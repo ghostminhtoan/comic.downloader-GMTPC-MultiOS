@@ -525,6 +525,7 @@ public class DownloadEngineService
         {
             if (ct.IsCancellationRequested) return false;
 
+            byte[]? data = null;
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, imageUrl);
@@ -559,7 +560,7 @@ public class DownloadEngineService
                     continue;
                 }
 
-                byte[] data = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                data = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
                 if (data.Length > 0)
                 {
                     await File.WriteAllBytesAsync(destinationPath, data, ct).ConfigureAwait(false);
@@ -574,7 +575,22 @@ public class DownloadEngineService
             catch (UnauthorizedAccessException uex)
             {
                 LogEmitted?.Invoke("ERROR", $"[Lỗi quyền bộ nhớ] Từ chối truy cập ghi tệp '{Path.GetFileName(destinationPath)}': {uex.Message}");
-                // Lỗi quyền truy cập không retry làm mất thời gian
+
+                if (OperatingSystem.IsAndroid() && data != null && data.Length > 0)
+                {
+                    try
+                    {
+                        string safeAppStorage = GetAppSpecificExternalPath();
+                        string safeFallbackPath = destinationPath.Replace("/storage/emulated/0/Download/ComicDownloads", safeAppStorage, StringComparison.OrdinalIgnoreCase);
+                        string fallbackDir = Path.GetDirectoryName(safeFallbackPath)!;
+                        if (!Directory.Exists(fallbackDir)) Directory.CreateDirectory(fallbackDir);
+                        File.WriteAllBytes(safeFallbackPath, data);
+                        Interlocked.Add(ref _totalBytesDownloadedInWindow, data.Length);
+                        LogEmitted?.Invoke("SUCCESS", $"[Lưu an toàn] Đã chuyển hướng lưu ảnh vào thư mục riêng của app: {Path.GetFileName(safeFallbackPath)}");
+                        return true;
+                    }
+                    catch {}
+                }
                 return false;
             }
             catch (Exception ex)
@@ -632,12 +648,23 @@ public class DownloadEngineService
         catch {}
     }
 
-    private string MakeSafeFilename(string filename)
+    private static readonly char[] IncompatibleChars = new[] { ':', '*', '?', '"', '<', '>', '|', '\\', '/', '\0' };
+
+    public static string MakeSafeFilename(string filename)
     {
+        if (string.IsNullOrWhiteSpace(filename)) return "Comic";
+        foreach (char c in IncompatibleChars)
+        {
+            filename = filename.Replace(c, '_');
+        }
         foreach (char c in Path.GetInvalidFileNameChars())
         {
             filename = filename.Replace(c, '_');
         }
-        return filename.Trim();
+        foreach (char c in Path.GetInvalidPathChars())
+        {
+            filename = filename.Replace(c, '_');
+        }
+        return filename.Trim().Trim('.', ' ', '_');
     }
 }

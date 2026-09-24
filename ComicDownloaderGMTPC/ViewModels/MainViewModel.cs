@@ -578,6 +578,33 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    public async Task AutoUpdateAsync()
+    {
+        const string updateApkUrl = "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/com.CompanyName.ComicDownloaderGMTPC-Signed.apk";
+        AddLog("INFO", $"Bắt đầu mở tải bản cập nhật: {updateApkUrl}");
+
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.Launcher != null)
+            {
+                await topLevel.Launcher.LaunchUriAsync(new Uri(updateApkUrl));
+                AddLog("SUCCESS", "Đã mở trình duyệt/trình tải xuống để tải và cài đặt file APK cập nhật mới nhất!");
+            }
+
+            if (topLevel?.Clipboard != null)
+            {
+                await topLevel.Clipboard.SetTextAsync(updateApkUrl);
+                AddLog("SUCCESS", $"Đã sao chép link tải APK vào Clipboard: {updateApkUrl}");
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi cập nhật: {ex.Message}");
+        }
+    }
+
     private Avalonia.Controls.TopLevel? GetTopLevel()
     {
         if (ComicDownloaderGMTPC.Views.MainView.Instance != null)

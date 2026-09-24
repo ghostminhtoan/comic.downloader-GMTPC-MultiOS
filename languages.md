@@ -15,6 +15,7 @@
 | Source | Nguồn |
 | STEP 1 | BƯỚC 1 |
 | STEP 2 | BƯỚC 2 |
+| AUTO UPDATE | CẬP NHẬT |
 
 ## 2. Toolbar & List Operations
 

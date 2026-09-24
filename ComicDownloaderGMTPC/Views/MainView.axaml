@@ -40,6 +40,13 @@
                                 CornerRadius="6" Padding="8,3" Height="28">
                             <TextBlock Text="{Binding CurrentLanguage, StringFormat='{}🌐 {0}'}" FontWeight="SemiBold" Foreground="#38BDF8" FontSize="11" />
                         </Button>
+
+                        <!-- Nút Tự Động Cập Nhật (Auto Update) -->
+                        <Button Command="{Binding AutoUpdateCommand}"
+                                Background="#059669" BorderBrush="#10B981" BorderThickness="1"
+                                CornerRadius="6" Padding="10,3" Height="28" ToolTip.Tip="Cập nhật phiên bản APK mới nhất từ GitHub">
+                            <TextBlock Text="🚀 CẬP NHẬT" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
+                        </Button>
                     </StackPanel>
                 </WrapPanel>
             </Border>
