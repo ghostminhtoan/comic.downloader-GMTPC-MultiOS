@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="ComicDownloaderGMTPC.Desktop/ComicDownloaderGMTPC.Desktop.csproj" />
+  <Project Path="ComicDownloaderGMTPC/ComicDownloaderGMTPC.csproj" />
+</Solution>
