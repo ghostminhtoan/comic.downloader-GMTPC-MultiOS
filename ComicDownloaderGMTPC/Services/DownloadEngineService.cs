@@ -29,6 +29,7 @@ public class DownloadEngineService
 
     public event Action<string, string>? LogEmitted;
     public event Action? ProgressUpdated;
+    public event Action<string>? AndroidOpenFolderRequested;
 
     public DownloadEngineService()
     {
@@ -41,15 +42,79 @@ public class DownloadEngineService
         _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
 
+        DownloadRoot = InitDownloadRoot();
+    }
+
+    private string InitDownloadRoot()
+    {
         string appDir = AppDomain.CurrentDomain.BaseDirectory;
-        DownloadRoot = Path.Combine(appDir, "Downloads");
+        string configFilePath = Path.Combine(appDir, "download_path.cfg");
+
+        // 1. Kiểm tra nếu người dùng đã tùy chọn thư mục trước đó
         try
         {
-            if (!Directory.Exists(DownloadRoot)) Directory.CreateDirectory(DownloadRoot);
+            if (File.Exists(configFilePath))
+            {
+                string saved = File.ReadAllText(configFilePath).Trim();
+                if (!string.IsNullOrWhiteSpace(saved) && Directory.Exists(saved))
+                {
+                    return saved;
+                }
+            }
+        }
+        catch {}
+
+        // 2. Đường dẫn mặc định theo OS
+        if (OperatingSystem.IsAndroid())
+        {
+            // Thư mục Download công khai của Android để người dùng dễ dàng xem và quản lý
+            string[] androidCandidates = new[]
+            {
+                "/storage/emulated/0/Download/ComicDownloads",
+                "/storage/emulated/0/Documents/ComicDownloads",
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ComicDownloads")
+            };
+
+            foreach (var cand in androidCandidates)
+            {
+                try
+                {
+                    if (!Directory.Exists(cand)) Directory.CreateDirectory(cand);
+                    return cand;
+                }
+                catch {}
+            }
+        }
+
+        string defaultPath = Path.Combine(appDir, "Downloads");
+        try
+        {
+            if (!Directory.Exists(defaultPath)) Directory.CreateDirectory(defaultPath);
+            return defaultPath;
         }
         catch
         {
-            DownloadRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ComicDownloads");
+            string docsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ComicDownloads");
+            try { if (!Directory.Exists(docsPath)) Directory.CreateDirectory(docsPath); } catch {}
+            return docsPath;
+        }
+    }
+
+    public void SetDownloadRoot(string newPath)
+    {
+        if (string.IsNullOrWhiteSpace(newPath)) return;
+        try
+        {
+            if (!Directory.Exists(newPath)) Directory.CreateDirectory(newPath);
+            DownloadRoot = newPath;
+
+            string configFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "download_path.cfg");
+            File.WriteAllText(configFilePath, newPath);
+            LogEmitted?.Invoke("SUCCESS", $"Đã lưu cấu hình thư mục tải về: {newPath}");
+        }
+        catch (Exception ex)
+        {
+            LogEmitted?.Invoke("WARN", $"Không thể lưu cấu hình thư mục tải: {ex.Message}");
         }
     }
 
@@ -116,17 +181,22 @@ public class DownloadEngineService
                 Directory.CreateDirectory(path);
             }
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (OperatingSystem.IsWindows())
             {
                 Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            else if (OperatingSystem.IsMacOS())
+            {
+                Process.Start(new ProcessStartInfo("open", $"\"{path}\"") { UseShellExecute = true });
+            }
+            else if (OperatingSystem.IsLinux() && !OperatingSystem.IsAndroid())
             {
                 Process.Start(new ProcessStartInfo("xdg-open", $"\"{path}\"") { UseShellExecute = true });
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            else if (OperatingSystem.IsAndroid())
             {
-                Process.Start(new ProcessStartInfo("open", $"\"{path}\"") { UseShellExecute = true });
+                // Kích hoạt sự kiện để UI copy clipboard và mở native viewer
+                AndroidOpenFolderRequested?.Invoke(path);
             }
         }
         catch (Exception ex)

@@ -7,6 +7,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Avalonia.Controls;
+using Avalonia.Input.Platform;
+using Avalonia.Platform.Storage;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.Services;
 
@@ -112,9 +115,38 @@ public partial class MainViewModel : ViewModelBase
         _langService.LanguageChanged += OnLanguageChanged;
         _downloadEngine.LogEmitted += OnLogEmitted;
         _downloadEngine.ProgressUpdated += OnProgressUpdated;
+        _downloadEngine.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
 
         UpdateLanguageStrings();
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
+    }
+
+    private async void OnAndroidOpenFolderRequested(string path)
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel != null)
+            {
+                if (topLevel.Clipboard != null)
+                {
+                    await topLevel.Clipboard.SetTextAsync(path);
+                }
+                if (topLevel.Launcher != null)
+                {
+                    try
+                    {
+                        await topLevel.Launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(path));
+                    }
+                    catch {}
+                }
+            }
+            AddLog("SUCCESS", $"[Android] Đã sao chép đường dẫn vào Clipboard:\n{path}\nBạn có thể dán vào ứng dụng Quản Lý Tệp (Files / ZArchiver) để mở!");
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi thao tác thư mục Android: {ex.Message}");
+        }
     }
 
     private void OnLanguageChanged()
@@ -463,6 +495,82 @@ public partial class MainViewModel : ViewModelBase
     public void OpenDownloadRoot()
     {
         _downloadEngine.OpenDirectoryInExplorer(_downloadEngine.DownloadRoot);
+    }
+
+    [RelayCommand]
+    public async Task ChangeDownloadFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null)
+            {
+                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
+                {
+                    Title = "Chọn thư mục lưu truyện tải về",
+                    AllowMultiple = false
+                };
+
+                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
+                if (folders != null && folders.Count > 0)
+                {
+                    var selected = folders[0];
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    if (!string.IsNullOrWhiteSpace(path))
+                    {
+                        _downloadEngine.SetDownloadRoot(path);
+                        DownloadPathText = path;
+                        AddLog("SUCCESS", $"Đã chọn thư mục tải mới: {path}");
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                AddLog("WARN", "Không thể mở bộ chọn thư mục hệ thống (StorageProvider).");
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi khi chọn thư mục tải: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task CopyDownloadPathAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.Clipboard != null)
+            {
+                await topLevel.Clipboard.SetTextAsync(_downloadEngine.DownloadRoot);
+                AddLog("SUCCESS", $"Đã sao chép đường dẫn tải vào Clipboard: {_downloadEngine.DownloadRoot}");
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi sao chép: {ex.Message}");
+        }
+    }
+
+    private Avalonia.Controls.TopLevel? GetTopLevel()
+    {
+        if (ComicDownloaderGMTPC.Views.MainView.Instance != null)
+        {
+            var tl = Avalonia.Controls.TopLevel.GetTopLevel(ComicDownloaderGMTPC.Views.MainView.Instance);
+            if (tl != null) return tl;
+        }
+
+        if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            return desktop.MainWindow;
+        }
+        if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView)
+        {
+            return Avalonia.Controls.TopLevel.GetTopLevel(singleView.MainView);
+        }
+        return null;
     }
 
     // ==========================================
