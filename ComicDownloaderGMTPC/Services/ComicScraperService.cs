@@ -107,35 +107,102 @@ public class ComicScraperService
             }
 
             using var req = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
-            req.Headers.Add("Referer", DomainRoutingService.NormalizeUrl(chapterUrl));
+            string baseDomain = DomainRoutingService.NormalizeUrl(chapterUrl);
+            req.Headers.Add("Referer", baseDomain);
             using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
             if (!res.IsSuccessStatusCode) return images;
 
             string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
-            // 1. Try reading containers
-            var matches = Regex.Matches(html, @"<(?:div|section|article)[^>]*(?:chapter_content|story-see-content|reading-detail|page-chapter|chapter-img|reading)[^>]*>.*?</(?:div|section|article)>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            // 1. Phân lập vùng đọc ảnh (Reading Scope) theo các khối page-chapter hoặc chapter_content
+            string searchScope = html;
+            var pageBlocks = Regex.Matches(
+                html,
+                @"<div[^>]+id=[""']page_\d+[""'][^>]*class=[""'][^""']*page-chapter[^""']*[""'][^>]*>.*?(?=<div[^>]+id=[""']page_\d+[""']|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-            string searchScope = matches.Count > 0
-                ? string.Join("\n", matches.Select(m => m.Value))
-                : html;
+            if (pageBlocks.Count > 0)
+            {
+                searchScope = string.Join("\n", pageBlocks.Cast<Match>().Select(m => m.Value));
+            }
+            else
+            {
+                var contentMatch = Regex.Match(html, @"<(?:div|section|article)[^>]*(?:chapter_content|story-see-content|reading-detail|chapter-img|reading)[^>]*>.*?</(?:div|section|article)>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                if (contentMatch.Success)
+                {
+                    searchScope = contentMatch.Value;
+                }
+            }
 
-            // 2. Extract image tags inside reading scope
-            var imgMatches = Regex.Matches(searchScope, @"<img[^>]+(?:data-src|data-original|data-cdn|src)=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+            // 2. Quét tất cả các thẻ <img> và <source> trong vùng đọc
+            var imgTags = Regex.Matches(searchScope, @"<(?:img|source)\s+[^>]*>", RegexOptions.IgnoreCase);
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (Match m in imgMatches)
+            foreach (Match m in imgTags)
             {
-                string src = m.Groups[1].Value.Trim();
-                if (string.IsNullOrWhiteSpace(src) || src.StartsWith("data:") || src.Contains("logo") || src.Contains("banner") || src.Contains("icon"))
+                string tag = m.Value;
+                string? imgUrl = null;
+
+                // Ưu tiên data-original -> data-cdn -> data-lazy-src -> data-src -> src
+                var dataOriginal = Regex.Match(tag, @"data-original=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+                if (dataOriginal.Success)
+                {
+                    imgUrl = dataOriginal.Groups[1].Value;
+                }
+                else
+                {
+                    var dataCdn = Regex.Match(tag, @"data-cdn=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+                    if (dataCdn.Success)
+                    {
+                        imgUrl = dataCdn.Groups[1].Value;
+                    }
+                    else
+                    {
+                        var dataLazy = Regex.Match(tag, @"data-lazy-src=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+                        if (dataLazy.Success)
+                        {
+                            imgUrl = dataLazy.Groups[1].Value;
+                        }
+                        else
+                        {
+                            var dataSrc = Regex.Match(tag, @"data-src=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+                            if (dataSrc.Success)
+                            {
+                                imgUrl = dataSrc.Groups[1].Value;
+                            }
+                            else
+                            {
+                                var src = Regex.Match(tag, @"src=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+                                if (src.Success)
+                                {
+                                    imgUrl = src.Groups[1].Value;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(imgUrl)) continue;
+                imgUrl = imgUrl.Trim();
+
+                // Lọc bỏ ảnh hệ thống/rác
+                if (imgUrl.StartsWith("data:") ||
+                    imgUrl.Contains("logo") ||
+                    imgUrl.Contains("banner") ||
+                    imgUrl.Contains("icon") ||
+                    imgUrl.Contains("avatar") ||
+                    imgUrl.Contains("loading") ||
+                    imgUrl.Contains("no_image") ||
+                    imgUrl.Contains("facebook.com"))
                 {
                     continue;
                 }
 
-                string full = MakeAbsoluteUrl(src, chapterUrl);
-                if (seen.Add(full))
+                // Giữ nguyên query string (theo workflow.md)
+                string fullUrl = MakeAbsoluteUrl(imgUrl, chapterUrl);
+                if (seen.Add(fullUrl))
                 {
-                    images.Add(full);
+                    images.Add(fullUrl);
                 }
             }
         }
@@ -284,10 +351,19 @@ public class ComicScraperService
 
     private string ExtractTitle(string html, string url)
     {
-        var ogMatch = Regex.Match(html, @"<meta[^>]*property=[""']og:title[""'][^>]*content=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
-        if (ogMatch.Success && !string.IsNullOrWhiteSpace(ogMatch.Groups[1].Value))
+        // 1. Thẻ meta itemprop="name" (Chuẩn nhất ở các web manga như TruyenQQ)
+        var itempropMeta = Regex.Match(html, @"<meta[^>]*itemprop=[""']name[""'][^>]*content=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+        if (itempropMeta.Success && !string.IsNullOrWhiteSpace(itempropMeta.Groups[1].Value))
         {
-            return CleanTitle(ogMatch.Groups[1].Value);
+            return CleanTitle(itempropMeta.Groups[1].Value);
+        }
+
+        // 2. Thẻ h1 itemprop="name" hoặc h1 với class tiêu đề
+        var h1Itemprop = Regex.Match(html, @"<h1[^>]*itemprop=[""']name[""'][^>]*>(.*?)</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (h1Itemprop.Success && !string.IsNullOrWhiteSpace(h1Itemprop.Groups[1].Value))
+        {
+            string raw = Regex.Replace(h1Itemprop.Groups[1].Value, @"<[^>]+>", "").Trim();
+            if (!string.IsNullOrWhiteSpace(raw)) return CleanTitle(raw);
         }
 
         var h1Match = Regex.Match(html, @"<h1[^>]*>(.*?)</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -295,6 +371,12 @@ public class ComicScraperService
         {
             string raw = Regex.Replace(h1Match.Groups[1].Value, @"<[^>]+>", "").Trim();
             if (!string.IsNullOrWhiteSpace(raw)) return CleanTitle(raw);
+        }
+
+        var ogMatch = Regex.Match(html, @"<meta[^>]*property=[""']og:title[""'][^>]*content=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+        if (ogMatch.Success && !string.IsNullOrWhiteSpace(ogMatch.Groups[1].Value))
+        {
+            return CleanTitle(ogMatch.Groups[1].Value);
         }
 
         var titleMatch = Regex.Match(html, @"<title[^>]*>(.*?)</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -326,16 +408,57 @@ public class ComicScraperService
     private List<ChapterItem> ExtractChapters(string html, string baseUrl, string domain)
     {
         var list = new List<ChapterItem>();
-        var matches = Regex.Matches(html, @"<a[^>]*href=[""']([^""']*(?:chap|chuong|chapter)[^""']*)[""'][^>]*>(.*?)</a>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        domain = domain.ToLowerInvariant();
+
+        // 1. Nhận diện vị trí bắt đầu của danh sách chương thật (bỏ qua toàn bộ header/menu chứa nút 'Đọc từ đầu')
+        string searchScope = html;
+        string[] containerMarkers = new[]
+        {
+            "works-chapter-list",
+            "list_chapter",
+            "chapter-list",
+            "list-chapter",
+            "table-chapters",
+            "box-list-chapter",
+            "nt_listchapter"
+        };
+
+        foreach (var marker in containerMarkers)
+        {
+            int idx = html.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                searchScope = html.Substring(idx);
+                // Cắt bớt phần bình luận/quảng cáo phía sau nếu có
+                int commentIdx = searchScope.IndexOf("id=\"comment", StringComparison.OrdinalIgnoreCase);
+                if (commentIdx < 0) commentIdx = searchScope.IndexOf("class=\"comment", StringComparison.OrdinalIgnoreCase);
+                if (commentIdx > 0)
+                {
+                    searchScope = searchScope.Substring(0, commentIdx);
+                }
+                break;
+            }
+        }
+
+        // 2. Quét thẻ <a> trong scope
+        var matches = Regex.Matches(searchScope, @"<a[^>]*href=[""']([^""']*(?:chap|chuong|chapter)[^""']*)[""'][^>]*>(.*?)</a>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        int counter = 1;
+        // Regex lọc bỏ triệt để các nút điều hướng
+        var navBypassRegex = new Regex(@"^(?:đọc\s*(?:từ\s*đầu|mới\s*nhất|tiếp)|doc\s*(?:tu\s*dau|moi\s*nhat|tiep)|read\s*(?:first|latest|continue)|theo\s*dõi|thích|like|subscribe|xem\s*thêm|mục\s*lục)$", RegexOptions.IgnoreCase);
+
         foreach (Match m in matches)
         {
             string href = m.Groups[1].Value.Trim();
             string text = Regex.Replace(m.Groups[2].Value, @"<[^>]+>", "").Trim();
 
-            if (string.IsNullOrWhiteSpace(text) || href.StartsWith("#") || href.StartsWith("javascript:"))
+            if (string.IsNullOrWhiteSpace(text) || href.StartsWith("#") || href.StartsWith("javascript:") || href.Contains("void(0)"))
+            {
+                continue;
+            }
+
+            // BẮT BUỘC BYPASS nút "Đọc từ đầu", "Đọc mới nhất", "Theo dõi", v.v.
+            if (navBypassRegex.IsMatch(text))
             {
                 continue;
             }
@@ -343,7 +466,7 @@ public class ComicScraperService
             string fullUrl = MakeAbsoluteUrl(href, baseUrl);
             if (seenUrls.Add(fullUrl))
             {
-                double chapNum = ExtractChapterNumber(text, counter);
+                double chapNum = ExtractChapterNumber(text, ExtractChapterNumber(href, 0));
                 list.Add(new ChapterItem
                 {
                     ChapterNumber = chapNum,
@@ -351,11 +474,15 @@ public class ComicScraperService
                     Url = fullUrl,
                     Status = "Waiting"
                 });
-                counter++;
             }
         }
 
-        if (list.Count == 0)
+        // 3. BẮT BUỘC sắp xếp tăng dần theo ChapterNumber (từ chương nhỏ nhất đến chương lớn nhất: 1 -> 39)
+        if (list.Count > 0)
+        {
+            list = list.OrderBy(c => c.ChapterNumber).ToList();
+        }
+        else
         {
             list.Add(new ChapterItem
             {
@@ -389,6 +516,10 @@ public class ComicScraperService
     private string CleanTitle(string title)
     {
         title = System.Net.WebUtility.HtmlDecode(title);
+        // Loại bỏ cụm SEO "chương mới nhất \d+..." hoặc "chap mới nhất \d+..."
+        title = Regex.Replace(title, @"\s*(?:chương|chap|chapter)\s*(?:mới\s*nhất)?\s*\d+.*$", "", RegexOptions.IgnoreCase).Trim();
+        // Loại bỏ thương hiệu đuôi: - TruyenQQ, | TruyenQQ, - NetTruyen, v.v.
+        title = Regex.Replace(title, @"\s*[-|–—]\s*(?:truy[eệ]nqq|nettruyen|mangadex|tuoitre|hako).*$", "", RegexOptions.IgnoreCase).Trim();
         title = Regex.Replace(title, @"\s*[-|–—].*$", "").Trim();
         return title;
     }
