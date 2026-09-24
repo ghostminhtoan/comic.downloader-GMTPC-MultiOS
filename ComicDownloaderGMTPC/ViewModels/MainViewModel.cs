@@ -593,16 +593,20 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        const string updateApkUrl = "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/com.CompanyName.ComicDownloaderGMTPC-Signed.apk";
+        string updateUrl = OperatingSystem.IsAndroid()
+            ? "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/com.CompanyName.ComicDownloaderGMTPC-Signed.apk"
+            : "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/ComicDownloaderGMTPC.Desktop.exe";
+
         IsUpdating = true;
         UpdateButtonLabel = "⏳ Đang kết nối...";
 
         try
         {
-            AddLog("INFO", "🚀 Bắt đầu tự động tải bản cập nhật mới nhất...");
+            string platformName = OperatingSystem.IsAndroid() ? "Android APK" : "Windows Standalone EXE";
+            AddLog("INFO", $"🚀 Bắt đầu tự động tải bản cập nhật mới nhất cho {platformName}...");
 
             bool success = await AppUpdateService.Instance.DownloadAndInstallUpdateAsync(
-                updateApkUrl,
+                updateUrl,
                 (level, msg) => AddLog(level, msg),
                 (percent) =>
                 {
@@ -618,13 +622,13 @@ public partial class MainViewModel : ViewModelBase
                 var topLevel = GetTopLevel();
                 if (topLevel?.Launcher != null)
                 {
-                    await topLevel.Launcher.LaunchUriAsync(new Uri(updateApkUrl));
+                    await topLevel.Launcher.LaunchUriAsync(new Uri(updateUrl));
                 }
 
                 if (topLevel?.Clipboard != null)
                 {
-                    await topLevel.Clipboard.SetTextAsync(updateApkUrl);
-                    AddLog("INFO", $"Đã sao chép link dự phòng vào Clipboard: {updateApkUrl}");
+                    await topLevel.Clipboard.SetTextAsync(updateUrl);
+                    AddLog("INFO", $"Đã sao chép link dự phòng vào Clipboard: {updateUrl}");
                 }
             }
         }
