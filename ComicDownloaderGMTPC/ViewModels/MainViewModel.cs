@@ -541,7 +541,8 @@ public partial class MainViewModel : ViewModelBase
                     string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
                     if (!string.IsNullOrWhiteSpace(normalized))
                     {
-                        _downloadEngine.SetDownloadRoot(normalized);
+                        string writable = _downloadEngine.EnsureWritableDownloadRoot(normalized);
+                        _downloadEngine.SetDownloadRoot(writable);
                         DownloadPathText = _downloadEngine.DownloadRoot;
                         AddLog("SUCCESS", $"Đã chọn thư mục tải mới: {_downloadEngine.DownloadRoot}");
                         return;

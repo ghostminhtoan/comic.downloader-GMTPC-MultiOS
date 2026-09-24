@@ -271,7 +271,10 @@ public class ComicScraperService
                     imgUrl.Contains("avatar") ||
                     imgUrl.Contains("loading") ||
                     imgUrl.Contains("no_image") ||
-                    imgUrl.Contains("facebook.com"))
+                    imgUrl.Contains("facebook.com") ||
+                    imgUrl.Contains("fbcdn") ||
+                    imgUrl.Contains("gstatic.com") ||
+                    imgUrl.Contains("google"))
                 {
                     continue;
                 }
