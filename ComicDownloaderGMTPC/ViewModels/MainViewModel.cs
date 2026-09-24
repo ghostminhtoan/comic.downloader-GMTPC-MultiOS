@@ -538,11 +538,12 @@ public partial class MainViewModel : ViewModelBase
                 {
                     var selected = folders[0];
                     string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
-                    if (!string.IsNullOrWhiteSpace(path))
+                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
+                    if (!string.IsNullOrWhiteSpace(normalized))
                     {
-                        _downloadEngine.SetDownloadRoot(path);
-                        DownloadPathText = path;
-                        AddLog("SUCCESS", $"Đã chọn thư mục tải mới: {path}");
+                        _downloadEngine.SetDownloadRoot(normalized);
+                        DownloadPathText = _downloadEngine.DownloadRoot;
+                        AddLog("SUCCESS", $"Đã chọn thư mục tải mới: {_downloadEngine.DownloadRoot}");
                         return;
                     }
                 }

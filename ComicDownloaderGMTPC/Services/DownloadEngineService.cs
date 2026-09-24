@@ -56,9 +56,21 @@ public class DownloadEngineService
             if (File.Exists(configFilePath))
             {
                 string saved = File.ReadAllText(configFilePath).Trim();
-                if (!string.IsNullOrWhiteSpace(saved) && Directory.Exists(saved))
+                string normalizedSaved = NormalizeStoragePath(saved);
+
+                if (!string.IsNullOrWhiteSpace(normalizedSaved))
                 {
-                    return saved;
+                    try
+                    {
+                        if (!Directory.Exists(normalizedSaved)) Directory.CreateDirectory(normalizedSaved);
+                        // Cập nhật lại config nếu trước đó bị lưu đường dẫn ảo SAF như /tree/downloads
+                        if (!string.Equals(saved, normalizedSaved, StringComparison.Ordinal))
+                        {
+                            File.WriteAllText(configFilePath, normalizedSaved);
+                        }
+                        return normalizedSaved;
+                    }
+                    catch {}
                 }
             }
         }
@@ -67,23 +79,9 @@ public class DownloadEngineService
         // 2. Đường dẫn mặc định theo OS
         if (OperatingSystem.IsAndroid())
         {
-            // Thư mục Download công khai của Android để người dùng dễ dàng xem và quản lý
-            string[] androidCandidates = new[]
-            {
-                "/storage/emulated/0/Download/ComicDownloads",
-                "/storage/emulated/0/Documents/ComicDownloads",
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ComicDownloads")
-            };
-
-            foreach (var cand in androidCandidates)
-            {
-                try
-                {
-                    if (!Directory.Exists(cand)) Directory.CreateDirectory(cand);
-                    return cand;
-                }
-                catch {}
-            }
+            string androidPath = GetDefaultAndroidDownloadPath();
+            try { File.WriteAllText(configFilePath, androidPath); } catch {}
+            return androidPath;
         }
 
         string defaultPath = Path.Combine(appDir, "Downloads");
@@ -103,19 +101,109 @@ public class DownloadEngineService
     public void SetDownloadRoot(string newPath)
     {
         if (string.IsNullOrWhiteSpace(newPath)) return;
+        string normalized = NormalizeStoragePath(newPath);
+
         try
         {
-            if (!Directory.Exists(newPath)) Directory.CreateDirectory(newPath);
-            DownloadRoot = newPath;
+            if (!Directory.Exists(normalized)) Directory.CreateDirectory(normalized);
+            DownloadRoot = normalized;
 
             string configFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "download_path.cfg");
-            File.WriteAllText(configFilePath, newPath);
-            LogEmitted?.Invoke("SUCCESS", $"Đã lưu cấu hình thư mục tải về: {newPath}");
+            File.WriteAllText(configFilePath, normalized);
+            LogEmitted?.Invoke("SUCCESS", $"Đã lưu cấu hình thư mục tải về: {normalized}");
         }
         catch (Exception ex)
         {
-            LogEmitted?.Invoke("WARN", $"Không thể lưu cấu hình thư mục tải: {ex.Message}");
+            LogEmitted?.Invoke("WARN", $"Không thể tạo thư mục '{normalized}': {ex.Message}. Đang chuyển về thư mục mặc định.");
+            if (OperatingSystem.IsAndroid())
+            {
+                DownloadRoot = GetDefaultAndroidDownloadPath();
+            }
         }
+    }
+
+    public static string NormalizeStoragePath(string? rawPath, string? folderName = null)
+    {
+        if (string.IsNullOrWhiteSpace(rawPath))
+        {
+            return OperatingSystem.IsAndroid() ? GetDefaultAndroidDownloadPath() : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Downloads");
+        }
+
+        string path = rawPath.Trim();
+
+        if (OperatingSystem.IsAndroid())
+        {
+            string decoded = Uri.UnescapeDataString(path);
+
+            // Kiểm tra xem có phải là đường dẫn ảo SAF (Storage Access Framework) không
+            bool isVirtualSaf = decoded.StartsWith("/tree/", StringComparison.OrdinalIgnoreCase) ||
+                                decoded.StartsWith("tree/", StringComparison.OrdinalIgnoreCase) ||
+                                decoded.StartsWith("content:", StringComparison.OrdinalIgnoreCase) ||
+                                (!decoded.StartsWith("/storage/", StringComparison.OrdinalIgnoreCase) &&
+                                 !decoded.StartsWith("/sdcard/", StringComparison.OrdinalIgnoreCase) &&
+                                 !decoded.StartsWith("/data/", StringComparison.OrdinalIgnoreCase));
+
+            if (isVirtualSaf)
+            {
+                string searchStr = (decoded + " " + (folderName ?? "")).ToLowerInvariant();
+
+                if (searchStr.Contains("download"))
+                {
+                    return "/storage/emulated/0/Download/ComicDownloads";
+                }
+                if (searchStr.Contains("document"))
+                {
+                    return "/storage/emulated/0/Documents/ComicDownloads";
+                }
+                if (searchStr.Contains("picture"))
+                {
+                    return "/storage/emulated/0/Pictures/ComicDownloads";
+                }
+
+                // Nếu có định dạng SAF colon như "primary:MyFolder"
+                int colonIdx = decoded.LastIndexOf(':');
+                if (colonIdx >= 0 && colonIdx < decoded.Length - 1)
+                {
+                    string sub = decoded.Substring(colonIdx + 1).Trim('/');
+                    if (!string.IsNullOrWhiteSpace(sub))
+                    {
+                        return $"/storage/emulated/0/{sub}";
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(folderName))
+                {
+                    return $"/storage/emulated/0/Download/{folderName}";
+                }
+
+                return GetDefaultAndroidDownloadPath();
+            }
+        }
+
+        return path;
+    }
+
+    public static string GetDefaultAndroidDownloadPath()
+    {
+        string[] candidates = new[]
+        {
+            "/storage/emulated/0/Download/ComicDownloads",
+            "/sdcard/Download/ComicDownloads",
+            "/storage/emulated/0/Documents/ComicDownloads",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ComicDownloads")
+        };
+
+        foreach (var cand in candidates)
+        {
+            try
+            {
+                if (!Directory.Exists(cand)) Directory.CreateDirectory(cand);
+                return cand;
+            }
+            catch {}
+        }
+
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ComicDownloads");
     }
 
     public async Task StartDownloadAsync(IEnumerable<ComicBookItem> items, string mode, CancellationToken externalCt = default)
@@ -217,7 +305,29 @@ public class DownloadEngineService
 
         try
         {
-            if (!Directory.Exists(bookDir)) Directory.CreateDirectory(bookDir);
+            if (!Directory.Exists(bookDir))
+            {
+                try
+                {
+                    Directory.CreateDirectory(bookDir);
+                }
+                catch (Exception createEx)
+                {
+                    if (OperatingSystem.IsAndroid())
+                    {
+                        // Fallback sang thư mục tài liệu nội bộ nếu thư mục công khai bị từ chối quyền
+                        string fallbackRoot = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                        bookDir = Path.Combine(fallbackRoot, "ComicDownloads", safeBookName);
+                        book.LocalDirectory = bookDir;
+                        if (!Directory.Exists(bookDir)) Directory.CreateDirectory(bookDir);
+                        LogEmitted?.Invoke("WARN", $"Chưa được cấp quyền bộ nhớ ngoài, truyện được lưu tạm vào: {bookDir}");
+                    }
+                    else
+                    {
+                        throw createEx;
+                    }
+                }
+            }
 
             // If chapters not extracted yet, try extraction
             if (book.Chapters.Count == 0)
@@ -377,8 +487,9 @@ public class DownloadEngineService
             {
                 return false;
             }
-            catch
+            catch (Exception ex)
             {
+                LogEmitted?.Invoke("WARN", $"Lỗi tải/ghi ảnh '{Path.GetFileName(destinationPath)}' (thử lần {attempt}/3): {ex.Message}");
                 await Task.Delay(400 * attempt, ct).ConfigureAwait(false);
             }
         }

@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 echo ========================================================
 echo   Building Comic Downloader GMTPC Avalonia for 3 OS:
@@ -11,7 +12,7 @@ if not exist "release\windows" mkdir "release\windows"
 if not exist "release\linux" mkdir "release\linux"
 if not exist "release\android" mkdir "release\android"
 
-:: Dọn dẹp tiến trình cũ và giải phóng file lock an toàn
+REM Clean old process and release file locks
 taskkill /F /IM ComicDownloaderGMTPC.Desktop.exe >nul 2>&1
 if exist "release\windows\ComicDownloaderGMTPC.Desktop.exe.old" del /f /q "release\windows\ComicDownloaderGMTPC.Desktop.exe.old" >nul 2>&1
 if exist "release\windows\ComicDownloaderGMTPC.Desktop.dll.old" del /f /q "release\windows\ComicDownloaderGMTPC.Desktop.dll.old" >nul 2>&1
@@ -20,7 +21,7 @@ if exist "release\windows\ComicDownloaderGMTPC.Desktop.exe" ren "release\windows
 if exist "release\windows\ComicDownloaderGMTPC.Desktop.dll" ren "release\windows\ComicDownloaderGMTPC.Desktop.dll" "ComicDownloaderGMTPC.Desktop.dll.old" >nul 2>&1
 if exist "release\windows\ComicDownloaderGMTPC.dll" ren "release\windows\ComicDownloaderGMTPC.dll" "ComicDownloaderGMTPC.dll.old" >nul 2>&1
 
-:: 1. BUILD WINDOWS (win-x64, self-contained)
+REM 1. BUILD WINDOWS (win-x64, self-contained)
 echo.
 echo [1/3] Publishing Windows (win-x64, self-contained)...
 dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -o release\windows
@@ -33,7 +34,7 @@ if exist "languages.md" (
 )
 echo [OK] Windows build succeeded -^> release\windows\ComicDownloaderGMTPC.Desktop.exe
 
-:: 2. BUILD LINUX (linux-x64, self-contained)
+REM 2. BUILD LINUX (linux-x64, self-contained)
 echo.
 echo [2/3] Publishing Linux (linux-x64, self-contained)...
 dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r linux-x64 --self-contained true -o release\linux
@@ -46,7 +47,7 @@ if exist "languages.md" (
 )
 echo [OK] Linux build succeeded -^> release\linux\ComicDownloaderGMTPC.Desktop
 
-:: 3. BUILD ANDROID (net10.0-android, self-contained package)
+REM 3. BUILD ANDROID (net10.0-android, self-contained package)
 echo.
 echo [3/3] Building Android (net10.0-android, self-contained package)...
 dotnet build ComicDownloaderGMTPC.Android\ComicDownloaderGMTPC.Android.csproj -c Release -o release\android
