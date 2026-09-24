@@ -334,9 +334,28 @@ public class DownloadEngineService
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, imageUrl);
-                if (!string.IsNullOrEmpty(refererUrl))
+
+                string effectiveReferer = refererUrl;
+                if (imageUrl.Contains("imggo.net", StringComparison.OrdinalIgnoreCase))
                 {
-                    req.Headers.Add("Referer", refererUrl);
+                    effectiveReferer = "https://daomeoden.net/";
+                }
+                else if (imageUrl.Contains("pubtranxzyzz", StringComparison.OrdinalIgnoreCase))
+                {
+                    effectiveReferer = "https://sayhentai.cx/";
+                }
+                else if (imageUrl.Contains("hentaicdn.com", StringComparison.OrdinalIgnoreCase) || imageUrl.Contains("hentai.direct", StringComparison.OrdinalIgnoreCase))
+                {
+                    effectiveReferer = "https://hentai2read.com/";
+                }
+                else if (imageUrl.Contains("vi-hentai", StringComparison.OrdinalIgnoreCase))
+                {
+                    effectiveReferer = "https://vi-hentai.pro/";
+                }
+
+                if (!string.IsNullOrEmpty(effectiveReferer))
+                {
+                    req.Headers.Add("Referer", effectiveReferer);
                 }
 
                 using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);

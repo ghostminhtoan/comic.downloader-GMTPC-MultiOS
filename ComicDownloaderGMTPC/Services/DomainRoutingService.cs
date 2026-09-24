@@ -29,7 +29,7 @@ public static class DomainRoutingService
             if (host.Contains("hako") || host.Contains("docln")) return "hako.vn";
             if (host.Contains("daomeoden")) return "daomeoden";
             if (host.Contains("damconuong")) return "damconuong.shop";
-            if (host.Contains("vi-hentai")) return "vi-hentai";
+            if (host.Contains("vi-hentai") || host.Contains("vihentai")) return "vi-hentai";
             if (host.Contains("sayhentai") || host.Contains("truyengg")) return "sayhentai";
             if (host.Contains("hentaiforce")) return "hentaiforce";
             if (host.Contains("hentai2read")) return "hentai2read";
