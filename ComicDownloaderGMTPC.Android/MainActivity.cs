@@ -28,12 +28,14 @@ public class MainActivity : AvaloniaMainActivity
         CurrentInstance = this;
 
         Services.DownloadEngineService.OpenStorageSettingsRequested += OnOpenStorageSettingsRequested;
+        Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
         RequestAppStoragePermissions();
     }
 
     protected override void OnDestroy()
     {
         Services.DownloadEngineService.OpenStorageSettingsRequested -= OnOpenStorageSettingsRequested;
+        Services.AppUpdateService.InstallApkRequested -= OnInstallApkRequested;
         if (CurrentInstance == this) CurrentInstance = null;
         base.OnDestroy();
     }
@@ -111,5 +113,56 @@ public class MainActivity : AvaloniaMainActivity
         {
             global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi xin cấp quyền lưu trữ: {ex.Message}");
         }
+    }
+
+    private void OnInstallApkRequested(string apkPath)
+    {
+        RunOnUiThread(() =>
+        {
+            try
+            {
+                if (OperatingSystem.IsAndroidVersionAtLeast(26))
+                {
+                    if (PackageManager != null && !PackageManager.CanRequestPackageInstalls())
+                    {
+                        try
+                        {
+                            var uri = global::Android.Net.Uri.FromParts("package", PackageName, null);
+                            var permIntent = new Intent(Settings.ActionManageUnknownAppSources, uri);
+                            permIntent.AddFlags(ActivityFlags.NewTask);
+                            StartActivity(permIntent);
+                        }
+                        catch
+                        {
+                            var permIntent = new Intent(Settings.ActionManageUnknownAppSources);
+                            permIntent.AddFlags(ActivityFlags.NewTask);
+                            StartActivity(permIntent);
+                        }
+                    }
+                }
+
+                var apkFile = new Java.IO.File(apkPath);
+                if (!apkFile.Exists())
+                {
+                    global::Android.Util.Log.Error("ComicGMTPC", $"File APK không tồn tại: {apkPath}");
+                    return;
+                }
+
+                var contentUri = AndroidX.Core.Content.FileProvider.GetUriForFile(
+                    this,
+                    PackageName + ".fileprovider",
+                    apkFile);
+
+                var installIntent = new Intent(Intent.ActionView);
+                installIntent.SetDataAndType(contentUri, "application/vnd.android.package-archive");
+                installIntent.AddFlags(ActivityFlags.NewTask);
+                installIntent.AddFlags(ActivityFlags.GrantReadUriPermission);
+                StartActivity(installIntent);
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi cài đặt APK: {ex.Message}");
+            }
+        });
     }
 }

@@ -32,6 +32,12 @@ public partial class MainViewModel : ViewModelBase
     private string _currentLanguage = "VI";
 
     [ObservableProperty]
+    private bool _isUpdating = false;
+
+    [ObservableProperty]
+    private string _updateButtonLabel = "🚀 CẬP NHẬT";
+
+    [ObservableProperty]
     private int _selectedRootTabIndex = 0;
 
     [ObservableProperty]
@@ -581,27 +587,55 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task AutoUpdateAsync()
     {
+        if (IsUpdating)
+        {
+            AddLog("WARN", "Tiến trình cập nhật đang chạy, vui lòng đợi...");
+            return;
+        }
+
         const string updateApkUrl = "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/com.CompanyName.ComicDownloaderGMTPC-Signed.apk";
-        AddLog("INFO", $"Bắt đầu mở tải bản cập nhật: {updateApkUrl}");
+        IsUpdating = true;
+        UpdateButtonLabel = "⏳ Đang kết nối...";
 
         try
         {
-            var topLevel = GetTopLevel();
-            if (topLevel?.Launcher != null)
-            {
-                await topLevel.Launcher.LaunchUriAsync(new Uri(updateApkUrl));
-                AddLog("SUCCESS", "Đã mở trình duyệt/trình tải xuống để tải và cài đặt file APK cập nhật mới nhất!");
-            }
+            AddLog("INFO", "🚀 Bắt đầu tự động tải bản cập nhật mới nhất...");
 
-            if (topLevel?.Clipboard != null)
+            bool success = await AppUpdateService.Instance.DownloadAndInstallUpdateAsync(
+                updateApkUrl,
+                (level, msg) => AddLog(level, msg),
+                (percent) =>
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        UpdateButtonLabel = $"⏳ {percent:F0}%";
+                    });
+                });
+
+            if (!success)
             {
-                await topLevel.Clipboard.SetTextAsync(updateApkUrl);
-                AddLog("SUCCESS", $"Đã sao chép link tải APK vào Clipboard: {updateApkUrl}");
+                // Fallback nếu có lỗi mạng đặc biệt: mở trình duyệt và sao chép link
+                var topLevel = GetTopLevel();
+                if (topLevel?.Launcher != null)
+                {
+                    await topLevel.Launcher.LaunchUriAsync(new Uri(updateApkUrl));
+                }
+
+                if (topLevel?.Clipboard != null)
+                {
+                    await topLevel.Clipboard.SetTextAsync(updateApkUrl);
+                    AddLog("INFO", $"Đã sao chép link dự phòng vào Clipboard: {updateApkUrl}");
+                }
             }
         }
         catch (Exception ex)
         {
-            AddLog("WARN", $"Lỗi cập nhật: {ex.Message}");
+            AddLog("ERROR", $"Lỗi cập nhật tự động: {ex.Message}");
+        }
+        finally
+        {
+            IsUpdating = false;
+            UpdateButtonLabel = "🚀 CẬP NHẬT";
         }
     }
 

@@ -43,9 +43,10 @@
 
                         <!-- Nút Tự Động Cập Nhật (Auto Update) -->
                         <Button Command="{Binding AutoUpdateCommand}"
+                                IsEnabled="{Binding !IsUpdating}"
                                 Background="#059669" BorderBrush="#10B981" BorderThickness="1"
-                                CornerRadius="6" Padding="10,3" Height="28" ToolTip.Tip="Cập nhật phiên bản APK mới nhất từ GitHub">
-                            <TextBlock Text="🚀 CẬP NHẬT" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
+                                CornerRadius="6" Padding="10,3" Height="28" ToolTip.Tip="Tự động tải ngầm và cài đặt phiên bản APK mới nhất">
+                            <TextBlock Text="{Binding UpdateButtonLabel}" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
                         </Button>
                     </StackPanel>
                 </WrapPanel>
