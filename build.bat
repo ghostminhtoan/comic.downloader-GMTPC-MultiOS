@@ -11,6 +11,15 @@ if not exist "release\windows" mkdir "release\windows"
 if not exist "release\linux" mkdir "release\linux"
 if not exist "release\android" mkdir "release\android"
 
+:: Dọn dẹp tiến trình cũ và giải phóng file lock an toàn
+taskkill /F /IM ComicDownloaderGMTPC.Desktop.exe >nul 2>&1
+if exist "release\windows\ComicDownloaderGMTPC.Desktop.exe.old" del /f /q "release\windows\ComicDownloaderGMTPC.Desktop.exe.old" >nul 2>&1
+if exist "release\windows\ComicDownloaderGMTPC.Desktop.dll.old" del /f /q "release\windows\ComicDownloaderGMTPC.Desktop.dll.old" >nul 2>&1
+if exist "release\windows\ComicDownloaderGMTPC.dll.old" del /f /q "release\windows\ComicDownloaderGMTPC.dll.old" >nul 2>&1
+if exist "release\windows\ComicDownloaderGMTPC.Desktop.exe" ren "release\windows\ComicDownloaderGMTPC.Desktop.exe" "ComicDownloaderGMTPC.Desktop.exe.old" >nul 2>&1
+if exist "release\windows\ComicDownloaderGMTPC.Desktop.dll" ren "release\windows\ComicDownloaderGMTPC.Desktop.dll" "ComicDownloaderGMTPC.Desktop.dll.old" >nul 2>&1
+if exist "release\windows\ComicDownloaderGMTPC.dll" ren "release\windows\ComicDownloaderGMTPC.dll" "ComicDownloaderGMTPC.dll.old" >nul 2>&1
+
 :: 1. BUILD WINDOWS (win-x64, self-contained)
 echo.
 echo [1/3] Publishing Windows (win-x64, self-contained)...

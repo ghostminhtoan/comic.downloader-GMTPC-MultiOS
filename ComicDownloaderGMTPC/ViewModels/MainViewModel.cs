@@ -32,6 +32,9 @@ public partial class MainViewModel : ViewModelBase
     private string _currentLanguage = "VI";
 
     [ObservableProperty]
+    private int _selectedRootTabIndex = 0;
+
+    [ObservableProperty]
     private string _urlInput = string.Empty;
 
     [ObservableProperty]
@@ -278,6 +281,25 @@ public partial class MainViewModel : ViewModelBase
 
         UpdateStats();
         StartScanMissing();
+        SelectedRootTabIndex = 1; // Tự động chuyển sang tab Download
+    }
+
+    [RelayCommand]
+    public async Task GetLinkFromSpecificUrlAsync(string? url)
+    {
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            UrlInput = url;
+        }
+
+        if (string.IsNullOrWhiteSpace(UrlInput))
+        {
+            AddLog("WARN", "Vui lòng nhập đường dẫn URL của truyện!");
+            return;
+        }
+
+        await GetLinkAsync();
+        SelectedRootTabIndex = 1; // Chuyển sang Tab Download để theo dõi tiến độ
     }
 
     // ==========================================
