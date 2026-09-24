@@ -12,6 +12,9 @@ public partial class ComicBookItem : ObservableObject
     private bool _isChecked = true;
 
     [ObservableProperty]
+    private bool _isSelectedInGrid;
+
+    [ObservableProperty]
     private string _title = string.Empty;
 
     [ObservableProperty]
@@ -27,6 +30,12 @@ public partial class ComicBookItem : ObservableObject
     private int _downloadedChapters;
 
     [ObservableProperty]
+    private int _totalPages;
+
+    [ObservableProperty]
+    private int _downloadedPages;
+
+    [ObservableProperty]
     private string _status = "Waiting"; // Waiting, Downloading, Completed, Error, Stopped, Paused
 
     [ObservableProperty]
@@ -34,6 +43,9 @@ public partial class ComicBookItem : ObservableObject
 
     [ObservableProperty]
     private double _progressPercentage;
+
+    [ObservableProperty]
+    private string _speedText = string.Empty;
 
     [ObservableProperty]
     private string _coverUrl = string.Empty;
@@ -46,6 +58,9 @@ public partial class ComicBookItem : ObservableObject
 
     [ObservableProperty]
     private bool _isDuplicate;
+
+    [ObservableProperty]
+    private string _localDirectory = string.Empty;
 
     public List<ChapterItem> Chapters { get; set; } = new();
 }

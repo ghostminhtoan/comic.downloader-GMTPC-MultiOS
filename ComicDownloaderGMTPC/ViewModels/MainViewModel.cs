@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,7 +18,9 @@ public partial class MainViewModel : ViewModelBase
     private readonly ComicScraperService _scraperService = ComicScraperService.Instance;
     private readonly DownloadEngineService _downloadEngine = DownloadEngineService.Instance;
     private readonly MissingChapterScannerService _scannerService = MissingChapterScannerService.Instance;
+    private readonly SourceSearchService _sourceSearchService = SourceSearchService.Instance;
     private CancellationTokenSource? _scanCts;
+    private CancellationTokenSource? _searchCts;
 
     [ObservableProperty]
     private string _appTitle = "Comic-GMTPC Avalonia v1.0 - Tiếng Việt";
@@ -28,7 +32,7 @@ public partial class MainViewModel : ViewModelBase
     private string _urlInput = string.Empty;
 
     [ObservableProperty]
-    private string _modeSelection = "Single comic"; // "Single comic" or "Multi-comic"
+    private string _modeSelection = "Single comic";
 
     [ObservableProperty]
     private bool _isAutoDownload;
@@ -69,19 +73,48 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string _downloadPathText = string.Empty;
 
+    // SOURCE SEARCH
+    [ObservableProperty]
+    private string _sourceSearchKeyword = string.Empty;
+
+    [ObservableProperty]
+    private bool _isSearchingSource;
+
+    [ObservableProperty]
+    private bool _searchMangaDex = true;
+
+    [ObservableProperty]
+    private bool _searchTruyenqq = true;
+
+    [ObservableProperty]
+    private bool _searchNettruyen = true;
+
+    [ObservableProperty]
+    private bool _searchHako = true;
+
+    [ObservableProperty]
+    private string _filterStatus = "Tất cả";
+
+    [ObservableProperty]
+    private string _filterKeyword = string.Empty;
+
+    [ObservableProperty]
+    private ComicBookItem? _selectedComic;
+
     public ObservableCollection<ComicBookItem> ComicBooks { get; } = new();
     public ObservableCollection<MissingScanItem> ScanResults { get; } = new();
     public ObservableCollection<LogMessageItem> Logs { get; } = new();
+    public ObservableCollection<SourceSearchResultItem> SearchResults { get; } = new();
 
     public MainViewModel()
     {
         _downloadPathText = _downloadEngine.DownloadRoot;
         _langService.LanguageChanged += OnLanguageChanged;
         _downloadEngine.LogEmitted += OnLogEmitted;
-        _downloadEngine.ProgressUpdated += UpdateStats;
+        _downloadEngine.ProgressUpdated += OnProgressUpdated;
 
         UpdateLanguageStrings();
-        AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia đã khởi chạy thành công.");
+        AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
     }
 
     private void OnLanguageChanged()
@@ -97,12 +130,127 @@ public partial class MainViewModel : ViewModelBase
             : "Comic-GMTPC Avalonia v1.0 - English";
     }
 
+    private void OnProgressUpdated()
+    {
+        DownloadSpeedText = _downloadEngine.CurrentSpeedText;
+        UpdateStats();
+    }
+
     [RelayCommand]
     public void ToggleLanguage()
     {
         _langService.ToggleLanguage();
         AddLog("INFO", $"Chuyển đổi ngôn ngữ sang: {_langService.CurrentLanguage}");
     }
+
+    // ==========================================
+    // SOURCE SEARCH & DISCOVERY (Cơ chế get link qua Source)
+    // ==========================================
+
+    [RelayCommand]
+    public async Task SearchSourceAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SourceSearchKeyword))
+        {
+            AddLog("WARN", "Vui lòng nhập tên truyện hoặc từ khóa tìm kiếm!");
+            return;
+        }
+
+        var domains = new List<string>();
+        if (SearchMangaDex) domains.Add("mangadex.org");
+        if (SearchTruyenqq) domains.Add("truyenqq");
+        if (SearchNettruyen) domains.Add("nettruyen.tech");
+        if (SearchHako) domains.Add("hako.vn");
+
+        if (domains.Count == 0)
+        {
+            AddLog("WARN", "Vui lòng chọn ít nhất một nguồn truyện (Source)!");
+            return;
+        }
+
+        SearchResults.Clear();
+        IsSearchingSource = true;
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+
+        AddLog("INFO", $"Đang tìm kiếm '{SourceSearchKeyword}' trên các nguồn: {string.Join(", ", domains)}...");
+
+        try
+        {
+            var found = await _sourceSearchService.SearchAsync(SourceSearchKeyword, domains, _searchCts.Token);
+            foreach (var item in found)
+            {
+                SearchResults.Add(item);
+            }
+
+            AddLog("SUCCESS", $"Tìm thấy {SearchResults.Count} truyện phù hợp từ các nguồn.");
+        }
+        catch (Exception ex)
+        {
+            AddLog("ERROR", $"Tìm kiếm nguồn gặp lỗi: {ex.Message}");
+        }
+        finally
+        {
+            IsSearchingSource = false;
+        }
+    }
+
+    [RelayCommand]
+    public void OpenExternalSearch(string isBing)
+    {
+        if (string.IsNullOrWhiteSpace(SourceSearchKeyword)) return;
+
+        bool bing = isBing == "True" || isBing == "true";
+        string targetDomain = SearchMangaDex ? "mangadex.org" : (SearchTruyenqq ? "truyenqqto.com" : "nettruyen.tech");
+        string url = _sourceSearchService.BuildExternalSearchUrl(SourceSearchKeyword, targetDomain, bing);
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("xdg-open", $"\"{url}\"") { UseShellExecute = true });
+            }
+        }
+        catch {}
+    }
+
+    [RelayCommand]
+    public async Task ImportSelectedSearchToQueueAsync()
+    {
+        var selected = SearchResults.Where(r => r.IsSelected).ToList();
+        if (selected.Count == 0)
+        {
+            AddLog("WARN", "Chưa chọn truyện nào từ kết quả tìm kiếm!");
+            return;
+        }
+
+        AddLog("INFO", $"Đang thêm {selected.Count} truyện từ nguồn tìm kiếm vào hàng chờ tải...");
+        int startIndex = ComicBooks.Count + 1;
+
+        for (int i = 0; i < selected.Count; i++)
+        {
+            var sr = selected[i];
+            int idx = startIndex + i;
+            var book = await _scraperService.ScrapeBookAsync(sr.Url, idx);
+            if (!string.IsNullOrEmpty(sr.CoverUrl) && string.IsNullOrEmpty(book.CoverUrl))
+            {
+                book.CoverUrl = sr.CoverUrl;
+            }
+            ComicBooks.Add(book);
+            AddLog("INFO", $"[{idx}] Đã nạp từ nguồn: {book.Title} ({book.TotalChapters} chaps) [{book.Domain}]");
+        }
+
+        UpdateStats();
+        StartScanMissing();
+    }
+
+    // ==========================================
+    // GET LINK / EXTRACTION PIPELINE
+    // ==========================================
 
     [RelayCommand]
     public async Task GetLinkAsync()
@@ -124,6 +272,10 @@ public partial class MainViewModel : ViewModelBase
         UrlInput = string.Empty;
         AddLog("INFO", "Đã xóa ô nhập link.");
     }
+
+    // ==========================================
+    // DOWNLOAD PIPELINE
+    // ==========================================
 
     [RelayCommand]
     public async Task DownloadAllAsync()
@@ -177,6 +329,10 @@ public partial class MainViewModel : ViewModelBase
         AddLog("INFO", "Đã xóa sạch hàng chờ tải.");
     }
 
+    // ==========================================
+    // DATA GRID SELECTION & ADVANCED OPTIONS
+    // ==========================================
+
     [RelayCommand]
     public void SelectAll()
     {
@@ -196,11 +352,128 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void CheckSelectedRows()
+    {
+        if (SelectedComic != null) SelectedComic.IsChecked = true;
+    }
+
+    [RelayCommand]
+    public void UncheckSelectedRows()
+    {
+        if (SelectedComic != null) SelectedComic.IsChecked = false;
+    }
+
+    [RelayCommand]
+    public void CheckErrors()
+    {
+        foreach (var item in ComicBooks)
+        {
+            item.IsChecked = (item.Status == "Error" || item.Status == "Stopped");
+        }
+        AddLog("INFO", "Đã đánh dấu các dòng truyện bị lỗi.");
+    }
+
+    [RelayCommand]
+    public void CheckDuplicates()
+    {
+        var grouped = ComicBooks.GroupBy(b => b.Title.Trim().ToLowerInvariant())
+                                .Where(g => g.Count() > 1)
+                                .SelectMany(g => g)
+                                .ToList();
+
+        foreach (var item in ComicBooks) item.IsDuplicate = false;
+        foreach (var item in grouped) item.IsDuplicate = true;
+
+        AddLog("INFO", $"Kiểm tra trùng: Phát hiện {grouped.Count} truyện trùng tên trong danh sách.");
+    }
+
+    [RelayCommand]
+    public void MoveUp(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target == null) return;
+
+        int index = ComicBooks.IndexOf(target);
+        if (index > 0)
+        {
+            ComicBooks.Move(index, index - 1);
+            ReindexComicBooks();
+        }
+    }
+
+    [RelayCommand]
+    public void MoveDown(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target == null) return;
+
+        int index = ComicBooks.IndexOf(target);
+        if (index >= 0 && index < ComicBooks.Count - 1)
+        {
+            ComicBooks.Move(index, index + 1);
+            ReindexComicBooks();
+        }
+    }
+
+    [RelayCommand]
+    public void DeleteSelected()
+    {
+        var toRemove = ComicBooks.Where(b => b.IsChecked).ToList();
+        if (toRemove.Count == 0 && SelectedComic != null)
+        {
+            toRemove.Add(SelectedComic);
+        }
+
+        foreach (var b in toRemove)
+        {
+            ComicBooks.Remove(b);
+        }
+
+        ReindexComicBooks();
+        UpdateStats();
+        AddLog("INFO", $"Đã xóa {toRemove.Count} truyện khỏi danh sách.");
+    }
+
+    [RelayCommand]
+    public void DeleteItem(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target != null)
+        {
+            ComicBooks.Remove(target);
+            ReindexComicBooks();
+            UpdateStats();
+            AddLog("INFO", $"Đã xóa '{target.Title}' khỏi danh sách.");
+        }
+    }
+
+    [RelayCommand]
+    public void OpenBookFolder(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        string path = target != null && !string.IsNullOrEmpty(target.LocalDirectory)
+            ? target.LocalDirectory
+            : _downloadEngine.DownloadRoot;
+
+        _downloadEngine.OpenDirectoryInExplorer(path);
+        AddLog("INFO", $"Mở thư mục: {path}");
+    }
+
+    [RelayCommand]
+    public void OpenDownloadRoot()
+    {
+        _downloadEngine.OpenDirectoryInExplorer(_downloadEngine.DownloadRoot);
+    }
+
+    // ==========================================
+    // SCAN MISSING INTEGER CHAPTERS
+    // ==========================================
+
+    [RelayCommand]
     public void StartScanMissing()
     {
         if (ComicBooks.Count == 0)
         {
-            AddLog("WARN", "Chưa có danh sách truyện để quét chap thiếu!");
             return;
         }
 
@@ -224,6 +497,14 @@ public partial class MainViewModel : ViewModelBase
     public void ClearLogs()
     {
         Logs.Clear();
+    }
+
+    private void ReindexComicBooks()
+    {
+        for (int i = 0; i < ComicBooks.Count; i++)
+        {
+            ComicBooks[i].Index = i + 1;
+        }
     }
 
     private async Task ExtractUrlsInternalAsync()
@@ -260,8 +541,6 @@ public partial class MainViewModel : ViewModelBase
         }
 
         UpdateStats();
-
-        // Auto scan missing chapters for newly extracted books
         StartScanMissing();
 
         if (IsAutoDownload)

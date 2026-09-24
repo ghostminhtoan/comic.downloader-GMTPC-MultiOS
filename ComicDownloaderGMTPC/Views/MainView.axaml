@@ -3,7 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:ComicDownloaderGMTPC.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="750"
+             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="800"
              x:Class="ComicDownloaderGMTPC.Views.MainView"
              x:DataType="vm:MainViewModel"
              Background="#0B0F19">
@@ -25,7 +25,7 @@
                 <!-- MODE SELECTOR & LANGUAGE SWITCHER -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <TextBlock Text="📁 Folder:" Foreground="#9CA3AF" VerticalAlignment="Center" FontSize="12" />
+                        <TextBlock Text="📁 Folder Mode:" Foreground="#9CA3AF" VerticalAlignment="Center" FontSize="12" />
                         <ComboBox SelectedItem="{Binding ModeSelection}" Width="140" Height="30" FontSize="12">
                             <x:String>Single comic</x:String>
                             <x:String>Multi-comic</x:String>
@@ -35,9 +35,7 @@
                     <Button Command="{Binding ToggleLanguageCommand}"
                             Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
                             CornerRadius="6" Padding="10,4" Height="30">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="{Binding CurrentLanguage, StringFormat='{}🌐 {0}'}" FontWeight="SemiBold" Foreground="#38BDF8" FontSize="12" />
-                        </StackPanel>
+                        <TextBlock Text="{Binding CurrentLanguage, StringFormat='{}🌐 {0}'}" FontWeight="SemiBold" Foreground="#38BDF8" FontSize="12" />
                     </Button>
                 </StackPanel>
             </Grid>
@@ -50,7 +48,7 @@
                     <Border Background="#0EA5E9" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left">
                         <TextBlock Text="BƯỚC 1 / STEP 1" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF" />
                     </Border>
-                    <TextBlock Text="Nguồn / Source" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0" />
+                    <TextBlock Text="Nguồn / Direct Link" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0" />
                 </StackPanel>
 
                 <TextBox Grid.Column="1" Text="{Binding UrlInput}"
@@ -63,16 +61,12 @@
                     <Button Command="{Binding GetLinkCommand}"
                             Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
                             CornerRadius="6" Padding="14,6" Height="36">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="🔍 LẤY LINK" FontSize="12" />
-                        </StackPanel>
+                        <TextBlock Text="🔍 LẤY LINK" FontSize="12" />
                     </Button>
                     <Button Command="{Binding GetMoreCommand}"
                             Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold"
                             CornerRadius="6" Padding="12,6" Height="36">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="➕ THÊM" FontSize="12" />
-                        </StackPanel>
+                        <TextBlock Text="➕ THÊM" FontSize="12" />
                     </Button>
                     <Button Command="{Binding ClearLinksCommand}"
                             Background="#1E293B" Foreground="#94A3B8"
@@ -98,9 +92,7 @@
                     <Button Command="{Binding DownloadAllCommand}"
                             Background="#4F46E5" Foreground="#FFFFFF" FontWeight="Bold"
                             CornerRadius="6" Padding="14,6" Height="32">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="⬇️ TẢI TẤT CẢ" FontSize="12" />
-                        </StackPanel>
+                        <TextBlock Text="⬇️ TẢI TẤT CẢ" FontSize="12" />
                     </Button>
                     <Button Command="{Binding StopCommand}"
                             Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold"
@@ -117,6 +109,11 @@
                             CornerRadius="6" Padding="10,6" Height="32">
                         <TextBlock Text="🧹 XÓA QUEUE" FontSize="12" />
                     </Button>
+                    <Button Command="{Binding OpenDownloadRootCommand}"
+                            Background="#1E293B" Foreground="#38BDF8" BorderBrush="#334155" BorderThickness="1"
+                            CornerRadius="6" Padding="10,6" Height="32">
+                        <TextBlock Text="📂 Mở thư mục tải" FontSize="12" />
+                    </Button>
                 </StackPanel>
 
                 <!-- TOGGLES & OPTIONS -->
@@ -124,45 +121,54 @@
                     <CheckBox IsChecked="{Binding IsAutoDownload}" Content="⚡ Tự động tải" FontSize="11" Foreground="#D1D5DB" />
                     <CheckBox IsChecked="{Binding IsAutoRetry}" Content="🔁 Tự thử lại" FontSize="11" Foreground="#D1D5DB" />
                     <CheckBox IsChecked="{Binding IsCompactRow}" Content="📏 Nén dòng" FontSize="11" Foreground="#D1D5DB" />
-                    <CheckBox IsChecked="{Binding IsThumbnailMode}" Content="🖼️ Thumbnail mode" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" />
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- MAIN CONTENT TABS -->
         <TabControl Grid.Row="3" Margin="0" Background="Transparent">
-            <!-- TAB 1: COMIC LIST -->
-            <TabItem Header="📋 Danh Sách Truyện (Queue)" FontSize="12" FontWeight="SemiBold">
+            <!-- TAB 1: COMIC LIST / DATA GRID -->
+            <TabItem Header="📋 Danh Sách Chờ Tải (Data Grid)" FontSize="12" FontWeight="SemiBold">
                 <Grid RowDefinitions="Auto, *">
-                    <!-- SUB TOOLBAR -->
-                    <Border Grid.Row="0" Background="#161F30" Padding="16,6" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                    <!-- ADVANCED DATA GRID TOOLBAR -->
+                    <Border Grid.Row="0" Background="#161F30" Padding="16,8" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                         <Grid ColumnDefinitions="Auto, *, Auto">
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                 <Button Command="{Binding SelectAllCommand}" Content="✓ Chọn tất cả" Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="8,4" CornerRadius="4" />
                                 <Button Command="{Binding UnselectAllCommand}" Content="✗ Bỏ chọn" Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="8,4" CornerRadius="4" />
                                 <Button Command="{Binding InvertSelectionCommand}" Content="⇄ Đảo chọn" Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="8,4" CornerRadius="4" />
+                                <Button Command="{Binding CheckSelectedRowsCommand}" Content="☑ Tích chọn" Background="#1E293B" Foreground="#38BDF8" FontSize="11" Padding="8,4" CornerRadius="4" />
+                                <Button Command="{Binding UncheckSelectedRowsCommand}" Content="☐ Bỏ tích chọn" Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="8,4" CornerRadius="4" />
+                                <Button Command="{Binding CheckErrorsCommand}" Content="⚠️ Tích lỗi" Background="#1E293B" Foreground="#F43F5E" FontSize="11" Padding="8,4" CornerRadius="4" />
+                                <Button Command="{Binding CheckDuplicatesCommand}" Content="🔍 Quét trùng" Background="#1E293B" Foreground="#F59E0B" FontSize="11" Padding="8,4" CornerRadius="4" />
+                                <Button Command="{Binding DeleteSelectedCommand}" Content="🗑️ Xóa dòng" Background="#1E293B" Foreground="#EF4444" FontSize="11" Padding="8,4" CornerRadius="4" />
                             </StackPanel>
 
                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding TotalBooks, StringFormat='{}Tổng: {0} truyện'}" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                <TextBlock Text="{Binding TotalBooks, StringFormat='{}Tổng: {0} truyện'}" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" />
                             </StackPanel>
                         </Grid>
                     </Border>
 
-                    <!-- DETAILS VIEW -->
+                    <!-- DATA GRID ITEMS VIEW -->
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding ComicBooks}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="12,8">
-                                        <Grid ColumnDefinitions="Auto, Auto, 2*, 1*, 2*, 1*, Auto" VerticalAlignment="Center">
+                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="12,6">
+                                        <Grid ColumnDefinitions="Auto, Auto, 2*, 1*, 2*, 1*, 1*, Auto" VerticalAlignment="Center">
                                             <!-- Checkbox & Index -->
                                             <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" Margin="0,0,6,0" VerticalAlignment="Center" />
                                             <TextBlock Grid.Column="1" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="11" Width="30" VerticalAlignment="Center" />
 
-                                            <!-- Title & Message -->
+                                            <!-- Title & Duplicate indicator -->
                                             <StackPanel Grid.Column="2" Margin="4,0,12,0" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                    <Border IsVisible="{Binding IsDuplicate}" Background="#78350F" CornerRadius="3" Padding="4,1" VerticalAlignment="Center">
+                                                        <TextBlock Text="TRÙNG TÊN" FontSize="9" FontWeight="Bold" Foreground="#FDE047" />
+                                                    </Border>
+                                                </StackPanel>
                                                 <TextBlock Text="{Binding StatusMessage}" Foreground="#94A3B8" FontSize="10" TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
 
@@ -171,7 +177,7 @@
                                                 <TextBlock Text="{Binding Domain}" FontSize="10" Foreground="#38BDF8" FontWeight="SemiBold" />
                                             </Border>
 
-                                            <!-- Progress -->
+                                            <!-- Progress Bar -->
                                             <StackPanel Grid.Column="4" Margin="10,0" VerticalAlignment="Center">
                                                 <Grid ColumnDefinitions="*, Auto">
                                                     <TextBlock Text="{Binding ProgressPercentage, StringFormat='{}{0:0}%'}" FontSize="10" Foreground="#94A3B8" />
@@ -184,8 +190,109 @@
                                             <TextBlock Grid.Column="5" Text="{Binding TotalChapters, StringFormat='{}{0} chaps'}" Foreground="#CBD5E1" FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Center" />
 
                                             <!-- Status Badge -->
-                                            <Border Grid.Column="6" CornerRadius="4" Padding="8,3" VerticalAlignment="Center" MinWidth="75" Background="#1E293B">
+                                            <Border Grid.Column="6" CornerRadius="4" Padding="8,3" VerticalAlignment="Center" MinWidth="75" Background="#1E293B" HorizontalAlignment="Center">
                                                 <TextBlock Text="{Binding Status}" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#FCD34D" />
+                                            </Border>
+
+                                            <!-- Row Actions: Move Up, Move Down, Open Folder, Delete -->
+                                            <StackPanel Grid.Column="7" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenBookFolderCommand}"
+                                                        CommandParameter="{Binding .}"
+                                                        ToolTip.Tip="Mở thư mục truyện"
+                                                        Background="#1E293B" Foreground="#38BDF8" Padding="6,3" FontSize="11" CornerRadius="4">
+                                                    <TextBlock Text="📂" />
+                                                </Button>
+                                                <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveUpCommand}"
+                                                        CommandParameter="{Binding .}"
+                                                        ToolTip.Tip="Di chuyển lên"
+                                                        Background="#1E293B" Foreground="#94A3B8" Padding="6,3" FontSize="11" CornerRadius="4">
+                                                    <TextBlock Text="▲" />
+                                                </Button>
+                                                <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveDownCommand}"
+                                                        CommandParameter="{Binding .}"
+                                                        ToolTip.Tip="Di chuyển xuống"
+                                                        Background="#1E293B" Foreground="#94A3B8" Padding="6,3" FontSize="11" CornerRadius="4">
+                                                    <TextBlock Text="▼" />
+                                                </Button>
+                                                <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).DeleteItemCommand}"
+                                                        CommandParameter="{Binding .}"
+                                                        ToolTip.Tip="Xóa khỏi danh sách"
+                                                        Background="#1E293B" Foreground="#EF4444" Padding="6,3" FontSize="11" CornerRadius="4">
+                                                    <TextBlock Text="✕" />
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 2: SOURCE SEARCH & DISCOVERY (Cơ chế get link qua Source) -->
+            <TabItem Header="🌐 Nguồn &amp; Tìm Kiếm (Source Search)" FontSize="12" FontWeight="SemiBold">
+                <Grid RowDefinitions="Auto, *">
+                    <!-- SEARCH CONTROLS -->
+                    <Border Grid.Row="0" Background="#161F30" Padding="16,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                        <Grid RowDefinitions="Auto, Auto">
+                            <!-- Keyword Input & Buttons -->
+                            <Grid Grid.Row="0" ColumnDefinitions="*, Auto, Auto, Auto" Margin="0,0,0,8">
+                                <TextBox Grid.Column="0" Text="{Binding SourceSearchKeyword}"
+                                         PlaceholderText="Nhập tên truyện cần tìm trên các nguồn (VD: Solo Leveling, One Piece, Thần Đạo Đan Tôn...)"
+                                         Height="36" CornerRadius="6" VerticalContentAlignment="Center"
+                                         Background="#0F172A" BorderBrush="#334155" Foreground="#F8FAFC" FontSize="12"
+                                         Margin="0,0,10,0" />
+
+                                <Button Grid.Column="1" Command="{Binding SearchSourceCommand}"
+                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
+                                        CornerRadius="6" Padding="14,6" Height="36" Margin="0,0,8,0">
+                                    <TextBlock Text="🔍 TÌM TRÊN NGUỒN" FontSize="12" />
+                                </Button>
+
+                                <Button Grid.Column="2" Command="{Binding OpenExternalSearchCommand}"
+                                        CommandParameter="False"
+                                        Background="#1E293B" Foreground="#38BDF8" BorderBrush="#334155" BorderThickness="1"
+                                        CornerRadius="6" Padding="12,6" Height="36" Margin="0,0,8,0">
+                                    <TextBlock Text="🌐 Google site: search" FontSize="11" />
+                                </Button>
+
+                                <Button Grid.Column="3" Command="{Binding ImportSelectedSearchToQueueCommand}"
+                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
+                                        CornerRadius="6" Padding="14,6" Height="36">
+                                    <TextBlock Text="📥 THÊM VÀO QUEUE" FontSize="12" />
+                                </Button>
+                            </Grid>
+
+                            <!-- Sources Checkboxes -->
+                            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                                <TextBlock Text="Nguồn tìm kiếm:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
+                                <CheckBox IsChecked="{Binding SearchMangaDex}" Content="MangaDex (API)" FontSize="11" Foreground="#D1D5DB" />
+                                <CheckBox IsChecked="{Binding SearchTruyenqq}" Content="TruyenQQ" FontSize="11" Foreground="#D1D5DB" />
+                                <CheckBox IsChecked="{Binding SearchNettruyen}" Content="NetTruyen" FontSize="11" Foreground="#D1D5DB" />
+                                <CheckBox IsChecked="{Binding SearchHako}" Content="Hako (Light Novel)" FontSize="11" Foreground="#D1D5DB" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- SEARCH RESULTS LIST -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding SearchResults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="12,8">
+                                        <Grid ColumnDefinitions="Auto, 100, 2*, 1*, Auto" VerticalAlignment="Center">
+                                            <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                            <Border Grid.Column="1" Background="#1E293B" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Domain}" FontSize="10" Foreground="#38BDF8" FontWeight="SemiBold" />
+                                            </Border>
+                                            <StackPanel Grid.Column="2" Margin="8,0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Url}" Foreground="#64748B" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="3" Text="{Binding LatestChapter}" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
+                                            <Border Grid.Column="4" Background="#064E3B" CornerRadius="4" Padding="8,3" VerticalAlignment="Center">
+                                                <TextBlock Text="Sẵn sàng nạp" FontSize="11" Foreground="#34D399" FontWeight="SemiBold" />
                                             </Border>
                                         </Grid>
                                     </Border>
@@ -196,7 +303,7 @@
                 </Grid>
             </TabItem>
 
-            <!-- TAB 2: SCAN MISSING CHAPTERS -->
+            <!-- TAB 3: SCAN MISSING CHAPTERS -->
             <TabItem Header="🔍 Scan Chap Số Nguyên Thiếu" FontSize="12" FontWeight="SemiBold">
                 <Grid RowDefinitions="Auto, *">
                     <Border Grid.Row="0" Background="#161F30" Padding="16,8" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
@@ -241,7 +348,7 @@
                 </Grid>
             </TabItem>
 
-            <!-- TAB 3: LOGS -->
+            <!-- TAB 4: LOGS -->
             <TabItem Header="📜 Nhật Ký Hoạt Động" FontSize="12" FontWeight="SemiBold">
                 <Grid RowDefinitions="Auto, *">
                     <Border Grid.Row="0" Background="#161F30" Padding="16,6" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
