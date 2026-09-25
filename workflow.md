@@ -453,5 +453,32 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
      - Phím `D` hoặc `Mũi tên Phải`: Chuyển ảnh tiếp theo.
      - Phím `1`: Zoom tỷ lệ 1:1 (100%).
      - Phím `F`: Zoom vừa khung cửa sổ (Fit).
-     - Phím `+` / `-`: Phóng to / thu nhỏ.
      - Giữ phím `Space`: Nhìn nhanh ảnh gốc (Peek Before).
+
+
+### 15.6. Parent Tab Tool & Comic File Packer (Đóng Gói File Truyện Tranh ZIP, CBZ, PDF)
+- **Tái cấu trúc điều hướng (Navigation Architecture Refactoring)**:
+  - Tách bạch rõ ràng chức năng: Tab `Download` được tinh gọn chỉ tập trung vào nghiệp vụ cốt lõi: `Chờ Tải (Queue)`, `Scan Thiếu Chap`, `Nhật Ký (Logs)`.
+  - Thành lập Parent Tab mới `🛠️ TAB TOOL (CÔNG CỤ)` gom cụm toàn bộ các module xử lý tệp tin và hình ảnh:
+    1. `📁 Split / Merge Folder`
+    2. `✂️ Cắt Ảnh Dài`
+    3. `🎨 Xử Lý Ảnh` (Tích hợp Live Preview đồng bộ 2 chiều Pan/Zoom, nút mở trong cửa sổ mới độc lập `EnhanceComparisonWindow`).
+    4. `📦 Đóng Gói File` (Comic File Packer chuyên dụng).
+- **Khắc phục triệt để lỗi Crash `0xc0000005` (Access Violation)**:
+  - Khi duyệt Next/Previous page ảnh xem trước, SkiaSharp giải phóng đối tượng native pointer nếu gọi `.Dispose()` trước khi truy xuất `.Width` và `.Height` cho ước lượng dung lượng.
+  - Sửa đổi: Lưu lại kích thước bitmap trước khi xử lý, bọc safe memory disposal trong khối `finally` và chuyển `MemoryStream` thành `Avalonia.Media.Imaging.Bitmap` an toàn trên UI thread.
+- **Đồng bộ hóa Pan & Zoom hoàn hảo giữa 2 ảnh Before & After**:
+  - Tích hợp bộ lắng nghe sự kiện đa tầng `ScrollChanged`, `PointerPressed/Moved/Released` (Tunnel routing) và `PointerWheelChanged` cho cả Live Preview trong tab Xử Lý Ảnh và Fullscreen Modal Overlay.
+  - Khi người dùng cuộn hoặc kéo rê ảnh một bên, khung ảnh đối diện tự động dịch chuyển và zoom đồng nhịp với tỷ lệ 1:1 mượt mà.
+  - Bổ sung nút `🗖 Mở Trong Cửa Sổ Mới` màu tím nổi bật giúp người dùng dễ dàng bật cửa sổ đối chiếu độc lập song song với cửa sổ chính.
+- **Dịch vụ Đóng Gói File Truyện Tranh (`FilePackerService`)**:
+  - Hỗ trợ 2 thư mục rõ ràng: `Thư mục nguồn (Input Folder)` và `Thư mục lưu (Output Folder)` kèm nút chọn và nút mở nhanh.
+  - Hỗ trợ 3 định dạng đóng gói chuẩn phổ biến nhất trong thế giới truyện tranh:
+    1. **ZIP (`.zip`)**: Đóng gói nén tệp chuẩn sử dụng `System.IO.Compression.ZipArchive`, tốc độ nén cao.
+    2. **CBZ (`.cbz`)**: Định dạng chuẩn quốc tế cho Comic/Manga Reader (ComicRack, CDisplayEx, Tachiyomi, v.v.), tương thích hoàn toàn cấu trúc zip.
+    3. **PDF (`.pdf`)**: Xuất PDF truyện tranh đa trang chất lượng cao bằng `SkiaSharp.SKDocument.CreatePdf`, không phụ thuộc thư viện nặng nề của bên thứ ba, tự động fit tỉ lệ trang ảnh gốc trên cả 3 nền tảng Windows, Linux, Android.
+  - Tự động sắp xếp thứ tự trang ảnh thông minh theo Natural Sort (ví dụ: `1.jpg`, `2.jpg`, ..., `10.jpg`, `100.jpg`).
+  - Hỗ trợ 2 chế độ linh hoạt:
+    - Đóng gói từng thư mục con (Mỗi chapter xuất thành 1 file riêng biệt).
+    - Gom đóng gói trực tiếp thư mục gốc.
+  - Tích hợp thanh tiến trình %, thống kê số tệp thành công / lỗi, nút dừng và khung nhật ký (logs) chuyên nghiệp.

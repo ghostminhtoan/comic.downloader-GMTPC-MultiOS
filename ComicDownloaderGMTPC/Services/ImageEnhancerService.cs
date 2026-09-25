@@ -202,8 +202,14 @@ public class ImageEnhancerService
                 }
             }
 
+            int workW = workingBitmap.Width;
+            int workH = workingBitmap.Height;
+
             using var enhanced = ProcessBitmap(workingBitmap, options);
-            if (isResized) workingBitmap.Dispose();
+            if (isResized)
+            {
+                workingBitmap.Dispose();
+            }
 
             string ext = Path.GetExtension(filePath).ToLowerInvariant();
             var format = ext switch
@@ -219,8 +225,8 @@ public class ImageEnhancerService
 
             // Ước tính dung lượng nén cho toàn bộ kích thước gốc
             long previewEncodedSize = bytes.Length;
-            long estimatedBytes = isResized
-                ? (long)(previewEncodedSize * ((double)(origW * origH) / (workingBitmap.Width * workingBitmap.Height)))
+            long estimatedBytes = isResized && workW > 0 && workH > 0
+                ? (long)(previewEncodedSize * ((double)(origW * origH) / (workW * workH)))
                 : previewEncodedSize;
 
             double delta = originalSize > 0

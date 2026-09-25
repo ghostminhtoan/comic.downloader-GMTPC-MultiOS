@@ -25,9 +25,11 @@ public partial class MainViewModel : ViewModelBase
     private readonly MissingChapterScannerService _scannerService = MissingChapterScannerService.Instance;
     private readonly SourceSearchService _sourceSearchService = SourceSearchService.Instance;
     private readonly ImageEnhancerService _imageEnhancer = new();
+    private readonly FilePackerService _filePacker = new();
     private CancellationTokenSource? _scanCts;
     private CancellationTokenSource? _searchCts;
     private CancellationTokenSource? _enhanceCts;
+    private CancellationTokenSource? _packerCts;
     private System.Threading.Timer? _previewDebounceTimer;
     private string _enhanceSampleImagePath = string.Empty;
 
@@ -1253,15 +1255,21 @@ public partial class MainViewModel : ViewModelBase
             var stats = _imageEnhancer.GeneratePreviewWithStats(_enhanceSampleImagePath, options, maxDimension: 900);
             if (stats?.PreviewBytes != null && stats.PreviewBytes.Length > 0)
             {
-                using var ms = new MemoryStream(stats.PreviewBytes);
-                var bmp = new Bitmap(ms);
+                byte[] rawBytes = stats.PreviewBytes;
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    EnhancePreviewResult = bmp;
-                    EnhanceBeforeInfoText = $"Before: {stats.OrigWidth} x {stats.OrigHeight}, {stats.OriginalSizeBytes / 1024.0:F1} KB";
-                    string sign = stats.SizeDeltaPercent >= 0 ? "+" : "";
-                    EnhanceAfterInfoText = $"After: {stats.OrigWidth} x {stats.OrigHeight}, {stats.ProcessedSizeBytes / 1024.0:F1} KB ({sign}{stats.SizeDeltaPercent:F1}%)";
-                    EnhanceClippingInfoText = stats.ClippingInfo;
+                    try
+                    {
+                        using var ms = new MemoryStream(rawBytes);
+                        EnhancePreviewResult = new Bitmap(ms);
+                        EnhanceBeforeInfoText = $"Before: {stats.OrigWidth} x {stats.OrigHeight}, {stats.OriginalSizeBytes / 1024.0:F1} KB";
+                        string sign = stats.SizeDeltaPercent >= 0 ? "+" : "";
+                        EnhanceAfterInfoText = $"After: {stats.OrigWidth} x {stats.OrigHeight}, {stats.ProcessedSizeBytes / 1024.0:F1} KB ({sign}{stats.SizeDeltaPercent:F1}%)";
+                        EnhanceClippingInfoText = stats.ClippingInfo;
+                    }
+                    catch
+                    {
+                    }
                 });
             }
         }
@@ -1278,14 +1286,14 @@ public partial class MainViewModel : ViewModelBase
             if (!File.Exists(imagePath)) return;
             _enhanceSampleImagePath = imagePath;
 
-            using (var fs = new FileStream(imagePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            {
-                var originalBmp = new Bitmap(fs);
-                long origSize = new FileInfo(imagePath).Length;
-                EnhancePreviewOriginal = originalBmp;
-                EnhancePreviewInfoText = $"{Path.GetFileName(imagePath)} ({originalBmp.PixelSize.Width}x{originalBmp.PixelSize.Height})";
-                EnhanceBeforeInfoText = $"Before: {originalBmp.PixelSize.Width} x {originalBmp.PixelSize.Height}, {origSize / 1024.0:F1} KB";
-            }
+            byte[] bytes = File.ReadAllBytes(imagePath);
+            using var ms = new MemoryStream(bytes);
+            var originalBmp = new Bitmap(ms);
+            long origSize = bytes.Length;
+
+            EnhancePreviewOriginal = originalBmp;
+            EnhancePreviewInfoText = $"{Path.GetFileName(imagePath)} ({originalBmp.PixelSize.Width}x{originalBmp.PixelSize.Height})";
+            EnhanceBeforeInfoText = $"Before: {originalBmp.PixelSize.Width} x {originalBmp.PixelSize.Height}, {origSize / 1024.0:F1} KB";
 
             UpdatePreviewResult();
         }
@@ -1757,6 +1765,252 @@ public partial class MainViewModel : ViewModelBase
     {
         EnhanceLogs.Clear();
     }
+
+    #region FILE PACKER (ĐÓNG GÓI FILE ZIP, CBZ, PDF)
+    [ObservableProperty]
+    private string _packerInputFolderPath = string.Empty;
+
+    [ObservableProperty]
+    private string _packerOutputFolderPath = string.Empty;
+
+    [ObservableProperty]
+    private bool _isPackerZip = false;
+
+    [ObservableProperty]
+    private bool _isPackerCbz = true;
+
+    [ObservableProperty]
+    private bool _isPackerPdf = false;
+
+    [ObservableProperty]
+    private bool _isPackerBatchSubfolders = true;
+
+    [ObservableProperty]
+    private bool _isPacking = false;
+
+    [ObservableProperty]
+    private double _packerProgress = 0;
+
+    [ObservableProperty]
+    private string _packerProgressText = "0%";
+
+    [ObservableProperty]
+    private string _packerCountText = "0 file";
+
+    [ObservableProperty]
+    private string _packerErrorCountText = "0";
+
+    [ObservableProperty]
+    private string _packerCurrentFileText = "Sẵn sàng.";
+
+    public ObservableCollection<string> PackerLogs { get; } = new();
+
+    [RelayCommand]
+    public async Task BrowsePackerInputFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null)
+            {
+                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
+                {
+                    Title = _langService.CurrentLanguage == "VI"
+                        ? "Chọn thư mục nguồn chứa ảnh hoặc các thư mục chapter cần đóng gói"
+                        : "Select input folder containing images or chapters to pack",
+                    AllowMultiple = false
+                };
+
+                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
+                if (folders != null && folders.Count > 0)
+                {
+                    var selected = folders[0];
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                    {
+                        PackerInputFolderPath = normalized;
+                        if (string.IsNullOrWhiteSpace(PackerOutputFolderPath))
+                        {
+                            PackerOutputFolderPath = Path.Combine(normalized, "Packed");
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi chọn thư mục nguồn đóng gói: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task BrowsePackerOutputFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null)
+            {
+                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
+                {
+                    Title = _langService.CurrentLanguage == "VI"
+                        ? "Chọn thư mục đích lưu file đóng gói (Zip, Cbz, Pdf)"
+                        : "Select output folder to save packed files (Zip, Cbz, Pdf)",
+                    AllowMultiple = false
+                };
+
+                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
+                if (folders != null && folders.Count > 0)
+                {
+                    var selected = folders[0];
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                    {
+                        PackerOutputFolderPath = normalized;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi chọn thư mục đích đóng gói: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public void OpenPackerInputFolder()
+    {
+        if (string.IsNullOrEmpty(PackerInputFolderPath) || !Directory.Exists(PackerInputFolderPath))
+        {
+            AddLog("WARN", "[Đóng gói file] Thư mục nguồn không tồn tại hoặc chưa được chọn!");
+            return;
+        }
+
+        _downloadEngine.OpenDirectoryInExplorer(PackerInputFolderPath);
+    }
+
+    [RelayCommand]
+    public void OpenPackerOutputFolder()
+    {
+        if (string.IsNullOrEmpty(PackerOutputFolderPath))
+        {
+            AddLog("WARN", "[Đóng gói file] Thư mục đích chưa được chọn!");
+            return;
+        }
+
+        if (!Directory.Exists(PackerOutputFolderPath))
+        {
+            try { Directory.CreateDirectory(PackerOutputFolderPath); } catch { }
+        }
+
+        _downloadEngine.OpenDirectoryInExplorer(PackerOutputFolderPath);
+    }
+
+    [RelayCommand]
+    public async Task StartPackingAsync()
+    {
+        if (string.IsNullOrWhiteSpace(PackerInputFolderPath) || !Directory.Exists(PackerInputFolderPath))
+        {
+            AddLog("WARN", "[Đóng gói file] Vui lòng chọn một thư mục nguồn hợp lệ!");
+            return;
+        }
+
+        if (!IsPackerZip && !IsPackerCbz && !IsPackerPdf)
+        {
+            AddLog("WARN", "[Đóng gói file] Vui lòng chọn ít nhất một định dạng (ZIP, CBZ hoặc PDF)!");
+            return;
+        }
+
+        string outDir = string.IsNullOrWhiteSpace(PackerOutputFolderPath)
+            ? Path.Combine(PackerInputFolderPath, "Packed")
+            : PackerOutputFolderPath;
+        PackerOutputFolderPath = outDir;
+
+        IsPacking = true;
+        PackerProgress = 0;
+        PackerProgressText = "0%";
+        PackerCountText = "0 file";
+        PackerErrorCountText = "0";
+        PackerCurrentFileText = "Đang quét danh sách thư mục...";
+        PackerLogs.Clear();
+        PackerLogs.Add($"[{DateTime.Now:HH:mm:ss}] Bắt đầu tiến trình đóng gói: Nguồn = {PackerInputFolderPath}, Đích = {outDir}");
+
+        _packerCts = new CancellationTokenSource();
+
+        var options = new FilePackerOptions
+        {
+            CreateZip = IsPackerZip,
+            CreateCbz = IsPackerCbz,
+            CreatePdf = IsPackerPdf,
+            PackSubfoldersIndividually = IsPackerBatchSubfolders
+        };
+
+        _filePacker.LogEmitted = (lvl, msg) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                PackerLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [{lvl}] {msg}");
+            });
+        };
+
+        var prog = new Progress<(int current, int total, string currentFile)>(info =>
+        {
+            if (info.total > 0)
+            {
+                PackerProgress = (double)info.current / info.total * 100.0;
+                PackerProgressText = $"{PackerProgress:F0}%";
+            }
+            PackerCurrentFileText = info.currentFile;
+        });
+
+        try
+        {
+            var (success, errors) = await _filePacker.ProcessPackingAsync(
+                PackerInputFolderPath,
+                outDir,
+                options,
+                prog,
+                _packerCts.Token);
+
+            PackerCountText = $"{success} file";
+            PackerErrorCountText = errors.ToString();
+            PackerCurrentFileText = _langService.CurrentLanguage == "VI" ? "Hoàn tất đóng gói." : "Packing completed.";
+            PackerLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [HOÀN TẤT] Thành công: {success}, Lỗi: {errors}");
+        }
+        catch (OperationCanceledException)
+        {
+            PackerLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [ĐÃ DỪNG] Tiến trình đóng gói đã dừng theo yêu cầu.");
+            PackerCurrentFileText = "Đã dừng.";
+        }
+        catch (Exception ex)
+        {
+            PackerLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [LỖI] {ex.Message}");
+            PackerCurrentFileText = "Lỗi: " + ex.Message;
+        }
+        finally
+        {
+            IsPacking = false;
+        }
+    }
+
+    [RelayCommand]
+    public void StopPacking()
+    {
+        if (_packerCts != null && !_packerCts.IsCancellationRequested)
+        {
+            _packerCts.Cancel();
+            PackerLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] Đang gửi yêu cầu dừng tiến trình đóng gói...");
+        }
+    }
+
+    [RelayCommand]
+    public void ClearPackerLogs()
+    {
+        PackerLogs.Clear();
+    }
+    #endregion
 }
 
 public class MangadexLanguageChoice
