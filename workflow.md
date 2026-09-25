@@ -399,5 +399,18 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   4. **Độ nét (Sharpness)**: 0 đến 10 (SKImageFilter Matrix Convolution 3x3 Laplacian edge-enhancement kernel)
   5. **Khử nhiễu (Noise Reduce)**: 0 đến 5 (SKImageFilter Gaussian / Bilateral blur filter)
 - **Tối ưu hiệu năng cực đỉnh (Single-pass color transform)**: Gộp chung Contrast, Brightness và Saturation vào một ma trận màu 4x5 duy nhất (`SKColorFilter.CreateColorMatrix`), xử lý qua native SIMD chỉ vài mili-giây cho mỗi ảnh chất lượng cao.
-- **Trực quan hóa Live Preview Before & After**: Tự động hiển thị và cập nhật kết quả xử lý của ảnh mẫu theo thời gian thực (debounced 120ms) giúp người dùng tinh chỉnh thông số trực quan trước khi chạy hàng loạt.
-- **Xử lý hàng loạt an toàn**: Tùy chỉnh số luồng `Parallel.ForEachAsync`, chất lượng xuất ảnh (10 - 100%), hỗ trợ lưu riêng vào thư mục `Enhanced/` hoặc ghi đè file gốc an toàn (sử dụng temporary file `.tmp_enh` trước khi replace), thanh tiến trình, bộ đếm thành công/lỗi và log chi tiết.
+- **Phân định rõ ràng Thư mục Nguồn (Input) và Thư mục Đích (Output)**:
+  - Cho phép người dùng duyệt và tùy chọn linh hoạt giữa lưu ảnh tối ưu sang thư mục riêng biệt (mặc định gợi ý `<InputFolder>/Enhanced`) hoặc tùy chọn "Chỉ đè file gốc" (`OverwriteOriginal`).
+  - Nút "Mở" tương ứng cho cả hai thư mục nguồn và đích.
+- **Hỗ trợ toàn diện Thư mục Đa Tầng (Recursive Subfolders)**:
+  - Quét đệ quy `SearchOption.AllDirectories` bất kể độ sâu bao nhiêu tầng con (ví dụ: `Bay Lên Cao\Chap 1\01.jpg`, `Bay Lên Cao\Chap 2\...`).
+  - Tự động tìm kiếm ảnh mẫu xem trước đệ quy (`FindFirstSampleImage`), giải quyết triệt để vấn đề thư mục gốc không có ảnh lẻ.
+  - Khi xuất sang thư mục đích, sử dụng `Path.GetRelativePath` để tái tạo và bảo toàn nguyên vẹn 100% cấu trúc thư mục con ban đầu.
+- **Giao diện Slider chuẩn hóa Vertical Center**: Tăng chiều cao vùng điều khiển (`MinHeight="68"`) và căn giữa theo trục dọc (`VerticalAlignment="Center"`) giúp thanh trượt và nhãn thông số thoáng đãng, cân đối và dễ thao tác.
+- **Xem trước tương tác cao cấp (Interactive Zoom & Pan)**:
+  - Cho phép phóng to/thu nhỏ ảnh mẫu từ 25% đến 500% qua các nút `➕`, `➖`, `1:1`.
+  - Khung xem trước bọc trong `ScrollViewer` kết hợp `LayoutTransformControl` (`ScaleTransform`) cho phép người dùng cuộn và kéo rê (pan/drag) ảnh tự do để soi chi tiết từng vùng ảnh.
+- **Chế độ Đối Chiếu Toàn Màn Hình & Cửa Sổ Riêng (Fullscreen & Dual Window Comparison)**:
+  - Nút "TOÀN MÀN HÌNH ĐỐI CHIẾU": Mở lớp phủ toàn màn hình (Modal Overlay) trực tiếp trong ứng dụng, tương thích mượt mà 100% trên cả Android, Linux và Windows.
+  - Nút "Mở Cửa Sổ Riêng": Khởi chạy cửa sổ độc lập `EnhanceComparisonWindow` trên Desktop với 2 khung cuộn lớn và thanh công cụ điều chỉnh trực tiếp giúp đối chiếu Before / After cực kỳ trực quan và tiện lợi.
+- **Xử lý hàng loạt an toàn**: Tùy chỉnh số luồng `Parallel.ForEachAsync`, chất lượng xuất ảnh (10 - 100%), cơ chế ghi đè an toàn sử dụng temporary file `.tmp_enh` trước khi replace, thanh tiến trình, bộ đếm thành công/lỗi và log chi tiết.

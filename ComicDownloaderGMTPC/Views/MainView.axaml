@@ -708,109 +708,136 @@
                                     <!-- Panel cấu hình bộ lọc & tác vụ -->
                                     <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                                         <StackPanel Spacing="10">
-                                            <!-- Hàng 1: Chọn thư mục & tùy chọn lưu -->
-                                            <Grid ColumnDefinitions="*, Auto, Auto, Auto">
-                                                <TextBox Grid.Column="0" Text="{Binding EnhanceFolderPath}" PlaceholderText="Chọn thư mục chứa ảnh cần tối ưu màu sắc / khử nhiễu..." Height="34" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" Padding="8,4" />
-                                                <Button Grid.Column="1" Command="{Binding BrowseEnhanceFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,5" Height="34" CornerRadius="4" Margin="0,0,6,0" />
-                                                <Button Grid.Column="2" Command="{Binding OpenEnhanceFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" Margin="0,0,8,0" ToolTip.Tip="Mở thư mục trên thiết bị" />
-                                                <CheckBox Grid.Column="3" IsChecked="{Binding EnhanceOverwriteOriginal}" Content="Ghi đè file gốc" Foreground="#F59E0B" FontSize="11" VerticalAlignment="Center" ToolTip.Tip="Nếu bỏ chọn, ảnh sau xử lý sẽ tự động lưu vào thư mục con 'Enhanced/'" />
+                                            <!-- Hàng 1: Thư mục nguồn (Input Folder) -->
+                                            <Grid ColumnDefinitions="Auto, *, Auto, Auto">
+                                                <TextBlock Grid.Column="0" Text="📥 Thư mục nguồn:" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Width="125" VerticalAlignment="Center" />
+                                                <TextBox Grid.Column="1" Text="{Binding EnhanceFolderPath}" PlaceholderText="Chọn thư mục nguồn chứa ảnh (hỗ trợ quét đệ quy đa tầng)..." Height="34" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" Padding="8,4" />
+                                                <Button Grid.Column="2" Command="{Binding BrowseEnhanceFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,5" Height="34" CornerRadius="4" Margin="0,0,6,0" />
+                                                <Button Grid.Column="3" Command="{Binding OpenEnhanceFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
                                             </Grid>
 
-                                            <!-- Hàng 2: Bộ 5 thông số (Sliders & Numeric) + Threads & Quality -->
-                                            <WrapPanel Orientation="Horizontal">
+                                            <!-- Hàng 2: Thư mục đích (Output Folder) & Tùy chọn ghi đè -->
+                                            <Grid ColumnDefinitions="Auto, *, Auto, Auto, Auto">
+                                                <TextBlock Grid.Column="0" Text="📤 Thư mục lưu:" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" Width="125" VerticalAlignment="Center" />
+                                                <TextBox Grid.Column="1" Text="{Binding EnhanceOutputFolderPath}" IsEnabled="{Binding !EnhanceOverwriteOriginal}" PlaceholderText="Chọn thư mục lưu ảnh (mặc định: thư mục con 'Enhanced' bên trong nguồn)..." Height="34" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" Padding="8,4" />
+                                                <Button Grid.Column="2" Command="{Binding BrowseEnhanceOutputFolderCommand}" IsEnabled="{Binding !EnhanceOverwriteOriginal}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,5" Height="34" CornerRadius="4" Margin="0,0,6,0" />
+                                                <Button Grid.Column="3" Command="{Binding OpenEnhanceOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" Margin="0,0,8,0" ToolTip.Tip="Mở thư mục lưu ảnh trên thiết bị" />
+                                                <CheckBox Grid.Column="4" IsChecked="{Binding EnhanceOverwriteOriginal}" Content="⚡ Ghi đè file gốc" Foreground="#F59E0B" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" ToolTip.Tip="Nếu chọn, ảnh sẽ được ghi đè trực tiếp vào vị trí gốc. Nếu bỏ chọn, ảnh lưu vào thư mục đích." />
+                                            </Grid>
+
+                                            <!-- Hàng 3: Bộ 5 thông số (Sliders & Numeric) - Căn giữa dọc và tăng chiều cao chuẩn đẹp -->
+                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <!-- Contrast -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,5" Margin="0,0,8,6">
-                                                    <StackPanel Width="150" Spacing="2">
-                                                        <Grid ColumnDefinitions="*, Auto">
-                                                            <TextBlock Grid.Column="0" Text="Tương phản (Contrast):" Foreground="#94A3B8" FontSize="10" />
-                                                            <TextBlock Grid.Column="1" Text="{Binding EnhanceContrast, StringFormat='{}{0:0}%'}" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" />
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,8,6" MinHeight="68" VerticalAlignment="Center">
+                                                    <StackPanel Width="155" Spacing="4" VerticalAlignment="Center">
+                                                        <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                                            <TextBlock Grid.Column="0" Text="Tương phản (Contrast):" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding EnhanceContrast, StringFormat='{}{0:0}%'}" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
                                                         </Grid>
-                                                        <Slider Value="{Binding EnhanceContrast}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" Height="20" />
+                                                        <Slider Value="{Binding EnhanceContrast}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" Height="26" VerticalAlignment="Center" Margin="0,2,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Brightness -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,5" Margin="0,0,8,6">
-                                                    <StackPanel Width="150" Spacing="2">
-                                                        <Grid ColumnDefinitions="*, Auto">
-                                                            <TextBlock Grid.Column="0" Text="Độ sáng (Brightness):" Foreground="#94A3B8" FontSize="10" />
-                                                            <TextBlock Grid.Column="1" Text="{Binding EnhanceBrightness, StringFormat='{}{0:0}'}" Foreground="#FCD34D" FontWeight="Bold" FontSize="10" />
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,8,6" MinHeight="68" VerticalAlignment="Center">
+                                                    <StackPanel Width="155" Spacing="4" VerticalAlignment="Center">
+                                                        <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                                            <TextBlock Grid.Column="0" Text="Độ sáng (Brightness):" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding EnhanceBrightness, StringFormat='{}{0:0}'}" Foreground="#FCD34D" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
                                                         </Grid>
-                                                        <Slider Value="{Binding EnhanceBrightness}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" Height="20" />
+                                                        <Slider Value="{Binding EnhanceBrightness}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" Height="26" VerticalAlignment="Center" Margin="0,2,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Saturation -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,5" Margin="0,0,8,6">
-                                                    <StackPanel Width="150" Spacing="2">
-                                                        <Grid ColumnDefinitions="*, Auto">
-                                                            <TextBlock Grid.Column="0" Text="Độ bão hòa (Saturation):" Foreground="#94A3B8" FontSize="10" />
-                                                            <TextBlock Grid.Column="1" Text="{Binding EnhanceSaturation, StringFormat='{}{0:0}%'}" Foreground="#EC4899" FontWeight="Bold" FontSize="10" />
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,8,6" MinHeight="68" VerticalAlignment="Center">
+                                                    <StackPanel Width="155" Spacing="4" VerticalAlignment="Center">
+                                                        <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                                            <TextBlock Grid.Column="0" Text="Độ bão hòa (Saturation):" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding EnhanceSaturation, StringFormat='{}{0:0}%'}" Foreground="#EC4899" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
                                                         </Grid>
-                                                        <Slider Value="{Binding EnhanceSaturation}" Minimum="0" Maximum="200" SmallChange="1" LargeChange="10" Height="20" />
+                                                        <Slider Value="{Binding EnhanceSaturation}" Minimum="0" Maximum="200" SmallChange="1" LargeChange="10" Height="26" VerticalAlignment="Center" Margin="0,2,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Sharpness -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,5" Margin="0,0,8,6">
-                                                    <StackPanel Width="150" Spacing="2">
-                                                        <Grid ColumnDefinitions="*, Auto">
-                                                            <TextBlock Grid.Column="0" Text="Độ nét (Sharpness):" Foreground="#94A3B8" FontSize="10" />
-                                                            <TextBlock Grid.Column="1" Text="{Binding EnhanceSharpness, StringFormat='{}{0:0.0}'}" Foreground="#10B981" FontWeight="Bold" FontSize="10" />
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,8,6" MinHeight="68" VerticalAlignment="Center">
+                                                    <StackPanel Width="155" Spacing="4" VerticalAlignment="Center">
+                                                        <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                                            <TextBlock Grid.Column="0" Text="Độ nét (Sharpness):" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding EnhanceSharpness, StringFormat='{}{0:0.0}'}" Foreground="#10B981" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
                                                         </Grid>
-                                                        <Slider Value="{Binding EnhanceSharpness}" Minimum="0" Maximum="10" SmallChange="0.5" LargeChange="1" Height="20" />
+                                                        <Slider Value="{Binding EnhanceSharpness}" Minimum="0" Maximum="10" SmallChange="0.5" LargeChange="1" Height="26" VerticalAlignment="Center" Margin="0,2,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Noise Reduce -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,5" Margin="0,0,8,6">
-                                                    <StackPanel Width="150" Spacing="2">
-                                                        <Grid ColumnDefinitions="*, Auto">
-                                                            <TextBlock Grid.Column="0" Text="Khử nhiễu (Noise):" Foreground="#94A3B8" FontSize="10" />
-                                                            <TextBlock Grid.Column="1" Text="{Binding EnhanceNoiseReduce, StringFormat='{}Mức {0}'}" Foreground="#A855F7" FontWeight="Bold" FontSize="10" />
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,8,6" MinHeight="68" VerticalAlignment="Center">
+                                                    <StackPanel Width="155" Spacing="4" VerticalAlignment="Center">
+                                                        <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                                            <TextBlock Grid.Column="0" Text="Khử nhiễu (Noise):" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding EnhanceNoiseReduce, StringFormat='{}Mức {0}'}" Foreground="#A855F7" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
                                                         </Grid>
-                                                        <Slider Value="{Binding EnhanceNoiseReduce}" Minimum="0" Maximum="5" SmallChange="1" LargeChange="1" Height="20" />
+                                                        <Slider Value="{Binding EnhanceNoiseReduce}" Minimum="0" Maximum="5" SmallChange="1" LargeChange="1" Height="26" VerticalAlignment="Center" Margin="0,2,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Quality -->
-                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,10,6">
-                                                    <TextBlock Text="Chất lượng:" Foreground="#E2E8F0" FontSize="10" VerticalAlignment="Center" />
-                                                    <NumericUpDown Value="{Binding EnhanceQuality}" Minimum="10" Maximum="100" Increment="5" FormatString="0" Width="105" Height="28" FontSize="11" Foreground="#38BDF8" Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
-                                                    <TextBlock Text="%" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
-                                                </StackPanel>
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,8,6" MinHeight="68" VerticalAlignment="Center">
+                                                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                                                        <TextBlock Text="Chất lượng ảnh:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                            <NumericUpDown Value="{Binding EnhanceQuality}" Minimum="10" Maximum="100" Increment="5" FormatString="0" Width="105" Height="28" FontSize="11" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                            <TextBlock Text="%" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Border>
 
                                                 <!-- Threads -->
-                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,10,6">
-                                                    <TextBlock Text="Số luồng:" Foreground="#E2E8F0" FontSize="10" VerticalAlignment="Center" />
-                                                    <NumericUpDown Value="{Binding EnhanceThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#F59E0B" Background="#0F172A" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
-                                                </StackPanel>
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,8,6" MinHeight="68" VerticalAlignment="Center">
+                                                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                                                        <TextBlock Text="Số luồng CPU:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                        <NumericUpDown Value="{Binding EnhanceThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#F59E0B" Background="#0B0F19" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                    </StackPanel>
+                                                </Border>
 
                                                 <!-- Đặt lại mặc định -->
-                                                <Button Command="{Binding ResetEnhanceSettingsCommand}" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="8,5" Height="28" CornerRadius="4" Margin="0,0,0,6" ToolTip.Tip="Khôi phục toàn bộ thông số về mặc định">
-                                                    <TextBlock Text="🔄 Đặt lại" />
-                                                </Button>
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,0,6" MinHeight="68" VerticalAlignment="Center">
+                                                    <Button Command="{Binding ResetEnhanceSettingsCommand}" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="10,6" Height="32" CornerRadius="4" VerticalAlignment="Center" ToolTip.Tip="Khôi phục toàn bộ thông số về mặc định">
+                                                        <TextBlock Text="🔄 Đặt lại" VerticalAlignment="Center" />
+                                                    </Button>
+                                                </Border>
                                             </WrapPanel>
 
-                                            <!-- Hàng 3: Các nút hành động chính -->
-                                            <WrapPanel Orientation="Horizontal">
+                                            <!-- Hàng 4: Các nút hành động chính (Bắt đầu, Dừng, Đổi ảnh mẫu, Toàn màn hình đối chiếu, Mở cửa sổ riêng) -->
+                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <Button Command="{Binding StartEnhanceCommand}" IsEnabled="{Binding !IsEnhancing}"
-                                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,6" Height="30" CornerRadius="4" Margin="0,0,8,6">
+                                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,6" Height="32" CornerRadius="4" Margin="0,0,8,6">
                                                     <TextBlock Text="▶ BẮT ĐẦU XỬ LÝ ẢNH" />
                                                 </Button>
 
                                                 <Button Command="{Binding StopEnhanceCommand}" IsEnabled="{Binding IsEnhancing}"
-                                                        Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,6" Height="30" CornerRadius="4" Margin="0,0,8,6">
+                                                        Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,6" Height="32" CornerRadius="4" Margin="0,0,8,6">
                                                     <TextBlock Text="⏹ DỪNG" />
                                                 </Button>
 
                                                 <Button Command="{Binding PickSampleImageCommand}"
-                                                        Background="#4F46E5" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,6" Height="30" CornerRadius="4" Margin="0,0,8,6" ToolTip.Tip="Chọn một ảnh cụ thể để xem trước Before / After">
+                                                        Background="#4F46E5" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,6" Height="32" CornerRadius="4" Margin="0,0,8,6" ToolTip.Tip="Chọn một ảnh cụ thể để xem trước Before / After">
                                                     <TextBlock Text="👁️ Chọn ảnh mẫu xem trước" />
                                                 </Button>
 
+                                                <Button Command="{Binding ToggleFullscreenPreviewCommand}"
+                                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="12,6" Height="32" CornerRadius="4" Margin="0,0,8,6" ToolTip.Tip="Mở chế độ đối chiếu toàn màn hình trực tiếp trong ứng dụng">
+                                                    <TextBlock Text="⛶ TOÀN MÀN HÌNH ĐỐI CHIẾU" />
+                                                </Button>
+
+                                                <Button Command="{Binding OpenComparisonWindowCommand}"
+                                                        Background="#374151" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="10,6" Height="32" CornerRadius="4" Margin="0,0,8,6" ToolTip.Tip="Mở cửa sổ đối chiếu độc lập trên Desktop (hỗ trợ kéo sang màn hình thứ 2)">
+                                                    <TextBlock Text="🪟 Mở Cửa Sổ Riêng" />
+                                                </Button>
+
                                                 <Button Command="{Binding ClearEnhanceLogsCommand}"
-                                                        Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="10,6" Height="30" CornerRadius="4" Margin="0,0,0,6">
+                                                        Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="10,6" Height="32" CornerRadius="4" Margin="0,0,0,6">
                                                     <TextBlock Text="🧹 Xóa log" />
                                                 </Button>
                                             </WrapPanel>
@@ -830,14 +857,25 @@
                                         </StackPanel>
                                     </Border>
 
-                                    <!-- Khung nội dung dưới: Live Preview Before / After & Log -->
+                                    <!-- Khung nội dung dưới: Live Preview Before / After có Zoom & Pan & Log -->
                                     <Grid Grid.Row="1" RowDefinitions="Auto, *">
-                                        <!-- Khung so sánh trực quan Trước & Sau (Live Preview) -->
+                                        <!-- Khung so sánh trực quan Trước & Sau (Live Preview có Zoom & Pan) -->
                                         <Border Grid.Row="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="10,8">
                                             <StackPanel Spacing="6">
-                                                <Grid ColumnDefinitions="*, Auto">
+                                                <Grid ColumnDefinitions="Auto, *, Auto">
                                                     <TextBlock Grid.Column="0" Text="⚡ Xem trước trực tiếp (Live Preview Before &amp; After):" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
-                                                    <TextBlock Grid.Column="1" Text="{Binding EnhancePreviewInfoText}" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding EnhancePreviewInfoText}" Foreground="#94A3B8" FontSize="10" TextTrimming="CharacterEllipsis" Margin="10,0" VerticalAlignment="Center" />
+                                                    
+                                                    <!-- Bộ điều khiển Zoom -->
+                                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                        <TextBlock Text="Thu phóng:" Foreground="#64748B" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                        <Button Command="{Binding ZoomOutPreviewCommand}" Content="➖" Background="#1E293B" Foreground="#94A3B8" Padding="5,2" FontSize="11" CornerRadius="3" ToolTip.Tip="Thu nhỏ" />
+                                                        <Border Background="#1E293B" CornerRadius="3" Padding="6,2" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding EnhancePreviewZoomText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" Width="36" TextAlignment="Center" />
+                                                        </Border>
+                                                        <Button Command="{Binding ZoomInPreviewCommand}" Content="➕" Background="#1E293B" Foreground="#38BDF8" Padding="5,2" FontSize="11" CornerRadius="3" ToolTip.Tip="Phóng to" />
+                                                        <Button Command="{Binding ResetZoomPreviewCommand}" Content="1:1" Background="#1E293B" Foreground="#10B981" Padding="5,2" FontSize="10" CornerRadius="3" ToolTip.Tip="Tỷ lệ gốc 100%" />
+                                                    </StackPanel>
                                                 </Grid>
 
                                                 <Grid ColumnDefinitions="*, *" Margin="0,4,0,0">
@@ -847,9 +885,14 @@
                                                             <Border Background="#1E293B" CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
                                                                 <TextBlock Text="📷 ẢNH GỐC (BEFORE)" Foreground="#94A3B8" FontWeight="Bold" FontSize="9" />
                                                             </Border>
-                                                            <Border Height="200" Background="#050811" CornerRadius="4" ClipToBounds="True">
-                                                                <Image Source="{Binding EnhancePreviewOriginal}" Stretch="Uniform" />
-                                                            </Border>
+                                                            <ScrollViewer Height="260" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                                                                <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                    <LayoutTransformControl.LayoutTransform>
+                                                                        <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
+                                                                    </LayoutTransformControl.LayoutTransform>
+                                                                    <Image Source="{Binding EnhancePreviewOriginal}" Stretch="None" />
+                                                                </LayoutTransformControl>
+                                                            </ScrollViewer>
                                                         </StackPanel>
                                                     </Border>
 
@@ -859,9 +902,14 @@
                                                             <Border Background="#0284C7" CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
                                                                 <TextBlock Text="✨ ĐÃ TỐI ƯU (AFTER)" Foreground="#FFFFFF" FontWeight="Bold" FontSize="9" />
                                                             </Border>
-                                                            <Border Height="200" Background="#050811" CornerRadius="4" ClipToBounds="True">
-                                                                <Image Source="{Binding EnhancePreviewResult}" Stretch="Uniform" />
-                                                            </Border>
+                                                            <ScrollViewer Height="260" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                                                                <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                    <LayoutTransformControl.LayoutTransform>
+                                                                        <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
+                                                                    </LayoutTransformControl.LayoutTransform>
+                                                                    <Image Source="{Binding EnhancePreviewResult}" Stretch="None" />
+                                                                </LayoutTransformControl>
+                                                            </ScrollViewer>
                                                         </StackPanel>
                                                     </Border>
                                                 </Grid>
@@ -968,6 +1016,147 @@
                     </Grid>
                 </StackPanel>
             </Border>
+        </Border>
+
+        <!-- 6. MODAL POPUP: TOÀN MÀN HÌNH ĐỐI CHIẾU ẢNH BEFORE / AFTER -->
+        <Border Background="#F20B0F19" IsVisible="{Binding IsEnhanceFullscreenVisible}" ZIndex="1000" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Grid RowDefinitions="Auto, Auto, *">
+                <!-- Header -->
+                <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="16,10">
+                    <Grid ColumnDefinitions="Auto, *, Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Border Background="#38BDF8" CornerRadius="4" Width="28" Height="28">
+                                <TextBlock Text="⚡" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="ĐỐI CHIẾU ẢNH TRƯỚC &amp; SAU (BEFORE &amp; AFTER - TOÀN MÀN HÌNH)" FontWeight="Bold" FontSize="14" Foreground="#F8FAFC" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- Zoom Controls -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding EnhancePreviewInfoText}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+                            <Border Background="#1E293B" CornerRadius="4" Padding="6,2">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Command="{Binding ZoomOutPreviewCommand}" Content="➖" Background="#0F172A" Foreground="#94A3B8" Padding="6,3" FontSize="12" CornerRadius="3" ToolTip.Tip="Thu nhỏ" />
+                                    <TextBlock Text="{Binding EnhancePreviewZoomText}" Foreground="#F8FAFC" FontWeight="Bold" FontSize="12" Width="45" TextAlignment="Center" VerticalAlignment="Center" />
+                                    <Button Command="{Binding ZoomInPreviewCommand}" Content="➕" Background="#0F172A" Foreground="#38BDF8" Padding="6,3" FontSize="12" CornerRadius="3" ToolTip.Tip="Phóng to" />
+                                    <Button Command="{Binding ResetZoomPreviewCommand}" Content="1:1" Background="#0F172A" Foreground="#10B981" Padding="6,3" FontSize="11" CornerRadius="3" ToolTip.Tip="Tỷ lệ gốc 100%" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Actions: Pick sample & Close -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button Command="{Binding PickSampleImageCommand}" Background="#4F46E5" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,6" CornerRadius="4">
+                                <TextBlock Text="🖼️ Đổi ảnh mẫu" />
+                            </Button>
+                            <Button Command="{Binding CloseFullscreenPreviewCommand}" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,6" CornerRadius="4">
+                                <TextBlock Text="✕ ĐÓNG TOÀN MÀN HÌNH" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Quick Adjustment Sliders in Fullscreen -->
+                <Border Grid.Row="1" Background="#161F30" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="12,8">
+                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Contrast -->
+                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
+                            <StackPanel Width="140" Spacing="2" VerticalAlignment="Center">
+                                <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                    <TextBlock Grid.Column="0" Text="Tương phản:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding EnhanceContrast, StringFormat='{}{0:0}%'}" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
+                                </Grid>
+                                <Slider Value="{Binding EnhanceContrast}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" Height="22" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Brightness -->
+                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
+                            <StackPanel Width="140" Spacing="2" VerticalAlignment="Center">
+                                <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                    <TextBlock Grid.Column="0" Text="Độ sáng:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding EnhanceBrightness, StringFormat='{}{0:0}'}" Foreground="#FCD34D" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
+                                </Grid>
+                                <Slider Value="{Binding EnhanceBrightness}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" Height="22" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Saturation -->
+                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
+                            <StackPanel Width="140" Spacing="2" VerticalAlignment="Center">
+                                <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                    <TextBlock Grid.Column="0" Text="Bão hòa:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding EnhanceSaturation, StringFormat='{}{0:0}%'}" Foreground="#EC4899" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
+                                </Grid>
+                                <Slider Value="{Binding EnhanceSaturation}" Minimum="0" Maximum="200" SmallChange="1" LargeChange="10" Height="22" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Sharpness -->
+                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
+                            <StackPanel Width="140" Spacing="2" VerticalAlignment="Center">
+                                <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                    <TextBlock Grid.Column="0" Text="Độ nét:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding EnhanceSharpness, StringFormat='{}{0:0.0}'}" Foreground="#10B981" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
+                                </Grid>
+                                <Slider Value="{Binding EnhanceSharpness}" Minimum="0" Maximum="10" SmallChange="0.5" LargeChange="1" Height="22" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Noise Reduce -->
+                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
+                            <StackPanel Width="140" Spacing="2" VerticalAlignment="Center">
+                                <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                    <TextBlock Grid.Column="0" Text="Khử nhiễu:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding EnhanceNoiseReduce, StringFormat='{}Mức {0}'}" Foreground="#A855F7" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
+                                </Grid>
+                                <Slider Value="{Binding EnhanceNoiseReduce}" Minimum="0" Maximum="5" SmallChange="1" LargeChange="1" Height="22" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <Button Command="{Binding ResetEnhanceSettingsCommand}" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="8,4" Height="28" CornerRadius="4" VerticalAlignment="Center" Margin="0,0,0,4">
+                            <TextBlock Text="🔄 Đặt lại" VerticalAlignment="Center" />
+                        </Button>
+                    </WrapPanel>
+                </Border>
+
+                <!-- Big Comparison View -->
+                <Grid Grid.Row="2" ColumnDefinitions="*, *" Margin="10">
+                    <!-- Before -->
+                    <Border Grid.Column="0" Background="#090D16" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,5,0">
+                        <Grid RowDefinitions="Auto, *">
+                            <Border Grid.Row="0" Background="#1E293B" CornerRadius="3" Padding="6,3" HorizontalAlignment="Left" Margin="0,0,0,6">
+                                <TextBlock Text="📷 ẢNH GỐC (BEFORE)" Foreground="#94A3B8" FontWeight="Bold" FontSize="11" />
+                            </Border>
+                            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                                <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <LayoutTransformControl.LayoutTransform>
+                                        <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
+                                    </LayoutTransformControl.LayoutTransform>
+                                    <Image Source="{Binding EnhancePreviewOriginal}" Stretch="None" />
+                                </LayoutTransformControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <!-- After -->
+                    <Border Grid.Column="1" Background="#090D16" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="6" Padding="6" Margin="5,0,0,0">
+                        <Grid RowDefinitions="Auto, *">
+                            <Border Grid.Row="0" Background="#0284C7" CornerRadius="3" Padding="6,3" HorizontalAlignment="Left" Margin="0,0,0,6">
+                                <TextBlock Text="✨ ĐÃ TỐI ƯU (AFTER)" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" />
+                            </Border>
+                            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                                <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <LayoutTransformControl.LayoutTransform>
+                                        <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
+                                    </LayoutTransformControl.LayoutTransform>
+                                    <Image Source="{Binding EnhancePreviewResult}" Stretch="None" />
+                                </LayoutTransformControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

@@ -13,6 +13,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Media.Imaging;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.Services;
+using ComicDownloaderGMTPC.Views;
 
 namespace ComicDownloaderGMTPC.ViewModels;
 
@@ -120,6 +121,9 @@ public partial class MainViewModel : ViewModelBase
     private string _enhanceFolderPath = string.Empty;
 
     [ObservableProperty]
+    private string _enhanceOutputFolderPath = string.Empty;
+
+    [ObservableProperty]
     private float _enhanceContrast = 0f; // -100 to +100
 
     [ObservableProperty]
@@ -142,6 +146,20 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _enhanceOverwriteOriginal = false;
+
+    [ObservableProperty]
+    private double _enhancePreviewZoom = 1.0; // 0.25 to 5.0
+
+    [ObservableProperty]
+    private string _enhancePreviewZoomText = "100%";
+
+    [ObservableProperty]
+    private bool _isEnhanceFullscreenVisible = false;
+
+    partial void OnEnhancePreviewZoomChanged(double value)
+    {
+        EnhancePreviewZoomText = $"{Math.Round(value * 100):0}%";
+    }
 
     [ObservableProperty]
     private bool _isEnhancing = false;
@@ -1233,8 +1251,8 @@ public partial class MainViewModel : ViewModelBase
                 var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
                 {
                     Title = _langService.CurrentLanguage == "VI"
-                        ? "Chọn thư mục chứa ảnh để xử lý nâng cao"
-                        : "Select folder containing images to enhance",
+                        ? "Chọn thư mục nguồn chứa ảnh để xử lý nâng cao"
+                        : "Select input folder containing images to enhance",
                     AllowMultiple = false
                 };
 
@@ -1248,12 +1266,16 @@ public partial class MainViewModel : ViewModelBase
                     {
                         EnhanceFolderPath = normalized;
 
-                        // Tự động tìm ảnh đầu tiên để làm mẫu xem trước
+                        // Tự động gợi ý Output folder nếu chưa đặt
+                        if (string.IsNullOrWhiteSpace(EnhanceOutputFolderPath))
+                        {
+                            EnhanceOutputFolderPath = Path.Combine(normalized, "Enhanced");
+                        }
+
+                        // Tự động tìm ảnh đầu tiên đệ quy trong cây thư mục đa tầng
                         if (Directory.Exists(normalized))
                         {
-                            var exts = new[] { ".jpg", ".jpeg", ".png", ".webp", ".bmp" };
-                            var firstImg = Directory.GetFiles(normalized, "*.*", SearchOption.TopDirectoryOnly)
-                                .FirstOrDefault(f => exts.Contains(Path.GetExtension(f).ToLowerInvariant()));
+                            var firstImg = _imageEnhancer.FindFirstSampleImage(normalized);
 
                             if (!string.IsNullOrEmpty(firstImg))
                             {
@@ -1263,7 +1285,7 @@ public partial class MainViewModel : ViewModelBase
                             {
                                 EnhancePreviewOriginal = null;
                                 EnhancePreviewResult = null;
-                                EnhancePreviewInfoText = "Thư mục không có ảnh mẫu hợp lệ (.jpg, .png, .webp, .bmp).";
+                                EnhancePreviewInfoText = "Cây thư mục không có ảnh mẫu hợp lệ (.jpg, .png, .webp, .bmp).";
                             }
                         }
                     }
@@ -1272,7 +1294,42 @@ public partial class MainViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            AddLog("WARN", $"Lỗi chọn thư mục xử lý ảnh: {ex.Message}");
+            AddLog("WARN", $"Lỗi chọn thư mục nguồn xử lý ảnh: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task BrowseEnhanceOutputFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null)
+            {
+                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
+                {
+                    Title = _langService.CurrentLanguage == "VI"
+                        ? "Chọn thư mục đích để lưu ảnh sau khi xử lý"
+                        : "Select output folder to save enhanced images",
+                    AllowMultiple = false
+                };
+
+                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
+                if (folders != null && folders.Count > 0)
+                {
+                    var selected = folders[0];
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                    {
+                        EnhanceOutputFolderPath = normalized;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi chọn thư mục đích: {ex.Message}");
         }
     }
 
@@ -1326,15 +1383,84 @@ public partial class MainViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(EnhanceFolderPath) || !Directory.Exists(EnhanceFolderPath))
         {
-            AddLog("WARN", "[Xử lý ảnh] Thư mục không tồn tại hoặc chưa được chọn!");
+            AddLog("WARN", "[Xử lý ảnh] Thư mục nguồn không tồn tại hoặc chưa được chọn!");
             return;
         }
 
-        string target = (!EnhanceOverwriteOriginal && Directory.Exists(Path.Combine(EnhanceFolderPath, "Enhanced")))
-            ? Path.Combine(EnhanceFolderPath, "Enhanced")
-            : EnhanceFolderPath;
+        _downloadEngine.OpenDirectoryInExplorer(EnhanceFolderPath);
+    }
+
+    [RelayCommand]
+    public void OpenEnhanceOutputFolder()
+    {
+        string target = EnhanceOverwriteOriginal ? EnhanceFolderPath : EnhanceOutputFolderPath;
+        if (string.IsNullOrEmpty(target))
+        {
+            AddLog("WARN", "[Xử lý ảnh] Thư mục đích chưa được chọn!");
+            return;
+        }
+
+        if (!Directory.Exists(target))
+        {
+            try { Directory.CreateDirectory(target); } catch { }
+        }
 
         _downloadEngine.OpenDirectoryInExplorer(target);
+    }
+
+    [RelayCommand]
+    public void ZoomInPreview()
+    {
+        EnhancePreviewZoom = Math.Min(5.0, EnhancePreviewZoom + 0.25);
+    }
+
+    [RelayCommand]
+    public void ZoomOutPreview()
+    {
+        EnhancePreviewZoom = Math.Max(0.25, EnhancePreviewZoom - 0.25);
+    }
+
+    [RelayCommand]
+    public void ResetZoomPreview()
+    {
+        EnhancePreviewZoom = 1.0;
+    }
+
+    [RelayCommand]
+    public void ToggleFullscreenPreview()
+    {
+        IsEnhanceFullscreenVisible = !IsEnhanceFullscreenVisible;
+    }
+
+    [RelayCommand]
+    public void CloseFullscreenPreview()
+    {
+        IsEnhanceFullscreenVisible = false;
+    }
+
+    [RelayCommand]
+    public void OpenComparisonWindow()
+    {
+        try
+        {
+            if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                var win = new EnhanceComparisonWindow
+                {
+                    DataContext = this
+                };
+                win.Show();
+            }
+            else
+            {
+                IsEnhanceFullscreenVisible = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Không thể mở cửa sổ riêng: {ex.Message}. Bật chế độ toàn màn hình trong ứng dụng.");
+            IsEnhanceFullscreenVisible = true;
+        }
     }
 
     [RelayCommand]
@@ -1358,8 +1484,15 @@ public partial class MainViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(EnhanceFolderPath) || !Directory.Exists(EnhanceFolderPath))
         {
-            AddLog("WARN", "[Xử lý ảnh] Vui lòng chọn một thư mục hợp lệ!");
+            AddLog("WARN", "[Xử lý ảnh] Vui lòng chọn một thư mục nguồn hợp lệ!");
             return;
+        }
+
+        string outDir = EnhanceOverwriteOriginal ? EnhanceFolderPath : EnhanceOutputFolderPath;
+        if (!EnhanceOverwriteOriginal && string.IsNullOrWhiteSpace(outDir))
+        {
+            outDir = Path.Combine(EnhanceFolderPath, "Enhanced");
+            EnhanceOutputFolderPath = outDir;
         }
 
         IsEnhancing = true;
@@ -1367,9 +1500,9 @@ public partial class MainViewModel : ViewModelBase
         EnhanceProgressText = "0.0%";
         EnhanceCountText = "0 ảnh";
         EnhanceErrorCountText = "0";
-        EnhanceCurrentFileText = _langService.CurrentLanguage == "VI" ? "Đang chuẩn bị xử lý..." : "Preparing enhancement...";
+        EnhanceCurrentFileText = _langService.CurrentLanguage == "VI" ? "Đang quét cây thư mục đa tầng..." : "Scanning multi-level folders...";
         EnhanceLogs.Clear();
-        EnhanceLogs.Add($"[{DateTime.Now:HH:mm:ss}] Bắt đầu tiến trình xử lý nâng cao ảnh: {EnhanceFolderPath}");
+        EnhanceLogs.Add($"[{DateTime.Now:HH:mm:ss}] Bắt đầu tiến trình xử lý ảnh: Nguồn = {EnhanceFolderPath}, Đích = {outDir}");
 
         _enhanceCts = new CancellationTokenSource();
 
@@ -1389,6 +1522,7 @@ public partial class MainViewModel : ViewModelBase
         {
             var (success, errors) = await _imageEnhancer.ProcessFolderAsync(
                 EnhanceFolderPath,
+                outDir,
                 options,
                 _enhanceCts.Token);
 

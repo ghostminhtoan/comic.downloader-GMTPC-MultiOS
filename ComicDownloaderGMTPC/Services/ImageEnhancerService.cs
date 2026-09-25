@@ -148,42 +148,58 @@ public class ImageEnhancerService
     }
 
     /// <summary>
-    /// Xử lý hàng loạt toàn bộ ảnh trong thư mục.
+    /// Tìm kiếm đệ quy ảnh đầu tiên trong cây thư mục để làm mẫu xem trước.
+    /// </summary>
+    public string? FindFirstSampleImage(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath)) return null;
+        try
+        {
+            return Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)
+                .FirstOrDefault(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Xử lý hàng loạt toàn bộ ảnh trong thư mục đa tầng (hỗ trợ phân định Input & Output folder).
     /// </summary>
     public async Task<(int successCount, int errorCount)> ProcessFolderAsync(
-        string folderPath,
+        string inputFolder,
+        string? outputFolder,
         ImageEnhancerOptions options,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+        if (string.IsNullOrWhiteSpace(inputFolder) || !Directory.Exists(inputFolder))
         {
-            LogEmitted?.Invoke("ERROR", $"Thư mục không tồn tại: {folderPath}");
+            LogEmitted?.Invoke("ERROR", $"Thư mục nguồn không tồn tại: {inputFolder}");
             return (0, 0);
         }
 
-        var files = Directory.GetFiles(folderPath, "*.*", SearchOption.TopDirectoryOnly)
+        // Quét đệ quy toàn bộ thư mục con đa tầng
+        var files = Directory.GetFiles(inputFolder, "*.*", SearchOption.AllDirectories)
             .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
             .OrderBy(f => f)
             .ToList();
 
         if (files.Count == 0)
         {
-            LogEmitted?.Invoke("WARN", $"Không tìm thấy ảnh hợp lệ trong thư mục: {folderPath}");
+            LogEmitted?.Invoke("WARN", $"Không tìm thấy ảnh hợp lệ trong cây thư mục: {inputFolder}");
             return (0, 0);
         }
 
-        string targetFolder = folderPath;
-        if (!options.OverwriteOriginal)
+        string targetFolder = string.IsNullOrWhiteSpace(outputFolder) ? Path.Combine(inputFolder, "Enhanced") : outputFolder;
+        if (!options.OverwriteOriginal && !Directory.Exists(targetFolder))
         {
-            targetFolder = Path.Combine(folderPath, "Enhanced");
-            if (!Directory.Exists(targetFolder))
-            {
-                Directory.CreateDirectory(targetFolder);
-            }
+            Directory.CreateDirectory(targetFolder);
             LogEmitted?.Invoke("INFO", $"Đã tạo thư mục lưu ảnh nâng cao: {targetFolder}");
         }
 
-        LogEmitted?.Invoke("INFO", $"Bắt đầu xử lý {files.Count} ảnh (Độ sáng: {options.Brightness}, Tương phản: {options.Contrast}%, Bão hòa: {options.Saturation}%, Nét: {options.Sharpness}, Khử nhiễu: {options.NoiseReduce})...");
+        string modeText = options.OverwriteOriginal ? "Ghi đè file gốc" : $"Lưu vào: {targetFolder}";
+        LogEmitted?.Invoke("INFO", $"Bắt đầu xử lý {files.Count} ảnh đa tầng ({modeText}) [Độ sáng: {options.Brightness}, Tương phản: {options.Contrast}%, Bão hòa: {options.Saturation}%, Nét: {options.Sharpness}, Khử nhiễu: {options.NoiseReduce}]...");
 
         int total = files.Count;
         int completed = 0;
@@ -200,12 +216,19 @@ public class ImageEnhancerService
         {
             token.ThrowIfCancellationRequested();
             string fileName = Path.GetFileName(filePath);
+            string relPath = Path.GetRelativePath(inputFolder, filePath);
             string destPath = options.OverwriteOriginal
                 ? filePath + ".tmp_enh"
-                : Path.Combine(targetFolder, fileName);
+                : Path.Combine(targetFolder, relPath);
 
             try
             {
+                string? destDir = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                {
+                    Directory.CreateDirectory(destDir);
+                }
+
                 await Task.Run(() =>
                 {
                     using var src = SKBitmap.Decode(filePath);
@@ -231,7 +254,7 @@ public class ImageEnhancerService
                 }
 
                 Interlocked.Increment(ref success);
-                LogEmitted?.Invoke("SUCCESS", $"[Xong] {fileName}");
+                LogEmitted?.Invoke("SUCCESS", $"[Xong] {relPath}");
             }
             catch (OperationCanceledException)
             {
@@ -242,13 +265,13 @@ public class ImageEnhancerService
             {
                 if (File.Exists(destPath)) try { File.Delete(destPath); } catch { }
                 Interlocked.Increment(ref errors);
-                LogEmitted?.Invoke("ERROR", $"[Lỗi] {fileName}: {ex.Message}");
+                LogEmitted?.Invoke("ERROR", $"[Lỗi] {relPath}: {ex.Message}");
             }
             finally
             {
                 int current = Interlocked.Increment(ref completed);
                 double percent = (double)current / total * 100.0;
-                ProgressUpdated?.Invoke(percent, fileName);
+                ProgressUpdated?.Invoke(percent, relPath);
             }
         });
 
