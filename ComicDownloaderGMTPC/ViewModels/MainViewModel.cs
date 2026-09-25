@@ -200,6 +200,25 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _canGoNext = false;
 
+    [ObservableProperty]
+    private bool _isPortraitMode = false;
+
+    public int EnhanceDualColumns => IsPortraitMode ? 1 : 2;
+    public int EnhanceDualRows => IsPortraitMode ? 2 : 1;
+    public bool IsDesktopLifetime => Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+
+    [ObservableProperty]
+    private string _enhanceImageCounterText = "0 / 0";
+
+    [ObservableProperty]
+    private string _enhanceImageFileNameText = "Chưa có ảnh";
+
+    partial void OnIsPortraitModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(EnhanceDualColumns));
+        OnPropertyChanged(nameof(EnhanceDualRows));
+    }
+
     partial void OnEnhancePreviewZoomChanged(double value)
     {
         EnhancePreviewZoomText = $"{Math.Round(value * 100):0}%";
@@ -1335,10 +1354,19 @@ public partial class MainViewModel : ViewModelBase
             }
             else
             {
-                _enhanceCurrentFileIndex = -1;
-                EnhancePreviewOriginal = null;
-                EnhancePreviewResult = null;
-                EnhancePreviewInfoText = "Cây thư mục không có ảnh hợp lệ.";
+                if (!string.IsNullOrEmpty(selectedFile) && File.Exists(selectedFile))
+                {
+                    _enhanceFolderFiles = new List<string> { selectedFile };
+                    _enhanceCurrentFileIndex = 0;
+                    LoadSamplePreview(selectedFile);
+                }
+                else
+                {
+                    _enhanceCurrentFileIndex = -1;
+                    EnhancePreviewOriginal = null;
+                    EnhancePreviewResult = null;
+                    EnhancePreviewInfoText = "Cây thư mục không có ảnh hợp lệ.";
+                }
             }
 
             UpdateNavigationState();
@@ -1355,10 +1383,14 @@ public partial class MainViewModel : ViewModelBase
         CanGoNext = _enhanceCurrentFileIndex < _enhanceFolderFiles.Count - 1;
         if (_enhanceCurrentFileIndex >= 0 && _enhanceCurrentFileIndex < _enhanceFolderFiles.Count)
         {
-            EnhanceImageIndexText = $"[{_enhanceCurrentFileIndex + 1} / {_enhanceFolderFiles.Count}] {Path.GetFileName(_enhanceFolderFiles[_enhanceCurrentFileIndex])}";
+            EnhanceImageCounterText = $"{_enhanceCurrentFileIndex + 1} / {_enhanceFolderFiles.Count}";
+            EnhanceImageFileNameText = Path.GetFileName(_enhanceFolderFiles[_enhanceCurrentFileIndex]);
+            EnhanceImageIndexText = $"[{EnhanceImageCounterText}] {EnhanceImageFileNameText}";
         }
         else
         {
+            EnhanceImageCounterText = "0 / 0";
+            EnhanceImageFileNameText = "Chưa có ảnh";
             EnhanceImageIndexText = "Chưa có ảnh";
         }
     }
@@ -1489,15 +1521,16 @@ public partial class MainViewModel : ViewModelBase
                 if (files != null && files.Count > 0)
                 {
                     var file = files[0];
-                    string? path = file.TryGetLocalPath() ?? file.Path?.LocalPath;
-                    if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                    string? rawPath = file.TryGetLocalPath() ?? file.Path?.LocalPath ?? file.Path?.ToString();
+                    string normalized = DownloadEngineService.NormalizeStoragePath(rawPath, file.Name);
+                    if (!string.IsNullOrEmpty(normalized) && File.Exists(normalized))
                     {
-                        string dir = Path.GetDirectoryName(path) ?? string.Empty;
+                        string dir = Path.GetDirectoryName(normalized) ?? string.Empty;
                         if (string.IsNullOrEmpty(EnhanceFolderPath))
                         {
                             EnhanceFolderPath = dir;
                         }
-                        LoadFolderImages(dir, path);
+                        LoadFolderImages(dir, normalized);
                     }
                 }
             }

@@ -40,6 +40,15 @@ public partial class EnhanceComparisonWindow : Window
             SingleScrollViewer.AddHandler(PointerPressedEvent, OnSinglePointerPressed, RoutingStrategies.Tunnel);
             SingleScrollViewer.AddHandler(PointerReleasedEvent, OnSinglePointerReleased, RoutingStrategies.Tunnel);
         }
+
+        // Tự động nhận diện Landscape (width > height) vs Portrait (width < height)
+        SizeChanged += (s, e) =>
+        {
+            if (DataContext is MainViewModel vm && e.NewSize.Width > 0 && e.NewSize.Height > 0)
+            {
+                vm.IsPortraitMode = e.NewSize.Width < e.NewSize.Height;
+            }
+        };
     }
 
     private void OnBeforeScrollChanged(object? sender, ScrollChangedEventArgs e)

@@ -855,7 +855,7 @@
                                                 </Button>
 
                                                 <!-- Nút Mở Cửa Sổ Riêng Tím Nổi Bật -->
-                                                <Button Command="{Binding OpenComparisonWindowCommand}"
+                                                <Button Command="{Binding OpenComparisonWindowCommand}" IsVisible="{Binding IsDesktopLifetime}"
                                                         Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="12,6" Height="34" CornerRadius="4" Margin="0,0,8,6" ToolTip.Tip="Mở cửa sổ đối chiếu độc lập phong cách FastStone trên Desktop (hỗ trợ kéo sang màn hình thứ 2)">
                                                     <TextBlock Text="🗖 MỞ TRONG CỬA SỔ MỚI" />
                                                 </Button>
@@ -886,16 +886,27 @@
                                             <StackPanel Spacing="6">
                                                 <!-- Toolbar Preview: Sử dụng WrapPanel chống overlap/tràn mép -->
                                                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <!-- Cụm 1: Tiêu đề & Duyệt ảnh Previous / Next -->
+                                                    <!-- Cụm 1: Tiêu đề & Duyệt ảnh Previous / Next to rõ cho Android & Desktop -->
                                                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,12,6">
-                                                        <TextBlock Text="⚡ Live Preview:" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
-                                                        <Border Background="#1E293B" CornerRadius="4" Padding="4,2" VerticalAlignment="Center">
+                                                        <TextBlock Text="⚡ Preview:" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                        <Button Command="{Binding PreviousImageCommand}" IsEnabled="{Binding CanGoPrevious}"
+                                                                Background="#1E293B" Foreground="#38BDF8" FontWeight="Bold" Padding="10,5" Height="32" CornerRadius="4" ToolTip.Tip="Ảnh trước (◀)">
                                                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                                                <Button Command="{Binding PreviousImageCommand}" IsEnabled="{Binding CanGoPrevious}" Content="⬅" Background="#0F172A" Foreground="#38BDF8" FontWeight="Bold" Padding="6,2" FontSize="10" CornerRadius="3" ToolTip.Tip="Ảnh trước" />
-                                                                <TextBlock Text="{Binding EnhanceImageIndexText}" Foreground="#F8FAFC" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" Margin="4,0" />
-                                                                <Button Command="{Binding NextImageCommand}" IsEnabled="{Binding CanGoNext}" Content="➡" Background="#0F172A" Foreground="#38BDF8" FontWeight="Bold" Padding="6,2" FontSize="10" CornerRadius="3" ToolTip.Tip="Ảnh tiếp theo" />
+                                                                <TextBlock Text="◀" FontSize="10" VerticalAlignment="Center" />
+                                                                <TextBlock Text="Trước" FontSize="11" VerticalAlignment="Center" />
                                                             </StackPanel>
+                                                        </Button>
+                                                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="8,4" Height="32" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding EnhanceImageCounterText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" TextAlignment="Center" />
                                                         </Border>
+                                                        <Button Command="{Binding NextImageCommand}" IsEnabled="{Binding CanGoNext}"
+                                                                Background="#1E293B" Foreground="#38BDF8" FontWeight="Bold" Padding="10,5" Height="32" CornerRadius="4" ToolTip.Tip="Ảnh tiếp theo (▶)">
+                                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                <TextBlock Text="Sau" FontSize="11" VerticalAlignment="Center" />
+                                                                <TextBlock Text="▶" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                        </Button>
+                                                        <TextBlock Text="{Binding EnhanceImageFileNameText}" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" MaxWidth="160" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding EnhanceImageFileNameText}" Margin="4,0,0,0" />
                                                     </StackPanel>
 
                                                     <!-- Cụm 2: Presets nhanh -->
@@ -916,7 +927,7 @@
                                                             <TextBlock Text="{Binding EnhancePreviewZoomText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" Width="36" TextAlignment="Center" />
                                                         </Border>
                                                         <Button Command="{Binding ZoomInPreviewCommand}" Content="➕" Background="#1E293B" Foreground="#38BDF8" Padding="5,2" FontSize="11" CornerRadius="3" ToolTip.Tip="Phóng to" />
-                                                        <Button Command="{Binding OpenComparisonWindowCommand}" Content="🗖 Cửa sổ riêng" Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" Padding="8,3" FontSize="10" CornerRadius="3" ToolTip.Tip="Mở đối chiếu Before/After trong cửa sổ riêng biệt" Margin="4,0,0,0" />
+                                                        <Button Command="{Binding OpenComparisonWindowCommand}" IsVisible="{Binding IsDesktopLifetime}" Content="🗖 Cửa sổ riêng" Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" Padding="8,3" FontSize="10" CornerRadius="3" ToolTip.Tip="Mở đối chiếu Before/After trong cửa sổ riêng biệt" Margin="4,0,0,0" />
                                                     </StackPanel>
                                                 </WrapPanel>
 
@@ -933,42 +944,64 @@
                                                     </Border>
                                                 </WrapPanel>
 
-                                                <!-- Vùng hiển thị Before & After có đồng bộ Pan/Scroll -->
-                                                <Grid ColumnDefinitions="*, *" Margin="0,2,0,0">
-                                                    <!-- Before -->
-                                                    <Border Grid.Column="0" Background="#090D16" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,4,0">
-                                                        <StackPanel Spacing="4">
-                                                            <Border Background="#1E293B" CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
-                                                                <TextBlock Text="📷 ẢNH GỐC (BEFORE)" Foreground="#94A3B8" FontWeight="Bold" FontSize="9" />
-                                                            </Border>
-                                                            <ScrollViewer x:Name="LiveBeforeScrollViewer" Height="240" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
-                                                                <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                                    <LayoutTransformControl.LayoutTransform>
-                                                                        <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
-                                                                    </LayoutTransformControl.LayoutTransform>
-                                                                    <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
-                                                                </LayoutTransformControl>
-                                                            </ScrollViewer>
-                                                        </StackPanel>
-                                                    </Border>
+                                                <!-- Vùng hiển thị Before & After có đồng bộ Pan/Scroll & Responsive Portrait/Landscape -->
+                                                <Panel Margin="0,2,0,0">
+                                                    <UniformGrid Columns="{Binding EnhanceDualColumns}" Rows="{Binding EnhanceDualRows}">
+                                                        <!-- Before -->
+                                                        <Border Background="#090D16" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="6" Margin="2">
+                                                            <StackPanel Spacing="4">
+                                                                <Border Background="#1E293B" CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
+                                                                    <TextBlock Text="📷 ẢNH GỐC (BEFORE)" Foreground="#94A3B8" FontWeight="Bold" FontSize="9" />
+                                                                </Border>
+                                                                <ScrollViewer x:Name="LiveBeforeScrollViewer" Height="220" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                                                                    <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                        <LayoutTransformControl.LayoutTransform>
+                                                                            <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
+                                                                        </LayoutTransformControl.LayoutTransform>
+                                                                        <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
+                                                                    </LayoutTransformControl>
+                                                                </ScrollViewer>
+                                                            </StackPanel>
+                                                        </Border>
 
-                                                    <!-- After -->
-                                                    <Border Grid.Column="1" Background="#090D16" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="6" Padding="6" Margin="4,0,0,0">
-                                                        <StackPanel Spacing="4">
-                                                            <Border Background="#0284C7" CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
-                                                                <TextBlock Text="✨ ĐÃ TỐI ƯU (AFTER)" Foreground="#FFFFFF" FontWeight="Bold" FontSize="9" />
-                                                            </Border>
-                                                            <ScrollViewer x:Name="LiveAfterScrollViewer" Height="240" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
-                                                                <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                                    <LayoutTransformControl.LayoutTransform>
-                                                                        <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
-                                                                    </LayoutTransformControl.LayoutTransform>
-                                                                    <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
-                                                                </LayoutTransformControl>
-                                                            </ScrollViewer>
-                                                        </StackPanel>
-                                                    </Border>
-                                                </Grid>
+                                                        <!-- After -->
+                                                        <Border Background="#090D16" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="6" Padding="6" Margin="2">
+                                                            <StackPanel Spacing="4">
+                                                                <Border Background="#0284C7" CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
+                                                                    <TextBlock Text="✨ ĐÃ TỐI ƯU (AFTER)" Foreground="#FFFFFF" FontWeight="Bold" FontSize="9" />
+                                                                </Border>
+                                                                <ScrollViewer x:Name="LiveAfterScrollViewer" Height="220" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                                                                    <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                        <LayoutTransformControl.LayoutTransform>
+                                                                            <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
+                                                                        </LayoutTransformControl.LayoutTransform>
+                                                                        <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
+                                                                    </LayoutTransformControl>
+                                                                </ScrollViewer>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </UniformGrid>
+
+                                                    <!-- Nút chuyển ảnh trước nổi trên ảnh -->
+                                                    <Button Command="{Binding PreviousImageCommand}" IsEnabled="{Binding CanGoPrevious}"
+                                                            HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"
+                                                            Width="34" Height="48" CornerRadius="6"
+                                                            Background="#B30F172A" BorderBrush="#38BDF8" BorderThickness="1"
+                                                            Foreground="#38BDF8" FontWeight="Bold" FontSize="16"
+                                                            ToolTip.Tip="Ảnh trước (◀)">
+                                                        <TextBlock Text="❮" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    </Button>
+
+                                                    <!-- Nút chuyển ảnh sau nổi trên ảnh -->
+                                                    <Button Command="{Binding NextImageCommand}" IsEnabled="{Binding CanGoNext}"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0"
+                                                            Width="34" Height="48" CornerRadius="6"
+                                                            Background="#B30F172A" BorderBrush="#38BDF8" BorderThickness="1"
+                                                            Foreground="#38BDF8" FontWeight="Bold" FontSize="16"
+                                                            ToolTip.Tip="Ảnh tiếp theo (▶)">
+                                                        <TextBlock Text="❯" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    </Button>
+                                                </Panel>
                                             </StackPanel>
                                         </Border>
 
@@ -1181,7 +1214,21 @@
 
         <!-- 6. MODAL POPUP: TOÀN MÀN HÌNH ĐỐI CHIẾU ẢNH BEFORE / AFTER (FASTSTONE CONVERSION PREVIEW) -->
         <Border Background="#F20B0F19" IsVisible="{Binding IsEnhanceFullscreenVisible}" ZIndex="1000" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-            <Grid RowDefinitions="Auto, Auto, Auto, *">
+            <Panel>
+                <!-- NÚT ĐÓNG NỔI TO RÕ LUÔN NẰM TRÊN CÙNG GÓC PHẢI (CHỐNG KẸT TRÊN ANDROID / MOBILE) -->
+                <Button Command="{Binding CloseFullscreenPreviewCommand}"
+                        ZIndex="3000" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Margin="10" MinWidth="44" MinHeight="44" CornerRadius="22"
+                        Background="#DC2626" Foreground="#FFFFFF"
+                        FontWeight="ExtraBold" FontSize="18"
+                        ToolTip.Tip="Đóng chế độ đối chiếu toàn màn hình (Esc)">
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="10,0">
+                        <TextBlock Text="✕" FontWeight="ExtraBold" FontSize="16" VerticalAlignment="Center" />
+                        <TextBlock Text="ĐÓNG" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <Grid RowDefinitions="Auto, Auto, Auto, *">
                 <!-- ROW 0: Header Toolbar (FastStone Style) -->
                 <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="12,8">
                     <Grid ColumnDefinitions="Auto, Auto, *, Auto">
@@ -1193,14 +1240,27 @@
                             <TextBlock Text="CONVERSION PREVIEW (TOÀN MÀN HÌNH)" FontWeight="Bold" FontSize="13" Foreground="#F8FAFC" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <!-- Cột 1: Navigation Previous / Next -->
+                        <!-- Cột 1: Navigation Previous / Next to rõ cho Android & Desktop -->
                         <Border Grid.Column="1" Background="#1E293B" CornerRadius="5" Padding="4,2" Margin="0,0,12,0" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                 <Button Command="{Binding PreviousImageCommand}" IsEnabled="{Binding CanGoPrevious}"
-                                        Content="⬅" Background="#0F172A" Foreground="#38BDF8" FontWeight="Bold" Padding="8,4" FontSize="12" CornerRadius="3" ToolTip.Tip="Ảnh trước" />
-                                <TextBlock Text="{Binding EnhanceImageIndexText}" Foreground="#F8FAFC" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="4,0" />
+                                        Background="#0F172A" Foreground="#38BDF8" FontWeight="Bold" Padding="10,5" Height="32" CornerRadius="3" ToolTip.Tip="Ảnh trước (◀)">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="◀" FontSize="10" VerticalAlignment="Center" />
+                                        <TextBlock Text="Trước" FontSize="11" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Border Background="#0B0F19" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="3" Padding="8,4" Height="32" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding EnhanceImageCounterText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" TextAlignment="Center" />
+                                </Border>
                                 <Button Command="{Binding NextImageCommand}" IsEnabled="{Binding CanGoNext}"
-                                        Content="➡" Background="#0F172A" Foreground="#38BDF8" FontWeight="Bold" Padding="8,4" FontSize="12" CornerRadius="3" ToolTip.Tip="Ảnh tiếp theo" />
+                                        Background="#0F172A" Foreground="#38BDF8" FontWeight="Bold" Padding="10,5" Height="32" CornerRadius="3" ToolTip.Tip="Ảnh tiếp theo (▶)">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="Sau" FontSize="11" VerticalAlignment="Center" />
+                                        <TextBlock Text="▶" FontSize="10" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <TextBlock Text="{Binding EnhanceImageFileNameText}" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" MaxWidth="180" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding EnhanceImageFileNameText}" Margin="4,0,0,0" />
                             </StackPanel>
                         </Border>
 
@@ -1232,7 +1292,7 @@
 
                         <!-- Cột 3: Đổi ảnh mẫu, Cửa sổ riêng & Đóng -->
                         <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <Button Command="{Binding OpenComparisonWindowCommand}" Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,6" CornerRadius="4" ToolTip.Tip="Mở cửa sổ đối chiếu độc lập phong cách FastStone">
+                            <Button Command="{Binding OpenComparisonWindowCommand}" IsVisible="{Binding IsDesktopLifetime}" Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,6" CornerRadius="4" ToolTip.Tip="Mở cửa sổ đối chiếu độc lập phong cách FastStone">
                                 <TextBlock Text="🗖 Cửa sổ riêng" />
                             </Button>
                             <Button Command="{Binding PickSampleImageCommand}" Background="#4F46E5" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,6" CornerRadius="4">
@@ -1336,11 +1396,32 @@
                 </Border>
 
                 <!-- ROW 3: Vùng hiển thị đối chiếu 3 chế độ (Dual, Split, Single) -->
-                <Grid Grid.Row="3" Margin="6">
-                    <!-- CHẾ ĐỘ 1: DUAL VIEW -->
-                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding IsDualView}">
+                <Panel Grid.Row="3" Margin="6">
+                    <!-- Nút chuyển ảnh trước nổi mép trái (To rõ cho Android) -->
+                    <Button Command="{Binding PreviousImageCommand}" IsEnabled="{Binding CanGoPrevious}"
+                            ZIndex="1500" HorizontalAlignment="Left" VerticalAlignment="Center"
+                            Margin="8,0,0,0" Width="44" Height="60" CornerRadius="8"
+                            Background="#B30F172A" BorderBrush="#38BDF8" BorderThickness="1"
+                            Foreground="#38BDF8" FontWeight="Bold" FontSize="20"
+                            ToolTip.Tip="Ảnh trước (◀)">
+                        <TextBlock Text="❮" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
+
+                    <!-- Nút chuyển ảnh sau nổi mép phải (To rõ cho Android) -->
+                    <Button Command="{Binding NextImageCommand}" IsEnabled="{Binding CanGoNext}"
+                            ZIndex="1500" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Margin="0,0,8,0" Width="44" Height="60" CornerRadius="8"
+                            Background="#B30F172A" BorderBrush="#38BDF8" BorderThickness="1"
+                            Foreground="#38BDF8" FontWeight="Bold" FontSize="20"
+                            ToolTip.Tip="Ảnh tiếp theo (▶)">
+                        <TextBlock Text="❯" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
+
+                    <Grid>
+                    <!-- CHẾ ĐỘ 1: DUAL VIEW (Responsive Portrait / Landscape) -->
+                    <UniformGrid Columns="{Binding EnhanceDualColumns}" Rows="{Binding EnhanceDualRows}" IsVisible="{Binding IsDualView}">
                         <!-- Before -->
-                        <Border Grid.Column="0" Background="#090D16" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="4" Margin="0,0,3,0">
+                        <Border Background="#090D16" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="4" Margin="2">
                             <Grid RowDefinitions="Auto, *">
                                 <Border Grid.Row="0" Background="#1E293B" CornerRadius="3" Padding="6,3" HorizontalAlignment="Left" Margin="0,0,0,4">
                                     <TextBlock Text="📷 ẢNH GỐC (BEFORE)" Foreground="#94A3B8" FontWeight="Bold" FontSize="10" />
@@ -1357,7 +1438,7 @@
                         </Border>
 
                         <!-- After -->
-                        <Border Grid.Column="1" Background="#090D16" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="6" Padding="4" Margin="3,0,0,0">
+                        <Border Background="#090D16" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="6" Padding="4" Margin="2">
                             <Grid RowDefinitions="Auto, *">
                                 <Border Grid.Row="0" Background="#0284C7" CornerRadius="3" Padding="6,3" HorizontalAlignment="Left" Margin="0,0,0,4">
                                     <TextBlock Text="✨ ĐÃ TỐI ƯU (AFTER)" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" />
@@ -1372,7 +1453,7 @@
                                 </ScrollViewer>
                             </Grid>
                         </Border>
-                    </Grid>
+                    </UniformGrid>
 
                     <!-- CHẾ ĐỘ 2: SPLIT VIEW -->
                     <Border Background="#090D16" BorderBrush="#6366F1" BorderThickness="1" CornerRadius="6" Padding="4" IsVisible="{Binding IsSplitView}">
@@ -1428,8 +1509,10 @@
                             </ScrollViewer>
                         </Grid>
                     </Border>
-                </Grid>
+                    </Grid>
+                </Panel>
             </Grid>
+            </Panel>
         </Border>
     </Grid>
 </UserControl>

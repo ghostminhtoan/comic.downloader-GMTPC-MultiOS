@@ -17,6 +17,28 @@ public partial class MainView : UserControl
         InitializeComponent();
 
         Loaded += OnMainViewLoaded;
+
+        // Tự động nhận diện Landscape (width > height) vs Portrait (width < height)
+        SizeChanged += (s, e) =>
+        {
+            if (DataContext is MainViewModel vm && e.NewSize.Width > 0 && e.NewSize.Height > 0)
+            {
+                vm.IsPortraitMode = e.NewSize.Width < e.NewSize.Height;
+            }
+        };
+
+        // Bắt phím Escape hoặc phím Back (trên Android) để thoát toàn màn hình đối chiếu
+        AddHandler(KeyDownEvent, (s, e) =>
+        {
+            if (DataContext is MainViewModel vm && vm.IsEnhanceFullscreenVisible)
+            {
+                if (e.Key == Key.Escape || e.Key == Key.Back)
+                {
+                    vm.IsEnhanceFullscreenVisible = false;
+                    e.Handled = true;
+                }
+            }
+        }, RoutingStrategies.Tunnel);
     }
 
     private void OnMainViewLoaded(object? sender, RoutedEventArgs e)

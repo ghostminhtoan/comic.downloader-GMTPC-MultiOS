@@ -515,3 +515,25 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
 - **Nghiệm Thu Toàn Diện**:
   - Bước 1: `build.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`) với `0 Warning(s), 0 Error(s)`.
   - Bước 2: Khởi chạy file thực tế `release\windows\ComicDownloaderGMTPC.Desktop.exe` đạt trạng thái `Responding: True`.
+
+### 15.8. Responsive Preview Landscape/Portrait & Fix Toàn Màn Hình/Duyệt Ảnh Trên Android
+- **Tự động chuyển đổi Responsive Trái/Phải vs Trên/Dưới theo hướng xoay màn hình**:
+  - Tự động nhận diện kích thước khung nhìn `SizeChanged` trên cả Windows và Android:
+    + **Landscape (`Width > Height`)**: 2 ảnh Trước / Sau hiển thị song song Trái / Phải (`Columns=2, Rows=1`).
+    + **Portrait (`Width < Height`)**: 2 ảnh Trước / Sau tự động chuyển sang hiển thị Trên / Dưới (`Columns=1, Rows=2`).
+  - Sử dụng `<UniformGrid Columns="{Binding EnhanceDualColumns}" Rows="{Binding EnhanceDualRows}">` cho cả Live Preview trong Tab Xử lý ảnh, Chế độ DUAL VIEW của Modal Toàn màn hình và Cửa sổ đối chiếu độc lập (`EnhanceComparisonWindow.axaml`). Giữ nguyên 100% logic đồng bộ cuộn/pan/zoom qua cặp ScrollViewer (`LiveBeforeScrollViewer` & `LiveAfterScrollViewer`).
+- **Khắc phục triệt để lỗi kẹt Modal Toàn màn hình & Mở cửa sổ mới trên Android**:
+  - Nguyên nhân: Trước đây Header Modal dùng `Grid ColumnDefinitions="Auto, Auto, *, Auto"`, trên màn hình hẹp của Android (~360-412px), Cột 3 chứa nút `✕ ĐÓNG` bị đẩy văng ra khỏi mép phải màn hình, đồng thời Android không có phím Escape vật lý. Ngoài ra nút "Mở trong cửa sổ mới" không hoạt động trên Android (vì Avalonia Mobile là SingleView, không thể mở đa cửa sổ kiểu Desktop).
+  - Khắc phục:
+    1. Thêm **Floating Close Button (Nút Đóng Nổi)** cố định ở góc trên cùng bên phải (`ZIndex="3000"`, kích thước 44x44px chuẩn Google Material touch, màu đỏ nổi bật `Background="#DC2626"`). Dù ở màn hình dọc hay ngang, người dùng chỉ cần chạm góc trên là đóng ngay lập tức.
+    2. Bắt sự kiện phím cứng `Key.Back` trên Android và `Key.Escape` trên Desktop trong `MainView.axaml.cs` để thoát nhanh modal.
+    3. Thêm thuộc tính `IsDesktopLifetime`: Tự động ẩn các nút "Mở trong cửa sổ mới" / "Cửa sổ riêng" trên môi trường Mobile/Android, chỉ hiển thị trên Desktop đa cửa sổ.
+- **Khắc phục lỗi mất nút Next / Previous Image trên Android**:
+  - Nguyên nhân: Cụm duyệt ảnh trước đây nhét chuỗi tên file dài `[1 / 15] Ten_File_Dai.jpg` giữa 2 nút `⬅` và `➡` mà không có `MaxWidth`/`TextTrimming`, làm nút `➡` bị đẩy ra ngoài màn hình Android. Nút bấm kích thước quá nhỏ (`Padding="6,2"`, `FontSize="10"`) khó chạm trên màn cảm ứng. Khi chọn ảnh qua `OpenFilePickerAsync`, một số thư mục SAF trên Android không cho quét file lân cận khiến danh sách rỗng và tắt các nút.
+  - Khắc phục:
+    1. Thiết kế lại cụm duyệt ảnh to rõ: `[ ◀ Trước ]`, ô chỉ số trang `[ 1 / 15 ]`, `[ Sau ▶ ]` với chiều cao tối thiểu 32px, phông chữ đậm dễ chạm. Tên file tách riêng có `TextTrimming="CharacterEllipsis"` và `MaxWidth` an toàn, chống 100% hiện tượng tràn màn hình.
+    2. Bổ sung **Floating Navigation Buttons (Nút Chuyển Ảnh Nổi)**: 2 nút mũi tên lớn `❮` (mép trái) và `❯` (mép phải) bán trong suốt phủ trực tiếp lên vùng xem ảnh ở cả Live Preview và Toàn màn hình. Người dùng Android chỉ cần chạm vào 2 bên rìa ảnh để lật trang tức thì.
+    3. Nâng cấp `LoadFolderImages`: Khi chọn ảnh mẫu trên Android mà quét thư mục không ra file khác do giới hạn quyền của hệ điều hành, hệ thống tự động gán file đã chọn làm trang ảnh 1/1, nạp xem trước ngay lập tức.
+- **Nghiệm Thu 2 Bước**:
+  - Bước 1: `build.bat` biên dịch sạch cả 3 OS (`win-x64`, `linux-x64`, `net10.0-android`) đạt `0 Warning(s), 0 Error(s)`.
+  - Bước 2: Chạy kiểm thử exe thực tế `release\windows\ComicDownloaderGMTPC.Desktop.exe` đạt `Responding: True`.
