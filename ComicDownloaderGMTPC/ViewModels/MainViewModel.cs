@@ -55,6 +55,59 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isCompactRow;
 
+    // AUTO SPLIT LONG IMAGES
+    [ObservableProperty]
+    private bool _isAutoSplitLongImages = false;
+
+    [ObservableProperty]
+    private int _autoSplitHeight = 5000;
+
+    partial void OnIsAutoSplitLongImagesChanged(bool value)
+    {
+        _downloadEngine.AutoSplitLongImages = value;
+    }
+
+    partial void OnAutoSplitHeightChanged(int value)
+    {
+        _downloadEngine.AutoSplitHeight = Math.Max(100, value);
+    }
+
+    // MANUAL SPLIT LONG IMAGES IN FOLDER
+    [ObservableProperty]
+    private string _manualSplitFolderPath = string.Empty;
+
+    [ObservableProperty]
+    private int _manualSplitHeight = 5000;
+
+    [ObservableProperty]
+    private int _manualSplitQuality = 90;
+
+    [ObservableProperty]
+    private int _manualSplitThreads = 4;
+
+    [ObservableProperty]
+    private bool _isManualSplitting = false;
+
+    [ObservableProperty]
+    private double _manualSplitProgress = 0;
+
+    [ObservableProperty]
+    private string _manualSplitProgressText = "0.0% (0 / 0)";
+
+    [ObservableProperty]
+    private string _manualSplitCountText = "0 ảnh";
+
+    [ObservableProperty]
+    private string _manualSplitErrorCountText = "0";
+
+    [ObservableProperty]
+    private string _manualSplitCurrentFileText = "Sẵn sàng.";
+
+    [ObservableProperty]
+    private ObservableCollection<string> _manualSplitLogs = new();
+
+    private CancellationTokenSource? _manualSplitCts;
+
     [ObservableProperty]
     private bool _isPopupPreview = true;
 
@@ -180,7 +233,7 @@ public partial class MainViewModel : ViewModelBase
         _langService.LanguageChanged += OnLanguageChanged;
         _downloadEngine.LogEmitted += OnLogEmitted;
         _downloadEngine.ProgressUpdated += OnProgressUpdated;
-        _downloadEngine.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
+        DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
 
         UpdateLanguageStrings();
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
@@ -865,6 +918,147 @@ public partial class MainViewModel : ViewModelBase
                 Logs.RemoveAt(Logs.Count - 1);
             }
         });
+    }
+
+    [RelayCommand]
+    public async Task BrowseManualSplitFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null)
+            {
+                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
+                {
+                    Title = _langService.CurrentLanguage == "VI"
+                        ? "Chọn thư mục chứa ảnh dài để cắt"
+                        : "Select folder containing long images to split",
+                    AllowMultiple = false
+                };
+
+                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
+                if (folders != null && folders.Count > 0)
+                {
+                    var selected = folders[0];
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                    {
+                        ManualSplitFolderPath = normalized;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi chọn thư mục cắt ảnh: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task StartManualSplitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ManualSplitFolderPath) || !Directory.Exists(ManualSplitFolderPath))
+        {
+            AddLog("WARN", "[Cắt ảnh dài] Vui lòng chọn một thư mục hợp lệ!");
+            return;
+        }
+
+        IsManualSplitting = true;
+        ManualSplitProgress = 0;
+        ManualSplitProgressText = "0.0% (0 / 0)";
+        ManualSplitCountText = "0 " + (_langService.CurrentLanguage == "VI" ? "ảnh" : "images");
+        ManualSplitErrorCountText = "0";
+        ManualSplitCurrentFileText = _langService.CurrentLanguage == "VI" ? "Đang quét thư mục..." : "Scanning folder...";
+        ManualSplitLogs.Clear();
+        ManualSplitLogs.Add($"[{DateTime.Now:HH:mm:ss}] Bắt đầu quét thư mục: {ManualSplitFolderPath}");
+
+        _manualSplitCts = new CancellationTokenSource();
+
+        var progress = new Progress<ImageSplitterService.SplitProgressInfo>(info =>
+        {
+            if (info.TotalFiles > 0)
+            {
+                double pct = Math.Min(100.0, (double)info.ProcessedFiles / info.TotalFiles * 100.0);
+                ManualSplitProgress = pct;
+                string unit = _langService.CurrentLanguage == "VI" ? "ảnh" : "images";
+                ManualSplitProgressText = $"{pct:0.0}% ({info.ProcessedFiles} / {info.TotalFiles} {unit})";
+                ManualSplitCountText = $"{info.SplitCount} {unit}";
+                ManualSplitErrorCountText = info.ErrorCount.ToString();
+            }
+            if (!string.IsNullOrEmpty(info.CurrentFile))
+            {
+                ManualSplitCurrentFileText = info.CurrentFile;
+            }
+            if (!string.IsNullOrEmpty(info.LogMessage))
+            {
+                ManualSplitLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {info.LogMessage}");
+                while (ManualSplitLogs.Count > 300)
+                {
+                    ManualSplitLogs.RemoveAt(ManualSplitLogs.Count - 1);
+                }
+            }
+        });
+
+        try
+        {
+            var summary = await ImageSplitterService.Instance.ProcessFolderAsync(
+                ManualSplitFolderPath,
+                ManualSplitHeight,
+                ManualSplitQuality,
+                ManualSplitThreads,
+                progress,
+                _manualSplitCts.Token);
+
+            if (summary.IsCancelled)
+            {
+                ManualSplitLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Đã hủy] Tiến trình cắt ảnh đã dừng theo yêu cầu.");
+                ManualSplitCurrentFileText = _langService.CurrentLanguage == "VI" ? "Đã dừng." : "Stopped.";
+            }
+            else
+            {
+                ManualSplitLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Hoàn tất] Đã quét {summary.ProcessedFiles}/{summary.TotalFiles} ảnh. Cắt thành công: {summary.SplitCount}. Lỗi: {summary.ErrorCount}.");
+                ManualSplitCurrentFileText = _langService.CurrentLanguage == "VI" ? "Hoàn tất." : "Completed.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ManualSplitLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Lỗi] {ex.Message}");
+            ManualSplitCurrentFileText = "Lỗi: " + ex.Message;
+        }
+        finally
+        {
+            IsManualSplitting = false;
+        }
+    }
+
+    [RelayCommand]
+    public void StopManualSplit()
+    {
+        if (_manualSplitCts != null && !_manualSplitCts.IsCancellationRequested)
+        {
+            _manualSplitCts.Cancel();
+            ManualSplitLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] Đang gửi yêu cầu dừng tiến trình...");
+        }
+    }
+
+    [RelayCommand]
+    public void OpenManualSplitFolder()
+    {
+        if (!string.IsNullOrEmpty(ManualSplitFolderPath) && Directory.Exists(ManualSplitFolderPath))
+        {
+            _downloadEngine.OpenDirectoryInExplorer(ManualSplitFolderPath);
+        }
+        else
+        {
+            AddLog("WARN", "[Cắt ảnh dài] Thư mục không tồn tại hoặc chưa được chọn!");
+        }
+    }
+
+    [RelayCommand]
+    public void ClearManualSplitLogs()
+    {
+        ManualSplitLogs.Clear();
     }
 }
 

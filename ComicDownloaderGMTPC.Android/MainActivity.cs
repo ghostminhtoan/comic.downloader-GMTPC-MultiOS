@@ -28,6 +28,7 @@ public class MainActivity : AvaloniaMainActivity
         CurrentInstance = this;
 
         Services.DownloadEngineService.OpenStorageSettingsRequested += OnOpenStorageSettingsRequested;
+        Services.DownloadEngineService.AndroidOpenFolderRequested += OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
         RequestAppStoragePermissions();
     }
@@ -35,6 +36,7 @@ public class MainActivity : AvaloniaMainActivity
     protected override void OnDestroy()
     {
         Services.DownloadEngineService.OpenStorageSettingsRequested -= OnOpenStorageSettingsRequested;
+        Services.DownloadEngineService.AndroidOpenFolderRequested -= OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested -= OnInstallApkRequested;
         if (CurrentInstance == this) CurrentInstance = null;
         base.OnDestroy();
@@ -162,6 +164,85 @@ public class MainActivity : AvaloniaMainActivity
             catch (Exception ex)
             {
                 global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi cài đặt APK: {ex.Message}");
+            }
+        });
+    }
+
+    private void OnOpenFolderRequested(string folderPath)
+    {
+        RunOnUiThread(() =>
+        {
+            try
+            {
+                var dir = new Java.IO.File(folderPath);
+                if (!dir.Exists())
+                {
+                    dir.Mkdirs();
+                }
+
+                bool launched = false;
+
+                // 1. Thử mở qua DocumentsUI / ExternalStorageProvider (Chuẩn nhất trên Android 8+)
+                try
+                {
+                    string relPath = folderPath.Replace("/storage/emulated/0/", "").Trim('/');
+                    string docId = "primary:" + relPath;
+                    var uri = DocumentsContract.BuildDocumentUri("com.android.externalstorage.documents", docId);
+                    var intent = new Intent(Intent.ActionView);
+                    intent.SetDataAndType(uri, DocumentsContract.Document.MimeTypeDir);
+                    intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
+                    StartActivity(intent);
+                    launched = true;
+                }
+                catch { }
+
+                // 2. Thử mở qua FileProvider
+                if (!launched)
+                {
+                    try
+                    {
+                        var contentUri = AndroidX.Core.Content.FileProvider.GetUriForFile(this, PackageName + ".fileprovider", dir);
+                        var intent = new Intent(Intent.ActionView);
+                        intent.SetDataAndType(contentUri, DocumentsContract.Document.MimeTypeDir);
+                        intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
+                        StartActivity(intent);
+                        launched = true;
+                    }
+                    catch { }
+                }
+
+                // 3. Thử mở qua resource/folder MIME
+                if (!launched)
+                {
+                    try
+                    {
+                        var uri = global::Android.Net.Uri.FromFile(dir);
+                        var intent = new Intent(Intent.ActionView);
+                        intent.SetDataAndType(uri, "resource/folder");
+                        intent.AddFlags(ActivityFlags.NewTask);
+                        StartActivity(intent);
+                        launched = true;
+                    }
+                    catch { }
+                }
+
+                // 4. Fallback với ACTION_VIEW thông thường
+                if (!launched)
+                {
+                    try
+                    {
+                        var intent = new Intent(Intent.ActionView);
+                        intent.SetDataAndType(global::Android.Net.Uri.Parse(folderPath), "*/*");
+                        intent.AddFlags(ActivityFlags.NewTask);
+                        StartActivity(intent);
+                        launched = true;
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi mở thư mục trên Android: {ex.Message}");
             }
         });
     }

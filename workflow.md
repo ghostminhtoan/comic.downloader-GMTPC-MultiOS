@@ -368,3 +368,17 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - Lỗi "đúng domain này nhưng sai mọi domain khác": ưu tiên đọc flow chung thay vì vá từng tab.
 - Cẩn trọng với vòng lặp xử lý chuỗi: luôn kiểm tra độ dài chuỗi marker (`marker.Length == 0`) để tránh rơi vào vòng lặp vô hạn gây đóng băng UI.
 
+## 15. Avalonia Cross-Platform Features
+### 15.1. Cắt ảnh dài đa nền tảng (Split Long Images)
+- Dùng `SkiaSharp` thuần túy (`SKBitmap`, `SKRectI`, `SKCodec`, `SKImageInfo`) trong `Services/ImageSplitterService.cs` để hỗ trợ đồng nhất trên Windows, Linux và Android mà không phụ thuộc luồng UI (UI Thread độc lập).
+- 2 chế độ:
+  1. **Tự động cắt khi tải (Auto Split on Download)**: Thiết lập cấu hình trong Toolbar tải (`IsAutoSplitLongImages`, `AutoSplitHeight`, `AutoSplitQuality`). Khi file ảnh tải về có chiều cao `height > maxHeight`, tự động chia thành các phần đánh số `_split_1`, `_split_2`,... và xóa file gốc khi thành công.
+  2. **Cắt thủ công theo thư mục (Manual Split Long Images)**: Tab riêng "Cắt ảnh dài" cho phép duyệt chọn thư mục, tùy chỉnh chiều cao pixel, chất lượng và số luồng xử lý song song (`Parallel.ForEachAsync`), kèm bảng log chi tiết và thanh tiến trình.
+
+### 15.2. Mở trực tiếp thư mục trên Android (Native Android Folder Direct Open)
+- Khi gọi mở thư mục trên Android, thông qua static event `DownloadEngineService.AndroidOpenFolderRequested`.
+- `MainActivity.cs` trên Android xử lý Intent đa tầng:
+  1. Thử `DocumentsContract.BuildDocumentUriUsingTree` hoặc `BuildDocumentUri` với MIME `vnd.android.document/directory` để mở thẳng vào thư mục qua ứng dụng Quản Lý Tệp (Files / DocumentsUI / Total Commander).
+  2. Thử `FileProvider` (`androidx.core.content.FileProvider`) với URI nội bộ và cờ `GrantReadUriPermission`.
+  3. Thử Intent fallback với MIME `resource/folder` hoặc `*/*`.
+  4. Luôn sao chép đường dẫn vào Android Clipboard để dự phòng.

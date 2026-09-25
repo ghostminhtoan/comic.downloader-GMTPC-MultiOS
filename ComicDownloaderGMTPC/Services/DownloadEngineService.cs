@@ -30,8 +30,12 @@ public class DownloadEngineService
 
     public event Action<string, string>? LogEmitted;
     public event Action? ProgressUpdated;
-    public event Action<string>? AndroidOpenFolderRequested;
+    public static event Action<string>? AndroidOpenFolderRequested;
     public static event Action? OpenStorageSettingsRequested;
+
+    public bool AutoSplitLongImages { get; set; } = false;
+    public int AutoSplitHeight { get; set; } = 5000;
+    public int AutoSplitQuality { get; set; } = 90;
 
     public void RequestOpenStorageSettings() => OpenStorageSettingsRequested?.Invoke();
 
@@ -581,6 +585,20 @@ public class DownloadEngineService
                 {
                     await File.WriteAllBytesAsync(destinationPath, data, ct).ConfigureAwait(false);
                     Interlocked.Add(ref _totalBytesDownloadedInWindow, data.Length);
+
+                    if (AutoSplitLongImages && File.Exists(destinationPath))
+                    {
+                        try
+                        {
+                            bool wasSplit = ImageSplitterService.TrySplitImageFile(destinationPath, AutoSplitHeight, AutoSplitQuality);
+                            if (wasSplit)
+                            {
+                                LogEmitted?.Invoke("INFO", $"[Cắt ảnh dài] Đã tự động cắt ảnh '{Path.GetFileName(destinationPath)}' (ngưỡng {AutoSplitHeight}px)");
+                            }
+                        }
+                        catch { }
+                    }
+
                     return true;
                 }
             }
