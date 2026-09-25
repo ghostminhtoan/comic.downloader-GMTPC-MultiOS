@@ -390,3 +390,14 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   1. Thẻ `<link rel="preload">` trong `<head>` không chứa token HMAC hợp lệ (bị CDN chặn 403 Forbidden). Bắt buộc phải khoanh vùng bóc tách trong container `reading-content` / `chapter_content`.
   2. Trong mã nguồn HTML, tham số URL bị mã hóa thực thể HTML (`&amp;expires=`). Bắt buộc phải dùng `WebUtility.HtmlDecode` để khôi phục tham số query `&expires=`, nếu không CDN sẽ báo lỗi 403.
   3. Header Referer khi tải ảnh từ sayhentai / pubtranxzyzz bắt buộc phải là `https://sayhentai.cx/`.
+
+### 15.4. Batch Image Enhancement (Dạng 2: Xử Lý & Tối Ưu Hóa Ảnh Hàng Loạt)
+- Hỗ trợ đầy đủ 5 bộ lọc hình ảnh bằng SkiaSharp thuần túy (chạy song song độc lập, đa nền tảng Windows, Linux, Android):
+  1. **Độ tương phản (Contrast)**: -100% đến +100%
+  2. **Độ sáng (Brightness)**: -100 đến +100
+  3. **Độ bão hòa màu (Saturation)**: 0% đến 200% (Rec.709 Luma weights: R=0.2126, G=0.7152, B=0.0722)
+  4. **Độ nét (Sharpness)**: 0 đến 10 (SKImageFilter Matrix Convolution 3x3 Laplacian edge-enhancement kernel)
+  5. **Khử nhiễu (Noise Reduce)**: 0 đến 5 (SKImageFilter Gaussian / Bilateral blur filter)
+- **Tối ưu hiệu năng cực đỉnh (Single-pass color transform)**: Gộp chung Contrast, Brightness và Saturation vào một ma trận màu 4x5 duy nhất (`SKColorFilter.CreateColorMatrix`), xử lý qua native SIMD chỉ vài mili-giây cho mỗi ảnh chất lượng cao.
+- **Trực quan hóa Live Preview Before & After**: Tự động hiển thị và cập nhật kết quả xử lý của ảnh mẫu theo thời gian thực (debounced 120ms) giúp người dùng tinh chỉnh thông số trực quan trước khi chạy hàng loạt.
+- **Xử lý hàng loạt an toàn**: Tùy chỉnh số luồng `Parallel.ForEachAsync`, chất lượng xuất ảnh (10 - 100%), hỗ trợ lưu riêng vào thư mục `Enhanced/` hoặc ghi đè file gốc an toàn (sử dụng temporary file `.tmp_enh` trước khi replace), thanh tiến trình, bộ đếm thành công/lỗi và log chi tiết.

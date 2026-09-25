@@ -1,0 +1,258 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using SkiaSharp;
+
+namespace ComicDownloaderGMTPC.Services;
+
+public class ImageEnhancerOptions
+{
+    public float Contrast { get; set; } = 0f;       // -100 to +100
+    public float Brightness { get; set; } = 0f;     // -100 to +100
+    public float Saturation { get; set; } = 100f;   // 0 to 200
+    public float Sharpness { get; set; } = 0f;      // 0 to 10
+    public int NoiseReduce { get; set; } = 0;       // 0 to 5
+    public int Quality { get; set; } = 90;          // 10 to 100
+    public bool OverwriteOriginal { get; set; } = false;
+    public int MaxThreads { get; set; } = 4;
+}
+
+public class ImageEnhancerService
+{
+    public event Action<string, string>? LogEmitted;
+    public event Action<double, string>? ProgressUpdated;
+
+    private static readonly string[] SupportedExtensions = { ".jpg", ".jpeg", ".png", ".webp", ".bmp" };
+
+    /// <summary>
+    /// Áp dụng các bộ lọc Contrast, Brightness, Saturation, Sharpness và Noise Reduction lên SKBitmap.
+    /// </summary>
+    public SKBitmap ProcessBitmap(SKBitmap src, ImageEnhancerOptions options)
+    {
+        // 1. Tính toán ma trận màu kết hợp (Combined Color Matrix: Contrast * Saturation + Brightness)
+        float c = options.Contrast >= 0 ? 1.0f + (options.Contrast / 50.0f) : (100.0f + options.Contrast) / 100.0f;
+        float b = options.Brightness * 2.55f;
+        float s = Math.Clamp(options.Saturation / 100.0f, 0.0f, 3.0f);
+
+        // Rec.709 Luma weights
+        const float rWeight = 0.2126f;
+        const float gWeight = 0.7152f;
+        const float bWeight = 0.0722f;
+
+        float sr = (1.0f - s) * rWeight;
+        float sg = (1.0f - s) * gWeight;
+        float sb = (1.0f - s) * bWeight;
+
+        float t = (1.0f - c) * 128.0f + b;
+
+        float[] colorMatrix = new float[]
+        {
+            c * (sr + s), c * sg,       c * sb,       0, t,
+            c * sr,       c * (sg + s), c * sb,       0, t,
+            c * sr,       c * sg,       c * (sb + s), 0, t,
+            0,            0,            0,            1, 0
+        };
+
+        using var colorFilter = SKColorFilter.CreateColorMatrix(colorMatrix);
+
+        // 2. Xây dựng ImageFilter chain: Noise reduction -> Sharpening
+        SKImageFilter? imageFilter = null;
+
+        if (options.NoiseReduce > 0)
+        {
+            float sigma = options.NoiseReduce * 0.4f;
+            imageFilter = SKImageFilter.CreateBlur(sigma, sigma);
+        }
+
+        if (options.Sharpness > 0)
+        {
+            float k = options.Sharpness * 0.35f;
+            float center = 1.0f + 4.0f * k;
+            float edge = -k;
+
+            float[] sharpenKernel = new float[]
+            {
+                 0,    edge,   0,
+                edge, center, edge,
+                 0,    edge,   0
+            };
+
+            var sharpenFilter = SKImageFilter.CreateMatrixConvolution(
+                new SKSizeI(3, 3),
+                sharpenKernel,
+                gain: 1.0f,
+                bias: 0.0f,
+                kernelOffset: new SKPointI(1, 1),
+                tileMode: SKShaderTileMode.Clamp,
+                convolveAlpha: false,
+                input: imageFilter);
+
+            imageFilter = sharpenFilter;
+        }
+
+        var dst = new SKBitmap(src.Width, src.Height, src.ColorType, src.AlphaType);
+        using (var canvas = new SKCanvas(dst))
+        {
+            using var paint = new SKPaint
+            {
+                ColorFilter = colorFilter,
+                ImageFilter = imageFilter
+            };
+            canvas.DrawBitmap(src, 0, 0, paint);
+        }
+
+        imageFilter?.Dispose();
+        return dst;
+    }
+
+    /// <summary>
+    /// Xử lý ảnh mẫu để tạo luồng byte xem trước (Live Preview).
+    /// </summary>
+    public byte[]? GeneratePreviewBytes(string filePath, ImageEnhancerOptions options, int maxDimension = 900)
+    {
+        try
+        {
+            if (!File.Exists(filePath)) return null;
+
+            using var src = SKBitmap.Decode(filePath);
+            if (src == null) return null;
+
+            // Thu nhỏ nếu ảnh quá lớn để xem trước mượt mà
+            SKBitmap workingBitmap = src;
+            bool isResized = false;
+
+            if (src.Width > maxDimension || src.Height > maxDimension)
+            {
+                float scale = Math.Min((float)maxDimension / src.Width, (float)maxDimension / src.Height);
+                int w = Math.Max(1, (int)(src.Width * scale));
+                int h = Math.Max(1, (int)(src.Height * scale));
+
+                workingBitmap = src.Resize(new SKImageInfo(w, h, src.ColorType, src.AlphaType), SKSamplingOptions.Default);
+                isResized = true;
+            }
+
+            using var enhanced = ProcessBitmap(workingBitmap, options);
+            if (isResized) workingBitmap.Dispose();
+
+            using var ms = new MemoryStream();
+            enhanced.Encode(ms, SKEncodedImageFormat.Jpeg, 85);
+            return ms.ToArray();
+        }
+        catch (Exception ex)
+        {
+            LogEmitted?.Invoke("WARN", $"Lỗi tạo xem trước ảnh: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Xử lý hàng loạt toàn bộ ảnh trong thư mục.
+    /// </summary>
+    public async Task<(int successCount, int errorCount)> ProcessFolderAsync(
+        string folderPath,
+        ImageEnhancerOptions options,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+        {
+            LogEmitted?.Invoke("ERROR", $"Thư mục không tồn tại: {folderPath}");
+            return (0, 0);
+        }
+
+        var files = Directory.GetFiles(folderPath, "*.*", SearchOption.TopDirectoryOnly)
+            .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+            .OrderBy(f => f)
+            .ToList();
+
+        if (files.Count == 0)
+        {
+            LogEmitted?.Invoke("WARN", $"Không tìm thấy ảnh hợp lệ trong thư mục: {folderPath}");
+            return (0, 0);
+        }
+
+        string targetFolder = folderPath;
+        if (!options.OverwriteOriginal)
+        {
+            targetFolder = Path.Combine(folderPath, "Enhanced");
+            if (!Directory.Exists(targetFolder))
+            {
+                Directory.CreateDirectory(targetFolder);
+            }
+            LogEmitted?.Invoke("INFO", $"Đã tạo thư mục lưu ảnh nâng cao: {targetFolder}");
+        }
+
+        LogEmitted?.Invoke("INFO", $"Bắt đầu xử lý {files.Count} ảnh (Độ sáng: {options.Brightness}, Tương phản: {options.Contrast}%, Bão hòa: {options.Saturation}%, Nét: {options.Sharpness}, Khử nhiễu: {options.NoiseReduce})...");
+
+        int total = files.Count;
+        int completed = 0;
+        int success = 0;
+        int errors = 0;
+
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, options.MaxThreads),
+            CancellationToken = ct
+        };
+
+        await Parallel.ForEachAsync(files, parallelOptions, async (filePath, token) =>
+        {
+            token.ThrowIfCancellationRequested();
+            string fileName = Path.GetFileName(filePath);
+            string destPath = options.OverwriteOriginal
+                ? filePath + ".tmp_enh"
+                : Path.Combine(targetFolder, fileName);
+
+            try
+            {
+                await Task.Run(() =>
+                {
+                    using var src = SKBitmap.Decode(filePath);
+                    if (src == null) throw new InvalidOperationException("Không thể giải mã dữ liệu ảnh.");
+
+                    using var enhanced = ProcessBitmap(src, options);
+
+                    string ext = Path.GetExtension(filePath).ToLowerInvariant();
+                    var format = ext switch
+                    {
+                        ".png" => SKEncodedImageFormat.Png,
+                        ".webp" => SKEncodedImageFormat.Webp,
+                        _ => SKEncodedImageFormat.Jpeg
+                    };
+
+                    using var fs = File.OpenWrite(destPath);
+                    enhanced.Encode(fs, format, Math.Clamp(options.Quality, 10, 100));
+                }, token);
+
+                if (options.OverwriteOriginal)
+                {
+                    File.Move(destPath, filePath, true);
+                }
+
+                Interlocked.Increment(ref success);
+                LogEmitted?.Invoke("SUCCESS", $"[Xong] {fileName}");
+            }
+            catch (OperationCanceledException)
+            {
+                if (File.Exists(destPath)) try { File.Delete(destPath); } catch { }
+                throw;
+            }
+            catch (Exception ex)
+            {
+                if (File.Exists(destPath)) try { File.Delete(destPath); } catch { }
+                Interlocked.Increment(ref errors);
+                LogEmitted?.Invoke("ERROR", $"[Lỗi] {fileName}: {ex.Message}");
+            }
+            finally
+            {
+                int current = Interlocked.Increment(ref completed);
+                double percent = (double)current / total * 100.0;
+                ProgressUpdated?.Invoke(percent, fileName);
+            }
+        });
+
+        LogEmitted?.Invoke("INFO", $"Hoàn tất nâng cao ảnh! Thành công: {success}/{total}, Lỗi: {errors}");
+        return (success, errors);
+    }
+}

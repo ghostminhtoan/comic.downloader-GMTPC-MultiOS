@@ -665,3 +665,21 @@
 | DETAILED LOG (FILE PATH & STATUS): | NHẬT KÝ CHI TIẾT (ĐƯỜNG DẪN PATH & TRẠNG THÁI): |
 | split long images | Cắt ảnh dài |
 
+## 14. Batch Image Enhancement
+
+| English | Vietnamese |
+| :--- | :--- |
+| Image Enhancement | Xử lý ảnh |
+| Contrast | Tương phản |
+| Brightness | Độ sáng |
+| Saturation | Độ bão hòa |
+| Sharpness | Độ nét |
+| Noise Reduce | Khử nhiễu |
+| Overwrite original files | Ghi đè file gốc |
+| Live Preview Before & After | Xem trước trực tiếp Trước & Sau |
+| Original Image (Before) | Ảnh gốc (Before) |
+| Enhanced Image (After) | Đã tối ưu (After) |
+| Pick sample image for preview | Chọn ảnh mẫu xem trước |
+| Reset settings | Đặt lại mặc định |
+| Start enhancement | Bắt đầu xử lý ảnh |
+

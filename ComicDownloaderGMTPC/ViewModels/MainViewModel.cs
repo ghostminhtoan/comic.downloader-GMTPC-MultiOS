@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
+using Avalonia.Media.Imaging;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.Services;
 
@@ -22,8 +23,12 @@ public partial class MainViewModel : ViewModelBase
     private readonly DownloadEngineService _downloadEngine = DownloadEngineService.Instance;
     private readonly MissingChapterScannerService _scannerService = MissingChapterScannerService.Instance;
     private readonly SourceSearchService _sourceSearchService = SourceSearchService.Instance;
+    private readonly ImageEnhancerService _imageEnhancer = new();
     private CancellationTokenSource? _scanCts;
     private CancellationTokenSource? _searchCts;
+    private CancellationTokenSource? _enhanceCts;
+    private System.Threading.Timer? _previewDebounceTimer;
+    private string _enhanceSampleImagePath = string.Empty;
 
     [ObservableProperty]
     private string _appTitle = "Comic-GMTPC Avalonia v1.0 - Tiếng Việt";
@@ -107,6 +112,72 @@ public partial class MainViewModel : ViewModelBase
     private ObservableCollection<string> _manualSplitLogs = new();
 
     private CancellationTokenSource? _manualSplitCts;
+ 
+    // ==========================================
+    // IMAGE ENHANCEMENT (BATCH CONVERT & LIVE PREVIEW)
+    // ==========================================
+    [ObservableProperty]
+    private string _enhanceFolderPath = string.Empty;
+
+    [ObservableProperty]
+    private float _enhanceContrast = 0f; // -100 to +100
+
+    [ObservableProperty]
+    private float _enhanceBrightness = 0f; // -100 to +100
+
+    [ObservableProperty]
+    private float _enhanceSaturation = 100f; // 0 to 200
+
+    [ObservableProperty]
+    private float _enhanceSharpness = 0f; // 0 to 10
+
+    [ObservableProperty]
+    private int _enhanceNoiseReduce = 0; // 0 to 5
+
+    [ObservableProperty]
+    private int _enhanceQuality = 90; // 10 to 100
+
+    [ObservableProperty]
+    private int _enhanceThreads = 4; // 1 to 16
+
+    [ObservableProperty]
+    private bool _enhanceOverwriteOriginal = false;
+
+    [ObservableProperty]
+    private bool _isEnhancing = false;
+
+    [ObservableProperty]
+    private double _enhanceProgress = 0;
+
+    [ObservableProperty]
+    private string _enhanceProgressText = "0.0%";
+
+    [ObservableProperty]
+    private string _enhanceCountText = "0 ảnh";
+
+    [ObservableProperty]
+    private string _enhanceErrorCountText = "0";
+
+    [ObservableProperty]
+    private string _enhanceCurrentFileText = "Sẵn sàng.";
+
+    [ObservableProperty]
+    private Bitmap? _enhancePreviewOriginal;
+
+    [ObservableProperty]
+    private Bitmap? _enhancePreviewResult;
+
+    [ObservableProperty]
+    private string _enhancePreviewInfoText = "Chưa chọn thư mục hoặc ảnh xem trước.";
+
+    [ObservableProperty]
+    private ObservableCollection<string> _enhanceLogs = new();
+
+    partial void OnEnhanceContrastChanged(float value) => TriggerLivePreviewDebounced();
+    partial void OnEnhanceBrightnessChanged(float value) => TriggerLivePreviewDebounced();
+    partial void OnEnhanceSaturationChanged(float value) => TriggerLivePreviewDebounced();
+    partial void OnEnhanceSharpnessChanged(float value) => TriggerLivePreviewDebounced();
+    partial void OnEnhanceNoiseReduceChanged(int value) => TriggerLivePreviewDebounced();
 
     [ObservableProperty]
     private bool _isPopupPreview = true;
@@ -234,6 +305,24 @@ public partial class MainViewModel : ViewModelBase
         _downloadEngine.LogEmitted += OnLogEmitted;
         _downloadEngine.ProgressUpdated += OnProgressUpdated;
         DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
+
+        _imageEnhancer.LogEmitted += (level, msg) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [{level}] {msg}");
+                while (EnhanceLogs.Count > 300) EnhanceLogs.RemoveAt(EnhanceLogs.Count - 1);
+            });
+        };
+        _imageEnhancer.ProgressUpdated += (pct, currentFile) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                EnhanceProgress = pct;
+                EnhanceProgressText = $"{pct:0.0}%";
+                EnhanceCurrentFileText = currentFile;
+            });
+        };
 
         UpdateLanguageStrings();
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
@@ -1059,6 +1148,284 @@ public partial class MainViewModel : ViewModelBase
     public void ClearManualSplitLogs()
     {
         ManualSplitLogs.Clear();
+    }
+
+    // ==========================================
+    // IMAGE ENHANCEMENT COMMANDS & METHODS
+    // ==========================================
+
+    private void TriggerLivePreviewDebounced()
+    {
+        if (string.IsNullOrEmpty(_enhanceSampleImagePath) || !File.Exists(_enhanceSampleImagePath))
+            return;
+
+        _previewDebounceTimer?.Dispose();
+        _previewDebounceTimer = new System.Threading.Timer(_ =>
+        {
+            UpdatePreviewResult();
+        }, null, 120, Timeout.Infinite);
+    }
+
+    private void UpdatePreviewResult()
+    {
+        if (string.IsNullOrEmpty(_enhanceSampleImagePath) || !File.Exists(_enhanceSampleImagePath))
+            return;
+
+        try
+        {
+            var options = new ImageEnhancerOptions
+            {
+                Contrast = EnhanceContrast,
+                Brightness = EnhanceBrightness,
+                Saturation = EnhanceSaturation,
+                Sharpness = EnhanceSharpness,
+                NoiseReduce = EnhanceNoiseReduce,
+                Quality = EnhanceQuality
+            };
+
+            byte[]? previewBytes = _imageEnhancer.GeneratePreviewBytes(_enhanceSampleImagePath, options, maxDimension: 800);
+            if (previewBytes != null && previewBytes.Length > 0)
+            {
+                using var ms = new MemoryStream(previewBytes);
+                var bmp = new Bitmap(ms);
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    EnhancePreviewResult = bmp;
+                });
+            }
+        }
+        catch
+        {
+            // Bỏ qua lỗi xem trước tạm thời
+        }
+    }
+
+    private void LoadSamplePreview(string imagePath)
+    {
+        try
+        {
+            if (!File.Exists(imagePath)) return;
+            _enhanceSampleImagePath = imagePath;
+
+            using (var fs = File.OpenRead(imagePath))
+            {
+                var originalBmp = new Bitmap(fs);
+                EnhancePreviewOriginal = originalBmp;
+                EnhancePreviewInfoText = $"{Path.GetFileName(imagePath)} ({originalBmp.PixelSize.Width}x{originalBmp.PixelSize.Height})";
+            }
+
+            UpdatePreviewResult();
+        }
+        catch (Exception ex)
+        {
+            EnhancePreviewInfoText = $"Không thể tải xem trước: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task BrowseEnhanceFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null)
+            {
+                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
+                {
+                    Title = _langService.CurrentLanguage == "VI"
+                        ? "Chọn thư mục chứa ảnh để xử lý nâng cao"
+                        : "Select folder containing images to enhance",
+                    AllowMultiple = false
+                };
+
+                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
+                if (folders != null && folders.Count > 0)
+                {
+                    var selected = folders[0];
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                    {
+                        EnhanceFolderPath = normalized;
+
+                        // Tự động tìm ảnh đầu tiên để làm mẫu xem trước
+                        if (Directory.Exists(normalized))
+                        {
+                            var exts = new[] { ".jpg", ".jpeg", ".png", ".webp", ".bmp" };
+                            var firstImg = Directory.GetFiles(normalized, "*.*", SearchOption.TopDirectoryOnly)
+                                .FirstOrDefault(f => exts.Contains(Path.GetExtension(f).ToLowerInvariant()));
+
+                            if (!string.IsNullOrEmpty(firstImg))
+                            {
+                                LoadSamplePreview(firstImg);
+                            }
+                            else
+                            {
+                                EnhancePreviewOriginal = null;
+                                EnhancePreviewResult = null;
+                                EnhancePreviewInfoText = "Thư mục không có ảnh mẫu hợp lệ (.jpg, .png, .webp, .bmp).";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi chọn thư mục xử lý ảnh: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task PickSampleImageAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null)
+            {
+                var options = new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = _langService.CurrentLanguage == "VI"
+                        ? "Chọn ảnh làm mẫu xem trước Before / After"
+                        : "Pick sample image for Before / After preview",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("Images")
+                        {
+                            Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp" }
+                        }
+                    }
+                };
+
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(options);
+                if (files != null && files.Count > 0)
+                {
+                    var file = files[0];
+                    string? path = file.TryGetLocalPath() ?? file.Path?.LocalPath;
+                    if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                    {
+                        if (string.IsNullOrEmpty(EnhanceFolderPath))
+                        {
+                            EnhanceFolderPath = Path.GetDirectoryName(path) ?? string.Empty;
+                        }
+                        LoadSamplePreview(path);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi chọn ảnh mẫu xem trước: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public void OpenEnhanceFolder()
+    {
+        if (string.IsNullOrEmpty(EnhanceFolderPath) || !Directory.Exists(EnhanceFolderPath))
+        {
+            AddLog("WARN", "[Xử lý ảnh] Thư mục không tồn tại hoặc chưa được chọn!");
+            return;
+        }
+
+        string target = (!EnhanceOverwriteOriginal && Directory.Exists(Path.Combine(EnhanceFolderPath, "Enhanced")))
+            ? Path.Combine(EnhanceFolderPath, "Enhanced")
+            : EnhanceFolderPath;
+
+        _downloadEngine.OpenDirectoryInExplorer(target);
+    }
+
+    [RelayCommand]
+    public void ResetEnhanceSettings()
+    {
+        EnhanceContrast = 0f;
+        EnhanceBrightness = 0f;
+        EnhanceSaturation = 100f;
+        EnhanceSharpness = 0f;
+        EnhanceNoiseReduce = 0;
+        EnhanceQuality = 90;
+        EnhanceThreads = 4;
+        EnhanceOverwriteOriginal = false;
+
+        UpdatePreviewResult();
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Đặt lại] Đã khôi phục toàn bộ thông số về giá trị mặc định.");
+    }
+
+    [RelayCommand]
+    public async Task StartEnhanceAsync()
+    {
+        if (string.IsNullOrWhiteSpace(EnhanceFolderPath) || !Directory.Exists(EnhanceFolderPath))
+        {
+            AddLog("WARN", "[Xử lý ảnh] Vui lòng chọn một thư mục hợp lệ!");
+            return;
+        }
+
+        IsEnhancing = true;
+        EnhanceProgress = 0;
+        EnhanceProgressText = "0.0%";
+        EnhanceCountText = "0 ảnh";
+        EnhanceErrorCountText = "0";
+        EnhanceCurrentFileText = _langService.CurrentLanguage == "VI" ? "Đang chuẩn bị xử lý..." : "Preparing enhancement...";
+        EnhanceLogs.Clear();
+        EnhanceLogs.Add($"[{DateTime.Now:HH:mm:ss}] Bắt đầu tiến trình xử lý nâng cao ảnh: {EnhanceFolderPath}");
+
+        _enhanceCts = new CancellationTokenSource();
+
+        var options = new ImageEnhancerOptions
+        {
+            Contrast = EnhanceContrast,
+            Brightness = EnhanceBrightness,
+            Saturation = EnhanceSaturation,
+            Sharpness = EnhanceSharpness,
+            NoiseReduce = EnhanceNoiseReduce,
+            Quality = EnhanceQuality,
+            MaxThreads = EnhanceThreads,
+            OverwriteOriginal = EnhanceOverwriteOriginal
+        };
+
+        try
+        {
+            var (success, errors) = await _imageEnhancer.ProcessFolderAsync(
+                EnhanceFolderPath,
+                options,
+                _enhanceCts.Token);
+
+            EnhanceCountText = $"{success} ảnh";
+            EnhanceErrorCountText = errors.ToString();
+            EnhanceCurrentFileText = _langService.CurrentLanguage == "VI" ? "Hoàn tất." : "Completed.";
+        }
+        catch (OperationCanceledException)
+        {
+            EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Đã dừng] Tiến trình xử lý ảnh đã dừng theo yêu cầu.");
+            EnhanceCurrentFileText = _langService.CurrentLanguage == "VI" ? "Đã dừng." : "Stopped.";
+        }
+        catch (Exception ex)
+        {
+            EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Lỗi] {ex.Message}");
+            EnhanceCurrentFileText = "Lỗi: " + ex.Message;
+        }
+        finally
+        {
+            IsEnhancing = false;
+        }
+    }
+
+    [RelayCommand]
+    public void StopEnhance()
+    {
+        if (_enhanceCts != null && !_enhanceCts.IsCancellationRequested)
+        {
+            _enhanceCts.Cancel();
+            EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] Đang gửi yêu cầu dừng tiến trình xử lý...");
+        }
+    }
+
+    [RelayCommand]
+    public void ClearEnhanceLogs()
+    {
+        EnhanceLogs.Clear();
     }
 }
 
