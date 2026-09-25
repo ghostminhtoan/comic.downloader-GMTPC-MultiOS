@@ -450,9 +450,9 @@
                                     <CheckBox IsChecked="{Binding IsAutoRetry}" Content="🔁 Tự thử lại" FontSize="10" Foreground="#D1D5DB" Margin="0,0,10,0" />
                                     <CheckBox IsChecked="{Binding IsCompactRow}" Content="📏 Nén dòng" FontSize="10" Foreground="#D1D5DB" Margin="0,0,10,0" />
                                     <CheckBox IsChecked="{Binding IsAutoSplitLongImages}" Content="✂️ Tự cắt ảnh dài" FontSize="10" Foreground="#F43F5E" FontWeight="SemiBold" Margin="0,0,6,0" ToolTip.Tip="Tự động cắt ảnh có chiều cao lớn hơn ngưỡng chỉ định thành các mảnh nhỏ trong khi tải" />
-                                    <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" IsVisible="{Binding IsAutoSplitLongImages}">
-                                        <TextBlock Text="Cao:" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center" />
-                                        <NumericUpDown Value="{Binding AutoSplitHeight}" Minimum="500" Maximum="50000" Increment="500" Width="85" Height="22" FontSize="10" />
+                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding IsAutoSplitLongImages}">
+                                        <TextBlock Text="Cao:" FontSize="10" Foreground="#F43F5E" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        <NumericUpDown Value="{Binding AutoSplitHeight}" Minimum="500" Maximum="50000" Increment="500" FormatString="0" Width="110" Height="26" FontSize="11" Foreground="#38BDF8" Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                         <TextBlock Text="px" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </WrapPanel>
@@ -632,42 +632,42 @@
                                         <StackPanel Spacing="8">
                                             <!-- Chọn thư mục -->
                                             <Grid ColumnDefinitions="*, Auto, Auto">
-                                                <TextBox Grid.Column="0" Text="{Binding ManualSplitFolderPath}" PlaceholderText="Chọn thư mục chứa ảnh dài để cắt..." Height="32" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" />
-                                                <Button Grid.Column="1" Command="{Binding BrowseManualSplitFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,4" Height="32" CornerRadius="4" Margin="0,0,6,0" />
-                                                <Button Grid.Column="2" Command="{Binding OpenManualSplitFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontSize="11" Padding="8,4" Height="32" CornerRadius="4" ToolTip.Tip="Mở thư mục trên thiết bị" />
+                                                <TextBox Grid.Column="0" Text="{Binding ManualSplitFolderPath}" PlaceholderText="Chọn thư mục chứa ảnh dài để cắt..." Height="34" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" Padding="8,4" />
+                                                <Button Grid.Column="1" Command="{Binding BrowseManualSplitFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,5" Height="34" CornerRadius="4" Margin="0,0,6,0" />
+                                                <Button Grid.Column="2" Command="{Binding OpenManualSplitFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" ToolTip.Tip="Mở thư mục trên thiết bị" />
                                             </Grid>
 
                                             <!-- Cấu hình Height, Quality, Threads & Nút Bắt đầu -->
                                             <WrapPanel Orientation="Horizontal">
-                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,14,4">
-                                                    <TextBlock Text="Chiều cao cắt (Height):" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                    <NumericUpDown Value="{Binding ManualSplitHeight}" Minimum="500" Maximum="50000" Increment="500" Width="95" Height="26" FontSize="11" />
-                                                    <TextBlock Text="px" Foreground="#64748B" FontSize="10" VerticalAlignment="Center" />
+                                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" Margin="0,0,16,6">
+                                                    <TextBlock Text="Chiều cao cắt (Height):" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                    <NumericUpDown Value="{Binding ManualSplitHeight}" Minimum="500" Maximum="50000" Increment="500" FormatString="0" Width="120" Height="28" FontSize="11" Foreground="#38BDF8" Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                    <TextBlock Text="px" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
                                                 </StackPanel>
 
-                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,14,4">
-                                                    <TextBlock Text="Chất lượng (Quality):" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                    <NumericUpDown Value="{Binding ManualSplitQuality}" Minimum="10" Maximum="100" Increment="5" Width="75" Height="26" FontSize="11" />
-                                                    <TextBlock Text="%" Foreground="#64748B" FontSize="10" VerticalAlignment="Center" />
+                                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" Margin="0,0,16,6">
+                                                    <TextBlock Text="Chất lượng (Quality):" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                    <NumericUpDown Value="{Binding ManualSplitQuality}" Minimum="10" Maximum="100" Increment="5" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0F172A" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                    <TextBlock Text="%" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
                                                 </StackPanel>
 
-                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,14,4">
-                                                    <TextBlock Text="Số luồng (Threads):" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                    <NumericUpDown Value="{Binding ManualSplitThreads}" Minimum="1" Maximum="16" Width="70" Height="26" FontSize="11" />
+                                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" Margin="0,0,16,6">
+                                                    <TextBlock Text="Số luồng (Threads):" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                    <NumericUpDown Value="{Binding ManualSplitThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="85" Height="28" FontSize="11" Foreground="#F59E0B" Background="#0F172A" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                 </StackPanel>
 
                                                 <Button Command="{Binding StartManualSplitCommand}" IsEnabled="{Binding !IsManualSplitting}"
-                                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="12,5" Height="28" CornerRadius="4" Margin="0,0,6,4">
+                                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,6" Height="30" CornerRadius="4" Margin="0,0,6,6">
                                                     <TextBlock Text="▶ BẮT ĐẦU CẮT ẢNH" />
                                                 </Button>
 
                                                 <Button Command="{Binding StopManualSplitCommand}" IsEnabled="{Binding IsManualSplitting}"
-                                                        Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="28" CornerRadius="4" Margin="0,0,6,4">
+                                                        Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,6" Height="30" CornerRadius="4" Margin="0,0,6,6">
                                                     <TextBlock Text="⏹ DỪNG" />
                                                 </Button>
 
                                                 <Button Command="{Binding ClearManualSplitLogsCommand}"
-                                                        Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="8,5" Height="28" CornerRadius="4" Margin="0,0,0,4">
+                                                        Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="10,6" Height="30" CornerRadius="4" Margin="0,0,0,6">
                                                     <TextBlock Text="🧹 Xóa log" />
                                                 </Button>
                                             </WrapPanel>
