@@ -399,6 +399,22 @@ public class DownloadEngineService
                 var refreshed = await _scraperService.ScrapeBookAsync(book.Url, book.Index, book.PreferredLanguage, true, ct).ConfigureAwait(false);
                 book.Chapters = refreshed.Chapters;
                 book.TotalChapters = refreshed.TotalChapters;
+                if (!string.IsNullOrWhiteSpace(refreshed.StatusMessage))
+                {
+                    book.StatusMessage = refreshed.StatusMessage;
+                }
+            }
+
+            if (book.Chapters.Count == 0)
+            {
+                book.Status = "Error";
+                if (string.IsNullOrWhiteSpace(book.StatusMessage) || book.StatusMessage.Contains("0 chương") || book.StatusMessage.Contains("Extracting"))
+                {
+                    book.StatusMessage = "Không có chương nào để tải (Hoặc lỗi kết nối/bị nhà mạng chặn TLS). Vui lòng thử bật 1.1.1.1/WARP.";
+                }
+                LogEmitted?.Invoke("ERROR", $"Truyện '{book.Title}' không thể tải vì 0 chương: {book.StatusMessage}");
+                ProgressUpdated?.Invoke();
+                return;
             }
 
             int totalChapters = Math.Max(1, book.TotalChapters);

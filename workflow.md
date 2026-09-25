@@ -186,9 +186,14 @@ Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file
   - dùng API chính chủ lấy chapter list, cover preview, ảnh chapter.
   - Khi lấy link MangaDex, bắt buộc hỏi người dùng chọn Tiếng Việt (`vi`) hoặc Tiếng Anh (`en`) qua hộp thoại Modal.
   - Cào chapter feed theo `offset` với `limit=100` để quét đủ 100% chapters.
-  - MangaDex là truyện tranh (manga), cấm gắn hậu tố `[MD-...]` hay sinh file `.md` vào tên truyện hoặc thư mục.
-  - Dùng WebView2 fetcher ngầm xử lý API MangaDex để vượt qua lỗi SSL/TLS Schannel của Windows khi cần. Bọc try-catch báo người dùng khi ISP chặn IP MangaDex.
-  - Tải ảnh qua `mangadex.network` hỗ trợ đa luồng curl và HttpClient song song, có WebView2 fallback an toàn.
+    - MangaDex là truyện tranh (manga), cấm gắn hậu tố `[MD-...]` hay sinh file `.md` vào tên truyện hoặc thư mục.
+    - Dịch vụ mạng đa tầng `MangaDexNetworkService` kết hợp toàn diện:
+      * Tầng 1: Direct HttpClient với DoH (`DoHResolver` giải quyết DNS qua Cloudflare DoH `1.1.1.1` và Google DoH `8.8.8.8`, chống đầu độc DNS).
+      * Tầng 2: Native WebView Service (`NativeWebViewService` chạy ngầm headless Edge/Chrome/Chromium trên đa hệ điều hành).
+      * Tầng 3: Reverse Proxy Gateways chuyển tiếp an toàn khi ISP chặn SNI/TLS.
+      * Tầng 4: Curl fallback hỗ trợ streaming dữ liệu nén.
+      * Tự động chẩn đoán và hướng dẫn trạng thái Cloudflare WARP (`CloudflareWarpService`) khi phát hiện nhà mạng chặn.
+    - Tải ảnh qua `mangadex.network` hỗ trợ đa luồng curl và HttpClient song song, có Native WebView fallback an toàn.
 - `loppytoonn.com`:
   - route `/truyen/<slug>`, chapter `/truyen/<slug>/<chapter-slug>`.
   - book info & chapter list lấy từ `.episode-list a`.
