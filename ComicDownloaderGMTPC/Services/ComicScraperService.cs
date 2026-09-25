@@ -591,27 +591,96 @@ public class ComicScraperService
         }
 
         string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        item.Title = ExtractTitle(html, url);
+        string rawTitle = ExtractTitle(html, url);
+        rawTitle = Regex.Replace(rawTitle, @"\s*[\-\|]\s*(?:Việt Hentai|Viet Hentai|Hentai Vietsub HD|Kuro Neko|Mèo đen|sayhentai\.cx|SayHentai\.Vip|SayHentai).*$", string.Empty, RegexOptions.IgnoreCase).Trim();
+        item.Title = string.IsNullOrWhiteSpace(rawTitle) ? ExtractFallbackTitleFromUrl(url) : rawTitle;
         item.CoverUrl = ExtractCoverUrl(html, url);
 
-        var matches = Regex.Matches(html, @"<a\s+[^>]*href=[""'](?<link>[^""']*(?:-chap-|-chuong-|\/chuong-)[^""']*)[""'][^>]*>(?<text>.*?)</a>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (Match m in matches)
+        void CollectChapters(string contentHtml)
         {
-            string link = m.Groups["link"].Value.Trim();
-            string fullUrl = MakeAbsoluteUrl(link, url);
-            if (seen.Add(fullUrl))
+            if (string.IsNullOrWhiteSpace(contentHtml)) return;
+
+            var matches = Regex.Matches(contentHtml, @"<li[^>]*class=[""'][^""']*wp-manga-chapter[^""']*[""'][^>]*>\s*<a\s+[^>]*href=[""'](?<link>[^""']+)[""'][^>]*>(?<text>.*?)</a>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (matches.Count == 0)
             {
-                string text = Regex.Replace(m.Groups["text"].Value, @"<[^>]+>", "").Trim();
-                double chapNum = ExtractChapterNumber(text, ExtractChapterNumber(fullUrl, item.Chapters.Count + 1));
-                item.Chapters.Add(new ChapterItem
+                matches = Regex.Matches(contentHtml, @"<a\s+[^>]*href=[""'](?<link>[^""']*(?:/chuong-|\-chuong\-)[^""']*)[""'][^>]*>(?<text>(?:Chapter|Chương|Chap)\s*\d+[^<]*)</a>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            }
+
+            foreach (Match m in matches)
+            {
+                string link = m.Groups["link"].Value.Trim();
+                string fullUrl = MakeAbsoluteUrl(link, url).TrimEnd('/');
+                if (seen.Add(fullUrl))
                 {
-                    ChapterNumber = chapNum,
-                    Title = string.IsNullOrWhiteSpace(text) ? $"Chap {chapNum}" : text,
-                    Url = fullUrl,
-                    Status = "Waiting"
-                });
+                    string text = Regex.Replace(m.Groups["text"].Value, @"<[^>]+>", "").Trim();
+                    double chapNum = ExtractChapterNumber(text, ExtractChapterNumber(fullUrl, item.Chapters.Count + 1));
+                    item.Chapters.Add(new ChapterItem
+                    {
+                        ChapterNumber = chapNum,
+                        Title = string.IsNullOrWhiteSpace(text) ? $"Chap {chapNum}" : text,
+                        Url = fullUrl,
+                        Status = "Waiting"
+                    });
+                }
+            }
+        }
+
+        CollectChapters(html);
+
+        // Xử lý AJAX pagination: data-ajax-url hoặc story/{id}/more-chapters
+        string moreUrl = "";
+        var ajaxMatch = Regex.Match(html, @"data-ajax-url=[""'](?<url>[^""']+)[""']", RegexOptions.IgnoreCase);
+        if (ajaxMatch.Success)
+        {
+            moreUrl = ajaxMatch.Groups["url"].Value.Trim();
+        }
+        else
+        {
+            var idMatch = Regex.Match(html, @"(?:data-story-id|data-id|data-post)=[""'](?<id>\d+)[""']", RegexOptions.IgnoreCase);
+            if (!idMatch.Success) idMatch = Regex.Match(html, @"id=[""']story_id[""'][^>]*value=[""'](?<id>\d+)[""']", RegexOptions.IgnoreCase);
+            if (idMatch.Success)
+            {
+                moreUrl = $"https://sayhentai.cx/story/{idMatch.Groups["id"].Value}/more-chapters";
+            }
+        }
+
+        int passes = 0;
+        while (!string.IsNullOrEmpty(moreUrl) && passes < 10)
+        {
+            passes++;
+            try
+            {
+                string fullMoreUrl = MakeAbsoluteUrl(moreUrl, url);
+                using var moreReq = new HttpRequestMessage(HttpMethod.Get, fullMoreUrl);
+                moreReq.Headers.Add("Referer", url);
+                moreReq.Headers.Add("X-Requested-With", "XMLHttpRequest");
+
+                using var moreRes = await _httpClient.SendAsync(moreReq, ct).ConfigureAwait(false);
+                if (moreRes.IsSuccessStatusCode)
+                {
+                    string moreHtml = await moreRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    CollectChapters(moreHtml);
+
+                    var nextAjax = Regex.Match(moreHtml, @"data-ajax-url=[""'](?<url>[^""']+)[""']", RegexOptions.IgnoreCase);
+                    if (nextAjax.Success && !string.Equals(nextAjax.Groups["url"].Value.Trim(), moreUrl, StringComparison.OrdinalIgnoreCase))
+                    {
+                        moreUrl = nextAjax.Groups["url"].Value.Trim();
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    break;
+                }
+            }
+            catch
+            {
+                break;
             }
         }
 
@@ -1050,27 +1119,67 @@ public class ComicScraperService
 
     private List<string> ExtractSayHentaiChapterImages(string html, string chapterUrl)
     {
-        var imageUrls = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // 1. Khoanh vùng khu vực đọc để loại bỏ các thẻ preload ở <head> không có token
+        int startIndex = html.IndexOf("class=\"reading-content\"", StringComparison.OrdinalIgnoreCase);
+        if (startIndex < 0) startIndex = html.IndexOf("id=\"chapter_content\"", StringComparison.OrdinalIgnoreCase);
+        if (startIndex < 0) startIndex = html.IndexOf("class=\"entry-content\"", StringComparison.OrdinalIgnoreCase);
+        string contentArea = startIndex >= 0 ? html.Substring(startIndex) : html;
 
-        foreach (Match match in Regex.Matches(html, @"https?://cdn\.pubtranxzyzz\.store/hen/\d+/[^/""'\s>]+/[^""'\s>]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^""'\s>]*)?", RegexOptions.IgnoreCase))
-        {
-            string url = match.Value.Trim();
-            if (seen.Add(url)) imageUrls.Add(url);
-        }
+        int stopIndex = contentArea.IndexOf("class=\"comment-box\"", StringComparison.OrdinalIgnoreCase);
+        if (stopIndex < 0) stopIndex = contentArea.IndexOf("class=\"entry-header footer\"", StringComparison.OrdinalIgnoreCase);
+        if (stopIndex > 0) contentArea = contentArea.Substring(0, stopIndex);
 
-        if (imageUrls.Count == 0)
+        var bestByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var orderedKeys = new List<string>();
+
+        void AddCandidate(string rawUrl)
         {
-            foreach (Match match in Regex.Matches(html, @"<(?:img|source)[^>]+(?:data-src|data-original|src)=[""'](?<url>[^""']+)[""']", RegexOptions.IgnoreCase))
+            if (string.IsNullOrWhiteSpace(rawUrl)) return;
+            string decoded = WebUtility.HtmlDecode(rawUrl).Trim();
+            if (decoded.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+                decoded.Contains("logo", StringComparison.OrdinalIgnoreCase) ||
+                decoded.Contains("banner", StringComparison.OrdinalIgnoreCase)) return;
+
+            string fullUrl = MakeAbsoluteUrl(decoded, chapterUrl);
+            string key = fullUrl.Split('?')[0];
+
+            if (!bestByPath.TryGetValue(key, out string? currentBest))
             {
-                string url = match.Groups["url"].Value.Trim();
-                if (url.StartsWith("data:") || url.Contains("logo") || url.Contains("banner")) continue;
-                string fullUrl = MakeAbsoluteUrl(url, chapterUrl);
-                if (seen.Add(fullUrl)) imageUrls.Add(fullUrl);
+                bestByPath[key] = fullUrl;
+                orderedKeys.Add(key);
+                return;
+            }
+
+            bool currentHasToken = currentBest.IndexOf("token=", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool candidateHasToken = fullUrl.IndexOf("token=", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!currentHasToken && candidateHasToken)
+            {
+                bestByPath[key] = fullUrl;
             }
         }
 
-        return imageUrls;
+        // Ưu tiên cdn.pubtranxzyzz.store
+        foreach (Match match in Regex.Matches(contentArea, @"https?://cdn\.pubtranxzyzz\.store/hen/\d+/[^/""'\s>]+/[^""'\s>]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^""'\s>]*)?", RegexOptions.IgnoreCase))
+        {
+            AddCandidate(match.Value);
+        }
+
+        // Kế đến là truyenvua.com
+        foreach (Match match in Regex.Matches(contentArea, @"https?://[^""'\s>]+?\.truyenvua\.com/[^""'\s>]+", RegexOptions.IgnoreCase))
+        {
+            AddCandidate(match.Value);
+        }
+
+        // Fallback quét các thẻ img/source trong contentArea
+        if (bestByPath.Count == 0)
+        {
+            foreach (Match match in Regex.Matches(contentArea, @"<(?:img|source)[^>]+(?:data-src|data-original|src)=[""'](?<url>[^""']+)[""']", RegexOptions.IgnoreCase))
+            {
+                AddCandidate(match.Groups["url"].Value);
+            }
+        }
+
+        return orderedKeys.Select(k => bestByPath[k]).ToList();
     }
 
     private List<string> ExtractDilibChapterImages(string html, string chapterUrl)

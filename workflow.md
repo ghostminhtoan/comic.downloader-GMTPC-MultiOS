@@ -382,3 +382,11 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   2. Thử `FileProvider` (`androidx.core.content.FileProvider`) với URI nội bộ và cờ `GrantReadUriPermission`.
   3. Thử Intent fallback với MIME `resource/folder` hoặc `*/*`.
   4. Luôn sao chép đường dẫn vào Android Clipboard để dự phòng.
+
+### 15.3. SayHentai Scraper & CDN Token Handling
+- SayHentai sử dụng cấu trúc phân trang chapter bằng AJAX: Trang ban đầu chỉ trả 20 chapter đầu tiên, các chapter còn lại (ví dụ chap 1 - 27) tải qua endpoint `https://sayhentai.cx/story/{id}/more-chapters` hoặc `data-ajax-url`. Khi cào truyện bắt buộc phải duyệt qua endpoint này đến khi hết chapter.
+- Loại bỏ các nút điều hướng "Chap đầu", "Chap cuối" ở phần đầu trang để không bị trùng hoặc sai lệch tên chapter.
+- Link ảnh của SayHentai đặt tại `cdn.pubtranxzyzz.store` có token xác thực và query string:
+  1. Thẻ `<link rel="preload">` trong `<head>` không chứa token HMAC hợp lệ (bị CDN chặn 403 Forbidden). Bắt buộc phải khoanh vùng bóc tách trong container `reading-content` / `chapter_content`.
+  2. Trong mã nguồn HTML, tham số URL bị mã hóa thực thể HTML (`&amp;expires=`). Bắt buộc phải dùng `WebUtility.HtmlDecode` để khôi phục tham số query `&expires=`, nếu không CDN sẽ báo lỗi 403.
+  3. Header Referer khi tải ảnh từ sayhentai / pubtranxzyzz bắt buộc phải là `https://sayhentai.cx/`.

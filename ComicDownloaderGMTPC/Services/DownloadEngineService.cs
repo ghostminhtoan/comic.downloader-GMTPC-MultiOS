@@ -550,12 +550,13 @@ public class DownloadEngineService
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, imageUrl);
 
-                string effectiveReferer = refererUrl;
+                string? effectiveReferer = refererUrl;
                 if (imageUrl.Contains("imggo.net", StringComparison.OrdinalIgnoreCase))
                 {
                     effectiveReferer = "https://daomeoden.net/";
                 }
-                else if (imageUrl.Contains("pubtranxzyzz", StringComparison.OrdinalIgnoreCase))
+                else if (imageUrl.Contains("pubtranxzyzz", StringComparison.OrdinalIgnoreCase) ||
+                         (refererUrl != null && refererUrl.Contains("sayhentai", StringComparison.OrdinalIgnoreCase)))
                 {
                     effectiveReferer = "https://sayhentai.cx/";
                 }
