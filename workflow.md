@@ -495,3 +495,23 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
     - Đóng gói từng thư mục con (Mỗi chapter xuất thành 1 file riêng biệt).
     - Gom đóng gói trực tiếp thư mục gốc.
   - Tích hợp thanh tiến trình %, thống kê số tệp thành công / lỗi, nút dừng và khung nhật ký (logs) chuyên nghiệp.
+
+### 15.7. Responsive UI Tab Công Cụ & Mục Lục Chương PDF (PDF Bookmarks / Outlines)
+- **Tái Cấu Trúc Responsive Toàn Diện Cho Tab Công Cụ (`MainView.axaml`)**:
+  - Khắc phục triệt để tình trạng tràn mép (overflow) và đè lấn (overlap) control trên các tab con `✂️ Cắt Ảnh Dài`, `🎨 Xử Lý Ảnh`, `📦 Đóng Gói File` khi cửa sổ bị thu nhỏ hoặc hiển thị trên Android:
+    1. **Bố cục nhập đường dẫn 2 tầng thông minh**: Thay thế `Grid ColumnDefinitions="Auto, *, Auto, Auto, Auto"` cố định 5 cột bằng cấu trúc 2 tầng: Dòng trên dành cho Tiêu đề nhãn / CheckBox ghi đè; dòng dưới dành cho TextBox co giãn `*` cùng các nút "📁 Chọn Thư Mục" và "📂 Mở" gọn gàng, TextBox luôn có không gian tối đa để đọc đường dẫn dài.
+    2. **Slider & Numeric Cards thích ứng (Adaptive WrapPanel)**: Gom 8 khối điều khiển thông số (Tương phản, Độ sáng, Bão hòa, Độ nét, Khử nhiễu, Chất lượng, Luồng CPU, Đặt lại) vào `WrapPanel` với kích thước chuẩn xác `145px`, tự động xếp dòng linh hoạt theo 2, 3, 4 hoặc 8 cột tùy thuộc vào độ rộng màn hình.
+    3. **Toolbar Live Preview chống overlap**: Tách các cụm chức năng (Duyệt ảnh trước/sau, Presets phong cách ảnh, Bộ điều khiển Zoom và Nút mở cửa sổ riêng biệt) thành các nhóm độc lập trong `WrapPanel`. Khi ở màn hình hẹp, các cụm tự động xếp xuống dòng ngay ngắn, triệt tiêu 100% hiện tượng đè lấn nút bấm.
+    4. **Thanh tiến trình & Banner thông báo responsive**: Tự động bọc dòng các chỉ số tiến độ %, số tệp hoàn tất, lỗi và các nút hành động mở thư mục / đóng banner.
+- **Tự Động Đính Kèm Mục Lục Chương (PDF Bookmarks / Outlines) Cho File PDF Gom**:
+  - Giải quyết bài toán lớn khi gom tất cả các chapter vào 1 file PDF duy nhất (`PackSubfoldersIndividually = false`): Trước đây người dùng xem file lớn hàng trăm/hàng nghìn trang không thể biết trang nào thuộc chương nào và không có mục lục.
+  - Tự động quét cấu trúc thư mục con (Chapter) theo thứ tự tự nhiên `NaturalSort`, thu thập chính xác cặp `(ChapterTitle, PageIndex)`. Các ảnh ở thư mục gốc (bìa/cover) được định vị là chương mở đầu.
+  - Triển khai thuật toán chèn Bookmarks gia tăng (PDF Incremental Update) chuẩn đặc tả ISO 32000-1 trực tiếp vào file PDF do SkiaSharp tạo ra:
+    + Cấu trúc cây Outlines Dictionary (`/Type /Outlines`, `/Count N`, `/First`, `/Last`).
+    + Danh sách từng Outline Item Dictionary (`/Title`, `/Dest [pageRef /XYZ null null null]`, `/Parent`, `/Prev`, `/Next`).
+    + Mã hóa Unicode tiếng Việt chuẩn xác bằng UTF-16BE Hexadecimal String kèm Byte Order Mark `<FEFF...>`.
+    + Cập nhật Root Catalog với `/Outlines` và cờ `/PageMode /UseOutlines` giúp mọi trình đọc PDF (Adobe Acrobat, Foxit, Moon+ Reader, Xodo, Chrome/Edge, Tachiyomi PDF) tự động bung danh sách chương để người đọc nhảy tới chương yêu thích ngay lập tức.
+  - Bảng `xref` incremental tuân thủ nghiêm ngặt quy định 20 bytes/entry và con trỏ `/Prev` trỏ về bảng xref gốc, đảm bảo tính toàn vẹn 100% của tệp tài liệu PDF.
+- **Nghiệm Thu Toàn Diện**:
+  - Bước 1: `build.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`) với `0 Warning(s), 0 Error(s)`.
+  - Bước 2: Khởi chạy file thực tế `release\windows\ComicDownloaderGMTPC.Desktop.exe` đạt trạng thái `Responding: True`.
