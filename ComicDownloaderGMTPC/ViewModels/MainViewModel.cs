@@ -113,6 +113,62 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private ComicBookItem? _selectedComic;
 
+    // MANGADEX LANGUAGE SELECTION MODAL PROMPT
+    [ObservableProperty]
+    private bool _isMangadexPromptVisible;
+
+    [ObservableProperty]
+    private bool _mangadexLangVi = true;
+
+    [ObservableProperty]
+    private bool _mangadexLangEn = false;
+
+    [ObservableProperty]
+    private bool _mangadexFallback = true;
+
+    private TaskCompletionSource<MangadexLanguageChoice?>? _mangadexPromptTcs;
+
+    [RelayCommand]
+    public void SelectMangadexVi()
+    {
+        MangadexLangVi = true;
+        MangadexLangEn = false;
+    }
+
+    [RelayCommand]
+    public void SelectMangadexEn()
+    {
+        MangadexLangVi = false;
+        MangadexLangEn = true;
+    }
+
+    [RelayCommand]
+    public void ConfirmMangadexLanguage()
+    {
+        IsMangadexPromptVisible = false;
+        var choice = new MangadexLanguageChoice
+        {
+            PrimaryLanguage = MangadexLangVi ? "vi" : "en",
+            UseFallback = MangadexFallback
+        };
+        _mangadexPromptTcs?.TrySetResult(choice);
+    }
+
+    [RelayCommand]
+    public void CancelMangadexLanguage()
+    {
+        IsMangadexPromptVisible = false;
+        _mangadexPromptTcs?.TrySetResult(null);
+    }
+
+    public Task<MangadexLanguageChoice?> PromptMangadexLanguageAsync()
+    {
+        _mangadexPromptTcs?.TrySetCanceled();
+        _mangadexPromptTcs = new TaskCompletionSource<MangadexLanguageChoice?>();
+        IsMangadexPromptVisible = true;
+        return _mangadexPromptTcs.Task;
+    }
+
     public ObservableCollection<ComicBookItem> ComicBooks { get; } = new();
     public ObservableCollection<MissingScanItem> ScanResults { get; } = new();
     public ObservableCollection<LogMessageItem> Logs { get; } = new();
@@ -200,7 +256,7 @@ public partial class MainViewModel : ViewModelBase
         var domains = new List<string>();
         if (SearchMangaDex) domains.Add("mangadex.org");
         if (SearchTruyenqq) domains.Add("truyenqq");
-        if (SearchNettruyen) domains.Add("nettruyen.tech");
+        if (SearchNettruyen) domains.Add("nettruyenviet10.com");
         if (SearchHako) domains.Add("hako.vn");
 
         if (domains.Count == 0)
@@ -242,7 +298,7 @@ public partial class MainViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(SourceSearchKeyword)) return;
 
         bool bing = isBing == "True" || isBing == "true";
-        string targetDomain = SearchMangaDex ? "mangadex.org" : (SearchTruyenqq ? "truyenqqto.com" : "nettruyen.tech");
+        string targetDomain = SearchMangaDex ? "mangadex.org" : (SearchTruyenqq ? "truyenqqto.com" : "nettruyenviet10.com");
         string url = _sourceSearchService.BuildExternalSearchUrl(SourceSearchKeyword, targetDomain, bing);
 
         try
@@ -272,11 +328,27 @@ public partial class MainViewModel : ViewModelBase
         AddLog("INFO", $"Đang thêm {selected.Count} truyện từ nguồn tìm kiếm vào hàng chờ tải...");
         int startIndex = ComicBooks.Count + 1;
 
+        bool hasMangadex = selected.Any(s => DomainRoutingService.DetectDomain(s.Url).Contains("mangadex"));
+        string mangadexLang = "vi";
+        bool mangadexFallback = true;
+        if (hasMangadex)
+        {
+            AddLog("INFO", "Phát hiện truyện MangaDex trong danh sách chọn. Vui lòng chọn ngôn ngữ tải...");
+            var choice = await PromptMangadexLanguageAsync();
+            if (choice == null)
+            {
+                AddLog("WARN", "Đã hủy thao tác nạp truyện MangaDex.");
+                return;
+            }
+            mangadexLang = choice.PrimaryLanguage;
+            mangadexFallback = choice.UseFallback;
+        }
+
         for (int i = 0; i < selected.Count; i++)
         {
             var sr = selected[i];
             int idx = startIndex + i;
-            var book = await _scraperService.ScrapeBookAsync(sr.Url, idx);
+            var book = await _scraperService.ScrapeBookAsync(sr.Url, idx, mangadexLang, mangadexFallback);
             if (!string.IsNullOrEmpty(sr.CoverUrl) && string.IsNullOrEmpty(book.CoverUrl))
             {
                 book.CoverUrl = sr.CoverUrl;
@@ -726,13 +798,31 @@ public partial class MainViewModel : ViewModelBase
 
         AddLog("INFO", $"Đang trích xuất thông tin cho {lines.Count} link truyện...");
 
+        bool hasMangadex = lines.Any(l => DomainRoutingService.DetectDomain(l).Contains("mangadex"));
+        string mangadexLang = "vi";
+        bool mangadexFallback = true;
+
+        if (hasMangadex)
+        {
+            AddLog("INFO", "Phát hiện liên kết MangaDex. Vui lòng chọn ngôn ngữ tải (Tiếng Việt / Tiếng Anh)...");
+            var choice = await PromptMangadexLanguageAsync();
+            if (choice == null)
+            {
+                AddLog("WARN", "Đã hủy thao tác lấy link MangaDex theo yêu cầu.");
+                return;
+            }
+            mangadexLang = choice.PrimaryLanguage;
+            mangadexFallback = choice.UseFallback;
+            AddLog("INFO", $"Đã xác nhận ngôn ngữ MangaDex: {(mangadexLang == "vi" ? "Tiếng Việt" : "Tiếng Anh")} (Fallback: {(mangadexFallback ? "Bật" : "Tắt")})");
+        }
+
         int startIndex = ComicBooks.Count + 1;
         for (int i = 0; i < lines.Count; i++)
         {
             string url = lines[i];
             int currentIndex = startIndex + i;
 
-            var book = await _scraperService.ScrapeBookAsync(url, currentIndex);
+            var book = await _scraperService.ScrapeBookAsync(url, currentIndex, mangadexLang, mangadexFallback);
             ComicBooks.Add(book);
             AddLog("INFO", $"[{currentIndex}] Đã nạp: {book.Title} ({book.TotalChapters} chaps) - Domain: {book.Domain}");
         }
@@ -776,4 +866,10 @@ public partial class MainViewModel : ViewModelBase
             }
         });
     }
+}
+
+public class MangadexLanguageChoice
+{
+    public string PrimaryLanguage { get; set; } = "vi";
+    public bool UseFallback { get; set; } = true;
 }

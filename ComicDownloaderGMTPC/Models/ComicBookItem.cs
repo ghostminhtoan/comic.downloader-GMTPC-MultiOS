@@ -57,6 +57,9 @@ public partial class ComicBookItem : ObservableObject
     private string _latestChapter = string.Empty;
 
     [ObservableProperty]
+    private string _preferredLanguage = "vi";
+
+    [ObservableProperty]
     private bool _isDuplicate;
 
     [ObservableProperty]

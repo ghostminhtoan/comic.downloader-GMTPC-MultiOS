@@ -8,8 +8,9 @@
              x:DataType="vm:MainViewModel"
              Background="#0B0F19">
 
-    <!-- KHUNG CUỘN CHÍNH HỖ TRỢ ĐA NỀN TẢNG (DESKTOP & MOBILE/ANDROID) -->
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <Grid>
+        <!-- KHUNG CUỘN CHÍNH HỖ TRỢ ĐA NỀN TẢNG (DESKTOP & MOBILE/ANDROID) -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid RowDefinitions="Auto, Auto, *, Auto" MinHeight="650">
 
             <!-- 1. HEADER / BRAND BAR -->
@@ -128,12 +129,12 @@
                                             </StackPanel>
                                         </TabItem>
 
-                                        <!-- nettruyen.tech -->
-                                        <TabItem Header="nettruyen.tech" FontSize="11">
+                                        <!-- loppytoonn.com -->
+                                        <TabItem Header="loppytoonn.com" FontSize="11">
                                             <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn NetTruyen Tech (nettruyen.tech)" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://nettruyen.tech/truyen-tranh/thuong-hoang-tro-ve-18234" Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện NetTruyen Tech..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                <TextBlock Text="Nguồn LoppyToon (loppytoonn.com)" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" />
+                                                <TextBlock Text="Ví dụ: https://loppytoonn.com/truyen/buc-thu-ve-trong-dem" Foreground="#94A3B8" FontSize="11" />
+                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện LoppyToon..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
                                                         <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
@@ -646,4 +647,74 @@
             </Border>
         </Grid>
     </ScrollViewer>
+
+        <!-- 5. MODAL POPUP: MANGADEX LANGUAGE SELECTION DIALOG -->
+        <Border Background="#CC000000" IsVisible="{Binding IsMangadexPromptVisible}" ZIndex="999" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Border Background="#111827" BorderBrush="#38BDF8" BorderThickness="1.5" CornerRadius="10" 
+                    Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center" Width="380" MaxWidth="450"
+                    BoxShadow="0 10 25 #80000000">
+                <StackPanel Spacing="14">
+                    <!-- Title Header -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Background="#38BDF8" CornerRadius="4" Width="24" Height="24">
+                            <TextBlock Text="🌐" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="MangaDex - Chọn Ngôn Ngữ Tải" FontWeight="Bold" FontSize="14" Foreground="#F8FAFC" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="Phát hiện liên kết MangaDex. Vui lòng chọn ngôn ngữ bản dịch của các chương bạn muốn tải về:" 
+                               Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap" />
+
+                    <!-- Options -->
+                    <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12,10">
+                        <StackPanel Spacing="10">
+                            <!-- Tiếng Việt -->
+                            <Button Command="{Binding SelectMangadexViCommand}" Background="Transparent" Padding="0" Cursor="Hand" HorizontalAlignment="Stretch">
+                                <Grid ColumnDefinitions="Auto, *">
+                                    <RadioButton Grid.Column="0" IsChecked="{Binding MangadexLangVi}" GroupName="mdLang" IsHitTestVisible="False" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="🇻🇳 Tiếng Việt (Vietnamese)" FontWeight="Bold" FontSize="12" Foreground="#38BDF8" />
+                                        <TextBlock Text="Ưu tiên tải các chương truyện bản dịch tiếng Việt" FontSize="10" Foreground="#64748B" />
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+
+                            <Border Height="1" Background="#1E293B" />
+
+                            <!-- Tiếng Anh -->
+                            <Button Command="{Binding SelectMangadexEnCommand}" Background="Transparent" Padding="0" Cursor="Hand" HorizontalAlignment="Stretch">
+                                <Grid ColumnDefinitions="Auto, *">
+                                    <RadioButton Grid.Column="0" IsChecked="{Binding MangadexLangEn}" GroupName="mdLang" IsHitTestVisible="False" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="🇬🇧 Tiếng Anh (English)" FontWeight="Bold" FontSize="12" Foreground="#F59E0B" />
+                                        <TextBlock Text="Ưu tiên tải các chương truyện bản dịch tiếng Anh" FontSize="10" Foreground="#64748B" />
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Fallback Option -->
+                    <CheckBox IsChecked="{Binding MangadexFallback}" Margin="2,0,0,0">
+                        <TextBlock Text="Tự động tải ngôn ngữ còn lại nếu không có bản dịch đã chọn" FontSize="10.5" Foreground="#CBD5E1" TextWrapping="Wrap" />
+                    </CheckBox>
+
+                    <!-- Action Buttons -->
+                    <Grid ColumnDefinitions="*, *" Margin="0,6,0,0">
+                        <Button Grid.Column="0" Command="{Binding CancelMangadexLanguageCommand}" 
+                                Background="#1E293B" BorderBrush="#334155" BorderThickness="1" 
+                                Foreground="#94A3B8" Padding="12,7" CornerRadius="6" HorizontalAlignment="Stretch" Margin="0,0,6,0">
+                            <TextBlock Text="❌ HỦY BỎ" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        </Button>
+
+                        <Button Grid.Column="1" Command="{Binding ConfirmMangadexLanguageCommand}" 
+                                Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1" 
+                                Foreground="#FFFFFF" Padding="12,7" CornerRadius="6" HorizontalAlignment="Stretch" Margin="6,0,0,0">
+                            <TextBlock Text="✅ XÁC NHẬN" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" />
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
 </UserControl>

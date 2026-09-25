@@ -182,7 +182,7 @@ public class SourceSearchService
     {
         var list = new List<SourceSearchResultItem>();
         string query = Uri.EscapeDataString(keyword);
-        string searchUrl = $"https://nettruyen.tech/tim-truyen?keyword={query}";
+        string searchUrl = $"https://nettruyenviet10.com/tim-truyen?keyword={query}";
 
         using var req = new HttpRequestMessage(HttpMethod.Get, searchUrl);
         using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
@@ -201,9 +201,9 @@ public class SourceSearchService
             {
                 Title = System.Net.WebUtility.HtmlDecode(bookTitle),
                 Url = bookUrl,
-                Domain = "nettruyen.tech",
+                Domain = "nettruyenviet10.com",
                 CoverUrl = coverUrl,
-                LatestChapter = "NetTruyen"
+                LatestChapter = "NetTruyenViet"
             });
         }
 

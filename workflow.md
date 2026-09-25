@@ -85,10 +85,10 @@ Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file
   - Scan/rescan không phụ thuộc checkbox book (checkbox chỉ để chọn/copy/toggle).
   - Right click tab scan: copy book link, copy missing integer chapter, copy decimal chapter; Ctrl+C chỉ copy link truyện.
   - Mọi domain scan missing integer chapter phải tôn trọng `multiple check`; cấm semaphore/lock toàn domain gây single check.
-  - `nettruyen.tech`/`nettruyenviet10.com`: WebView `Xem thêm` mở ngầm song song theo số scan task; không khóa WatchMore WebView còn 1 cửa.
+  - `nettruyenviet10.com`: WebView `Xem thêm` mở ngầm song song theo số scan task; không khóa WatchMore WebView còn 1 cửa.
   - WatchMore WebView: đóng, dispose sau khi lấy HTML/cookie; giảm `multiple check` không mở vượt limit mới.
-  - `nettruyen.tech`/`nettruyenviet10.com`: ưu tiên API/AJAX chapter list; chỉ mở WebView `Xem thêm` khi AJAX thiếu/thất bại.
-  - `nettruyen.tech`/`nettruyenviet10.com`: nguồn chapter đầy đủ ưu tiên `/Comic/Services/ComicService.asmx/ChapterList?slug=<book-slug>` (API của nút `Xem thêm`, tránh hụt chap đầu như `thuong-hoang-tro-ve`).
+  - `nettruyenviet10.com`: ưu tiên API/AJAX chapter list; chỉ mở WebView `Xem thêm` khi AJAX thiếu/thất bại.
+  - `nettruyenviet10.com`: nguồn chapter đầy đủ ưu tiên `/Comic/Services/ComicService.asmx/ChapterList?slug=<book-slug>` (API của nút `Xem thêm`, tránh hụt chap đầu như `thuong-hoang-tro-ve`).
   - Scan thiếu chap số nguyên 1-3: tự quét lại tối đa 3 lần trước khi lưu.
   - Mọi domain: label chap `số:số`, `số-số`, `số - số` tính là range phủ đủ các số trong khoảng, không báo thiếu số trong range.
   - Domain trả chapter label riêng với link (ví dụ Nettruyen API `chapter_name`): cache `ReaderChapterItem.Name` giữ label thật, không tự build lại từ link làm mất range như `Chapter 58: 59`.
@@ -184,15 +184,18 @@ Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file
 - `mangadex.org`:
   - ưu tiên route `tag / title / chapter`.
   - dùng API chính chủ lấy chapter list, cover preview, ảnh chapter.
+  - Khi lấy link MangaDex, bắt buộc hỏi người dùng chọn Tiếng Việt (`vi`) hoặc Tiếng Anh (`en`) qua hộp thoại Modal.
+  - Cào chapter feed theo `offset` với `limit=100` để quét đủ 100% chapters.
   - MangaDex là truyện tranh (manga), cấm gắn hậu tố `[MD-...]` hay sinh file `.md` vào tên truyện hoặc thư mục.
-  - Dùng WebView2 fetcher ngầm xử lý API MangaDex để vượt qua lỗi SSL/TLS Schannel của Windows. Fallback OpenGraph HTML khi URL thiếu slug.
+  - Dùng WebView2 fetcher ngầm xử lý API MangaDex để vượt qua lỗi SSL/TLS Schannel của Windows khi cần. Bọc try-catch báo người dùng khi ISP chặn IP MangaDex.
   - Tải ảnh qua `mangadex.network` hỗ trợ đa luồng curl và HttpClient song song, có WebView2 fallback an toàn.
-- `nettruyen`
-- `nettruyen.tech`:
-  - preview cover từ `div.col-image img` (`.jpg`, `.png`, `.webp`); hover book hiện badge trắng `preview` khi tích hợp thành công.
-  - download folder/process tách riêng `nettruyen.tech`, không chung `nettruyen` hay `nettruyenviet10.com`.
+- `loppytoonn.com`:
+  - route `/truyen/<slug>`, chapter `/truyen/<slug>/<chapter-slug>`.
+  - book info & chapter list lấy từ `.episode-list a`.
+  - ảnh chapter lấy từ `.chapter-content img`, tự động lọc bỏ ảnh watermark credit (`credit.jpg`), logo, icon.
 - `nettruyenviet10.com`:
-  - download folder/process tách riêng `nettruyenviet10.com`, không chung `nettruyen` hay `nettruyen.tech`.
+  - download folder/process tách riêng `nettruyenviet10.com`.
+  - tự động loại bỏ banner quảng cáo đầu truyện (`nettruyenviet.webp`, `assets/images`).
   - AJAX `ProcessChapterList`/`GetListChapter` trả đủ list: gán lại `chapterLinks` bằng kết quả AJAX, không chỉ đổi HTML trung gian.
 - `dilib.vn / thuviensach.vn`:
   - book slug chứa số: nhận dạng book từ chapter URL chỉ cắt sau marker chapter (`-chap-...` hoặc `/chuong...`), không xóa số cuối book slug.

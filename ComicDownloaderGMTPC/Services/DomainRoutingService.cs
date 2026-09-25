@@ -22,7 +22,7 @@ public static class DomainRoutingService
 
             if (host.Contains("truyenqq")) return "truyenqq";
             if (host.Contains("mangadex")) return "mangadex.org";
-            if (host.Contains("nettruyen.tech")) return "nettruyen.tech";
+            if (host.Contains("loppytoonn")) return "loppytoonn.com";
             if (host.Contains("nettruyenviet10")) return "nettruyenviet10.com";
             if (host.Contains("nettruyen")) return "nettruyen";
             if (host.Contains("thuviensach") || host.Contains("dilib")) return "thuviensach.vn";

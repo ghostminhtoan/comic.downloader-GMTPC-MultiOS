@@ -396,7 +396,7 @@ public class DownloadEngineService
             // If chapters not extracted yet, try extraction
             if (book.Chapters.Count == 0)
             {
-                var refreshed = await _scraperService.ScrapeBookAsync(book.Url, book.Index, ct).ConfigureAwait(false);
+                var refreshed = await _scraperService.ScrapeBookAsync(book.Url, book.Index, book.PreferredLanguage, true, ct).ConfigureAwait(false);
                 book.Chapters = refreshed.Chapters;
                 book.TotalChapters = refreshed.TotalChapters;
             }
