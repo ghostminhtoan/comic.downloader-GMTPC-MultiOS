@@ -156,9 +156,58 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isEnhanceFullscreenVisible = false;
 
+    [ObservableProperty]
+    private string _enhanceBeforeInfoText = "Before: 0 x 0, 0 KB";
+
+    [ObservableProperty]
+    private string _enhanceAfterInfoText = "After: 0 x 0, 0 KB";
+
+    [ObservableProperty]
+    private string _enhanceClippingInfoText = "✅ Cân bằng";
+
+    [ObservableProperty]
+    private string _enhanceImageIndexText = "Chưa có ảnh";
+
+    [ObservableProperty]
+    private string _enhanceViewMode = "Dual"; // "Dual", "Single", "Split"
+
+    [ObservableProperty]
+    private bool _isDualView = true;
+
+    [ObservableProperty]
+    private bool _isSingleView = false;
+
+    [ObservableProperty]
+    private bool _isSplitView = false;
+
+    [ObservableProperty]
+    private bool _isSingleShowingBefore = false;
+
+    [ObservableProperty]
+    private double _enhanceSplitRatio = 0.5; // 0.0 to 1.0
+
+    [ObservableProperty]
+    private bool _isLoupeEnabled = false;
+
+    [ObservableProperty]
+    private double _loupeZoom = 2.5;
+
+    [ObservableProperty]
+    private bool _canGoPrevious = false;
+
+    [ObservableProperty]
+    private bool _canGoNext = false;
+
     partial void OnEnhancePreviewZoomChanged(double value)
     {
         EnhancePreviewZoomText = $"{Math.Round(value * 100):0}%";
+    }
+
+    partial void OnEnhanceViewModeChanged(string value)
+    {
+        IsDualView = value == "Dual";
+        IsSingleView = value == "Single";
+        IsSplitView = value == "Split";
     }
 
     [ObservableProperty]
@@ -1201,14 +1250,18 @@ public partial class MainViewModel : ViewModelBase
                 Quality = EnhanceQuality
             };
 
-            byte[]? previewBytes = _imageEnhancer.GeneratePreviewBytes(_enhanceSampleImagePath, options, maxDimension: 800);
-            if (previewBytes != null && previewBytes.Length > 0)
+            var stats = _imageEnhancer.GeneratePreviewWithStats(_enhanceSampleImagePath, options, maxDimension: 900);
+            if (stats?.PreviewBytes != null && stats.PreviewBytes.Length > 0)
             {
-                using var ms = new MemoryStream(previewBytes);
+                using var ms = new MemoryStream(stats.PreviewBytes);
                 var bmp = new Bitmap(ms);
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
                     EnhancePreviewResult = bmp;
+                    EnhanceBeforeInfoText = $"Before: {stats.OrigWidth} x {stats.OrigHeight}, {stats.OriginalSizeBytes / 1024.0:F1} KB";
+                    string sign = stats.SizeDeltaPercent >= 0 ? "+" : "";
+                    EnhanceAfterInfoText = $"After: {stats.OrigWidth} x {stats.OrigHeight}, {stats.ProcessedSizeBytes / 1024.0:F1} KB ({sign}{stats.SizeDeltaPercent:F1}%)";
+                    EnhanceClippingInfoText = stats.ClippingInfo;
                 });
             }
         }
@@ -1228,8 +1281,10 @@ public partial class MainViewModel : ViewModelBase
             using (var fs = new FileStream(imagePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
                 var originalBmp = new Bitmap(fs);
+                long origSize = new FileInfo(imagePath).Length;
                 EnhancePreviewOriginal = originalBmp;
                 EnhancePreviewInfoText = $"{Path.GetFileName(imagePath)} ({originalBmp.PixelSize.Width}x{originalBmp.PixelSize.Height})";
+                EnhanceBeforeInfoText = $"Before: {originalBmp.PixelSize.Width} x {originalBmp.PixelSize.Height}, {origSize / 1024.0:F1} KB";
             }
 
             UpdatePreviewResult();
@@ -1238,6 +1293,76 @@ public partial class MainViewModel : ViewModelBase
         {
             EnhancePreviewInfoText = $"Không thể tải xem trước: {ex.Message}";
         }
+    }
+
+    private List<string> _enhanceFolderFiles = new();
+    private int _enhanceCurrentFileIndex = -1;
+
+    public void LoadFolderImages(string folderPath, string? selectedFile = null)
+    {
+        try
+        {
+            _enhanceFolderFiles = _imageEnhancer.GetAllImagesInFolder(folderPath);
+            if (_enhanceFolderFiles.Count > 0)
+            {
+                if (!string.IsNullOrEmpty(selectedFile))
+                {
+                    _enhanceCurrentFileIndex = _enhanceFolderFiles.IndexOf(selectedFile);
+                    if (_enhanceCurrentFileIndex < 0) _enhanceCurrentFileIndex = 0;
+                }
+                else
+                {
+                    _enhanceCurrentFileIndex = 0;
+                }
+
+                LoadSamplePreview(_enhanceFolderFiles[_enhanceCurrentFileIndex]);
+            }
+            else
+            {
+                _enhanceCurrentFileIndex = -1;
+                EnhancePreviewOriginal = null;
+                EnhancePreviewResult = null;
+                EnhancePreviewInfoText = "Cây thư mục không có ảnh hợp lệ.";
+            }
+
+            UpdateNavigationState();
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi tải danh sách ảnh: {ex.Message}");
+        }
+    }
+
+    private void UpdateNavigationState()
+    {
+        CanGoPrevious = _enhanceCurrentFileIndex > 0;
+        CanGoNext = _enhanceCurrentFileIndex < _enhanceFolderFiles.Count - 1;
+        if (_enhanceCurrentFileIndex >= 0 && _enhanceCurrentFileIndex < _enhanceFolderFiles.Count)
+        {
+            EnhanceImageIndexText = $"[{_enhanceCurrentFileIndex + 1} / {_enhanceFolderFiles.Count}] {Path.GetFileName(_enhanceFolderFiles[_enhanceCurrentFileIndex])}";
+        }
+        else
+        {
+            EnhanceImageIndexText = "Chưa có ảnh";
+        }
+    }
+
+    [RelayCommand]
+    public void PreviousImage()
+    {
+        if (_enhanceFolderFiles.Count == 0 || _enhanceCurrentFileIndex <= 0) return;
+        _enhanceCurrentFileIndex--;
+        LoadSamplePreview(_enhanceFolderFiles[_enhanceCurrentFileIndex]);
+        UpdateNavigationState();
+    }
+
+    [RelayCommand]
+    public void NextImage()
+    {
+        if (_enhanceFolderFiles.Count == 0 || _enhanceCurrentFileIndex >= _enhanceFolderFiles.Count - 1) return;
+        _enhanceCurrentFileIndex++;
+        LoadSamplePreview(_enhanceFolderFiles[_enhanceCurrentFileIndex]);
+        UpdateNavigationState();
     }
 
     [RelayCommand]
@@ -1272,21 +1397,9 @@ public partial class MainViewModel : ViewModelBase
                             EnhanceOutputFolderPath = Path.Combine(normalized, "Enhanced");
                         }
 
-                        // Tự động tìm ảnh đầu tiên đệ quy trong cây thư mục đa tầng
                         if (Directory.Exists(normalized))
                         {
-                            var firstImg = _imageEnhancer.FindFirstSampleImage(normalized);
-
-                            if (!string.IsNullOrEmpty(firstImg))
-                            {
-                                LoadSamplePreview(firstImg);
-                            }
-                            else
-                            {
-                                EnhancePreviewOriginal = null;
-                                EnhancePreviewResult = null;
-                                EnhancePreviewInfoText = "Cây thư mục không có ảnh mẫu hợp lệ (.jpg, .png, .webp, .bmp).";
-                            }
+                            LoadFolderImages(normalized);
                         }
                     }
                 }
@@ -1363,11 +1476,12 @@ public partial class MainViewModel : ViewModelBase
                     string? path = file.TryGetLocalPath() ?? file.Path?.LocalPath;
                     if (!string.IsNullOrEmpty(path) && File.Exists(path))
                     {
+                        string dir = Path.GetDirectoryName(path) ?? string.Empty;
                         if (string.IsNullOrEmpty(EnhanceFolderPath))
                         {
-                            EnhanceFolderPath = Path.GetDirectoryName(path) ?? string.Empty;
+                            EnhanceFolderPath = dir;
                         }
-                        LoadSamplePreview(path);
+                        LoadFolderImages(dir, path);
                     }
                 }
             }
@@ -1424,6 +1538,88 @@ public partial class MainViewModel : ViewModelBase
     public void ResetZoomPreview()
     {
         EnhancePreviewZoom = 1.0;
+    }
+
+    [RelayCommand]
+    public void ZoomFitPreview()
+    {
+        if (EnhancePreviewOriginal != null)
+        {
+            int h = EnhancePreviewOriginal.PixelSize.Height;
+            if (h > 2000) EnhancePreviewZoom = 0.4;
+            else if (h > 1400) EnhancePreviewZoom = 0.55;
+            else if (h > 900) EnhancePreviewZoom = 0.75;
+            else EnhancePreviewZoom = 1.0;
+        }
+        else
+        {
+            EnhancePreviewZoom = 0.75;
+        }
+    }
+
+    [RelayCommand]
+    public void SetViewModeDual() => EnhanceViewMode = "Dual";
+
+    [RelayCommand]
+    public void SetViewModeSingle() => EnhanceViewMode = "Single";
+
+    [RelayCommand]
+    public void SetViewModeSplit() => EnhanceViewMode = "Split";
+
+    [RelayCommand]
+    public void ToggleCompareMode()
+    {
+        EnhanceViewMode = EnhanceViewMode == "Dual" ? "Single" : "Dual";
+    }
+
+    [RelayCommand]
+    public void ToggleLoupe()
+    {
+        IsLoupeEnabled = !IsLoupeEnabled;
+    }
+
+    [RelayCommand]
+    public void ApplyPresetDefault()
+    {
+        EnhanceContrast = 0f;
+        EnhanceBrightness = 0f;
+        EnhanceSaturation = 100f;
+        EnhanceSharpness = 0f;
+        EnhanceNoiseReduce = 0;
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Mặc định (Gốc)");
+    }
+
+    [RelayCommand]
+    public void ApplyPresetOldScan()
+    {
+        EnhanceContrast = 25f;
+        EnhanceBrightness = 10f;
+        EnhanceSaturation = 100f;
+        EnhanceSharpness = 1.0f;
+        EnhanceNoiseReduce = 1;
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Khử ố vàng giấy scan");
+    }
+
+    [RelayCommand]
+    public void ApplyPresetWebtoon()
+    {
+        EnhanceContrast = 10f;
+        EnhanceBrightness = 0f;
+        EnhanceSaturation = 125f;
+        EnhanceSharpness = 1.0f;
+        EnhanceNoiseReduce = 0;
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Webtoon rực rỡ");
+    }
+
+    [RelayCommand]
+    public void ApplyPresetNight()
+    {
+        EnhanceContrast = 12f;
+        EnhanceBrightness = -15f;
+        EnhanceSaturation = 90f;
+        EnhanceSharpness = 0.5f;
+        EnhanceNoiseReduce = 0;
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Đọc đêm dịu mắt");
     }
 
     [RelayCommand]

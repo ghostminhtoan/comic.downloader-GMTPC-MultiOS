@@ -417,3 +417,41 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - **Lưu ý SkiaSharp ColorMatrix Normalization (Khắc phục triệt để lỗi ảnh convert/preview bị blank/black)**:
   - Trong SkiaSharp (`SKColorFilter.CreateColorMatrix`), cột offset thứ 5 (translation bias) được chuẩn hóa theo hệ quy chiếu `[-1.0 .. +1.0]` (với 1.0 tương ứng 255 mức sáng), KHÔNG phải `[0 .. 255]` như GDI+ hay Android ColorMatrix.
   - Công thức chuẩn xác: Độ dịch sáng `b = options.Brightness / 100.0f`, điểm xoay tương phản `t = (1.0f - c) * 0.5f + b`. Tuyệt đối không nhân với 128 hay 255 vì sẽ làm tràn giá trị khiến toàn bộ ma trận màu bị clamp về 0 (ảnh đen hoàn toàn).
+
+### 15.5. FastStone Photo Resizer Conversion Preview & Unique Comic Innovations
+Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi kinh điển của FastStone Photo Resizer kết hợp cùng các công cụ sáng tạo chuyên sâu cho truyện tranh/manga/webtoon:
+- **Phần 1: FastStone Core Preview Architecture**:
+  1. **Đồng bộ hóa Pan & Zoom 2 chiều (Bidirectional Synchronized Scroll/Pan)**:
+     - Lắng nghe sự kiện `ScrollChanged` trên cả 2 ScrollViewer (`BeforeScrollViewer` & `AfterScrollViewer`) với cờ ngắt đệ quy `_isSyncingScroll` để đồng bộ hoàn hảo vị trí cuộn khi người dùng cuộn một bên.
+     - Lắng nghe `PointerPressed`, `PointerMoved`, `PointerReleased` với cờ `RoutingStrategies.Tunnel` để kéo chuột rê ảnh (Pan Drag) đồng thời cả 2 khung hình mà không bị ScrollViewer nuốt sự kiện.
+     - Bánh xe cuộn chuột (`OnPointerWheelChanged`) tự động tăng/giảm Zoom mượt mà.
+  2. **Thống kê dung lượng & kích thước thời gian thực (Real-time File Size & Dimension Stats)**:
+     - Trả về thông số chi tiết của ảnh gốc (`2560x1440, 2,839 KB`) và ảnh sau xử lý (`2560x1440, 281 KB (-89.4%)`).
+     - Tự động mã hóa SkiaSharp theo mức chất lượng đã chọn (`SKEncodedImageFormat.Jpeg`, `options.Quality`) để tính toán chính xác kích thước file xuất thực tế.
+  3. **3 Chế độ xem linh hoạt (Tri-View Modes)**:
+     - **Dual View (Song song)**: 2 khung ảnh Before và After đặt cạnh nhau, chia tỉ lệ 50:50.
+     - **Split View (Rèm trượt)**: 2 ảnh lồng nhau trên cùng mặt phẳng tọa độ với `GridSplitter` di động và Slider chỉnh tỷ lệ cắt ranh giới Before/After trực quan.
+     - **Single View (Ảnh đơn có phím tắt Peek)**: Tràn viền tối đa; người dùng chỉ cần nhấn giữ chuột trái hoặc giữ phím `Space` để tức thì soi lại ảnh gốc Before, thả ra quay về After.
+  4. **Bộ công cụ Zoom nhanh**:
+     - `1:1` (100% kích thước pixel thực).
+     - `Fit` (Tự động co vừa khung cửa sổ tùy theo chiều cao ảnh).
+     - `Zoom In (+)` và `Zoom Out (-)`.
+  5. **Duyệt ảnh Trước / Sau toàn thư mục (Folder Image Navigation)**:
+     - Tự động quét toàn bộ danh sách file ảnh hợp lệ (`.jpg`, `.jpeg`, `.png`, `.webp`, `.bmp`) trong thư mục nguồn và các thư mục con qua `GetAllImagesInFolder`.
+     - Nút `⬅` (Previous) và `➡` (Next) kèm bộ đếm vị trí trực quan: `[ 3 / 24 ] Trang 003.jpg`.
+- **Phần 2: Unique Comic Innovations**:
+  1. **Rèm trượt đối chiếu (Curtain Wipe) thuần XAML**: Dùng `GridSplitter` và `Border.ClipToBounds="True"` lồng 2 ảnh xếp lớp giúp thao tác kéo rèm mượt mà tuyệt đối ở 60+ FPS mà không cần render lại bitmap trên CPU.
+  2. **Kính lúp phóng đại nét vẽ (Pixel Loupe / Magnifier)**: Công cụ toggle kính lúp hỗ trợ soi chi tiết từng nét mực, hạt nhiễu (noise) và độ sắc nét viền vẽ.
+  3. **Bộ Presets 1-Click chuyên dụng cho truyện tranh (One-Click Comic Presets)**:
+     - `🔘 Mặc định`: Reset về thông số gốc (Contrast 0, Brightness 0, Saturation 100%, Sharpness 0, Noise 0).
+     - `📜 Khử ố scan`: Contrast +25%, Brightness +10, Sharpness 1.0, Noise 1 (Tẩy trắng nền ố vàng của giấy scan cũ, giữ đen nét vẽ).
+     - `🎨 Webtoon rực rỡ`: Saturation 125%, Contrast +10%, Sharpness 1.0 (Nâng tông màu rực rỡ và làm sắc cạnh khung hình webtoon).
+     - `🌙 Đọc đêm dịu mắt`: Brightness -15, Contrast +12%, Saturation 90%, Sharpness 0.5 (Hạ độ chói của nền trắng, chữ sắc nét, chống mỏi mắt khi đọc trong bóng tối).
+  4. **Chỉ báo phân tích ánh sáng (Luma Clipping Indicator)**: Tự động phân tích histogram độ chói luma để cảnh báo sớm nếu ảnh có nguy cơ cháy sáng (`> 250`) hoặc bệt màu chết tối (`< 5`).
+  5. **Hệ thống phím tắt bàn phím tốc độ cao**:
+     - Phím `A` hoặc `Mũi tên Trái`: Chuyển ảnh trước.
+     - Phím `D` hoặc `Mũi tên Phải`: Chuyển ảnh tiếp theo.
+     - Phím `1`: Zoom tỷ lệ 1:1 (100%).
+     - Phím `F`: Zoom vừa khung cửa sổ (Fit).
+     - Phím `+` / `-`: Phóng to / thu nhỏ.
+     - Giữ phím `Space`: Nhìn nhanh ảnh gốc (Peek Before).

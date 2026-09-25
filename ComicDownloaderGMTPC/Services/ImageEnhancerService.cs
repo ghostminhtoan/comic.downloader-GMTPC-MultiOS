@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -17,6 +18,17 @@ public class ImageEnhancerOptions
     public int Quality { get; set; } = 90;          // 10 to 100
     public bool OverwriteOriginal { get; set; } = false;
     public int MaxThreads { get; set; } = 4;
+}
+
+public class PreviewStatsResult
+{
+    public byte[]? PreviewBytes { get; set; }
+    public int OrigWidth { get; set; }
+    public int OrigHeight { get; set; }
+    public long OriginalSizeBytes { get; set; }
+    public long ProcessedSizeBytes { get; set; }
+    public double SizeDeltaPercent { get; set; }
+    public string ClippingInfo { get; set; } = string.Empty;
 }
 
 public class ImageEnhancerService
@@ -152,6 +164,129 @@ public class ImageEnhancerService
         {
             LogEmitted?.Invoke("WARN", $"Lỗi tạo xem trước ảnh: {ex.Message}");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Xử lý ảnh mẫu và trích xuất đầy đủ thông số kích thước, dung lượng trước/sau và chỉ số ánh sáng (FastStone style).
+    /// </summary>
+    public PreviewStatsResult? GeneratePreviewWithStats(string filePath, ImageEnhancerOptions options, int maxDimension = 900)
+    {
+        try
+        {
+            if (!File.Exists(filePath)) return null;
+
+            var fileInfo = new FileInfo(filePath);
+            long originalSize = fileInfo.Length;
+
+            using var src = SKBitmap.Decode(filePath);
+            if (src == null) return null;
+
+            int origW = src.Width;
+            int origH = src.Height;
+
+            SKBitmap workingBitmap = src;
+            bool isResized = false;
+
+            if (src.Width > maxDimension || src.Height > maxDimension)
+            {
+                float scale = Math.Min((float)maxDimension / src.Width, (float)maxDimension / src.Height);
+                int w = Math.Max(1, (int)(src.Width * scale));
+                int h = Math.Max(1, (int)(src.Height * scale));
+
+                var resized = src.Resize(new SKImageInfo(w, h, src.ColorType, src.AlphaType), SKSamplingOptions.Default);
+                if (resized != null)
+                {
+                    workingBitmap = resized;
+                    isResized = true;
+                }
+            }
+
+            using var enhanced = ProcessBitmap(workingBitmap, options);
+            if (isResized) workingBitmap.Dispose();
+
+            string ext = Path.GetExtension(filePath).ToLowerInvariant();
+            var format = ext switch
+            {
+                ".png" => SKEncodedImageFormat.Png,
+                ".webp" => SKEncodedImageFormat.Webp,
+                _ => SKEncodedImageFormat.Jpeg
+            };
+
+            using var ms = new MemoryStream();
+            enhanced.Encode(ms, format, Math.Clamp(options.Quality, 10, 100));
+            byte[] bytes = ms.ToArray();
+
+            // Ước tính dung lượng nén cho toàn bộ kích thước gốc
+            long previewEncodedSize = bytes.Length;
+            long estimatedBytes = isResized
+                ? (long)(previewEncodedSize * ((double)(origW * origH) / (workingBitmap.Width * workingBitmap.Height)))
+                : previewEncodedSize;
+
+            double delta = originalSize > 0
+                ? ((double)(estimatedBytes - originalSize) / originalSize) * 100.0
+                : 0.0;
+
+            // Phân tích vùng cháy sáng (highlight) và chết tối (shadow)
+            int shadows = 0, highlights = 0;
+            int stepX = Math.Max(1, enhanced.Width / 40);
+            int stepY = Math.Max(1, enhanced.Height / 40);
+            int sampleCount = 0;
+
+            for (int y = 0; y < enhanced.Height; y += stepY)
+            {
+                for (int x = 0; x < enhanced.Width; x += stepX)
+                {
+                    var color = enhanced.GetPixel(x, y);
+                    float luma = 0.2126f * color.Red + 0.7152f * color.Green + 0.0722f * color.Blue;
+                    if (luma < 5f) shadows++;
+                    else if (luma > 250f) highlights++;
+                    sampleCount++;
+                }
+            }
+
+            float shadowPct = sampleCount > 0 ? (float)shadows / sampleCount * 100f : 0f;
+            float highlightPct = sampleCount > 0 ? (float)highlights / sampleCount * 100f : 0f;
+
+            string clippingText;
+            if (highlightPct > 12f) clippingText = $"⚠️ Cháy sáng ({highlightPct:F1}%)";
+            else if (shadowPct > 15f) clippingText = $"⚠️ Chết tối ({shadowPct:F1}%)";
+            else clippingText = "✅ Cân bằng tốt";
+
+            return new PreviewStatsResult
+            {
+                PreviewBytes = bytes,
+                OrigWidth = origW,
+                OrigHeight = origH,
+                OriginalSizeBytes = originalSize,
+                ProcessedSizeBytes = estimatedBytes,
+                SizeDeltaPercent = delta,
+                ClippingInfo = clippingText
+            };
+        }
+        catch (Exception ex)
+        {
+            LogEmitted?.Invoke("WARN", $"Lỗi tạo xem trước ảnh: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Lấy danh sách toàn bộ file ảnh hợp lệ trong cây thư mục phục vụ duyệt Next/Previous.
+    /// </summary>
+    public List<string> GetAllImagesInFolder(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath)) return new List<string>();
+        try
+        {
+            return Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)
+                .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .OrderBy(f => f)
+                .ToList();
+        }
+        catch
+        {
+            return new List<string>();
         }
     }
 
