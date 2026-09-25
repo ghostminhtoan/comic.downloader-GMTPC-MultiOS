@@ -181,7 +181,7 @@
                                 <LayoutTransformControl.LayoutTransform>
                                     <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                 </LayoutTransformControl.LayoutTransform>
-                                <Image Source="{Binding EnhancePreviewOriginal}" Stretch="None" x:Name="BeforeImage" />
+                                <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" x:Name="BeforeImage" />
                             </LayoutTransformControl>
                         </ScrollViewer>
                     </Grid>
@@ -200,7 +200,7 @@
                                 <LayoutTransformControl.LayoutTransform>
                                     <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                 </LayoutTransformControl.LayoutTransform>
-                                <Image Source="{Binding EnhancePreviewResult}" Stretch="None" x:Name="AfterImage" />
+                                <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" x:Name="AfterImage" />
                             </LayoutTransformControl>
                         </ScrollViewer>
                     </Grid>
@@ -229,13 +229,13 @@
                             <!-- Container 2 ảnh xếp lớp -->
                             <Panel>
                                 <!-- Lớp dưới: Ảnh gốc (Before) -->
-                                <Image Source="{Binding EnhancePreviewOriginal}" Stretch="None" />
+                                <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
                                 
                                 <!-- Lớp trên: Ảnh tối ưu (After) với độ rộng chia đôi theo SplitRatio -->
                                 <Grid ColumnDefinitions="*, Auto, *">
                                     <!-- Phần After bên trái -->
                                     <Border Grid.Column="0" ClipToBounds="True">
-                                        <Image Source="{Binding EnhancePreviewResult}" Stretch="None" HorizontalAlignment="Left" />
+                                        <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" HorizontalAlignment="Left" />
                                     </Border>
                                     
                                     <!-- Đường ranh giới chia rèm -->
@@ -265,8 +265,8 @@
                             </LayoutTransformControl.LayoutTransform>
                             <!-- Tự động hoán đổi hiển thị Before / After -->
                             <Panel x:Name="SingleImagePanel">
-                                <Image Source="{Binding EnhancePreviewResult}" Stretch="None" IsVisible="{Binding !IsSingleShowingBefore}" />
-                                <Image Source="{Binding EnhancePreviewOriginal}" Stretch="None" IsVisible="{Binding IsSingleShowingBefore}" />
+                                <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" IsVisible="{Binding !IsSingleShowingBefore}" />
+                                <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" IsVisible="{Binding IsSingleShowingBefore}" />
                             </Panel>
                         </LayoutTransformControl>
                     </ScrollViewer>

@@ -934,7 +934,7 @@
                                                                     <LayoutTransformControl.LayoutTransform>
                                                                         <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                                                     </LayoutTransformControl.LayoutTransform>
-                                                                    <Image Source="{Binding EnhancePreviewOriginal}" Stretch="None" />
+                                                                    <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
                                                                 </LayoutTransformControl>
                                                             </ScrollViewer>
                                                         </StackPanel>
@@ -951,7 +951,7 @@
                                                                     <LayoutTransformControl.LayoutTransform>
                                                                         <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                                                     </LayoutTransformControl.LayoutTransform>
-                                                                    <Image Source="{Binding EnhancePreviewResult}" Stretch="None" />
+                                                                    <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
                                                                 </LayoutTransformControl>
                                                             </ScrollViewer>
                                                         </StackPanel>
@@ -1043,6 +1043,21 @@
                                                     <TextBlock Text="{Binding PackerErrorCountText, StringFormat='{}Lỗi: {0}'}" Foreground="#F43F5E" FontWeight="SemiBold" FontSize="10" />
                                                 </StackPanel>
                                             </Grid>
+
+                                            <!-- Banner thông báo khi đóng gói hoàn tất -->
+                                            <Border Background="#064E3B" BorderBrush="#10B981" BorderThickness="1.5" CornerRadius="6" Padding="12,8" Margin="0,4,0,0" IsVisible="{Binding IsPackerCompletedVisible}">
+                                                <Grid ColumnDefinitions="Auto, *, Auto">
+                                                    <TextBlock Grid.Column="0" Text="🎉" FontSize="18" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="ĐÓNG GÓI HOÀN TẤT THÀNH CÔNG!" FontWeight="Bold" FontSize="12" Foreground="#34D399" />
+                                                        <TextBlock Text="{Binding PackerCompletedMessage}" FontSize="11" Foreground="#E2E8F0" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                        <Button Command="{Binding OpenPackerOutputFolderCommand}" Content="📂 Mở Thư Mục Chứa File" Background="#10B981" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,6" CornerRadius="4" />
+                                                        <Button Command="{Binding DismissPackerCompletedCommand}" Content="✕" Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="8,6" CornerRadius="4" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
                                         </StackPanel>
                                     </Border>
 
@@ -1319,7 +1334,7 @@
                                         <LayoutTransformControl.LayoutTransform>
                                             <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                         </LayoutTransformControl.LayoutTransform>
-                                        <Image Source="{Binding EnhancePreviewOriginal}" Stretch="None" />
+                                        <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
                                     </LayoutTransformControl>
                                 </ScrollViewer>
                             </Grid>
@@ -1336,7 +1351,7 @@
                                         <LayoutTransformControl.LayoutTransform>
                                             <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                         </LayoutTransformControl.LayoutTransform>
-                                        <Image Source="{Binding EnhancePreviewResult}" Stretch="None" />
+                                        <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
                                     </LayoutTransformControl>
                                 </ScrollViewer>
                             </Grid>
@@ -1361,10 +1376,10 @@
                                         <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                     </LayoutTransformControl.LayoutTransform>
                                     <Panel>
-                                        <Image Source="{Binding EnhancePreviewOriginal}" Stretch="None" />
+                                        <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
                                         <Grid ColumnDefinitions="*, Auto, *">
                                             <Border Grid.Column="0" ClipToBounds="True">
-                                                <Image Source="{Binding EnhancePreviewResult}" Stretch="None" HorizontalAlignment="Left" />
+                                                <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" HorizontalAlignment="Left" />
                                             </Border>
                                             <GridSplitter Grid.Column="1" Width="4" Background="#38BDF8" ResizeDirection="Columns" />
                                             <Border Grid.Column="2" Background="Transparent" />
@@ -1390,8 +1405,8 @@
                                         <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                     </LayoutTransformControl.LayoutTransform>
                                     <Panel>
-                                        <Image Source="{Binding EnhancePreviewResult}" Stretch="None" IsVisible="{Binding !IsSingleShowingBefore}" />
-                                        <Image Source="{Binding EnhancePreviewOriginal}" Stretch="None" IsVisible="{Binding IsSingleShowingBefore}" />
+                                        <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" IsVisible="{Binding !IsSingleShowingBefore}" />
+                                        <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" IsVisible="{Binding IsSingleShowingBefore}" />
                                     </Panel>
                                 </LayoutTransformControl>
                             </ScrollViewer>

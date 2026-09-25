@@ -170,7 +170,7 @@ public class ImageEnhancerService
     /// <summary>
     /// Xử lý ảnh mẫu và trích xuất đầy đủ thông số kích thước, dung lượng trước/sau và chỉ số ánh sáng (FastStone style).
     /// </summary>
-    public PreviewStatsResult? GeneratePreviewWithStats(string filePath, ImageEnhancerOptions options, int maxDimension = 900)
+    public PreviewStatsResult? GeneratePreviewWithStats(string filePath, ImageEnhancerOptions options, int maxDimension = 0)
     {
         try
         {
@@ -188,7 +188,7 @@ public class ImageEnhancerService
             SKBitmap workingBitmap = src;
             bool isResized = false;
 
-            if (src.Width > maxDimension || src.Height > maxDimension)
+            if (maxDimension > 0 && (src.Width > maxDimension || src.Height > maxDimension))
             {
                 float scale = Math.Min((float)maxDimension / src.Width, (float)maxDimension / src.Height);
                 int w = Math.Max(1, (int)(src.Width * scale));

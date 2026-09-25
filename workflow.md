@@ -467,10 +467,23 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
 - **Khắc phục triệt để lỗi Crash `0xc0000005` (Access Violation)**:
   - Khi duyệt Next/Previous page ảnh xem trước, SkiaSharp giải phóng đối tượng native pointer nếu gọi `.Dispose()` trước khi truy xuất `.Width` và `.Height` cho ước lượng dung lượng.
   - Sửa đổi: Lưu lại kích thước bitmap trước khi xử lý, bọc safe memory disposal trong khối `finally` và chuyển `MemoryStream` thành `Avalonia.Media.Imaging.Bitmap` an toàn trên UI thread.
-- **Đồng bộ hóa Pan & Zoom hoàn hảo giữa 2 ảnh Before & After**:
-  - Tích hợp bộ lắng nghe sự kiện đa tầng `ScrollChanged`, `PointerPressed/Moved/Released` (Tunnel routing) và `PointerWheelChanged` cho cả Live Preview trong tab Xử Lý Ảnh và Fullscreen Modal Overlay.
-  - Khi người dùng cuộn hoặc kéo rê ảnh một bên, khung ảnh đối diện tự động dịch chuyển và zoom đồng nhịp với tỷ lệ 1:1 mượt mà.
-  - Bổ sung nút `🗖 Mở Trong Cửa Sổ Mới` màu tím nổi bật giúp người dùng dễ dàng bật cửa sổ đối chiếu độc lập song song với cửa sổ chính.
+- **Đồng bộ hóa Kích Thước Pixel & Pan / Zoom Tuyệt Đối Giữa 2 Ảnh Before & After**:
+  - Khắc phục triệt để lỗi ảnh After bị co nhỏ hoặc lệch kích thước so với Before do downscale xem trước: Giữ nguyên 100% kích thước pixel gốc của ảnh (`maxDimension = 0`) khi trích xuất `PreviewBytes`.
+  - Cố định kích thước hiển thị đồng bộ tuyệt đối trên XAML bằng `Width="{Binding EnhanceImagePixelWidth}"` và `Height="{Binding EnhanceImagePixelHeight}"` với `Stretch="Fill"`.
+  - Nhờ vậy, khung ảnh Trước và Sau có chung không gian tọa độ và kích thước Extent chính xác từng pixel: Thao tác cuộn chuột (Scroll), kéo rê chuột (Pan Drag), phóng to/thu nhỏ (Zoom), chế độ rèm trượt (Split Curtain) hay lật ảnh đơn (Single Peek) luôn đồng bộ chuẩn xác trong mọi trường hợp.
+- **Tối Ưu Tiến Trình & Thông Báo Đóng Gói File (`FilePackerService`)**:
+  - Khắc phục lỗi kẹt 100% khi vừa bắt đầu đóng gói: Tính toán trước chính xác tổng số lượt tệp ảnh cần xử lý trên toàn bộ các chapter và định dạng xuất (`totalUnits = imgFiles.Count * formatCount`).
+  - Tiến trình bắt đầu chuẩn từ 0% và tăng mượt mà dần theo từng ảnh hoàn tất cho đến 100%.
+  - Bổ sung Banner thông báo hoàn tất đóng gói nổi bật với tông màu xanh ngọc (Emerald), hiển thị chi tiết số file tạo thành công/lỗi và nút "📂 Mở Thư Mục Chứa File" giúp người dùng xem ngay kết quả.
+- **Bóc Tách Bộ Nhớ Android Tự Do Tuyệt Đối (`NormalizeStoragePath`)**:
+  - Khắc phục triệt để lỗi mọi công cụ trên Android đều bị ép cứng vào thư mục `/0/Download/ComicDownloads`.
+  - Xử lý bóc tách toàn diện mọi định dạng URI từ Bộ chọn tệp Storage Access Framework (SAF) của Android:
+    1. Chuẩn hóa đường dẫn POSIX trực tiếp: `/storage/emulated/0/...`, `/sdcard/...`.
+    2. Bóc tách tiền tố `raw:`.
+    3. Bóc tách định dạng colon `primary:SubPath` thành `/storage/emulated/0/{SubPath}`.
+    4. Bóc tách thẻ nhớ ngoài microSD `UUID:SubPath` (ví dụ `9C33-6BBD:Comics`) thành `/storage/{UUID}/{SubPath}`.
+    5. Chỉ sử dụng fallback khi đường dẫn hoàn toàn rỗng. Người dùng có thể thoải mái chọn bất kỳ thư mục nào trên bộ nhớ máy hoặc thẻ nhớ ngoài.
+
 - **Dịch vụ Đóng Gói File Truyện Tranh (`FilePackerService`)**:
   - Hỗ trợ 2 thư mục rõ ràng: `Thư mục nguồn (Input Folder)` và `Thư mục lưu (Output Folder)` kèm nút chọn và nút mở nhanh.
   - Hỗ trợ 3 định dạng đóng gói chuẩn phổ biến nhất trong thế giới truyện tranh:

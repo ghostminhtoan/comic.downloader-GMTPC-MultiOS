@@ -237,6 +237,12 @@ public partial class MainViewModel : ViewModelBase
     private Bitmap? _enhancePreviewResult;
 
     [ObservableProperty]
+    private double _enhanceImagePixelWidth = 800;
+
+    [ObservableProperty]
+    private double _enhanceImagePixelHeight = 1200;
+
+    [ObservableProperty]
     private string _enhancePreviewInfoText = "Chưa chọn thư mục hoặc ảnh xem trước.";
 
     [ObservableProperty]
@@ -826,7 +832,7 @@ public partial class MainViewModel : ViewModelBase
                 if (folders != null && folders.Count > 0)
                 {
                     var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
                     string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
                     if (!string.IsNullOrWhiteSpace(normalized))
                     {
@@ -1098,7 +1104,7 @@ public partial class MainViewModel : ViewModelBase
                 if (folders != null && folders.Count > 0)
                 {
                     var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
                     string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
                     if (!string.IsNullOrWhiteSpace(normalized))
                     {
@@ -1252,7 +1258,7 @@ public partial class MainViewModel : ViewModelBase
                 Quality = EnhanceQuality
             };
 
-            var stats = _imageEnhancer.GeneratePreviewWithStats(_enhanceSampleImagePath, options, maxDimension: 900);
+            var stats = _imageEnhancer.GeneratePreviewWithStats(_enhanceSampleImagePath, options, maxDimension: 0);
             if (stats?.PreviewBytes != null && stats.PreviewBytes.Length > 0)
             {
                 byte[] rawBytes = stats.PreviewBytes;
@@ -1291,6 +1297,8 @@ public partial class MainViewModel : ViewModelBase
             var originalBmp = new Bitmap(ms);
             long origSize = bytes.Length;
 
+            EnhanceImagePixelWidth = originalBmp.PixelSize.Width;
+            EnhanceImagePixelHeight = originalBmp.PixelSize.Height;
             EnhancePreviewOriginal = originalBmp;
             EnhancePreviewInfoText = $"{Path.GetFileName(imagePath)} ({originalBmp.PixelSize.Width}x{originalBmp.PixelSize.Height})";
             EnhanceBeforeInfoText = $"Before: {originalBmp.PixelSize.Width} x {originalBmp.PixelSize.Height}, {origSize / 1024.0:F1} KB";
@@ -1393,7 +1401,7 @@ public partial class MainViewModel : ViewModelBase
                 if (folders != null && folders.Count > 0)
                 {
                     var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
                     string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
                     if (!string.IsNullOrWhiteSpace(normalized))
                     {
@@ -1439,7 +1447,7 @@ public partial class MainViewModel : ViewModelBase
                 if (folders != null && folders.Count > 0)
                 {
                     var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
                     string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
                     if (!string.IsNullOrWhiteSpace(normalized))
                     {
@@ -1551,12 +1559,14 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void ZoomFitPreview()
     {
-        if (EnhancePreviewOriginal != null)
+        if (EnhanceImagePixelHeight > 0)
         {
-            int h = EnhancePreviewOriginal.PixelSize.Height;
-            if (h > 2000) EnhancePreviewZoom = 0.4;
-            else if (h > 1400) EnhancePreviewZoom = 0.55;
-            else if (h > 900) EnhancePreviewZoom = 0.75;
+            double h = EnhanceImagePixelHeight;
+            if (h > 4000) EnhancePreviewZoom = 0.25;
+            else if (h > 2500) EnhancePreviewZoom = 0.35;
+            else if (h > 1800) EnhancePreviewZoom = 0.5;
+            else if (h > 1200) EnhancePreviewZoom = 0.65;
+            else if (h > 800) EnhancePreviewZoom = 0.85;
             else EnhancePreviewZoom = 1.0;
         }
         else
@@ -1803,7 +1813,19 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string _packerCurrentFileText = "Sẵn sàng.";
 
+    [ObservableProperty]
+    private bool _isPackerCompletedVisible;
+
+    [ObservableProperty]
+    private string _packerCompletedMessage = string.Empty;
+
     public ObservableCollection<string> PackerLogs { get; } = new();
+
+    [RelayCommand]
+    public void DismissPackerCompleted()
+    {
+        IsPackerCompletedVisible = false;
+    }
 
     [RelayCommand]
     public async Task BrowsePackerInputFolderAsync()
@@ -1825,7 +1847,7 @@ public partial class MainViewModel : ViewModelBase
                 if (folders != null && folders.Count > 0)
                 {
                     var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
                     string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
                     if (!string.IsNullOrWhiteSpace(normalized))
                     {
@@ -1864,7 +1886,7 @@ public partial class MainViewModel : ViewModelBase
                 if (folders != null && folders.Count > 0)
                 {
                     var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath;
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
                     string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
                     if (!string.IsNullOrWhiteSpace(normalized))
                     {
@@ -1929,6 +1951,7 @@ public partial class MainViewModel : ViewModelBase
         PackerOutputFolderPath = outDir;
 
         IsPacking = true;
+        IsPackerCompletedVisible = false;
         PackerProgress = 0;
         PackerProgressText = "0%";
         PackerCountText = "0 file";
@@ -1959,7 +1982,7 @@ public partial class MainViewModel : ViewModelBase
         {
             if (info.total > 0)
             {
-                PackerProgress = (double)info.current / info.total * 100.0;
+                PackerProgress = Math.Clamp((double)info.current / info.total * 100.0, 0.0, 100.0);
                 PackerProgressText = $"{PackerProgress:F0}%";
             }
             PackerCurrentFileText = info.currentFile;
@@ -1974,10 +1997,19 @@ public partial class MainViewModel : ViewModelBase
                 prog,
                 _packerCts.Token);
 
+            PackerProgress = 100.0;
+            PackerProgressText = "100%";
             PackerCountText = $"{success} file";
             PackerErrorCountText = errors.ToString();
             PackerCurrentFileText = _langService.CurrentLanguage == "VI" ? "Hoàn tất đóng gói." : "Packing completed.";
             PackerLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [HOÀN TẤT] Thành công: {success}, Lỗi: {errors}");
+
+            IsPackerCompletedVisible = true;
+            PackerCompletedMessage = _langService.CurrentLanguage == "VI"
+                ? $"Đã tạo thành công {success} file nén (Lỗi: {errors}) tại thư mục:\n{outDir}"
+                : $"Successfully generated {success} packed files (Errors: {errors}) in:\n{outDir}";
+
+            AddLog("SUCCESS", $"[Đóng gói file] Hoàn tất đóng gói: {success} file thành công ({outDir})");
         }
         catch (OperationCanceledException)
         {

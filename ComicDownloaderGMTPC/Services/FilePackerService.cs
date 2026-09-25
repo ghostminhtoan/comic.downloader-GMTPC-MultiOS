@@ -36,7 +36,7 @@ public class FilePackerService
     }
 
     /// <summary>
-    /// Tiến trình đóng gói thư mục theo cấu hình đã chọn.
+    /// Tiến trình đóng gói thư mục theo cấu hình đã chọn kèm báo cáo tiến trình mượt mà theo từng ảnh.
     /// </summary>
     public async Task<(int successCount, int errorCount)> ProcessPackingAsync(
         string inputFolder,
@@ -79,56 +79,77 @@ public class FilePackerService
             targetsToPack.Add(inputFolder);
         }
 
-        int total = targetsToPack.Count;
-        int current = 0;
+        // Quét trước để tính tổng số đơn vị công việc (ảnh x số định dạng chọn)
+        int formatCount = (options.CreateZip ? 1 : 0) + (options.CreateCbz ? 1 : 0) + (options.CreatePdf ? 1 : 0);
+        if (formatCount == 0) formatCount = 1;
+
+        var targetWorkList = new List<(string dir, string dirName, List<string> images)>();
+        int totalUnits = 0;
 
         foreach (var targetDir in targetsToPack)
         {
-            if (ct.IsCancellationRequested) break;
-            current++;
             string dirName = Path.GetFileName(targetDir);
             if (string.IsNullOrEmpty(dirName)) dirName = Path.GetFileName(Path.GetDirectoryName(targetDir) ?? "Archive");
 
-            progress?.Report((current, total, $"Đang xử lý: {dirName}"));
-            LogEmitted?.Invoke("INFO", $"[{current}/{total}] Bắt đầu đóng gói: {dirName}");
+            var imgFiles = NaturalSort(
+                Directory.GetFiles(targetDir, "*.*", SearchOption.AllDirectories)
+                    .Where(f => ValidImageExtensions.Contains(Path.GetExtension(f)))
+            );
+
+            if (imgFiles.Count > 0)
+            {
+                targetWorkList.Add((targetDir, dirName, imgFiles));
+                totalUnits += imgFiles.Count * formatCount;
+            }
+            else
+            {
+                LogEmitted?.Invoke("WARN", $"Bỏ qua {dirName}: Không tìm thấy file ảnh hợp lệ.");
+            }
+        }
+
+        if (totalUnits == 0)
+        {
+            progress?.Report((0, 100, "Không có file ảnh nào để đóng gói."));
+            return (0, 0);
+        }
+
+        int currentUnit = 0;
+        progress?.Report((0, totalUnits, $"Bắt đầu đóng gói {targetWorkList.Count} thư mục ({totalUnits} lượt tệp)..."));
+
+        int totalFolders = targetWorkList.Count;
+        int folderIndex = 0;
+
+        foreach (var (targetDir, dirName, imgFiles) in targetWorkList)
+        {
+            if (ct.IsCancellationRequested) break;
+            folderIndex++;
+            LogEmitted?.Invoke("INFO", $"[{folderIndex}/{totalFolders}] Đang xử lý '{dirName}' ({imgFiles.Count} ảnh)...");
 
             bool targetSuccess = true;
 
             try
             {
-                // Lấy toàn bộ ảnh trong targetDir
-                var imgFiles = NaturalSort(
-                    Directory.GetFiles(targetDir, "*.*", SearchOption.AllDirectories)
-                        .Where(f => ValidImageExtensions.Contains(Path.GetExtension(f)))
-                );
-
-                if (imgFiles.Count == 0)
-                {
-                    LogEmitted?.Invoke("WARN", $"Bỏ qua {dirName}: Không tìm thấy file ảnh hợp lệ.");
-                    continue;
-                }
-
-                // 1. Đóng gói ZIP
-                if (options.CreateZip)
-                {
-                    string zipPath = Path.Combine(outputFolder, $"{dirName}.zip");
-                    await Task.Run(() => CreateArchiveFromImages(imgFiles, zipPath, targetDir, ct), ct);
-                    LogEmitted?.Invoke("SUCCESS", $"Đã tạo ZIP: {Path.GetFileName(zipPath)} ({imgFiles.Count} ảnh)");
-                }
-
-                // 2. Đóng gói CBZ (Comic Book Zip)
+                // 1. Đóng gói CBZ (Comic Book Zip)
                 if (options.CreateCbz)
                 {
                     string cbzPath = Path.Combine(outputFolder, $"{dirName}.cbz");
-                    await Task.Run(() => CreateArchiveFromImages(imgFiles, cbzPath, targetDir, ct), ct);
+                    await Task.Run(() => CreateArchiveFromImages(imgFiles, cbzPath, targetDir, "CBZ", totalUnits, ref currentUnit, progress, ct), ct);
                     LogEmitted?.Invoke("SUCCESS", $"Đã tạo CBZ: {Path.GetFileName(cbzPath)} ({imgFiles.Count} ảnh)");
+                }
+
+                // 2. Đóng gói ZIP
+                if (options.CreateZip)
+                {
+                    string zipPath = Path.Combine(outputFolder, $"{dirName}.zip");
+                    await Task.Run(() => CreateArchiveFromImages(imgFiles, zipPath, targetDir, "ZIP", totalUnits, ref currentUnit, progress, ct), ct);
+                    LogEmitted?.Invoke("SUCCESS", $"Đã tạo ZIP: {Path.GetFileName(zipPath)} ({imgFiles.Count} ảnh)");
                 }
 
                 // 3. Đóng gói PDF
                 if (options.CreatePdf)
                 {
                     string pdfPath = Path.Combine(outputFolder, $"{dirName}.pdf");
-                    await Task.Run(() => CreatePdfFromImages(imgFiles, pdfPath, ct), ct);
+                    await Task.Run(() => CreatePdfFromImages(imgFiles, pdfPath, totalUnits, ref currentUnit, progress, ct), ct);
                     LogEmitted?.Invoke("SUCCESS", $"Đã tạo PDF: {Path.GetFileName(pdfPath)} ({imgFiles.Count} trang)");
                 }
             }
@@ -150,9 +171,17 @@ public class FilePackerService
     }
 
     /// <summary>
-    /// Nén danh sách ảnh vào file Zip / Cbz.
+    /// Nén danh sách ảnh vào file Zip / Cbz kèm báo cáo tiến trình chi tiết từng file.
     /// </summary>
-    private static void CreateArchiveFromImages(List<string> images, string archivePath, string baseDir, CancellationToken ct)
+    private static void CreateArchiveFromImages(
+        List<string> images,
+        string archivePath,
+        string baseDir,
+        string formatName,
+        int totalUnits,
+        ref int currentUnit,
+        IProgress<(int current, int total, string currentFile)>? progress,
+        CancellationToken ct)
     {
         if (File.Exists(archivePath)) File.Delete(archivePath);
 
@@ -164,13 +193,22 @@ public class FilePackerService
             if (ct.IsCancellationRequested) return;
             string relPath = Path.GetRelativePath(baseDir, img);
             archive.CreateEntryFromFile(img, relPath, CompressionLevel.Optimal);
+
+            int cur = Interlocked.Increment(ref currentUnit);
+            progress?.Report((cur, totalUnits, $"[{formatName}] {Path.GetFileName(img)} ({cur}/{totalUnits})"));
         }
     }
 
     /// <summary>
-    /// Tạo tài liệu PDF đa trang từ danh sách ảnh sử dụng SkiaSharp thuần túy.
+    /// Tạo tài liệu PDF đa trang từ danh sách ảnh sử dụng SkiaSharp thuần túy kèm báo cáo tiến trình.
     /// </summary>
-    private static void CreatePdfFromImages(List<string> images, string pdfPath, CancellationToken ct)
+    private static void CreatePdfFromImages(
+        List<string> images,
+        string pdfPath,
+        int totalUnits,
+        ref int currentUnit,
+        IProgress<(int current, int total, string currentFile)>? progress,
+        CancellationToken ct)
     {
         if (File.Exists(pdfPath)) File.Delete(pdfPath);
 
@@ -187,11 +225,15 @@ public class FilePackerService
 
             byte[] bytes = File.ReadAllBytes(imgPath);
             using var bitmap = SKBitmap.Decode(bytes);
-            if (bitmap == null) continue;
+            if (bitmap != null)
+            {
+                using var pageCanvas = document.BeginPage(bitmap.Width, bitmap.Height);
+                pageCanvas.DrawBitmap(bitmap, 0, 0);
+                document.EndPage();
+            }
 
-            using var pageCanvas = document.BeginPage(bitmap.Width, bitmap.Height);
-            pageCanvas.DrawBitmap(bitmap, 0, 0);
-            document.EndPage();
+            int cur = Interlocked.Increment(ref currentUnit);
+            progress?.Report((cur, totalUnits, $"[PDF] Trang {Path.GetFileName(imgPath)} ({cur}/{totalUnits})"));
         }
 
         document.Close();

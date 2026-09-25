@@ -143,59 +143,81 @@ public class DownloadEngineService
         {
             string decoded = Uri.UnescapeDataString(path);
 
-            // Kiểm tra xem có phải là đường dẫn ảo SAF (Storage Access Framework) không
-            bool isVirtualSaf = decoded.StartsWith("/tree/", StringComparison.OrdinalIgnoreCase) ||
-                                decoded.StartsWith("tree/", StringComparison.OrdinalIgnoreCase) ||
-                                decoded.StartsWith("content:", StringComparison.OrdinalIgnoreCase) ||
-                                (!decoded.StartsWith("/storage/", StringComparison.OrdinalIgnoreCase) &&
-                                 !decoded.StartsWith("/sdcard/", StringComparison.OrdinalIgnoreCase) &&
-                                 !decoded.StartsWith("/data/", StringComparison.OrdinalIgnoreCase));
-
-            if (isVirtualSaf)
+            // 1. Nếu đã là đường dẫn file hệ thống chuẩn (Linux/Android POSIX path)
+            if (decoded.StartsWith("/storage/", StringComparison.OrdinalIgnoreCase) ||
+                decoded.StartsWith("/sdcard/", StringComparison.OrdinalIgnoreCase) ||
+                decoded.StartsWith("/data/", StringComparison.OrdinalIgnoreCase))
             {
-                string searchStr = (decoded + " " + (folderName ?? "")).ToLowerInvariant();
+                if (decoded.StartsWith("/sdcard", StringComparison.OrdinalIgnoreCase))
+                {
+                    decoded = "/storage/emulated/0" + decoded.Substring(7);
+                }
+                return decoded.TrimEnd('/', '\\');
+            }
 
-                if (searchStr.Contains("download"))
-                {
-                    return "/storage/emulated/0/Download/ComicDownloads";
-                }
-                if (searchStr.Contains("document"))
-                {
-                    return "/storage/emulated/0/Documents/ComicDownloads";
-                }
-                if (searchStr.Contains("picture"))
-                {
-                    return "/storage/emulated/0/Pictures/ComicDownloads";
-                }
+            // 2. Bóc tách SAF prefix raw:
+            if (decoded.StartsWith("raw:", StringComparison.OrdinalIgnoreCase))
+            {
+                return decoded.Substring(4).TrimEnd('/', '\\');
+            }
 
-                // Nếu có định dạng SAF colon như "primary:MyFolder"
-                int colonIdx = decoded.LastIndexOf(':');
-                if (colonIdx >= 0 && colonIdx < decoded.Length - 1)
+            // 3. Bóc tách cấu trúc SAF colon (primary:SubPath hoặc UUID:SubPath)
+            int colonIdx = decoded.LastIndexOf(':');
+            if (colonIdx >= 0 && colonIdx < decoded.Length - 1)
+            {
+                string volumePart = decoded.Substring(0, colonIdx);
+                string subPath = decoded.Substring(colonIdx + 1).Trim().Trim('/', '\\');
+
+                // Lấy volumeId đứng trước dấu ':'
+                int slashBeforeColon = volumePart.LastIndexOfAny(new[] { '/', '%', ':' });
+                string volumeId = slashBeforeColon >= 0 ? volumePart.Substring(slashBeforeColon + 1) : volumePart;
+
+                if (volumeId.Equals("primary", StringComparison.OrdinalIgnoreCase) || volumeId.Equals("0", StringComparison.OrdinalIgnoreCase))
                 {
-                    string sub = decoded.Substring(colonIdx + 1).Trim().Trim('/');
-                    if (!string.IsNullOrWhiteSpace(sub) && 
-                        !string.Equals(sub, "primary", StringComparison.OrdinalIgnoreCase) && 
-                        !string.Equals(sub, "0", StringComparison.OrdinalIgnoreCase))
+                    if (string.IsNullOrWhiteSpace(subPath))
                     {
-                        return $"/storage/emulated/0/{sub}";
+                        return !string.IsNullOrWhiteSpace(folderName)
+                            ? Path.Combine("/storage/emulated/0", folderName)
+                            : "/storage/emulated/0";
                     }
+                    return $"/storage/emulated/0/{subPath}";
                 }
-
-                if (!string.IsNullOrWhiteSpace(folderName) && 
-                    !string.Equals(folderName, "primary", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(folderName, "0", StringComparison.OrdinalIgnoreCase))
+                else if (System.Text.RegularExpressions.Regex.IsMatch(volumeId, @"^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$"))
                 {
-                    return $"/storage/emulated/0/Download/{folderName}";
+                    // Thẻ nhớ ngoài microSD
+                    if (string.IsNullOrWhiteSpace(subPath))
+                    {
+                        return !string.IsNullOrWhiteSpace(folderName)
+                            ? Path.Combine($"/storage/{volumeId}", folderName)
+                            : $"/storage/{volumeId}";
+                    }
+                    return $"/storage/{volumeId}/{subPath}";
                 }
-
-                return GetDefaultAndroidDownloadPath();
+                else if (!string.IsNullOrWhiteSpace(subPath))
+                {
+                    return $"/storage/emulated/0/{subPath}";
+                }
             }
 
-            // Loại bỏ khoảng trắng hoặc path rỗng ở root dẫn đến thư mục (blank)
-            if (path == "/storage/emulated/0" || path == "/storage/emulated/0/" || path == "/sdcard" || path == "/sdcard/")
+            // 4. Nếu không có colon nhưng có folderName cụ thể từ SAF
+            string searchStr = decoded.ToLowerInvariant();
+            if (!string.IsNullOrWhiteSpace(folderName) && 
+                !folderName.Equals("primary", StringComparison.OrdinalIgnoreCase) &&
+                !folderName.Equals("0", StringComparison.OrdinalIgnoreCase))
             {
-                return "/storage/emulated/0/Download/ComicDownloads";
+                if (searchStr.Contains("download")) return Path.Combine("/storage/emulated/0/Download", folderName);
+                if (searchStr.Contains("document")) return Path.Combine("/storage/emulated/0/Documents", folderName);
+                if (searchStr.Contains("picture")) return Path.Combine("/storage/emulated/0/Pictures", folderName);
+                if (searchStr.Contains("dcim")) return Path.Combine("/storage/emulated/0/DCIM", folderName);
+                return Path.Combine("/storage/emulated/0", folderName);
             }
+
+            // 5. Fallback các thư mục hệ thống chuẩn
+            if (searchStr.Contains("download")) return "/storage/emulated/0/Download";
+            if (searchStr.Contains("document")) return "/storage/emulated/0/Documents";
+            if (searchStr.Contains("picture")) return "/storage/emulated/0/Pictures";
+
+            return GetDefaultAndroidDownloadPath();
         }
 
         return path;
