@@ -194,11 +194,17 @@ public class ComicScraperService
                 if (ntImages.Count > 0) return ntImages;
             }
 
-            // 2. Generic Scope: TruyenQQ và các trang manga tiêu chuẩn
-            string searchScope = html;
+            if (domain.Contains("truyenqq"))
+            {
+                var qqImages = ExtractTruyenqqChapterImages(html, chapterUrl);
+                if (qqImages.Count > 0) return qqImages;
+            }
+
+            // 2. Generic Scope: Manga tiêu chuẩn (Bảo vệ: không bao giờ tải trong comment_list)
+            string searchScope = StripCommentElements(html);
             var pageBlocks = Regex.Matches(
-                html,
-                @"<div[^>]+id=[""']page_\d+[""'][^>]*class=[""'][^""']*page-chapter[^""']*[""'][^>]*>.*?(?=<div[^>]+id=[""']page_\d+[""']|$)",
+                searchScope,
+                @"<div[^>]+id=[""']page_\d+[""'][^>]*class=[""'][^""']*page-chapter[^""']*[""'][^>]*>.*?</div>",
                 RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
             if (pageBlocks.Count > 0)
@@ -207,7 +213,7 @@ public class ComicScraperService
             }
             else
             {
-                var contentMatch = Regex.Match(html, @"<(?:div|section|article)[^>]*(?:chapter_content|story-see-content|reading-detail|chapter-img|reading)[^>]*>.*?</(?:div|section|article)>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                var contentMatch = Regex.Match(searchScope, @"<(?:div|section|article)[^>]*(?:chapter_content|story-see-content|reading-detail|chapter-img|reading)[^>]*>.*?</(?:div|section|article)>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
                 if (contentMatch.Success)
                 {
                     searchScope = contentMatch.Value;
@@ -220,66 +226,10 @@ public class ComicScraperService
             foreach (Match m in imgTags)
             {
                 string tag = m.Value;
-                string? imgUrl = null;
+                string? imgUrl = ExtractImageUrlFromTag(tag);
+                if (string.IsNullOrWhiteSpace(imgUrl) || IsIgnoredImage(imgUrl)) continue;
 
-                // Ưu tiên data-original -> data-cdn -> data-lazy-src -> data-src -> src
-                var dataOriginal = Regex.Match(tag, @"data-original=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
-                if (dataOriginal.Success)
-                {
-                    imgUrl = dataOriginal.Groups[1].Value;
-                }
-                else
-                {
-                    var dataCdn = Regex.Match(tag, @"data-cdn=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
-                    if (dataCdn.Success)
-                    {
-                        imgUrl = dataCdn.Groups[1].Value;
-                    }
-                    else
-                    {
-                        var dataLazy = Regex.Match(tag, @"data-lazy-src=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
-                        if (dataLazy.Success)
-                        {
-                            imgUrl = dataLazy.Groups[1].Value;
-                        }
-                        else
-                        {
-                            var dataSrc = Regex.Match(tag, @"data-src=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
-                            if (dataSrc.Success)
-                            {
-                                imgUrl = dataSrc.Groups[1].Value;
-                            }
-                            else
-                            {
-                                var src = Regex.Match(tag, @"src=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
-                                if (src.Success)
-                                {
-                                    imgUrl = src.Groups[1].Value;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (string.IsNullOrWhiteSpace(imgUrl)) continue;
-                imgUrl = imgUrl.Trim();
-
-                if (imgUrl.StartsWith("data:") ||
-                    imgUrl.Contains("logo") ||
-                    imgUrl.Contains("banner") ||
-                    imgUrl.Contains("icon") ||
-                    imgUrl.Contains("avatar") ||
-                    imgUrl.Contains("loading") ||
-                    imgUrl.Contains("no_image") ||
-                    imgUrl.Contains("facebook.com") ||
-                    imgUrl.Contains("fbcdn") ||
-                    imgUrl.Contains("gstatic.com") ||
-                    imgUrl.Contains("google"))
-                {
-                    continue;
-                }
-
-                string fullUrl = MakeAbsoluteUrl(imgUrl, chapterUrl);
+                string fullUrl = MakeAbsoluteUrl(imgUrl.Trim(), chapterUrl);
                 if (seen.Add(fullUrl))
                 {
                     images.Add(fullUrl);
@@ -1071,6 +1021,118 @@ public class ComicScraperService
         }
 
         return imageUrls;
+    }
+
+    private static string StripCommentElements(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return string.Empty;
+
+        // BẮT BUỘC: Đừng bao giờ tải trong element:
+        // <div class="comment-container box" id="comment_list">
+        var commentMatch = Regex.Match(
+            html,
+            @"<div[^>]+(?:id=[""']comment_list[""']|class=[""'][^""']*comment-container[^""']*[""'])[^>]*>",
+            RegexOptions.IgnoreCase);
+
+        if (commentMatch.Success)
+        {
+            return html.Substring(0, commentMatch.Index);
+        }
+
+        return html;
+    }
+
+    private List<string> ExtractTruyenqqChapterImages(string html, string chapterUrl)
+    {
+        var images = new List<string>();
+        if (string.IsNullOrWhiteSpace(html)) return images;
+
+        // 1. Loại bỏ triệt để element comment_list để không bao giờ bóc tách ảnh emo/meme trong bình luận
+        string cleanHtml = StripCommentElements(html);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 2. TruyenQQ phân trang truyện bằng cấu trúc: <div id="page_X" class="page-chapter"><img ... /></div>
+        var pageBlocks = Regex.Matches(
+            cleanHtml,
+            @"<div[^>]+id=[""']page_\d+[""'][^>]*class=[""'][^""']*page-chapter[^""']*[""'][^>]*>(?<block>.*?)</div>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        foreach (Match pb in pageBlocks)
+        {
+            string blockContent = pb.Groups["block"].Value;
+            var imgMatch = Regex.Match(blockContent, @"<img\s+[^>]*>", RegexOptions.IgnoreCase);
+            if (!imgMatch.Success) continue;
+
+            string tag = imgMatch.Value;
+            string? imgUrl = ExtractImageUrlFromTag(tag);
+            if (string.IsNullOrWhiteSpace(imgUrl) || IsIgnoredImage(imgUrl)) continue;
+
+            string fullUrl = MakeAbsoluteUrl(imgUrl.Trim(), chapterUrl);
+            if (seen.Add(fullUrl))
+            {
+                images.Add(fullUrl);
+            }
+        }
+
+        // 3. Fallback an toàn nếu TruyenQQ đổi cấu trúc page_X nhưng vẫn nằm trong cleanHtml
+        if (images.Count == 0)
+        {
+            var fallbackImgs = Regex.Matches(cleanHtml, @"<(?:img|source)\s+[^>]*class=[""'][^""']*(?:lazy|page-chapter)[^""']*[""'][^>]*>", RegexOptions.IgnoreCase);
+            foreach (Match m in fallbackImgs)
+            {
+                string tag = m.Value;
+                string? imgUrl = ExtractImageUrlFromTag(tag);
+                if (string.IsNullOrWhiteSpace(imgUrl) || IsIgnoredImage(imgUrl)) continue;
+
+                string fullUrl = MakeAbsoluteUrl(imgUrl.Trim(), chapterUrl);
+                if (seen.Add(fullUrl))
+                {
+                    images.Add(fullUrl);
+                }
+            }
+        }
+
+        return images;
+    }
+
+    private static string? ExtractImageUrlFromTag(string tag)
+    {
+        var dataOriginal = Regex.Match(tag, @"data-original=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+        if (dataOriginal.Success) return dataOriginal.Groups[1].Value;
+
+        var dataCdn = Regex.Match(tag, @"data-cdn=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+        if (dataCdn.Success) return dataCdn.Groups[1].Value;
+
+        var dataLazy = Regex.Match(tag, @"data-lazy-src=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+        if (dataLazy.Success) return dataLazy.Groups[1].Value;
+
+        var dataSrc = Regex.Match(tag, @"data-src=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+        if (dataSrc.Success) return dataSrc.Groups[1].Value;
+
+        var src = Regex.Match(tag, @"src=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
+        if (src.Success) return src.Groups[1].Value;
+
+        return null;
+    }
+
+    private static bool IsIgnoredImage(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return true;
+        url = url.Trim();
+        return url.StartsWith("data:") ||
+               url.Contains("logo") ||
+               url.Contains("banner") ||
+               url.Contains("icon") ||
+               url.Contains("avatar") ||
+               url.Contains("loading") ||
+               url.Contains("no_image") ||
+               url.Contains("facebook.com") ||
+               url.Contains("fbcdn") ||
+               url.Contains("gstatic.com") ||
+               url.Contains("google") ||
+               url.Contains("blogspot.com") ||
+               url.Contains("emo") ||
+               url.Contains("sticker");
     }
 
     #endregion
