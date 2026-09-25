@@ -32,8 +32,11 @@ public class ImageEnhancerService
     public SKBitmap ProcessBitmap(SKBitmap src, ImageEnhancerOptions options)
     {
         // 1. Tính toán ma trận màu kết hợp (Combined Color Matrix: Contrast * Saturation + Brightness)
+        // Contrast: -100..100 -> hệ số c (c = 1.0 khi Contrast = 0)
         float c = options.Contrast >= 0 ? 1.0f + (options.Contrast / 50.0f) : (100.0f + options.Contrast) / 100.0f;
-        float b = options.Brightness * 2.55f;
+        // Brightness: -100..100 -> độ dịch b chuẩn hóa [-1.0 .. +1.0] cho Skia (b = 0 khi Brightness = 0)
+        float b = options.Brightness / 100.0f;
+        // Saturation: 0..200 -> hệ số s [0.0 .. 3.0] (s = 1.0 khi Saturation = 100)
         float s = Math.Clamp(options.Saturation / 100.0f, 0.0f, 3.0f);
 
         // Rec.709 Luma weights
@@ -45,7 +48,8 @@ public class ImageEnhancerService
         float sg = (1.0f - s) * gWeight;
         float sb = (1.0f - s) * bWeight;
 
-        float t = (1.0f - c) * 128.0f + b;
+        // Điểm xoay tương phản chuẩn hóa trong không gian Skia [0.0 .. 1.0] là 0.5 (tương ứng với 128 trong [0..255])
+        float t = (1.0f - c) * 0.5f + b;
 
         float[] colorMatrix = new float[]
         {
@@ -129,8 +133,12 @@ public class ImageEnhancerService
                 int w = Math.Max(1, (int)(src.Width * scale));
                 int h = Math.Max(1, (int)(src.Height * scale));
 
-                workingBitmap = src.Resize(new SKImageInfo(w, h, src.ColorType, src.AlphaType), SKSamplingOptions.Default);
-                isResized = true;
+                var resized = src.Resize(new SKImageInfo(w, h, src.ColorType, src.AlphaType), SKSamplingOptions.Default);
+                if (resized != null)
+                {
+                    workingBitmap = resized;
+                    isResized = true;
+                }
             }
 
             using var enhanced = ProcessBitmap(workingBitmap, options);
@@ -155,7 +163,15 @@ public class ImageEnhancerService
         if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath)) return null;
         try
         {
+            // Ưu tiên chọn ảnh có dung lượng hợp lệ (> 10KB) để tránh các file tạm / rỗng
             return Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)
+                .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .FirstOrDefault(f =>
+                {
+                    try { return new FileInfo(f).Length > 10000; }
+                    catch { return true; }
+                })
+                ?? Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)
                 .FirstOrDefault(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
         }
         catch

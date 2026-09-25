@@ -1225,7 +1225,7 @@ public partial class MainViewModel : ViewModelBase
             if (!File.Exists(imagePath)) return;
             _enhanceSampleImagePath = imagePath;
 
-            using (var fs = File.OpenRead(imagePath))
+            using (var fs = new FileStream(imagePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
                 var originalBmp = new Bitmap(fs);
                 EnhancePreviewOriginal = originalBmp;

@@ -414,3 +414,6 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   - Nút "TOÀN MÀN HÌNH ĐỐI CHIẾU": Mở lớp phủ toàn màn hình (Modal Overlay) trực tiếp trong ứng dụng, tương thích mượt mà 100% trên cả Android, Linux và Windows.
   - Nút "Mở Cửa Sổ Riêng": Khởi chạy cửa sổ độc lập `EnhanceComparisonWindow` trên Desktop với 2 khung cuộn lớn và thanh công cụ điều chỉnh trực tiếp giúp đối chiếu Before / After cực kỳ trực quan và tiện lợi.
 - **Xử lý hàng loạt an toàn**: Tùy chỉnh số luồng `Parallel.ForEachAsync`, chất lượng xuất ảnh (10 - 100%), cơ chế ghi đè an toàn sử dụng temporary file `.tmp_enh` trước khi replace, thanh tiến trình, bộ đếm thành công/lỗi và log chi tiết.
+- **Lưu ý SkiaSharp ColorMatrix Normalization (Khắc phục triệt để lỗi ảnh convert/preview bị blank/black)**:
+  - Trong SkiaSharp (`SKColorFilter.CreateColorMatrix`), cột offset thứ 5 (translation bias) được chuẩn hóa theo hệ quy chiếu `[-1.0 .. +1.0]` (với 1.0 tương ứng 255 mức sáng), KHÔNG phải `[0 .. 255]` như GDI+ hay Android ColorMatrix.
+  - Công thức chuẩn xác: Độ dịch sáng `b = options.Brightness / 100.0f`, điểm xoay tương phản `t = (1.0f - c) * 0.5f + b`. Tuyệt đối không nhân với 128 hay 255 vì sẽ làm tràn giá trị khiến toàn bộ ma trận màu bị clamp về 0 (ảnh đen hoàn toàn).
