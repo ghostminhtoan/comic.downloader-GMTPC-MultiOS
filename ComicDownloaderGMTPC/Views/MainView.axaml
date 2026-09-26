@@ -10,7 +10,7 @@
 
     <Grid>
         <!-- KHUNG CUỘN CHÍNH HỖ TRỢ ĐA NỀN TẢNG (DESKTOP & MOBILE/ANDROID) -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" BringIntoViewOnFocusChange="False">
         <Grid RowDefinitions="Auto, Auto, *, Auto" MinHeight="650">
 
             <!-- 1. HEADER / BRAND BAR -->
@@ -706,7 +706,7 @@
 
                                     <!-- Log chi tiết -->
                                     <Border Grid.Row="1" Background="#0A0E17" Padding="6" MinHeight="180">
-                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False">
                                             <ItemsControl ItemsSource="{Binding ManualSplitLogs}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
@@ -953,7 +953,7 @@
                                                                 <Border Background="#1E293B" CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
                                                                     <TextBlock Text="📷 ẢNH GỐC (BEFORE)" Foreground="#94A3B8" FontWeight="Bold" FontSize="9" />
                                                                 </Border>
-                                                                <ScrollViewer x:Name="LiveBeforeScrollViewer" Height="220" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                                                                <ScrollViewer x:Name="LiveBeforeScrollViewer" Height="220" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False" IsScrollInertiaEnabled="True" Background="#050811" CornerRadius="4">
                                                                     <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
                                                                         <LayoutTransformControl.LayoutTransform>
                                                                             <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
@@ -970,7 +970,7 @@
                                                                 <Border Background="#0284C7" CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
                                                                     <TextBlock Text="✨ ĐÃ TỐI ƯU (AFTER)" Foreground="#FFFFFF" FontWeight="Bold" FontSize="9" />
                                                                 </Border>
-                                                                <ScrollViewer x:Name="LiveAfterScrollViewer" Height="220" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                                                                <ScrollViewer x:Name="LiveAfterScrollViewer" Height="220" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False" IsScrollInertiaEnabled="True" Background="#050811" CornerRadius="4">
                                                                     <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
                                                                         <LayoutTransformControl.LayoutTransform>
                                                                             <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
@@ -1007,7 +1007,7 @@
 
                                         <!-- Khung log chi tiết -->
                                         <Border Grid.Row="1" Background="#0A0E17" Padding="6" MinHeight="120">
-                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False">
                                                 <ItemsControl ItemsSource="{Binding EnhanceLogs}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
@@ -1112,7 +1112,7 @@
 
                                     <!-- Log chi tiết -->
                                     <Border Grid.Row="1" Background="#0A0E17" Padding="6" MinHeight="180">
-                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False">
                                             <ItemsControl ItemsSource="{Binding PackerLogs}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
@@ -1426,7 +1426,7 @@
                                 <Border Grid.Row="0" Background="#1E293B" CornerRadius="3" Padding="6,3" HorizontalAlignment="Left" Margin="0,0,0,4">
                                     <TextBlock Text="📷 ẢNH GỐC (BEFORE)" Foreground="#94A3B8" FontWeight="Bold" FontSize="10" />
                                 </Border>
-                                <ScrollViewer x:Name="ModalBeforeScrollViewer" Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                                <ScrollViewer x:Name="ModalBeforeScrollViewer" Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False" IsScrollInertiaEnabled="True" Background="#050811" CornerRadius="4">
                                     <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <LayoutTransformControl.LayoutTransform>
                                             <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
@@ -1443,7 +1443,7 @@
                                 <Border Grid.Row="0" Background="#0284C7" CornerRadius="3" Padding="6,3" HorizontalAlignment="Left" Margin="0,0,0,4">
                                     <TextBlock Text="✨ ĐÃ TỐI ƯU (AFTER)" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" />
                                 </Border>
-                                <ScrollViewer x:Name="ModalAfterScrollViewer" Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                                <ScrollViewer x:Name="ModalAfterScrollViewer" Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False" IsScrollInertiaEnabled="True" Background="#050811" CornerRadius="4">
                                     <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <LayoutTransformControl.LayoutTransform>
                                             <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
@@ -1467,7 +1467,7 @@
                                     <Slider Width="140" Minimum="0" Maximum="1" Value="{Binding EnhanceSplitRatio}" Height="20" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Grid>
-                            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False" IsScrollInertiaEnabled="True" Background="#050811" CornerRadius="4">
                                 <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <LayoutTransformControl.LayoutTransform>
                                         <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
@@ -1496,7 +1496,7 @@
                                 </Border>
                                 <Button Grid.Column="1" Command="{Binding ToggleCompareModeCommand}" Content="🔄 Hoán đổi Before / After" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="8,4" CornerRadius="4" HorizontalAlignment="Right" Margin="0,0,4,0" />
                             </Grid>
-                            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#050811" CornerRadius="4">
+                            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False" IsScrollInertiaEnabled="True" Background="#050811" CornerRadius="4">
                                 <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <LayoutTransformControl.LayoutTransform>
                                         <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />

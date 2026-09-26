@@ -1,8 +1,10 @@
 using System;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using ComicDownloaderGMTPC.ViewModels;
 
 namespace ComicDownloaderGMTPC.Views;
@@ -67,8 +69,24 @@ public partial class EnhanceComparisonWindow : Window
         _isSyncingScroll = false;
     }
 
+    private static bool IsScrollBarElement(object? source, Visual? container)
+    {
+        if (source is Visual v)
+        {
+            Visual? cur = v;
+            while (cur != null && cur != container)
+            {
+                if (cur is ScrollBar) return true;
+                cur = cur.GetVisualParent();
+            }
+        }
+        return false;
+    }
+
     private void OnImagePointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (IsScrollBarElement(e.Source, sender as Visual)) return;
+
         var point = e.GetCurrentPoint(this);
         if (point.Properties.IsLeftButtonPressed || point.Properties.IsMiddleButtonPressed)
         {
@@ -76,11 +94,14 @@ public partial class EnhanceComparisonWindow : Window
             _dragStartPoint = point.Position;
             _dragStartOffset = BeforeScrollViewer?.Offset ?? default;
             e.Pointer.Capture(sender as IInputElement);
+            e.Handled = true;
         }
     }
 
     private void OnImagePointerMoved(object? sender, PointerEventArgs e)
     {
+        if (IsScrollBarElement(e.Source, sender as Visual)) return;
+
         if (_isDragging && BeforeScrollViewer != null && AfterScrollViewer != null)
         {
             var currentPoint = e.GetCurrentPoint(this).Position;
@@ -93,6 +114,7 @@ public partial class EnhanceComparisonWindow : Window
             BeforeScrollViewer.Offset = newOffset;
             AfterScrollViewer.Offset = newOffset;
             _isSyncingScroll = false;
+            e.Handled = true;
         }
     }
 

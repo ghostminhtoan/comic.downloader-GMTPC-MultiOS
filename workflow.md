@@ -537,3 +537,18 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
 - **Nghiệm Thu 2 Bước**:
   - Bước 1: `build.bat` biên dịch sạch cả 3 OS (`win-x64`, `linux-x64`, `net10.0-android`) đạt `0 Warning(s), 0 Error(s)`.
   - Bước 2: Chạy kiểm thử exe thực tế `release\windows\ComicDownloaderGMTPC.Desktop.exe` đạt `Responding: True`.
+
+### 15.9. Khắc Phục Triệt Để 3 Lỗi ScrollBar Auto Slide, 2 Ngón Pinch-to-Zoom & Pan 2 Chiều Trên Android & Windows
+- **Khắc phục lỗi click vào vertical scroll bar bị auto slide xuống bottom liên tục**:
+  - *Nguyên nhân*:
+    1. Trong SetupSyncScroll, sự kiện PointerPressedEvent với cờ RoutingStrategies.Tunnel chặn trước cả ScrollBar. Khi người dùng click vào track/thumb của ScrollBar, OnPressed cướp Pointer Capture (ev.Pointer.Capture). ScrollBar nội bộ của Avalonia bị nghẽn PointerReleased, khiến RepeatButton của Track bị kẹt lặp lại cuộn xuống vô hạn, đồng thời OnMoved liên tục cập nhật Offset theo con trỏ chuột, đẩy nội dung trượt tuột xuống bottom liên tục.
+    2. ScrollViewer ngoài cùng (bọc Tab Tool) và các ScrollViewer con có BringIntoViewOnFocusChange=True (mặc định), khi click ScrollBar thì focus thay đổi làm ScrollViewer tự động cuộn xuống cuối trang.
+  - *Khắc phục*:
+    1. Bổ sung bộ lọc IsScrollBarElement kiểm tra ev.Source có thuộc ScrollBar (Thumb, Track, RepeatButton) hay không. Nếu là ScrollBar thì lập tức return, trao lại 100% quyền điều khiển cho Avalonia ScrollBar tự nhiên, triệt tiêu hoàn toàn lỗi kẹt cuộn xuống bottom.
+    2. Thêm BringIntoViewOnFocusChange=False cho ScrollViewer ngoài cùng và tất cả ScrollViewer trong Tab Tool (LiveBeforeScrollViewer, LiveAfterScrollViewer, ModalBeforeScrollViewer, ModalAfterScrollViewer, và các ScrollViewer logs).
+- **Khắc phục lỗi dùng 2 ngón tay zoom rất khó khăn trên Android (Pinch to Zoom)**:
+  - *Nguyên nhân*: Trước đây chỉ có logic isDragging đơn điểm (1 con trỏ). Khi người dùng chạm 2 ngón tay lên màn hình cảm ứng Android, cả 2 ngón đều bị coi là kéo chuột (Pan drag), giằng co dragStart và Offset, làm ảnh giật cục và hoàn toàn không thể zoom 2 ngón tay.
+  - *Khắc phục*: Xây dựng bộ nhận diện đa chạm activePointers (Dictionary theo Pointer.Id). Khi phát hiện activePointers.Count >= 2, lập tức kích hoạt chế độ Pinch-to-Zoom mượt mà: tính khoảng cách Euclidean giữa 2 ngón tay Point.Distance(p1, p2), tính tỉ lệ thay đổi so với khoảng cách ban đầu và cập nhật trực tiếp vm.EnhancePreviewZoom. Khi nhấc 1 ngón tay, hệ thống tự động chuyển mượt về chế độ Pan cho ngón còn lại.
+- **Khắc phục lỗi pan trái phải được nhưng không pan lên xuống được trên Android**:
+  - *Nguyên nhân*: ScrollViewer ngoài cùng có VerticalScrollBarVisibility=Auto và HorizontalScrollBarVisibility=Disabled. Khi vuốt ngang, ScrollViewer ngoài cùng bỏ qua nên ảnh pan ngang được; nhưng khi vuốt dọc, ScrollViewer ngoài cùng chiếm quyền cử chỉ cuộn cả trang, đồng thời OnMoved không đánh dấu ev.Handled = true, dẫn đến cử chỉ vuốt dọc bị nuốt mất và ảnh không pan lên xuống được.
+  - *Khắc phục*: Đánh dấu ev.Handled = true; trong cả OnPressed và OnMoved khi đang kéo rê ảnh (Pan), cô lập hoàn toàn sự kiện cử chỉ trong khung ảnh, ngăn chặn triệt để ScrollViewer ngoài cùng can thiệp, cho phép pan tự do 2 chiều (trái/phải/lên/xuống).
