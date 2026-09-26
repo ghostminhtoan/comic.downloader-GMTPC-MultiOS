@@ -79,6 +79,14 @@ public class MainActivity : AvaloniaMainActivity
         RequestAppStoragePermissions();
     }
 
+    protected override void OnResume()
+    {
+        base.OnResume();
+        // Khi người dùng quay lại màn hình chính của ứng dụng, ẩn bong bóng và reset trạng thái BubbleMode
+        FloatingBubbleService.Hide(this);
+        Services.BackgroundExecutionService.Instance.SetBubbleMode(false);
+    }
+
     protected override void OnDestroy()
     {
         Services.BackgroundExecutionService.NativeStartOrUpdateForegroundNotification = null;

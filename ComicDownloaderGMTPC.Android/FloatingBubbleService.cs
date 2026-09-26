@@ -1,17 +1,22 @@
 using System;
 using Android.App;
 using Android.Content;
+using Android.Content.PM;
 using Android.Graphics;
 using Android.OS;
 using Android.Provider;
 using Android.Views;
 using Android.Widget;
+using AndroidX.Core.App;
 
 namespace ComicDownloaderGMTPC.Android;
 
-[Service(Exported = false)]
+[Service(Exported = false, ForegroundServiceType = ForegroundService.TypeDataSync)]
 public class FloatingBubbleService : Service, View.IOnTouchListener
 {
+    public const string BubbleChannelId = "comic_gmtpc_bubble_channel";
+    public const int BubbleNotificationId = 1003;
+
     private IWindowManager? _windowManager;
     private View? _floatingBubbleView;
     private WindowManagerLayoutParams? _params;
@@ -20,6 +25,7 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
     private float _initialTouchX;
     private float _initialTouchY;
     private int _screenWidth = 1080;
+    private int _screenHeight = 1920;
     private bool _isViewAdded = false;
 
     public override IBinder? OnBind(Intent? intent) => null;
@@ -27,6 +33,8 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
     public override void OnCreate()
     {
         base.OnCreate();
+        EnsureForegroundNotification();
+
         if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(this))
         {
             StopSelf();
@@ -38,6 +46,8 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
 
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
+        EnsureForegroundNotification();
+
         if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(this))
         {
             StopSelf();
@@ -46,6 +56,65 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
 
         CreateOrShowMessengerFloatingBubble();
         return StartCommandResult.Sticky;
+    }
+
+    private void EnsureForegroundNotification()
+    {
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(26))
+            {
+                var nm = (NotificationManager?)GetSystemService(NotificationService);
+                if (nm != null)
+                {
+                    var channel = new NotificationChannel(
+                        BubbleChannelId,
+                        "Bong bóng nổi Comic GMTPC",
+                        NotificationImportance.Low)
+                    {
+                        Description = "Kênh duy trì hiển thị bong bóng nổi trên màn hình",
+                        LockscreenVisibility = NotificationVisibility.Public
+                    };
+                    nm.CreateNotificationChannel(channel);
+                }
+
+                var openIntent = new Intent(this, typeof(MainActivity));
+                openIntent.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
+                var pendingIntent = PendingIntent.GetActivity(
+                    this,
+                    0,
+                    openIntent,
+                    PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
+
+                var notifBuilder = new NotificationCompat.Builder(this, BubbleChannelId);
+                notifBuilder.SetContentTitle("Comic GMTPC (Bong bóng nổi)");
+                notifBuilder.SetContentText("Chạm vào bong bóng tròn ở giữa màn hình để mở ứng dụng");
+                notifBuilder.SetSmallIcon(Resource.Drawable.Icon);
+                notifBuilder.SetOngoing(true);
+                notifBuilder.SetPriority(NotificationCompat.PriorityLow);
+                if (pendingIntent != null)
+                {
+                    notifBuilder.SetContentIntent(pendingIntent);
+                }
+
+                var notif = notifBuilder.Build();
+                if (notif != null)
+                {
+                    if (OperatingSystem.IsAndroidVersionAtLeast(34))
+                    {
+                        StartForeground(BubbleNotificationId, notif, ForegroundService.TypeDataSync);
+                    }
+                    else
+                    {
+                        StartForeground(BubbleNotificationId, notif);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi EnsureForegroundNotification: {ex.Message}");
+        }
     }
 
     private void CreateOrShowMessengerFloatingBubble()
@@ -60,15 +129,26 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                 _windowManager = GetSystemService(WindowService) as IWindowManager;
                 if (_windowManager == null) return;
 
-                float density = Resources?.DisplayMetrics?.Density ?? 2.0f;
-                _screenWidth = Resources?.DisplayMetrics?.WidthPixels ?? 1080;
+                var displayMetrics = Resources?.DisplayMetrics;
+                float density = displayMetrics?.Density ?? 2.0f;
+                _screenWidth = displayMetrics?.WidthPixels ?? 1080;
+                _screenHeight = displayMetrics?.HeightPixels ?? 1920;
                 if (_screenWidth <= 0) _screenWidth = 1080;
+                if (_screenHeight <= 0) _screenHeight = 1920;
 
                 int bubbleSizePx = (int)(64 * density);
+                int initialCenterX = (_screenWidth - bubbleSizePx) / 2;
+                int initialCenterY = (_screenHeight - bubbleSizePx) / 2;
 
                 if (_floatingBubbleView != null && _isViewAdded)
                 {
                     _floatingBubbleView.Visibility = ViewStates.Visible;
+                    if (_params != null)
+                    {
+                        _params.X = initialCenterX;
+                        _params.Y = initialCenterY;
+                        _windowManager.UpdateViewLayout(_floatingBubbleView, _params);
+                    }
                     return;
                 }
 
@@ -153,15 +233,15 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                     Format.Translucent)
                 {
                     Gravity = GravityFlags.Top | GravityFlags.Start,
-                    X = _screenWidth - bubbleSizePx - (int)(12 * density),
-                    Y = (int)(220 * density)
+                    X = initialCenterX,
+                    Y = initialCenterY
                 };
 
                 if (!_isViewAdded)
                 {
                     _windowManager.AddView(_floatingBubbleView, _params);
                     _isViewAdded = true;
-                    global::Android.Util.Log.Info("ComicGMTPC", "Đã kích hoạt Floating Bubble Messenger trên Android thành công!");
+                    global::Android.Util.Log.Info("ComicGMTPC", $"Đã hiển thị Floating Bubble Messenger ngay giữa màn hình ({initialCenterX}, {initialCenterY}) thành công!");
                 }
             }
             catch (Exception ex)
@@ -242,6 +322,7 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
             var intent = new Intent(this, typeof(MainActivity));
             intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop | ActivityFlags.ReorderToFront);
             StartActivity(intent);
+            Services.BackgroundExecutionService.Instance.SetBubbleMode(false);
             StopSelf();
         }
         catch (Exception ex)
@@ -272,7 +353,7 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
             var intent = new Intent(context, typeof(FloatingBubbleService));
             if (OperatingSystem.IsAndroidVersionAtLeast(26))
             {
-                context.StartService(intent);
+                context.StartForegroundService(intent);
             }
             else
             {
@@ -282,6 +363,12 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
         catch (Exception ex)
         {
             global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi Show FloatingBubbleService: {ex.Message}");
+            try
+            {
+                var intent = new Intent(context, typeof(FloatingBubbleService));
+                context.StartService(intent);
+            }
+            catch { }
         }
     }
 
