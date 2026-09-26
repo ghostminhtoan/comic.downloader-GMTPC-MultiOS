@@ -115,16 +115,31 @@ public class AppUpdateService
                         await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
                         totalDownloaded += bytesRead;
 
+                        double percent;
                         if (totalBytes > 0)
                         {
-                            double percent = (totalDownloaded * 100.0) / totalBytes;
-                            progressCallback?.Invoke(percent);
+                            percent = (totalDownloaded * 100.0) / totalBytes;
+                        }
+                        else
+                        {
+                            // Ước tính kích thước khoảng 50MB trên Android và 70MB trên Desktop nếu không có Content-Length
+                            double estimatedSize = OperatingSystem.IsAndroid() ? (50.0 * 1024.0 * 1024.0) : (70.0 * 1024.0 * 1024.0);
+                            percent = Math.Min(99.0, (totalDownloaded * 100.0) / estimatedSize);
+                        }
 
-                            if ((DateTime.UtcNow - lastLogTime).TotalMilliseconds >= 1200)
+                        progressCallback?.Invoke(percent);
+
+                        if ((DateTime.UtcNow - lastLogTime).TotalMilliseconds >= 1000)
+                        {
+                            lastLogTime = DateTime.UtcNow;
+                            double currentMb = totalDownloaded / (1024.0 * 1024.0);
+                            if (totalBytes > 0)
                             {
-                                lastLogTime = DateTime.UtcNow;
-                                double currentMb = totalDownloaded / (1024.0 * 1024.0);
                                 logCallback("INFO", $"[Cập nhật tự động] Đã tải {percent:F0}% ({currentMb:F1} MB / {totalMb:F1} MB)...");
+                            }
+                            else
+                            {
+                                logCallback("INFO", $"[Cập nhật tự động] Đã tải {currentMb:F1} MB ({percent:F0}%)...");
                             }
                         }
                     }

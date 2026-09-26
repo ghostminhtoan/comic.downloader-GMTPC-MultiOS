@@ -45,13 +45,11 @@ public class MainActivity : AvaloniaMainActivity
         };
         Services.BackgroundExecutionService.NativeRequestEnterBubbleMode = () =>
         {
-            EnterBubbleOrPipMode();
+            ComicBackgroundService.StartOrUpdate(this, "Comic Downloader GMTPC", "Ứng dụng đang chạy ngầm...", 0);
+            MoveTaskToBack(true);
         };
-        Services.BackgroundExecutionService.NativeRequestExitBubbleMode = () =>
-        {
-            FloatingBubbleService.Hide(this);
-        };
-        Services.BackgroundExecutionService.NativeIsBubbleOrPipSupported = () => true;
+        Services.BackgroundExecutionService.NativeRequestExitBubbleMode = null;
+        Services.BackgroundExecutionService.NativeIsBubbleOrPipSupported = () => false;
 
         Services.BackgroundExecutionService.NativeMinimizeOrHide = () =>
         {
@@ -66,7 +64,6 @@ public class MainActivity : AvaloniaMainActivity
             RunOnUiThread(() =>
             {
                 ComicBackgroundService.Stop(this);
-                FloatingBubbleService.Hide(this);
                 FinishAffinity();
                 global::Android.OS.Process.KillProcess(global::Android.OS.Process.MyPid());
                 Java.Lang.JavaSystem.Exit(0);
@@ -137,52 +134,7 @@ public class MainActivity : AvaloniaMainActivity
         // Tiến trình vẫn chạy ngầm liên tục nhờ Foreground Service ComicBackgroundService
     }
 
-    [System.Runtime.Versioning.SupportedOSPlatform("android26.0")]
-    public override void OnPictureInPictureModeChanged(bool isInPictureInPictureMode, global::Android.Content.Res.Configuration? newConfig)
-    {
-        base.OnPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
-        Services.BackgroundExecutionService.Instance.SetBubbleMode(isInPictureInPictureMode);
-    }
 
-    public void EnterBubbleOrPipMode()
-    {
-        RunOnUiThread(() =>
-        {
-            try
-            {
-                // Kích hoạt Foreground Service thông báo kèm Bubble Metadata chuẩn Android 11+
-                ComicBackgroundService.StartOrUpdate(this, "Comic Downloader GMTPC", "Ứng dụng đang chạy ngầm...", 0);
-
-                // Kiểm tra quyền Vẽ trên ứng dụng khác (SYSTEM_ALERT_WINDOW / CanDrawOverlays)
-                if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(this))
-                {
-                    try
-                    {
-                        Toast.MakeText(this, "Vui lòng BẬT 'Cho phép hiển thị trên các ứng dụng khác' để dùng quả bóng nổi DU Recorder!", ToastLength.Long)?.Show();
-                        var intent = new Intent(Settings.ActionManageOverlayPermission, global::Android.Net.Uri.Parse("package:" + PackageName));
-                        intent.AddFlags(ActivityFlags.NewTask);
-                        StartActivity(intent);
-                    }
-                    catch
-                    {
-                        var intent = new Intent(Settings.ActionManageOverlayPermission);
-                        intent.AddFlags(ActivityFlags.NewTask);
-                        StartActivity(intent);
-                    }
-                    MoveTaskToBack(true);
-                    return;
-                }
-
-                // Đã có quyền: Kích hoạt quả bóng tròn nổi DU Recorder & Thu ứng dụng ra màn hình Home
-                FloatingBubbleService.Show(this);
-                MoveTaskToBack(true);
-            }
-            catch (Exception ex)
-            {
-                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi kích hoạt Bong bóng: {ex.Message}");
-            }
-        });
-    }
 
     private void OnOpenStorageSettingsRequested()
     {

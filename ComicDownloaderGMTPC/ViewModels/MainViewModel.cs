@@ -532,18 +532,6 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    public void ToggleBubbleMode()
-    {
-        BackgroundExecutionService.Instance.ToggleBubbleMode();
-    }
-
-    [RelayCommand]
-    public void ExitBubbleMode()
-    {
-        BackgroundExecutionService.Instance.SetBubbleMode(false);
-    }
-
-    [RelayCommand]
     public void OpenExitConfirm()
     {
         IsExitConfirmOpen = true;
@@ -559,14 +547,6 @@ public partial class MainViewModel : ViewModelBase
     public void MinimizeOrHideApp()
     {
         IsExitConfirmOpen = false;
-        BackgroundExecutionService.Instance.MinimizeOrHide();
-    }
-
-    [RelayCommand]
-    public void RunInBackgroundWithBubble()
-    {
-        IsExitConfirmOpen = false;
-        BackgroundExecutionService.Instance.SetBubbleMode(true);
         BackgroundExecutionService.Instance.MinimizeOrHide();
     }
 
@@ -1087,13 +1067,13 @@ public partial class MainViewModel : ViewModelBase
         string[] updateUrls = OperatingSystem.IsAndroid()
             ? new[]
             {
-                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/latest/download/com.CompanyName.ComicDownloaderGMTPC-Signed.apk",
-                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/com.CompanyName.ComicDownloaderGMTPC-Signed.apk"
+                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/com.CompanyName.ComicDownloaderGMTPC-Signed.apk",
+                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/latest/download/com.CompanyName.ComicDownloaderGMTPC-Signed.apk"
             }
             : new[]
             {
-                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/latest/download/ComicDownloaderGMTPC.Desktop.exe",
-                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/ComicDownloaderGMTPC.Desktop.exe"
+                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/ComicDownloaderGMTPC.Desktop.exe",
+                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/latest/download/ComicDownloaderGMTPC.Desktop.exe"
             };
 
         IsUpdating = true;

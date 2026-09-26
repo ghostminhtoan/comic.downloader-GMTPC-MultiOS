@@ -65,18 +65,6 @@
                                 ToolTip.Tip="Tự động tải ngầm và cài đặt phiên bản APK mới nhất">
                             <TextBlock Text="{Binding UpdateButtonLabel}" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
                         </Button>
-
-                        <!-- Nút Chế Độ Bong Bóng Chạy Ngầm (Bubble Mode - Chỉ hiển thị trên Android) -->
-                        <Button Command="{Binding ToggleBubbleModeCommand}"
-                                IsVisible="{Binding IsAndroidPlatform}"
-                                Background="#7C3AED" BorderBrush="#8B5CF6" BorderThickness="1"
-                                CornerRadius="6" Padding="10,3" Height="28" Margin="0,0,0,4"
-                                ToolTip.Tip="Thu nhỏ ứng dụng thành bong bóng nổi tròn Messenger mà vẫn chạy ngầm liên tục">
-                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                <TextBlock Text="🫧" FontSize="11" />
-                                <TextBlock Text="BONG BÓNG" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
                     </WrapPanel>
                 </WrapPanel>
             </Border>
@@ -2103,17 +2091,11 @@
                     <TextBlock Text="{Binding BubbleStatusDetail}" FontSize="10" Foreground="#94A3B8" MaxWidth="220" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
                 <ProgressBar Value="{Binding BubbleProgress}" Minimum="0" Maximum="100" Width="60" Height="6" CornerRadius="3" Foreground="#8B5CF6" Background="#0F172A" />
-                <Button Command="{Binding ToggleBubbleModeCommand}"
-                        Background="#7C3AED" Foreground="#FFFFFF"
-                        FontWeight="Bold" FontSize="10" CornerRadius="6" Padding="8,4"
-                        ToolTip.Tip="Thu nhỏ ứng dụng thành bong bóng nổi chạy ngầm">
-                    <TextBlock Text="🫧 Bong bóng" />
-                </Button>
             </StackPanel>
         </Border>
         </Panel>
 
-        <!-- MODAL POPUP CONFIRM KHI BẤM PHÍM BACK HOẶC NÚT THOÁT (3 OPTION: TẮT / CHẠY NGẦM / THOÁT HOÀN TOÀN) -->
+        <!-- MODAL POPUP CONFIRM KHI BẤM PHÍM BACK HOẶC NÚT THOÁT (2 OPTION: CHẠY NGẦM / THOÁT HOÀN TOÀN) -->
         <Border IsVisible="{Binding IsExitConfirmOpen}"
                 Background="#B0050A15"
                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
@@ -2136,35 +2118,22 @@
 
                     <Border Height="1" Background="#1E293B" HorizontalAlignment="Stretch" />
 
-                    <!-- Danh sách 3 Lựa chọn chính -->
+                    <!-- Danh sách 2 Lựa chọn chính -->
                     <StackPanel Spacing="10">
-                        <!-- Option 1: Ẩn / Tắt giao diện (Chạy nền thông thường) -->
+                        <!-- Option 1: Ẩn / Tắt giao diện (Chạy ngầm mượt mà) -->
                         <Button Command="{Binding MinimizeOrHideAppCommand}"
                                 Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
                                 CornerRadius="10" Padding="14,10" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                             <Grid ColumnDefinitions="Auto, *">
                                 <TextBlock Grid.Column="0" Text="🔘" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="Tắt / Ẩn Giao Diện" FontWeight="Bold" Foreground="#38BDF8" FontSize="13" />
-                                    <TextBlock Text="Thu ứng dụng xuống nền, tiếp tục chạy tác vụ nếu có" FontSize="10" Foreground="#94A3B8" TextWrapping="Wrap" />
+                                    <TextBlock Text="Chạy Ngầm (Ẩn Giao Diện)" FontWeight="Bold" Foreground="#38BDF8" FontSize="13" />
+                                    <TextBlock Text="Thu ứng dụng xuống nền, tiếp tục chạy tải/xử lý ngầm mượt mà" FontSize="10" Foreground="#94A3B8" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Grid>
                         </Button>
 
-                        <!-- Option 2: Chạy ngầm & Bong bóng nổi Messenger -->
-                        <Button Command="{Binding RunInBackgroundWithBubbleCommand}"
-                                Background="#1E1B4B" BorderBrush="#8B5CF6" BorderThickness="1"
-                                CornerRadius="10" Padding="14,10" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                            <Grid ColumnDefinitions="Auto, *">
-                                <TextBlock Grid.Column="0" Text="🫧" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0" />
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="Chạy Ngầm (Bong Bóng Nổi)" FontWeight="Bold" Foreground="#A78BFA" FontSize="13" />
-                                    <TextBlock Text="Bật bong bóng Chat Head nổi trên màn hình để dễ dàng theo dõi" FontSize="10" Foreground="#CBD5E1" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Grid>
-                        </Button>
-
-                        <!-- Option 3: Thoát hoàn toàn (Force Stop) -->
+                        <!-- Option 2: Thoát hoàn toàn (Force Stop) -->
                         <Button Command="{Binding ForceExitAppCommand}"
                                 Background="#3B1219" BorderBrush="#EF4444" BorderThickness="1"
                                 CornerRadius="10" Padding="14,10" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
