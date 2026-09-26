@@ -41,7 +41,7 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
             return;
         }
 
-        CreateOrShowDuRecorderFloatingBubble();
+        CreateOrShowCyanFloatingBubble();
     }
 
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
@@ -54,7 +54,7 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
             return StartCommandResult.NotSticky;
         }
 
-        CreateOrShowDuRecorderFloatingBubble();
+        CreateOrShowCyanFloatingBubble();
         return StartCommandResult.Sticky;
     }
 
@@ -69,10 +69,10 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                 {
                     var channel = new NotificationChannel(
                         BubbleChannelId,
-                        "Bóng nổi Comic GMTPC (DU Recorder style)",
+                        "Bóng nổi Comic GMTPC (Cyan)",
                         NotificationImportance.Low)
                     {
-                        Description = "Duy trì quả bóng nổi trên màn hình thiết bị",
+                        Description = "Duy trì quả bóng nổi màu Cyan trên màn hình thiết bị",
                         LockscreenVisibility = NotificationVisibility.Public
                     };
                     nm.CreateNotificationChannel(channel);
@@ -87,8 +87,8 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                     PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
 
                 var notifBuilder = new NotificationCompat.Builder(this, BubbleChannelId);
-                notifBuilder.SetContentTitle("Comic GMTPC đang nổi trên màn hình");
-                notifBuilder.SetContentText("Chạm vào bóng tròn nổi để quay lại ứng dụng");
+                notifBuilder.SetContentTitle("Comic GMTPC (Bóng nổi Cyan)");
+                notifBuilder.SetContentText("Chạm vào bóng Cyan trên màn hình để mở ứng dụng");
                 notifBuilder.SetSmallIcon(Resource.Drawable.Icon);
                 notifBuilder.SetOngoing(true);
                 notifBuilder.SetPriority(NotificationCompat.PriorityLow);
@@ -117,7 +117,7 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
         }
     }
 
-    private void CreateOrShowDuRecorderFloatingBubble()
+    private void CreateOrShowCyanFloatingBubble()
     {
         var looper = Looper.MainLooper;
         if (looper == null) return;
@@ -136,14 +136,14 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                 if (_screenWidth <= 0) _screenWidth = 1080;
                 if (_screenHeight <= 0) _screenHeight = 1920;
 
-                int bubbleSizePx = (int)(58 * density);
+                int bubbleSizePx = (int)(64 * density);
                 int initialCenterX = (_screenWidth - bubbleSizePx) / 2;
                 int initialCenterY = (_screenHeight - bubbleSizePx) / 2;
 
                 if (_floatingBubbleView != null && _isViewAdded)
                 {
                     _floatingBubbleView.Visibility = ViewStates.Visible;
-                    _floatingBubbleView.Alpha = 0.85f;
+                    _floatingBubbleView.Alpha = 1.0f;
                     if (_params != null)
                     {
                         _params.X = initialCenterX;
@@ -153,18 +153,18 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                     return;
                 }
 
-                // 1. Root Container hình tròn phong cách DU Recorder (Floating Assistive Ball)
+                // 1. Container hình tròn phong cách DU Recorder màu CYAN (#00E5FF / #0891B2) nổi bật 100% Opaque
                 var bubbleRoot = new FrameLayout(this);
                 var rootBackground = new global::Android.Graphics.Drawables.GradientDrawable(
                     global::Android.Graphics.Drawables.GradientDrawable.Orientation.TlBr,
-                    new int[] { Color.ParseColor("#7C3AED"), Color.ParseColor("#312E81") });
+                    new int[] { Color.ParseColor("#00E5FF"), Color.ParseColor("#0891B2") });
                 rootBackground.SetShape(global::Android.Graphics.Drawables.ShapeType.Oval);
-                rootBackground.SetStroke((int)(2.5f * density), Color.ParseColor("#F59E0B")); // Viền vàng cam nổi bật
+                rootBackground.SetStroke((int)(3.5f * density), Color.ParseColor("#FFFFFF")); // Viền trắng phát sáng
                 bubbleRoot.Background = rootBackground;
-                bubbleRoot.Elevation = 14f * density;
-                bubbleRoot.Alpha = 0.88f;
+                bubbleRoot.Elevation = 20f * density;
+                bubbleRoot.Alpha = 1.0f; // 100% OPAQUE, KHÔNG HỀ TRONG SUỐT
 
-                // 2. Nội dung bên trong: Icon truyện tranh và nhãn GMTPC
+                // 2. Nội dung bên trong: Biểu tượng truyện tranh và nhãn GMTPC màu đen tương phản rõ nét
                 var innerLayout = new LinearLayout(this)
                 {
                     Orientation = Orientation.Vertical
@@ -174,7 +174,7 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                 var iconText = new TextView(this)
                 {
                     Text = "📖",
-                    TextSize = 20,
+                    TextSize = 22,
                     Gravity = GravityFlags.Center
                 };
                 innerLayout.AddView(iconText);
@@ -182,11 +182,11 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                 var labelText = new TextView(this)
                 {
                     Text = "GMTPC",
-                    TextSize = 7.5f,
+                    TextSize = 8,
                     Gravity = GravityFlags.Center,
                     Typeface = Typeface.DefaultBold
                 };
-                labelText.SetTextColor(Color.ParseColor("#FDE047"));
+                labelText.SetTextColor(Color.ParseColor("#000000")); // Màu đen đậm nét trên nền Cyan
                 innerLayout.AddView(labelText);
 
                 var centerParams = new FrameLayout.LayoutParams(
@@ -197,18 +197,18 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                 };
                 bubbleRoot.AddView(innerLayout, centerParams);
 
-                // 3. Mini Active Badge góc dưới (chấm xanh lá phát sáng báo đang chạy ngầm)
-                int badgeSizePx = (int)(16 * density);
+                // 3. Mini Active Badge góc dưới (chấm cam phát sáng báo đang chạy ngầm)
+                int badgeSizePx = (int)(18 * density);
                 var badgeView = new TextView(this)
                 {
                     Text = "⚡",
-                    TextSize = 8,
+                    TextSize = 9,
                     Gravity = GravityFlags.Center
                 };
                 var badgeBg = new global::Android.Graphics.Drawables.GradientDrawable();
                 badgeBg.SetShape(global::Android.Graphics.Drawables.ShapeType.Oval);
-                badgeBg.SetColor(Color.ParseColor("#10B981"));
-                badgeBg.SetStroke((int)(1.5f * density), Color.ParseColor("#0F172A"));
+                badgeBg.SetColor(Color.ParseColor("#FF5722"));
+                badgeBg.SetStroke((int)(2f * density), Color.White);
                 badgeView.Background = badgeBg;
                 badgeView.SetTextColor(Color.White);
 
@@ -243,12 +243,12 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                 {
                     _windowManager.AddView(_floatingBubbleView, _params);
                     _isViewAdded = true;
-                    global::Android.Util.Log.Info("ComicGMTPC", $"Đã kích hoạt quả bóng nổi DU Recorder tại tâm màn hình ({initialCenterX}, {initialCenterY}) thành công!");
+                    global::Android.Util.Log.Info("ComicGMTPC", $"Đã kích hoạt quả bóng nổi Cyan tại tâm màn hình ({initialCenterX}, {initialCenterY}) thành công!");
                 }
             }
             catch (Exception ex)
             {
-                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi tạo DU Recorder Floating Bubble: {ex.Message}");
+                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi tạo Cyan Floating Bubble: {ex.Message}");
             }
         });
     }
@@ -264,7 +264,6 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                 _initialY = _params.Y;
                 _initialTouchX = e.RawX;
                 _initialTouchY = e.RawY;
-                _floatingBubbleView.Alpha = 1.0f; // Sáng rõ 100% khi người dùng chạm vào
                 return true;
 
             case MotionEventActions.Move:
@@ -287,7 +286,7 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
                 }
                 else
                 {
-                    // Tự động hít/bám vào mép trái hoặc mép phải màn hình (DU Recorder Edge Snap)
+                    // Tự động hít/bám vào mép trái hoặc mép phải màn hình
                     SnapToScreenEdge();
                 }
                 return true;
@@ -302,7 +301,7 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
         {
             float density = Resources?.DisplayMetrics?.Density ?? 2.0f;
             int margin = (int)(4 * density);
-            int bubbleWidth = _params.Width > 0 ? _params.Width : (int)(58 * density);
+            int bubbleWidth = _params.Width > 0 ? _params.Width : (int)(64 * density);
 
             int midScreen = _screenWidth / 2;
             if (_params.X + bubbleWidth / 2 < midScreen)
@@ -313,7 +312,6 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
             {
                 _params.X = _screenWidth - bubbleWidth - margin; // Bám sát mép phải
             }
-            _floatingBubbleView.Alpha = 0.85f; // Làm mờ nhẹ khi ở trạng thái nghỉ mép màn hình
             _windowManager.UpdateViewLayout(_floatingBubbleView, _params);
         }
         catch { }
@@ -331,7 +329,7 @@ public class FloatingBubbleService : Service, View.IOnTouchListener
         }
         catch (Exception ex)
         {
-            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi mở MainActivity từ DU Recorder Bubble: {ex.Message}");
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi mở MainActivity từ Cyan Bubble: {ex.Message}");
         }
     }
 
