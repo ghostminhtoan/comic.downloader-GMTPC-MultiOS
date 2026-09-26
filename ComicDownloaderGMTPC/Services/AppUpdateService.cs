@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,13 +23,53 @@ public class AppUpdateService
         var handler = new HttpClientHandler
         {
             AllowAutoRedirect = true,
-            MaxAutomaticRedirections = 10
+            MaxAutomaticRedirections = 10,
+            ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
         };
         _httpClient = new HttpClient(handler)
         {
-            Timeout = TimeSpan.FromMinutes(10)
+            Timeout = TimeSpan.FromMinutes(15)
         };
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ComicDownloaderGMTPC-Updater/1.0");
+        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
+    }
+
+    private static string GetWritableUpdateDirectory()
+    {
+        if (OperatingSystem.IsAndroid())
+        {
+            var candidates = new List<string>();
+            try
+            {
+                string extApp = DownloadEngineService.GetAppSpecificExternalPath();
+                if (!string.IsNullOrWhiteSpace(extApp)) candidates.Add(extApp);
+            }
+            catch { }
+
+            candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Download"));
+            candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Download"));
+            candidates.Add(Path.Combine(Path.GetTempPath(), "Download"));
+
+            foreach (var dir in candidates)
+            {
+                try
+                {
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    string testFile = Path.Combine(dir, $".probe_{Guid.NewGuid():N}.tmp");
+                    File.WriteAllBytes(testFile, new byte[] { 0x47, 0x4D });
+                    if (File.Exists(testFile))
+                    {
+                        File.Delete(testFile);
+                        return dir;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        string userDownloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        if (!Directory.Exists(userDownloads)) userDownloads = AppContext.BaseDirectory;
+        return userDownloads;
     }
 
     public async Task<bool> DownloadAndInstallUpdateAsync(
@@ -38,35 +80,70 @@ public class AppUpdateService
     {
         try
         {
-            logCallback("INFO", "[Cập nhật tự động] Đang tìm kiếm và kết nối bản cập nhật mới nhất...");
+            logCallback("INFO", "[Cập nhật tự động] Đang kết nối máy chủ cập nhật GitHub...");
 
             HttpResponseMessage? response = null;
             string finalUrl = candidateUrls.Length > 0 ? candidateUrls[0] : "";
 
-            foreach (var url in candidateUrls)
+            foreach (var initialUrl in candidateUrls)
             {
                 if (ct.IsCancellationRequested) break;
-                try
+                string currentUrl = initialUrl;
+                int redirectCount = 0;
+
+                while (redirectCount < 10)
                 {
-                    var req = new HttpRequestMessage(HttpMethod.Get, url);
-                    var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-                    if (resp.IsSuccessStatusCode)
+                    try
                     {
-                        response = resp;
-                        finalUrl = url;
+                        var req = new HttpRequestMessage(HttpMethod.Get, currentUrl);
+                        req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                        req.Headers.TryAddWithoutValidation("Accept", "*/*");
+
+                        var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+
+                        if (resp.StatusCode == HttpStatusCode.Redirect ||
+                            resp.StatusCode == HttpStatusCode.MovedPermanently ||
+                            resp.StatusCode == HttpStatusCode.Found ||
+                            resp.StatusCode == HttpStatusCode.SeeOther ||
+                            (int)resp.StatusCode == 307 ||
+                            (int)resp.StatusCode == 308)
+                        {
+                            var redirectLocation = resp.Headers.Location;
+                            resp.Dispose();
+                            if (redirectLocation != null)
+                            {
+                                currentUrl = redirectLocation.IsAbsoluteUri ? redirectLocation.AbsoluteUri : new Uri(new Uri(currentUrl), redirectLocation).AbsoluteUri;
+                                redirectCount++;
+                                continue;
+                            }
+                        }
+
+                        if (resp.IsSuccessStatusCode)
+                        {
+                            response = resp;
+                            finalUrl = currentUrl;
+                            break;
+                        }
+                        else
+                        {
+                            logCallback("WARN", $"[Cập nhật tự động] Máy chủ phản hồi mã {resp.StatusCode} cho URL {currentUrl}");
+                            resp.Dispose();
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logCallback("WARN", $"[Cập nhật tự động] Không thể kết nối {currentUrl}: {ex.Message}");
                         break;
                     }
-                    resp.Dispose();
                 }
-                catch
-                {
-                    // Thử URL tiếp theo
-                }
+
+                if (response != null && response.IsSuccessStatusCode) break;
             }
 
             if (response == null || !response.IsSuccessStatusCode)
             {
-                logCallback("ERROR", "[Cập nhật tự động] Không thể kết nối tới máy chủ cập nhật GitHub Releases. Vui lòng kiểm tra lại kết nối mạng!");
+                logCallback("ERROR", "[Cập nhật tự động] Không thể kết nối tới máy chủ cập nhật GitHub Releases. Vui lòng kiểm tra kết nối mạng!");
                 return false;
             }
 
@@ -75,37 +152,31 @@ public class AppUpdateService
                 long totalBytes = response.Content.Headers.ContentLength ?? -1L;
                 double totalMb = totalBytes > 0 ? (totalBytes / (1024.0 * 1024.0)) : 0;
 
-                string targetPath;
-                if (OperatingSystem.IsAndroid())
-                {
-                    string appDir = DownloadEngineService.GetAppSpecificExternalPath();
-                    if (!Directory.Exists(appDir)) Directory.CreateDirectory(appDir);
-                    targetPath = Path.Combine(appDir, "ComicDownloaderGMTPC_Update.apk");
-                }
-                else
-                {
-                    string userDownloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-                    if (!Directory.Exists(userDownloads))
-                    {
-                        userDownloads = AppContext.BaseDirectory;
-                    }
-                    string fileName = Path.GetFileName(new Uri(finalUrl).AbsolutePath);
-                    if (string.IsNullOrWhiteSpace(fileName)) fileName = "ComicDownloaderGMTPC.Desktop.exe";
-                    targetPath = Path.Combine(userDownloads, fileName);
-                }
+                string updateDir = GetWritableUpdateDirectory();
+                string fileName = OperatingSystem.IsAndroid()
+                    ? "ComicDownloaderGMTPC_Update.apk"
+                    : (OperatingSystem.IsWindows() ? "ComicDownloaderGMTPC.Desktop.exe" : "ComicDownloaderGMTPC.Desktop");
+                string targetPath = Path.Combine(updateDir, fileName);
 
                 if (File.Exists(targetPath))
                 {
                     try { File.Delete(targetPath); } catch { }
                 }
 
-                string fileTypeDesc = OperatingSystem.IsAndroid() ? "APK Android" : "EXE Windows";
-                logCallback("INFO", $"[Cập nhật tự động] Đang tải trực tiếp gói {fileTypeDesc} ({totalMb:F1} MB)...");
+                string fileTypeDesc = OperatingSystem.IsAndroid() ? "APK Android" : "Executable Desktop";
+                if (totalBytes > 0)
+                {
+                    logCallback("INFO", $"[Cập nhật tự động] Đã tìm thấy gói {fileTypeDesc} ({totalMb:F1} MB). Bắt đầu tải...");
+                }
+                else
+                {
+                    logCallback("INFO", $"[Cập nhật tự động] Đã tìm thấy gói {fileTypeDesc}. Bắt đầu tải dữ liệu...");
+                }
 
                 await using (var contentStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
-                await using (var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                await using (var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 131072, useAsync: true))
                 {
-                    byte[] buffer = new byte[81920];
+                    byte[] buffer = new byte[131072];
                     long totalDownloaded = 0;
                     int bytesRead;
                     DateTime lastLogTime = DateTime.UtcNow;
@@ -122,14 +193,13 @@ public class AppUpdateService
                         }
                         else
                         {
-                            // Ước tính kích thước khoảng 50MB trên Android và 70MB trên Desktop nếu không có Content-Length
-                            double estimatedSize = OperatingSystem.IsAndroid() ? (50.0 * 1024.0 * 1024.0) : (70.0 * 1024.0 * 1024.0);
+                            double estimatedSize = OperatingSystem.IsAndroid() ? (48.0 * 1024.0 * 1024.0) : (70.0 * 1024.0 * 1024.0);
                             percent = Math.Min(99.0, (totalDownloaded * 100.0) / estimatedSize);
                         }
 
                         progressCallback?.Invoke(percent);
 
-                        if ((DateTime.UtcNow - lastLogTime).TotalMilliseconds >= 1000)
+                        if ((DateTime.UtcNow - lastLogTime).TotalMilliseconds >= 800)
                         {
                             lastLogTime = DateTime.UtcNow;
                             double currentMb = totalDownloaded / (1024.0 * 1024.0);
@@ -146,7 +216,8 @@ public class AppUpdateService
                 }
 
                 progressCallback?.Invoke(100.0);
-                logCallback("SUCCESS", $"[Cập nhật tự động] Tải xong 100% ({totalMb:F1} MB)!");
+                double finalMb = new FileInfo(targetPath).Length / (1024.0 * 1024.0);
+                logCallback("SUCCESS", $"[Cập nhật tự động] Tải xong 100% ({finalMb:F1} MB)!");
 
                 if (OperatingSystem.IsAndroid())
                 {
@@ -154,22 +225,21 @@ public class AppUpdateService
                     {
                         logCallback("INFO", "[Cập nhật tự động] Đang kích hoạt trình cài đặt hệ thống Android...");
                         InstallApkRequested.Invoke(targetPath);
-                        logCallback("SUCCESS", "[Cập nhật tự động] Đã gửi lệnh cài đặt đến hệ thống Android. Vui lòng bấm 'Cập nhật' trên thông báo hệ thống!");
+                        logCallback("SUCCESS", "[Cập nhật tự động] Đã gửi lệnh cài đặt đến hệ thống Android. Vui lòng bấm 'Cập nhật' trên màn hình!");
                         return true;
                     }
                     else
                     {
-                        logCallback("WARN", "[Cập nhật tự động] Trình cài đặt Android chưa sẵn sàng. Bạn có thể mở tệp tại: " + targetPath);
+                        logCallback("WARN", "[Cập nhật tự động] Trình cài đặt Android chưa sẵn sàng. Tệp APK lưu tại: " + targetPath);
                     }
                 }
                 else
                 {
-                    // Trên máy tính Desktop Windows / Linux
                     try
                     {
                         if (OperatingSystem.IsWindows())
                         {
-                            logCallback("SUCCESS", $"[Cập nhật tự động] Đã tải bản mới về thư mục Downloads: {targetPath}");
+                            logCallback("SUCCESS", $"[Cập nhật tự động] Đã tải bản mới về: {targetPath}");
                             Process.Start(new ProcessStartInfo
                             {
                                 FileName = "explorer.exe",
