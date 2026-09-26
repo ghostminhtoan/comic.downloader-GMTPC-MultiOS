@@ -63,6 +63,23 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isCompactRow;
 
+    // CONCURRENT COMIC DOWNLOADS & IMAGE THREADS
+    [ObservableProperty]
+    private int _concurrentComicDownloads = 2; // 1 đến 8
+
+    [ObservableProperty]
+    private int _imageDownloadThreads = 4; // 1 đến 16
+
+    partial void OnConcurrentComicDownloadsChanged(int value)
+    {
+        _downloadEngine.ConcurrentComicDownloads = Math.Clamp(value, 1, 8);
+    }
+
+    partial void OnImageDownloadThreadsChanged(int value)
+    {
+        _downloadEngine.ImageDownloadThreads = Math.Clamp(value, 1, 16);
+    }
+
     // AUTO SPLIT LONG IMAGES
     [ObservableProperty]
     private bool _isAutoSplitLongImages = false;
@@ -419,6 +436,7 @@ public partial class MainViewModel : ViewModelBase
         };
 
         UpdateLanguageStrings();
+        InitFolderToolsService();
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
     }
 

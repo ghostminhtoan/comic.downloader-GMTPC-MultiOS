@@ -1858,4 +1858,235 @@ public class ComicScraperService
         }
         return relativeOrAbsolute;
     }
+
+    public async Task<TagAnalysisResult> AnalyzeTagUrlAsync(string url, CancellationToken ct = default)
+    {
+        var result = new TagAnalysisResult
+        {
+            BaseUrl = url,
+            Domain = DomainRoutingService.DetectDomain(url),
+            TotalPages = 1,
+            IsSuccess = false
+        };
+
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            result.StatusMessage = "URL không hợp lệ";
+            return result;
+        }
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                result.StatusMessage = $"Lỗi máy chủ HTTP {(int)res.StatusCode}";
+                return result;
+            }
+
+            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            // Trích xuất tiêu đề Tag / Thể loại
+            var titleMatch = Regex.Match(html, @"<title[^>]*>(?<title>[^<]+)</title>", RegexOptions.IgnoreCase);
+            if (titleMatch.Success)
+            {
+                result.TagTitle = CleanTitle(titleMatch.Groups["title"].Value);
+            }
+
+            int maxPage = 1;
+
+            // 1. Phân tích các liên kết phân trang pagination
+            var pageMatches = Regex.Matches(html, @"(?:page[=/_-]|trang[=/_-]|\/page\/|\/trang-)(\d+)", RegexOptions.IgnoreCase);
+            foreach (Match m in pageMatches)
+            {
+                if (int.TryParse(m.Groups[1].Value, out int p) && p > maxPage && p < 10000)
+                {
+                    maxPage = p;
+                }
+            }
+
+            // 2. Phân tích text trong các nút phân trang
+            var numMatches = Regex.Matches(html, @"<(?:a|span|li)[^>]*class=[""'][^""']*(?:page|pagination|paging)[^""']*[""'][^>]*>(\d+)</(?:a|span|li)>", RegexOptions.IgnoreCase);
+            foreach (Match m in numMatches)
+            {
+                if (int.TryParse(m.Groups[1].Value, out int p) && p > maxPage && p < 10000)
+                {
+                    maxPage = p;
+                }
+            }
+
+            result.TotalPages = Math.Max(1, maxPage);
+            result.IsSuccess = true;
+            result.StatusMessage = $"Phân tích thành công: {result.TotalPages} trang ({result.TagTitle})";
+        }
+        catch (Exception ex)
+        {
+            result.StatusMessage = $"Lỗi phân tích: {ex.Message}";
+        }
+
+        return result;
+    }
+
+    public async Task<List<ComicBookItem>> ScrapeBatchComicsFromTagPagesAsync(string tagUrl, int pageFrom, int pageTo, string domain, CancellationToken ct = default)
+    {
+        var list = new List<ComicBookItem>();
+        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        tagUrl = tagUrl.Trim();
+        pageFrom = Math.Max(1, pageFrom);
+        pageTo = Math.Max(pageFrom, pageTo);
+
+        for (int page = pageFrom; page <= pageTo; page++)
+        {
+            if (ct.IsCancellationRequested) break;
+
+            string pageUrl = BuildPagedTagUrl(tagUrl, page, domain);
+
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                if (!res.IsSuccessStatusCode) continue;
+
+                string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+                // Trích xuất các liên kết truyện từ trang danh mục
+                var comicLinks = ExtractComicLinksFromTagPage(html, pageUrl, domain);
+
+                foreach (var (cUrl, cTitle, cCover) in comicLinks)
+                {
+                    if (seenUrls.Add(cUrl))
+                    {
+                        list.Add(new ComicBookItem
+                        {
+                            Index = list.Count + 1,
+                            Url = cUrl,
+                            Title = cTitle,
+                            CoverUrl = cCover,
+                            Domain = DomainRoutingService.DetectDomain(cUrl),
+                            Status = "Waiting",
+                            StatusMessage = "Sẵn sàng tải"
+                        });
+                    }
+                }
+            }
+            catch {}
+        }
+
+        return list;
+    }
+
+    private string BuildPagedTagUrl(string baseUrl, int page, string domain)
+    {
+        if (page <= 1) return baseUrl;
+
+        domain = domain.ToLowerInvariant();
+        if (baseUrl.Contains("?") || baseUrl.Contains("page=") || baseUrl.Contains("&page="))
+        {
+            if (Regex.IsMatch(baseUrl, @"[?&]page=\d+"))
+            {
+                return Regex.Replace(baseUrl, @"([?&]page=)\d+", $"${{1}}{page}");
+            }
+            return $"{baseUrl}&page={page}";
+        }
+
+        if (domain.Contains("truyenqq"))
+        {
+            return $"{baseUrl.TrimEnd('/')}/trang-{page}.html";
+        }
+
+        if (domain.Contains("thuviensach") || domain.Contains("dilib"))
+        {
+            return $"{baseUrl.TrimEnd('/')}/trang-{page}/";
+        }
+
+        if (domain.Contains("daomeoden"))
+        {
+            return $"{baseUrl.TrimEnd('/')}/page-{page}.html";
+        }
+
+        if (domain.Contains("sayhentai") || domain.Contains("hentai2read"))
+        {
+            return $"{baseUrl.TrimEnd('/')}/page/{page}/";
+        }
+
+        return $"{baseUrl}?page={page}";
+    }
+
+    private List<(string Url, string Title, string Cover)> ExtractComicLinksFromTagPage(string html, string pageUrl, string domain)
+    {
+        var result = new List<(string Url, string Title, string Cover)>();
+        domain = domain.ToLowerInvariant();
+
+        // 1. Regex tìm tất cả các thẻ chứa link truyện và ảnh bìa
+        var itemMatches = Regex.Matches(html, @"<a\s+[^>]*?href=[""'](?<link>[^""']+)[""'][^>]*>(?<inner>[\s\S]*?)<\/a>", RegexOptions.IgnoreCase);
+
+        foreach (Match m in itemMatches)
+        {
+            string link = m.Groups["link"].Value.Trim();
+            string inner = m.Groups["inner"].Value;
+
+            if (link.StartsWith("#") || link.StartsWith("javascript:") || link.Contains("/the-loai/") || link.Contains("/genre/"))
+            {
+                continue;
+            }
+
+            // Lọc đúng link truyện theo domain
+            bool isComicLink = false;
+            if (domain.Contains("truyenqq") && link.Contains("/truyen-tranh/") && !link.Contains("-chap-")) isComicLink = true;
+            else if (domain.Contains("nettruyen") && link.Contains("/truyen-tranh/") && !link.Contains("/chap-")) isComicLink = true;
+            else if (domain.Contains("thuviensach") && (link.EndsWith(".html") || link.Contains("/truyen-tranh/"))) isComicLink = true;
+            else if (domain.Contains("loppytoonn") && link.Contains("/truyen/") && link.Split('/').Length <= 5) isComicLink = true;
+            else if (domain.Contains("daomeoden") && link.Contains("/truyen-tranh/")) isComicLink = true;
+            else if (domain.Contains("vi-hentai") && link.Contains("/truyen/")) isComicLink = true;
+            else if (domain.Contains("damconuong") && link.Contains("/truyen/")) isComicLink = true;
+            else if (domain.Contains("sayhentai") && (link.Contains("/story/") || link.Contains("/truyen/"))) isComicLink = true;
+            else if (domain.Contains("hentai2read") && link.Contains("hentai2read.com/") && link.Split('/').Length <= 5) isComicLink = true;
+
+            if (isComicLink)
+            {
+                string fullUrl = MakeAbsoluteUrl(link, pageUrl);
+                
+                string title = string.Empty;
+                var titleAttr = Regex.Match(m.Value, @"title=[""'](?<t>[^""']+)[""']", RegexOptions.IgnoreCase);
+                if (titleAttr.Success)
+                {
+                    title = WebUtility.HtmlDecode(titleAttr.Groups["t"].Value.Trim());
+                }
+
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    var cleanInner = Regex.Replace(inner, @"<[^>]+>", " ").Trim();
+                    if (!string.IsNullOrWhiteSpace(cleanInner) && cleanInner.Length >= 2)
+                    {
+                        title = WebUtility.HtmlDecode(cleanInner);
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    title = ExtractFallbackTitleFromUrl(fullUrl);
+                }
+
+                string coverUrl = string.Empty;
+                var imgMatch = Regex.Match(inner, @"<img\s+[^>]*?>", RegexOptions.IgnoreCase);
+                if (imgMatch.Success)
+                {
+                    string? img = ExtractImageUrlFromTag(imgMatch.Value);
+                    if (!string.IsNullOrWhiteSpace(img))
+                    {
+                        coverUrl = MakeAbsoluteUrl(img, pageUrl);
+                    }
+                }
+
+                if (title.Length >= 2 && !result.Any(x => x.Url.Equals(fullUrl, StringComparison.OrdinalIgnoreCase)))
+                {
+                    result.Add((fullUrl, CleanTitle(title), coverUrl));
+                }
+            }
+        }
+
+        return result;
+    }
 }

@@ -88,129 +88,366 @@
                 <!-- [TAB 1 LỚN] TAB SOURCE: MANGA SOURCE, SOURCE HENTAI, NOVEL SOURCE, SEARCH, PASSWORD -->
                 <!-- ========================================================================= -->
                 <TabItem Header="🌐 TAB SOURCE (NGUỒN TRUYỆN)" FontSize="13" FontWeight="Bold">
-                    <Border Background="#0F172A" Padding="8">
-                        <TabControl Background="Transparent" Margin="0">
-
+                    <Border Background="#0F172A" CornerRadius="8" Padding="10" Margin="0,6,0,0">
+                        <TabControl Background="Transparent">
                             <!-- 1.1 MANGA SOURCE (SUBTABS DOMAIN) -->
                             <TabItem Header="📖 Manga Source" FontSize="12" FontWeight="SemiBold">
                                 <Border Background="#131B2E" CornerRadius="6" Padding="10" Margin="0,4,0,0">
                                     <TabControl Background="Transparent">
                                         <!-- TruyenQQ -->
                                         <TabItem Header="truyenqq" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn TruyenQQ (truyenqqto.com / truyenqq.com)" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://truyenqqto.com/truyen-tranh/dai-quan-gia-la-ma-hoang-1823" Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện TruyenQQ..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                            <StackPanel Spacing="10" Margin="0,8,0,0">
+                                                <!-- Toolbar Navigation & Bookmarks -->
                                                 <WrapPanel Orientation="Horizontal">
-                                                    <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
-                                                        <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                    <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="truyenqq" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
-                                                    <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
-                                                        <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                    <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="truyenqq" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainHistoryCommand}" CommandParameter="truyenqq" Background="#1E293B" Foreground="#F59E0B" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="📜 Lịch sử duyệt" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainBookmarksCommand}" CommandParameter="truyenqq" Background="#1E293B" Foreground="#EC4899" Padding="8,4" CornerRadius="4" Margin="0,0,0,4">
+                                                        <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
                                                     </Button>
                                                 </WrapPanel>
+
+                                                <!-- Panel Analyze & Cào hàng loạt theo dải trang -->
+                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔍 Phân Tích Tag / Thể Loại / Tác Giả (Lấy Truyện Hàng Loạt):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainTruyenqqTagUrl}" PlaceholderText="Dán link thể loại / tag / artist TruyenQQ..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="truyenqq" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
+                                                                <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
+                                                            </Button>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                            <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="truyenqq" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4">
+                                                                <TextBlock Text="📥 CÀO DANH SÁCH THEO TRANG" FontSize="10" />
+                                                            </Button>
+                                                            <Button Command="{Binding StopDomainBatchScrapeCommand}" IsEnabled="{Binding IsDomainBatchScraping}" Background="#DC2626" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4" Margin="0,0,0,4">
+                                                                <TextBlock Text="⏹ Dừng cào" FontSize="10" />
+                                                            </Button>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding DomainAnalyzeStatusText}" Foreground="#10B981" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- Nhập Link Truyện Trực Tiếp -->
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="⚡ Hoặc Dán Link Truyện Trực Tiếp Để Tải Từng Bộ:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" />
+                                                    <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện TruyenQQ..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
+                                                            <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                        </Button>
+                                                        <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
+                                                            <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </TabItem>
 
                                         <!-- nettruyenviet10.com -->
                                         <TabItem Header="nettruyenviet10.com" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn NetTruyen Viet 10 (nettruyenviet10.com)" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://nettruyenviet10.com/truyen-tranh/vo-luyen-dinh-phong-1922" Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện NetTruyen Viet 10..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                            <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
-                                                    <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
-                                                        <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                    <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="nettruyen" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
-                                                    <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
-                                                        <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                    <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="nettruyen" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainHistoryCommand}" CommandParameter="nettruyen" Background="#1E293B" Foreground="#F59E0B" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="📜 Lịch sử duyệt" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainBookmarksCommand}" CommandParameter="nettruyen" Background="#1E293B" Foreground="#EC4899" Padding="8,4" CornerRadius="4" Margin="0,0,0,4">
+                                                        <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
                                                     </Button>
                                                 </WrapPanel>
+
+                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔍 Phân Tích Tag / Thể Loại NetTruyen (Lấy Truyện Hàng Loạt):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainNettruyenTagUrl}" PlaceholderText="Dán link thể loại NetTruyen..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="nettruyen" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
+                                                                <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
+                                                            </Button>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                            <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="nettruyen" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4">
+                                                                <TextBlock Text="📥 CÀO DANH SÁCH THEO TRANG" FontSize="10" />
+                                                            </Button>
+                                                            <Button Command="{Binding StopDomainBatchScrapeCommand}" IsEnabled="{Binding IsDomainBatchScraping}" Background="#DC2626" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4" Margin="0,0,0,4">
+                                                                <TextBlock Text="⏹ Dừng cào" FontSize="10" />
+                                                            </Button>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding DomainAnalyzeStatusText}" Foreground="#10B981" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="⚡ Hoặc Dán Link Truyện Trực Tiếp Để Tải Từng Bộ:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" />
+                                                    <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện NetTruyen Viet 10..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
+                                                            <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                        </Button>
+                                                        <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
+                                                            <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </TabItem>
 
                                         <!-- loppytoonn.com -->
                                         <TabItem Header="loppytoonn.com" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn LoppyToon (loppytoonn.com)" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://loppytoonn.com/truyen/buc-thu-ve-trong-dem" Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện LoppyToon..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                            <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
-                                                    <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
-                                                        <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                    <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="loppy" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
-                                                    <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
-                                                        <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                    <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="loppy" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainHistoryCommand}" CommandParameter="loppy" Background="#1E293B" Foreground="#F59E0B" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="📜 Lịch sử duyệt" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainBookmarksCommand}" CommandParameter="loppy" Background="#1E293B" Foreground="#EC4899" Padding="8,4" CornerRadius="4" Margin="0,0,0,4">
+                                                        <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
                                                     </Button>
                                                 </WrapPanel>
+
+                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔍 Phân Tích Tag / Thể Loại LoppyToon (Lấy Truyện Hàng Loạt):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainLoppyTagUrl}" PlaceholderText="Dán link thể loại LoppyToon..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="loppy" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
+                                                                <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
+                                                            </Button>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                            <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="loppy" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4">
+                                                                <TextBlock Text="📥 CÀO DANH SÁCH THEO TRANG" FontSize="10" />
+                                                            </Button>
+                                                            <Button Command="{Binding StopDomainBatchScrapeCommand}" IsEnabled="{Binding IsDomainBatchScraping}" Background="#DC2626" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4" Margin="0,0,0,4">
+                                                                <TextBlock Text="⏹ Dừng cào" FontSize="10" />
+                                                            </Button>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding DomainAnalyzeStatusText}" Foreground="#10B981" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="⚡ Hoặc Dán Link Truyện Trực Tiếp Để Tải Từng Bộ:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" />
+                                                    <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện LoppyToon..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
+                                                            <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                        </Button>
+                                                        <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
+                                                            <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </TabItem>
 
                                         <!-- thuviensach.vn -->
                                         <TabItem Header="thuviensach.vn" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn Thư Viện Sách / Dilib (thuviensach.vn / dilib.vn)" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://thuviensach.vn/truyen-tranh/tham-tu-lung-danh-conan.html" Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện Thư Viện Sách..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                            <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
-                                                    <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
-                                                        <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                    <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="thuviensach" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
-                                                    <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
-                                                        <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                    <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="thuviensach" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainHistoryCommand}" CommandParameter="thuviensach" Background="#1E293B" Foreground="#F59E0B" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="📜 Lịch sử duyệt" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainBookmarksCommand}" CommandParameter="thuviensach" Background="#1E293B" Foreground="#EC4899" Padding="8,4" CornerRadius="4" Margin="0,0,0,4">
+                                                        <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
                                                     </Button>
                                                 </WrapPanel>
-                                            </StackPanel>
-                                        </TabItem>
 
-                                        <!-- loppytoonn.com -->
-                                        <TabItem Header="loppytoonn.com" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn LoppyToonn (loppytoonn.com)" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://loppytoonn.com/comic/..." Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện LoppyToonn..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
-                                                <WrapPanel Orientation="Horizontal">
-                                                    <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
-                                                        <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
-                                                    </Button>
-                                                    <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
-                                                        <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
-                                                    </Button>
-                                                </WrapPanel>
+                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔍 Phân Tích Thể Loại Thư Viện Sách / Dilib:" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainThuviensachTagUrl}" PlaceholderText="Dán link thể loại Thư Viện Sách..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="thuviensach" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
+                                                                <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
+                                                            </Button>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                            <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="thuviensach" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4">
+                                                                <TextBlock Text="📥 CÀO DANH SÁCH THEO TRANG" FontSize="10" />
+                                                            </Button>
+                                                            <Button Command="{Binding StopDomainBatchScrapeCommand}" IsEnabled="{Binding IsDomainBatchScraping}" Background="#DC2626" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4" Margin="0,0,0,4">
+                                                                <TextBlock Text="⏹ Dừng cào" FontSize="10" />
+                                                            </Button>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding DomainAnalyzeStatusText}" Foreground="#10B981" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="⚡ Hoặc Dán Link Truyện Trực Tiếp Để Tải Từng Bộ:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" />
+                                                    <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện Thư Viện Sách..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
+                                                            <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                        </Button>
+                                                        <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
+                                                            <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </TabItem>
 
                                         <!-- mangadex.org -->
                                         <TabItem Header="mangadex.org" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn MangaDex Official (mangadex.org API)" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://mangadex.org/title/a1c7c817-4e59-43b7-9365-09675a149a6f/one-piece" Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện MangaDex..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                            <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
-                                                    <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
-                                                        <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                    <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="mangadex" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
-                                                    <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
-                                                        <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                    <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="mangadex" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainHistoryCommand}" CommandParameter="mangadex" Background="#1E293B" Foreground="#F59E0B" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="📜 Lịch sử duyệt" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainBookmarksCommand}" CommandParameter="mangadex" Background="#1E293B" Foreground="#EC4899" Padding="8,4" CornerRadius="4" Margin="0,0,0,4">
+                                                        <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
                                                     </Button>
                                                 </WrapPanel>
+
+                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔍 Phân Tích Tag / Thể Loại MangaDex Official:" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainMangadexTagUrl}" PlaceholderText="Dán link tag MangaDex..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="mangadex" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
+                                                                <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
+                                                            </Button>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                            <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="mangadex" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4">
+                                                                <TextBlock Text="📥 CÀO DANH SÁCH THEO TRANG" FontSize="10" />
+                                                            </Button>
+                                                            <Button Command="{Binding StopDomainBatchScrapeCommand}" IsEnabled="{Binding IsDomainBatchScraping}" Background="#DC2626" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4" Margin="0,0,0,4">
+                                                                <TextBlock Text="⏹ Dừng cào" FontSize="10" />
+                                                            </Button>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding DomainAnalyzeStatusText}" Foreground="#10B981" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="⚡ Hoặc Dán Link Truyện Trực Tiếp Để Tải Từng Bộ:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" />
+                                                    <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện MangaDex..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
+                                                            <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                        </Button>
+                                                        <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
+                                                            <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </TabItem>
 
                                         <!-- daomeoden -->
                                         <TabItem Header="daomeoden" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn Đảo Mèo Đen (daomeoden.net)" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://daomeoden.net/truyen-tranh/con-gai-cua-boss-47593-0.html" Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện Đảo Mèo Đen..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                            <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
-                                                    <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
-                                                        <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                    <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="daomeoden" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
-                                                    <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
-                                                        <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                    <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="daomeoden" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainHistoryCommand}" CommandParameter="daomeoden" Background="#1E293B" Foreground="#F59E0B" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="📜 Lịch sử duyệt" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainBookmarksCommand}" CommandParameter="daomeoden" Background="#1E293B" Foreground="#EC4899" Padding="8,4" CornerRadius="4" Margin="0,0,0,4">
+                                                        <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
                                                     </Button>
                                                 </WrapPanel>
+
+                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔍 Phân Tích Thể Loại Đảo Mèo Đen:" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainDaomeodenTagUrl}" PlaceholderText="Dán link thể loại Đảo Mèo Đen..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="daomeoden" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
+                                                                <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
+                                                            </Button>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                            <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="daomeoden" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4">
+                                                                <TextBlock Text="📥 CÀO DANH SÁCH THEO TRANG" FontSize="10" />
+                                                            </Button>
+                                                            <Button Command="{Binding StopDomainBatchScrapeCommand}" IsEnabled="{Binding IsDomainBatchScraping}" Background="#DC2626" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4" Margin="0,0,0,4">
+                                                                <TextBlock Text="⏹ Dừng cào" FontSize="10" />
+                                                            </Button>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding DomainAnalyzeStatusText}" Foreground="#10B981" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="⚡ Hoặc Dán Link Truyện Trực Tiếp Để Tải Từng Bộ:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" />
+                                                    <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link truyện Đảo Mèo Đen..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
+                                                            <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                        </Button>
+                                                        <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
+                                                            <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </TabItem>
                                     </TabControl>
@@ -223,97 +460,237 @@
                                     <TabControl Background="Transparent">
                                         <!-- vi-hentai -->
                                         <TabItem Header="vi-hentai" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn Vi-Hentai (vi-hentai.pro / Packer Decoder)" FontWeight="Bold" Foreground="#F43F5E" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://vi-hentai.pro/truyen/..." Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link Vi-Hentai..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
-                                                <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4">
-                                                    <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
-                                                </Button>
+                                            <StackPanel Spacing="10" Margin="0,8,0,0">
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="vihentai" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                    </Button>
+                                                    <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="vihentai" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainHistoryCommand}" CommandParameter="vihentai" Background="#1E293B" Foreground="#F59E0B" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="📜 Lịch sử duyệt" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainBookmarksCommand}" CommandParameter="vihentai" Background="#1E293B" Foreground="#EC4899" Padding="8,4" CornerRadius="4" Margin="0,0,0,4">
+                                                        <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
+                                                    </Button>
+                                                </WrapPanel>
+
+                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔍 Phân Tích Thể Loại Vi-Hentai (Lấy Truyện Hàng Loạt):" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainVihentaiTagUrl}" PlaceholderText="Dán link thể loại Vi-Hentai..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="vihentai" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
+                                                                <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
+                                                            </Button>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                            <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="vihentai" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4">
+                                                                <TextBlock Text="📥 CÀO DANH SÁCH THEO TRANG" FontSize="10" />
+                                                            </Button>
+                                                            <Button Command="{Binding StopDomainBatchScrapeCommand}" IsEnabled="{Binding IsDomainBatchScraping}" Background="#DC2626" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4" Margin="0,0,0,4">
+                                                                <TextBlock Text="⏹ Dừng cào" FontSize="10" />
+                                                            </Button>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding DomainAnalyzeStatusText}" Foreground="#10B981" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="⚡ Hoặc Dán Link Truyện Trực Tiếp Để Tải Từng Bộ:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" />
+                                                    <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link Vi-Hentai..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
+                                                            <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                        </Button>
+                                                        <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
+                                                            <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </TabItem>
 
                                         <!-- damconuong.shop -->
                                         <TabItem Header="damconuong.shop" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn Dâm Cô Nương (damconuong.shop)" FontWeight="Bold" Foreground="#F43F5E" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://damconuong.shop/truyen/..." Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link Dâm Cô Nương..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
-                                                <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4">
-                                                    <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
-                                                </Button>
+                                            <StackPanel Spacing="10" Margin="0,8,0,0">
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="damconuong" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                    </Button>
+                                                    <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="damconuong" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainHistoryCommand}" CommandParameter="damconuong" Background="#1E293B" Foreground="#F59E0B" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="📜 Lịch sử duyệt" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainBookmarksCommand}" CommandParameter="damconuong" Background="#1E293B" Foreground="#EC4899" Padding="8,4" CornerRadius="4" Margin="0,0,0,4">
+                                                        <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
+                                                    </Button>
+                                                </WrapPanel>
+
+                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔍 Phân Tích Thể Loại Dâm Cô Nương:" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainDamconuongTagUrl}" PlaceholderText="Dán link thể loại Dâm Cô Nương..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="damconuong" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
+                                                                <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
+                                                            </Button>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                            <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="damconuong" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4">
+                                                                <TextBlock Text="📥 CÀO DANH SÁCH THEO TRANG" FontSize="10" />
+                                                            </Button>
+                                                            <Button Command="{Binding StopDomainBatchScrapeCommand}" IsEnabled="{Binding IsDomainBatchScraping}" Background="#DC2626" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4" Margin="0,0,0,4">
+                                                                <TextBlock Text="⏹ Dừng cào" FontSize="10" />
+                                                            </Button>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding DomainAnalyzeStatusText}" Foreground="#10B981" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="⚡ Hoặc Dán Link Truyện Trực Tiếp Để Tải Từng Bộ:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" />
+                                                    <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link Dâm Cô Nương..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
+                                                            <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                        </Button>
+                                                        <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
+                                                            <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </TabItem>
 
                                         <!-- sayhentai -->
                                         <TabItem Header="sayhentai" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn SayHentai / Truyenggvn (sayhentai.cx)" FontWeight="Bold" Foreground="#F43F5E" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://sayhentai.cx/..." Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link SayHentai..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
-                                                <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4">
-                                                    <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
-                                                </Button>
-                                            </StackPanel>
-                                        </TabItem>
+                                            <StackPanel Spacing="10" Margin="0,8,0,0">
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="sayhentai" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                    </Button>
+                                                    <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="sayhentai" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainHistoryCommand}" CommandParameter="sayhentai" Background="#1E293B" Foreground="#F59E0B" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="📜 Lịch sử duyệt" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainBookmarksCommand}" CommandParameter="sayhentai" Background="#1E293B" Foreground="#EC4899" Padding="8,4" CornerRadius="4" Margin="0,0,0,4">
+                                                        <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
+                                                    </Button>
+                                                </WrapPanel>
 
-                                        <!-- HENTAIFORCE -->
-                                        <TabItem Header="HENTAIFORCE" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn HentaiForce (hentaiforce.net)" FontWeight="Bold" Foreground="#F43F5E" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://hentaiforce.net/view/..." Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link HentaiForce..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
-                                                <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4">
-                                                    <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
-                                                </Button>
-                                            </StackPanel>
-                                        </TabItem>
+                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔍 Phân Tích Thể Loại SayHentai:" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainSayhentaiTagUrl}" PlaceholderText="Dán link thể loại SayHentai..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="sayhentai" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
+                                                                <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
+                                                            </Button>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                            <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="sayhentai" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4">
+                                                                <TextBlock Text="📥 CÀO DANH SÁCH THEO TRANG" FontSize="10" />
+                                                            </Button>
+                                                            <Button Command="{Binding StopDomainBatchScrapeCommand}" IsEnabled="{Binding IsDomainBatchScraping}" Background="#DC2626" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4" Margin="0,0,0,4">
+                                                                <TextBlock Text="⏹ Dừng cào" FontSize="10" />
+                                                            </Button>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding DomainAnalyzeStatusText}" Foreground="#10B981" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Border>
 
-                                        <!-- hitomi.la -->
-                                        <TabItem Header="hitomi.la" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn Hitomi (hitomi.la)" FontWeight="Bold" Foreground="#F43F5E" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://hitomi.la/reader/..." Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link Hitomi..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
-                                                <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4">
-                                                    <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
-                                                </Button>
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="⚡ Hoặc Dán Link Truyện Trực Tiếp Để Tải Từng Bộ:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" />
+                                                    <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link SayHentai..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
+                                                            <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                        </Button>
+                                                        <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
+                                                            <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </TabItem>
 
                                         <!-- hentai2read -->
                                         <TabItem Header="hentai2read" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn Hentai2Read (hentai2read.com)" FontWeight="Bold" Foreground="#F43F5E" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://hentai2read.com/..." Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link Hentai2Read..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
-                                                <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4">
-                                                    <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
-                                                </Button>
-                                            </StackPanel>
-                                        </TabItem>
+                                            <StackPanel Spacing="10" Margin="0,8,0,0">
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="hentai2read" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                    </Button>
+                                                    <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="hentai2read" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainHistoryCommand}" CommandParameter="hentai2read" Background="#1E293B" Foreground="#F59E0B" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
+                                                        <TextBlock Text="📜 Lịch sử duyệt" FontSize="10" />
+                                                    </Button>
+                                                    <Button Command="{Binding OpenDomainBookmarksCommand}" CommandParameter="hentai2read" Background="#1E293B" Foreground="#EC4899" Padding="8,4" CornerRadius="4" Margin="0,0,0,4">
+                                                        <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
+                                                    </Button>
+                                                </WrapPanel>
 
-                                        <!-- hentaiera -->
-                                        <TabItem Header="hentaiera" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn HentaiEra (hentaiera.com)" FontWeight="Bold" Foreground="#F43F5E" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://hentaiera.com/gallery/..." Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link HentaiEra..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
-                                                <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4">
-                                                    <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
-                                                </Button>
-                                            </StackPanel>
-                                        </TabItem>
+                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔍 Phân Tích Thể Loại Hentai2Read:" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainHentai2readTagUrl}" PlaceholderText="Dán link thể loại Hentai2Read..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="hentai2read" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
+                                                                <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
+                                                            </Button>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Width="70" Height="26" FontSize="10" />
+                                                                <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                            <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="hentai2read" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4">
+                                                                <TextBlock Text="📥 CÀO DANH SÁCH THEO TRANG" FontSize="10" />
+                                                            </Button>
+                                                            <Button Command="{Binding StopDomainBatchScrapeCommand}" IsEnabled="{Binding IsDomainBatchScraping}" Background="#DC2626" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4" Margin="0,0,0,4">
+                                                                <TextBlock Text="⏹ Dừng cào" FontSize="10" />
+                                                            </Button>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding DomainAnalyzeStatusText}" Foreground="#10B981" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Border>
 
-                                        <!-- e-hentai.org -->
-                                        <TabItem Header="e-hentai.org" FontSize="11">
-                                            <StackPanel Spacing="8" Margin="0,8,0,0">
-                                                <TextBlock Text="Nguồn E-Hentai / ExHentai (e-hentai.org)" FontWeight="Bold" Foreground="#F43F5E" FontSize="12" />
-                                                <TextBlock Text="Ví dụ: https://e-hentai.org/g/..." Foreground="#94A3B8" FontSize="11" />
-                                                <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link E-Hentai..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
-                                                <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4">
-                                                    <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
-                                                </Button>
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="⚡ Hoặc Dán Link Truyện Trực Tiếp Để Tải Từng Bộ:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" />
+                                                    <TextBox Text="{Binding UrlInput}" PlaceholderText="Dán link Hentai2Read..." Height="34" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding GetLinkCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="12,5" CornerRadius="4" Margin="0,0,6,0">
+                                                            <TextBlock Text="🔍 LẤY LINK &amp; XEM TIẾN TRÌNH" FontSize="11" />
+                                                        </Button>
+                                                        <Button Command="{Binding GetMoreCommand}" Background="#059669" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4">
+                                                            <TextBlock Text="➕ Thêm vào Queue" FontSize="11" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </TabItem>
                                     </TabControl>
@@ -404,7 +781,7 @@
                 </TabItem>
 
                 <!-- ========================================================================= -->
-                <!-- [TAB 2 LỚN] TAB DOWNLOAD: DOWNLOAD MANGA, SPLIT/MERGE, SPLIT IMAGES, NOVEL -->
+                <!-- [TAB 2 LỚN] TAB DOWNLOAD: DOWNLOAD MANGA, SCAN, LOGS -->
                 <!-- ========================================================================= -->
                 <TabItem Header="📥 TAB DOWNLOAD (TẢI VỀ &amp; QUẢN LÝ)" FontSize="13" FontWeight="Bold">
                     <Grid RowDefinitions="Auto, *">
@@ -433,26 +810,44 @@
                                     </Button>
                                 </WrapPanel>
 
-                                <!-- Thư mục lưu hiện tại -->
-                                <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,3" Margin="0,0,0,4">
-                                    <Grid ColumnDefinitions="Auto, *, Auto">
-                                        <TextBlock Grid.Column="0" Text="📁 Lưu tại:" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center" Margin="0,0,6,0" />
-                                        <TextBlock Grid.Column="1" Text="{Binding DownloadPathText}" FontSize="10" Foreground="#38BDF8" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                        <Button Grid.Column="2" Command="{Binding CopyDownloadPathCommand}" Background="#1E293B" Foreground="#94A3B8" Padding="5,1" FontSize="9" CornerRadius="3">
-                                            <TextBlock Text="📋 Chép" />
-                                        </Button>
-                                    </Grid>
+                                <!-- Thư mục lưu hiện tại (Bố cục 2 tầng xem Full Path trên Android) -->
+                                <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,6" Margin="0,0,0,6">
+                                    <StackPanel Spacing="3">
+                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="📁 Thư mục lưu truyện hiện tại:" FontSize="10" Foreground="#94A3B8" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                            <Button Command="{Binding CopyDownloadPathCommand}" Background="#1E293B" Foreground="#38BDF8" Padding="6,2" FontSize="9" CornerRadius="3" Margin="0,0,6,0">
+                                                <TextBlock Text="📋 Chép đường dẫn" />
+                                            </Button>
+                                        </WrapPanel>
+                                        <TextBox Text="{Binding DownloadPathText}" IsReadOnly="True" Background="#0B0F19" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Height="28" CornerRadius="3" BorderBrush="#1E293B" BorderThickness="1" VerticalContentAlignment="Center" Padding="6,2" />
+                                    </StackPanel>
                                 </Border>
 
-                                <!-- Toggles Checkboxes -->
-                                <WrapPanel Grid.Row="2" Orientation="Horizontal">
-                                    <CheckBox IsChecked="{Binding IsAutoDownload}" Content="⚡ Tự động tải" FontSize="10" Foreground="#D1D5DB" Margin="0,0,10,0" />
-                                    <CheckBox IsChecked="{Binding IsAutoRetry}" Content="🔁 Tự thử lại" FontSize="10" Foreground="#D1D5DB" Margin="0,0,10,0" />
-                                    <CheckBox IsChecked="{Binding IsCompactRow}" Content="📏 Nén dòng" FontSize="10" Foreground="#D1D5DB" Margin="0,0,10,0" />
-                                    <CheckBox IsChecked="{Binding IsAutoSplitLongImages}" Content="✂️ Tự cắt ảnh dài" FontSize="10" Foreground="#F43F5E" FontWeight="SemiBold" Margin="0,0,6,0" ToolTip.Tip="Tự động cắt ảnh có chiều cao lớn hơn ngưỡng chỉ định thành các mảnh nhỏ trong khi tải" />
-                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding IsAutoSplitLongImages}">
+                                <!-- Toggles Checkboxes, Concurrency & Threads -->
+                                <WrapPanel Grid.Row="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <!-- Số truyện tải cùng lúc -->
+                                    <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,3" Margin="0,0,8,4" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="⚡ Số truyện cùng lúc:" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <NumericUpDown Value="{Binding ConcurrentComicDownloads}" Minimum="1" Maximum="8" Increment="1" FormatString="0" Width="80" Height="26" FontSize="10" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Số luồng tải ảnh -->
+                                    <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,3" Margin="0,0,8,4" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="🧵 Số luồng tải ảnh:" Foreground="#10B981" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <NumericUpDown Value="{Binding ImageDownloadThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="80" Height="26" FontSize="10" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <CheckBox IsChecked="{Binding IsAutoDownload}" Content="⚡ Tự động tải" FontSize="10" Foreground="#D1D5DB" Margin="0,0,10,4" />
+                                    <CheckBox IsChecked="{Binding IsAutoRetry}" Content="🔁 Tự thử lại" FontSize="10" Foreground="#D1D5DB" Margin="0,0,10,4" />
+                                    <CheckBox IsChecked="{Binding IsCompactRow}" Content="📏 Nén dòng" FontSize="10" Foreground="#D1D5DB" Margin="0,0,10,4" />
+                                    <CheckBox IsChecked="{Binding IsAutoSplitLongImages}" Content="✂️ Tự cắt ảnh dài" FontSize="10" Foreground="#F43F5E" FontWeight="SemiBold" Margin="0,0,6,4" ToolTip.Tip="Tự động cắt ảnh có chiều cao lớn hơn ngưỡng chỉ định thành các mảnh nhỏ trong khi tải" />
+                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding IsAutoSplitLongImages}" Margin="0,0,0,4">
                                         <TextBlock Text="Cao:" FontSize="10" Foreground="#F43F5E" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                        <NumericUpDown Value="{Binding AutoSplitHeight}" Minimum="500" Maximum="50000" Increment="500" FormatString="0" Width="125" Height="26" FontSize="11" Foreground="#38BDF8" Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                        <NumericUpDown Value="{Binding AutoSplitHeight}" Minimum="500" Maximum="50000" Increment="500" FormatString="0" Width="120" Height="26" FontSize="10" Foreground="#38BDF8" Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                         <TextBlock Text="px" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </WrapPanel>
@@ -483,13 +878,13 @@
                                         <ItemsControl ItemsSource="{Binding ComicBooks}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="8,5">
+                                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="8,6">
                                                         <Grid ColumnDefinitions="Auto, Auto, *, Auto" VerticalAlignment="Center">
                                                             <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" Margin="0,0,6,0" VerticalAlignment="Center" />
                                                             <TextBlock Grid.Column="1" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" Width="24" VerticalAlignment="Center" />
 
-                                                            <!-- Thông tin truyện -->
-                                                            <StackPanel Grid.Column="2" Margin="4,0,8,0" VerticalAlignment="Center">
+                                                            <!-- Thông tin truyện & Tiến trình -->
+                                                            <StackPanel Grid.Column="2" Margin="4,0,8,0" VerticalAlignment="Center" Spacing="3">
                                                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="11" TextTrimming="CharacterEllipsis" />
                                                                     <Border IsVisible="{Binding IsDuplicate}" Background="#78350F" CornerRadius="2" Padding="3,1" VerticalAlignment="Center">
@@ -497,15 +892,27 @@
                                                                     </Border>
                                                                 </StackPanel>
 
-                                                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
-                                                                    <Border Background="#1E293B" CornerRadius="2" Padding="3,1">
+                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <Border Background="#1E293B" CornerRadius="2" Padding="4,1" Margin="0,0,6,2">
                                                                         <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="SemiBold" />
                                                                     </Border>
-                                                                    <TextBlock Text="{Binding TotalChapters, StringFormat='{}{0} chaps'}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" />
-                                                                    <TextBlock Text="{Binding Status}" Foreground="#FCD34D" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                                                </StackPanel>
+                                                                    <TextBlock Text="{Binding TotalChapters, StringFormat='{}{0} chaps'}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                    <TextBlock Text="{Binding Status}" Foreground="#FCD34D" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                    <!-- Chuỗi chi tiết tiến trình: Chương X/Y (Trang A/B) • Z.Z% -->
+                                                                    <TextBlock Text="{Binding DetailProgressText}" Foreground="#34D399" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                </WrapPanel>
 
-                                                                <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100" Height="2" CornerRadius="1" Foreground="#38BDF8" Background="#0F172A" Margin="0,2,0,0" />
+                                                                <!-- Ô chọn Chapter (hỗ trợ chữ, số nguyên, số thập phân: vd 1-10, 15.5, oneshot) -->
+                                                                <Grid ColumnDefinitions="Auto, *">
+                                                                    <TextBlock Grid.Column="0" Text="📑 Chọn chap:" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                                    <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="VD: 1-10, 15.5, oneshot (để trống = tải hết)" FontSize="9" Height="22" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="4,1" />
+                                                                </Grid>
+
+                                                                <!-- Thanh Progress Bar hiển thị số % -->
+                                                                <Grid ColumnDefinitions="*, Auto" Margin="0,2,0,0">
+                                                                    <ProgressBar Grid.Column="0" Value="{Binding ProgressPercentage}" Maximum="100" Height="6" CornerRadius="3" Foreground="#38BDF8" Background="#0F172A" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                                    <TextBlock Grid.Column="1" Text="{Binding ProgressPercentageText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="9" VerticalAlignment="Center" />
+                                                                </Grid>
                                                             </StackPanel>
 
                                                             <!-- Nút thao tác hàng -->
@@ -622,16 +1029,133 @@
 
                             <!-- CHILD TAB 3.1: FOLDER TOOLS (SPLIT / MERGE) -->
                             <TabItem Header="📁 Split / Merge Folder" FontSize="12" FontWeight="SemiBold">
-                                <Border Background="#131B2E" CornerRadius="6" Padding="12" Margin="0,4,0,0">
-                                    <StackPanel Spacing="8" MaxWidth="550" HorizontalAlignment="Left">
-                                        <TextBlock Text="Công cụ Gộp / Tách Thư mục Truyện" FontWeight="Bold" Foreground="#38BDF8" FontSize="13" />
-                                        <TextBlock Text="Chuyển đổi cấu trúc thư mục giữa 'Single comic' (root/book/chapter) và 'Multi-comic' (root/book-chapter)." Foreground="#94A3B8" FontSize="11" />
-                                        <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                            <Button Content="🔄 Chuyển sang Single comic (Gộp)" Background="#0284C7" Foreground="#FFFFFF" Padding="10,5" CornerRadius="4" Margin="0,0,8,0" />
-                                            <Button Content="📂 Chuyển sang Multi-comic (Tách)" Background="#1E293B" Foreground="#38BDF8" Padding="10,5" CornerRadius="4" />
-                                        </WrapPanel>
-                                    </StackPanel>
-                                </Border>
+                                <Grid RowDefinitions="Auto, *">
+                                    <!-- Panel cấu hình tác vụ Split / Merge -->
+                                    <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                                        <StackPanel Spacing="12">
+                                            <!-- KHU VỰC 1: TÁCH / GỘP THEO SỐ LƯỢNG CHAPTER -->
+                                            <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                <StackPanel Spacing="8">
+                                                    <TextBlock Text="1. Tách / Gộp Thư Mục Theo Số Lượng Chapter (Ví dụ: Nhóm 200 chap/folder)" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" />
+                                                    
+                                                    <!-- Thư mục gốc theo Chapter (Bố cục 2 tầng xem Full Path trên Android) -->
+                                                    <StackPanel Spacing="3">
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="📁 Thư mục truyện gốc (Root Single Comic):" Foreground="#94A3B8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                            <Button Command="{Binding BrowseFolderSplitRootCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                            <Button Command="{Binding OpenFolderSplitRootCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục trên thiết bị" />
+                                                        </WrapPanel>
+                                                        <TextBox Text="{Binding FolderSplitRootPath}" PlaceholderText="Chọn thư mục truyện gốc cần tách hoặc gộp..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                    </StackPanel>
+
+                                                    <!-- Cấu hình số chapter mỗi nhóm & kiểu tách -->
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,3" Margin="0,0,8,4" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                                <TextBlock Text="Số chap/folder:" Foreground="#E2E8F0" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding FolderSplitGroupSize}" Minimum="1" Maximum="5000" Increment="50" FormatString="0" Width="85" Height="26" FontSize="10" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                            </StackPanel>
+                                                        </Border>
+
+                                                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,3" Margin="0,0,8,4" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                                <TextBlock Text="Kiểu tên folder:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <ComboBox SelectedItem="{Binding FolderSplitType}" Width="160" Height="26" FontSize="10">
+                                                                    <x:String>chapter</x:String>
+                                                                    <x:String>book-chapter</x:String>
+                                                                </ComboBox>
+                                                            </StackPanel>
+                                                        </Border>
+
+                                                        <CheckBox IsChecked="{Binding IsMergeRemainderFolder}" Content="Gộp cả nhóm lẻ còn lại" FontSize="10" Foreground="#D1D5DB" Margin="0,0,8,4" />
+
+                                                        <Button Command="{Binding SplitByChapterCountCommand}" IsEnabled="{Binding !IsFolderToolRunning}"
+                                                                Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="12,5" Height="28" CornerRadius="4" Margin="0,0,6,4">
+                                                            <TextBlock Text="📂 TÁCH THEO SỐ LƯỢNG CHAPTER" />
+                                                        </Button>
+
+                                                        <Button Command="{Binding MergeByChapterCountCommand}" IsEnabled="{Binding !IsFolderToolRunning}"
+                                                                Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="12,5" Height="28" CornerRadius="4" Margin="0,0,0,4">
+                                                            <TextBlock Text="🔄 GỘP CHAPTER VỀ GỐC" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- KHU VỰC 2: TÁCH / GỘP THEO BẢNG CHỮ CÁI (ALPHABET) -->
+                                            <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                <StackPanel Spacing="8">
+                                                    <TextBlock Text="2. Tách / Gộp Thư Mục Theo Bảng Chữ Cái (Alphabet A-G, H-P, Q-Z...)" FontWeight="Bold" Foreground="#F59E0B" FontSize="12" />
+
+                                                    <!-- Thư mục gốc theo Alphabet (Bố cục 2 tầng xem Full Path trên Android) -->
+                                                    <StackPanel Spacing="3">
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="📁 Thư mục gốc chứa nhiều bộ truyện (Multi-Comic Root):" Foreground="#94A3B8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                            <Button Command="{Binding BrowseFolderAlphabetRootCommand}" Content="📁 Chọn Thư Mục" Background="#D97706" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                            <Button Command="{Binding OpenFolderAlphabetRootCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#F59E0B" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục trên thiết bị" />
+                                                        </WrapPanel>
+                                                        <TextBox Text="{Binding FolderAlphabetRootPath}" PlaceholderText="Chọn thư mục chứa nhiều bộ truyện cần phân loại theo chữ cái..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#F59E0B" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                    </StackPanel>
+
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <CheckBox IsChecked="{Binding IsAlphabetIgnoreLeadingTags}" Content="Bỏ qua tiền tố tag [...]" FontSize="10" Foreground="#D1D5DB" Margin="0,0,10,4" />
+
+                                                        <!-- Quản lý dải chữ cái -->
+                                                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,3" Margin="0,0,8,4" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                                <TextBlock Text="Dải:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <TextBox Text="{Binding NewAlphabetRangeInput}" PlaceholderText="VD: A-C" Width="60" Height="24" FontSize="10" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="4,1" />
+                                                                <Button Command="{Binding AddAlphabetRangeCommand}" Content="➕ Thêm" Background="#1E293B" Foreground="#38BDF8" FontSize="9" Padding="6,2" CornerRadius="3" />
+                                                            </StackPanel>
+                                                        </Border>
+
+                                                        <Button Command="{Binding SplitByAlphabetCommand}" IsEnabled="{Binding !IsFolderToolRunning}"
+                                                                Background="#D97706" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="12,5" Height="28" CornerRadius="4" Margin="0,0,6,4">
+                                                            <TextBlock Text="🔤 TÁCH THEO ALPHABET" />
+                                                        </Button>
+
+                                                        <Button Command="{Binding MergeByAlphabetCommand}" IsEnabled="{Binding !IsFolderToolRunning}"
+                                                                Background="#4F46E5" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="12,5" Height="28" CornerRadius="4" Margin="0,0,6,4">
+                                                            <TextBlock Text="🔄 GỘP TỪ ALPHABET VỀ GỐC" />
+                                                        </Button>
+
+                                                        <Button Command="{Binding StopFolderToolCommand}" IsEnabled="{Binding IsFolderToolRunning}"
+                                                                Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="10,5" Height="28" CornerRadius="4" Margin="0,0,6,4">
+                                                            <TextBlock Text="⏹ DỪNG" />
+                                                        </Button>
+
+                                                        <Button Command="{Binding ClearFolderToolLogsCommand}"
+                                                                Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="8,5" Height="28" CornerRadius="4" Margin="0,0,0,4">
+                                                            <TextBlock Text="🧹 Xóa log" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Thanh tiến trình & Trạng thái -->
+                                            <StackPanel Spacing="4">
+                                                <ProgressBar Value="{Binding FolderToolProgress}" Maximum="100" Height="6" CornerRadius="3" Foreground="#38BDF8" Background="#0F172A" />
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding FolderToolProgressText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" Margin="0,0,10,0" />
+                                                    <TextBlock Text="{Binding FolderToolStatusText}" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Log chi tiết -->
+                                    <Border Grid.Row="1" Background="#0A0E17" Padding="6" MinHeight="160">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False">
+                                            <ItemsControl ItemsSource="{Binding FolderToolLogs}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding}" Foreground="#CBD5E1" FontSize="10" FontFamily="Consolas, Monospace" Margin="2,1" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
                             </TabItem>
 
                             <!-- CHILD TAB 3.2: SPLIT LONG IMAGES (CẮT ẢNH DÀI) -->
@@ -640,14 +1164,14 @@
                                     <!-- Panel cấu hình -->
                                     <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                                         <StackPanel Spacing="10">
-                                            <!-- Chọn thư mục -->
-                                            <StackPanel Spacing="4">
-                                                <TextBlock Text="📁 Thư mục chứa ảnh dài để cắt:" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" />
-                                                <Grid ColumnDefinitions="*, Auto, Auto">
-                                                    <TextBox Grid.Column="0" Text="{Binding ManualSplitFolderPath}" PlaceholderText="Chọn thư mục chứa ảnh dài để cắt..." Height="34" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" Padding="8,4" />
-                                                    <Button Grid.Column="1" Command="{Binding BrowseManualSplitFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" Margin="0,0,6,0" />
-                                                    <Button Grid.Column="2" Command="{Binding OpenManualSplitFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" ToolTip.Tip="Mở thư mục trên thiết bị" />
-                                                </Grid>
+                                            <!-- Chọn thư mục (Bố cục 2 tầng xem Full Path trên Android) -->
+                                            <StackPanel Spacing="3">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="📁 Thư mục chứa ảnh dài để cắt:" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowseManualSplitFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                    <Button Command="{Binding OpenManualSplitFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục trên thiết bị" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding ManualSplitFolderPath}" PlaceholderText="Chọn thư mục chứa ảnh dài để cắt..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
                                             </StackPanel>
 
                                             <!-- Cấu hình Height, Quality, Threads & Nút Bắt đầu -->
@@ -725,30 +1249,28 @@
                                     <!-- Panel cấu hình bộ lọc & tác vụ -->
                                     <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                                         <StackPanel Spacing="10">
-                                            <!-- Hàng 1: Thư mục nguồn (Input Folder) -->
-                                            <StackPanel Spacing="4">
-                                                <TextBlock Text="📥 Thư mục nguồn chứa ảnh (hỗ trợ quét đệ quy đa tầng):" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" />
-                                                <Grid ColumnDefinitions="*, Auto, Auto">
-                                                    <TextBox Grid.Column="0" Text="{Binding EnhanceFolderPath}" PlaceholderText="Chọn thư mục nguồn chứa ảnh..." Height="34" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" Padding="8,4" />
-                                                    <Button Grid.Column="1" Command="{Binding BrowseEnhanceFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" Margin="0,0,6,0" />
-                                                    <Button Grid.Column="2" Command="{Binding OpenEnhanceFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
-                                                </Grid>
+                                            <!-- Hàng 1: Thư mục nguồn (Bố cục 2 tầng xem Full Path trên Android) -->
+                                            <StackPanel Spacing="3">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="📥 Thư mục nguồn chứa ảnh (hỗ trợ quét đệ quy đa tầng):" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowseEnhanceFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                    <Button Command="{Binding OpenEnhanceFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding EnhanceFolderPath}" PlaceholderText="Chọn thư mục nguồn chứa ảnh..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
                                             </StackPanel>
 
-                                            <!-- Hàng 2: Thư mục đích (Output Folder) & Tùy chọn ghi đè -->
-                                            <StackPanel Spacing="4">
-                                                <Grid ColumnDefinitions="*, Auto">
-                                                    <TextBlock Grid.Column="0" Text="📤 Thư mục lưu ảnh đã xử lý:" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
-                                                    <CheckBox Grid.Column="1" IsChecked="{Binding EnhanceOverwriteOriginal}" Content="⚡ Ghi đè file gốc" Foreground="#F59E0B" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" ToolTip.Tip="Nếu chọn, ảnh sẽ được ghi đè trực tiếp vào vị trí gốc. Nếu bỏ chọn, ảnh lưu vào thư mục đích." />
-                                                </Grid>
-                                                <Grid ColumnDefinitions="*, Auto, Auto">
-                                                    <TextBox Grid.Column="0" Text="{Binding EnhanceOutputFolderPath}" IsEnabled="{Binding !EnhanceOverwriteOriginal}" PlaceholderText="Chọn thư mục lưu ảnh (mặc định: thư mục con 'Enhanced' bên trong nguồn)..." Height="34" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" Padding="8,4" />
-                                                    <Button Grid.Column="1" Command="{Binding BrowseEnhanceOutputFolderCommand}" IsEnabled="{Binding !EnhanceOverwriteOriginal}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" Margin="0,0,6,0" />
-                                                    <Button Grid.Column="2" Command="{Binding OpenEnhanceOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu ảnh trên thiết bị" />
-                                                </Grid>
+                                            <!-- Hàng 2: Thư mục đích (Bố cục 2 tầng xem Full Path trên Android) & Tùy chọn ghi đè -->
+                                            <StackPanel Spacing="3">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="📤 Thư mục lưu ảnh đã xử lý:" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <CheckBox IsChecked="{Binding EnhanceOverwriteOriginal}" Content="⚡ Ghi đè file gốc" Foreground="#F59E0B" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" ToolTip.Tip="Nếu chọn, ảnh sẽ được ghi đè trực tiếp vào vị trí gốc. Nếu bỏ chọn, ảnh lưu vào thư mục đích." Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowseEnhanceOutputFolderCommand}" IsEnabled="{Binding !EnhanceOverwriteOriginal}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                    <Button Command="{Binding OpenEnhanceOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu ảnh trên thiết bị" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding EnhanceOutputFolderPath}" IsEnabled="{Binding !EnhanceOverwriteOriginal}" PlaceholderText="Chọn thư mục lưu ảnh (mặc định: thư mục con 'Enhanced' bên trong nguồn)..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
                                             </StackPanel>
 
-                                            <!-- Hàng 3: Bộ 5 thông số (Sliders & Numeric) -->
+                                            <!-- Hàng 3: Bộ 5 thông số (Sliders & Numeric - Tăng kích thước Quality +15px và CPU Threads +15px) -->
                                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <!-- Contrast -->
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,8,6" MinHeight="68" VerticalAlignment="Center">
@@ -805,22 +1327,22 @@
                                                     </StackPanel>
                                                 </Border>
 
-                                                <!-- Quality -->
+                                                <!-- Quality: Tăng thêm 15px lên 110px -->
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,8,6" MinHeight="68" VerticalAlignment="Center">
                                                     <StackPanel Spacing="4" VerticalAlignment="Center">
                                                         <TextBlock Text="Chất lượng ảnh:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
                                                         <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                                            <NumericUpDown Value="{Binding EnhanceQuality}" Minimum="10" Maximum="100" Increment="5" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                            <NumericUpDown Value="{Binding EnhanceQuality}" Minimum="10" Maximum="100" Increment="5" FormatString="0" Width="110" Height="28" FontSize="11" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             <TextBlock Text="%" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </Border>
 
-                                                <!-- Threads -->
+                                                <!-- Threads: Tăng thêm 15px lên 100px -->
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,8,6" MinHeight="68" VerticalAlignment="Center">
                                                     <StackPanel Spacing="4" VerticalAlignment="Center">
                                                         <TextBlock Text="Số luồng CPU:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
-                                                        <NumericUpDown Value="{Binding EnhanceThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="85" Height="28" FontSize="11" Foreground="#F59E0B" Background="#0B0F19" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                        <NumericUpDown Value="{Binding EnhanceThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="100" Height="28" FontSize="11" Foreground="#F59E0B" Background="#0B0F19" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                     </StackPanel>
                                                 </Border>
 
@@ -884,7 +1406,7 @@
                                         <!-- Khung so sánh trực quan Trước & Sau (Live Preview có Zoom, Pan, Navigation & Stats) -->
                                         <Border Grid.Row="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="10,8">
                                             <StackPanel Spacing="6">
-                                                <!-- Toolbar Preview: Sử dụng WrapPanel chống overlap/tràn mép -->
+                                                <!-- Toolbar Preview: Sử dụng WrapPanel chống overlap/tràn mép trên Android -->
                                                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                     <!-- Cụm 1: Tiêu đề & Duyệt ảnh Previous / Next to rõ cho Android & Desktop -->
                                                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,12,6">
@@ -909,26 +1431,26 @@
                                                         <TextBlock Text="{Binding EnhanceImageFileNameText}" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" MaxWidth="160" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding EnhanceImageFileNameText}" Margin="4,0,0,0" />
                                                     </StackPanel>
 
-                                                    <!-- Cụm 2: Presets nhanh -->
-                                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,12,6">
-                                                        <TextBlock Text="⚡ Presets:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" Margin="0,0,2,0" />
-                                                        <Button Command="{Binding ApplyPresetDefaultCommand}" Content="🔘 Gốc" Background="#1E293B" Foreground="#E2E8F0" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Thông số gốc" />
-                                                        <Button Command="{Binding ApplyPresetOldScanCommand}" Content="📜 Khử ố scan" Background="#854D0E" Foreground="#FEF08A" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Làm trắng nền giấy scan cũ" />
-                                                        <Button Command="{Binding ApplyPresetWebtoonCommand}" Content="🎨 Webtoon" Background="#831843" Foreground="#FBCFE8" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Rực rỡ màu sắc webtoon" />
-                                                        <Button Command="{Binding ApplyPresetNightCommand}" Content="🌙 Đọc đêm" Background="#1E1B4B" Foreground="#C7D2FE" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Hạ sáng dịu mắt" />
-                                                    </StackPanel>
+                                                    <!-- Cụm 2: Presets nhanh dạng WrapPanel chống tràn mép -->
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,6">
+                                                        <TextBlock Text="⚡ Presets:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                        <Button Command="{Binding ApplyPresetDefaultCommand}" Content="🔘 Gốc" Background="#1E293B" Foreground="#E2E8F0" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Thông số gốc" Margin="0,0,4,2" />
+                                                        <Button Command="{Binding ApplyPresetOldScanCommand}" Content="📜 Khử ố scan" Background="#854D0E" Foreground="#FEF08A" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Làm trắng nền giấy scan cũ" Margin="0,0,4,2" />
+                                                        <Button Command="{Binding ApplyPresetWebtoonCommand}" Content="🎨 Webtoon" Background="#831843" Foreground="#FBCFE8" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Rực rỡ màu sắc webtoon" Margin="0,0,4,2" />
+                                                        <Button Command="{Binding ApplyPresetNightCommand}" Content="🌙 Đọc đêm" Background="#1E1B4B" Foreground="#C7D2FE" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Hạ sáng dịu mắt" Margin="0,0,0,2" />
+                                                    </WrapPanel>
                                                     
                                                     <!-- Cụm 3: Bộ điều khiển Zoom & Nút Mở Cửa Sổ Mới -->
-                                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,0,6">
-                                                        <Button Command="{Binding ResetZoomPreviewCommand}" Content="1:1" Background="#1E293B" Foreground="#10B981" Padding="5,2" FontSize="10" CornerRadius="3" ToolTip.Tip="Tỷ lệ 100%" />
-                                                        <Button Command="{Binding ZoomFitPreviewCommand}" Content="⛶ Fit" Background="#1E293B" Foreground="#F59E0B" Padding="5,2" FontSize="10" CornerRadius="3" ToolTip.Tip="Tự co vừa khung" />
-                                                        <Button Command="{Binding ZoomOutPreviewCommand}" Content="➖" Background="#1E293B" Foreground="#94A3B8" Padding="5,2" FontSize="11" CornerRadius="3" ToolTip.Tip="Thu nhỏ" />
-                                                        <Border Background="#1E293B" CornerRadius="3" Padding="6,2" VerticalAlignment="Center">
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,6">
+                                                        <Button Command="{Binding ResetZoomPreviewCommand}" Content="1:1" Background="#1E293B" Foreground="#10B981" Padding="5,2" FontSize="10" CornerRadius="3" ToolTip.Tip="Tỷ lệ 100%" Margin="0,0,4,0" />
+                                                        <Button Command="{Binding ZoomFitPreviewCommand}" Content="⛶ Fit" Background="#1E293B" Foreground="#F59E0B" Padding="5,2" FontSize="10" CornerRadius="3" ToolTip.Tip="Tự co vừa khung" Margin="0,0,4,0" />
+                                                        <Button Command="{Binding ZoomOutPreviewCommand}" Content="➖" Background="#1E293B" Foreground="#94A3B8" Padding="5,2" FontSize="11" CornerRadius="3" ToolTip.Tip="Thu nhỏ" Margin="0,0,4,0" />
+                                                        <Border Background="#1E293B" CornerRadius="3" Padding="6,2" VerticalAlignment="Center" Margin="0,0,4,0">
                                                             <TextBlock Text="{Binding EnhancePreviewZoomText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" Width="36" TextAlignment="Center" />
                                                         </Border>
-                                                        <Button Command="{Binding ZoomInPreviewCommand}" Content="➕" Background="#1E293B" Foreground="#38BDF8" Padding="5,2" FontSize="11" CornerRadius="3" ToolTip.Tip="Phóng to" />
-                                                        <Button Command="{Binding OpenComparisonWindowCommand}" IsVisible="{Binding IsDesktopLifetime}" Content="🗖 Cửa sổ riêng" Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" Padding="8,3" FontSize="10" CornerRadius="3" ToolTip.Tip="Mở đối chiếu Before/After trong cửa sổ riêng biệt" Margin="4,0,0,0" />
-                                                    </StackPanel>
+                                                        <Button Command="{Binding ZoomInPreviewCommand}" Content="➕" Background="#1E293B" Foreground="#38BDF8" Padding="5,2" FontSize="11" CornerRadius="3" ToolTip.Tip="Phóng to" Margin="0,0,4,0" />
+                                                        <Button Command="{Binding OpenComparisonWindowCommand}" IsVisible="{Binding IsDesktopLifetime}" Content="🗖 Cửa sổ riêng" Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" Padding="8,3" FontSize="10" CornerRadius="3" ToolTip.Tip="Mở đối chiếu Before/After trong cửa sổ riêng biệt" />
+                                                    </WrapPanel>
                                                 </WrapPanel>
 
                                                 <!-- FastStone Info Bar (Dung lượng Before vs After) -->
@@ -1026,24 +1548,24 @@
                                 <Grid RowDefinitions="Auto, *">
                                     <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                                         <StackPanel Spacing="10">
-                                            <!-- Hàng 1: Thư mục nguồn (Input Folder) -->
-                                            <StackPanel Spacing="4">
-                                                <TextBlock Text="📥 Thư mục nguồn chứa ảnh hoặc các thư mục chapter cần đóng gói:" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" />
-                                                <Grid ColumnDefinitions="*, Auto, Auto">
-                                                    <TextBox Grid.Column="0" Text="{Binding PackerInputFolderPath}" PlaceholderText="Chọn thư mục chứa ảnh hoặc các thư mục chapter cần đóng gói..." Height="34" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" Padding="8,4" />
-                                                    <Button Grid.Column="1" Command="{Binding BrowsePackerInputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" Margin="0,0,6,0" />
-                                                    <Button Grid.Column="2" Command="{Binding OpenPackerInputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
-                                                </Grid>
+                                            <!-- Hàng 1: Thư mục nguồn (Bố cục 2 tầng xem Full Path trên Android) -->
+                                            <StackPanel Spacing="3">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="📥 Thư mục nguồn chứa ảnh hoặc các thư mục chapter cần đóng gói:" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowsePackerInputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                    <Button Command="{Binding OpenPackerInputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding PackerInputFolderPath}" PlaceholderText="Chọn thư mục chứa ảnh hoặc các thư mục chapter cần đóng gói..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
                                             </StackPanel>
 
-                                            <!-- Hàng 2: Thư mục lưu (Output Folder) -->
-                                            <StackPanel Spacing="4">
-                                                <TextBlock Text="📤 Thư mục lưu file đóng gói (Mặc định: thư mục 'Packed' bên trong nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" />
-                                                <Grid ColumnDefinitions="*, Auto, Auto">
-                                                    <TextBox Grid.Column="0" Text="{Binding PackerOutputFolderPath}" PlaceholderText="Chọn thư mục lưu file đóng gói..." Height="34" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" Padding="8,4" />
-                                                    <Button Grid.Column="1" Command="{Binding BrowsePackerOutputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" Margin="0,0,6,0" />
-                                                    <Button Grid.Column="2" Command="{Binding OpenPackerOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" Padding="10,5" Height="34" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu file đóng gói trên thiết bị" />
-                                                </Grid>
+                                            <!-- Hàng 2: Thư mục lưu (Bố cục 2 tầng xem Full Path trên Android) -->
+                                            <StackPanel Spacing="3">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="📤 Thư mục lưu file đóng gói (Mặc định: thư mục 'Packed' bên trong nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowsePackerOutputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                    <Button Command="{Binding OpenPackerOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu file đóng gói trên thiết bị" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding PackerOutputFolderPath}" PlaceholderText="Chọn thư mục lưu file đóng gói..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
                                             </StackPanel>
 
                                             <!-- Hàng 3: Tùy chọn định dạng đóng gói & chế độ quét -->

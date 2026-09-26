@@ -37,6 +37,10 @@ public class DownloadEngineService
     public int AutoSplitHeight { get; set; } = 5000;
     public int AutoSplitQuality { get; set; } = 90;
 
+    // SỐ TRUYỆN TẢI CÙNG LÚC & SỐ LUỒNG TẢI ẢNH
+    public int ConcurrentComicDownloads { get; set; } = 2; // 1 đến 8
+    public int ImageDownloadThreads { get; set; } = 4; // 1 đến 16
+
     public void RequestOpenStorageSettings() => OpenStorageSettingsRequested?.Invoke();
 
     public DownloadEngineService()
@@ -58,7 +62,6 @@ public class DownloadEngineService
         string appDir = AppDomain.CurrentDomain.BaseDirectory;
         string configFilePath = Path.Combine(appDir, "download_path.cfg");
 
-        // 1. Kiểm tra nếu người dùng đã tùy chọn thư mục trước đó
         try
         {
             if (File.Exists(configFilePath))
@@ -71,7 +74,6 @@ public class DownloadEngineService
                     try
                     {
                         if (!Directory.Exists(normalizedSaved)) Directory.CreateDirectory(normalizedSaved);
-                        // Cập nhật lại config nếu trước đó bị lưu đường dẫn ảo SAF như /tree/downloads
                         if (!string.Equals(saved, normalizedSaved, StringComparison.Ordinal))
                         {
                             File.WriteAllText(configFilePath, normalizedSaved);
@@ -84,7 +86,6 @@ public class DownloadEngineService
         }
         catch {}
 
-        // 2. Đường dẫn mặc định theo OS
         if (OperatingSystem.IsAndroid())
         {
             string androidPath = GetDefaultAndroidDownloadPath();
@@ -143,7 +144,6 @@ public class DownloadEngineService
         {
             string decoded = Uri.UnescapeDataString(path);
 
-            // 1. Nếu đã là đường dẫn file hệ thống chuẩn (Linux/Android POSIX path)
             if (decoded.StartsWith("/storage/", StringComparison.OrdinalIgnoreCase) ||
                 decoded.StartsWith("/sdcard/", StringComparison.OrdinalIgnoreCase) ||
                 decoded.StartsWith("/data/", StringComparison.OrdinalIgnoreCase))
@@ -155,20 +155,17 @@ public class DownloadEngineService
                 return decoded.TrimEnd('/', '\\');
             }
 
-            // 2. Bóc tách SAF prefix raw:
             if (decoded.StartsWith("raw:", StringComparison.OrdinalIgnoreCase))
             {
                 return decoded.Substring(4).TrimEnd('/', '\\');
             }
 
-            // 3. Bóc tách cấu trúc SAF colon (primary:SubPath hoặc UUID:SubPath)
             int colonIdx = decoded.LastIndexOf(':');
             if (colonIdx >= 0 && colonIdx < decoded.Length - 1)
             {
                 string volumePart = decoded.Substring(0, colonIdx);
                 string subPath = decoded.Substring(colonIdx + 1).Trim().Trim('/', '\\');
 
-                // Lấy volumeId đứng trước dấu ':'
                 int slashBeforeColon = volumePart.LastIndexOfAny(new[] { '/', '%', ':' });
                 string volumeId = slashBeforeColon >= 0 ? volumePart.Substring(slashBeforeColon + 1) : volumePart;
 
@@ -184,7 +181,6 @@ public class DownloadEngineService
                 }
                 else if (System.Text.RegularExpressions.Regex.IsMatch(volumeId, @"^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$"))
                 {
-                    // Thẻ nhớ ngoài microSD
                     if (string.IsNullOrWhiteSpace(subPath))
                     {
                         return !string.IsNullOrWhiteSpace(folderName)
@@ -199,7 +195,6 @@ public class DownloadEngineService
                 }
             }
 
-            // 4. Nếu không có colon nhưng có folderName cụ thể từ SAF
             string searchStr = decoded.ToLowerInvariant();
             if (!string.IsNullOrWhiteSpace(folderName) && 
                 !folderName.Equals("primary", StringComparison.OrdinalIgnoreCase) &&
@@ -212,7 +207,6 @@ public class DownloadEngineService
                 return Path.Combine("/storage/emulated/0", folderName);
             }
 
-            // 5. Fallback các thư mục hệ thống chuẩn
             if (searchStr.Contains("download")) return "/storage/emulated/0/Download";
             if (searchStr.Contains("document")) return "/storage/emulated/0/Documents";
             if (searchStr.Contains("picture")) return "/storage/emulated/0/Pictures";
@@ -225,15 +219,12 @@ public class DownloadEngineService
 
     public static string GetDefaultAndroidDownloadPath()
     {
-        // 1. Thư mục công khai Download
         string pub = "/storage/emulated/0/Download/ComicDownloads";
         if (CanWriteToDirectory(pub)) return pub;
 
-        // 2. Thư mục App-Specific External (Đảm bảo 100% quyền ghi trên Android 11-14 không cần quyền đặc biệt)
         string appExt = GetAppSpecificExternalPath();
         if (CanWriteToDirectory(appExt)) return appExt;
 
-        // 3. Fallback Documents
         string docs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ComicDownloads");
         try { if (!Directory.Exists(docs)) Directory.CreateDirectory(docs); } catch {}
         return docs;
@@ -284,13 +275,11 @@ public class DownloadEngineService
 
         candidateRoot = NormalizeStoragePath(candidateRoot);
 
-        // 1. Nếu candidateRoot ghi được tốt
         if (CanWriteToDirectory(candidateRoot))
         {
             return candidateRoot;
         }
 
-        // 2. Thử Download công khai
         string pubDownload = "/storage/emulated/0/Download/ComicDownloads";
         if (CanWriteToDirectory(pubDownload))
         {
@@ -298,7 +287,6 @@ public class DownloadEngineService
             return pubDownload;
         }
 
-        // 3. Tự động chuyển sang App-Specific External Files (100% quyền ghi không bị Access Denied)
         string appStorage = GetAppSpecificExternalPath();
         if (CanWriteToDirectory(appStorage))
         {
@@ -307,7 +295,6 @@ public class DownloadEngineService
             return appStorage;
         }
 
-        // 4. Fallback MyDocuments
         string docs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ComicDownloads");
         try { if (!Directory.Exists(docs)) Directory.CreateDirectory(docs); } catch {}
         SetDownloadRoot(docs);
@@ -324,18 +311,38 @@ public class DownloadEngineService
         _lastSpeedCheckTime = DateTime.UtcNow;
         _totalBytesDownloadedInWindow = 0;
 
-        LogEmitted?.Invoke("INFO", $"Bắt đầu tải danh sách truyện (Thư mục: {mode}) tới: {DownloadRoot}");
+        int concurrentComics = Math.Clamp(ConcurrentComicDownloads, 1, 8);
+        int imageThreads = Math.Clamp(ImageDownloadThreads, 1, 16);
+
+        LogEmitted?.Invoke("INFO", $"Bắt đầu tải danh sách truyện (Song song: {concurrentComics} truyện, {imageThreads} luồng ảnh | Thư mục: {mode}) tới: {DownloadRoot}");
 
         try
         {
-            foreach (var item in items)
+            var validItems = items.Where(item => item.IsChecked).ToList();
+            if (validItems.Count == 0)
             {
-                if (ct.IsCancellationRequested) break;
-                if (!item.IsChecked) continue;
-
-                await DownloadComicBookAsync(item, mode, ct).ConfigureAwait(false);
+                LogEmitted?.Invoke("WARN", "Không có truyện nào được tích chọn để tải.");
+                return;
             }
 
+            using var comicThrottler = new SemaphoreSlim(concurrentComics, concurrentComics);
+            var downloadTasks = validItems.Select(async item =>
+            {
+                if (ct.IsCancellationRequested) return;
+
+                await comicThrottler.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    if (ct.IsCancellationRequested) return;
+                    await DownloadComicBookAsync(item, mode, imageThreads, ct).ConfigureAwait(false);
+                }
+                finally
+                {
+                    comicThrottler.Release();
+                }
+            });
+
+            await Task.WhenAll(downloadTasks).ConfigureAwait(false);
             LogEmitted?.Invoke("SUCCESS", "Hoàn tất toàn bộ tác vụ tải trong hàng chờ.");
         }
         catch (OperationCanceledException)
@@ -391,7 +398,6 @@ public class DownloadEngineService
             }
             else if (OperatingSystem.IsAndroid())
             {
-                // Kích hoạt sự kiện để UI copy clipboard và mở native viewer
                 AndroidOpenFolderRequested?.Invoke(path);
             }
         }
@@ -401,10 +407,11 @@ public class DownloadEngineService
         }
     }
 
-    private async Task DownloadComicBookAsync(ComicBookItem book, string mode, CancellationToken ct)
+    private async Task DownloadComicBookAsync(ComicBookItem book, string mode, int imageThreads, CancellationToken ct)
     {
         book.Status = "Downloading";
         book.StatusMessage = "Đang khởi tạo thư mục và nạp danh sách chương...";
+        book.DetailProgressText = "Đang khởi tạo...";
         ProgressUpdated?.Invoke();
 
         string effectiveRoot = EnsureWritableDownloadRoot(DownloadRoot);
@@ -419,7 +426,7 @@ public class DownloadEngineService
                 Directory.CreateDirectory(bookDir);
             }
 
-            // If chapters not extracted yet, try extraction
+            // Trích xuất danh sách chapter nếu chưa có
             if (book.Chapters.Count == 0)
             {
                 var refreshed = await _scraperService.ScrapeBookAsync(book.Url, book.Index, book.PreferredLanguage, true, ct).ConfigureAwait(false);
@@ -434,37 +441,69 @@ public class DownloadEngineService
             if (book.Chapters.Count == 0)
             {
                 book.Status = "Error";
-                if (string.IsNullOrWhiteSpace(book.StatusMessage) || book.StatusMessage.Contains("0 chương") || book.StatusMessage.Contains("Extracting"))
-                {
-                    book.StatusMessage = "Không có chương nào để tải (Hoặc lỗi kết nối/bị nhà mạng chặn TLS). Vui lòng thử bật 1.1.1.1/WARP.";
-                }
+                book.StatusMessage = "Không có chương nào để tải (Hoặc lỗi kết nối/bị chặn).";
+                book.DetailProgressText = "0 chương";
                 LogEmitted?.Invoke("ERROR", $"Truyện '{book.Title}' không thể tải vì 0 chương: {book.StatusMessage}");
                 ProgressUpdated?.Invoke();
                 return;
             }
 
-            int totalChapters = Math.Max(1, book.TotalChapters);
+            // XỬ LÝ CHỌN SỐ CHAPTER ĐỂ TẢI (CHẤP NHẬN CHỮ, SỐ NGUYÊN, SỐ THẬP PHÂN)
+            List<ChapterItem> targetChapters = book.Chapters;
+            if (!string.IsNullOrWhiteSpace(book.ChapterSelectionText))
+            {
+                var chapterFilter = ChapterRangeParser.Parse(book.ChapterSelectionText);
+                if (chapterFilter != null)
+                {
+                    var filtered = new List<ChapterItem>();
+                    for (int i = 0; i < book.Chapters.Count; i++)
+                    {
+                        var ch = book.Chapters[i];
+                        if (chapterFilter.IsMatch(ch.Title))
+                        {
+                            filtered.Add(ch);
+                        }
+                    }
+
+                    if (filtered.Count > 0)
+                    {
+                        targetChapters = filtered;
+                        LogEmitted?.Invoke("INFO", $"[{book.Title}] Bộ lọc chapter '{book.ChapterSelectionText}': Đã chọn {filtered.Count}/{book.Chapters.Count} chương");
+                    }
+                    else
+                    {
+                        LogEmitted?.Invoke("WARN", $"[{book.Title}] Bộ lọc '{book.ChapterSelectionText}' không khớp chương nào. Tải toàn bộ {book.Chapters.Count} chương.");
+                    }
+                }
+            }
+
+            int totalChapters = Math.Max(1, targetChapters.Count);
             int completedChapters = 0;
 
-            for (int chIdx = 0; chIdx < book.Chapters.Count; chIdx++)
+            for (int chIdx = 0; chIdx < targetChapters.Count; chIdx++)
             {
                 if (ct.IsCancellationRequested)
                 {
                     book.Status = "Stopped";
                     book.StatusMessage = "Đã dừng bởi người dùng";
+                    book.DetailProgressText = "Đã dừng";
                     ProgressUpdated?.Invoke();
                     return;
                 }
 
-                var chapter = book.Chapters[chIdx];
+                var chapter = targetChapters[chIdx];
                 string chapterDirName = MakeSafeFilename(string.IsNullOrWhiteSpace(chapter.Title) ? $"Chapter {chIdx + 1}" : chapter.Title);
-                string chapterDir = Path.Combine(bookDir, chapterDirName);
+                
+                string chapterDir = string.Equals(mode, "Multi-comic", StringComparison.OrdinalIgnoreCase)
+                    ? Path.Combine(effectiveRoot, $"{safeBookName}-{chapterDirName}")
+                    : Path.Combine(bookDir, chapterDirName);
+
                 if (!Directory.Exists(chapterDir)) Directory.CreateDirectory(chapterDir);
 
                 book.StatusMessage = $"Đang trích xuất ảnh {chapter.Title}...";
+                book.UpdateProgress(completedChapters, totalChapters, 0, 0);
                 ProgressUpdated?.Invoke();
 
-                // 1. Scrape real image URLs for chapter
                 var imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain, ct).ConfigureAwait(false);
                 chapter.ImageUrls = imageUrls;
                 chapter.TotalPages = imageUrls.Count;
@@ -474,8 +513,7 @@ public class DownloadEngineService
 
                 if (imageUrls.Count > 0)
                 {
-                    // Tải song song 4 ảnh cùng lúc với SemaphoreSlim giúp tốc độ tăng gấp 4-5 lần
-                    using var throttler = new SemaphoreSlim(4, 4);
+                    using var throttler = new SemaphoreSlim(imageThreads, imageThreads);
                     int downloadedCount = 0;
 
                     var downloadTasks = imageUrls.Select(async (pageUrl, pIdx) =>
@@ -490,11 +528,11 @@ public class DownloadEngineService
                             string pageFileName = $"{(pIdx + 1):D3}.jpg";
                             string pageFilePath = Path.Combine(chapterDir, pageFileName);
 
-                            // Resume check: if page exists and recorded in manifest, skip
                             if (File.Exists(pageFilePath) && new FileInfo(pageFilePath).Length > 1024 && manifest.ContainsKey(pageFileName))
                             {
                                 int currentDone = Interlocked.Increment(ref downloadedCount);
                                 chapter.DownloadedPages = currentDone;
+                                book.UpdateProgress(completedChapters, totalChapters, currentDone, imageUrls.Count);
                                 return;
                             }
 
@@ -507,6 +545,7 @@ public class DownloadEngineService
                                 }
                                 int currentDone = Interlocked.Increment(ref downloadedCount);
                                 chapter.DownloadedPages = currentDone;
+                                book.UpdateProgress(completedChapters, totalChapters, currentDone, imageUrls.Count);
                             }
 
                             book.StatusMessage = $"Đang tải {chapter.Title}: {downloadedCount}/{imageUrls.Count} trang";
@@ -523,7 +562,6 @@ public class DownloadEngineService
                 }
                 else
                 {
-                    // Fallback for text/novel chapter: save placeholder text file
                     string txtPath = Path.Combine(chapterDir, "chapter_info.txt");
                     if (!File.Exists(txtPath))
                     {
@@ -534,25 +572,28 @@ public class DownloadEngineService
                 SaveManifest(manifestFile, manifest);
 
                 completedChapters++;
-                book.DownloadedChapters = completedChapters;
-                book.ProgressPercentage = Math.Round((double)completedChapters / totalChapters * 100, 1);
                 chapter.Status = "Completed";
+                book.UpdateProgress(completedChapters, totalChapters, imageUrls.Count, imageUrls.Count);
                 ProgressUpdated?.Invoke();
             }
 
             book.Status = "Completed";
-            book.StatusMessage = $"Đã tải xong toàn bộ {completedChapters} chương";
+            book.StatusMessage = $"Đã tải xong toàn bộ {completedChapters}/{totalChapters} chương";
+            book.UpdateProgress(completedChapters, totalChapters, 0, 0);
+            book.DetailProgressText = $"Hoàn tất {completedChapters}/{totalChapters} chaps • 100%";
             LogEmitted?.Invoke("SUCCESS", $"Đã hoàn tất truyện: '{book.Title}' ({completedChapters} chaps) -> {bookDir}");
         }
         catch (OperationCanceledException)
         {
             book.Status = "Stopped";
             book.StatusMessage = "Tác vụ tải đã dừng";
+            book.DetailProgressText = "Đã dừng";
         }
         catch (Exception ex)
         {
             book.Status = "Error";
             book.StatusMessage = ex.Message;
+            book.DetailProgressText = "Lỗi tải";
             LogEmitted?.Invoke("ERROR", $"Lỗi tải '{book.Title}': {ex.Message}");
         }
         finally
@@ -648,12 +689,16 @@ public class DownloadEngineService
                     }
                     catch {}
                 }
+
                 return false;
             }
             catch (Exception ex)
             {
-                LogEmitted?.Invoke("WARN", $"Lỗi tải/ghi ảnh '{Path.GetFileName(destinationPath)}' (thử lần {attempt}/3): {ex.Message}");
-                await Task.Delay(150 * attempt, ct).ConfigureAwait(false);
+                if (attempt == 3)
+                {
+                    LogEmitted?.Invoke("WARN", $"Tải ảnh thất bại sau 3 lần '{imageUrl}': {ex.Message}");
+                }
+                await Task.Delay(400 * attempt, ct).ConfigureAwait(false);
             }
         }
 
@@ -667,35 +712,34 @@ public class DownloadEngineService
         if (elapsed >= 1.0)
         {
             long bytes = Interlocked.Exchange(ref _totalBytesDownloadedInWindow, 0);
-            double speedBps = bytes / elapsed;
-            _lastSpeedCheckTime = now;
-
-            if (speedBps > 1024 * 1024)
+            double speedKb = (bytes / 1024.0) / elapsed;
+            if (speedKb > 1024.0)
             {
-                CurrentSpeedText = $"{(speedBps / (1024 * 1024)):F1} MB/s";
+                CurrentSpeedText = $"{(speedKb / 1024.0):F1} MB/s";
             }
             else
             {
-                CurrentSpeedText = $"{(speedBps / 1024):F1} KB/s";
+                CurrentSpeedText = $"{speedKb:F1} KB/s";
             }
+            _lastSpeedCheckTime = now;
         }
     }
 
-    private Dictionary<string, string> LoadManifest(string path)
+    private static Dictionary<string, string> LoadManifest(string path)
     {
         try
         {
             if (File.Exists(path))
             {
                 string json = File.ReadAllText(path);
-                return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+                return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
             }
         }
         catch {}
-        return new();
+        return new Dictionary<string, string>();
     }
 
-    private void SaveManifest(string path, Dictionary<string, string> manifest)
+    private static void SaveManifest(string path, Dictionary<string, string> manifest)
     {
         try
         {
@@ -705,23 +749,13 @@ public class DownloadEngineService
         catch {}
     }
 
-    private static readonly char[] IncompatibleChars = new[] { ':', '*', '?', '"', '<', '>', '|', '\\', '/', '\0' };
-
-    public static string MakeSafeFilename(string filename)
+    private static string MakeSafeFilename(string name)
     {
-        if (string.IsNullOrWhiteSpace(filename)) return "Comic";
-        foreach (char c in IncompatibleChars)
-        {
-            filename = filename.Replace(c, '_');
-        }
+        if (string.IsNullOrWhiteSpace(name)) return "Unnamed";
         foreach (char c in Path.GetInvalidFileNameChars())
         {
-            filename = filename.Replace(c, '_');
+            name = name.Replace(c, '_');
         }
-        foreach (char c in Path.GetInvalidPathChars())
-        {
-            filename = filename.Replace(c, '_');
-        }
-        return filename.Trim().Trim('.', ' ', '_');
+        return name.Trim().TrimEnd('.');
     }
 }
