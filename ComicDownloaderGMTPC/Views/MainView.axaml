@@ -16,52 +16,67 @@
             <Grid RowDefinitions="Auto, Auto, *, Auto" MinHeight="650">
 
             <!-- 1. HEADER / BRAND BAR -->
-            <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="12,8">
+            <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="10,6">
                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,16,4">
-                        <Border Background="#6366F1" CornerRadius="6" Width="26" Height="26">
-                            <TextBlock Text="⚡" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,12,4">
+                        <Border Background="#6366F1" CornerRadius="6" Width="24" Height="24">
+                            <TextBlock Text="⚡" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
-                        <TextBlock Text="COMIC DOWNLOADER GMTPC" FontWeight="Bold" FontSize="15" Foreground="#F3F4F6" VerticalAlignment="Center" />
-                        <Border Background="#312E81" CornerRadius="4" Padding="5,2" VerticalAlignment="Center">
-                            <TextBlock Text="XPLAT" FontSize="10" FontWeight="SemiBold" Foreground="#A5B4FC" />
+                        <TextBlock Text="COMIC DOWNLOADER GMTPC" FontWeight="Bold" FontSize="14" Foreground="#F3F4F6" VerticalAlignment="Center" />
+                        <Border Background="#312E81" CornerRadius="4" Padding="4,1" VerticalAlignment="Center">
+                            <TextBlock Text="XPLAT" FontSize="9" FontWeight="SemiBold" Foreground="#A5B4FC" />
                         </Border>
                     </StackPanel>
 
-                    <!-- Folder Mode Selector & Language Switcher -->
-                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" Margin="0,0,0,4">
-                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <!-- Folder Mode Selector & Action Buttons in WrapPanel for Mobile & Desktop -->
+                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,2">
+                        <!-- Chọn kiểu thư mục -->
+                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
                             <TextBlock Text="📁 Thư mục:" Foreground="#9CA3AF" VerticalAlignment="Center" FontSize="11" />
-                            <ComboBox SelectedItem="{Binding ModeSelection}" Width="125" Height="28" FontSize="11">
+                            <ComboBox SelectedItem="{Binding ModeSelection}" Width="120" Height="28" FontSize="11">
                                 <x:String>Single comic</x:String>
                                 <x:String>Multi-comic</x:String>
                             </ComboBox>
                         </StackPanel>
 
+                        <!-- Đổi ngôn ngữ -->
                         <Button Command="{Binding ToggleLanguageCommand}"
                                 Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
-                                CornerRadius="6" Padding="8,3" Height="28">
+                                CornerRadius="6" Padding="8,3" Height="28" Margin="0,0,6,4">
                             <TextBlock Text="{Binding CurrentLanguage, StringFormat='{}🌐 {0}'}" FontWeight="SemiBold" Foreground="#38BDF8" FontSize="11" />
+                        </Button>
+
+                        <!-- NÚT THOÁT HOÀN TOÀN (BÊN TRÁI NÚT CẬP NHẬT) -->
+                        <Button Command="{Binding OpenExitConfirmCommand}"
+                                Background="#991B1B" BorderBrush="#DC2626" BorderThickness="1"
+                                CornerRadius="6" Padding="10,3" Height="28" Margin="0,0,6,4"
+                                ToolTip.Tip="Đóng hoặc force stop chương trình hoàn toàn">
+                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                <TextBlock Text="⛔" FontSize="11" />
+                                <TextBlock Text="THOÁT" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
+                            </StackPanel>
                         </Button>
 
                         <!-- Nút Tự Động Cập Nhật (Auto Update) -->
                         <Button Command="{Binding AutoUpdateCommand}"
                                 IsEnabled="{Binding !IsUpdating}"
                                 Background="#059669" BorderBrush="#10B981" BorderThickness="1"
-                                CornerRadius="6" Padding="10,3" Height="28" ToolTip.Tip="Tự động tải ngầm và cài đặt phiên bản APK mới nhất">
+                                CornerRadius="6" Padding="10,3" Height="28" Margin="0,0,6,4"
+                                ToolTip.Tip="Tự động tải ngầm và cài đặt phiên bản APK mới nhất">
                             <TextBlock Text="{Binding UpdateButtonLabel}" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
                         </Button>
 
                         <!-- Nút Chế Độ Bong Bóng Chạy Ngầm (Bubble Mode) -->
                         <Button Command="{Binding ToggleBubbleModeCommand}"
                                 Background="#7C3AED" BorderBrush="#8B5CF6" BorderThickness="1"
-                                CornerRadius="6" Padding="10,3" Height="28" ToolTip.Tip="Thu nhỏ ứng dụng thành bong bóng nổi/PiP mà vẫn chạy ngầm liên tục">
+                                CornerRadius="6" Padding="10,3" Height="28" Margin="0,0,0,4"
+                                ToolTip.Tip="Thu nhỏ ứng dụng thành bong bóng nổi tròn Messenger mà vẫn chạy ngầm liên tục">
                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                                 <TextBlock Text="🫧" FontSize="11" />
                                 <TextBlock Text="BONG BÓNG" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                    </StackPanel>
+                    </WrapPanel>
                 </WrapPanel>
             </Border>
 
@@ -890,66 +905,74 @@
                                         <ItemsControl ItemsSource="{Binding ComicBooks}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="8,6">
-                                                        <Grid ColumnDefinitions="Auto, Auto, *, Auto" VerticalAlignment="Center">
-                                                            <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" Margin="0,0,6,0" VerticalAlignment="Center" />
-                                                            <TextBlock Grid.Column="1" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" Width="24" VerticalAlignment="Center" />
+                                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Margin="0,0,0,2" CornerRadius="4" ClipToBounds="True">
+                                                        <Grid RowDefinitions="Auto, Auto">
+                                                            <!-- Hàng 0: Toàn bộ thông tin truyện & Nút thao tác -->
+                                                            <Grid Grid.Row="0" ColumnDefinitions="Auto, Auto, *, Auto" VerticalAlignment="Center" Margin="8,6,8,4">
+                                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                                                <TextBlock Grid.Column="1" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" Width="24" VerticalAlignment="Center" />
 
-                                                            <!-- Thông tin truyện & Tiến trình -->
-                                                            <StackPanel Grid.Column="2" Margin="4,0,8,0" VerticalAlignment="Center" Spacing="3">
-                                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="11" TextTrimming="CharacterEllipsis" />
-                                                                    <Border IsVisible="{Binding IsDuplicate}" Background="#78350F" CornerRadius="2" Padding="3,1" VerticalAlignment="Center">
-                                                                        <TextBlock Text="TRÙNG" FontSize="8" FontWeight="Bold" Foreground="#FDE047" />
-                                                                    </Border>
+                                                                <!-- Thông tin truyện & Tiến trình -->
+                                                                <StackPanel Grid.Column="2" Margin="4,0,8,0" VerticalAlignment="Center" Spacing="3">
+                                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                                                        <Border IsVisible="{Binding IsDuplicate}" Background="#78350F" CornerRadius="2" Padding="3,1" VerticalAlignment="Center">
+                                                                            <TextBlock Text="TRÙNG" FontSize="8" FontWeight="Bold" Foreground="#FDE047" />
+                                                                        </Border>
+                                                                    </StackPanel>
+
+                                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                        <Border Background="#1E293B" CornerRadius="2" Padding="4,1" Margin="0,0,6,2">
+                                                                            <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="SemiBold" />
+                                                                        </Border>
+                                                                        <TextBlock Text="{Binding TotalChapters, StringFormat='{}{0} chaps'}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                        <TextBlock Text="{Binding Status}" Foreground="#FCD34D" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                        <!-- Chuỗi chi tiết tiến trình: Chương X/Y (Trang A/B) • Z.Z% -->
+                                                                        <TextBlock Text="{Binding DetailProgressText}" Foreground="#34D399" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                    </WrapPanel>
+
+                                                                    <!-- Ô chọn Chapter (hỗ trợ chữ, số nguyên, số thập phân: vd 1-10, 15.5, oneshot) -->
+                                                                    <Grid ColumnDefinitions="Auto, *">
+                                                                        <TextBlock Grid.Column="0" Text="📑 Chọn chap:" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                                        <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="VD: 1-10, 15.5, oneshot (để trống = tải hết)" FontSize="9" Height="22" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="4,1" />
+                                                                    </Grid>
                                                                 </StackPanel>
 
-                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                    <Border Background="#1E293B" CornerRadius="2" Padding="4,1" Margin="0,0,6,2">
-                                                                        <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="SemiBold" />
-                                                                    </Border>
-                                                                    <TextBlock Text="{Binding TotalChapters, StringFormat='{}{0} chaps'}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,2" />
-                                                                    <TextBlock Text="{Binding Status}" Foreground="#FCD34D" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
-                                                                    <!-- Chuỗi chi tiết tiến trình: Chương X/Y (Trang A/B) • Z.Z% -->
-                                                                    <TextBlock Text="{Binding DetailProgressText}" Foreground="#34D399" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
-                                                                </WrapPanel>
+                                                                <!-- Nút thao tác hàng -->
+                                                                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                                                                    <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenBookFolderCommand}"
+                                                                            CommandParameter="{Binding .}" ToolTip.Tip="Mở thư mục"
+                                                                            Background="#1E293B" Foreground="#38BDF8" Padding="4,2" FontSize="9" CornerRadius="3">
+                                                                        <TextBlock Text="📂" />
+                                                                    </Button>
+                                                                    <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveUpCommand}"
+                                                                            CommandParameter="{Binding .}"
+                                                                            Background="#1E293B" Foreground="#94A3B8" Padding="4,2" FontSize="9" CornerRadius="3">
+                                                                        <TextBlock Text="▲" />
+                                                                    </Button>
+                                                                    <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveDownCommand}"
+                                                                            CommandParameter="{Binding .}"
+                                                                            Background="#1E293B" Foreground="#94A3B8" Padding="4,2" FontSize="9" CornerRadius="3">
+                                                                        <TextBlock Text="▼" />
+                                                                    </Button>
+                                                                    <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).DeleteItemCommand}"
+                                                                            CommandParameter="{Binding .}"
+                                                                            Background="#1E293B" Foreground="#EF4444" Padding="4,2" FontSize="9" CornerRadius="3">
+                                                                        <TextBlock Text="✕" />
+                                                                    </Button>
+                                                                </StackPanel>
+                                                            </Grid>
 
-                                                                <!-- Ô chọn Chapter (hỗ trợ chữ, số nguyên, số thập phân: vd 1-10, 15.5, oneshot) -->
-                                                                <Grid ColumnDefinitions="Auto, *">
-                                                                    <TextBlock Grid.Column="0" Text="📑 Chọn chap:" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                                                    <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="VD: 1-10, 15.5, oneshot (để trống = tải hết)" FontSize="9" Height="22" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="4,1" />
-                                                                </Grid>
-
-                                                                <!-- Thanh Progress Bar hiển thị số % -->
-                                                                <Grid ColumnDefinitions="*, Auto" Margin="0,2,0,0">
-                                                                    <ProgressBar Grid.Column="0" Value="{Binding ProgressPercentage}" Maximum="100" Height="6" CornerRadius="3" Foreground="#38BDF8" Background="#0F172A" VerticalAlignment="Center" Margin="0,0,6,0" />
-                                                                    <TextBlock Grid.Column="1" Text="{Binding ProgressPercentageText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="9" VerticalAlignment="Center" />
-                                                                </Grid>
-                                                            </StackPanel>
-
-                                                            <!-- Nút thao tác hàng -->
-                                                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-                                                                <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenBookFolderCommand}"
-                                                                        CommandParameter="{Binding .}" ToolTip.Tip="Mở thư mục"
-                                                                        Background="#1E293B" Foreground="#38BDF8" Padding="4,2" FontSize="9" CornerRadius="3">
-                                                                    <TextBlock Text="📂" />
-                                                                </Button>
-                                                                <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveUpCommand}"
-                                                                        CommandParameter="{Binding .}"
-                                                                        Background="#1E293B" Foreground="#94A3B8" Padding="4,2" FontSize="9" CornerRadius="3">
-                                                                    <TextBlock Text="▲" />
-                                                                </Button>
-                                                                <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveDownCommand}"
-                                                                        CommandParameter="{Binding .}"
-                                                                        Background="#1E293B" Foreground="#94A3B8" Padding="4,2" FontSize="9" CornerRadius="3">
-                                                                    <TextBlock Text="▼" />
-                                                                </Button>
-                                                                <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).DeleteItemCommand}"
-                                                                        CommandParameter="{Binding .}"
-                                                                        Background="#1E293B" Foreground="#EF4444" Padding="4,2" FontSize="9" CornerRadius="3">
-                                                                    <TextBlock Text="✕" />
-                                                                </Button>
-                                                            </StackPanel>
+                                                            <!-- Hàng 1: THANH PROGRESS BAR SÁT MÉP GÓC ĐÁY CARD 100% VỚI SỐ % OVERLAP NỔI BẬT KHÁC MÀU -->
+                                                            <Grid Grid.Row="1" Height="14" HorizontalAlignment="Stretch" Margin="0,2,0,0">
+                                                                <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100" Height="14"
+                                                                             CornerRadius="0" Foreground="#0284C7" Background="#0B132B"
+                                                                             HorizontalAlignment="Stretch" VerticalAlignment="Stretch" BorderThickness="0" Margin="0" />
+                                                                <!-- Con số % overlap nổi bật với màu vàng dạ quang sắc nét -->
+                                                                <TextBlock Text="{Binding ProgressPercentageText}"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                           Foreground="#FDE047" FontWeight="ExtraBold" FontSize="9" />
+                                                            </Grid>
                                                         </Grid>
                                                     </Border>
                                                 </DataTemplate>
@@ -2121,6 +2144,85 @@
                     </StackPanel>
                 </Button>
             </StackPanel>
+        </Border>
+
+        <!-- MODAL POPUP CONFIRM KHI BẤM PHÍM BACK HOẶC NÚT THOÁT (3 OPTION: TẮT / CHẠY NGẦM / THOÁT HOÀN TOÀN) -->
+        <Border IsVisible="{Binding IsExitConfirmOpen}"
+                Background="#B0050A15"
+                HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                ZIndex="999">
+            <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1.5"
+                    CornerRadius="16" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    MinWidth="320" MaxWidth="440" Margin="16"
+                    BoxShadow="0 16 40 0 #A0000000">
+                <StackPanel Spacing="16">
+                    <!-- Header Dialog -->
+                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                        <Border Background="#312E81" CornerRadius="10" Width="36" Height="36">
+                            <TextBlock Text="⚙️" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="TÙY CHỌN ỨNG DỤNG" FontWeight="Bold" FontSize="15" Foreground="#F3F4F6" />
+                            <TextBlock Text="Chọn cách đóng hoặc chạy ngầm:" FontSize="11" Foreground="#94A3B8" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Height="1" Background="#1E293B" HorizontalAlignment="Stretch" />
+
+                    <!-- Danh sách 3 Lựa chọn chính -->
+                    <StackPanel Spacing="10">
+                        <!-- Option 1: Ẩn / Tắt giao diện (Chạy nền thông thường) -->
+                        <Button Command="{Binding MinimizeOrHideAppCommand}"
+                                Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                CornerRadius="10" Padding="14,10" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                            <Grid ColumnDefinitions="Auto, *">
+                                <TextBlock Grid.Column="0" Text="🔘" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Tắt / Ẩn Giao Diện" FontWeight="Bold" Foreground="#38BDF8" FontSize="13" />
+                                    <TextBlock Text="Thu ứng dụng xuống nền, tiếp tục chạy tác vụ nếu có" FontSize="10" Foreground="#94A3B8" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+
+                        <!-- Option 2: Chạy ngầm & Bong bóng nổi Messenger -->
+                        <Button Command="{Binding RunInBackgroundWithBubbleCommand}"
+                                Background="#1E1B4B" BorderBrush="#8B5CF6" BorderThickness="1"
+                                CornerRadius="10" Padding="14,10" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                            <Grid ColumnDefinitions="Auto, *">
+                                <TextBlock Grid.Column="0" Text="🫧" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Chạy Ngầm (Bong Bóng Nổi)" FontWeight="Bold" Foreground="#A78BFA" FontSize="13" />
+                                    <TextBlock Text="Bật bong bóng Chat Head nổi trên màn hình để dễ dàng theo dõi" FontSize="10" Foreground="#CBD5E1" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+
+                        <!-- Option 3: Thoát hoàn toàn (Force Stop) -->
+                        <Button Command="{Binding ForceExitAppCommand}"
+                                Background="#3B1219" BorderBrush="#EF4444" BorderThickness="1"
+                                CornerRadius="10" Padding="14,10" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                            <Grid ColumnDefinitions="Auto, *">
+                                <TextBlock Grid.Column="0" Text="⛔" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Thoát Hoàn Toàn (Force Stop)" FontWeight="Bold" Foreground="#F87171" FontSize="13" />
+                                    <TextBlock Text="Dừng mọi tác vụ, tắt sạch tiến trình và giải phóng bộ nhớ" FontSize="10" Foreground="#FDA4AF" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                    </StackPanel>
+
+                    <Border Height="1" Background="#1E293B" HorizontalAlignment="Stretch" />
+
+                    <!-- Nút Hủy / Đóng dialog -->
+                    <Button Command="{Binding CancelExitConfirmCommand}"
+                            Background="#0F172A" BorderBrush="#475569" BorderThickness="1"
+                            Foreground="#94A3B8" FontWeight="SemiBold" FontSize="12"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Padding="10,6" CornerRadius="8">
+                        <TextBlock Text="✕ Hủy / Ở lại ứng dụng" />
+                    </Button>
+                </StackPanel>
+            </Border>
         </Border>
     </Grid>
 </UserControl>

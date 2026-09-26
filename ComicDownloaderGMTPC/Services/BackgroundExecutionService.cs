@@ -33,6 +33,8 @@ public class BackgroundExecutionService
     public static Action? NativeRequestEnterBubbleMode { get; set; }
     public static Action? NativeRequestExitBubbleMode { get; set; }
     public static Func<bool>? NativeIsBubbleOrPipSupported { get; set; }
+    public static Action? NativeMinimizeOrHide { get; set; }
+    public static Action? NativeForceExit { get; set; }
 
     public bool IsBubbleMode { get; private set; } = false;
 
@@ -127,5 +129,24 @@ public class BackgroundExecutionService
     public void ToggleBubbleMode()
     {
         SetBubbleMode(!IsBubbleMode);
+    }
+
+    public void MinimizeOrHide()
+    {
+        NativeMinimizeOrHide?.Invoke();
+    }
+
+    public void ForceExit()
+    {
+        NativeStopForegroundNotification?.Invoke();
+        NativeRequestExitBubbleMode?.Invoke();
+        if (NativeForceExit != null)
+        {
+            NativeForceExit.Invoke();
+        }
+        else
+        {
+            Environment.Exit(0);
+        }
     }
 }

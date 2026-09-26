@@ -13,6 +13,23 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         BackgroundExecutionService.Instance.BubbleModeChanged += OnBubbleModeChanged;
+
+        BackgroundExecutionService.NativeMinimizeOrHide = () =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                WindowState = WindowState.Minimized;
+            });
+        };
+
+        BackgroundExecutionService.NativeForceExit = () =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                Close();
+                System.Environment.Exit(0);
+            });
+        };
     }
 
     private void OnBubbleModeChanged(bool enabled)

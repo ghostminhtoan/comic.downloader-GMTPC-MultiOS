@@ -68,6 +68,9 @@ public partial class MainViewModel : ViewModelBase
     private bool _isBubbleMode = false;
 
     [ObservableProperty]
+    private bool _isExitConfirmOpen = false;
+
+    [ObservableProperty]
     private string _bubbleStatusTitle = "Sẵn sàng";
 
     [ObservableProperty]
@@ -532,6 +535,50 @@ public partial class MainViewModel : ViewModelBase
     public void ExitBubbleMode()
     {
         BackgroundExecutionService.Instance.SetBubbleMode(false);
+    }
+
+    [RelayCommand]
+    public void OpenExitConfirm()
+    {
+        IsExitConfirmOpen = true;
+    }
+
+    [RelayCommand]
+    public void CancelExitConfirm()
+    {
+        IsExitConfirmOpen = false;
+    }
+
+    [RelayCommand]
+    public void MinimizeOrHideApp()
+    {
+        IsExitConfirmOpen = false;
+        BackgroundExecutionService.Instance.MinimizeOrHide();
+    }
+
+    [RelayCommand]
+    public void RunInBackgroundWithBubble()
+    {
+        IsExitConfirmOpen = false;
+        BackgroundExecutionService.Instance.SetBubbleMode(true);
+        BackgroundExecutionService.Instance.MinimizeOrHide();
+    }
+
+    [RelayCommand]
+    public void ForceExitApp()
+    {
+        IsExitConfirmOpen = false;
+        try
+        {
+            Stop();
+            StopManualSplit();
+            StopEnhance();
+            StopPacking();
+            StopFolderTool();
+        }
+        catch {}
+
+        BackgroundExecutionService.Instance.ForceExit();
     }
 
     private async void OnAndroidOpenFolderRequested(string path)

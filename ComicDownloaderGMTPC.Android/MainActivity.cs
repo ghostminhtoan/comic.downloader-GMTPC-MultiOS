@@ -6,6 +6,7 @@ using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using Android.Provider;
+using Android.Views;
 using Avalonia;
 using Avalonia.Android;
 
@@ -48,6 +49,26 @@ public class MainActivity : AvaloniaMainActivity
         };
         Services.BackgroundExecutionService.NativeIsBubbleOrPipSupported = () => true;
 
+        Services.BackgroundExecutionService.NativeMinimizeOrHide = () =>
+        {
+            RunOnUiThread(() =>
+            {
+                MoveTaskToBack(true);
+            });
+        };
+
+        Services.BackgroundExecutionService.NativeForceExit = () =>
+        {
+            RunOnUiThread(() =>
+            {
+                ComicBackgroundService.Stop(this);
+                FloatingBubbleService.Hide(this);
+                FinishAffinity();
+                global::Android.OS.Process.KillProcess(global::Android.OS.Process.MyPid());
+                Java.Lang.JavaSystem.Exit(0);
+            });
+        };
+
         Services.DownloadEngineService.OpenStorageSettingsRequested += OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested += OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
@@ -60,6 +81,8 @@ public class MainActivity : AvaloniaMainActivity
         Services.BackgroundExecutionService.NativeStopForegroundNotification = null;
         Services.BackgroundExecutionService.NativeRequestEnterBubbleMode = null;
         Services.BackgroundExecutionService.NativeRequestExitBubbleMode = null;
+        Services.BackgroundExecutionService.NativeMinimizeOrHide = null;
+        Services.BackgroundExecutionService.NativeForceExit = null;
 
         Services.DownloadEngineService.OpenStorageSettingsRequested -= OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested -= OnOpenFolderRequested;
@@ -68,26 +91,41 @@ public class MainActivity : AvaloniaMainActivity
         base.OnDestroy();
     }
 
+    public override void OnBackPressed()
+    {
+        // Khi người dùng bấm phím Back: Mở popup confirm 3 option (Tắt / Chạy ngầm / Thoát hoàn toàn)
+        RunOnUiThread(() =>
+        {
+            var vm = App.SharedMainViewModel;
+            if (vm != null)
+            {
+                if (vm.IsExitConfirmOpen)
+                {
+                    vm.IsExitConfirmOpen = false;
+                }
+                else
+                {
+                    vm.IsExitConfirmOpen = true;
+                }
+            }
+        });
+    }
+
+    public override bool OnKeyDown(Keycode keyCode, KeyEvent? e)
+    {
+        if (keyCode == Keycode.Back && e?.Action == KeyEventActions.Down)
+        {
+            OnBackPressed();
+            return true;
+        }
+        return base.OnKeyDown(keyCode, e);
+    }
+
     protected override void OnUserLeaveHint()
     {
         base.OnUserLeaveHint();
-        // Khi người dùng bấm Home hoặc chuyển app và có tác vụ nền đang chạy
-        if (Services.BackgroundExecutionService.Instance.HasActiveTasks)
-        {
-            try
-            {
-                if (OperatingSystem.IsAndroidVersionAtLeast(26))
-                {
-                    using var pipBuilder = new PictureInPictureParams.Builder();
-                    var pipParams = pipBuilder.Build();
-                    if (pipParams != null)
-                    {
-                        EnterPictureInPictureMode(pipParams);
-                    }
-                }
-            }
-            catch {}
-        }
+        // Khi người dùng chuyển app hoặc về Home bình thường: Không tự động hiện PiP to đùng
+        // Tiến trình vẫn chạy ngầm liên tục nhờ Foreground Service ComicBackgroundService
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("android26.0")]
@@ -103,42 +141,40 @@ public class MainActivity : AvaloniaMainActivity
         {
             try
             {
-                bool pipEntered = false;
-                if (OperatingSystem.IsAndroidVersionAtLeast(26))
+                // Ưu tiên kích hoạt Bong bóng nổi tròn phong cách Messenger Chat Head
+                if (OperatingSystem.IsAndroidVersionAtLeast(23) && Settings.CanDrawOverlays(this))
+                {
+                    FloatingBubbleService.Show(this);
+                    MoveTaskToBack(true);
+                }
+                else if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(this))
                 {
                     try
                     {
-                        using var pipBuilder = new PictureInPictureParams.Builder();
-                        var pipParams = pipBuilder.Build();
-                        if (pipParams != null)
-                        {
-                            pipEntered = EnterPictureInPictureMode(pipParams);
-                        }
+                        var intent = new Intent(Settings.ActionManageOverlayPermission, global::Android.Net.Uri.Parse("package:" + PackageName));
+                        intent.AddFlags(ActivityFlags.NewTask);
+                        StartActivity(intent);
                     }
-                    catch {}
+                    catch
+                    {
+                        var intent = new Intent(Settings.ActionManageOverlayPermission);
+                        intent.AddFlags(ActivityFlags.NewTask);
+                        StartActivity(intent);
+                    }
                 }
-
-                if (!pipEntered)
+                else if (OperatingSystem.IsAndroidVersionAtLeast(26))
                 {
-                    if (OperatingSystem.IsAndroidVersionAtLeast(23) && Settings.CanDrawOverlays(this))
+                    using var pipBuilder = new PictureInPictureParams.Builder();
+                    var pipParams = pipBuilder.Build();
+                    if (pipParams != null)
                     {
-                        FloatingBubbleService.Show(this);
-                        MoveTaskToBack(true);
-                    }
-                    else if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(this))
-                    {
-                        try
-                        {
-                            var intent = new Intent(Settings.ActionManageOverlayPermission, global::Android.Net.Uri.Parse("package:" + PackageName));
-                            StartActivity(intent);
-                        }
-                        catch {}
+                        EnterPictureInPictureMode(pipParams);
                     }
                 }
             }
             catch (Exception ex)
             {
-                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi kích hoạt Bong bóng PiP: {ex.Message}");
+                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi kích hoạt Bong bóng: {ex.Message}");
             }
         });
     }
