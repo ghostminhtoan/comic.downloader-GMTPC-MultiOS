@@ -121,10 +121,6 @@ public class ComicBackgroundService : Service
                 Description = "Thông báo tiến trình tải truyện, xử lý ảnh và đóng gói file chạy ngầm liên tục",
                 LockscreenVisibility = NotificationVisibility.Public
             };
-            if (OperatingSystem.IsAndroidVersionAtLeast(30))
-            {
-                channel.SetAllowBubbles(true);
-            }
             channel.SetShowBadge(false);
 
             var nm = (NotificationManager?)GetSystemService(NotificationService);
@@ -154,41 +150,6 @@ public class ComicBackgroundService : Service
         {
             builder.SetContentIntent(pendingIntent);
         }
-
-        // Tích hợp Android 11+ Bubble Metadata chuẩn hệ điều hành
-        try
-        {
-            var bubbleIntent = new Intent(this, typeof(MainActivity));
-            bubbleIntent.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
-            var bFlags = PendingIntentFlags.UpdateCurrent;
-            if (OperatingSystem.IsAndroidVersionAtLeast(31))
-            {
-                bFlags |= PendingIntentFlags.Mutable;
-            }
-            var bubblePendingIntent = PendingIntent.GetActivity(
-                this,
-                0,
-                bubbleIntent,
-                bFlags);
-
-            if (bubblePendingIntent != null)
-            {
-                var iconCompat = AndroidX.Core.Graphics.Drawable.IconCompat.CreateWithResource(this, Resource.Drawable.Icon);
-                if (iconCompat != null)
-                {
-                    var bubbleBuilder = new NotificationCompat.BubbleMetadata.Builder(bubblePendingIntent, iconCompat);
-                    bubbleBuilder.SetDesiredHeight(600);
-                    bubbleBuilder.SetAutoExpandBubble(false);
-                    bubbleBuilder.SetSuppressNotification(false);
-                    var bubbleData = bubbleBuilder.Build();
-                    if (bubbleData != null)
-                    {
-                        builder.SetBubbleMetadata(bubbleData);
-                    }
-                }
-            }
-        }
-        catch { }
 
         if (progress >= 0 && progress <= 100)
         {

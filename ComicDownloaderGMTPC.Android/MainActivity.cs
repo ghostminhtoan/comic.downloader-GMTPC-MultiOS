@@ -161,7 +161,7 @@ public class MainActivity : AvaloniaMainActivity
                 {
                     try
                     {
-                        Toast.MakeText(this, "Vui lòng BẬT 'Cho phép hiển thị trên các ứng dụng khác' để dùng Bong bóng nổi Messenger!", ToastLength.Long)?.Show();
+                        Toast.MakeText(this, "Vui lòng BẬT 'Cho phép hiển thị trên các ứng dụng khác' để dùng quả bóng nổi DU Recorder!", ToastLength.Long)?.Show();
                         var intent = new Intent(Settings.ActionManageOverlayPermission, global::Android.Net.Uri.Parse("package:" + PackageName));
                         intent.AddFlags(ActivityFlags.NewTask);
                         StartActivity(intent);
@@ -176,7 +176,7 @@ public class MainActivity : AvaloniaMainActivity
                     return;
                 }
 
-                // Đã có quyền: Kích hoạt Bong bóng tròn nổi Messenger & Thu ứng dụng ra màn hình Home
+                // Đã có quyền: Kích hoạt quả bóng tròn nổi DU Recorder & Thu ứng dụng ra màn hình Home
                 FloatingBubbleService.Show(this);
                 MoveTaskToBack(true);
             }

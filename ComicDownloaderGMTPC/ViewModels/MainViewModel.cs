@@ -1084,9 +1084,17 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        string updateUrl = OperatingSystem.IsAndroid()
-            ? "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/com.CompanyName.ComicDownloaderGMTPC-Signed.apk"
-            : "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/ComicDownloaderGMTPC.Desktop.exe";
+        string[] updateUrls = OperatingSystem.IsAndroid()
+            ? new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/latest/download/com.CompanyName.ComicDownloaderGMTPC-Signed.apk",
+                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/com.CompanyName.ComicDownloaderGMTPC-Signed.apk"
+            }
+            : new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/latest/download/ComicDownloaderGMTPC.Desktop.exe",
+                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/ComicDownloaderGMTPC.Desktop.exe"
+            };
 
         IsUpdating = true;
         UpdateButtonLabel = "⏳ Đang kết nối...";
@@ -1097,7 +1105,7 @@ public partial class MainViewModel : ViewModelBase
             AddLog("INFO", $"🚀 Bắt đầu tự động tải bản cập nhật mới nhất cho {platformName}...");
 
             bool success = await AppUpdateService.Instance.DownloadAndInstallUpdateAsync(
-                updateUrl,
+                updateUrls,
                 (level, msg) => AddLog(level, msg),
                 (percent) =>
                 {
@@ -1109,18 +1117,7 @@ public partial class MainViewModel : ViewModelBase
 
             if (!success)
             {
-                // Fallback nếu có lỗi mạng đặc biệt: mở trình duyệt và sao chép link
-                var topLevel = GetTopLevel();
-                if (topLevel?.Launcher != null)
-                {
-                    await topLevel.Launcher.LaunchUriAsync(new Uri(updateUrl));
-                }
-
-                if (topLevel?.Clipboard != null)
-                {
-                    await topLevel.Clipboard.SetTextAsync(updateUrl);
-                    AddLog("INFO", $"Đã sao chép link dự phòng vào Clipboard: {updateUrl}");
-                }
+                AddLog("WARN", "[Cập nhật tự động] Không thể tải bản cập nhật. Vui lòng kiểm tra lại kết nối mạng và thử lại sau.");
             }
         }
         catch (Exception ex)
