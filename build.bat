@@ -1,7 +1,7 @@
 @echo off
 setlocal
 echo ========================================================
-echo   Building & Publishing Comic Downloader GMTPC Avalonia
+echo   Building and Publishing Comic Downloader GMTPC Avalonia
 echo   Standalone Single-File Executables for 3 Platforms:
 echo   1. Windows (win-x64, standalone single-file exe)
 echo   2. Linux   (linux-x64, standalone single-file binary)
@@ -49,14 +49,13 @@ echo [OK] Linux standalone single-file binary succeeded:
 echo      -^> publish\linux\ComicDownloaderGMTPC.Desktop
 
 echo.
-echo [3/3] Building & Packaging Android (net10.0-android, single APK package)...
+echo [3/3] Building and Packaging Android (net10.0-android, single APK package)...
 dotnet build ComicDownloaderGMTPC.Android\ComicDownloaderGMTPC.Android.csproj -c Release -o publish\android
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Android build failed!
     exit /b %ERRORLEVEL%
 )
 
-REM Giữ file APK duy nhất và dọn các file DLL/PDB trung gian trong thư mục publish/android
 del /f /q "publish\android\*.dll" >nul 2>&1
 del /f /q "publish\android\*.pdb" >nul 2>&1
 del /f /q "publish\android\*.xml" >nul 2>&1

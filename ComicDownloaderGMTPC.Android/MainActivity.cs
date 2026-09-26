@@ -20,6 +20,9 @@ namespace ComicDownloaderGMTPC.Android;
     MainLauncher = true,
     LaunchMode = LaunchMode.SingleTask,
     SupportsPictureInPicture = true,
+    ResizeableActivity = true,
+    AllowEmbedded = true,
+    Exported = true,
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Density | ConfigChanges.FontScale)]
 public class MainActivity : AvaloniaMainActivity
 {
@@ -142,6 +145,9 @@ public class MainActivity : AvaloniaMainActivity
         {
             try
             {
+                // Kích hoạt Foreground Service thông báo kèm Bubble Metadata chuẩn Android 11+
+                ComicBackgroundService.StartOrUpdate(this, "Comic Downloader GMTPC", "Ứng dụng đang chạy ngầm...", 0);
+
                 // Kiểm tra quyền Vẽ trên ứng dụng khác (SYSTEM_ALERT_WINDOW / CanDrawOverlays)
                 if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(this))
                 {
@@ -158,6 +164,7 @@ public class MainActivity : AvaloniaMainActivity
                         intent.AddFlags(ActivityFlags.NewTask);
                         StartActivity(intent);
                     }
+                    MoveTaskToBack(true);
                     return;
                 }
 
@@ -314,69 +321,126 @@ public class MainActivity : AvaloniaMainActivity
                     dir.Mkdirs();
                 }
 
-                bool launched = false;
+                // 1. Bypass StrictMode cho file:// URI giữa các app
+                try
+                {
+                    var policy = new StrictMode.VmPolicy.Builder().Build();
+                    StrictMode.SetVmPolicy(policy);
+                }
+                catch { }
 
-                // 1. Thử mở qua DocumentsUI / ExternalStorageProvider (Chuẩn nhất trên Android 8+)
+                var fileUri = global::Android.Net.Uri.FromFile(dir);
+
+                // Danh sách package ứng dụng đọc truyện tranh và quản lý file phổ biến
+                string[] comicReaderPackages = new[]
+                {
+                    "com.viewer.comicscreen",
+                    "com.viewer.comicscreen.lite",
+                    "com.viewer.comicscreen.free",
+                    "com.rookiestudio.perfectviewer",
+                    "com.kuro.kuroreader",
+                    "com.foobnix.pdf.reader",
+                    "com.github.axet.bookreader"
+                };
+
+                string[] fileManagerPackages = new[]
+                {
+                    "com.estrongs.android.pop",
+                    "com.mixplorer",
+                    "ru.zdevs.zarchiver",
+                    "pl.solidexplorer2",
+                    "com.lonelycatgames.Xplore",
+                    "com.google.android.apps.nbu.files",
+                    "com.mi.android.globalFileExplorer",
+                    "com.coloros.filemanager",
+                    "com.sec.android.app.myfiles",
+                    "com.alphainventor.filemanager"
+                };
+
+                var targetedIntents = new List<IParcelable>();
+                var pm = PackageManager;
+
+                // 2. Kiểm tra các app đọc truyện tranh (Comic Screen, Perfect Viewer...)
+                if (pm != null)
+                {
+                    foreach (var pkg in comicReaderPackages)
+                    {
+                        try
+                        {
+                            var launchIntent = pm.GetLaunchIntentForPackage(pkg);
+                            if (launchIntent != null)
+                            {
+                                var comicIntent = new Intent(Intent.ActionView);
+                                comicIntent.SetPackage(pkg);
+                                comicIntent.SetDataAndType(fileUri, "*/*");
+                                comicIntent.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
+                                targetedIntents.Add(comicIntent);
+                            }
+                        }
+                        catch { }
+                    }
+
+                    // 3. Kiểm tra các app quản lý file (ES File Explorer...)
+                    foreach (var pkg in fileManagerPackages)
+                    {
+                        try
+                        {
+                            var launchIntent = pm.GetLaunchIntentForPackage(pkg);
+                            if (launchIntent != null)
+                            {
+                                var fmIntent = new Intent(Intent.ActionView);
+                                fmIntent.SetPackage(pkg);
+                                fmIntent.SetDataAndType(fileUri, "resource/folder");
+                                fmIntent.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
+                                targetedIntents.Add(fmIntent);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                // 4. Intent cơ sở với file://
+                var primaryIntent = new Intent(Intent.ActionView);
+                primaryIntent.SetDataAndType(fileUri, "resource/folder");
+                primaryIntent.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
+
+                // 5. Intent DocumentsUI / Files hệ thống
                 try
                 {
                     string relPath = folderPath.Replace("/storage/emulated/0/", "").Trim('/');
                     string docId = "primary:" + relPath;
-                    var uri = DocumentsContract.BuildDocumentUri("com.android.externalstorage.documents", docId);
-                    var intent = new Intent(Intent.ActionView);
-                    intent.SetDataAndType(uri, DocumentsContract.Document.MimeTypeDir);
-                    intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
-                    StartActivity(intent);
-                    launched = true;
+                    var docUri = DocumentsContract.BuildDocumentUri("com.android.externalstorage.documents", docId);
+                    var docIntent = new Intent(Intent.ActionView);
+                    docIntent.SetDataAndType(docUri, DocumentsContract.Document.MimeTypeDir);
+                    docIntent.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
+                    targetedIntents.Add(docIntent);
                 }
                 catch { }
 
-                // 2. Thử mở qua FileProvider
-                if (!launched)
+                // 6. Tạo Chooser để người dùng có thể chọn Comic Screen, ES File Explorer hoặc Files
+                var chooserIntent = Intent.CreateChooser(primaryIntent, "📂 Mở Thư Mục Bằng Ứng Dụng");
+                if (chooserIntent != null)
                 {
-                    try
+                    chooserIntent.AddFlags(ActivityFlags.NewTask);
+                    if (targetedIntents.Count > 0)
                     {
-                        var contentUri = AndroidX.Core.Content.FileProvider.GetUriForFile(this, PackageName + ".fileprovider", dir);
-                        var intent = new Intent(Intent.ActionView);
-                        intent.SetDataAndType(contentUri, DocumentsContract.Document.MimeTypeDir);
-                        intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
-                        StartActivity(intent);
-                        launched = true;
+                        chooserIntent.PutExtra(Intent.ExtraInitialIntents, targetedIntents.ToArray());
                     }
-                    catch { }
+                    StartActivity(chooserIntent);
                 }
-
-                // 3. Thử mở qua resource/folder MIME
-                if (!launched)
+                else
                 {
-                    try
-                    {
-                        var uri = global::Android.Net.Uri.FromFile(dir);
-                        var intent = new Intent(Intent.ActionView);
-                        intent.SetDataAndType(uri, "resource/folder");
-                        intent.AddFlags(ActivityFlags.NewTask);
-                        StartActivity(intent);
-                        launched = true;
-                    }
-                    catch { }
-                }
-
-                // 4. Fallback với ACTION_VIEW thông thường
-                if (!launched)
-                {
-                    try
-                    {
-                        var intent = new Intent(Intent.ActionView);
-                        intent.SetDataAndType(global::Android.Net.Uri.Parse(folderPath), "*/*");
-                        intent.AddFlags(ActivityFlags.NewTask);
-                        StartActivity(intent);
-                        launched = true;
-                    }
-                    catch { }
+                    StartActivity(primaryIntent);
                 }
             }
             catch (Exception ex)
             {
                 global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi mở thư mục trên Android: {ex.Message}");
+                try
+                {
+                    Toast.MakeText(this, $"Đã sao chép đường dẫn: {folderPath}", ToastLength.Short)?.Show();
+                }
+                catch { }
             }
         });
     }
