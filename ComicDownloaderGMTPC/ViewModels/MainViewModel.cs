@@ -182,6 +182,28 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private int _enhanceNoiseReduce = 0; // 0 to 5
 
+    // 3 BỘ PRESET TÙY CHỌN NGƯỜI DÙNG (PRESET 1, 2, 3)
+    [ObservableProperty] private string _userPreset1Name = "Preset 1";
+    [ObservableProperty] private float _userPreset1Contrast = 0f;
+    [ObservableProperty] private float _userPreset1Brightness = 0f;
+    [ObservableProperty] private float _userPreset1Saturation = 100f;
+    [ObservableProperty] private float _userPreset1Sharpness = 0f;
+    [ObservableProperty] private int _userPreset1NoiseReduce = 0;
+
+    [ObservableProperty] private string _userPreset2Name = "Preset 2";
+    [ObservableProperty] private float _userPreset2Contrast = 0f;
+    [ObservableProperty] private float _userPreset2Brightness = 0f;
+    [ObservableProperty] private float _userPreset2Saturation = 100f;
+    [ObservableProperty] private float _userPreset2Sharpness = 0f;
+    [ObservableProperty] private int _userPreset2NoiseReduce = 0;
+
+    [ObservableProperty] private string _userPreset3Name = "Preset 3";
+    [ObservableProperty] private float _userPreset3Contrast = 0f;
+    [ObservableProperty] private float _userPreset3Brightness = 0f;
+    [ObservableProperty] private float _userPreset3Saturation = 100f;
+    [ObservableProperty] private float _userPreset3Sharpness = 0f;
+    [ObservableProperty] private int _userPreset3NoiseReduce = 0;
+
     [ObservableProperty]
     private int _enhanceQuality = 90; // 10 to 100
 
@@ -196,6 +218,25 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _enhancePreviewZoomText = "100%";
+
+    public double EnhancePreviewZoomPercent
+    {
+        get => Math.Round(EnhancePreviewZoom * 100);
+        set
+        {
+            double zoom = Math.Clamp(value / 100.0, 0.1, 10.0);
+            if (Math.Abs(EnhancePreviewZoom - zoom) > 0.001)
+            {
+                EnhancePreviewZoom = zoom;
+            }
+        }
+    }
+
+    partial void OnEnhancePreviewZoomChanged(double value)
+    {
+        EnhancePreviewZoomText = $"{Math.Round(value * 100)}%";
+        OnPropertyChanged(nameof(EnhancePreviewZoomPercent));
+    }
 
     [ObservableProperty]
     private bool _isEnhanceFullscreenVisible = false;
@@ -260,11 +301,6 @@ public partial class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(EnhanceDualColumns));
         OnPropertyChanged(nameof(EnhanceDualRows));
-    }
-
-    partial void OnEnhancePreviewZoomChanged(double value)
-    {
-        EnhancePreviewZoomText = $"{Math.Round(value * 100):0}%";
     }
 
     partial void OnEnhanceViewModeChanged(string value)
@@ -444,6 +480,7 @@ public partial class MainViewModel : ViewModelBase
         _downloadEngine.ProgressUpdated += OnProgressUpdated;
         _downloadEngine.PauseStateChanged += (paused) => Avalonia.Threading.Dispatcher.UIThread.Post(() => IsPaused = paused);
         DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
+        LoadUserPresetsFromDisk();
 
         // Lắng nghe sự kiện chạy ngầm & bong bóng
         var bg = BackgroundExecutionService.Instance;
@@ -1834,6 +1871,134 @@ public partial class MainViewModel : ViewModelBase
         EnhanceSharpness = 0.5f;
         EnhanceNoiseReduce = 0;
         EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Đọc đêm dịu mắt");
+    }
+
+    [RelayCommand]
+    public void SaveUserPreset1()
+    {
+        UserPreset1Contrast = EnhanceContrast;
+        UserPreset1Brightness = EnhanceBrightness;
+        UserPreset1Saturation = EnhanceSaturation;
+        UserPreset1Sharpness = EnhanceSharpness;
+        UserPreset1NoiseReduce = EnhanceNoiseReduce;
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Đã lưu thông số vào '{UserPreset1Name}'");
+        SaveUserPresetsToDisk();
+    }
+
+    [RelayCommand]
+    public void LoadUserPreset1()
+    {
+        EnhanceContrast = UserPreset1Contrast;
+        EnhanceBrightness = UserPreset1Brightness;
+        EnhanceSaturation = UserPreset1Saturation;
+        EnhanceSharpness = UserPreset1Sharpness;
+        EnhanceNoiseReduce = UserPreset1NoiseReduce;
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Đã tải thông số từ '{UserPreset1Name}'");
+    }
+
+    [RelayCommand]
+    public void SaveUserPreset2()
+    {
+        UserPreset2Contrast = EnhanceContrast;
+        UserPreset2Brightness = EnhanceBrightness;
+        UserPreset2Saturation = EnhanceSaturation;
+        UserPreset2Sharpness = EnhanceSharpness;
+        UserPreset2NoiseReduce = EnhanceNoiseReduce;
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Đã lưu thông số vào '{UserPreset2Name}'");
+        SaveUserPresetsToDisk();
+    }
+
+    [RelayCommand]
+    public void LoadUserPreset2()
+    {
+        EnhanceContrast = UserPreset2Contrast;
+        EnhanceBrightness = UserPreset2Brightness;
+        EnhanceSaturation = UserPreset2Saturation;
+        EnhanceSharpness = UserPreset2Sharpness;
+        EnhanceNoiseReduce = UserPreset2NoiseReduce;
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Đã tải thông số từ '{UserPreset2Name}'");
+    }
+
+    [RelayCommand]
+    public void SaveUserPreset3()
+    {
+        UserPreset3Contrast = EnhanceContrast;
+        UserPreset3Brightness = EnhanceBrightness;
+        UserPreset3Saturation = EnhanceSaturation;
+        UserPreset3Sharpness = EnhanceSharpness;
+        UserPreset3NoiseReduce = EnhanceNoiseReduce;
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Đã lưu thông số vào '{UserPreset3Name}'");
+        SaveUserPresetsToDisk();
+    }
+
+    [RelayCommand]
+    public void LoadUserPreset3()
+    {
+        EnhanceContrast = UserPreset3Contrast;
+        EnhanceBrightness = UserPreset3Brightness;
+        EnhanceSaturation = UserPreset3Saturation;
+        EnhanceSharpness = UserPreset3Sharpness;
+        EnhanceNoiseReduce = UserPreset3NoiseReduce;
+        EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Preset] Đã tải thông số từ '{UserPreset3Name}'");
+    }
+
+    private void SaveUserPresetsToDisk()
+    {
+        try
+        {
+            string appDir = OperatingSystem.IsAndroid()
+                ? DownloadEngineService.GetAppSpecificExternalPath()
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".comicdownloader");
+            if (!Directory.Exists(appDir)) Directory.CreateDirectory(appDir);
+            string file = Path.Combine(appDir, "user_presets.json");
+            var data = new
+            {
+                P1Name = UserPreset1Name, P1Contrast = UserPreset1Contrast, P1Brightness = UserPreset1Brightness, P1Sat = UserPreset1Saturation, P1Sharp = UserPreset1Sharpness, P1Noise = UserPreset1NoiseReduce,
+                P2Name = UserPreset2Name, P2Contrast = UserPreset2Contrast, P2Brightness = UserPreset2Brightness, P2Sat = UserPreset2Saturation, P2Sharp = UserPreset2Sharpness, P2Noise = UserPreset2NoiseReduce,
+                P3Name = UserPreset3Name, P3Contrast = UserPreset3Contrast, P3Brightness = UserPreset3Brightness, P3Sat = UserPreset3Saturation, P3Sharp = UserPreset3Sharpness, P3Noise = UserPreset3NoiseReduce
+            };
+            string json = System.Text.Json.JsonSerializer.Serialize(data);
+            File.WriteAllText(file, json);
+        }
+        catch { }
+    }
+
+    private void LoadUserPresetsFromDisk()
+    {
+        try
+        {
+            string appDir = OperatingSystem.IsAndroid()
+                ? DownloadEngineService.GetAppSpecificExternalPath()
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".comicdownloader");
+            string file = Path.Combine(appDir, "user_presets.json");
+            if (File.Exists(file))
+            {
+                string json = File.ReadAllText(file);
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("P1Name", out var p1n)) UserPreset1Name = p1n.GetString() ?? "Preset 1";
+                if (root.TryGetProperty("P1Contrast", out var p1c)) UserPreset1Contrast = p1c.GetSingle();
+                if (root.TryGetProperty("P1Brightness", out var p1b)) UserPreset1Brightness = p1b.GetSingle();
+                if (root.TryGetProperty("P1Sat", out var p1s)) UserPreset1Saturation = p1s.GetSingle();
+                if (root.TryGetProperty("P1Sharp", out var p1sh)) UserPreset1Sharpness = p1sh.GetSingle();
+                if (root.TryGetProperty("P1Noise", out var p1nr)) UserPreset1NoiseReduce = p1nr.GetInt32();
+
+                if (root.TryGetProperty("P2Name", out var p2n)) UserPreset2Name = p2n.GetString() ?? "Preset 2";
+                if (root.TryGetProperty("P2Contrast", out var p2c)) UserPreset2Contrast = p2c.GetSingle();
+                if (root.TryGetProperty("P2Brightness", out var p2b)) UserPreset2Brightness = p2b.GetSingle();
+                if (root.TryGetProperty("P2Sat", out var p2s)) UserPreset2Saturation = p2s.GetSingle();
+                if (root.TryGetProperty("P2Sharp", out var p2sh)) UserPreset2Sharpness = p2sh.GetSingle();
+                if (root.TryGetProperty("P2Noise", out var p2nr)) UserPreset2NoiseReduce = p2nr.GetInt32();
+
+                if (root.TryGetProperty("P3Name", out var p3n)) UserPreset3Name = p3n.GetString() ?? "Preset 3";
+                if (root.TryGetProperty("P3Contrast", out var p3c)) UserPreset3Contrast = p3c.GetSingle();
+                if (root.TryGetProperty("P3Brightness", out var p3b)) UserPreset3Brightness = p3b.GetSingle();
+                if (root.TryGetProperty("P3Sat", out var p3s)) UserPreset3Saturation = p3s.GetSingle();
+                if (root.TryGetProperty("P3Sharp", out var p3sh)) UserPreset3Sharpness = p3sh.GetSingle();
+                if (root.TryGetProperty("P3Noise", out var p3nr)) UserPreset3NoiseReduce = p3nr.GetInt32();
+            }
+        }
+        catch { }
     }
 
     [RelayCommand]

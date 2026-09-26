@@ -153,6 +153,7 @@ public partial class MainView : UserControl
                     var pts = activePointers.Values.Take(2).ToArray();
                     initialPinchDistance = Math.Max(10.0, GetDistance(pts[0], pts[1]));
                     initialZoom = vm.EnhancePreviewZoom;
+                    ev.Pointer.Capture(null);
                     ev.Handled = true; // Chặn cử chỉ cuộn trang ngoài cùng
                 }
             }
@@ -167,8 +168,18 @@ public partial class MainView : UserControl
                 var curPos = ev.GetCurrentPoint(this).Position;
                 activePointers[ev.Pointer.Id] = curPos;
 
-                if (isPinching && activePointers.Count >= 2 && DataContext is MainViewModel vm)
+                if (activePointers.Count >= 2 && DataContext is MainViewModel vm)
                 {
+                    if (!isPinching)
+                    {
+                        isDragging = false;
+                        isPinching = true;
+                        var ptsInit = activePointers.Values.Take(2).ToArray();
+                        initialPinchDistance = Math.Max(10.0, GetDistance(ptsInit[0], ptsInit[1]));
+                        initialZoom = vm.EnhancePreviewZoom;
+                        ev.Pointer.Capture(null);
+                    }
+
                     // Đang dùng 2 ngón tay để zoom (Pinch Gesture)
                     var pts = activePointers.Values.Take(2).ToArray();
                     double curDistance = GetDistance(pts[0], pts[1]);
@@ -184,7 +195,7 @@ public partial class MainView : UserControl
                     }
                     ev.Handled = true; // Ngăn chặn ScrollViewer ngoài cùng cuộn dọc
                 }
-                else if (isDragging)
+                else if (isDragging && !isPinching)
                 {
                     // Đang dùng 1 ngón tay / chuột để kéo rê ảnh (Pan Drag)
                     var delta = dragStartPoint - curPos;
@@ -223,9 +234,15 @@ public partial class MainView : UserControl
 
         void OnCaptureLost(object? sender, PointerCaptureLostEventArgs ev)
         {
-            activePointers.Clear();
-            isDragging = false;
-            isPinching = false;
+            if (activePointers.Count < 2)
+            {
+                activePointers.Remove(ev.Pointer.Id);
+                if (activePointers.Count == 0)
+                {
+                    isDragging = false;
+                    isPinching = false;
+                }
+            }
         }
 
         before.AddHandler(PointerPressedEvent, OnPressed, RoutingStrategies.Tunnel);
