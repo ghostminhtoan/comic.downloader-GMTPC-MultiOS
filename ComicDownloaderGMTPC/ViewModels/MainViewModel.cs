@@ -248,6 +248,7 @@ public partial class MainViewModel : ViewModelBase
     public int EnhanceDualColumns => IsPortraitMode ? 1 : 2;
     public int EnhanceDualRows => IsPortraitMode ? 2 : 1;
     public bool IsDesktopLifetime => Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+    public bool IsAndroidPlatform => OperatingSystem.IsAndroid();
 
     [ObservableProperty]
     private string _enhanceImageCounterText = "0 / 0";
@@ -314,6 +315,7 @@ public partial class MainViewModel : ViewModelBase
     partial void OnEnhanceSaturationChanged(float value) => TriggerLivePreviewDebounced();
     partial void OnEnhanceSharpnessChanged(float value) => TriggerLivePreviewDebounced();
     partial void OnEnhanceNoiseReduceChanged(int value) => TriggerLivePreviewDebounced();
+    partial void OnEnhanceQualityChanged(int value) => TriggerLivePreviewDebounced();
 
     [ObservableProperty]
     private bool _isPopupPreview = true;
