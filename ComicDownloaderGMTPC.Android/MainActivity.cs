@@ -23,6 +23,7 @@ namespace ComicDownloaderGMTPC.Android;
     ResizeableActivity = true,
     AllowEmbedded = true,
     Exported = true,
+    WindowSoftInputMode = SoftInput.AdjustResize,
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Density | ConfigChanges.FontScale)]
 public class MainActivity : AvaloniaMainActivity
 {
@@ -33,6 +34,7 @@ public class MainActivity : AvaloniaMainActivity
     {
         base.OnCreate(savedInstanceState);
         CurrentInstance = this;
+        Window?.SetSoftInputMode(SoftInput.AdjustResize);
 
         // Đăng ký bridge chạy ngầm và bong bóng
         Services.BackgroundExecutionService.NativeStartOrUpdateForegroundNotification = (title, text, progress) =>

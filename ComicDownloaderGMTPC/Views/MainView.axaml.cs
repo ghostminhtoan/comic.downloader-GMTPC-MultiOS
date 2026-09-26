@@ -52,6 +52,23 @@ public partial class MainView : UserControl
 
         // Đồng bộ Pan & Zoom cho Modal Đối Chiếu Toàn Màn Hình
         SetupSyncScroll(this.FindControl<ScrollViewer>("ModalBeforeScrollViewer"), this.FindControl<ScrollViewer>("ModalAfterScrollViewer"));
+
+        // Khi bất kỳ ô nhập liệu nào (TextBox, NumericUpDown, ComboBox) nhận focus trên Android / Desktop:
+        // Tự động cuộn khung nhìn để không bao giờ bị bàn phím ảo che khuất ô cần nhập
+        AddHandler(InputElement.GotFocusEvent, (s, ev) =>
+        {
+            if (ev.Source is Control ctrl && (ctrl is TextBox || ctrl is NumericUpDown || ctrl is ComboBox || ctrl.Parent is NumericUpDown))
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    try
+                    {
+                        ctrl.BringIntoView();
+                    }
+                    catch { }
+                }, Avalonia.Threading.DispatcherPriority.Background);
+            }
+        }, RoutingStrategies.Bubble);
     }
 
     private void SetupSyncScroll(ScrollViewer? before, ScrollViewer? after)

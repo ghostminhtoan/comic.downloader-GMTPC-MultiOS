@@ -12,7 +12,7 @@
         <!-- GIAO DIỆN CHÍNH -->
         <Panel>
             <!-- KHUNG CUỘN CHÍNH HỖ TRỢ ĐA NỀN TẢNG (DESKTOP & MOBILE/ANDROID) -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" BringIntoViewOnFocusChange="False">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <Grid RowDefinitions="Auto, Auto, *, Auto" MinHeight="650">
 
             <!-- 1. HEADER / BRAND BAR -->
