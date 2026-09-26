@@ -21,15 +21,19 @@ public class DownloadEngineService
     private readonly ComicScraperService _scraperService = ComicScraperService.Instance;
     private CancellationTokenSource? _cts;
     private bool _isDownloading;
+    private volatile bool _isPaused;
+    private TaskCompletionSource<bool>? _pauseTcs;
     private long _totalBytesDownloadedInWindow;
     private DateTime _lastSpeedCheckTime = DateTime.UtcNow;
 
     public bool IsDownloading => _isDownloading;
+    public bool IsPaused => _isPaused;
     public string DownloadRoot { get; set; }
     public string CurrentSpeedText { get; private set; } = "0.0 KB/s";
 
     public event Action<string, string>? LogEmitted;
     public event Action? ProgressUpdated;
+    public event Action<bool>? PauseStateChanged;
     public static event Action<string>? AndroidOpenFolderRequested;
     public static event Action? OpenStorageSettingsRequested;
 
@@ -357,19 +361,70 @@ public class DownloadEngineService
         finally
         {
             _isDownloading = false;
+            _isPaused = false;
+            _pauseTcs?.TrySetResult(true);
+            _pauseTcs = null;
             CurrentSpeedText = "0.0 KB/s";
             BackgroundExecutionService.Instance.CompleteTask("download_queue", "Tải Truyện", "Hoàn tất tải truyện");
+            PauseStateChanged?.Invoke(false);
             ProgressUpdated?.Invoke();
+        }
+    }
+
+    public void Pause()
+    {
+        if (!_isDownloading || _isPaused) return;
+        _isPaused = true;
+        _pauseTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        LogEmitted?.Invoke("WARN", "⏸️ Đã tạm dừng tải truyện. Bấm TIẾP TỤC để tiếp tục tiến trình.");
+        BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện (Tạm dừng)", "Đã tạm dừng tải truyện...", 0, true);
+        PauseStateChanged?.Invoke(true);
+        ProgressUpdated?.Invoke();
+    }
+
+    public void Resume()
+    {
+        if (!_isPaused) return;
+        _isPaused = false;
+        _pauseTcs?.TrySetResult(true);
+        _pauseTcs = null;
+        LogEmitted?.Invoke("INFO", "▶️ Tiếp tục tiến trình tải truyện...");
+        BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", "Đang tiếp tục tải...", 0, true);
+        PauseStateChanged?.Invoke(false);
+        ProgressUpdated?.Invoke();
+    }
+
+    public void TogglePause()
+    {
+        if (_isPaused) Resume();
+        else Pause();
+    }
+
+    private async Task WaitIfPausedAsync(CancellationToken ct)
+    {
+        var tcs = _pauseTcs;
+        if (_isPaused && tcs != null)
+        {
+            using var reg = ct.Register(() => tcs.TrySetCanceled(ct));
+            try
+            {
+                await tcs.Task.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) {}
         }
     }
 
     public void Stop()
     {
+        _isPaused = false;
+        _pauseTcs?.TrySetCanceled();
+        _pauseTcs = null;
         if (_cts != null && !_cts.IsCancellationRequested)
         {
             _cts.Cancel();
             LogEmitted?.Invoke("WARN", "Đang yêu cầu dừng tất cả tác vụ tải...");
         }
+        PauseStateChanged?.Invoke(false);
     }
 
     public void OpenDirectoryInExplorer(string path)
@@ -493,6 +548,8 @@ public class DownloadEngineService
                     return;
                 }
 
+                await WaitIfPausedAsync(ct).ConfigureAwait(false);
+
                 var chapter = targetChapters[chIdx];
                 string chapterDirName = MakeSafeFilename(string.IsNullOrWhiteSpace(chapter.Title) ? $"Chapter {chIdx + 1}" : chapter.Title);
                 
@@ -506,6 +563,7 @@ public class DownloadEngineService
                 book.UpdateProgress(completedChapters, totalChapters, 0, 0);
                 ProgressUpdated?.Invoke();
 
+                await WaitIfPausedAsync(ct).ConfigureAwait(false);
                 var imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain, ct).ConfigureAwait(false);
                 chapter.ImageUrls = imageUrls;
                 chapter.TotalPages = imageUrls.Count;
@@ -526,6 +584,7 @@ public class DownloadEngineService
                         try
                         {
                             if (ct.IsCancellationRequested) return;
+                            await WaitIfPausedAsync(ct).ConfigureAwait(false);
 
                             string pageFileName = $"{(pIdx + 1):D3}.jpg";
                             string pageFilePath = Path.Combine(chapterDir, pageFileName);

@@ -61,6 +61,9 @@ public partial class MainViewModel : ViewModelBase
     private bool _isAutoRetry = true;
 
     [ObservableProperty]
+    private bool _isPaused = false;
+
+    [ObservableProperty]
     private bool _isCompactRow;
 
     // BACKGROUND EXECUTION & BUBBLE MODE (BONG BÓNG CHẠY NGẦM)
@@ -437,6 +440,7 @@ public partial class MainViewModel : ViewModelBase
         _langService.LanguageChanged += OnLanguageChanged;
         _downloadEngine.LogEmitted += OnLogEmitted;
         _downloadEngine.ProgressUpdated += OnProgressUpdated;
+        _downloadEngine.PauseStateChanged += (paused) => Avalonia.Threading.Dispatcher.UIThread.Post(() => IsPaused = paused);
         DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
 
         // Lắng nghe sự kiện chạy ngầm & bong bóng
@@ -816,6 +820,24 @@ public partial class MainViewModel : ViewModelBase
         AddLog("INFO", $"Bắt đầu tải {ComicBooks.Count(b => b.IsChecked)} truyện...");
         await _downloadEngine.StartDownloadAsync(ComicBooks, ModeSelection);
         UpdateStats();
+    }
+
+    [RelayCommand]
+    public void PauseDownload()
+    {
+        _downloadEngine.Pause();
+    }
+
+    [RelayCommand]
+    public void ResumeDownload()
+    {
+        _downloadEngine.Resume();
+    }
+
+    [RelayCommand]
+    public void TogglePauseDownload()
+    {
+        _downloadEngine.TogglePause();
     }
 
     [RelayCommand]

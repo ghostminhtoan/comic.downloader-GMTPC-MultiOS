@@ -7,6 +7,7 @@ using Android.Content.PM;
 using Android.OS;
 using Android.Provider;
 using Android.Views;
+using Android.Widget;
 using Avalonia;
 using Avalonia.Android;
 
@@ -141,16 +142,12 @@ public class MainActivity : AvaloniaMainActivity
         {
             try
             {
-                // Ưu tiên kích hoạt Bong bóng nổi tròn phong cách Messenger Chat Head
-                if (OperatingSystem.IsAndroidVersionAtLeast(23) && Settings.CanDrawOverlays(this))
-                {
-                    FloatingBubbleService.Show(this);
-                    MoveTaskToBack(true);
-                }
-                else if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(this))
+                // Kiểm tra quyền Vẽ trên ứng dụng khác (SYSTEM_ALERT_WINDOW / CanDrawOverlays)
+                if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(this))
                 {
                     try
                     {
+                        Toast.MakeText(this, "Vui lòng BẬT 'Cho phép hiển thị trên các ứng dụng khác' để dùng Bong bóng nổi Messenger!", ToastLength.Long)?.Show();
                         var intent = new Intent(Settings.ActionManageOverlayPermission, global::Android.Net.Uri.Parse("package:" + PackageName));
                         intent.AddFlags(ActivityFlags.NewTask);
                         StartActivity(intent);
@@ -161,16 +158,12 @@ public class MainActivity : AvaloniaMainActivity
                         intent.AddFlags(ActivityFlags.NewTask);
                         StartActivity(intent);
                     }
+                    return;
                 }
-                else if (OperatingSystem.IsAndroidVersionAtLeast(26))
-                {
-                    using var pipBuilder = new PictureInPictureParams.Builder();
-                    var pipParams = pipBuilder.Build();
-                    if (pipParams != null)
-                    {
-                        EnterPictureInPictureMode(pipParams);
-                    }
-                }
+
+                // Đã có quyền: Kích hoạt Bong bóng tròn nổi Messenger & Thu ứng dụng ra màn hình Home
+                FloatingBubbleService.Show(this);
+                MoveTaskToBack(true);
             }
             catch (Exception ex)
             {

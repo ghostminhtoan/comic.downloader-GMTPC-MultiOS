@@ -21,6 +21,9 @@
 			android:name=".ComicBackgroundService" 
 			android:exported="false" 
 			android:foregroundServiceType="dataSync" />
+		<service 
+			android:name=".FloatingBubbleService" 
+			android:exported="false" />
 		<provider
 			android:name="androidx.core.content.FileProvider"
 			android:authorities="com.CompanyName.ComicDownloaderGMTPC.fileprovider"
