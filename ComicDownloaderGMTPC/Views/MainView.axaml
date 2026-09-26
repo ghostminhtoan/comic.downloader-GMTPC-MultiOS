@@ -1300,90 +1300,92 @@
                                                 <TextBox Text="{Binding EnhanceFolderPath}" PlaceholderText="Chọn thư mục nguồn chứa ảnh..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" FontSize="11" VerticalContentAlignment="Center" Padding="8,0" IsReadOnly="True" />
                                             </StackPanel>
 
-                                            <!-- Hàng 3: Bộ thông số tinh chỉnh (Sliders & Numeric - Tối ưu nhỏ gọn Width 140px fit 2+ ô/hàng trên mobile) -->
-                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <!-- Hàng 3: Bộ thông số tinh chỉnh (Bố cục 2 Cột chuẩn Mobile/Desktop - hiển thị rõ 100% con số giá trị) -->
+                                            <UniformGrid Columns="2" HorizontalAlignment="Stretch">
                                                 <!-- Contrast -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="0,0,4,4" MinHeight="48" VerticalAlignment="Center">
-                                                    <StackPanel Width="140" Spacing="2" VerticalAlignment="Center">
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="2">
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
                                                         <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
                                                             <TextBlock Grid.Column="0" Text="Tương phản:" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
-                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceContrast}" Minimum="-100" Maximum="100" Increment="1" FormatString="0" Width="65" Height="24" FontSize="10" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Tương phản (-100 đến 100)" />
+                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceContrast}" Minimum="-100" Maximum="100" Increment="1" FormatString="0" ShowButtonSpinner="False" Width="52" Height="22" FontSize="10" FontWeight="Bold" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Tương phản (-100 đến 100)" />
                                                         </Grid>
-                                                        <Slider Value="{Binding EnhanceContrast}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" Height="18" VerticalAlignment="Center" Margin="0,2,0,0" />
+                                                        <Slider Value="{Binding EnhanceContrast}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" Height="18" VerticalAlignment="Center" Margin="0,1,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Brightness -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="0,0,4,4" MinHeight="48" VerticalAlignment="Center">
-                                                    <StackPanel Width="140" Spacing="2" VerticalAlignment="Center">
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="2">
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
                                                         <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
                                                             <TextBlock Grid.Column="0" Text="Độ sáng:" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
-                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceBrightness}" Minimum="-100" Maximum="100" Increment="1" FormatString="0" Width="65" Height="24" FontSize="10" Foreground="#FCD34D" Background="#0B0F19" BorderBrush="#FCD34D" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Độ sáng (-100 đến 100)" />
+                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceBrightness}" Minimum="-100" Maximum="100" Increment="1" FormatString="0" ShowButtonSpinner="False" Width="52" Height="22" FontSize="10" FontWeight="Bold" Foreground="#FCD34D" Background="#0B0F19" BorderBrush="#FCD34D" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Độ sáng (-100 đến 100)" />
                                                         </Grid>
-                                                        <Slider Value="{Binding EnhanceBrightness}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" Height="18" VerticalAlignment="Center" Margin="0,2,0,0" />
+                                                        <Slider Value="{Binding EnhanceBrightness}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" Height="18" VerticalAlignment="Center" Margin="0,1,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Saturation -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="0,0,4,4" MinHeight="48" VerticalAlignment="Center">
-                                                    <StackPanel Width="140" Spacing="2" VerticalAlignment="Center">
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="2">
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
                                                         <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
                                                             <TextBlock Grid.Column="0" Text="Bão hòa:" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
-                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceSaturation}" Minimum="0" Maximum="200" Increment="1" FormatString="0" Width="65" Height="24" FontSize="10" Foreground="#EC4899" Background="#0B0F19" BorderBrush="#EC4899" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Bão hòa màu (0 đến 200%)" />
+                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceSaturation}" Minimum="0" Maximum="200" Increment="1" FormatString="0" ShowButtonSpinner="False" Width="52" Height="22" FontSize="10" FontWeight="Bold" Foreground="#EC4899" Background="#0B0F19" BorderBrush="#EC4899" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Bão hòa màu (0 đến 200%)" />
                                                         </Grid>
-                                                        <Slider Value="{Binding EnhanceSaturation}" Minimum="0" Maximum="200" SmallChange="1" LargeChange="10" Height="18" VerticalAlignment="Center" Margin="0,2,0,0" />
+                                                        <Slider Value="{Binding EnhanceSaturation}" Minimum="0" Maximum="200" SmallChange="1" LargeChange="10" Height="18" VerticalAlignment="Center" Margin="0,1,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Sharpness -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="0,0,4,4" MinHeight="48" VerticalAlignment="Center">
-                                                    <StackPanel Width="140" Spacing="2" VerticalAlignment="Center">
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="2">
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
                                                         <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
                                                             <TextBlock Grid.Column="0" Text="Độ nét:" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
-                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceSharpness}" Minimum="0" Maximum="10" Increment="0.5" FormatString="0.0" Width="65" Height="24" FontSize="10" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Độ nét (0.0 đến 10.0)" />
+                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceSharpness}" Minimum="0" Maximum="10" Increment="0.5" FormatString="0.0" ShowButtonSpinner="False" Width="52" Height="22" FontSize="10" FontWeight="Bold" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Độ nét (0.0 đến 10.0)" />
                                                         </Grid>
-                                                        <Slider Value="{Binding EnhanceSharpness}" Minimum="0" Maximum="10" SmallChange="0.5" LargeChange="1" Height="18" VerticalAlignment="Center" Margin="0,2,0,0" />
+                                                        <Slider Value="{Binding EnhanceSharpness}" Minimum="0" Maximum="10" SmallChange="0.5" LargeChange="1" Height="18" VerticalAlignment="Center" Margin="0,1,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Noise Reduce -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="0,0,4,4" MinHeight="48" VerticalAlignment="Center">
-                                                    <StackPanel Width="140" Spacing="2" VerticalAlignment="Center">
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="2">
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
                                                         <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
                                                             <TextBlock Grid.Column="0" Text="Khử nhiễu:" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
-                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceNoiseReduce}" Minimum="0" Maximum="5" Increment="1" FormatString="0" Width="65" Height="24" FontSize="10" Foreground="#A855F7" Background="#0B0F19" BorderBrush="#A855F7" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Khử nhiễu (0 đến 5)" />
+                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceNoiseReduce}" Minimum="0" Maximum="5" Increment="1" FormatString="0" ShowButtonSpinner="False" Width="52" Height="22" FontSize="10" FontWeight="Bold" Foreground="#A855F7" Background="#0B0F19" BorderBrush="#A855F7" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Khử nhiễu (0 đến 5)" />
                                                         </Grid>
-                                                        <Slider Value="{Binding EnhanceNoiseReduce}" Minimum="0" Maximum="5" SmallChange="1" LargeChange="1" Height="18" VerticalAlignment="Center" Margin="0,2,0,0" />
+                                                        <Slider Value="{Binding EnhanceNoiseReduce}" Minimum="0" Maximum="5" SmallChange="1" LargeChange="1" Height="18" VerticalAlignment="Center" Margin="0,1,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Quality -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="0,0,4,4" MinHeight="48" VerticalAlignment="Center">
-                                                    <StackPanel Width="130" Spacing="2" VerticalAlignment="Center">
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="2">
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
                                                         <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
                                                             <TextBlock Grid.Column="0" Text="Chất lượng:" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
-                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceQuality}" Minimum="10" Maximum="100" Increment="5" FormatString="0" Width="65" Height="24" FontSize="10" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Chất lượng ảnh JPG/WEBP %" />
+                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceQuality}" Minimum="10" Maximum="100" Increment="5" FormatString="0" ShowButtonSpinner="False" Width="52" Height="22" FontSize="10" FontWeight="Bold" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Chất lượng ảnh JPG/WEBP %" />
                                                         </Grid>
+                                                        <Slider Value="{Binding EnhanceQuality}" Minimum="10" Maximum="100" SmallChange="5" LargeChange="10" Height="18" VerticalAlignment="Center" Margin="0,1,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
                                                 <!-- Threads -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="0,0,4,4" MinHeight="48" VerticalAlignment="Center">
-                                                    <StackPanel Width="120" Spacing="2" VerticalAlignment="Center">
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="2">
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
                                                         <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
                                                             <TextBlock Grid.Column="0" Text="Số luồng:" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
-                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="60" Height="24" FontSize="10" Foreground="#F59E0B" Background="#0B0F19" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Luồng xử lý CPU" />
+                                                            <NumericUpDown Grid.Column="1" Value="{Binding EnhanceThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" ShowButtonSpinner="False" Width="52" Height="22" FontSize="10" FontWeight="Bold" Foreground="#F59E0B" Background="#0B0F19" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ParsingNumberStyle="Integer" ToolTip.Tip="Luồng xử lý CPU" />
                                                         </Grid>
+                                                        <Slider Value="{Binding EnhanceThreads}" Minimum="1" Maximum="16" SmallChange="1" LargeChange="2" Height="18" VerticalAlignment="Center" Margin="0,1,0,0" />
                                                     </StackPanel>
                                                 </Border>
 
-                                                <!-- Đặt lại mặc định -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="0,0,0,4" MinHeight="48" VerticalAlignment="Center">
-                                                    <Button Command="{Binding ResetEnhanceSettingsCommand}" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="8,4" Height="28" CornerRadius="4" VerticalAlignment="Center" ToolTip.Tip="Khôi phục mặc định">
-                                                        <TextBlock Text="🔄 Đặt lại" VerticalAlignment="Center" />
+                                                <!-- Reset -->
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="2">
+                                                    <Button Command="{Binding ResetEnhanceSettingsCommand}" Background="#1E293B" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" Padding="8,4" Height="38" CornerRadius="4" HorizontalAlignment="Stretch" VerticalAlignment="Center" ToolTip.Tip="Khôi phục mặc định">
+                                                        <TextBlock Text="🔄 Đặt lại" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Button>
                                                 </Border>
-                                            </WrapPanel>
+                                            </UniformGrid>
 
                                             <!-- Hàng 4: Các nút hành động chính -->
                                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
