@@ -2039,6 +2039,27 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void ResetContrast() => EnhanceContrast = 0f;
+
+    [RelayCommand]
+    public void ResetBrightness() => EnhanceBrightness = 0f;
+
+    [RelayCommand]
+    public void ResetSaturation() => EnhanceSaturation = 100f;
+
+    [RelayCommand]
+    public void ResetSharpness() => EnhanceSharpness = 0f;
+
+    [RelayCommand]
+    public void ResetNoiseReduce() => EnhanceNoiseReduce = 0;
+
+    [RelayCommand]
+    public void ResetQuality() => EnhanceQuality = 90;
+
+    [RelayCommand]
+    public void ResetThreads() => EnhanceThreads = 4;
+
+    [RelayCommand]
     public void ResetEnhanceSettings()
     {
         EnhanceContrast = 0f;
