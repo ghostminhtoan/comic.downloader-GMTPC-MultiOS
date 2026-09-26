@@ -12,11 +12,13 @@ using Avalonia.Android;
 namespace ComicDownloaderGMTPC.Android;
 
 [Activity(
-    Label = "ComicDownloaderGMTPC.Android",
+    Label = "ComicDownloaderGMTPC",
     Theme = "@style/MyTheme.NoActionBar",
     Icon = "@drawable/icon",
     MainLauncher = true,
-    ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode)]
+    LaunchMode = LaunchMode.SingleTask,
+    SupportsPictureInPicture = true,
+    ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Density | ConfigChanges.FontScale)]
 public class MainActivity : AvaloniaMainActivity
 {
     private const int StoragePermissionRequestCode = 1001;
@@ -27,6 +29,25 @@ public class MainActivity : AvaloniaMainActivity
         base.OnCreate(savedInstanceState);
         CurrentInstance = this;
 
+        // Đăng ký bridge chạy ngầm và bong bóng
+        Services.BackgroundExecutionService.NativeStartOrUpdateForegroundNotification = (title, text, progress) =>
+        {
+            ComicBackgroundService.StartOrUpdate(this, title, text, progress);
+        };
+        Services.BackgroundExecutionService.NativeStopForegroundNotification = () =>
+        {
+            ComicBackgroundService.Stop(this);
+        };
+        Services.BackgroundExecutionService.NativeRequestEnterBubbleMode = () =>
+        {
+            EnterBubbleOrPipMode();
+        };
+        Services.BackgroundExecutionService.NativeRequestExitBubbleMode = () =>
+        {
+            FloatingBubbleService.Hide(this);
+        };
+        Services.BackgroundExecutionService.NativeIsBubbleOrPipSupported = () => true;
+
         Services.DownloadEngineService.OpenStorageSettingsRequested += OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested += OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
@@ -35,11 +56,91 @@ public class MainActivity : AvaloniaMainActivity
 
     protected override void OnDestroy()
     {
+        Services.BackgroundExecutionService.NativeStartOrUpdateForegroundNotification = null;
+        Services.BackgroundExecutionService.NativeStopForegroundNotification = null;
+        Services.BackgroundExecutionService.NativeRequestEnterBubbleMode = null;
+        Services.BackgroundExecutionService.NativeRequestExitBubbleMode = null;
+
         Services.DownloadEngineService.OpenStorageSettingsRequested -= OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested -= OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested -= OnInstallApkRequested;
         if (CurrentInstance == this) CurrentInstance = null;
         base.OnDestroy();
+    }
+
+    protected override void OnUserLeaveHint()
+    {
+        base.OnUserLeaveHint();
+        // Khi người dùng bấm Home hoặc chuyển app và có tác vụ nền đang chạy
+        if (Services.BackgroundExecutionService.Instance.HasActiveTasks)
+        {
+            try
+            {
+                if (OperatingSystem.IsAndroidVersionAtLeast(26))
+                {
+                    using var pipBuilder = new PictureInPictureParams.Builder();
+                    var pipParams = pipBuilder.Build();
+                    if (pipParams != null)
+                    {
+                        EnterPictureInPictureMode(pipParams);
+                    }
+                }
+            }
+            catch {}
+        }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("android26.0")]
+    public override void OnPictureInPictureModeChanged(bool isInPictureInPictureMode, global::Android.Content.Res.Configuration? newConfig)
+    {
+        base.OnPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        Services.BackgroundExecutionService.Instance.SetBubbleMode(isInPictureInPictureMode);
+    }
+
+    public void EnterBubbleOrPipMode()
+    {
+        RunOnUiThread(() =>
+        {
+            try
+            {
+                bool pipEntered = false;
+                if (OperatingSystem.IsAndroidVersionAtLeast(26))
+                {
+                    try
+                    {
+                        using var pipBuilder = new PictureInPictureParams.Builder();
+                        var pipParams = pipBuilder.Build();
+                        if (pipParams != null)
+                        {
+                            pipEntered = EnterPictureInPictureMode(pipParams);
+                        }
+                    }
+                    catch {}
+                }
+
+                if (!pipEntered)
+                {
+                    if (OperatingSystem.IsAndroidVersionAtLeast(23) && Settings.CanDrawOverlays(this))
+                    {
+                        FloatingBubbleService.Show(this);
+                        MoveTaskToBack(true);
+                    }
+                    else if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(this))
+                    {
+                        try
+                        {
+                            var intent = new Intent(Settings.ActionManageOverlayPermission, global::Android.Net.Uri.Parse("package:" + PackageName));
+                            StartActivity(intent);
+                        }
+                        catch {}
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi kích hoạt Bong bóng PiP: {ex.Message}");
+            }
+        });
     }
 
     private void OnOpenStorageSettingsRequested()
@@ -97,6 +198,10 @@ public class MainActivity : AvaloniaMainActivity
                 if (CheckSelfPermission(Manifest.Permission.ReadMediaImages) != Permission.Granted)
                 {
                     permissionsToRequest.Add(Manifest.Permission.ReadMediaImages);
+                }
+                if (CheckSelfPermission(Manifest.Permission.PostNotifications) != Permission.Granted)
+                {
+                    permissionsToRequest.Add(Manifest.Permission.PostNotifications);
                 }
             }
 

@@ -8,6 +8,8 @@ namespace ComicDownloaderGMTPC;
 
 public partial class App : Application
 {
+    public static MainViewModel SharedMainViewModel { get; } = new MainViewModel();
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -22,18 +24,18 @@ public partial class App : Application
         {
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainViewModel()
+                DataContext = SharedMainViewModel
             };
         }
         else if (ApplicationLifetime is IActivityApplicationLifetime singleViewFactoryApplicationLifetime)
         {
-            singleViewFactoryApplicationLifetime.MainViewFactory = () => new MainView { DataContext = new MainViewModel() };
+            singleViewFactoryApplicationLifetime.MainViewFactory = () => new MainView { DataContext = SharedMainViewModel };
         }
         else if (ApplicationLifetime is ISingleViewApplicationLifetime singleViewPlatform)
         {
             singleViewPlatform.MainView = new MainView
             {
-                DataContext = new MainViewModel()
+                DataContext = SharedMainViewModel
             };
         }
 

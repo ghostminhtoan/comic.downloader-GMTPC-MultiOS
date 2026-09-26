@@ -79,12 +79,15 @@ public partial class MainViewModel
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
+                double pct = 0;
                 if (total > 0)
                 {
-                    FolderToolProgress = Math.Clamp((double)current / total * 100.0, 0.0, 100.0);
+                    pct = Math.Clamp((double)current / total * 100.0, 0.0, 100.0);
+                    FolderToolProgress = pct;
                     FolderToolProgressText = $"{FolderToolProgress:F0}%";
                 }
                 FolderToolStatusText = msg;
+                BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", msg, pct, true);
             });
         };
 
@@ -167,6 +170,7 @@ public partial class MainViewModel
         finally
         {
             IsFolderToolRunning = false;
+            BackgroundExecutionService.Instance.CompleteTask("folder_tools", "Tách/Gộp Thư Mục", "Hoàn tất");
         }
     }
 
@@ -208,6 +212,7 @@ public partial class MainViewModel
         finally
         {
             IsFolderToolRunning = false;
+            BackgroundExecutionService.Instance.CompleteTask("folder_tools", "Tách/Gộp Thư Mục", "Hoàn tất");
         }
     }
 
@@ -313,6 +318,7 @@ public partial class MainViewModel
         finally
         {
             IsFolderToolRunning = false;
+            BackgroundExecutionService.Instance.CompleteTask("folder_tools", "Tách/Gộp Thư Mục", "Hoàn tất");
         }
     }
 
@@ -355,6 +361,7 @@ public partial class MainViewModel
         finally
         {
             IsFolderToolRunning = false;
+            BackgroundExecutionService.Instance.CompleteTask("folder_tools", "Tách/Gộp Thư Mục", "Hoàn tất");
         }
     }
 

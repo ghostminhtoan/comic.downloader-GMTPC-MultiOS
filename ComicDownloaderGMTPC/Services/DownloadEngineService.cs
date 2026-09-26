@@ -318,6 +318,7 @@ public class DownloadEngineService
 
         try
         {
+            BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", "Bắt đầu tải danh sách truyện...", 0, true);
             var validItems = items.Where(item => item.IsChecked).ToList();
             if (validItems.Count == 0)
             {
@@ -357,6 +358,7 @@ public class DownloadEngineService
         {
             _isDownloading = false;
             CurrentSpeedText = "0.0 KB/s";
+            BackgroundExecutionService.Instance.CompleteTask("download_queue", "Tải Truyện", "Hoàn tất tải truyện");
             ProgressUpdated?.Invoke();
         }
     }
@@ -550,6 +552,7 @@ public class DownloadEngineService
 
                             book.StatusMessage = $"Đang tải {chapter.Title}: {downloadedCount}/{imageUrls.Count} trang";
                             CalculateSpeed();
+                            BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", $"{book.Title} • {chapter.Title} ({downloadedCount}/{imageUrls.Count})", book.ProgressPercentage, true);
                             ProgressUpdated?.Invoke();
                         }
                         finally

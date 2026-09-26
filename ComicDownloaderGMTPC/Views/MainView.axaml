@@ -9,9 +9,11 @@
              Background="#0B0F19">
 
     <Grid>
-        <!-- KHUNG CUỘN CHÍNH HỖ TRỢ ĐA NỀN TẢNG (DESKTOP & MOBILE/ANDROID) -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" BringIntoViewOnFocusChange="False">
-        <Grid RowDefinitions="Auto, Auto, *, Auto" MinHeight="650">
+        <!-- GIAO DIỆN CHÍNH (TỰ ĐỘNG ẨN KHI BẬT CHẾ ĐỘ BONG BÓNG) -->
+        <Panel IsVisible="{Binding !IsBubbleMode}">
+            <!-- KHUNG CUỘN CHÍNH HỖ TRỢ ĐA NỀN TẢNG (DESKTOP & MOBILE/ANDROID) -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" BringIntoViewOnFocusChange="False">
+            <Grid RowDefinitions="Auto, Auto, *, Auto" MinHeight="650">
 
             <!-- 1. HEADER / BRAND BAR -->
             <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="12,8">
@@ -48,6 +50,16 @@
                                 Background="#059669" BorderBrush="#10B981" BorderThickness="1"
                                 CornerRadius="6" Padding="10,3" Height="28" ToolTip.Tip="Tự động tải ngầm và cài đặt phiên bản APK mới nhất">
                             <TextBlock Text="{Binding UpdateButtonLabel}" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
+                        </Button>
+
+                        <!-- Nút Chế Độ Bong Bóng Chạy Ngầm (Bubble Mode) -->
+                        <Button Command="{Binding ToggleBubbleModeCommand}"
+                                Background="#7C3AED" BorderBrush="#8B5CF6" BorderThickness="1"
+                                CornerRadius="6" Padding="10,3" Height="28" ToolTip.Tip="Thu nhỏ ứng dụng thành bong bóng nổi/PiP mà vẫn chạy ngầm liên tục">
+                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                <TextBlock Text="🫧" FontSize="11" />
+                                <TextBlock Text="BONG BÓNG" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
+                            </StackPanel>
                         </Button>
                     </StackPanel>
                 </WrapPanel>
@@ -2035,6 +2047,80 @@
                 </Panel>
             </Grid>
             </Panel>
+        </Border>
+
+        <!-- FLOATING MINI BADGE (HIỂN THỊ Ở GÓC DƯỚI KHI CÓ TÁC VỤ CHẠY NGẦM VÀ ĐANG Ở GIAO DIỆN CHÍNH) -->
+        <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Margin="16" CornerRadius="12"
+                Background="#1E1B4B" BorderBrush="#8B5CF6" BorderThickness="1.5"
+                Padding="12,8" IsVisible="{Binding IsBackgroundWorking}" ZIndex="500"
+                BoxShadow="0 8 24 0 #60000000">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Border Width="10" Height="10" CornerRadius="5" Background="#10B981" VerticalAlignment="Center" />
+                <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding BubbleStatusTitle}" FontWeight="Bold" FontSize="11" Foreground="#F3F4F6" />
+                    <TextBlock Text="{Binding BubbleStatusDetail}" FontSize="10" Foreground="#94A3B8" MaxWidth="220" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <ProgressBar Value="{Binding BubbleProgress}" Minimum="0" Maximum="100" Width="60" Height="6" CornerRadius="3" Foreground="#8B5CF6" Background="#0F172A" />
+                <Button Command="{Binding ToggleBubbleModeCommand}"
+                        Background="#7C3AED" Foreground="#FFFFFF"
+                        FontWeight="Bold" FontSize="10" CornerRadius="6" Padding="8,4"
+                        ToolTip.Tip="Thu nhỏ ứng dụng thành bong bóng nổi chạy ngầm">
+                    <TextBlock Text="🫧 Bong bóng" />
+                </Button>
+            </StackPanel>
+        </Border>
+        </Panel>
+
+        <!-- GIAO DIỆN BONG BÓNG CHẠY NGẦM (MINI / PiP VIEW) -->
+        <Border IsVisible="{Binding IsBubbleMode}"
+                Background="#0F172A" BorderBrush="#6366F1" BorderThickness="2"
+                CornerRadius="16" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                MinWidth="280" MaxWidth="420"
+                BoxShadow="0 12 32 0 #80000000">
+            <StackPanel Spacing="12">
+                <!-- Header Bong bóng -->
+                <Grid ColumnDefinitions="*, Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Border Background="#6366F1" CornerRadius="8" Width="28" Height="28">
+                            <TextBlock Text="🫧" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel>
+                            <TextBlock Text="BONG BÓNG CHẠY NGẦM" FontWeight="Bold" FontSize="12" Foreground="#38BDF8" />
+                            <TextBlock Text="Tiến trình đang xử lý liên tục..." FontSize="9" Foreground="#94A3B8" />
+                        </StackPanel>
+                    </StackPanel>
+                    <Button Grid.Column="1" Command="{Binding ExitBubbleModeCommand}"
+                            Background="#1E293B" Foreground="#EF4444" FontWeight="Bold"
+                            Padding="6,2" CornerRadius="6" FontSize="10">
+                        <TextBlock Text="✕ Đóng" />
+                    </Button>
+                </Grid>
+
+                <!-- Thẻ trạng thái & Tiến trình -->
+                <Border Background="#1E1B4B" BorderBrush="#4338CA" BorderThickness="1" CornerRadius="8" Padding="10">
+                    <StackPanel Spacing="6">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding BubbleStatusTitle}" FontWeight="Bold" FontSize="12" Foreground="#F3F4F6" />
+                            <TextBlock Grid.Column="1" Text="{Binding BubbleProgressText}" FontWeight="Bold" FontSize="12" Foreground="#10B981" />
+                        </Grid>
+                        <ProgressBar Value="{Binding BubbleProgress}" Minimum="0" Maximum="100" Height="8" CornerRadius="4" Foreground="#8B5CF6" Background="#0B0F19" />
+                        <TextBlock Text="{Binding BubbleStatusDetail}" FontSize="10" Foreground="#A5B4FC" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Nút Phóng to / Vào lại ứng dụng -->
+                <Button Command="{Binding ExitBubbleModeCommand}"
+                        Background="#059669" BorderBrush="#10B981" BorderThickness="1"
+                        Foreground="#FFFFFF" FontWeight="Bold" FontSize="12"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Padding="12,8" CornerRadius="8">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="🔍" FontSize="12" />
+                        <TextBlock Text="PHÓNG TO / VÀO LẠI ỨNG DỤNG" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
         </Border>
     </Grid>
 </UserControl>

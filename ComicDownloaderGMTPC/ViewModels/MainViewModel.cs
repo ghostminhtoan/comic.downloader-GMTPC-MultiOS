@@ -63,6 +63,25 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isCompactRow;
 
+    // BACKGROUND EXECUTION & BUBBLE MODE (BONG BÓNG CHẠY NGẦM)
+    [ObservableProperty]
+    private bool _isBubbleMode = false;
+
+    [ObservableProperty]
+    private string _bubbleStatusTitle = "Sẵn sàng";
+
+    [ObservableProperty]
+    private string _bubbleStatusDetail = "Không có tác vụ chạy ngầm";
+
+    [ObservableProperty]
+    private double _bubbleProgress = 0;
+
+    [ObservableProperty]
+    private string _bubbleProgressText = "0%";
+
+    [ObservableProperty]
+    private bool _isBackgroundWorking = false;
+
     // CONCURRENT COMIC DOWNLOADS & IMAGE THREADS
     [ObservableProperty]
     private int _concurrentComicDownloads = 2; // 1 đến 8
@@ -417,6 +436,12 @@ public partial class MainViewModel : ViewModelBase
         _downloadEngine.ProgressUpdated += OnProgressUpdated;
         DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
 
+        // Lắng nghe sự kiện chạy ngầm & bong bóng
+        var bg = BackgroundExecutionService.Instance;
+        bg.TaskProgressChanged += OnBackgroundTaskProgressChanged;
+        bg.AnyTaskRunningChanged += OnAnyTaskRunningChanged;
+        bg.BubbleModeChanged += OnBubbleModeChanged;
+
         _imageEnhancer.LogEmitted += (level, msg) =>
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -433,11 +458,80 @@ public partial class MainViewModel : ViewModelBase
                 EnhanceProgressText = $"{pct:0.0}%";
                 EnhanceCurrentFileText = currentFile;
             });
+            BackgroundExecutionService.Instance.ReportProgress("image_enhancer", "Xử Lý Ảnh", $"Đang xử lý: {currentFile}", pct, true);
         };
 
         UpdateLanguageStrings();
         InitFolderToolsService();
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
+    }
+
+    private void OnBackgroundTaskProgressChanged(BackgroundTaskInfo task)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (task.IsRunning)
+            {
+                BubbleStatusTitle = task.Title;
+                BubbleStatusDetail = task.Detail;
+                BubbleProgress = task.ProgressPercentage;
+                BubbleProgressText = $"{task.ProgressPercentage:0}%";
+                IsBackgroundWorking = true;
+            }
+            else
+            {
+                var primary = BackgroundExecutionService.Instance.GetPrimaryTask();
+                if (primary != null)
+                {
+                    BubbleStatusTitle = primary.Title;
+                    BubbleStatusDetail = primary.Detail;
+                    BubbleProgress = primary.ProgressPercentage;
+                    BubbleProgressText = $"{primary.ProgressPercentage:0}%";
+                    IsBackgroundWorking = true;
+                }
+                else
+                {
+                    BubbleStatusTitle = "Hoàn tất";
+                    BubbleStatusDetail = task.Detail;
+                    BubbleProgress = 100;
+                    BubbleProgressText = "100%";
+                    IsBackgroundWorking = false;
+                }
+            }
+        });
+    }
+
+    private void OnAnyTaskRunningChanged(bool anyRunning)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            IsBackgroundWorking = anyRunning;
+            if (!anyRunning)
+            {
+                BubbleStatusTitle = "Sẵn sàng";
+                BubbleStatusDetail = "Tất cả tác vụ nền đã hoàn thành";
+            }
+        });
+    }
+
+    private void OnBubbleModeChanged(bool enabled)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            IsBubbleMode = enabled;
+        });
+    }
+
+    [RelayCommand]
+    public void ToggleBubbleMode()
+    {
+        BackgroundExecutionService.Instance.ToggleBubbleMode();
+    }
+
+    [RelayCommand]
+    public void ExitBubbleMode()
+    {
+        BackgroundExecutionService.Instance.SetBubbleMode(false);
     }
 
     private async void OnAndroidOpenFolderRequested(string path)
@@ -1175,6 +1269,7 @@ public partial class MainViewModel : ViewModelBase
         ManualSplitLogs.Add($"[{DateTime.Now:HH:mm:ss}] Bắt đầu quét thư mục: {ManualSplitFolderPath}");
 
         _manualSplitCts = new CancellationTokenSource();
+        BackgroundExecutionService.Instance.ReportProgress("image_splitter", "Cắt Ảnh Dài", "Bắt đầu quét thư mục ảnh dài...", 0, true);
 
         var progress = new Progress<ImageSplitterService.SplitProgressInfo>(info =>
         {
@@ -1186,6 +1281,7 @@ public partial class MainViewModel : ViewModelBase
                 ManualSplitProgressText = $"{pct:0.0}% ({info.ProcessedFiles} / {info.TotalFiles} {unit})";
                 ManualSplitCountText = $"{info.SplitCount} {unit}";
                 ManualSplitErrorCountText = info.ErrorCount.ToString();
+                BackgroundExecutionService.Instance.ReportProgress("image_splitter", "Cắt Ảnh Dài", $"{info.ProcessedFiles}/{info.TotalFiles} ảnh ({pct:0.0}%)", pct, true);
             }
             if (!string.IsNullOrEmpty(info.CurrentFile))
             {
@@ -1230,6 +1326,7 @@ public partial class MainViewModel : ViewModelBase
         finally
         {
             IsManualSplitting = false;
+            BackgroundExecutionService.Instance.CompleteTask("image_splitter", "Cắt Ảnh Dài", "Hoàn tất cắt ảnh dài");
         }
     }
 
@@ -1770,6 +1867,7 @@ public partial class MainViewModel : ViewModelBase
         EnhanceLogs.Add($"[{DateTime.Now:HH:mm:ss}] Bắt đầu tiến trình xử lý ảnh: Nguồn = {EnhanceFolderPath}, Đích = {outDir}");
 
         _enhanceCts = new CancellationTokenSource();
+        BackgroundExecutionService.Instance.ReportProgress("image_enhancer", "Xử Lý Ảnh", "Đang chuẩn bị xử lý ảnh...", 0, true);
 
         var options = new ImageEnhancerOptions
         {
@@ -1808,6 +1906,7 @@ public partial class MainViewModel : ViewModelBase
         finally
         {
             IsEnhancing = false;
+            BackgroundExecutionService.Instance.CompleteTask("image_enhancer", "Xử Lý Ảnh", "Hoàn tất xử lý ảnh");
         }
     }
 
@@ -2012,6 +2111,7 @@ public partial class MainViewModel : ViewModelBase
         PackerLogs.Add($"[{DateTime.Now:HH:mm:ss}] Bắt đầu tiến trình đóng gói: Nguồn = {PackerInputFolderPath}, Đích = {outDir}");
 
         _packerCts = new CancellationTokenSource();
+        BackgroundExecutionService.Instance.ReportProgress("file_packer", "Đóng Gói File", "Bắt đầu đóng gói file...", 0, true);
 
         var options = new FilePackerOptions
         {
@@ -2031,12 +2131,15 @@ public partial class MainViewModel : ViewModelBase
 
         var prog = new Progress<(int current, int total, string currentFile)>(info =>
         {
+            double pct = 0;
             if (info.total > 0)
             {
-                PackerProgress = Math.Clamp((double)info.current / info.total * 100.0, 0.0, 100.0);
+                pct = Math.Clamp((double)info.current / info.total * 100.0, 0.0, 100.0);
+                PackerProgress = pct;
                 PackerProgressText = $"{PackerProgress:F0}%";
             }
             PackerCurrentFileText = info.currentFile;
+            BackgroundExecutionService.Instance.ReportProgress("file_packer", "Đóng Gói File", $"Đang nén: {info.currentFile} ({pct:F0}%)", pct, true);
         });
 
         try
@@ -2075,6 +2178,7 @@ public partial class MainViewModel : ViewModelBase
         finally
         {
             IsPacking = false;
+            BackgroundExecutionService.Instance.CompleteTask("file_packer", "Đóng Gói File", "Hoàn tất đóng gói file");
         }
     }
 
