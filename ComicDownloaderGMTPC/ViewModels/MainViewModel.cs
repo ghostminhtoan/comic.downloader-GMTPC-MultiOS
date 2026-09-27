@@ -488,28 +488,43 @@ public partial class MainViewModel : ViewModelBase
         bg.AnyTaskRunningChanged += OnAnyTaskRunningChanged;
         bg.BubbleModeChanged += OnBubbleModeChanged;
 
+        long lastEnhanceLogTick = 0;
         _imageEnhancer.LogEmitted += (level, msg) =>
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            long now = Environment.TickCount64;
+            // Luôn ưu tiên hiển thị log lỗi và cảnh báo, các log thành công đơn lẻ được throttle 150ms để không nghẽn UI
+            if (level == "ERROR" || level == "WARN" || level == "INFO" || now - lastEnhanceLogTick >= 150)
             {
-                EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [{level}] {msg}");
-                while (EnhanceLogs.Count > 300) EnhanceLogs.RemoveAt(EnhanceLogs.Count - 1);
-            });
+                lastEnhanceLogTick = now;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [{level}] {msg}");
+                    while (EnhanceLogs.Count > 300) EnhanceLogs.RemoveAt(EnhanceLogs.Count - 1);
+                });
+            }
         };
+
+        long lastEnhanceProgressTick = 0;
         _imageEnhancer.ProgressUpdated += (pct, currentFile) =>
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            long now = Environment.TickCount64;
+            if (pct >= 100.0 || now - lastEnhanceProgressTick >= 120)
             {
-                EnhanceProgress = pct;
-                EnhanceProgressText = $"{pct:0.0}%";
-                EnhanceCurrentFileText = currentFile;
-            });
-            BackgroundExecutionService.Instance.ReportProgress("image_enhancer", "Xử Lý Ảnh", $"Đang xử lý: {currentFile}", pct, true);
+                lastEnhanceProgressTick = now;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    EnhanceProgress = pct;
+                    EnhanceProgressText = $"{pct:0.0}%";
+                    EnhanceCurrentFileText = currentFile;
+                });
+                BackgroundExecutionService.Instance.ReportProgress("image_enhancer", "Xử Lý Ảnh", $"Đang xử lý: {currentFile}", pct, true);
+            }
         };
 
         UpdateLanguageStrings();
         InitFolderToolsService();
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
+        SoundNotificationService.Instance.PlaySound(SoundNotificationType.Startup);
     }
 
     private void OnBackgroundTaskProgressChanged(BackgroundTaskInfo task)
@@ -2126,6 +2141,15 @@ public partial class MainViewModel : ViewModelBase
             EnhanceCountText = $"{success} ảnh";
             EnhanceErrorCountText = errors.ToString();
             EnhanceCurrentFileText = _langService.CurrentLanguage == "VI" ? "Hoàn tất." : "Completed.";
+
+            if (errors > 0 && success == 0)
+            {
+                SoundNotificationService.Instance.PlaySound(SoundNotificationType.DownloadError);
+            }
+            else
+            {
+                SoundNotificationService.Instance.PlaySound(SoundNotificationType.DownloadFinish);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -2136,6 +2160,7 @@ public partial class MainViewModel : ViewModelBase
         {
             EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Lỗi] {ex.Message}");
             EnhanceCurrentFileText = "Lỗi: " + ex.Message;
+            SoundNotificationService.Instance.PlaySound(SoundNotificationType.DownloadError);
         }
         finally
         {

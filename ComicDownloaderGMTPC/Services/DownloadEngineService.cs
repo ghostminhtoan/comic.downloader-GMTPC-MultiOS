@@ -349,6 +349,7 @@ public class DownloadEngineService
 
             await Task.WhenAll(downloadTasks).ConfigureAwait(false);
             LogEmitted?.Invoke("SUCCESS", "Hoàn tất toàn bộ tác vụ tải trong hàng chờ.");
+            SoundNotificationService.Instance.PlaySound(SoundNotificationType.DownloadFinish);
         }
         catch (OperationCanceledException)
         {
@@ -357,6 +358,7 @@ public class DownloadEngineService
         catch (Exception ex)
         {
             LogEmitted?.Invoke("ERROR", $"Tiến trình tải gặp lỗi: {ex.Message}");
+            SoundNotificationService.Instance.PlaySound(SoundNotificationType.DownloadError);
         }
         finally
         {
@@ -657,6 +659,7 @@ public class DownloadEngineService
             book.StatusMessage = ex.Message;
             book.DetailProgressText = "Lỗi tải";
             LogEmitted?.Invoke("ERROR", $"Lỗi tải '{book.Title}': {ex.Message}");
+            SoundNotificationService.Instance.PlaySound(SoundNotificationType.DownloadError);
         }
         finally
         {

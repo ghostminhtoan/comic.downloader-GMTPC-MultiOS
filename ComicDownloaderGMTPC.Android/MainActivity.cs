@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Android;
 using Android.App;
 using Android.Content;
@@ -75,6 +76,46 @@ public class MainActivity : AvaloniaMainActivity
         Services.DownloadEngineService.OpenStorageSettingsRequested += OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested += OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
+
+        // Đăng ký Native Android Audio Player cho âm thanh thông báo (Startup / DownloadFinish / Error)
+        Services.SoundNotificationService.AndroidPlaySoundHandler = (type, filePath) =>
+        {
+            RunOnUiThread(() =>
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+                    {
+                        var player = new global::Android.Media.MediaPlayer();
+                        player.SetDataSource(filePath);
+                        player.Prepare();
+                        player.Start();
+                        player.Completion += (s, e) =>
+                        {
+                            try
+                            {
+                                player.Release();
+                                player.Dispose();
+                            }
+                            catch { }
+                        };
+                        return;
+                    }
+
+                    // Fallback qua ToneGenerator nếu chưa tải xong file WAV
+                    var toneType = type switch
+                    {
+                        Services.SoundNotificationType.Startup => global::Android.Media.Tone.PropBeep,
+                        Services.SoundNotificationType.DownloadFinish => global::Android.Media.Tone.PropAck,
+                        _ => global::Android.Media.Tone.PropNack
+                    };
+                    using var toneGen = new global::Android.Media.ToneGenerator(global::Android.Media.Stream.Music, 100);
+                    toneGen.StartTone(toneType, 250);
+                }
+                catch { }
+            });
+        };
+
         RequestAppStoragePermissions();
     }
 
@@ -85,6 +126,7 @@ public class MainActivity : AvaloniaMainActivity
 
     protected override void OnDestroy()
     {
+        Services.SoundNotificationService.AndroidPlaySoundHandler = null;
         Services.BackgroundExecutionService.NativeStartOrUpdateForegroundNotification = null;
         Services.BackgroundExecutionService.NativeStopForegroundNotification = null;
         Services.BackgroundExecutionService.NativeRequestEnterBubbleMode = null;

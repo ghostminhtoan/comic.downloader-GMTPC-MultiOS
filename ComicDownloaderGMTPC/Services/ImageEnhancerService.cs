@@ -108,19 +108,22 @@ public class ImageEnhancerService
             imageFilter = sharpenFilter;
         }
 
-        var dst = new SKBitmap(src.Width, src.Height, src.ColorType, src.AlphaType);
-        using (var canvas = new SKCanvas(dst))
+        SKBitmap dst = new SKBitmap(src.Width, src.Height, src.ColorType, src.AlphaType);
+        try
         {
+            using var canvas = new SKCanvas(dst);
             using var paint = new SKPaint
             {
                 ColorFilter = colorFilter,
                 ImageFilter = imageFilter
             };
             canvas.DrawBitmap(src, 0, 0, paint);
+            return dst;
         }
-
-        imageFilter?.Dispose();
-        return dst;
+        finally
+        {
+            imageFilter?.Dispose();
+        }
     }
 
     /// <summary>
@@ -378,13 +381,18 @@ public class ImageEnhancerService
         int success = 0;
         int errors = 0;
 
+        // Giới hạn số luồng xử lý đồ họa trên thiết bị di động để tránh tràn native memory OOM killer của Android
+        int effectiveThreads = OperatingSystem.IsAndroid()
+            ? Math.Clamp(options.MaxThreads, 1, 2)
+            : Math.Clamp(options.MaxThreads, 1, 16);
+
         var parallelOptions = new ParallelOptions
         {
-            MaxDegreeOfParallelism = Math.Max(1, options.MaxThreads),
+            MaxDegreeOfParallelism = effectiveThreads,
             CancellationToken = ct
         };
 
-        await Parallel.ForEachAsync(files, parallelOptions, async (filePath, token) =>
+        await Parallel.ForEachAsync(files, parallelOptions, (filePath, token) =>
         {
             token.ThrowIfCancellationRequested();
             string fileName = Path.GetFileName(filePath);
@@ -401,9 +409,8 @@ public class ImageEnhancerService
                     Directory.CreateDirectory(destDir);
                 }
 
-                await Task.Run(() =>
+                using (var src = SKBitmap.Decode(filePath))
                 {
-                    using var src = SKBitmap.Decode(filePath);
                     if (src == null) throw new InvalidOperationException("Không thể giải mã dữ liệu ảnh.");
 
                     using var enhanced = ProcessBitmap(src, options);
@@ -418,7 +425,7 @@ public class ImageEnhancerService
 
                     using var fs = File.OpenWrite(destPath);
                     enhanced.Encode(fs, format, Math.Clamp(options.Quality, 10, 100));
-                }, token);
+                }
 
                 if (options.OverwriteOriginal)
                 {
@@ -444,7 +451,15 @@ public class ImageEnhancerService
                 int current = Interlocked.Increment(ref completed);
                 double percent = (double)current / total * 100.0;
                 ProgressUpdated?.Invoke(percent, relPath);
+
+                // Dọn dẹp bộ nhớ định kỳ trên Android để đảm bảo chạy mượt khi tắt màn hình/chuyển ứng dụng
+                if (OperatingSystem.IsAndroid() && current % 20 == 0)
+                {
+                    GC.Collect(2, GCCollectionMode.Optimized);
+                }
             }
+
+            return ValueTask.CompletedTask;
         });
 
         LogEmitted?.Invoke("INFO", $"Hoàn tất nâng cao ảnh! Thành công: {success}/{total}, Lỗi: {errors}");

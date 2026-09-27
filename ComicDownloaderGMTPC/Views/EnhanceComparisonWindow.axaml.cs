@@ -27,6 +27,7 @@ public partial class EnhanceComparisonWindow : Window
             BeforeScrollViewer.AddHandler(PointerPressedEvent, OnImagePointerPressed, RoutingStrategies.Tunnel);
             BeforeScrollViewer.AddHandler(PointerMovedEvent, OnImagePointerMoved, RoutingStrategies.Tunnel);
             BeforeScrollViewer.AddHandler(PointerReleasedEvent, OnImagePointerReleased, RoutingStrategies.Tunnel);
+            BeforeScrollViewer.AddHandler(PointerCaptureLostEvent, (s, e) => _isDragging = false, RoutingStrategies.Tunnel);
         }
 
         if (AfterScrollViewer != null)
@@ -35,6 +36,7 @@ public partial class EnhanceComparisonWindow : Window
             AfterScrollViewer.AddHandler(PointerPressedEvent, OnImagePointerPressed, RoutingStrategies.Tunnel);
             AfterScrollViewer.AddHandler(PointerMovedEvent, OnImagePointerMoved, RoutingStrategies.Tunnel);
             AfterScrollViewer.AddHandler(PointerReleasedEvent, OnImagePointerReleased, RoutingStrategies.Tunnel);
+            AfterScrollViewer.AddHandler(PointerCaptureLostEvent, (s, e) => _isDragging = false, RoutingStrategies.Tunnel);
         }
 
         if (SingleScrollViewer != null)

@@ -45,13 +45,20 @@ public partial class MainView : UserControl
         }, RoutingStrategies.Tunnel);
     }
 
+    private bool _isSyncScrollSetup = false;
+
     private void OnMainViewLoaded(object? sender, RoutedEventArgs e)
     {
-        // Đồng bộ Pan & Zoom cho Live Preview trong Tab Xử Lý Ảnh
-        SetupSyncScroll(this.FindControl<ScrollViewer>("LiveBeforeScrollViewer"), this.FindControl<ScrollViewer>("LiveAfterScrollViewer"));
+        if (!_isSyncScrollSetup)
+        {
+            _isSyncScrollSetup = true;
 
-        // Đồng bộ Pan & Zoom cho Modal Đối Chiếu Toàn Màn Hình
-        SetupSyncScroll(this.FindControl<ScrollViewer>("ModalBeforeScrollViewer"), this.FindControl<ScrollViewer>("ModalAfterScrollViewer"));
+            // Đồng bộ Pan & Zoom cho Live Preview trong Tab Xử Lý Ảnh
+            SetupSyncScroll(this.FindControl<ScrollViewer>("LiveBeforeScrollViewer"), this.FindControl<ScrollViewer>("LiveAfterScrollViewer"));
+
+            // Đồng bộ Pan & Zoom cho Modal Đối Chiếu Toàn Màn Hình
+            SetupSyncScroll(this.FindControl<ScrollViewer>("ModalBeforeScrollViewer"), this.FindControl<ScrollViewer>("ModalAfterScrollViewer"));
+        }
 
         // Khi bất kỳ ô nhập liệu nào (TextBox, NumericUpDown, ComboBox) nhận focus trên Android / Desktop:
         // Tự động cuộn khung nhìn để không bao giờ bị bàn phím ảo che khuất ô cần nhập
@@ -127,12 +134,17 @@ public partial class MainView : UserControl
 
         void OnPressed(object? sender, PointerPressedEventArgs ev)
         {
-            // Bỏ qua nếu người dùng click/chạm vào thanh ScrollBar (chống cướp pointer làm kẹt lặp lại cuộn tuột xuống bottom)
             if (IsScrollBarElement(ev.Source, sender as Visual)) return;
 
             var p = ev.GetCurrentPoint(this);
             if (p.Properties.IsLeftButtonPressed || p.Properties.IsMiddleButtonPressed || ev.Pointer.Type == PointerType.Touch)
             {
+                if (ev.Pointer.Type == PointerType.Mouse)
+                {
+                    // Chuột: Luôn dọn dẹp các pointer touch cũ còn sót
+                    activePointers.Clear();
+                }
+
                 activePointers[ev.Pointer.Id] = p.Position;
 
                 if (activePointers.Count == 1)
@@ -143,7 +155,7 @@ public partial class MainView : UserControl
                     dragStartPoint = p.Position;
                     dragStartOffset = before.Offset;
                     ev.Pointer.Capture(sender as IInputElement);
-                    ev.Handled = true; // Ngăn ScrollViewer ngoài cùng cuộn trang khi chạm vào ảnh
+                    ev.Handled = true;
                 }
                 else if (activePointers.Count >= 2 && DataContext is MainViewModel vm)
                 {
@@ -154,7 +166,7 @@ public partial class MainView : UserControl
                     initialPinchDistance = Math.Max(10.0, GetDistance(pts[0], pts[1]));
                     initialZoom = vm.EnhancePreviewZoom;
                     ev.Pointer.Capture(null);
-                    ev.Handled = true; // Chặn cử chỉ cuộn trang ngoài cùng
+                    ev.Handled = true;
                 }
             }
         }
@@ -180,7 +192,6 @@ public partial class MainView : UserControl
                         ev.Pointer.Capture(null);
                     }
 
-                    // Đang dùng 2 ngón tay để zoom (Pinch Gesture)
                     var pts = activePointers.Values.Take(2).ToArray();
                     double curDistance = GetDistance(pts[0], pts[1]);
                     if (initialPinchDistance > 5)
@@ -193,11 +204,10 @@ public partial class MainView : UserControl
                             vm.EnhancePreviewZoom = targetZoom;
                         }
                     }
-                    ev.Handled = true; // Ngăn chặn ScrollViewer ngoài cùng cuộn dọc
+                    ev.Handled = true;
                 }
                 else if (isDragging && !isPinching)
                 {
-                    // Đang dùng 1 ngón tay / chuột để kéo rê ảnh (Pan Drag)
                     var delta = dragStartPoint - curPos;
                     var newOffset = new Vector(
                         Math.Max(0, dragStartOffset.X + delta.X),
@@ -207,7 +217,7 @@ public partial class MainView : UserControl
                     before.Offset = newOffset;
                     after.Offset = newOffset;
                     isSyncing = false;
-                    ev.Handled = true; // Khắc phục triệt để lỗi không pan lên xuống được trên Android
+                    ev.Handled = true;
                 }
             }
         }
@@ -218,7 +228,6 @@ public partial class MainView : UserControl
 
             if (activePointers.Count == 1)
             {
-                // Khi nhấc 1 ngón tay lên sau khi zoom, ngón còn lại chuyển mượt về chế độ Pan
                 isPinching = false;
                 isDragging = true;
                 dragStartPoint = activePointers.Values.First();
@@ -228,20 +237,17 @@ public partial class MainView : UserControl
             {
                 isDragging = false;
                 isPinching = false;
-                ev.Pointer.Capture(null);
+                try { ev.Pointer.Capture(null); } catch { }
             }
         }
 
         void OnCaptureLost(object? sender, PointerCaptureLostEventArgs ev)
         {
-            if (activePointers.Count < 2)
+            activePointers.Remove(ev.Pointer.Id);
+            if (activePointers.Count == 0)
             {
-                activePointers.Remove(ev.Pointer.Id);
-                if (activePointers.Count == 0)
-                {
-                    isDragging = false;
-                    isPinching = false;
-                }
+                isDragging = false;
+                isPinching = false;
             }
         }
 

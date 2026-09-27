@@ -582,6 +582,27 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
   - Khi đóng gói file: Hệ thống tự động tạo thư mục mang tên bộ truyện bên trong `\Downloads\packed\`, xuất từng chapter thành file `.cbz`/`.zip`/`.pdf` tương ứng:
     `\Downloads\packed\Tro Choi Toan Cau Toi Co The Manh Len Gap Tram Lan 24959\Chapter 1.cbz`
     `\Downloads\packed\Tro Choi Toan Cau Toi Co The Manh Len Gap Tram Lan 24959\Chapter 2.cbz`
-  - Nếu người dùng chọn gom tất cả vào 1 file duy nhất (`PackSubfoldersIndividually = false`), file nén tổng mang tên bộ truyện cũng được lưu an toàn trong thư mục cấu trúc bộ truyện đó.
-  - Ngăn ngừa triệt để hiện tượng trùng lặp tên folder lồng nhau nếu người dùng tự tay chọn đích có chứa tên bộ truyện.
+### 15.12. Âm Thanh Thông Báo Đa Nền Tảng, Khắc Phục Liệt Pan & Zoom, Đổi Vị Trí Nút Reset ↺ & Tối Ưu Background Image Enhancer
+- **Âm thanh thông báo đa nền tảng (Windows, Linux, Android)**:
+  - Thiết kế `SoundNotificationService` singleton quản lý phát âm thanh bất đồng bộ không chặn luồng chính cho 3 trạng thái:
+    + `Startup`: Khi mở ứng dụng (`Startup.wav`).
+    + `DownloadFinish`: Khi tải xong toàn bộ truyện hoặc xử lý xong ảnh (`download-finish.wav`).
+    + `DownloadError`: Khi có lỗi tải truyện hoặc lỗi xử lý ảnh (`error.wav`).
+  - Cơ chế tự động tìm nạp thông minh: Kiểm tra file WAV trong thư mục ứng dụng/cache `.portable/sounds/`, nếu chưa có sẽ tự động tải ngầm và lưu cache từ GitHub Release assets của dự án; tích hợp fallback âm thanh hệ thống trên Windows (`SystemSounds`) và Native Audio Player trên Android (`ToneGenerator` & `MediaPlayer` thông qua `MainActivity.cs`).
+- **Khắc phục triệt để lỗi Pan & Zoom bị liệt từ lần 2 trở đi**:
+  - *Nguyên nhân*: Trong `SetupSyncScroll`, trình xử lý `OnCaptureLost` có logic kiểm tra `if (activePointers.Count < 2)` khiến các Touch Pointer ID không được dọn dẹp sạch khi người dùng nhấc ngón tay, dẫn đến các con trỏ "ma" tồn tại vĩnh viễn trong `activePointers`. Lần thao tác thứ 2 trở đi, hệ thống hiểu nhầm đang ở chế độ chạm đa điểm nhưng khoảng cách không thay đổi nên gán `isDragging = false`, vô hiệu hóa hoàn toàn cử chỉ Pan.
+  - *Khắc phục*: Tái cấu trúc bộ theo dõi con trỏ cảm ứng trong `MainView.axaml.cs` và `EnhanceComparisonWindow.axaml.cs`: Loại bỏ pointer an toàn theo đúng ID con trỏ, tự động reset trạng thái kéo rê khi con trỏ rơi vào Capture Lost, đồng thời dọn dẹp sạch sẽ bộ đệm con trỏ khi nạp ảnh mới hoặc đóng/mở xem trước.
+- **Bố trí lại vị trí nút Reset ↺ tránh bấm nhầm mũi tên tăng/giảm số**:
+  - *Thiết kế cũ*: Nút Reset ↺ nằm ở cột tận cùng bên phải của ô `NumericUpDown`, khiến người dùng khi bấm vào 2 mũi tên tăng/giảm ở mép phải ô số rất dễ bấm trúng nút Reset ↺ làm mất toàn bộ giá trị đang chỉnh.
+  - *Thiết kế mới*: Chuyển nút Reset ↺ sang **bên trái** ô `NumericUpDown` (`ColumnDefinitions="Auto, 100, 22, 52"`: Column 0: Label, Column 1: Slider, Column 2: Button Reset ↺, Column 3: NumericUpDown với 2 mũi tên tăng giảm ở góc phải của nó). Áp dụng đồng bộ cho cả Tab Xử lý ảnh chính, Modal xem trước toàn màn hình và Cửa sổ đối chiếu độc lập (`EnhanceComparisonWindow.axaml`).
+- **Tối ưu hóa hiệu năng xử lý ảnh nền & Khắc phục hiện tượng out/kill app khi tắt màn/chuyển ứng dụng**:
+  - *Nguyên nhân*:
+    1. Khi xử lý hàng trăm ảnh, mỗi ảnh hoàn tất đều bắn trực tiếp `Dispatcher.UIThread.Post` cho cả Log và Progress. Hàng nghìn delegate dồn ứ làm tắc nghẽn Main UI Thread gây hiện tượng ANR (Application Not Responding), khiến Android OS kill tiến trình khi chuyển sang chạy ngầm.
+    2. Trong `ProcessFolderAsync`, việc chạy lồng `Task.Run` bên trong `Parallel.ForEachAsync` làm quá tải ThreadPool. Số luồng decode Skia không giới hạn khiến RAM native vọt lên hàng trăm MB kích hoạt Android Low Memory Killer (LMK).
+  - *Khắc phục*:
+    1. Bỏ `Task.Run` lồng thừa trong `Parallel.ForEachAsync`, chạy đồng bộ trực tiếp trên thread worker được cấp.
+    2. Giới hạn số luồng xử lý đồ họa an toàn trên Android (`Math.Clamp(options.MaxThreads, 1, 2)`) nhằm kiểm soát mức tiêu thụ Native Heap Memory của SkiaSharp.
+    3. Thêm cơ chế Throttle (120ms - 150ms) cho các cập nhật giao diện Dispatcher và `BackgroundExecutionService.ReportProgress`, giữ UI Thread luôn thông suốt và phản hồi ngay lập tức.
+    4. Kích hoạt thu gom rác tối ưu `GC.Collect(2, GCCollectionMode.Optimized)` định kỳ trên Android.
+
 
