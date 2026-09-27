@@ -67,6 +67,8 @@ public partial class MainViewModel
     [ObservableProperty]
     private ObservableCollection<string> _folderToolLogs = new();
 
+    private long _lastFolderBgReportTicks = 0;
+
     private void InitFolderToolsService()
     {
         // 1. Nhận log từ service đưa vào Queue an toàn đa luồng
@@ -115,8 +117,14 @@ public partial class MainViewModel
                     FolderToolProgressText = $"{FolderToolProgress:F0}%";
                 }
                 FolderToolStatusText = msg;
-                BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", msg, pct, true);
-            }, Avalonia.Threading.DispatcherPriority.Render);
+
+                long now = Environment.TickCount64;
+                if (current == total || current == 0 || now - _lastFolderBgReportTicks >= 200)
+                {
+                    _lastFolderBgReportTicks = now;
+                    BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", msg, pct, true);
+                }
+            }, Avalonia.Threading.DispatcherPriority.Background);
         };
 
         // Gợi ý thư mục mặc định

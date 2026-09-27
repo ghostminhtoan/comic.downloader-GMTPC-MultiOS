@@ -660,16 +660,21 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
   3. **Tắc nghẽn I/O & Nguy cơ ANR (Application Not Responding)**: Vòng lặp di chuyển hàng trăm chapter/folder liên tục không nhả nhịp CPU khiến hệ thống Android đánh giá tác vụ bị đơ (ANR) và tự động force-close.
   4. **Bị Low Memory Killer (LMK) tắt khi chuyển app / tắt màn hình**: Chưa kích hoạt Foreground Service và WakeLock ngay từ đầu khiến Android OS gom bộ nhớ và kill ứng dụng khi người dùng không tương tác trực tiếp.
 - **Giải pháp khắc phục toàn diện**:
-  1. **Xây dựng `SafeMoveDirectory` đa tầng với cơ chế Fallback an toàn (`FolderToolsService.cs`)**:
-     - Thử `Directory.Move` trước; nếu thất bại do lỗi hệ thống/phân vùng, tự động chuyển sang `MergeDirectoryContents` đệ quy từng tệp.
-     - Trong `MergeDirectoryContents`: Thử `File.Move` trước, nếu gặp lỗi Scoped Storage sẽ fallback sang `File.Copy(..., overwrite: true)` + `File.Delete(...)`. Bọc `try/catch` cục bộ cho từng file và folder riêng biệt, không bao giờ để lỗi 1 file làm hỏng toàn bộ quá trình.
-  2. **Tái cấu trúc `DeleteEmptyDirectoriesBottomUp` với thuật toán duyệt Stack an toàn**:
-     - Thay thế hoàn toàn `SearchOption.AllDirectories` bằng vòng lặp `Stack<string>` duyệt từng tầng có `try/catch` độc lập, tự động bỏ qua các thư mục bị cấm quyền mà không gây ném ngoại lệ.
-     - Xóa thư mục từ dưới lên trên (`OrderByDescending(d => d.Length)`) sau khi đảm bảo thư mục đã rỗng hoàn toàn.
-  3. **Nhả nhịp CPU chống ANR**: Thêm `await Task.Yield();` sau mỗi lần di chuyển folder/chapter, đảm bảo hệ thống luôn phản hồi mượt mà.
-  4. **Kích hoạt Foreground Service & WakeLock tức thì (`MainViewModel.FolderTools.cs`)**:
-     - Gọi `BackgroundExecutionService.Instance.ReportProgress("folder_tools", ...)` với `isRunning = true` ngay khi bắt đầu các phương thức `SplitByChapterCountAsync`, `MergeByChapterCountAsync`, `SplitByAlphabetAsync`, `MergeByAlphabetAsync`.
-     - Bọc `try/catch` an toàn cho các lệnh phát âm thanh thông báo `SoundNotificationService`.
+  1. **Tạo trước thư mục cha (Parent Directory) & Cơ chế `SafeMoveDirectory` chống lỗi Scoped Storage**:
+     - Khi tách chapter vào thư mục nhóm mới (ví dụ `chap 0001-0200/`), hệ thống chủ động gọi `Directory.CreateDirectory(parentDest)` trước khi gọi `Directory.Move`.
+     - Nhờ thư mục cha đã tồn tại, `Directory.Move` thực hiện đổi metadata inode (atomic rename) thành công ngay trong 0.001s thay vì bị fail và fallback sang copy/delete hàng chục nghìn file ảnh gây freeze I/O.
+     - Fallback `MergeDirectoryContents` đệ quy an toàn từng file khi có xung đột chéo phân vùng hoặc file trùng tên.
+  2. **Chống đệ quy vô tận (Infinite Directory Recursion Protection)**:
+     - Kiểm tra nếu `dest` nằm bên trong `source` (`normDest.StartsWith(normSource)`), lập tức bỏ qua để tránh vòng lặp đệ quy tạo thư mục con lồng nhau vô hạn gây tràn bộ nhớ (`StackOverflowException`).
+  3. **Tái cấu trúc `DeleteEmptyDirectoriesBottomUp` theo độ sâu đường dẫn (`GetPathDepth`)**:
+     - Sắp xếp thư mục theo cấp độ sâu giảm dần (`OrderByDescending(d => GetPathDepth(d)).ThenByDescending(d => d.Length)`), đảm bảo các thư mục con sâu nhất luôn được quét và xóa rỗng trước thư mục cha.
+  4. **Cơ chế Throttle thông minh cho UI & Android Binder IPC Notification**:
+     - Giới hạn tần suất phát sự kiện `ProgressChanged` trong service (tối thiểu 100ms/lần) và `BackgroundExecutionService` (tối thiểu 200ms/lần) qua `Environment.TickCount64`.
+     - Chống quá tải Android Binder IPC và tràn hàng đợi Dispatcher của Avalonia khi xử lý nhanh hàng trăm chapter trong thời gian ngắn.
+  5. **Nhả nhịp CPU chống ANR & Giữ tiến trình chạy ngầm**:
+     - Thêm `await Task.Yield();` sau mỗi vòng lặp di chuyển chapter.
+     - Kích hoạt Foreground Service và WakeLock tức thì ngay khi bắt đầu tác vụ, bảo vệ bởi `try/catch` an toàn cho âm thanh thông báo.
+
 
 
 
