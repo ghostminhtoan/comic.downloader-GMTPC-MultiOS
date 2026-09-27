@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -102,7 +103,9 @@ public class FolderToolsService
             int splitCount = 0;
             long lastProgressTicks = 0;
 
-            LogEmitted?.Invoke("INFO", $"[Tách Folder] Đã tìm thấy {totalChapters} chapter trong {bookGroups.Count} bộ truyện. Bắt đầu phân chia...");
+            LogEmitted?.Invoke("INFO", $"[Tách Folder] Đã tìm thấy {totalChapters} chapter trong {bookGroups.Count} bộ truyện. Bắt đầu phân chia siêu tốc...");
+
+            var allMoveTasks = new List<(ChapterFolderItem chapter, string destPath)>();
 
             foreach (var bookGroup in bookGroups)
             {
@@ -176,52 +179,39 @@ public class FolderToolsService
                     }
                     catch { }
 
-                    int bucketMoved = 0;
                     foreach (var chapter in bucket)
                     {
-                        if (ct.IsCancellationRequested) break;
-
                         string destPath = Path.Combine(groupFolderPath, chapter.FolderName);
-                        if (string.Equals(chapter.SourcePath, destPath, StringComparison.OrdinalIgnoreCase)) continue;
-
-                        try
+                        if (!string.Equals(chapter.SourcePath, destPath, StringComparison.OrdinalIgnoreCase))
                         {
-                            SafeMoveDirectory(chapter.SourcePath, destPath);
-                            splitCount++;
-                            bucketMoved++;
+                            allMoveTasks.Add((chapter, destPath));
                         }
-                        catch (Exception ex)
-                        {
-                            LogEmitted?.Invoke("ERROR", $"[Tách Lỗi] Không thể chuyển '{chapter.SourcePath}': {ex.Message}");
-                        }
-
-                        long now = Environment.TickCount64;
-                        if (splitCount == totalChapters || now - lastProgressTicks >= 250)
-                        {
-                            lastProgressTicks = now;
-                            double pct = (double)splitCount / totalChapters * 100.0;
-                            ProgressChanged?.Invoke(splitCount, totalChapters, $"Đã tách {splitCount}/{totalChapters} chapter ({pct:F0}%)...");
-                        }
-
-                        // Nhả nhịp định kỳ chống quá tải JNI / I/O trên Android
-                        if (splitCount % 10 == 0)
-                        {
-                            await Task.Delay(10, ct).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            await Task.Yield();
-                        }
-                    }
-
-                    if (bucketMoved > 0)
-                    {
-                        LogEmitted?.Invoke("SUCCESS", $"[Tách] Nhóm '{groupFolderName}': Đã hoàn tất {bucketMoved} chapters.");
                     }
                 }
             }
 
-            // Dọn dẹp các thư mục rỗng 1 lần duy nhất ở cuối để tránh lặp quét đĩa gây lag
+            int maxDegree = Math.Clamp(Environment.ProcessorCount, 4, 8);
+            await Parallel.ForEachAsync(allMoveTasks, new ParallelOptions { MaxDegreeOfParallelism = maxDegree, CancellationToken = ct }, (task, token) =>
+            {
+                try
+                {
+                    SafeMoveDirectory(task.chapter.SourcePath, task.destPath);
+                    int done = Interlocked.Increment(ref splitCount);
+                    long now = Environment.TickCount64;
+                    if (done == totalChapters || now - Volatile.Read(ref lastProgressTicks) >= 120)
+                    {
+                        Interlocked.Exchange(ref lastProgressTicks, now);
+                        double pct = (double)done / totalChapters * 100.0;
+                        ProgressChanged?.Invoke(done, totalChapters, $"Đã tách {done}/{totalChapters} chapter ({pct:F0}%)...");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogEmitted?.Invoke("ERROR", $"[Tách Lỗi] Không thể chuyển '{task.chapter.SourcePath}': {ex.Message}");
+                }
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
+
             DeleteEmptyDirectoriesBottomUp(rootFolder);
             ProgressChanged?.Invoke(totalChapters, totalChapters, $"Hoàn tất: Đã tách {splitCount}/{totalChapters} chapter.");
             LogEmitted?.Invoke("SUCCESS", $"[Tách Folder] Hoàn tất tách {splitCount} chapter folders tại {rootFolder}");
@@ -270,21 +260,19 @@ public class FolderToolsService
                 return 0;
             }
 
-            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Tìm thấy {total} chapter cần gộp về thư mục truyện gốc. Bắt đầu di chuyển...");
+            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Tìm thấy {total} chapter cần gộp về thư mục truyện gốc. Bắt đầu di chuyển siêu tốc...");
 
-            var groupsToClean = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var groupsToClean = new ConcurrentBag<string>();
+            int maxDegree = Math.Clamp(Environment.ProcessorCount, 4, 8);
 
-            for (int i = 0; i < itemsToMerge.Count; i++)
+            await Parallel.ForEachAsync(itemsToMerge, new ParallelOptions { MaxDegreeOfParallelism = maxDegree, CancellationToken = ct }, (chapter, token) =>
             {
-                if (ct.IsCancellationRequested) break;
-                var chapter = itemsToMerge[i];
-
-                if (string.IsNullOrWhiteSpace(chapter.SourcePath) || string.IsNullOrWhiteSpace(chapter.FolderName)) continue;
+                if (string.IsNullOrWhiteSpace(chapter.SourcePath) || string.IsNullOrWhiteSpace(chapter.FolderName)) return ValueTask.CompletedTask;
 
                 string targetBookFolder = !string.IsNullOrWhiteSpace(chapter.BookFolderPath) ? chapter.BookFolderPath : rootFolder;
                 string destPath = Path.Combine(targetBookFolder, chapter.FolderName);
 
-                if (string.Equals(chapter.SourcePath, destPath, StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(chapter.SourcePath, destPath, StringComparison.OrdinalIgnoreCase)) return ValueTask.CompletedTask;
 
                 string? sourceParent = Path.GetDirectoryName(chapter.SourcePath);
                 if (!string.IsNullOrEmpty(sourceParent) && !string.Equals(sourceParent, targetBookFolder, StringComparison.OrdinalIgnoreCase))
@@ -295,39 +283,24 @@ public class FolderToolsService
                 try
                 {
                     SafeMoveDirectory(chapter.SourcePath, destPath);
-                    mergedCount++;
+                    int done = Interlocked.Increment(ref mergedCount);
+                    long now = Environment.TickCount64;
+                    if (done == total || now - Volatile.Read(ref lastProgressTicks) >= 120)
+                    {
+                        Interlocked.Exchange(ref lastProgressTicks, now);
+                        double pct = (double)done / total * 100.0;
+                        ProgressChanged?.Invoke(done, total, $"Đã gộp {done}/{total} chapter ({pct:F0}%)...");
+                    }
                 }
                 catch (Exception ex)
                 {
                     LogEmitted?.Invoke("ERROR", $"[Gộp Lỗi] Lỗi gộp '{chapter.SourcePath}': {ex.Message}");
                 }
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
 
-                long now = Environment.TickCount64;
-                if (i + 1 == total || now - lastProgressTicks >= 250)
-                {
-                    lastProgressTicks = now;
-                    double pct = (double)(i + 1) / total * 100.0;
-                    ProgressChanged?.Invoke(i + 1, total, $"Đã gộp {mergedCount}/{total} chapter ({pct:F0}%)...");
-                }
-
-                // Dọn dẹp nhanh thư mục cha nếu đã trống
-                if (!string.IsNullOrEmpty(sourceParent) && Directory.Exists(sourceParent))
-                {
-                    TryCleanEmptyOrJunkDirectory(sourceParent);
-                }
-
-                if ((i + 1) % 10 == 0)
-                {
-                    await Task.Delay(10, ct).ConfigureAwait(false);
-                }
-                else
-                {
-                    await Task.Yield();
-                }
-            }
-
-            // Dọn dẹp tất cả các group folders cũ
-            foreach (var g in groupsToClean)
+            // Dọn dẹp tất cả các group folders cũ tức thì
+            foreach (var g in groupsToClean.Distinct())
             {
                 TryCleanEmptyOrJunkDirectory(g);
             }
@@ -398,53 +371,41 @@ public class FolderToolsService
                 return 0;
             }
 
-            for (int i = 0; i < candidateDirs.Count; i++)
+            var moveList = new List<(DirectoryInfo subDir, string destPath, string destParentDir)>();
+            foreach (var subDir in candidateDirs)
             {
-                if (ct.IsCancellationRequested) break;
-                var subDir = candidateDirs[i];
-
                 string categoryName = DetermineAlphabetCategory(subDir.Name, parsedRanges, ignoreLeadingTags);
                 string destParentDir = Path.Combine(rootFolder, categoryName);
                 string destPath = Path.Combine(destParentDir, subDir.Name);
 
-                if (string.Equals(subDir.FullName, destPath, StringComparison.OrdinalIgnoreCase)) continue;
-
-                try
+                if (!string.Equals(subDir.FullName, destPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!Directory.Exists(destParentDir))
-                    {
-                        Directory.CreateDirectory(destParentDir);
-                    }
+                    try { if (!Directory.Exists(destParentDir)) Directory.CreateDirectory(destParentDir); } catch { }
+                    moveList.Add((subDir, destPath, destParentDir));
                 }
-                catch { }
+            }
 
+            int maxDegree = Math.Clamp(Environment.ProcessorCount, 4, 8);
+            await Parallel.ForEachAsync(moveList, new ParallelOptions { MaxDegreeOfParallelism = maxDegree, CancellationToken = ct }, (task, token) =>
+            {
                 try
                 {
-                    SafeMoveDirectory(subDir.FullName, destPath);
-                    splitCount++;
+                    SafeMoveDirectory(task.subDir.FullName, task.destPath);
+                    int done = Interlocked.Increment(ref splitCount);
+                    long now = Environment.TickCount64;
+                    if (done == total || now - Volatile.Read(ref lastProgressTicks) >= 120)
+                    {
+                        Interlocked.Exchange(ref lastProgressTicks, now);
+                        double pct = (double)done / total * 100.0;
+                        ProgressChanged?.Invoke(done, total, $"Đã phân loại {done}/{total} thư mục ({pct:F0}%)...");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    LogEmitted?.Invoke("ERROR", $"[Tách Alphabet Lỗi] Không thể chuyển '{subDir.FullName}': {ex.Message}");
+                    LogEmitted?.Invoke("ERROR", $"[Tách Alphabet Lỗi] Không thể chuyển '{task.subDir.FullName}': {ex.Message}");
                 }
-
-                long now = Environment.TickCount64;
-                if (i + 1 == total || now - lastProgressTicks >= 250)
-                {
-                    lastProgressTicks = now;
-                    double pct = (double)(i + 1) / total * 100.0;
-                    ProgressChanged?.Invoke(i + 1, total, $"Đã phân loại {splitCount}/{total} thư mục ({pct:F0}%)...");
-                }
-
-                if ((i + 1) % 10 == 0)
-                {
-                    await Task.Delay(10, ct).ConfigureAwait(false);
-                }
-                else
-                {
-                    await Task.Yield();
-                }
-            }
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
 
             DeleteEmptyDirectoriesBottomUp(rootFolder);
             ProgressChanged?.Invoke(total, total, $"Hoàn tất: Đã phân loại {splitCount}/{total} thư mục.");
@@ -540,43 +501,33 @@ public class FolderToolsService
                 return 0;
             }
 
-            LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Tìm thấy {total} bộ truyện cần gộp về gốc. Bắt đầu di chuyển...");
+            LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Tìm thấy {total} bộ truyện cần gộp về gốc. Bắt đầu di chuyển siêu tốc...");
 
-            for (int i = 0; i < allItemsToMerge.Count; i++)
+            int maxDegree = Math.Clamp(Environment.ProcessorCount, 4, 8);
+            await Parallel.ForEachAsync(allItemsToMerge, new ParallelOptions { MaxDegreeOfParallelism = maxDegree, CancellationToken = ct }, (item, token) =>
             {
-                if (ct.IsCancellationRequested) break;
-                var (catDir, comicDir) = allItemsToMerge[i];
-
-                string destPath = Path.Combine(rootFolder, comicDir.Name);
-                if (string.Equals(comicDir.FullName, destPath, StringComparison.OrdinalIgnoreCase)) continue;
-
-                try
+                string destPath = Path.Combine(rootFolder, item.comicDir.Name);
+                if (!string.Equals(item.comicDir.FullName, destPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    SafeMoveDirectory(comicDir.FullName, destPath);
-                    mergedCount++;
+                    try
+                    {
+                        SafeMoveDirectory(item.comicDir.FullName, destPath);
+                        int done = Interlocked.Increment(ref mergedCount);
+                        long now = Environment.TickCount64;
+                        if (done == total || now - Volatile.Read(ref lastProgressTicks) >= 120)
+                        {
+                            Interlocked.Exchange(ref lastProgressTicks, now);
+                            double pct = (double)done / total * 100.0;
+                            ProgressChanged?.Invoke(done, total, $"Đã gộp {done}/{total} bộ truyện ({pct:F0}%)...");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogEmitted?.Invoke("ERROR", $"[Gộp Alphabet Lỗi] Lỗi gộp '{item.comicDir.FullName}': {ex.Message}");
+                    }
                 }
-                catch (Exception ex)
-                {
-                    LogEmitted?.Invoke("ERROR", $"[Gộp Alphabet Lỗi] Lỗi gộp '{comicDir.FullName}': {ex.Message}");
-                }
-
-                long now = Environment.TickCount64;
-                if (i + 1 == total || now - lastProgressTicks >= 250)
-                {
-                    lastProgressTicks = now;
-                    double pct = (double)(i + 1) / total * 100.0;
-                    ProgressChanged?.Invoke(i + 1, total, $"Đã gộp {mergedCount}/{total} bộ truyện ({pct:F0}%)...");
-                }
-
-                if ((i + 1) % 10 == 0)
-                {
-                    await Task.Delay(10, ct).ConfigureAwait(false);
-                }
-                else
-                {
-                    await Task.Yield();
-                }
-            }
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
 
             foreach (var dir in catDirsToClean)
             {
@@ -718,13 +669,14 @@ public class FolderToolsService
                 string folderName = Path.GetFileName(folder);
                 if (folderName.StartsWith(".") || folderName.EndsWith("-tmp", StringComparison.OrdinalIgnoreCase)) continue;
 
-                if (DirectoryContainsImages(folder) && ChapterFilter.TryParseChapterNumber(folderName, out double chapNum))
+                bool isBucket = IsGroupBucketFolder(folderName);
+                if (!isBucket && ChapterFilter.TryParseChapterNumber(folderName, out double chapNum) && DirectoryContainsImages(folder))
                 {
                     string parent = Path.GetDirectoryName(folder) ?? rootFolder;
                     string parentName = Path.GetFileName(parent);
                     string bookPath = parent;
 
-                    if (Regex.IsMatch(parentName, @"(^|[-_\s])(chap|chapter|vol|volume|tap|tập)\s*\d+[\s\-_–—]+\d+$", RegexOptions.IgnoreCase))
+                    if (IsGroupBucketFolder(parentName))
                     {
                         string grandParent = Path.GetDirectoryName(parent) ?? rootFolder;
                         bookPath = grandParent;
@@ -747,6 +699,12 @@ public class FolderToolsService
         }
 
         return items;
+    }
+
+    private static bool IsGroupBucketFolder(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        return Regex.IsMatch(name, @"(^|[-_\s])(chap|chapter|vol|volume|tap|tập)\s*\d+[\s\-_–—]+\d+$", RegexOptions.IgnoreCase);
     }
 
     private static bool DirectoryContainsImages(string folder)
