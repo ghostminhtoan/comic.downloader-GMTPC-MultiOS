@@ -653,6 +653,7 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
     3. Áp dụng sắp xếp số học tự nhiên `NaturalSortComparer` khi gom nhóm và duyệt danh sách chapter.
     4. Tích hợp âm thanh thông báo `SoundNotificationService` (hoàn tất / báo lỗi) khi kết thúc tác vụ.
 
+### 15.16. Khắc Phục Triệt Để Lỗi Crash Khi Tách/Gộp Quá 50 - 100 Chapter Trên Android
 - **Nguyên nhân gây crash khi tách hơn 50 - 100 chapter**:
   1. **Tràn bảng JNI Local Reference Table (512 limit)**: Khi tách/gộp hàng trăm chapter, việc phát `LogEmitted` cho từng chapter liên tục làm hàng trăm delegate `Dispatcher.UIThread.Post` dồn ứ vào UI Thread. Avalonia Android tương tác với Mono runtime tạo ra hàng loạt JNI Local References không kịp giải phóng, vượt ngưỡng 512 entries gây crash `SIGABRT` / `SIGSEGV` ngay ở mốc chapter thứ 50 - 100.
   2. **Quá tải Binder IPC Notification**: Bắn `ReportProgress` quá dày đặc làm nghẽn kênh giao tiếp Intent giữa tiến trình app và Android System Server.
@@ -672,6 +673,22 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
   5. **Bảo vệ chống đệ quy & Dọn dẹp thư mục rỗng Bottom-Up theo `GetPathDepth`**:
      - Kiểm tra `normDest.StartsWith(normSource)` chống đệ quy lồng nhau.
      - Sắp xếp xóa thư mục theo độ sâu giảm dần (`OrderByDescending(d => GetPathDepth(d))`).
+
+### 15.17. Khắc Phục Lỗi Chồng Đè (Overlap) Text Tiến Độ & WrapPanel Footer Status Bar / Floating Badge
+- **Khắc phục lỗi Overlap Text Tiến Độ trong Tab Tách/Gộp Folder**:
+  - *Nguyên nhân*: Khung hiển thị dùng `Grid ColumnDefinitions="*, Auto"`, khi chuỗi trạng thái dài hoặc trên màn hình hẹp, Column 0 và Column 1 cùng co giãn làm tiêu đề `📊 Tiến độ xử lý: 63%` và chuỗi trạng thái `Đã tách 215/342 chapter...` đè trực tiếp lên nhau.
+  - *Khắc phục*:
+    1. Chuyển hàng tiêu đề sang `Grid ColumnDefinitions="Auto, *"`. Tiêu đề cố định nằm bên trái (`Column 0`), chuỗi trạng thái tóm tắt căn phải (`HorizontalAlignment="Right"`, `Column 1`) với `TextTrimming="CharacterEllipsis"`.
+    2. Bổ sung thêm dòng `TextBlock` chi tiết độc lập bên dưới thanh `ProgressBar` với `TextWrapping="Wrap"`, `Foreground="#34D399"`, tự động hiển thị khi `IsFolderToolRunning = true` giúp người dùng đọc trọn vẹn tiến trình từng chapter mà không bao giờ đè lên tiêu đề.
+- **Tối ưu hóa WrapPanel Footer Status Bar & Nâng cao Floating Mini Badge**:
+  - *Nguyên nhân*: Thanh Footer Status Bar đáy màn hình trên thiết bị Android hẹp bị thiếu margin giữa các item khi wrap xuống dòng làm chữ "Tốc độ: ..." bị dính sát hoặc tràn lề; đồng thời Floating Mini Badge góc dưới có margin đáy quá thấp (`Margin="16"`) nằm đè trực tiếp lên thanh footer status bar.
+  - *Khắc phục*:
+    1. Thêm `Margin="0,2,10,2"` và `VerticalAlignment="Center"` cho tất cả các `TextBlock` trong `WrapPanel` của Footer Status Bar, đảm bảo khi xuống dòng các phần tử tự động cách đều, phông chữ 10.5pt rõ nét.
+    2. Nâng lề dưới của Floating Mini Badge lên `Margin="12,0,12,34"`, cấu trúc lại bằng `Grid ColumnDefinitions="Auto, *, Auto"` với `MaxWidth="480"`, co giãn thông minh không bao giờ đè vào thanh Footer Status Bar.
+- **Nghiệm Thu Toàn Diện**:
+  - Bước 1: `build.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`) với `0 Warning(s), 0 Error(s)`.
+  - Bước 2: Khởi chạy file thực tế `publish\windows\ComicDownloaderGMTPC.Desktop.exe` đạt trạng thái `Responding: True`.
+
 
 
 
