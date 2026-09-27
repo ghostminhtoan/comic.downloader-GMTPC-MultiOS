@@ -758,9 +758,28 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
      - Đóng gói PDF (`FilePackerService.cs`).
      - Cắt ảnh dài WebP (`ImageSplitterService.cs`).
      - Xử lý và nâng cao ảnh WebP (`ImageEnhancerService.cs`).
+### 15.21. Nâng Cấp Khả Năng Xử Lý Song Song 20 Folder Cùng Lúc Cho Tab Tách / Gộp Folder (Folder Tools)
+- **Bối cảnh & Yêu cầu**:
+  - Trước đây, `FolderToolsService` bị giới hạn cố định `MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 4, 8)`. Trên các máy CPU 4 core, tác vụ chỉ xử lý 4 folder cùng lúc khiến tốc độ tách/gộp hàng trăm folder chapter hoặc thư mục alphabet bị chậm.
+  - Người dùng yêu cầu mở rộng khả năng xử lý đồng thời lên 20 folder cùng lúc để khai thác tối đa tốc độ I/O đĩa.
+- **Giải pháp & Kiến trúc triển khai**:
+  1. **Nâng cấp `FolderToolsService.cs`**:
+     - Bổ sung tham số cấu hình `int maxDegree = 20` cho toàn bộ 4 phương thức xử lý chính:
+       + `SplitByChapterCountAsync(rootFolder, groupSize, folderType, mergeRemainder, maxDegree, ct)`
+       + `MergeByChapterCountAsync(rootFolder, maxDegree, ct)`
+       + `SplitByAlphabetAsync(rootFolder, rawRanges, ignoreLeadingTags, maxDegree, ct)`
+       + `MergeByAlphabetAsync(rootFolder, rawRanges, maxDegree, ct)`
+     - Cấu hình `int effectiveDegree = Math.Clamp(maxDegree, 1, 128)` cho `Parallel.ForEachAsync`, mặc định xử lý 20 folder cùng lúc.
+     - Tạo trước các thư mục đích và dọn dẹp thư mục cha rỗng an toàn bằng cơ chế `ConcurrentBag<string>` và `SafeMoveDirectory`.
+  2. **Nâng cấp `MainViewModel.FolderTools.cs`**:
+     - Bổ sung thuộc tính `[ObservableProperty] private int _folderToolThreads = 20;` cho phép người dùng tùy chỉnh từ 1 đến 64 folder cùng lúc (mặc định 20).
+     - Truyền `FolderToolThreads` vào toàn bộ các lệnh tách/gộp chapter và alphabet.
+  3. **Nâng cấp Giao diện Responsive (`MainView.axaml`)**:
+     - Bổ sung khối điều khiển `NumericUpDown` "Song song: [20] folder" gọn gàng ở cả 2 khu vực Tách/Gộp theo Chapter và Tách/Gộp theo Alphabet, có ToolTip hướng dẫn chi tiết.
 - **Nghiệm Thu Toàn Diện**:
   - Bước 1: `build.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`) với `0 Warning(s), 0 Error(s)`.
   - Bước 2: Khởi chạy file thực tế `publish\windows\ComicDownloaderGMTPC.Desktop.exe` đạt trạng thái `Responding: True`.
+
 
 
 

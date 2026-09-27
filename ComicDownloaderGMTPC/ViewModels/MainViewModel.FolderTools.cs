@@ -50,6 +50,12 @@ public partial class MainViewModel
     private ObservableCollection<string> _alphabetRanges = new() { "A-G", "H-P", "Q-Z" };
 
     // ==========================================
+    // CẤU HÌNH XỬ LÝ SONG SONG (THREADS / CONCURRENCY)
+    // ==========================================
+    [ObservableProperty]
+    private int _folderToolThreads = 20; // Xử lý 20 folder cùng lúc siêu tốc theo yêu cầu
+
+    // ==========================================
     // TIẾN TRÌNH & NHẬT KÝ
     // ==========================================
     [ObservableProperty]
@@ -188,12 +194,13 @@ public partial class MainViewModel
                 FolderSplitGroupSize,
                 FolderSplitType,
                 IsMergeRemainderFolder,
+                FolderToolThreads,
                 _folderToolsCts.Token);
 
             FolderToolProgress = 100;
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã tách {count} chapter folders.";
-            AddLog("SUCCESS", $"[Tách/Gộp] Hoàn tất tách {count} chapter folders tại {FolderSplitRootPath}");
+            AddLog("SUCCESS", $"[Tách/Gộp] Hoàn tất tách {count} chapter folders ({FolderToolThreads} folders cùng lúc) tại {FolderSplitRootPath}");
             try { SoundNotificationService.Instance.PlayDownloadFinish(); } catch { }
         }
         catch (OperationCanceledException)
@@ -233,12 +240,13 @@ public partial class MainViewModel
         {
             int count = await _folderTools.MergeByChapterCountAsync(
                 FolderSplitRootPath,
+                FolderToolThreads,
                 _folderToolsCts.Token);
 
             FolderToolProgress = 100;
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã gộp {count} chapter folders về gốc.";
-            AddLog("SUCCESS", $"[Tách/Gộp] Hoàn tất gộp {count} chapter folders về {FolderSplitRootPath}");
+            AddLog("SUCCESS", $"[Tách/Gộp] Hoàn tất gộp {count} chapter folders ({FolderToolThreads} folders cùng lúc) về {FolderSplitRootPath}");
             try { SoundNotificationService.Instance.PlayDownloadFinish(); } catch { }
         }
         catch (OperationCanceledException)
@@ -342,12 +350,13 @@ public partial class MainViewModel
                 FolderAlphabetRootPath,
                 new List<string>(AlphabetRanges),
                 IsAlphabetIgnoreLeadingTags,
+                FolderToolThreads,
                 _folderToolsCts.Token);
 
             FolderToolProgress = 100;
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã phân loại {count} thư mục theo bảng chữ cái.";
-            AddLog("SUCCESS", $"[Alphabet] Hoàn tất chia {count} thư mục theo chữ cái tại {FolderAlphabetRootPath}");
+            AddLog("SUCCESS", $"[Alphabet] Hoàn tất chia {count} thư mục ({FolderToolThreads} folders cùng lúc) theo chữ cái tại {FolderAlphabetRootPath}");
             try { SoundNotificationService.Instance.PlayDownloadFinish(); } catch { }
         }
         catch (OperationCanceledException)
@@ -388,12 +397,13 @@ public partial class MainViewModel
             int count = await _folderTools.MergeByAlphabetAsync(
                 FolderAlphabetRootPath,
                 new List<string>(AlphabetRanges),
+                FolderToolThreads,
                 _folderToolsCts.Token);
 
             FolderToolProgress = 100;
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã gộp {count} thư mục về thư mục gốc.";
-            AddLog("SUCCESS", $"[Alphabet] Hoàn tất gộp {count} thư mục về {FolderAlphabetRootPath}");
+            AddLog("SUCCESS", $"[Alphabet] Hoàn tất gộp {count} thư mục ({FolderToolThreads} folders cùng lúc) về {FolderAlphabetRootPath}");
             try { SoundNotificationService.Instance.PlayDownloadFinish(); } catch { }
         }
         catch (OperationCanceledException)

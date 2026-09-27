@@ -76,7 +76,10 @@ public class FolderToolsService
     public event Action<string, string>? LogEmitted;
     public event Action<int, int, string>? ProgressChanged;
 
-    public async Task<int> SplitByChapterCountAsync(string rootFolder, int groupSize, string folderType, bool mergeRemainder, CancellationToken ct)
+    public Task<int> SplitByChapterCountAsync(string rootFolder, int groupSize, string folderType, bool mergeRemainder, CancellationToken ct)
+        => SplitByChapterCountAsync(rootFolder, groupSize, folderType, mergeRemainder, 20, ct);
+
+    public async Task<int> SplitByChapterCountAsync(string rootFolder, int groupSize, string folderType, bool mergeRemainder, int maxDegree, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(rootFolder) || !Directory.Exists(rootFolder) || groupSize <= 0)
         {
@@ -86,7 +89,8 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            LogEmitted?.Invoke("INFO", $"[Tách Folder] Bắt đầu quét thư mục tại: {rootFolder} | Cỡ nhóm: {groupSize} chap | Kiểu: {folderType}");
+            int effectiveDegree = Math.Clamp(maxDegree, 1, 128);
+            LogEmitted?.Invoke("INFO", $"[Tách Folder] Bắt đầu quét thư mục tại: {rootFolder} | Cỡ nhóm: {groupSize} chap | Kiểu: {folderType} | Xử lý song song: {effectiveDegree} folder");
             ProgressChanged?.Invoke(0, 1, "Đang quét danh sách chapter...");
             
             var chapterItems = CollectChapterFolders(rootFolder);
@@ -103,7 +107,7 @@ public class FolderToolsService
             int splitCount = 0;
             long lastProgressTicks = 0;
 
-            LogEmitted?.Invoke("INFO", $"[Tách Folder] Đã tìm thấy {totalChapters} chapter trong {bookGroups.Count} bộ truyện. Bắt đầu phân chia siêu tốc...");
+            LogEmitted?.Invoke("INFO", $"[Tách Folder] Đã tìm thấy {totalChapters} chapter trong {bookGroups.Count} bộ truyện. Bắt đầu phân chia siêu tốc ({effectiveDegree} folders cùng lúc)...");
 
             var allMoveTasks = new List<(ChapterFolderItem chapter, string destPath)>();
 
@@ -190,8 +194,7 @@ public class FolderToolsService
                 }
             }
 
-            int maxDegree = Math.Clamp(Environment.ProcessorCount, 4, 8);
-            await Parallel.ForEachAsync(allMoveTasks, new ParallelOptions { MaxDegreeOfParallelism = maxDegree, CancellationToken = ct }, (task, token) =>
+            await Parallel.ForEachAsync(allMoveTasks, new ParallelOptions { MaxDegreeOfParallelism = effectiveDegree, CancellationToken = ct }, (task, token) =>
             {
                 try
                 {
@@ -223,7 +226,10 @@ public class FolderToolsService
         }
     }
 
-    public async Task<int> MergeByChapterCountAsync(string rootFolder, CancellationToken ct)
+    public Task<int> MergeByChapterCountAsync(string rootFolder, CancellationToken ct)
+        => MergeByChapterCountAsync(rootFolder, 20, ct);
+
+    public async Task<int> MergeByChapterCountAsync(string rootFolder, int maxDegree, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(rootFolder) || !Directory.Exists(rootFolder))
         {
@@ -233,7 +239,8 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Bắt đầu quét chapter về thư mục truyện gốc: {rootFolder}");
+            int effectiveDegree = Math.Clamp(maxDegree, 1, 128);
+            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Bắt đầu quét chapter về thư mục truyện gốc: {rootFolder} | Xử lý song song: {effectiveDegree} folder");
             ProgressChanged?.Invoke(0, 1, "Đang quét chapter cần gộp...");
 
             var allCollected = CollectChapterFolders(rootFolder);
@@ -260,12 +267,11 @@ public class FolderToolsService
                 return 0;
             }
 
-            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Tìm thấy {total} chapter cần gộp về thư mục truyện gốc. Bắt đầu di chuyển siêu tốc...");
+            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Tìm thấy {total} chapter cần gộp về thư mục truyện gốc. Bắt đầu di chuyển siêu tốc ({effectiveDegree} folders cùng lúc)...");
 
             var groupsToClean = new ConcurrentBag<string>();
-            int maxDegree = Math.Clamp(Environment.ProcessorCount, 4, 8);
 
-            await Parallel.ForEachAsync(itemsToMerge, new ParallelOptions { MaxDegreeOfParallelism = maxDegree, CancellationToken = ct }, (chapter, token) =>
+            await Parallel.ForEachAsync(itemsToMerge, new ParallelOptions { MaxDegreeOfParallelism = effectiveDegree, CancellationToken = ct }, (chapter, token) =>
             {
                 if (string.IsNullOrWhiteSpace(chapter.SourcePath) || string.IsNullOrWhiteSpace(chapter.FolderName)) return ValueTask.CompletedTask;
 
@@ -316,7 +322,10 @@ public class FolderToolsService
         }
     }
 
-    public async Task<int> SplitByAlphabetAsync(string rootFolder, List<string> rawRanges, bool ignoreLeadingTags, CancellationToken ct)
+    public Task<int> SplitByAlphabetAsync(string rootFolder, List<string> rawRanges, bool ignoreLeadingTags, CancellationToken ct)
+        => SplitByAlphabetAsync(rootFolder, rawRanges, ignoreLeadingTags, 20, ct);
+
+    public async Task<int> SplitByAlphabetAsync(string rootFolder, List<string> rawRanges, bool ignoreLeadingTags, int maxDegree, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(rootFolder) || !Directory.Exists(rootFolder) || rawRanges == null || rawRanges.Count == 0)
         {
@@ -326,6 +335,7 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            int effectiveDegree = Math.Clamp(maxDegree, 1, 128);
             var parsedRanges = new List<AlphabetRangeItem>();
             foreach (var raw in rawRanges)
             {
@@ -337,7 +347,7 @@ public class FolderToolsService
 
             if (parsedRanges.Count == 0) return 0;
 
-            LogEmitted?.Invoke("INFO", $"[Tách Alphabet] Bắt đầu phân loại theo chữ cái tại: {rootFolder} | Dải: {string.Join(", ", parsedRanges.Select(r => r.DisplayName))}");
+            LogEmitted?.Invoke("INFO", $"[Tách Alphabet] Bắt đầu phân loại theo chữ cái tại: {rootFolder} | Dải: {string.Join(", ", parsedRanges.Select(r => r.DisplayName))} | Xử lý song song: {effectiveDegree} folder");
             ProgressChanged?.Invoke(0, 1, "Đang quét danh sách thư mục...");
 
             var excludedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -371,6 +381,8 @@ public class FolderToolsService
                 return 0;
             }
 
+            LogEmitted?.Invoke("INFO", $"[Tách Alphabet] Tìm thấy {total} thư mục cần phân loại. Bắt đầu di chuyển siêu tốc ({effectiveDegree} folders cùng lúc)...");
+
             var moveList = new List<(DirectoryInfo subDir, string destPath, string destParentDir)>();
             foreach (var subDir in candidateDirs)
             {
@@ -385,8 +397,7 @@ public class FolderToolsService
                 }
             }
 
-            int maxDegree = Math.Clamp(Environment.ProcessorCount, 4, 8);
-            await Parallel.ForEachAsync(moveList, new ParallelOptions { MaxDegreeOfParallelism = maxDegree, CancellationToken = ct }, (task, token) =>
+            await Parallel.ForEachAsync(moveList, new ParallelOptions { MaxDegreeOfParallelism = effectiveDegree, CancellationToken = ct }, (task, token) =>
             {
                 try
                 {
@@ -418,7 +429,10 @@ public class FolderToolsService
         }
     }
 
-    public async Task<int> MergeByAlphabetAsync(string rootFolder, List<string> rawRanges, CancellationToken ct)
+    public Task<int> MergeByAlphabetAsync(string rootFolder, List<string> rawRanges, CancellationToken ct)
+        => MergeByAlphabetAsync(rootFolder, rawRanges, 20, ct);
+
+    public async Task<int> MergeByAlphabetAsync(string rootFolder, List<string> rawRanges, int maxDegree, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(rootFolder) || !Directory.Exists(rootFolder))
         {
@@ -428,7 +442,8 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Bắt đầu quét thư mục chữ cái về gốc: {rootFolder}");
+            int effectiveDegree = Math.Clamp(maxDegree, 1, 128);
+            LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Bắt đầu quét thư mục chữ cái về gốc: {rootFolder} | Xử lý song song: {effectiveDegree} folder");
             ProgressChanged?.Invoke(0, 1, "Đang quét thư mục chữ cái...");
 
             var categoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -501,10 +516,9 @@ public class FolderToolsService
                 return 0;
             }
 
-            LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Tìm thấy {total} bộ truyện cần gộp về gốc. Bắt đầu di chuyển siêu tốc...");
+            LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Tìm thấy {total} bộ truyện cần gộp về gốc. Bắt đầu di chuyển siêu tốc ({effectiveDegree} folders cùng lúc)...");
 
-            int maxDegree = Math.Clamp(Environment.ProcessorCount, 4, 8);
-            await Parallel.ForEachAsync(allItemsToMerge, new ParallelOptions { MaxDegreeOfParallelism = maxDegree, CancellationToken = ct }, (item, token) =>
+            await Parallel.ForEachAsync(allItemsToMerge, new ParallelOptions { MaxDegreeOfParallelism = effectiveDegree, CancellationToken = ct }, (item, token) =>
             {
                 string destPath = Path.Combine(rootFolder, item.comicDir.Name);
                 if (!string.Equals(item.comicDir.FullName, destPath, StringComparison.OrdinalIgnoreCase))
