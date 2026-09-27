@@ -176,6 +176,7 @@ public class FolderToolsService
                     }
                     catch { }
 
+                    int bucketMoved = 0;
                     foreach (var chapter in bucket)
                     {
                         if (ct.IsCancellationRequested) break;
@@ -187,7 +188,7 @@ public class FolderToolsService
                         {
                             SafeMoveDirectory(chapter.SourcePath, destPath);
                             splitCount++;
-                            LogEmitted?.Invoke("SUCCESS", $"[Tách] Đã chuyển '{chapter.FolderName}' -> '{groupFolderName}'");
+                            bucketMoved++;
                         }
                         catch (Exception ex)
                         {
@@ -195,14 +196,27 @@ public class FolderToolsService
                         }
 
                         long now = Environment.TickCount64;
-                        if (splitCount == totalChapters || now - lastProgressTicks >= 100)
+                        if (splitCount == totalChapters || now - lastProgressTicks >= 250)
                         {
                             lastProgressTicks = now;
                             double pct = (double)splitCount / totalChapters * 100.0;
                             ProgressChanged?.Invoke(splitCount, totalChapters, $"Đã tách {splitCount}/{totalChapters} chapter ({pct:F0}%)...");
                         }
 
-                        await Task.Yield();
+                        // Nhả nhịp định kỳ chống quá tải JNI / I/O trên Android
+                        if (splitCount % 10 == 0)
+                        {
+                            await Task.Delay(10, ct).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await Task.Yield();
+                        }
+                    }
+
+                    if (bucketMoved > 0)
+                    {
+                        LogEmitted?.Invoke("SUCCESS", $"[Tách] Nhóm '{groupFolderName}': Đã hoàn tất {bucketMoved} chapters.");
                     }
                 }
             }
@@ -264,7 +278,6 @@ public class FolderToolsService
                 {
                     SafeMoveDirectory(chapter.SourcePath, destPath);
                     mergedCount++;
-                    LogEmitted?.Invoke("SUCCESS", $"[Gộp] Đã chuyển '{chapter.FolderName}' -> thư mục gốc");
                 }
                 catch (Exception ex)
                 {
@@ -272,14 +285,21 @@ public class FolderToolsService
                 }
 
                 long now = Environment.TickCount64;
-                if (mergedCount == total || now - lastProgressTicks >= 100)
+                if (mergedCount == total || now - lastProgressTicks >= 250)
                 {
                     lastProgressTicks = now;
                     double pct = (double)mergedCount / total * 100.0;
                     ProgressChanged?.Invoke(mergedCount, total, $"Đã gộp {mergedCount}/{total} chapter ({pct:F0}%)...");
                 }
 
-                await Task.Yield();
+                if (mergedCount % 10 == 0)
+                {
+                    await Task.Delay(10, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    await Task.Yield();
+                }
             }
 
             DeleteEmptyDirectoriesBottomUp(rootFolder);
@@ -371,7 +391,6 @@ public class FolderToolsService
                 {
                     SafeMoveDirectory(subDir.FullName, destPath);
                     splitCount++;
-                    LogEmitted?.Invoke("SUCCESS", $"[Tách Alphabet] '{subDir.Name}' -> '{categoryName}'");
                 }
                 catch (Exception ex)
                 {
@@ -379,14 +398,21 @@ public class FolderToolsService
                 }
 
                 long now = Environment.TickCount64;
-                if (i + 1 == total || now - lastProgressTicks >= 100)
+                if (i + 1 == total || now - lastProgressTicks >= 250)
                 {
                     lastProgressTicks = now;
                     double pct = (double)(i + 1) / total * 100.0;
                     ProgressChanged?.Invoke(i + 1, total, $"Đã phân loại {splitCount}/{total} thư mục ({pct:F0}%)...");
                 }
 
-                await Task.Yield();
+                if ((i + 1) % 10 == 0)
+                {
+                    await Task.Delay(10, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    await Task.Yield();
+                }
             }
 
             DeleteEmptyDirectoriesBottomUp(rootFolder);
@@ -489,7 +515,6 @@ public class FolderToolsService
                 {
                     SafeMoveDirectory(comicDir.FullName, destPath);
                     mergedCount++;
-                    LogEmitted?.Invoke("SUCCESS", $"[Gộp Alphabet] '{catDir.Name}\\{comicDir.Name}' -> '{comicDir.Name}'");
                 }
                 catch (Exception ex)
                 {
@@ -497,14 +522,21 @@ public class FolderToolsService
                 }
 
                 long now = Environment.TickCount64;
-                if (i + 1 == total || now - lastProgressTicks >= 100)
+                if (i + 1 == total || now - lastProgressTicks >= 250)
                 {
                     lastProgressTicks = now;
                     double pct = (double)(i + 1) / total * 100.0;
                     ProgressChanged?.Invoke(i + 1, total, $"Đã gộp {mergedCount}/{total} thư mục ({pct:F0}%)...");
                 }
 
-                await Task.Yield();
+                if ((i + 1) % 10 == 0)
+                {
+                    await Task.Delay(10, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    await Task.Yield();
+                }
             }
 
             foreach (var dir in emptyDirs)
@@ -714,7 +746,20 @@ public class FolderToolsService
             try { Directory.CreateDirectory(parentDest); } catch { }
         }
 
-        // 2. Thử Directory.Move nhanh trước nếu thư mục đích chưa tồn tại
+        // 2. Nếu dest đã tồn tại nhưng là thư mục rỗng, dọn dẹp trước để Directory.Move thành công tức thì
+        if (Directory.Exists(dest))
+        {
+            try
+            {
+                if (!Directory.EnumerateFileSystemEntries(dest).Any())
+                {
+                    Directory.Delete(dest, false);
+                }
+            }
+            catch { }
+        }
+
+        // 3. Thử Directory.Move nhanh trước nếu thư mục đích chưa tồn tại
         try
         {
             if (!Directory.Exists(dest))
@@ -728,7 +773,7 @@ public class FolderToolsService
             // Bỏ qua lỗi và chuyển sang fallback an toàn
         }
 
-        // 3. Fallback sang Merge đệ quy an toàn cho từng file
+        // 4. Fallback sang Merge đệ quy an toàn cho từng file
         try
         {
             Directory.CreateDirectory(dest);

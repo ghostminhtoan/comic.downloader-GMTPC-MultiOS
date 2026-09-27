@@ -77,13 +77,13 @@ public partial class MainViewModel
             _folderLogBuffer.Enqueue($"[{DateTime.Now:HH:mm:ss}] [{lvl}] {msg}");
         };
 
-        // 2. Timer xả log định kỳ (60ms) theo mẻ để UI Thread không bao giờ bị nghẽn/đơ
+        // 2. Timer xả log định kỳ (200ms) theo mẻ để UI Thread không bao giờ bị nghẽn/đơ/tràn JNI
         _folderLogFlushTimer = new System.Threading.Timer(_ =>
         {
             if (_folderLogBuffer.IsEmpty) return;
 
             var batch = new List<string>();
-            while (batch.Count < 30 && _folderLogBuffer.TryDequeue(out var logItem))
+            while (batch.Count < 15 && _folderLogBuffer.TryDequeue(out var logItem))
             {
                 batch.Add(logItem);
             }
@@ -96,13 +96,13 @@ public partial class MainViewModel
                     {
                         FolderToolLogs.Insert(0, batch[i]);
                     }
-                    while (FolderToolLogs.Count > 300)
+                    while (FolderToolLogs.Count > 100)
                     {
                         FolderToolLogs.RemoveAt(FolderToolLogs.Count - 1);
                     }
                 }, Avalonia.Threading.DispatcherPriority.Background);
             }
-        }, null, 100, 60);
+        }, null, 200, 200);
 
         // 3. Nhận sự kiện thay đổi tiến trình mượt mà
         _folderTools.ProgressChanged += (current, total, msg) =>
@@ -119,7 +119,7 @@ public partial class MainViewModel
                 FolderToolStatusText = msg;
 
                 long now = Environment.TickCount64;
-                if (current == total || current == 0 || now - _lastFolderBgReportTicks >= 200)
+                if (current == total || current == 0 || now - _lastFolderBgReportTicks >= 350)
                 {
                     _lastFolderBgReportTicks = now;
                     BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", msg, pct, true);

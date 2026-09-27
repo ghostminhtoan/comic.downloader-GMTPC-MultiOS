@@ -653,27 +653,26 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
     3. Áp dụng sắp xếp số học tự nhiên `NaturalSortComparer` khi gom nhóm và duyệt danh sách chapter.
     4. Tích hợp âm thanh thông báo `SoundNotificationService` (hoàn tất / báo lỗi) khi kết thúc tác vụ.
 
-### 15.16. Khắc Phục Triệt Để Lỗi Crash Khi Gộp / Tách Folder Trên Android
-- **Nguyên nhân gây crash trên môi trường Android**:
-  1. **Lỗi `Directory.Move` với Scoped Storage & Cross-mount**: Trên Android, việc gọi `Directory.Move` giữa các phân vùng lưu trữ hoặc khi thư mục có file đang bị MediaScanner/Thumbnail Loader hệ thống truy cập sẽ quăng ngoại lệ `IOException` hoặc `UnauthorizedAccessException`. Nếu không có cơ chế fallback, toàn bộ tiến trình sẽ bị ngắt đột ngột.
-  2. **Quét thư mục toàn bộ bằng `SearchOption.AllDirectories`**: Hàm `DeleteEmptyDirectoriesBottomUp` cũ sử dụng `Directory.GetDirectories(path, "*", SearchOption.AllDirectories)`. Trên Android, khi duyệt trúng các thư mục hệ thống (như `.trashed`, thư mục ẩn, thư mục bị hạn chế quyền), phương thức này lập tức quăng `UnauthorizedAccessException` không bắt được ở cấp sâu làm ứng dụng crash.
-  3. **Tắc nghẽn I/O & Nguy cơ ANR (Application Not Responding)**: Vòng lặp di chuyển hàng trăm chapter/folder liên tục không nhả nhịp CPU khiến hệ thống Android đánh giá tác vụ bị đơ (ANR) và tự động force-close.
-  4. **Bị Low Memory Killer (LMK) tắt khi chuyển app / tắt màn hình**: Chưa kích hoạt Foreground Service và WakeLock ngay từ đầu khiến Android OS gom bộ nhớ và kill ứng dụng khi người dùng không tương tác trực tiếp.
+- **Nguyên nhân gây crash khi tách hơn 50 - 100 chapter**:
+  1. **Tràn bảng JNI Local Reference Table (512 limit)**: Khi tách/gộp hàng trăm chapter, việc phát `LogEmitted` cho từng chapter liên tục làm hàng trăm delegate `Dispatcher.UIThread.Post` dồn ứ vào UI Thread. Avalonia Android tương tác với Mono runtime tạo ra hàng loạt JNI Local References không kịp giải phóng, vượt ngưỡng 512 entries gây crash `SIGABRT` / `SIGSEGV` ngay ở mốc chapter thứ 50 - 100.
+  2. **Quá tải Binder IPC Notification**: Bắn `ReportProgress` quá dày đặc làm nghẽn kênh giao tiếp Intent giữa tiến trình app và Android System Server.
+  3. **Thư mục đích rỗng cản trở `Directory.Move`**: Nếu thư mục đích đã tạo rỗng từ trước, `Directory.Move` fail và fallback sang copy/delete từng file ảnh, làm bùng nổ I/O và kích hoạt Watchdog.
 - **Giải pháp khắc phục toàn diện**:
-  1. **Tạo trước thư mục cha (Parent Directory) & Cơ chế `SafeMoveDirectory` chống lỗi Scoped Storage**:
-     - Khi tách chapter vào thư mục nhóm mới (ví dụ `chap 0001-0200/`), hệ thống chủ động gọi `Directory.CreateDirectory(parentDest)` trước khi gọi `Directory.Move`.
-     - Nhờ thư mục cha đã tồn tại, `Directory.Move` thực hiện đổi metadata inode (atomic rename) thành công ngay trong 0.001s thay vì bị fail và fallback sang copy/delete hàng chục nghìn file ảnh gây freeze I/O.
-     - Fallback `MergeDirectoryContents` đệ quy an toàn từng file khi có xung đột chéo phân vùng hoặc file trùng tên.
-  2. **Chống đệ quy vô tận (Infinite Directory Recursion Protection)**:
-     - Kiểm tra nếu `dest` nằm bên trong `source` (`normDest.StartsWith(normSource)`), lập tức bỏ qua để tránh vòng lặp đệ quy tạo thư mục con lồng nhau vô hạn gây tràn bộ nhớ (`StackOverflowException`).
-  3. **Tái cấu trúc `DeleteEmptyDirectoriesBottomUp` theo độ sâu đường dẫn (`GetPathDepth`)**:
-     - Sắp xếp thư mục theo cấp độ sâu giảm dần (`OrderByDescending(d => GetPathDepth(d)).ThenByDescending(d => d.Length)`), đảm bảo các thư mục con sâu nhất luôn được quét và xóa rỗng trước thư mục cha.
-  4. **Cơ chế Throttle thông minh cho UI & Android Binder IPC Notification**:
-     - Giới hạn tần suất phát sự kiện `ProgressChanged` trong service (tối thiểu 100ms/lần) và `BackgroundExecutionService` (tối thiểu 200ms/lần) qua `Environment.TickCount64`.
-     - Chống quá tải Android Binder IPC và tràn hàng đợi Dispatcher của Avalonia khi xử lý nhanh hàng trăm chapter trong thời gian ngắn.
-  5. **Nhả nhịp CPU chống ANR & Giữ tiến trình chạy ngầm**:
-     - Thêm `await Task.Yield();` sau mỗi vòng lặp di chuyển chapter.
-     - Kích hoạt Foreground Service và WakeLock tức thì ngay khi bắt đầu tác vụ, bảo vệ bởi `try/catch` an toàn cho âm thanh thông báo.
+  1. **Tạo trước thư mục cha & Dọn dẹp thư mục đích rỗng (`SafeMoveDirectory`)**:
+     - Tự động tạo `parentDest` trước khi gọi `Directory.Move`.
+     - Nếu `dest` đã tồn tại nhưng là thư mục rỗng, chủ động xóa bỏ trước để `Directory.Move` đổi inode thành công ngay trong 0.001s.
+  2. **Gom nhóm Log & Chống tràn JNI Local Reference Table**:
+     - Thay vì bắn log chi tiết cho từng chapter lẻ (100-500 dòng log), chỉ phát log tóm tắt sau khi hoàn thành từng nhóm bucket (`[Tách] Nhóm 'chap 0001-0200': Đã hoàn tất 150 chapters`) hoặc khi có lỗi.
+     - Timer xả log định kỳ 200ms theo mẻ tối đa 15 dòng, giới hạn `FolderToolLogs` tối đa 100 dòng.
+  3. **Nhả nhịp chu kỳ `Task.Delay(10)` sau mỗi 10 chapters**:
+     - Cho phép Android Main Looper và Mono GC dọn dẹp bộ đệm JNI và xả queue sự kiện định kỳ, đảm bảo xử lý mượt mà hàng trăm hay hàng nghìn chapter liên tục mà không bao giờ bị nghẽn.
+  4. **Throttle chặt chẽ 250ms - 350ms cho Progress và Android Foreground Service**:
+     - Progress Bar và Status Text cập nhật mượt mà 250ms/lần.
+     - Cập nhật Foreground Service Notification tối thiểu 350ms/lần, loại bỏ hoàn toàn hiện tượng Binder queue saturation.
+  5. **Bảo vệ chống đệ quy & Dọn dẹp thư mục rỗng Bottom-Up theo `GetPathDepth`**:
+     - Kiểm tra `normDest.StartsWith(normSource)` chống đệ quy lồng nhau.
+     - Sắp xếp xóa thư mục theo độ sâu giảm dần (`OrderByDescending(d => GetPathDepth(d))`).
+
 
 
 
