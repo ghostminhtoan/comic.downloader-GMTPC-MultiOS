@@ -281,7 +281,7 @@ public class ImageEnhancerService
     }
 
     /// <summary>
-    /// Lấy danh sách toàn bộ file ảnh hợp lệ trong cây thư mục phục vụ duyệt Next/Previous.
+    /// Lấy danh sách toàn bộ file ảnh hợp lệ trong cây thư mục phục vụ duyệt Next/Previous theo thứ tự tự nhiên (1, 2, ..., 10, 11).
     /// </summary>
     public List<string> GetAllImagesInFolder(string folderPath)
     {
@@ -290,8 +290,7 @@ public class ImageEnhancerService
         {
             return Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)
                 .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-                .OrderBy(f => f)
-                .ToList();
+                .NaturalSort();
         }
         catch
         {
@@ -300,23 +299,23 @@ public class ImageEnhancerService
     }
 
     /// <summary>
-    /// Tìm kiếm đệ quy ảnh đầu tiên trong cây thư mục để làm mẫu xem trước.
+    /// Tìm kiếm đệ quy ảnh đầu tiên trong cây thư mục để làm mẫu xem trước theo thứ tự tự nhiên (1, 2, ..., 10).
     /// </summary>
     public string? FindFirstSampleImage(string folderPath)
     {
         if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath)) return null;
         try
         {
-            // Ưu tiên chọn ảnh có dung lượng hợp lệ (> 10KB) để tránh các file tạm / rỗng
-            return Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)
+            var validImages = Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)
                 .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-                .FirstOrDefault(f =>
-                {
-                    try { return new FileInfo(f).Length > 10000; }
-                    catch { return true; }
-                })
-                ?? Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)
-                .FirstOrDefault(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
+                .NaturalSort();
+
+            // Ưu tiên chọn ảnh có dung lượng hợp lệ (> 10KB) để tránh các file tạm / rỗng
+            return validImages.FirstOrDefault(f =>
+            {
+                try { return new FileInfo(f).Length > 10000; }
+                catch { return true; }
+            }) ?? validImages.FirstOrDefault();
         }
         catch
         {
@@ -325,7 +324,7 @@ public class ImageEnhancerService
     }
 
     /// <summary>
-    /// Xử lý hàng loạt toàn bộ ảnh trong thư mục đa tầng (hỗ trợ phân định Input & Output folder).
+    /// Xử lý hàng loạt toàn bộ ảnh trong thư mục đa tầng (hỗ trợ phân định Input & Output folder) theo đúng thứ tự số tự nhiên.
     /// </summary>
     public async Task<(int successCount, int errorCount)> ProcessFolderAsync(
         string inputFolder,
@@ -339,11 +338,10 @@ public class ImageEnhancerService
             return (0, 0);
         }
 
-        // Quét đệ quy toàn bộ thư mục con đa tầng
+        // Quét đệ quy toàn bộ thư mục con đa tầng theo thứ tự tự nhiên của số (1, 2, ..., 9, 10, 11)
         var files = Directory.GetFiles(inputFolder, "*.*", SearchOption.AllDirectories)
             .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-            .OrderBy(f => f)
-            .ToList();
+            .NaturalSort();
 
         if (files.Count == 0)
         {

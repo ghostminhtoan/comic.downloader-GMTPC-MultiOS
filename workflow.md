@@ -603,6 +603,19 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
     1. Bỏ `Task.Run` lồng thừa trong `Parallel.ForEachAsync`, chạy đồng bộ trực tiếp trên thread worker được cấp.
     2. Giới hạn số luồng xử lý đồ họa an toàn trên Android (`Math.Clamp(options.MaxThreads, 1, 2)`) nhằm kiểm soát mức tiêu thụ Native Heap Memory của SkiaSharp.
     3. Thêm cơ chế Throttle (120ms - 150ms) cho các cập nhật giao diện Dispatcher và `BackgroundExecutionService.ReportProgress`, giữ UI Thread luôn thông suốt và phản hồi ngay lập tức.
-    4. Kích hoạt thu gom rác tối ưu `GC.Collect(2, GCCollectionMode.Optimized)` định kỳ trên Android.
+### 15.13. Chuẩn Hóa Sắp Xếp Theo Thứ Tự Số Tự Nhiên (Universal Natural Sort Order)
+- **Vấn đề triệt tiêu**:
+  - Khi quét file/folder bằng C# / OS (`Directory.GetFiles`, `Directory.GetDirectories`, `Directory.EnumerateFiles`, `.OrderBy(f => f)`), hệ thống mặc định sắp xếp theo chuỗi ký tự (Alphabetical / Lexicographical order):
+    `1.jpg, 10.jpg, 11.jpg, 12.jpg, ..., 19.jpg, 2.jpg, 20.jpg, 21.jpg, ..., 3.jpg, 30.jpg...`
+    khiến việc xử lý ảnh, đóng gói file ZIP/CBZ/PDF, duyệt ảnh Next/Previous bị đảo lộn thứ tự trang/chương.
+- **Giải pháp toàn diện (`NaturalSortComparer.cs`)**:
+  - Xây dựng bộ so sánh tự nhiên `NaturalSortComparer : IComparer<string>` và phương thức mở rộng `IEnumerable<string>.NaturalSort()`:
+    + So sánh trực tiếp chuỗi không phân biệt hoa thường (`ToUpperInvariant`).
+    + Tách và so sánh giá trị số học thực tế của các chuỗi số (`1, 2, 3, ..., 9, 10, 11, 12, ... 19, 20, 21, ...`), bảo toàn cấu trúc thư mục đa tầng (Full path / Relative path).
+  - Áp dụng đồng bộ cho toàn bộ hệ thống:
+    1. **Xử lý ảnh (`ImageEnhancerService.cs`)**: Quét file đệ quy đa tầng, nạp danh sách duyệt ảnh Next/Previous, tìm ảnh mẫu ban đầu đều theo đúng số thứ tự tự nhiên `1, 2, 3... 10`.
+    2. **Đóng gói file (`FilePackerService.cs`)**: Sắp xếp danh sách chapter con (`targetsToPack`), danh sách file ảnh trong từng chapter và file ảnh gốc (`CollectImagesAndBookmarks`) theo `NaturalSort()`.
+    3. **Cắt ảnh dài (`ImageSplitterService.cs`)**: Quét và sắp xếp danh sách file cần cắt theo thứ tự tự nhiên `NaturalSort()`.
+    4. **Duyệt ảnh Preview (`MainViewModel.cs`)**: Hiển thị số trang và duyệt tuần tự chính xác 100% `1 -> 2 -> ... -> 10 -> 11...`.
 
 

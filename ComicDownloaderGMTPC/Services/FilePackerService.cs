@@ -28,11 +28,11 @@ public class FilePackerService
     public Action<string, string>? LogEmitted { get; set; }
 
     /// <summary>
-    /// Sắp xếp tên file theo thứ tự tự nhiên của con người (1, 2, ..., 9, 10 thay vì 1, 10, 2).
+    /// Sắp xếp tên file hoặc thư mục theo thứ tự tự nhiên của con người (1, 2, ..., 9, 10 thay vì 1, 10, 2).
     /// </summary>
     public static List<string> NaturalSort(IEnumerable<string> files)
     {
-        return files.OrderBy(f => Regex.Replace(Path.GetFileName(f), @"\d+", m => m.Value.PadLeft(10, '0')), StringComparer.OrdinalIgnoreCase).ToList();
+        return files.NaturalSort();
     }
 
     /// <summary>
@@ -74,14 +74,14 @@ public class FilePackerService
             LogEmitted?.Invoke("INFO", $"Đã tạo thư mục lưu file đóng gói: {finalOutputDir}");
         }
 
-        // Xác định danh sách các thư mục cần đóng gói
+        // Xác định danh sách các thư mục cần đóng gói theo thứ tự số tự nhiên (Chapter 1, Chapter 2, ..., Chapter 10, Chapter 11)
         List<string> targetsToPack = new();
         if (options.PackSubfoldersIndividually)
         {
             var subs = Directory.GetDirectories(inputFolder, "*", SearchOption.TopDirectoryOnly);
             if (subs.Length > 0)
             {
-                targetsToPack.AddRange(subs);
+                targetsToPack.AddRange(NaturalSort(subs));
             }
             else
             {

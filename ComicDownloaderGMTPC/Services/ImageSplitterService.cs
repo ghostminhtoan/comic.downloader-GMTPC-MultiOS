@@ -154,7 +154,7 @@ public class ImageSplitterService
                 .Where(f => SupportedImageExtensions.Contains(Path.GetExtension(f)))
                 // Bỏ qua những file đã cắt trước đó (đã có hậu tố -split-)
                 .Where(f => !Path.GetFileNameWithoutExtension(f).Contains("-split-"))
-                .ToList();
+                .NaturalSort();
 
             summary.TotalFiles = allFiles.Count;
             if (summary.TotalFiles == 0)
