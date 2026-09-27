@@ -175,15 +175,7 @@ public class FolderToolsService
 
                         try
                         {
-                            Directory.CreateDirectory(groupFolderPath);
-                            if (!Directory.Exists(destPath))
-                            {
-                                Directory.Move(chapter.SourcePath, destPath);
-                            }
-                            else
-                            {
-                                MergeDirectoryContents(chapter.SourcePath, destPath);
-                            }
+                            SafeMoveDirectory(chapter.SourcePath, destPath);
                             splitCount++;
                             LogEmitted?.Invoke("SUCCESS", $"[Tách] Đã chuyển '{chapter.FolderName}' -> '{groupFolderName}'");
                         }
@@ -194,6 +186,7 @@ public class FolderToolsService
 
                         double pct = (double)splitCount / totalChapters * 100.0;
                         ProgressChanged?.Invoke(splitCount, totalChapters, $"Đã tách {splitCount}/{totalChapters} chapter ({pct:F0}%)...");
+                        await Task.Yield();
                     }
                 }
             }
@@ -252,15 +245,7 @@ public class FolderToolsService
 
                 try
                 {
-                    if (!Directory.Exists(destPath))
-                    {
-                        Directory.Move(chapter.SourcePath, destPath);
-                    }
-                    else
-                    {
-                        MergeDirectoryContents(chapter.SourcePath, destPath);
-                    }
-
+                    SafeMoveDirectory(chapter.SourcePath, destPath);
                     mergedCount++;
                     LogEmitted?.Invoke("SUCCESS", $"[Gộp] Đã chuyển '{chapter.FolderName}' -> thư mục gốc");
                 }
@@ -271,6 +256,7 @@ public class FolderToolsService
 
                 double pct = (double)mergedCount / total * 100.0;
                 ProgressChanged?.Invoke(mergedCount, total, $"Đã gộp {mergedCount}/{total} chapter ({pct:F0}%)...");
+                await Task.Yield();
             }
 
             DeleteEmptyDirectoriesBottomUp(rootFolder);
@@ -316,7 +302,9 @@ public class FolderToolsService
             foreach (var r in parsedRanges) excludedNames.Add(r.DisplayName);
 
             var dirInfo = new DirectoryInfo(rootFolder);
-            var subDirs = dirInfo.GetDirectories();
+            DirectoryInfo[] subDirs;
+            try { subDirs = dirInfo.GetDirectories(); } catch { subDirs = Array.Empty<DirectoryInfo>(); }
+
             var candidateDirs = subDirs.Where(subDir =>
                 !subDir.Attributes.HasFlag(FileAttributes.Hidden) &&
                 !subDir.Attributes.HasFlag(FileAttributes.System) &&
@@ -348,16 +336,7 @@ public class FolderToolsService
 
                 try
                 {
-                    Directory.CreateDirectory(destParentDir);
-                    if (!Directory.Exists(destPath))
-                    {
-                        Directory.Move(subDir.FullName, destPath);
-                    }
-                    else
-                    {
-                        MergeDirectoryContents(subDir.FullName, destPath);
-                    }
-
+                    SafeMoveDirectory(subDir.FullName, destPath);
                     splitCount++;
                     LogEmitted?.Invoke("SUCCESS", $"[Tách Alphabet] '{subDir.Name}' -> '{categoryName}'");
                 }
@@ -368,6 +347,7 @@ public class FolderToolsService
 
                 double pct = (double)(i + 1) / total * 100.0;
                 ProgressChanged?.Invoke(i + 1, total, $"Đã phân loại {splitCount}/{total} thư mục ({pct:F0}%)...");
+                await Task.Yield();
             }
 
             DeleteEmptyDirectoriesBottomUp(rootFolder);
@@ -416,7 +396,9 @@ public class FolderToolsService
             }
 
             var rootDirInfo = new DirectoryInfo(rootFolder);
-            var subDirs = rootDirInfo.GetDirectories();
+            DirectoryInfo[] subDirs;
+            try { subDirs = rootDirInfo.GetDirectories(); } catch { subDirs = Array.Empty<DirectoryInfo>(); }
+
             var allItemsToMerge = new List<(DirectoryInfo catDir, DirectoryInfo comicDir)>();
             var emptyDirs = new List<DirectoryInfo>();
 
@@ -434,7 +416,10 @@ public class FolderToolsService
                 if (!isAlphabetCategory) continue;
 
                 emptyDirs.Add(catDir);
-                foreach (var comicDir in catDir.GetDirectories())
+                DirectoryInfo[] cDirs;
+                try { cDirs = catDir.GetDirectories(); } catch { cDirs = Array.Empty<DirectoryInfo>(); }
+
+                foreach (var comicDir in cDirs)
                 {
                     allItemsToMerge.Add((catDir, comicDir));
                 }
@@ -462,14 +447,7 @@ public class FolderToolsService
 
                 try
                 {
-                    if (!Directory.Exists(destPath))
-                    {
-                        Directory.Move(comicDir.FullName, destPath);
-                    }
-                    else
-                    {
-                        MergeDirectoryContents(comicDir.FullName, destPath);
-                    }
+                    SafeMoveDirectory(comicDir.FullName, destPath);
                     mergedCount++;
                     LogEmitted?.Invoke("SUCCESS", $"[Gộp Alphabet] '{catDir.Name}\\{comicDir.Name}' -> '{comicDir.Name}'");
                 }
@@ -480,6 +458,7 @@ public class FolderToolsService
 
                 double pct = (double)(i + 1) / total * 100.0;
                 ProgressChanged?.Invoke(i + 1, total, $"Đã gộp {mergedCount}/{total} thư mục ({pct:F0}%)...");
+                await Task.Yield();
             }
 
             foreach (var dir in emptyDirs)
@@ -670,39 +649,93 @@ public class FolderToolsService
         catch { return false; }
     }
 
+    /// <summary>
+    /// Di chuyển thư mục an toàn tuyệt đối trên mọi hệ điều hành (kể cả Android Scoped Storage / Cross-mount).
+    /// </summary>
+    private static void SafeMoveDirectory(string source, string dest)
+    {
+        if (string.Equals(source, dest, StringComparison.OrdinalIgnoreCase)) return;
+
+        // 1. Thử Directory.Move nhanh trước nếu thư mục đích chưa tồn tại
+        try
+        {
+            if (!Directory.Exists(dest))
+            {
+                Directory.Move(source, dest);
+                return;
+            }
+        }
+        catch
+        {
+            // Bỏ qua lỗi và chuyển sang fallback an toàn
+        }
+
+        // 2. Fallback sang Merge đệ quy an toàn cho từng file
+        try
+        {
+            Directory.CreateDirectory(dest);
+            MergeDirectoryContents(source, dest);
+        }
+        catch
+        {
+            // Bảo toàn không sập ứng dụng
+        }
+    }
+
     private static void MergeDirectoryContents(string source, string dest)
     {
         if (string.Equals(source, dest, StringComparison.OrdinalIgnoreCase)) return;
-        Directory.CreateDirectory(dest);
+        try { Directory.CreateDirectory(dest); } catch { }
 
-        foreach (var file in Directory.GetFiles(source))
+        string[] files;
+        try { files = Directory.GetFiles(source); } catch { files = Array.Empty<string>(); }
+
+        foreach (var file in files)
         {
-            string destFile = Path.Combine(dest, Path.GetFileName(file));
             try
             {
+                string destFile = Path.Combine(dest, Path.GetFileName(file));
                 if (File.Exists(destFile))
                 {
                     var sInfo = new FileInfo(file);
                     var dInfo = new FileInfo(destFile);
                     if (sInfo.Length == dInfo.Length)
                     {
-                        File.Delete(file);
+                        try { File.Delete(file); } catch { }
                         continue;
                     }
                 }
-                File.Move(file, destFile, overwrite: true);
+
+                // Thử File.Move trước
+                try
+                {
+                    File.Move(file, destFile, overwrite: true);
+                }
+                catch
+                {
+                    // Fallback copy + delete nếu File.Move bị lỗi quyền/cross-device trên Android
+                    File.Copy(file, destFile, overwrite: true);
+                    try { File.Delete(file); } catch { }
+                }
             }
             catch {}
         }
 
-        foreach (var dir in Directory.GetDirectories(source))
+        string[] subDirs;
+        try { subDirs = Directory.GetDirectories(source); } catch { subDirs = Array.Empty<string>(); }
+
+        foreach (var dir in subDirs)
         {
-            MergeDirectoryContents(dir, Path.Combine(dest, Path.GetFileName(dir)));
+            try
+            {
+                MergeDirectoryContents(dir, Path.Combine(dest, Path.GetFileName(dir)));
+            }
+            catch {}
         }
 
         try
         {
-            if (!Directory.EnumerateFileSystemEntries(source).Any())
+            if (Directory.Exists(source) && !Directory.EnumerateFileSystemEntries(source).Any())
             {
                 Directory.Delete(source, false);
             }
@@ -710,19 +743,48 @@ public class FolderToolsService
         catch {}
     }
 
+    /// <summary>
+    /// Xóa thư mục rỗng an toàn từ dưới lên trên không bao giờ ném Exception khi gặp thư mục bị hạn chế quyền.
+    /// </summary>
     private static void DeleteEmptyDirectoriesBottomUp(string rootFolder)
     {
+        if (string.IsNullOrWhiteSpace(rootFolder) || !Directory.Exists(rootFolder)) return;
+
         try
         {
-            foreach (string directory in Directory.GetDirectories(rootFolder, "*", SearchOption.AllDirectories)
-                         .OrderByDescending(path => path.Length))
+            var allDirs = new List<string>();
+            var stack = new Stack<string>();
+            stack.Push(rootFolder);
+
+            while (stack.Count > 0)
             {
-                if (string.Equals(directory, rootFolder, StringComparison.OrdinalIgnoreCase)) continue;
+                string current = stack.Pop();
+                string[] subs;
                 try
                 {
-                    if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                    subs = Directory.GetDirectories(current);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (var sub in subs)
+                {
+                    allDirs.Add(sub);
+                    stack.Push(sub);
+                }
+            }
+
+            // Xóa từ dưới lên trên (thư mục sâu nhất xóa trước)
+            foreach (var dir in allDirs.OrderByDescending(d => d.Length))
+            {
+                if (string.Equals(dir, rootFolder, StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
                     {
-                        Directory.Delete(directory, false);
+                        Directory.Delete(dir, false);
                     }
                 }
                 catch {}

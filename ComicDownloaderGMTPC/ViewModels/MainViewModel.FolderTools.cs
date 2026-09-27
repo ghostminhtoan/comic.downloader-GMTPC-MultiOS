@@ -170,6 +170,7 @@ public partial class MainViewModel
         FolderToolProgress = 0;
         FolderToolProgressText = "0%";
         FolderToolStatusText = "Đang tách thư mục theo số lượng chapter...";
+        BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", "Đang tách thư mục...", 0, true);
         _folderToolsCts = new CancellationTokenSource();
 
         try
@@ -185,7 +186,7 @@ public partial class MainViewModel
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã tách {count} chapter folders.";
             AddLog("SUCCESS", $"[Tách/Gộp] Hoàn tất tách {count} chapter folders tại {FolderSplitRootPath}");
-            SoundNotificationService.Instance.PlayDownloadFinish();
+            try { SoundNotificationService.Instance.PlayDownloadFinish(); } catch { }
         }
         catch (OperationCanceledException)
         {
@@ -195,7 +196,7 @@ public partial class MainViewModel
         {
             FolderToolStatusText = "Lỗi: " + ex.Message;
             AddLog("ERROR", $"[Tách/Gộp Lỗi] {ex.Message}");
-            SoundNotificationService.Instance.PlayDownloadError();
+            try { SoundNotificationService.Instance.PlayDownloadError(); } catch { }
         }
         finally
         {
@@ -217,6 +218,7 @@ public partial class MainViewModel
         FolderToolProgress = 0;
         FolderToolProgressText = "0%";
         FolderToolStatusText = "Đang gộp chapter về thư mục gốc...";
+        BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", "Đang gộp chapter...", 0, true);
         _folderToolsCts = new CancellationTokenSource();
 
         try
@@ -229,7 +231,7 @@ public partial class MainViewModel
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã gộp {count} chapter folders về gốc.";
             AddLog("SUCCESS", $"[Tách/Gộp] Hoàn tất gộp {count} chapter folders về {FolderSplitRootPath}");
-            SoundNotificationService.Instance.PlayDownloadFinish();
+            try { SoundNotificationService.Instance.PlayDownloadFinish(); } catch { }
         }
         catch (OperationCanceledException)
         {
@@ -239,7 +241,7 @@ public partial class MainViewModel
         {
             FolderToolStatusText = "Lỗi: " + ex.Message;
             AddLog("ERROR", $"[Tách/Gộp Lỗi] {ex.Message}");
-            SoundNotificationService.Instance.PlayDownloadError();
+            try { SoundNotificationService.Instance.PlayDownloadError(); } catch { }
         }
         finally
         {
@@ -323,6 +325,7 @@ public partial class MainViewModel
         FolderToolProgress = 0;
         FolderToolProgressText = "0%";
         FolderToolStatusText = "Đang phân loại thư mục theo chữ cái...";
+        BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", "Đang phân loại thư mục...", 0, true);
         _folderToolsCts = new CancellationTokenSource();
 
         try
@@ -337,7 +340,7 @@ public partial class MainViewModel
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã phân loại {count} thư mục theo bảng chữ cái.";
             AddLog("SUCCESS", $"[Alphabet] Hoàn tất chia {count} thư mục theo chữ cái tại {FolderAlphabetRootPath}");
-            SoundNotificationService.Instance.PlayDownloadFinish();
+            try { SoundNotificationService.Instance.PlayDownloadFinish(); } catch { }
         }
         catch (OperationCanceledException)
         {
@@ -347,7 +350,7 @@ public partial class MainViewModel
         {
             FolderToolStatusText = "Lỗi: " + ex.Message;
             AddLog("ERROR", $"[Alphabet Lỗi] {ex.Message}");
-            SoundNotificationService.Instance.PlayDownloadError();
+            try { SoundNotificationService.Instance.PlayDownloadError(); } catch { }
         }
         finally
         {
@@ -369,6 +372,7 @@ public partial class MainViewModel
         FolderToolProgress = 0;
         FolderToolProgressText = "0%";
         FolderToolStatusText = "Đang gộp các thư mục chữ cái về gốc...";
+        BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", "Đang gộp thư mục chữ cái...", 0, true);
         _folderToolsCts = new CancellationTokenSource();
 
         try
@@ -382,7 +386,7 @@ public partial class MainViewModel
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã gộp {count} thư mục về thư mục gốc.";
             AddLog("SUCCESS", $"[Alphabet] Hoàn tất gộp {count} thư mục về {FolderAlphabetRootPath}");
-            SoundNotificationService.Instance.PlayDownloadFinish();
+            try { SoundNotificationService.Instance.PlayDownloadFinish(); } catch { }
         }
         catch (OperationCanceledException)
         {
@@ -392,7 +396,7 @@ public partial class MainViewModel
         {
             FolderToolStatusText = "Lỗi: " + ex.Message;
             AddLog("ERROR", $"[Alphabet Lỗi] {ex.Message}");
-            SoundNotificationService.Instance.PlayDownloadError();
+            try { SoundNotificationService.Instance.PlayDownloadError(); } catch { }
         }
         finally
         {

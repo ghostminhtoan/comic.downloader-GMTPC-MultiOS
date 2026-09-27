@@ -653,6 +653,26 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
     3. Áp dụng sắp xếp số học tự nhiên `NaturalSortComparer` khi gom nhóm và duyệt danh sách chapter.
     4. Tích hợp âm thanh thông báo `SoundNotificationService` (hoàn tất / báo lỗi) khi kết thúc tác vụ.
 
+### 15.16. Khắc Phục Triệt Để Lỗi Crash Khi Gộp / Tách Folder Trên Android
+- **Nguyên nhân gây crash trên môi trường Android**:
+  1. **Lỗi `Directory.Move` với Scoped Storage & Cross-mount**: Trên Android, việc gọi `Directory.Move` giữa các phân vùng lưu trữ hoặc khi thư mục có file đang bị MediaScanner/Thumbnail Loader hệ thống truy cập sẽ quăng ngoại lệ `IOException` hoặc `UnauthorizedAccessException`. Nếu không có cơ chế fallback, toàn bộ tiến trình sẽ bị ngắt đột ngột.
+  2. **Quét thư mục toàn bộ bằng `SearchOption.AllDirectories`**: Hàm `DeleteEmptyDirectoriesBottomUp` cũ sử dụng `Directory.GetDirectories(path, "*", SearchOption.AllDirectories)`. Trên Android, khi duyệt trúng các thư mục hệ thống (như `.trashed`, thư mục ẩn, thư mục bị hạn chế quyền), phương thức này lập tức quăng `UnauthorizedAccessException` không bắt được ở cấp sâu làm ứng dụng crash.
+  3. **Tắc nghẽn I/O & Nguy cơ ANR (Application Not Responding)**: Vòng lặp di chuyển hàng trăm chapter/folder liên tục không nhả nhịp CPU khiến hệ thống Android đánh giá tác vụ bị đơ (ANR) và tự động force-close.
+  4. **Bị Low Memory Killer (LMK) tắt khi chuyển app / tắt màn hình**: Chưa kích hoạt Foreground Service và WakeLock ngay từ đầu khiến Android OS gom bộ nhớ và kill ứng dụng khi người dùng không tương tác trực tiếp.
+- **Giải pháp khắc phục toàn diện**:
+  1. **Xây dựng `SafeMoveDirectory` đa tầng với cơ chế Fallback an toàn (`FolderToolsService.cs`)**:
+     - Thử `Directory.Move` trước; nếu thất bại do lỗi hệ thống/phân vùng, tự động chuyển sang `MergeDirectoryContents` đệ quy từng tệp.
+     - Trong `MergeDirectoryContents`: Thử `File.Move` trước, nếu gặp lỗi Scoped Storage sẽ fallback sang `File.Copy(..., overwrite: true)` + `File.Delete(...)`. Bọc `try/catch` cục bộ cho từng file và folder riêng biệt, không bao giờ để lỗi 1 file làm hỏng toàn bộ quá trình.
+  2. **Tái cấu trúc `DeleteEmptyDirectoriesBottomUp` với thuật toán duyệt Stack an toàn**:
+     - Thay thế hoàn toàn `SearchOption.AllDirectories` bằng vòng lặp `Stack<string>` duyệt từng tầng có `try/catch` độc lập, tự động bỏ qua các thư mục bị cấm quyền mà không gây ném ngoại lệ.
+     - Xóa thư mục từ dưới lên trên (`OrderByDescending(d => d.Length)`) sau khi đảm bảo thư mục đã rỗng hoàn toàn.
+  3. **Nhả nhịp CPU chống ANR**: Thêm `await Task.Yield();` sau mỗi lần di chuyển folder/chapter, đảm bảo hệ thống luôn phản hồi mượt mà.
+  4. **Kích hoạt Foreground Service & WakeLock tức thì (`MainViewModel.FolderTools.cs`)**:
+     - Gọi `BackgroundExecutionService.Instance.ReportProgress("folder_tools", ...)` với `isRunning = true` ngay khi bắt đầu các phương thức `SplitByChapterCountAsync`, `MergeByChapterCountAsync`, `SplitByAlphabetAsync`, `MergeByAlphabetAsync`.
+     - Bọc `try/catch` an toàn cho các lệnh phát âm thanh thông báo `SoundNotificationService`.
+
+
+
 
 
 
