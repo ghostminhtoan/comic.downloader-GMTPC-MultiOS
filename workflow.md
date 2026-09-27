@@ -618,4 +618,24 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
     3. **Cắt ảnh dài (`ImageSplitterService.cs`)**: Quét và sắp xếp danh sách file cần cắt theo thứ tự tự nhiên `NaturalSort()`.
     4. **Duyệt ảnh Preview (`MainViewModel.cs`)**: Hiển thị số trang và duyệt tuần tự chính xác 100% `1 -> 2 -> ... -> 10 -> 11...`.
 
+### 15.14. Hỗ Trợ Toàn Diện Cử Chỉ 2 Ngón Tay Pinch-to-Zoom & Pan Đồng Thời Trên Android
+- **Nguyên nhân trước đây không thể dùng 2 ngón tay để Zoom trên Android**:
+  1. Khi ngón tay đầu tiên chạm vào khung ảnh, hàm `OnPressed` thực hiện `Pointer.Capture()`. Việc capture con trỏ đơn điểm trên driver cảm ứng của Avalonia Android khiến ngón tay thứ 2 chạm vào bị khóa/bị hiểu nhầm là di chuyển của ngón thứ nhất.
+  2. Trong chế độ Dual View (Before / After), 2 ảnh nằm trên 2 `ScrollViewer` tách biệt. Khi ngón 1 chạm vào ảnh Before và ngón 2 chạm vào ảnh After, mỗi ScrollViewer chỉ nhận biết được 1 con trỏ -> không bao giờ kích hoạt được Pinch-to-Zoom.
+  3. Chỉ hỗ trợ Pan khi có 1 ngón hoặc Zoom khi có 2 ngón, chưa kết hợp vừa Pinch (banh/khép ngón tay) vừa Pan (dịch chuyển trung điểm 2 ngón tay) cùng một lúc.
+- **Giải pháp xử lý toàn diện (`SetupPinchAndPanGesture`)**:
+  - Áp dụng thống nhất cho toàn bộ các khung xem trước:
+    + Live Preview trong Tab Xử Lý Ảnh (`LiveBeforeScrollViewer`, `LiveAfterScrollViewer`).
+    + Modal Đối Chiếu Toàn Màn Hình: Dual View (`ModalBeforeScrollViewer`, `ModalAfterScrollViewer`), Split View (`ModalSplitScrollViewer`), Single View (`ModalSingleScrollViewer`).
+    + Cửa sổ Đối Chiếu Độc Lập (`EnhanceComparisonWindow.axaml.cs`).
+  - **Cơ chế hoạt động**:
+    + Bảng theo dõi con trỏ đa điểm `Dictionary<long, Point> activePointers` toàn cục cho cụm ScrollViewer liên quan.
+    + Không bao giờ thực hiện `Pointer.Capture` khi con trỏ là thiết bị cảm ứng (`PointerType.Touch`), chỉ capture khi là chuột máy tính (`PointerType.Mouse`).
+    + Khi `activePointers.Count == 1`: Kéo rê ảnh tự do 2 chiều (Pan).
+    + Khi `activePointers.Count >= 2`: Tự động tính toán đồng thời:
+      * **Khoảng cách 2 ngón Euclidean**: `scaleFactor = curDistance / initialDistance`, cập nhật độ phóng to `vm.EnhancePreviewZoom` mượt mà (từ 25% đến 500%).
+      * **Trung điểm 2 ngón (`midPoint`)**: `midDelta = initialPinchMidPoint - curMidPoint`, cập nhật đồng bộ `Offset` của các ScrollViewer, cho phép vừa banh ngón tay vừa vuốt kéo ảnh trượt theo tay người dùng.
+    + Khi nhấc 1 ngón tay, hệ thống mượt mà chuyển đổi lại sang chế độ 1 ngón Pan mà không bị giật hay nhảy vị trí.
+
+
 

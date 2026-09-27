@@ -53,11 +53,15 @@ public partial class MainView : UserControl
         {
             _isSyncScrollSetup = true;
 
-            // Đồng bộ Pan & Zoom cho Live Preview trong Tab Xử Lý Ảnh
-            SetupSyncScroll(this.FindControl<ScrollViewer>("LiveBeforeScrollViewer"), this.FindControl<ScrollViewer>("LiveAfterScrollViewer"));
+            // 1. Đồng bộ Pan & 2 ngón Pinch-to-Zoom cho Live Preview trong Tab Xử Lý Ảnh
+            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("LiveBeforeScrollViewer"), this.FindControl<ScrollViewer>("LiveAfterScrollViewer"));
 
-            // Đồng bộ Pan & Zoom cho Modal Đối Chiếu Toàn Màn Hình
-            SetupSyncScroll(this.FindControl<ScrollViewer>("ModalBeforeScrollViewer"), this.FindControl<ScrollViewer>("ModalAfterScrollViewer"));
+            // 2. Đồng bộ Pan & 2 ngón Pinch-to-Zoom cho Modal Đối Chiếu Toàn Màn Hình (Dual View)
+            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("ModalBeforeScrollViewer"), this.FindControl<ScrollViewer>("ModalAfterScrollViewer"));
+
+            // 3. Pan & 2 ngón Pinch-to-Zoom cho Split View & Single View trong Modal Toàn Màn Hình
+            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("ModalSplitScrollViewer"));
+            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("ModalSingleScrollViewer"));
         }
 
         // Khi bất kỳ ô nhập liệu nào (TextBox, NumericUpDown, ComboBox) nhận focus trên Android / Desktop:
@@ -78,39 +82,44 @@ public partial class MainView : UserControl
         }, RoutingStrategies.Bubble);
     }
 
-    private void SetupSyncScroll(ScrollViewer? before, ScrollViewer? after)
+    private void SetupPinchAndPanGesture(params ScrollViewer?[] viewers)
     {
-        if (before == null || after == null) return;
+        var validViewers = viewers.Where(v => v != null).Cast<ScrollViewer>().ToList();
+        if (validViewers.Count == 0) return;
 
         bool isSyncing = false;
         bool isDragging = false;
         bool isPinching = false;
         Point dragStartPoint = default;
         Vector dragStartOffset = default;
-
-        // Bảng theo dõi các con trỏ chạm đa điểm (Multi-touch Touch Tracking)
-        var activePointers = new Dictionary<long, Point>();
+        Point initialPinchMidPoint = default;
+        Vector initialPinchOffset = default;
         double initialPinchDistance = 0;
         double initialZoom = 1.0;
 
-        before.ScrollChanged += (s, ev) =>
-        {
-            if (isSyncing) return;
-            isSyncing = true;
-            after.Offset = before.Offset;
-            isSyncing = false;
-        };
+        // Bảng theo dõi các con trỏ chạm đa điểm (Multi-touch Touch Tracking)
+        var activePointers = new Dictionary<long, Point>();
 
-        after.ScrollChanged += (s, ev) =>
+        // Đồng bộ cuộn giữa các ScrollViewer nếu có nhiều hơn 1
+        if (validViewers.Count > 1)
         {
-            if (isSyncing) return;
-            isSyncing = true;
-            before.Offset = after.Offset;
-            isSyncing = false;
-        };
+            foreach (var v in validViewers)
+            {
+                v.ScrollChanged += (s, ev) =>
+                {
+                    if (isSyncing) return;
+                    isSyncing = true;
+                    var offset = v.Offset;
+                    foreach (var other in validViewers)
+                    {
+                        if (other != v) other.Offset = offset;
+                    }
+                    isSyncing = false;
+                };
+            }
+        }
 
         // Kiểm tra xem nguồn sự kiện có nằm trên thanh ScrollBar (Track/Thumb/Buttons) hay không
-        // Nếu là ScrollBar, tuyệt đối không can thiệp để Avalonia tự xử lý cuộn chuẩn xác
         static bool IsScrollBarElement(object? source, Visual? container)
         {
             if (source is Visual v)
@@ -141,11 +150,11 @@ public partial class MainView : UserControl
             {
                 if (ev.Pointer.Type == PointerType.Mouse)
                 {
-                    // Chuột: Luôn dọn dẹp các pointer touch cũ còn sót
                     activePointers.Clear();
                 }
 
                 activePointers[ev.Pointer.Id] = p.Position;
+                var firstViewer = validViewers[0];
 
                 if (activePointers.Count == 1)
                 {
@@ -153,19 +162,27 @@ public partial class MainView : UserControl
                     isDragging = true;
                     isPinching = false;
                     dragStartPoint = p.Position;
-                    dragStartOffset = before.Offset;
-                    ev.Pointer.Capture(sender as IInputElement);
+                    dragStartOffset = firstViewer.Offset;
+
+                    // Chỉ capture khi là chuột máy tính, KHÔNG capture trên Touch để không khóa đa chạm 2 ngón trên Android
+                    if (ev.Pointer.Type == PointerType.Mouse)
+                    {
+                        ev.Pointer.Capture(sender as IInputElement);
+                    }
                     ev.Handled = true;
                 }
                 else if (activePointers.Count >= 2 && DataContext is MainViewModel vm)
                 {
-                    // 2 ngón tay trên Android / Màn hình cảm ứng: Kích hoạt Pinch-to-Zoom mượt mà
-                    isDragging = false;
+                    // 2 ngón tay trên Android / Màn hình cảm ứng: Kích hoạt Pinch-to-Zoom & Pan 2 ngón đồng thời
+                    isDragging = true;
                     isPinching = true;
                     var pts = activePointers.Values.Take(2).ToArray();
                     initialPinchDistance = Math.Max(10.0, GetDistance(pts[0], pts[1]));
+                    initialPinchMidPoint = new Point((pts[0].X + pts[1].X) / 2.0, (pts[0].Y + pts[1].Y) / 2.0);
+                    initialPinchOffset = firstViewer.Offset;
                     initialZoom = vm.EnhancePreviewZoom;
-                    ev.Pointer.Capture(null);
+
+                    try { ev.Pointer.Capture(null); } catch { }
                     ev.Handled = true;
                 }
             }
@@ -179,21 +196,25 @@ public partial class MainView : UserControl
             {
                 var curPos = ev.GetCurrentPoint(this).Position;
                 activePointers[ev.Pointer.Id] = curPos;
+                var firstViewer = validViewers[0];
 
                 if (activePointers.Count >= 2 && DataContext is MainViewModel vm)
                 {
-                    if (!isPinching)
-                    {
-                        isDragging = false;
-                        isPinching = true;
-                        var ptsInit = activePointers.Values.Take(2).ToArray();
-                        initialPinchDistance = Math.Max(10.0, GetDistance(ptsInit[0], ptsInit[1]));
-                        initialZoom = vm.EnhancePreviewZoom;
-                        ev.Pointer.Capture(null);
-                    }
-
                     var pts = activePointers.Values.Take(2).ToArray();
                     double curDistance = GetDistance(pts[0], pts[1]);
+                    var curMidPoint = new Point((pts[0].X + pts[1].X) / 2.0, (pts[0].Y + pts[1].Y) / 2.0);
+
+                    if (!isPinching)
+                    {
+                        isDragging = true;
+                        isPinching = true;
+                        initialPinchDistance = Math.Max(10.0, curDistance);
+                        initialPinchMidPoint = curMidPoint;
+                        initialPinchOffset = firstViewer.Offset;
+                        initialZoom = vm.EnhancePreviewZoom;
+                    }
+
+                    // 1. Phóng to / Thu nhỏ (Pinch-to-Zoom) theo tỷ lệ khoảng cách 2 ngón tay
                     if (initialPinchDistance > 5)
                     {
                         double scaleFactor = curDistance / initialPinchDistance;
@@ -204,6 +225,21 @@ public partial class MainView : UserControl
                             vm.EnhancePreviewZoom = targetZoom;
                         }
                     }
+
+                    // 2. Kéo rê (Pan) đồng thời theo độ dịch chuyển của trung điểm 2 ngón tay
+                    var midDelta = initialPinchMidPoint - curMidPoint;
+                    var newOffset = new Vector(
+                        Math.Max(0, initialPinchOffset.X + midDelta.X),
+                        Math.Max(0, initialPinchOffset.Y + midDelta.Y)
+                    );
+
+                    isSyncing = true;
+                    foreach (var v in validViewers)
+                    {
+                        v.Offset = newOffset;
+                    }
+                    isSyncing = false;
+
                     ev.Handled = true;
                 }
                 else if (isDragging && !isPinching)
@@ -213,10 +249,14 @@ public partial class MainView : UserControl
                         Math.Max(0, dragStartOffset.X + delta.X),
                         Math.Max(0, dragStartOffset.Y + delta.Y)
                     );
+
                     isSyncing = true;
-                    before.Offset = newOffset;
-                    after.Offset = newOffset;
+                    foreach (var v in validViewers)
+                    {
+                        v.Offset = newOffset;
+                    }
                     isSyncing = false;
+
                     ev.Handled = true;
                 }
             }
@@ -225,13 +265,14 @@ public partial class MainView : UserControl
         void OnReleased(object? sender, PointerReleasedEventArgs ev)
         {
             activePointers.Remove(ev.Pointer.Id);
+            var firstViewer = validViewers[0];
 
             if (activePointers.Count == 1)
             {
                 isPinching = false;
                 isDragging = true;
                 dragStartPoint = activePointers.Values.First();
-                dragStartOffset = before.Offset;
+                dragStartOffset = firstViewer.Offset;
             }
             else if (activePointers.Count == 0)
             {
@@ -251,17 +292,6 @@ public partial class MainView : UserControl
             }
         }
 
-        before.AddHandler(PointerPressedEvent, OnPressed, RoutingStrategies.Tunnel);
-        before.AddHandler(PointerMovedEvent, OnMoved, RoutingStrategies.Tunnel);
-        before.AddHandler(PointerReleasedEvent, OnReleased, RoutingStrategies.Tunnel);
-        before.AddHandler(PointerCaptureLostEvent, OnCaptureLost, RoutingStrategies.Tunnel);
-
-        after.AddHandler(PointerPressedEvent, OnPressed, RoutingStrategies.Tunnel);
-        after.AddHandler(PointerMovedEvent, OnMoved, RoutingStrategies.Tunnel);
-        after.AddHandler(PointerReleasedEvent, OnReleased, RoutingStrategies.Tunnel);
-        after.AddHandler(PointerCaptureLostEvent, OnCaptureLost, RoutingStrategies.Tunnel);
-
-        // Đồng bộ phóng to / thu nhỏ bằng bánh xe cuộn chuột trực tiếp trên khung ảnh
         void OnWheel(object? sender, PointerWheelEventArgs ev)
         {
             if (DataContext is MainViewModel vm)
@@ -279,7 +309,13 @@ public partial class MainView : UserControl
             }
         }
 
-        before.AddHandler(PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel);
-        after.AddHandler(PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel);
+        foreach (var v in validViewers)
+        {
+            v.AddHandler(PointerPressedEvent, OnPressed, RoutingStrategies.Tunnel);
+            v.AddHandler(PointerMovedEvent, OnMoved, RoutingStrategies.Tunnel);
+            v.AddHandler(PointerReleasedEvent, OnReleased, RoutingStrategies.Tunnel);
+            v.AddHandler(PointerCaptureLostEvent, OnCaptureLost, RoutingStrategies.Tunnel);
+            v.AddHandler(PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel);
+        }
     }
 }

@@ -2322,7 +2322,7 @@
                                     <Slider Width="140" Minimum="0" Maximum="1" Value="{Binding EnhanceSplitRatio}" Height="20" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Grid>
-                            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False" IsScrollInertiaEnabled="True" Background="#050811" CornerRadius="4">
+                            <ScrollViewer x:Name="ModalSplitScrollViewer" Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False" IsScrollInertiaEnabled="True" Background="#050811" CornerRadius="4">
                                 <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <LayoutTransformControl.LayoutTransform>
                                         <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
@@ -2351,7 +2351,7 @@
                                 </Border>
                                 <Button Grid.Column="1" Command="{Binding ToggleCompareModeCommand}" Content="🔄 Hoán đổi Before / After" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="8,4" CornerRadius="4" HorizontalAlignment="Right" Margin="0,0,4,0" />
                             </Grid>
-                            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False" IsScrollInertiaEnabled="True" Background="#050811" CornerRadius="4">
+                            <ScrollViewer x:Name="ModalSingleScrollViewer" Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False" IsScrollInertiaEnabled="True" Background="#050811" CornerRadius="4">
                                 <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <LayoutTransformControl.LayoutTransform>
                                         <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
