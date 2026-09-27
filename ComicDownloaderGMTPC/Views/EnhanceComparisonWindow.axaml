@@ -121,8 +121,6 @@
                         <x:Double x:Key="SliderHorizontalThumbWidth">8</x:Double>
                         <x:Double x:Key="SliderHorizontalThumbHeight">14</x:Double>
                         <x:Double x:Key="SliderHorizontalTrackHeight">3</x:Double>
-                        <x:Double x:Key="ButtonSpinnerWidth">14</x:Double>
-                        <x:Double x:Key="NumericUpDownButtonWidth">14</x:Double>
                     </WrapPanel.Resources>
                     <WrapPanel.Styles>
                         <!-- Slider phong cách XnConvert: Thanh mỏng, con trỏ hình chữ nhật nhỏ xám sang trọng -->
@@ -153,12 +151,12 @@
                             <Setter Property="MinHeight" Value="3" />
                         </Style>
 
-                        <!-- NumericUpDown phong cách XnConvert: Siêu nhỏ gọn, số hiển thị rõ nét căn phải -->
+                        <!-- NumericUpDown phong cách XnConvert: Số hiển thị rõ nét căn phải, không bị che khuất -->
                         <Style Selector="NumericUpDown">
-                            <Setter Property="Height" Value="22" />
-                            <Setter Property="MinHeight" Value="20" />
-                            <Setter Property="Width" Value="52" />
-                            <Setter Property="Padding" Value="3,0,1,0" />
+                            <Setter Property="Height" Value="24" />
+                            <Setter Property="MinHeight" Value="22" />
+                            <Setter Property="Width" Value="58" />
+                            <Setter Property="Padding" Value="0" />
                             <Setter Property="FontSize" Value="11" />
                             <Setter Property="CornerRadius" Value="3" />
                             <Setter Property="BorderThickness" Value="1" />
@@ -168,49 +166,62 @@
                             <Setter Property="VerticalContentAlignment" Value="Center" />
                             <Setter Property="HorizontalContentAlignment" Value="Right" />
                         </Style>
+                        <Style Selector="NumericUpDown:pointerover">
+                            <Setter Property="BorderBrush" Value="#38BDF8" />
+                        </Style>
+                        <Style Selector="NumericUpDown:focus-within">
+                            <Setter Property="BorderBrush" Value="#38BDF8" />
+                            <Setter Property="Background" Value="#0B0F19" />
+                        </Style>
                         <Style Selector="NumericUpDown /template/ TextBox#PART_TextBox">
-                            <Setter Property="Height" Value="20" />
-                            <Setter Property="MinHeight" Value="18" />
-                            <Setter Property="Padding" Value="3,0,1,0" />
+                            <Setter Property="Height" Value="22" />
+                            <Setter Property="MinHeight" Value="20" />
+                            <Setter Property="Padding" Value="4,0,2,0" />
                             <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="Foreground" Value="#F8FAFC" />
                             <Setter Property="VerticalContentAlignment" Value="Center" />
                             <Setter Property="HorizontalContentAlignment" Value="Right" />
                         </Style>
-                        <Style Selector="NumericUpDown /template/ ButtonSpinner">
-                            <Setter Property="Width" Value="14" />
-                            <Setter Property="MinWidth" Value="14" />
+                        <Style Selector="NumericUpDown /template/ ButtonSpinner#PART_Spinner">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
                             <Setter Property="Padding" Value="0" />
                             <Setter Property="Margin" Value="0" />
-                            <Setter Property="BorderThickness" Value="0" />
                         </Style>
                         <Style Selector="ButtonSpinner /template/ RepeatButton">
                             <Setter Property="Width" Value="14" />
-                            <Setter Property="MinWidth" Value="14" />
-                            <Setter Property="MinHeight" Value="9" />
-                            <Setter Property="Height" Value="10" />
+                            <Setter Property="MinWidth" Value="12" />
+                            <Setter Property="MinHeight" Value="10" />
                             <Setter Property="Padding" Value="0" />
                             <Setter Property="Margin" Value="0" />
                             <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="Background" Value="#1E293B" />
+                            <Setter Property="Foreground" Value="#94A3B8" />
                         </Style>
-                        <Style Selector="ButtonSpinner RepeatButton">
-                            <Setter Property="Width" Value="14" />
-                            <Setter Property="MinWidth" Value="14" />
-                            <Setter Property="MinHeight" Value="9" />
-                            <Setter Property="Height" Value="10" />
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="Margin" Value="0" />
-                            <Setter Property="BorderThickness" Value="0" />
+                        <Style Selector="ButtonSpinner /template/ RepeatButton:pointerover">
+                            <Setter Property="Background" Value="#334155" />
                         </Style>
-                        <Style Selector="ButtonSpinner Path">
-                            <Setter Property="Width" Value="6" />
+                        <Style Selector="ButtonSpinner /template/ RepeatButton:pressed">
+                            <Setter Property="Background" Value="#0284C7" />
+                        </Style>
+                        <Style Selector="ButtonSpinner /template/ RepeatButton Path">
+                            <Setter Property="Width" Value="7" />
                             <Setter Property="Height" Value="4" />
                             <Setter Property="Stretch" Value="Uniform" />
+                            <Setter Property="Fill" Value="#94A3B8" />
+                            <Setter Property="HorizontalAlignment" Value="Center" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                        </Style>
+                        <Style Selector="ButtonSpinner /template/ RepeatButton:pointerover Path">
+                            <Setter Property="Fill" Value="#38BDF8" />
                         </Style>
                     </WrapPanel.Styles>
 
                     <!-- Contrast -->
                     <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="0,0,4,4" VerticalAlignment="Center">
-                        <Grid ColumnDefinitions="Auto, 100, 52, 22" VerticalAlignment="Center">
+                        <Grid ColumnDefinitions="Auto, 100, 58, 22" VerticalAlignment="Center">
                             <TextBlock Grid.Column="0" Text="Tương phản:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
                             <Slider Grid.Column="1" Value="{Binding EnhanceContrast}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" />
                             <NumericUpDown Grid.Column="2" Value="{Binding EnhanceContrast}" Minimum="-100" Maximum="100" Increment="1" FormatString="0" ParsingNumberStyle="Integer" ToolTip.Tip="Tương phản (-100 đến 100)" />
@@ -222,7 +233,7 @@
 
                     <!-- Brightness -->
                     <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="0,0,4,4" VerticalAlignment="Center">
-                        <Grid ColumnDefinitions="Auto, 100, 52, 22" VerticalAlignment="Center">
+                        <Grid ColumnDefinitions="Auto, 100, 58, 22" VerticalAlignment="Center">
                             <TextBlock Grid.Column="0" Text="Độ sáng:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
                             <Slider Grid.Column="1" Value="{Binding EnhanceBrightness}" Minimum="-100" Maximum="100" SmallChange="1" LargeChange="10" />
                             <NumericUpDown Grid.Column="2" Value="{Binding EnhanceBrightness}" Minimum="-100" Maximum="100" Increment="1" FormatString="0" ParsingNumberStyle="Integer" ToolTip.Tip="Độ sáng (-100 đến 100)" />
@@ -234,7 +245,7 @@
 
                     <!-- Saturation -->
                     <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="0,0,4,4" VerticalAlignment="Center">
-                        <Grid ColumnDefinitions="Auto, 100, 52, 22" VerticalAlignment="Center">
+                        <Grid ColumnDefinitions="Auto, 100, 58, 22" VerticalAlignment="Center">
                             <TextBlock Grid.Column="0" Text="Bão hòa:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
                             <Slider Grid.Column="1" Value="{Binding EnhanceSaturation}" Minimum="0" Maximum="200" SmallChange="1" LargeChange="10" />
                             <NumericUpDown Grid.Column="2" Value="{Binding EnhanceSaturation}" Minimum="0" Maximum="200" Increment="1" FormatString="0" ParsingNumberStyle="Integer" ToolTip.Tip="Bão hòa màu (0 đến 200%)" />
@@ -246,7 +257,7 @@
 
                     <!-- Sharpness -->
                     <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="0,0,4,4" VerticalAlignment="Center">
-                        <Grid ColumnDefinitions="Auto, 100, 52, 22" VerticalAlignment="Center">
+                        <Grid ColumnDefinitions="Auto, 100, 58, 22" VerticalAlignment="Center">
                             <TextBlock Grid.Column="0" Text="Độ nét:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
                             <Slider Grid.Column="1" Value="{Binding EnhanceSharpness}" Minimum="0" Maximum="10" SmallChange="0.5" LargeChange="1" />
                             <NumericUpDown Grid.Column="2" Value="{Binding EnhanceSharpness}" Minimum="0" Maximum="10" Increment="0.5" FormatString="0.0" ToolTip.Tip="Độ nét (0.0 đến 10.0)" />
@@ -258,7 +269,7 @@
 
                     <!-- Noise Reduce -->
                     <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="0,0,4,4" VerticalAlignment="Center">
-                        <Grid ColumnDefinitions="Auto, 100, 52, 22" VerticalAlignment="Center">
+                        <Grid ColumnDefinitions="Auto, 100, 58, 22" VerticalAlignment="Center">
                             <TextBlock Grid.Column="0" Text="Khử nhiễu:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
                             <Slider Grid.Column="1" Value="{Binding EnhanceNoiseReduce}" Minimum="0" Maximum="5" SmallChange="1" LargeChange="1" />
                             <NumericUpDown Grid.Column="2" Value="{Binding EnhanceNoiseReduce}" Minimum="0" Maximum="5" Increment="1" FormatString="0" ParsingNumberStyle="Integer" ToolTip.Tip="Khử nhiễu (0 đến 5)" />
