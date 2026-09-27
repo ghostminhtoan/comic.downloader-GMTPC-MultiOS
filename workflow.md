@@ -637,5 +637,22 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
       * **Trung điểm 2 ngón (`midPoint`)**: `midDelta = initialPinchMidPoint - curMidPoint`, cập nhật đồng bộ `Offset` của các ScrollViewer, cho phép vừa banh ngón tay vừa vuốt kéo ảnh trượt theo tay người dùng.
     + Khi nhấc 1 ngón tay, hệ thống mượt mà chuyển đổi lại sang chế độ 1 ngón Pan mà không bị giật hay nhảy vị trí.
 
+### 15.15. Đổi Tên Tab Tách / Gộp Folder, Khắc Phục Hiển Thị Tiến Trình & Tối Ưu Mượt Mà Hiệu Năng
+- **Đổi tên Tab**:
+  - Đổi tên Tab con 3.1 từ `📁 Split / Merge Folder` thành `📁 Tách / Gộp Folder` trên giao diện người dùng.
+- **Khắc phục lỗi không thấy Progress Bar và phần trăm khi tách/gộp**:
+  - *Nguyên nhân*: Trước đây `ProgressChanged` tính tiến trình dựa trên số lượng bộ truyện (`processedBooks / totalBooks`). Khi người dùng chọn 1 bộ truyện duy nhất (`totalBooks = 1`) và tách 500 chapter, `ProgressChanged` chỉ được gọi 1 lần duy nhất ở 100% khi xong toàn bộ -> Trong suốt quá trình di chuyển file, progress bar và % đứng im ở 0%.
+  - *Khắc phục*: Tái cấu trúc `FolderToolsService.cs` tính toán tiến độ chi tiết theo từng chapter / thư mục con thực tế (`splitCount / totalChapters * 100%`), cập nhật liên tục giá trị `FolderToolProgress` và `FolderToolProgressText` theo thời gian thực.
+- **Tối ưu hóa triệt để tình trạng đơ / lag (Smooth Performance Optimization)**:
+  - *Nguyên nhân gây lag*:
+    1. Cơ chế log cũ gọi `FolderToolLogs.Insert(0, ...)` trực tiếp trên Main UI Thread cho từng file di chuyển. Thao tác chèn đầu mảng $O(N)$ dồn dập hàng trăm lần làm UI Thread bị nghẽn (UI Flood).
+    2. Gọi `DeleteEmptyDirectoriesBottomUp` quét đệ quy toàn bộ cây thư mục lặp đi lặp lại sau mỗi bộ truyện.
+  - *Khắc phục*:
+    1. Xây dựng bộ đệm log an toàn đa luồng `ConcurrentQueue<string> _folderLogBuffer` kết hợp timer xả log theo mẻ định kỳ (Batching 60ms), triệt tiêu hoàn toàn hiện tượng nghẽn giao diện.
+    2. Chỉ thực hiện dọn dẹp thư mục rỗng 1 lần duy nhất ở cuối toàn bộ tác vụ.
+    3. Áp dụng sắp xếp số học tự nhiên `NaturalSortComparer` khi gom nhóm và duyệt danh sách chapter.
+    4. Tích hợp âm thanh thông báo `SoundNotificationService` (hoàn tất / báo lỗi) khi kết thúc tác vụ.
+
+
 
 

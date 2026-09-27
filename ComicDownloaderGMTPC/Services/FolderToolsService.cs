@@ -85,14 +85,23 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            LogEmitted?.Invoke("INFO", $"[Split Chapters] Bắt đầu chia thư mục tại: {rootFolder} | Cỡ nhóm: {groupSize} chap | Kiểu: {folderType}");
+            LogEmitted?.Invoke("INFO", $"[Tách Folder] Bắt đầu quét thư mục tại: {rootFolder} | Cỡ nhóm: {groupSize} chap | Kiểu: {folderType}");
+            ProgressChanged?.Invoke(0, 1, "Đang quét danh sách chapter...");
             
             var chapterItems = CollectChapterFolders(rootFolder);
-            var bookGroups = chapterItems.GroupBy(x => x.BookFolderPath, StringComparer.OrdinalIgnoreCase).ToList();
+            int totalChapters = chapterItems.Count;
 
+            if (totalChapters == 0)
+            {
+                LogEmitted?.Invoke("WARN", $"[Tách Folder] Không tìm thấy chapter hợp lệ nào chứa ảnh tại: {rootFolder}");
+                ProgressChanged?.Invoke(0, 0, "Không tìm thấy chapter nào.");
+                return 0;
+            }
+
+            var bookGroups = chapterItems.GroupBy(x => x.BookFolderPath, StringComparer.OrdinalIgnoreCase).ToList();
             int splitCount = 0;
-            int totalBooks = bookGroups.Count;
-            int processedBooks = 0;
+
+            LogEmitted?.Invoke("INFO", $"[Tách Folder] Đã tìm thấy {totalChapters} chapter trong {bookGroups.Count} bộ truyện. Bắt đầu phân chia...");
 
             foreach (var bookGroup in bookGroups)
             {
@@ -101,12 +110,11 @@ public class FolderToolsService
                 string bookFolder = bookGroup.Key;
                 var chapters = bookGroup
                     .OrderBy(item => item.ChapterNumber)
-                    .ThenBy(item => item.FolderName, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.FolderName, NaturalSortComparer.Instance)
                     .ToList();
 
                 if (chapters.Count < 2)
                 {
-                    processedBooks++;
                     continue;
                 }
 
@@ -117,7 +125,7 @@ public class FolderToolsService
                     {
                         Key = g.Key,
                         Items = g.OrderBy(item => item.ChapterNumber)
-                                 .ThenBy(item => item.FolderName, StringComparer.OrdinalIgnoreCase)
+                                 .ThenBy(item => item.FolderName, NaturalSortComparer.Instance)
                                  .ToList()
                     })
                     .Where(b => b.Items.Count > 0)
@@ -125,7 +133,6 @@ public class FolderToolsService
 
                 if (rawBuckets.Count == 0)
                 {
-                    processedBooks++;
                     continue;
                 }
 
@@ -178,21 +185,23 @@ public class FolderToolsService
                                 MergeDirectoryContents(chapter.SourcePath, destPath);
                             }
                             splitCount++;
-                            LogEmitted?.Invoke("SUCCESS", $"[Split] Đã chuyển '{chapter.FolderName}' -> '{groupFolderName}'");
+                            LogEmitted?.Invoke("SUCCESS", $"[Tách] Đã chuyển '{chapter.FolderName}' -> '{groupFolderName}'");
                         }
                         catch (Exception ex)
                         {
-                            LogEmitted?.Invoke("ERROR", $"[Split Error] Lỗi chuyển '{chapter.SourcePath}': {ex.Message}");
+                            LogEmitted?.Invoke("ERROR", $"[Tách Lỗi] Không thể chuyển '{chapter.SourcePath}': {ex.Message}");
                         }
+
+                        double pct = (double)splitCount / totalChapters * 100.0;
+                        ProgressChanged?.Invoke(splitCount, totalChapters, $"Đã tách {splitCount}/{totalChapters} chapter ({pct:F0}%)...");
                     }
                 }
-
-                DeleteEmptyDirectoriesBottomUp(bookFolder);
-                processedBooks++;
-                ProgressChanged?.Invoke(processedBooks, Math.Max(1, totalBooks), $"Đã chia {splitCount} chapter...");
             }
 
-            LogEmitted?.Invoke("SUCCESS", $"[Split Chapters] Hoàn tất chia {splitCount} chapter folders.");
+            // Dọn dẹp các thư mục rỗng 1 lần duy nhất ở cuối để tránh lặp quét đĩa gây lag
+            DeleteEmptyDirectoriesBottomUp(rootFolder);
+            ProgressChanged?.Invoke(totalChapters, totalChapters, $"Hoàn tất: Đã tách {splitCount}/{totalChapters} chapter.");
+            LogEmitted?.Invoke("SUCCESS", $"[Tách Folder] Hoàn tất tách {splitCount} chapter folders tại {rootFolder}");
             return splitCount;
         }
         finally
@@ -211,16 +220,27 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            LogEmitted?.Invoke("INFO", $"[Merge Chapters] Bắt đầu gộp chapter về thư mục gốc: {rootFolder}");
+            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Bắt đầu quét chapter về thư mục gốc: {rootFolder}");
+            ProgressChanged?.Invoke(0, 1, "Đang quét chapter cần gộp...");
 
             var items = CollectChapterFolders(rootFolder)
                 .Where(item => !string.Equals(item.SourcePath, rootFolder, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(item => item.Depth)
                 .ThenBy(item => item.ChapterNumber)
+                .ThenBy(item => item.FolderName, NaturalSortComparer.Instance)
                 .ToList();
 
             int mergedCount = 0;
-            int total = Math.Max(1, items.Count);
+            int total = items.Count;
+
+            if (total == 0)
+            {
+                LogEmitted?.Invoke("WARN", $"[Gộp Chapter] Không tìm thấy chapter nào cần gộp tại: {rootFolder}");
+                ProgressChanged?.Invoke(0, 0, "Không tìm thấy chapter nào cần gộp.");
+                return 0;
+            }
+
+            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Tìm thấy {total} chapter cần gộp về gốc. Bắt đầu di chuyển...");
 
             foreach (var chapter in items)
             {
@@ -242,18 +262,20 @@ public class FolderToolsService
                     }
 
                     mergedCount++;
-                    LogEmitted?.Invoke("SUCCESS", $"[Merge] Đã gộp '{chapter.FolderName}' -> thư mục gốc");
+                    LogEmitted?.Invoke("SUCCESS", $"[Gộp] Đã chuyển '{chapter.FolderName}' -> thư mục gốc");
                 }
                 catch (Exception ex)
                 {
-                    LogEmitted?.Invoke("ERROR", $"[Merge Error] Lỗi gộp '{chapter.SourcePath}': {ex.Message}");
+                    LogEmitted?.Invoke("ERROR", $"[Gộp Lỗi] Lỗi gộp '{chapter.SourcePath}': {ex.Message}");
                 }
 
-                ProgressChanged?.Invoke(mergedCount, total, $"Đã gộp {mergedCount}/{total} chapters...");
+                double pct = (double)mergedCount / total * 100.0;
+                ProgressChanged?.Invoke(mergedCount, total, $"Đã gộp {mergedCount}/{total} chapter ({pct:F0}%)...");
             }
 
             DeleteEmptyDirectoriesBottomUp(rootFolder);
-            LogEmitted?.Invoke("SUCCESS", $"[Merge Chapters] Hoàn tất gộp {mergedCount} chapter folders về gốc.");
+            ProgressChanged?.Invoke(total, total, $"Hoàn tất: Đã gộp {mergedCount}/{total} chapter về gốc.");
+            LogEmitted?.Invoke("SUCCESS", $"[Gộp Chapter] Hoàn tất gộp {mergedCount} chapter folders về {rootFolder}");
             return mergedCount;
         }
         finally
@@ -283,7 +305,8 @@ public class FolderToolsService
 
             if (parsedRanges.Count == 0) return 0;
 
-            LogEmitted?.Invoke("INFO", $"[Split Alphabet] Bắt đầu chia thư mục theo chữ cái: {rootFolder} | Ranges: {string.Join(", ", parsedRanges.Select(r => r.DisplayName))}");
+            LogEmitted?.Invoke("INFO", $"[Tách Alphabet] Bắt đầu phân loại theo chữ cái tại: {rootFolder} | Dải: {string.Join(", ", parsedRanges.Select(r => r.DisplayName))}");
+            ProgressChanged?.Invoke(0, 1, "Đang quét danh sách thư mục...");
 
             var excludedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -294,22 +317,28 @@ public class FolderToolsService
 
             var dirInfo = new DirectoryInfo(rootFolder);
             var subDirs = dirInfo.GetDirectories();
-            int splitCount = 0;
-            int total = Math.Max(1, subDirs.Length);
+            var candidateDirs = subDirs.Where(subDir =>
+                !subDir.Attributes.HasFlag(FileAttributes.Hidden) &&
+                !subDir.Attributes.HasFlag(FileAttributes.System) &&
+                !subDir.Name.StartsWith(".") &&
+                !subDir.Name.EndsWith("-tmp", StringComparison.OrdinalIgnoreCase) &&
+                !excludedNames.Contains(subDir.Name)
+            ).ToList();
 
-            for (int i = 0; i < subDirs.Length; i++)
+            int splitCount = 0;
+            int total = candidateDirs.Count;
+
+            if (total == 0)
+            {
+                LogEmitted?.Invoke("WARN", $"[Tách Alphabet] Không tìm thấy thư mục nào cần phân loại tại: {rootFolder}");
+                ProgressChanged?.Invoke(0, 0, "Không có thư mục cần phân loại.");
+                return 0;
+            }
+
+            for (int i = 0; i < candidateDirs.Count; i++)
             {
                 if (ct.IsCancellationRequested) break;
-                var subDir = subDirs[i];
-
-                if (subDir.Attributes.HasFlag(FileAttributes.Hidden) ||
-                    subDir.Attributes.HasFlag(FileAttributes.System) ||
-                    subDir.Name.StartsWith(".") ||
-                    subDir.Name.EndsWith("-tmp", StringComparison.OrdinalIgnoreCase) ||
-                    excludedNames.Contains(subDir.Name))
-                {
-                    continue;
-                }
+                var subDir = candidateDirs[i];
 
                 string categoryName = DetermineAlphabetCategory(subDir.Name, parsedRanges, ignoreLeadingTags);
                 string destParentDir = Path.Combine(rootFolder, categoryName);
@@ -330,18 +359,20 @@ public class FolderToolsService
                     }
 
                     splitCount++;
-                    LogEmitted?.Invoke("SUCCESS", $"[Split Alphabet] '{subDir.Name}' -> '{categoryName}'");
+                    LogEmitted?.Invoke("SUCCESS", $"[Tách Alphabet] '{subDir.Name}' -> '{categoryName}'");
                 }
                 catch (Exception ex)
                 {
-                    LogEmitted?.Invoke("ERROR", $"[Split Alphabet Error] Không thể chuyển '{subDir.FullName}': {ex.Message}");
+                    LogEmitted?.Invoke("ERROR", $"[Tách Alphabet Lỗi] Không thể chuyển '{subDir.FullName}': {ex.Message}");
                 }
 
-                ProgressChanged?.Invoke(i + 1, total, $"Đã phân loại {splitCount} thư mục...");
+                double pct = (double)(i + 1) / total * 100.0;
+                ProgressChanged?.Invoke(i + 1, total, $"Đã phân loại {splitCount}/{total} thư mục ({pct:F0}%)...");
             }
 
             DeleteEmptyDirectoriesBottomUp(rootFolder);
-            LogEmitted?.Invoke("SUCCESS", $"[Split Alphabet] Hoàn tất chia {splitCount} thư mục theo bảng chữ cái.");
+            ProgressChanged?.Invoke(total, total, $"Hoàn tất: Đã phân loại {splitCount}/{total} thư mục.");
+            LogEmitted?.Invoke("SUCCESS", $"[Tách Alphabet] Hoàn tất chia {splitCount} thư mục theo bảng chữ cái.");
             return splitCount;
         }
         finally
@@ -360,7 +391,8 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            LogEmitted?.Invoke("INFO", $"[Merge Alphabet] Bắt đầu gộp thư mục chữ cái về gốc: {rootFolder}");
+            LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Bắt đầu quét thư mục chữ cái về gốc: {rootFolder}");
+            ProgressChanged?.Invoke(0, 1, "Đang quét thư mục chữ cái...");
 
             var categoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -385,13 +417,11 @@ public class FolderToolsService
 
             var rootDirInfo = new DirectoryInfo(rootFolder);
             var subDirs = rootDirInfo.GetDirectories();
-            int mergedCount = 0;
+            var allItemsToMerge = new List<(DirectoryInfo catDir, DirectoryInfo comicDir)>();
             var emptyDirs = new List<DirectoryInfo>();
 
             foreach (var catDir in subDirs)
             {
-                if (ct.IsCancellationRequested) break;
-
                 if (catDir.Attributes.HasFlag(FileAttributes.Hidden) ||
                     catDir.Attributes.HasFlag(FileAttributes.System) ||
                     catDir.Name.StartsWith(".") ||
@@ -403,34 +433,53 @@ public class FolderToolsService
                 bool isAlphabetCategory = categoryNames.Contains(catDir.Name) || AlphabetRangeItem.TryParse(catDir.Name, out _);
                 if (!isAlphabetCategory) continue;
 
-                var comicDirs = catDir.GetDirectories();
-                foreach (var comicDir in comicDirs)
+                emptyDirs.Add(catDir);
+                foreach (var comicDir in catDir.GetDirectories())
                 {
-                    if (ct.IsCancellationRequested) break;
+                    allItemsToMerge.Add((catDir, comicDir));
+                }
+            }
 
-                    string destPath = Path.Combine(rootFolder, comicDir.Name);
-                    if (string.Equals(comicDir.FullName, destPath, StringComparison.OrdinalIgnoreCase)) continue;
+            int mergedCount = 0;
+            int total = allItemsToMerge.Count;
 
-                    try
+            if (total == 0)
+            {
+                LogEmitted?.Invoke("WARN", $"[Gộp Alphabet] Không tìm thấy thư mục nào cần gộp tại: {rootFolder}");
+                ProgressChanged?.Invoke(0, 0, "Không có thư mục nào cần gộp.");
+                return 0;
+            }
+
+            LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Tìm thấy {total} thư mục cần gộp về gốc. Bắt đầu di chuyển...");
+
+            for (int i = 0; i < allItemsToMerge.Count; i++)
+            {
+                if (ct.IsCancellationRequested) break;
+                var (catDir, comicDir) = allItemsToMerge[i];
+
+                string destPath = Path.Combine(rootFolder, comicDir.Name);
+                if (string.Equals(comicDir.FullName, destPath, StringComparison.OrdinalIgnoreCase)) continue;
+
+                try
+                {
+                    if (!Directory.Exists(destPath))
                     {
-                        if (!Directory.Exists(destPath))
-                        {
-                            Directory.Move(comicDir.FullName, destPath);
-                        }
-                        else
-                        {
-                            MergeDirectoryContents(comicDir.FullName, destPath);
-                        }
-                        mergedCount++;
-                        LogEmitted?.Invoke("SUCCESS", $"[Merge Alphabet] '{catDir.Name}\\{comicDir.Name}' -> '{comicDir.Name}'");
+                        Directory.Move(comicDir.FullName, destPath);
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        LogEmitted?.Invoke("ERROR", $"[Merge Alphabet Error] Lỗi gộp '{comicDir.FullName}': {ex.Message}");
+                        MergeDirectoryContents(comicDir.FullName, destPath);
                     }
+                    mergedCount++;
+                    LogEmitted?.Invoke("SUCCESS", $"[Gộp Alphabet] '{catDir.Name}\\{comicDir.Name}' -> '{comicDir.Name}'");
+                }
+                catch (Exception ex)
+                {
+                    LogEmitted?.Invoke("ERROR", $"[Gộp Alphabet Lỗi] Lỗi gộp '{comicDir.FullName}': {ex.Message}");
                 }
 
-                emptyDirs.Add(catDir);
+                double pct = (double)(i + 1) / total * 100.0;
+                ProgressChanged?.Invoke(i + 1, total, $"Đã gộp {mergedCount}/{total} thư mục ({pct:F0}%)...");
             }
 
             foreach (var dir in emptyDirs)
@@ -446,7 +495,8 @@ public class FolderToolsService
             }
 
             DeleteEmptyDirectoriesBottomUp(rootFolder);
-            LogEmitted?.Invoke("SUCCESS", $"[Merge Alphabet] Hoàn tất gộp {mergedCount} thư mục về gốc.");
+            ProgressChanged?.Invoke(total, total, $"Hoàn tất: Đã gộp {mergedCount}/{total} thư mục về gốc.");
+            LogEmitted?.Invoke("SUCCESS", $"[Gộp Alphabet] Hoàn tất gộp {mergedCount} thư mục về {rootFolder}");
             return mergedCount;
         }
         finally
@@ -571,7 +621,10 @@ public class FolderToolsService
             string[] subDirs;
             try { subDirs = Directory.GetDirectories(current); } catch { continue; }
 
-            foreach (var folder in subDirs)
+            // Sắp xếp tự nhiên để duyệt theo đúng thứ tự
+            var sortedSubDirs = subDirs.OrderBy(d => Path.GetFileName(d), NaturalSortComparer.Instance);
+
+            foreach (var folder in sortedSubDirs)
             {
                 string folderName = Path.GetFileName(folder);
                 if (folderName.StartsWith(".") || folderName.EndsWith("-tmp", StringComparison.OrdinalIgnoreCase)) continue;

@@ -99,6 +99,10 @@ public class SoundNotificationService
         });
     }
 
+    public void PlayStartup() => PlaySound(SoundNotificationType.Startup);
+    public void PlayDownloadFinish() => PlaySound(SoundNotificationType.DownloadFinish);
+    public void PlayDownloadError() => PlaySound(SoundNotificationType.DownloadError);
+
     private async Task<string?> EnsureSoundFileAsync(SoundNotificationType type)
     {
         try

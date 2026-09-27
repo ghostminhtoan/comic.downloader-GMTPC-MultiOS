@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -15,9 +16,11 @@ public partial class MainViewModel
 {
     private readonly FolderToolsService _folderTools = FolderToolsService.Instance;
     private CancellationTokenSource? _folderToolsCts;
+    private readonly ConcurrentQueue<string> _folderLogBuffer = new();
+    private System.Threading.Timer? _folderLogFlushTimer;
 
     // ==========================================
-    // SPLIT / MERGE BY CHAPTER COUNT (SINGLE COMIC)
+    // TÁCH / GỘP THEO SỐ LƯỢNG CHAPTER (SINGLE COMIC)
     // ==========================================
     [ObservableProperty]
     private string _folderSplitRootPath = string.Empty;
@@ -32,7 +35,7 @@ public partial class MainViewModel
     private bool _isMergeRemainderFolder = true;
 
     // ==========================================
-    // SPLIT / MERGE BY ALPHABET
+    // TÁCH / GỘP THEO BẢNG CHỮ CÁI (ALPHABET)
     // ==========================================
     [ObservableProperty]
     private string _folderAlphabetRootPath = string.Empty;
@@ -47,7 +50,7 @@ public partial class MainViewModel
     private ObservableCollection<string> _alphabetRanges = new() { "A-G", "H-P", "Q-Z" };
 
     // ==========================================
-    // PROGRESS & LOGS
+    // TIẾN TRÌNH & NHẬT KÝ
     // ==========================================
     [ObservableProperty]
     private bool _isFolderToolRunning = false;
@@ -66,15 +69,40 @@ public partial class MainViewModel
 
     private void InitFolderToolsService()
     {
+        // 1. Nhận log từ service đưa vào Queue an toàn đa luồng
         _folderTools.LogEmitted += (lvl, msg) =>
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                FolderToolLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [{lvl}] {msg}");
-                while (FolderToolLogs.Count > 300) FolderToolLogs.RemoveAt(FolderToolLogs.Count - 1);
-            });
+            _folderLogBuffer.Enqueue($"[{DateTime.Now:HH:mm:ss}] [{lvl}] {msg}");
         };
 
+        // 2. Timer xả log định kỳ (60ms) theo mẻ để UI Thread không bao giờ bị nghẽn/đơ
+        _folderLogFlushTimer = new System.Threading.Timer(_ =>
+        {
+            if (_folderLogBuffer.IsEmpty) return;
+
+            var batch = new List<string>();
+            while (batch.Count < 30 && _folderLogBuffer.TryDequeue(out var logItem))
+            {
+                batch.Add(logItem);
+            }
+
+            if (batch.Count > 0)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    for (int i = 0; i < batch.Count; i++)
+                    {
+                        FolderToolLogs.Insert(0, batch[i]);
+                    }
+                    while (FolderToolLogs.Count > 300)
+                    {
+                        FolderToolLogs.RemoveAt(FolderToolLogs.Count - 1);
+                    }
+                }, Avalonia.Threading.DispatcherPriority.Background);
+            }
+        }, null, 100, 60);
+
+        // 3. Nhận sự kiện thay đổi tiến trình mượt mà
         _folderTools.ProgressChanged += (current, total, msg) =>
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -88,7 +116,7 @@ public partial class MainViewModel
                 }
                 FolderToolStatusText = msg;
                 BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", msg, pct, true);
-            });
+            }, Avalonia.Threading.DispatcherPriority.Render);
         };
 
         // Gợi ý thư mục mặc định
@@ -104,7 +132,7 @@ public partial class MainViewModel
 
         var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục gốc truyện" : "Select Comic Root Folder",
+            Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục truyện gốc" : "Select Comic Root Folder",
             AllowMultiple = false
         });
 
@@ -112,7 +140,7 @@ public partial class MainViewModel
         {
             string raw = folders[0].Path.LocalPath;
             FolderSplitRootPath = DownloadEngineService.NormalizeStoragePath(raw, folders[0].Name);
-            AddLog("INFO", $"[Split/Merge] Đã chọn thư mục: {FolderSplitRootPath}");
+            AddLog("INFO", $"[Tách/Gộp] Đã chọn thư mục: {FolderSplitRootPath}");
         }
     }
 
@@ -128,20 +156,20 @@ public partial class MainViewModel
     {
         if (string.IsNullOrWhiteSpace(FolderSplitRootPath) || !Directory.Exists(FolderSplitRootPath))
         {
-            AddLog("WARN", "[Split/Merge] Vui lòng chọn thư mục hợp lệ trước!");
+            AddLog("WARN", "[Tách/Gộp] Vui lòng chọn thư mục hợp lệ trước!");
             return;
         }
 
         if (FolderSplitGroupSize <= 0)
         {
-            AddLog("WARN", "[Split/Merge] Số lượng chapter mỗi nhóm không hợp lệ!");
+            AddLog("WARN", "[Tách/Gộp] Số lượng chapter mỗi nhóm không hợp lệ!");
             return;
         }
 
         IsFolderToolRunning = true;
         FolderToolProgress = 0;
         FolderToolProgressText = "0%";
-        FolderToolStatusText = "Đang chia thư mục theo số chapter...";
+        FolderToolStatusText = "Đang tách thư mục theo số lượng chapter...";
         _folderToolsCts = new CancellationTokenSource();
 
         try
@@ -155,8 +183,9 @@ public partial class MainViewModel
 
             FolderToolProgress = 100;
             FolderToolProgressText = "100%";
-            FolderToolStatusText = $"Hoàn tất: Đã chia {count} chapter folders.";
-            AddLog("SUCCESS", $"[Split/Merge] Hoàn tất chia {count} chapter folders tại {FolderSplitRootPath}");
+            FolderToolStatusText = $"Hoàn tất: Đã tách {count} chapter folders.";
+            AddLog("SUCCESS", $"[Tách/Gộp] Hoàn tất tách {count} chapter folders tại {FolderSplitRootPath}");
+            SoundNotificationService.Instance.PlayDownloadFinish();
         }
         catch (OperationCanceledException)
         {
@@ -165,7 +194,8 @@ public partial class MainViewModel
         catch (Exception ex)
         {
             FolderToolStatusText = "Lỗi: " + ex.Message;
-            AddLog("ERROR", $"[Split/Merge Error] {ex.Message}");
+            AddLog("ERROR", $"[Tách/Gộp Lỗi] {ex.Message}");
+            SoundNotificationService.Instance.PlayDownloadError();
         }
         finally
         {
@@ -179,7 +209,7 @@ public partial class MainViewModel
     {
         if (string.IsNullOrWhiteSpace(FolderSplitRootPath) || !Directory.Exists(FolderSplitRootPath))
         {
-            AddLog("WARN", "[Split/Merge] Vui lòng chọn thư mục hợp lệ trước!");
+            AddLog("WARN", "[Tách/Gộp] Vui lòng chọn thư mục hợp lệ trước!");
             return;
         }
 
@@ -198,7 +228,8 @@ public partial class MainViewModel
             FolderToolProgress = 100;
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã gộp {count} chapter folders về gốc.";
-            AddLog("SUCCESS", $"[Split/Merge] Hoàn tất gộp {count} chapter folders về {FolderSplitRootPath}");
+            AddLog("SUCCESS", $"[Tách/Gộp] Hoàn tất gộp {count} chapter folders về {FolderSplitRootPath}");
+            SoundNotificationService.Instance.PlayDownloadFinish();
         }
         catch (OperationCanceledException)
         {
@@ -207,7 +238,8 @@ public partial class MainViewModel
         catch (Exception ex)
         {
             FolderToolStatusText = "Lỗi: " + ex.Message;
-            AddLog("ERROR", $"[Split/Merge Error] {ex.Message}");
+            AddLog("ERROR", $"[Tách/Gộp Lỗi] {ex.Message}");
+            SoundNotificationService.Instance.PlayDownloadError();
         }
         finally
         {
@@ -305,6 +337,7 @@ public partial class MainViewModel
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã phân loại {count} thư mục theo bảng chữ cái.";
             AddLog("SUCCESS", $"[Alphabet] Hoàn tất chia {count} thư mục theo chữ cái tại {FolderAlphabetRootPath}");
+            SoundNotificationService.Instance.PlayDownloadFinish();
         }
         catch (OperationCanceledException)
         {
@@ -313,7 +346,8 @@ public partial class MainViewModel
         catch (Exception ex)
         {
             FolderToolStatusText = "Lỗi: " + ex.Message;
-            AddLog("ERROR", $"[Alphabet Error] {ex.Message}");
+            AddLog("ERROR", $"[Alphabet Lỗi] {ex.Message}");
+            SoundNotificationService.Instance.PlayDownloadError();
         }
         finally
         {
@@ -348,6 +382,7 @@ public partial class MainViewModel
             FolderToolProgressText = "100%";
             FolderToolStatusText = $"Hoàn tất: Đã gộp {count} thư mục về thư mục gốc.";
             AddLog("SUCCESS", $"[Alphabet] Hoàn tất gộp {count} thư mục về {FolderAlphabetRootPath}");
+            SoundNotificationService.Instance.PlayDownloadFinish();
         }
         catch (OperationCanceledException)
         {
@@ -356,7 +391,8 @@ public partial class MainViewModel
         catch (Exception ex)
         {
             FolderToolStatusText = "Lỗi: " + ex.Message;
-            AddLog("ERROR", $"[Alphabet Error] {ex.Message}");
+            AddLog("ERROR", $"[Alphabet Lỗi] {ex.Message}");
+            SoundNotificationService.Instance.PlayDownloadError();
         }
         finally
         {
@@ -371,7 +407,7 @@ public partial class MainViewModel
         if (_folderToolsCts != null && !_folderToolsCts.IsCancellationRequested)
         {
             _folderToolsCts.Cancel();
-            AddLog("WARN", "[Split/Merge] Đang gửi yêu cầu dừng...");
+            AddLog("WARN", "[Tách/Gộp] Đang gửi yêu cầu dừng...");
         }
     }
 
@@ -379,5 +415,6 @@ public partial class MainViewModel
     public void ClearFolderToolLogs()
     {
         FolderToolLogs.Clear();
+        while (_folderLogBuffer.TryDequeue(out _)) { }
     }
 }
