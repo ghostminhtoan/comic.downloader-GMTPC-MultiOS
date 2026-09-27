@@ -567,3 +567,21 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
   + Linux: `dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish\linux`
   + Android: `dotnet build ComicDownloaderGMTPC.Android\ComicDownloaderGMTPC.Android.csproj -c Release -o publish\android`
   + Tự động dọn dẹp các tệp trung gian (`.pdb`, `.xml`, `.json`, `.dll`, `.so`) sau khi xuất bản để mỗi folder chỉ chứa đúng duy nhất 1 file executable/package chính.
+
+### 15.11. Cấu Trúc Thư Mục Xuất Bản Cùng Cấp & Bảo Toàn Cây Thư Mục Gốc (Sibling Output & Folder Structure Preservation)
+- **Quy tắc output cùng cấp (Sibling Output Directory)**:
+  - Thư mục đầu ra cho tính năng `🎨 Xử Lý Ảnh` (`enhanced`) và `📦 Đóng Gói File` (`packed`) KHÔNG lồng vào bên trong thư mục nguồn mà được tự động thiết lập ở **cùng cấp** với thư mục nguồn (`Parent Directory`).
+  - Ví dụ:
+    - Nguồn: `\Downloads\Tro Choi Toan Cau Toi Co The Manh Len Gap Tram Lan 24959\`
+    - Xử lý ảnh: `\Downloads\enhanced\`
+    - Đóng gói file: `\Downloads\packed\`
+- **Tự động bảo toàn 100% cấu trúc thư mục gốc (Keep Folder Structure)**:
+  - Khi xử lý ảnh: Hệ thống tự động tạo thư mục mang tên bộ truyện bên trong `\Downloads\enhanced\`, sau đó sao chép và tái tạo nguyên vẹn toàn bộ các tầng chapter con:
+    `\Downloads\enhanced\Tro Choi Toan Cau Toi Co The Manh Len Gap Tram Lan 24959\Chapter 1\01.jpg`
+    `\Downloads\enhanced\Tro Choi Toan Cau Toi Co The Manh Len Gap Tram Lan 24959\Chapter 2\01.jpg`
+  - Khi đóng gói file: Hệ thống tự động tạo thư mục mang tên bộ truyện bên trong `\Downloads\packed\`, xuất từng chapter thành file `.cbz`/`.zip`/`.pdf` tương ứng:
+    `\Downloads\packed\Tro Choi Toan Cau Toi Co The Manh Len Gap Tram Lan 24959\Chapter 1.cbz`
+    `\Downloads\packed\Tro Choi Toan Cau Toi Co The Manh Len Gap Tram Lan 24959\Chapter 2.cbz`
+  - Nếu người dùng chọn gom tất cả vào 1 file duy nhất (`PackSubfoldersIndividually = false`), file nén tổng mang tên bộ truyện cũng được lưu an toàn trong thư mục cấu trúc bộ truyện đó.
+  - Ngăn ngừa triệt để hiện tượng trùng lặp tên folder lồng nhau nếu người dùng tự tay chọn đích có chứa tên bộ truyện.
+

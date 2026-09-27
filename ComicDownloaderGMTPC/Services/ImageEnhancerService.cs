@@ -348,14 +348,29 @@ public class ImageEnhancerService
             return (0, 0);
         }
 
-        string targetFolder = string.IsNullOrWhiteSpace(outputFolder) ? Path.Combine(inputFolder, "Enhanced") : outputFolder;
-        if (!options.OverwriteOriginal && !Directory.Exists(targetFolder))
+        string inputDirName = Path.GetFileName(inputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrEmpty(inputDirName)) inputDirName = "Enhanced_Images";
+
+        string rawTargetFolder = string.IsNullOrWhiteSpace(outputFolder)
+            ? (Directory.GetParent(inputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))?.FullName != null
+                ? Path.Combine(Directory.GetParent(inputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))!.FullName, "enhanced")
+                : Path.Combine(inputFolder, "enhanced"))
+            : outputFolder;
+
+        // Nếu thư mục đích chưa kết thúc bằng tên thư mục gốc, tự động lồng tên thư mục gốc vào trong để bảo toàn 100% cấu trúc
+        string baseTargetFolder = options.OverwriteOriginal
+            ? inputFolder
+            : (rawTargetFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).EndsWith(inputDirName, StringComparison.OrdinalIgnoreCase)
+                ? rawTargetFolder
+                : Path.Combine(rawTargetFolder, inputDirName));
+
+        if (!options.OverwriteOriginal && !Directory.Exists(baseTargetFolder))
         {
-            Directory.CreateDirectory(targetFolder);
-            LogEmitted?.Invoke("INFO", $"Đã tạo thư mục lưu ảnh nâng cao: {targetFolder}");
+            Directory.CreateDirectory(baseTargetFolder);
+            LogEmitted?.Invoke("INFO", $"Đã tạo thư mục lưu ảnh nâng cao: {baseTargetFolder}");
         }
 
-        string modeText = options.OverwriteOriginal ? "Ghi đè file gốc" : $"Lưu vào: {targetFolder}";
+        string modeText = options.OverwriteOriginal ? "Ghi đè file gốc" : $"Lưu vào: {baseTargetFolder}";
         LogEmitted?.Invoke("INFO", $"Bắt đầu xử lý {files.Count} ảnh đa tầng ({modeText}) [Độ sáng: {options.Brightness}, Tương phản: {options.Contrast}%, Bão hòa: {options.Saturation}%, Nét: {options.Sharpness}, Khử nhiễu: {options.NoiseReduce}]...");
 
         int total = files.Count;
@@ -376,7 +391,7 @@ public class ImageEnhancerService
             string relPath = Path.GetRelativePath(inputFolder, filePath);
             string destPath = options.OverwriteOriginal
                 ? filePath + ".tmp_enh"
-                : Path.Combine(targetFolder, relPath);
+                : Path.Combine(baseTargetFolder, relPath);
 
             try
             {

@@ -1639,10 +1639,10 @@ public partial class MainViewModel : ViewModelBase
                     {
                         EnhanceFolderPath = normalized;
 
-                        // Tự động gợi ý Output folder nếu chưa đặt
+                        // Tự động gợi ý Output folder ở cùng cấp với thư mục nguồn
                         if (string.IsNullOrWhiteSpace(EnhanceOutputFolderPath))
                         {
-                            EnhanceOutputFolderPath = Path.Combine(normalized, "Enhanced");
+                            EnhanceOutputFolderPath = GetSiblingFolder(normalized, "enhanced");
                         }
 
                         if (Directory.Exists(normalized))
@@ -2087,7 +2087,7 @@ public partial class MainViewModel : ViewModelBase
         string outDir = EnhanceOverwriteOriginal ? EnhanceFolderPath : EnhanceOutputFolderPath;
         if (!EnhanceOverwriteOriginal && string.IsNullOrWhiteSpace(outDir))
         {
-            outDir = Path.Combine(EnhanceFolderPath, "Enhanced");
+            outDir = GetSiblingFolder(EnhanceFolderPath, "enhanced");
             EnhanceOutputFolderPath = outDir;
         }
 
@@ -2238,7 +2238,7 @@ public partial class MainViewModel : ViewModelBase
                         PackerInputFolderPath = normalized;
                         if (string.IsNullOrWhiteSpace(PackerOutputFolderPath))
                         {
-                            PackerOutputFolderPath = Path.Combine(normalized, "Packed");
+                            PackerOutputFolderPath = GetSiblingFolder(normalized, "packed");
                         }
                     }
                 }
@@ -2330,7 +2330,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         string outDir = string.IsNullOrWhiteSpace(PackerOutputFolderPath)
-            ? Path.Combine(PackerInputFolderPath, "Packed")
+            ? GetSiblingFolder(PackerInputFolderPath, "packed")
             : PackerOutputFolderPath;
         PackerOutputFolderPath = outDir;
 
@@ -2378,7 +2378,7 @@ public partial class MainViewModel : ViewModelBase
 
         try
         {
-            var (success, errors) = await _filePacker.ProcessPackingAsync(
+            var (success, errors, finalDir) = await _filePacker.ProcessPackingAsync(
                 PackerInputFolderPath,
                 outDir,
                 options,
@@ -2394,10 +2394,10 @@ public partial class MainViewModel : ViewModelBase
 
             IsPackerCompletedVisible = true;
             PackerCompletedMessage = _langService.CurrentLanguage == "VI"
-                ? $"Đã tạo thành công {success} file nén (Lỗi: {errors}) tại thư mục:\n{outDir}"
-                : $"Successfully generated {success} packed files (Errors: {errors}) in:\n{outDir}";
+                ? $"Đã tạo thành công {success} file nén (Lỗi: {errors}) tại thư mục:\n{finalDir}"
+                : $"Successfully generated {success} packed files (Errors: {errors}) in:\n{finalDir}";
 
-            AddLog("SUCCESS", $"[Đóng gói file] Hoàn tất đóng gói: {success} file thành công ({outDir})");
+            AddLog("SUCCESS", $"[Đóng gói file] Hoàn tất đóng gói: {success} file thành công ({finalDir})");
         }
         catch (OperationCanceledException)
         {
@@ -2432,6 +2432,18 @@ public partial class MainViewModel : ViewModelBase
         PackerLogs.Clear();
     }
     #endregion
+
+    public static string GetSiblingFolder(string inputPath, string defaultFolderName)
+    {
+        if (string.IsNullOrWhiteSpace(inputPath)) return string.Empty;
+        string clean = inputPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var parent = Directory.GetParent(clean);
+        if (parent != null && !string.IsNullOrWhiteSpace(parent.FullName))
+        {
+            return Path.Combine(parent.FullName, defaultFolderName);
+        }
+        return Path.Combine(clean, defaultFolderName);
+    }
 }
 
 public class MangadexLanguageChoice

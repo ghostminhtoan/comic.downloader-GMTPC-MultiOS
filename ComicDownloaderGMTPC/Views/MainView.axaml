@@ -1300,6 +1300,17 @@
                                                 <TextBox Text="{Binding EnhanceFolderPath}" PlaceholderText="Chọn thư mục nguồn chứa ảnh..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" FontSize="11" VerticalContentAlignment="Center" Padding="8,0" IsReadOnly="True" />
                                             </StackPanel>
 
+                                            <!-- Hàng 2: Thư mục lưu ảnh đã xử lý (Bố cục 2 tầng xem Full Path trên Android) -->
+                                            <StackPanel Spacing="3">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="📤 Thư mục lưu ảnh đã xử lý (Mặc định: thư mục 'enhanced' cùng cấp với nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowseEnhanceOutputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                    <Button Command="{Binding OpenEnhanceOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu ảnh đã xử lý trên thiết bị" />
+                                                    <CheckBox IsChecked="{Binding EnhanceOverwriteOriginal}" Content="Chỉ đè trực tiếp lên file gốc" Foreground="#F59E0B" FontWeight="SemiBold" FontSize="10" Margin="10,0,0,0" VerticalAlignment="Center" ToolTip.Tip="Nếu chọn, ảnh sau xử lý sẽ lưu đè trực tiếp lên file ảnh gốc thay vì tạo thư mục mới" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding EnhanceOutputFolderPath}" IsEnabled="{Binding !EnhanceOverwriteOriginal}" PlaceholderText="Chọn thư mục lưu ảnh đã xử lý..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                            </StackPanel>
+
                                             <!-- Hàng 3: Bộ thông số tinh chỉnh (Chuẩn bố cục XnConvert: Slider ngang mỏng, NumericUpDown 3-digit nhỏ gọn, Nút Reset riêng ↺) -->
                                             <UniformGrid Columns="{Binding EnhanceDualColumns}" HorizontalAlignment="Stretch">
                                                 <UniformGrid.Resources>
@@ -1729,7 +1740,7 @@
                                             <!-- Hàng 2: Thư mục lưu (Bố cục 2 tầng xem Full Path trên Android) -->
                                             <StackPanel Spacing="3">
                                                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="📤 Thư mục lưu file đóng gói (Mặc định: thư mục 'Packed' bên trong nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <TextBlock Text="📤 Thư mục lưu file đóng gói (Mặc định: thư mục 'packed' cùng cấp với nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
                                                     <Button Command="{Binding BrowsePackerOutputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
                                                     <Button Command="{Binding OpenPackerOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu file đóng gói trên thiết bị" />
                                                 </WrapPanel>

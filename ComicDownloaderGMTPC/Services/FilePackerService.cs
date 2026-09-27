@@ -38,7 +38,7 @@ public class FilePackerService
     /// <summary>
     /// Tiến trình đóng gói thư mục theo cấu hình đã chọn kèm báo cáo tiến trình mượt mà theo từng ảnh.
     /// </summary>
-    public async Task<(int successCount, int errorCount)> ProcessPackingAsync(
+    public async Task<(int successCount, int errorCount, string finalOutputDir)> ProcessPackingAsync(
         string inputFolder,
         string outputFolder,
         FilePackerOptions options,
@@ -51,12 +51,27 @@ public class FilePackerService
         if (!Directory.Exists(inputFolder))
         {
             LogEmitted?.Invoke("ERROR", $"Thư mục nguồn không tồn tại: {inputFolder}");
-            return (0, 1);
+            return (0, 1, outputFolder);
         }
 
-        if (!Directory.Exists(outputFolder))
+        string inputDirName = Path.GetFileName(inputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrEmpty(inputDirName)) inputDirName = "Packed_Comics";
+
+        string rawTargetFolder = string.IsNullOrWhiteSpace(outputFolder)
+            ? (Directory.GetParent(inputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))?.FullName != null
+                ? Path.Combine(Directory.GetParent(inputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))!.FullName, "packed")
+                : Path.Combine(inputFolder, "packed"))
+            : outputFolder;
+
+        // Tự động bảo toàn cấu trúc thư mục gốc bên trong thư mục packed cùng cấp
+        string finalOutputDir = rawTargetFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).EndsWith(inputDirName, StringComparison.OrdinalIgnoreCase)
+            ? rawTargetFolder
+            : Path.Combine(rawTargetFolder, inputDirName);
+
+        if (!Directory.Exists(finalOutputDir))
         {
-            Directory.CreateDirectory(outputFolder);
+            Directory.CreateDirectory(finalOutputDir);
+            LogEmitted?.Invoke("INFO", $"Đã tạo thư mục lưu file đóng gói: {finalOutputDir}");
         }
 
         // Xác định danh sách các thư mục cần đóng gói
@@ -89,7 +104,10 @@ public class FilePackerService
         foreach (var targetDir in targetsToPack)
         {
             string dirName = Path.GetFileName(targetDir);
-            if (string.IsNullOrEmpty(dirName)) dirName = Path.GetFileName(Path.GetDirectoryName(targetDir) ?? "Archive");
+            if (string.IsNullOrEmpty(dirName) || (!options.PackSubfoldersIndividually && string.Equals(targetDir, inputFolder, StringComparison.OrdinalIgnoreCase)))
+            {
+                dirName = inputDirName;
+            }
 
             var (imgFiles, chapterBookmarks) = CollectImagesAndBookmarks(targetDir);
 
@@ -107,7 +125,7 @@ public class FilePackerService
         if (totalUnits == 0)
         {
             progress?.Report((0, 100, "Không có file ảnh nào để đóng gói."));
-            return (0, 0);
+            return (0, 0, finalOutputDir);
         }
 
         int currentUnit = 0;
@@ -129,7 +147,7 @@ public class FilePackerService
                 // 1. Đóng gói CBZ (Comic Book Zip)
                 if (options.CreateCbz)
                 {
-                    string cbzPath = Path.Combine(outputFolder, $"{dirName}.cbz");
+                    string cbzPath = Path.Combine(finalOutputDir, $"{dirName}.cbz");
                     await Task.Run(() => CreateArchiveFromImages(imgFiles, cbzPath, targetDir, "CBZ", totalUnits, ref currentUnit, progress, ct), ct);
                     LogEmitted?.Invoke("SUCCESS", $"Đã tạo CBZ: {Path.GetFileName(cbzPath)} ({imgFiles.Count} ảnh)");
                 }
@@ -137,7 +155,7 @@ public class FilePackerService
                 // 2. Đóng gói ZIP
                 if (options.CreateZip)
                 {
-                    string zipPath = Path.Combine(outputFolder, $"{dirName}.zip");
+                    string zipPath = Path.Combine(finalOutputDir, $"{dirName}.zip");
                     await Task.Run(() => CreateArchiveFromImages(imgFiles, zipPath, targetDir, "ZIP", totalUnits, ref currentUnit, progress, ct), ct);
                     LogEmitted?.Invoke("SUCCESS", $"Đã tạo ZIP: {Path.GetFileName(zipPath)} ({imgFiles.Count} ảnh)");
                 }
@@ -145,7 +163,7 @@ public class FilePackerService
                 // 3. Đóng gói PDF (hỗ trợ đính kèm mục lục chương / Bookmarks)
                 if (options.CreatePdf)
                 {
-                    string pdfPath = Path.Combine(outputFolder, $"{dirName}.pdf");
+                    string pdfPath = Path.Combine(finalOutputDir, $"{dirName}.pdf");
                     await Task.Run(() => CreatePdfFromImages(imgFiles, pdfPath, chapterBookmarks, totalUnits, ref currentUnit, progress, ct), ct);
                     if (chapterBookmarks.Count > 0)
                     {
@@ -171,7 +189,7 @@ public class FilePackerService
             else errors++;
         }
 
-        return (success, errors);
+        return (success, errors, finalOutputDir);
     }
 
     /// <summary>
