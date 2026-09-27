@@ -243,36 +243,54 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Bắt đầu quét chapter về thư mục gốc: {rootFolder}");
+            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Bắt đầu quét chapter về thư mục truyện gốc: {rootFolder}");
             ProgressChanged?.Invoke(0, 1, "Đang quét chapter cần gộp...");
 
-            var items = CollectChapterFolders(rootFolder)
-                .Where(item => !string.Equals(item.SourcePath, rootFolder, StringComparison.OrdinalIgnoreCase))
+            var allCollected = CollectChapterFolders(rootFolder);
+            var itemsToMerge = allCollected
+                .Where(item =>
+                {
+                    string targetBook = !string.IsNullOrWhiteSpace(item.BookFolderPath) ? item.BookFolderPath : rootFolder;
+                    string expectedDest = Path.Combine(targetBook, item.FolderName);
+                    return !string.Equals(item.SourcePath, expectedDest, StringComparison.OrdinalIgnoreCase);
+                })
                 .OrderByDescending(item => item.Depth)
                 .ThenBy(item => item.ChapterNumber)
                 .ThenBy(item => item.FolderName, NaturalSortComparer.Instance)
                 .ToList();
 
             int mergedCount = 0;
-            int total = items.Count;
+            int total = itemsToMerge.Count;
             long lastProgressTicks = 0;
 
             if (total == 0)
             {
-                LogEmitted?.Invoke("WARN", $"[Gộp Chapter] Không tìm thấy chapter nào cần gộp tại: {rootFolder}");
+                LogEmitted?.Invoke("WARN", $"[Gộp Chapter] Không tìm thấy chapter nào nằm trong thư mục con cần gộp tại: {rootFolder}");
                 ProgressChanged?.Invoke(0, 0, "Không tìm thấy chapter nào cần gộp.");
                 return 0;
             }
 
-            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Tìm thấy {total} chapter cần gộp về gốc. Bắt đầu di chuyển...");
+            LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Tìm thấy {total} chapter cần gộp về thư mục truyện gốc. Bắt đầu di chuyển...");
 
-            foreach (var chapter in items)
+            var groupsToClean = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < itemsToMerge.Count; i++)
             {
                 if (ct.IsCancellationRequested) break;
+                var chapter = itemsToMerge[i];
+
                 if (string.IsNullOrWhiteSpace(chapter.SourcePath) || string.IsNullOrWhiteSpace(chapter.FolderName)) continue;
 
-                string destPath = Path.Combine(rootFolder, chapter.FolderName);
+                string targetBookFolder = !string.IsNullOrWhiteSpace(chapter.BookFolderPath) ? chapter.BookFolderPath : rootFolder;
+                string destPath = Path.Combine(targetBookFolder, chapter.FolderName);
+
                 if (string.Equals(chapter.SourcePath, destPath, StringComparison.OrdinalIgnoreCase)) continue;
+
+                string? sourceParent = Path.GetDirectoryName(chapter.SourcePath);
+                if (!string.IsNullOrEmpty(sourceParent) && !string.Equals(sourceParent, targetBookFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    groupsToClean.Add(sourceParent);
+                }
 
                 try
                 {
@@ -285,14 +303,20 @@ public class FolderToolsService
                 }
 
                 long now = Environment.TickCount64;
-                if (mergedCount == total || now - lastProgressTicks >= 250)
+                if (i + 1 == total || now - lastProgressTicks >= 250)
                 {
                     lastProgressTicks = now;
-                    double pct = (double)mergedCount / total * 100.0;
-                    ProgressChanged?.Invoke(mergedCount, total, $"Đã gộp {mergedCount}/{total} chapter ({pct:F0}%)...");
+                    double pct = (double)(i + 1) / total * 100.0;
+                    ProgressChanged?.Invoke(i + 1, total, $"Đã gộp {mergedCount}/{total} chapter ({pct:F0}%)...");
                 }
 
-                if (mergedCount % 10 == 0)
+                // Dọn dẹp nhanh thư mục cha nếu đã trống
+                if (!string.IsNullOrEmpty(sourceParent) && Directory.Exists(sourceParent))
+                {
+                    TryCleanEmptyOrJunkDirectory(sourceParent);
+                }
+
+                if ((i + 1) % 10 == 0)
                 {
                     await Task.Delay(10, ct).ConfigureAwait(false);
                 }
@@ -302,9 +326,15 @@ public class FolderToolsService
                 }
             }
 
+            // Dọn dẹp tất cả các group folders cũ
+            foreach (var g in groupsToClean)
+            {
+                TryCleanEmptyOrJunkDirectory(g);
+            }
+
             DeleteEmptyDirectoriesBottomUp(rootFolder);
             ProgressChanged?.Invoke(total, total, $"Hoàn tất: Đã gộp {mergedCount}/{total} chapter về gốc.");
-            LogEmitted?.Invoke("SUCCESS", $"[Gộp Chapter] Hoàn tất gộp {mergedCount} chapter folders về {rootFolder}");
+            LogEmitted?.Invoke("SUCCESS", $"[Gộp Chapter] Hoàn tất gộp {mergedCount} chapter folders về thư mục truyện gốc.");
             return mergedCount;
         }
         finally
@@ -339,8 +369,9 @@ public class FolderToolsService
 
             var excludedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "[Number]", "Number", "[Numbers]", "Numbers",
-                "other language", "Other Language", "other languages", "Other Languages"
+                "[Number]", "Number", "[Numbers]", "Numbers", "[0-9]", "0-9", "#", "[#]",
+                "other language", "Other Language", "other languages", "Other Languages", "[Other Latin]",
+                "[Other]", "Other"
             };
             foreach (var r in parsedRanges) excludedNames.Add(r.DisplayName);
 
@@ -441,8 +472,9 @@ public class FolderToolsService
 
             var categoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "[Number]", "Number", "[Numbers]", "Numbers",
-                "other language", "Other Language", "other languages", "Other Languages", "[Other Latin]"
+                "[Number]", "Number", "[Numbers]", "Numbers", "[0-9]", "0-9", "#", "[#]",
+                "other language", "Other Language", "other languages", "Other Languages", "[Other Latin]",
+                "[Other]", "Other"
             };
 
             if (rawRanges != null)
@@ -465,7 +497,7 @@ public class FolderToolsService
             try { subDirs = rootDirInfo.GetDirectories(); } catch { subDirs = Array.Empty<DirectoryInfo>(); }
 
             var allItemsToMerge = new List<(DirectoryInfo catDir, DirectoryInfo comicDir)>();
-            var emptyDirs = new List<DirectoryInfo>();
+            var catDirsToClean = new List<DirectoryInfo>();
 
             foreach (var catDir in subDirs)
             {
@@ -477,10 +509,13 @@ public class FolderToolsService
                     continue;
                 }
 
-                bool isAlphabetCategory = categoryNames.Contains(catDir.Name) || AlphabetRangeItem.TryParse(catDir.Name, out _);
+                bool isAlphabetCategory = categoryNames.Contains(catDir.Name) || 
+                                          AlphabetRangeItem.TryParse(catDir.Name, out _) ||
+                                          (catDir.Name.Length == 1 && ((catDir.Name[0] >= 'A' && catDir.Name[0] <= 'Z') || (catDir.Name[0] >= 'a' && catDir.Name[0] <= 'z')));
+                
                 if (!isAlphabetCategory) continue;
 
-                emptyDirs.Add(catDir);
+                catDirsToClean.Add(catDir);
                 DirectoryInfo[] cDirs;
                 try { cDirs = catDir.GetDirectories(); } catch { cDirs = Array.Empty<DirectoryInfo>(); }
 
@@ -496,12 +531,16 @@ public class FolderToolsService
 
             if (total == 0)
             {
-                LogEmitted?.Invoke("WARN", $"[Gộp Alphabet] Không tìm thấy thư mục nào cần gộp tại: {rootFolder}");
+                foreach (var dir in catDirsToClean)
+                {
+                    TryCleanEmptyOrJunkDirectory(dir.FullName);
+                }
+                LogEmitted?.Invoke("WARN", $"[Gộp Alphabet] Không tìm thấy bộ truyện nào trong các thư mục chữ cái tại: {rootFolder}");
                 ProgressChanged?.Invoke(0, 0, "Không có thư mục nào cần gộp.");
                 return 0;
             }
 
-            LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Tìm thấy {total} thư mục cần gộp về gốc. Bắt đầu di chuyển...");
+            LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Tìm thấy {total} bộ truyện cần gộp về gốc. Bắt đầu di chuyển...");
 
             for (int i = 0; i < allItemsToMerge.Count; i++)
             {
@@ -526,7 +565,7 @@ public class FolderToolsService
                 {
                     lastProgressTicks = now;
                     double pct = (double)(i + 1) / total * 100.0;
-                    ProgressChanged?.Invoke(i + 1, total, $"Đã gộp {mergedCount}/{total} thư mục ({pct:F0}%)...");
+                    ProgressChanged?.Invoke(i + 1, total, $"Đã gộp {mergedCount}/{total} bộ truyện ({pct:F0}%)...");
                 }
 
                 if ((i + 1) % 10 == 0)
@@ -539,21 +578,14 @@ public class FolderToolsService
                 }
             }
 
-            foreach (var dir in emptyDirs)
+            foreach (var dir in catDirsToClean)
             {
-                try
-                {
-                    if (Directory.Exists(dir.FullName) && !Directory.EnumerateFileSystemEntries(dir.FullName).Any())
-                    {
-                        Directory.Delete(dir.FullName, false);
-                    }
-                }
-                catch {}
+                TryCleanEmptyOrJunkDirectory(dir.FullName);
             }
 
             DeleteEmptyDirectoriesBottomUp(rootFolder);
-            ProgressChanged?.Invoke(total, total, $"Hoàn tất: Đã gộp {mergedCount}/{total} thư mục về gốc.");
-            LogEmitted?.Invoke("SUCCESS", $"[Gộp Alphabet] Hoàn tất gộp {mergedCount} thư mục về {rootFolder}");
+            ProgressChanged?.Invoke(total, total, $"Hoàn tất: Đã gộp {mergedCount}/{total} bộ truyện về gốc.");
+            LogEmitted?.Invoke("SUCCESS", $"[Gộp Alphabet] Hoàn tất gộp {mergedCount} bộ truyện về {rootFolder}");
             return mergedCount;
         }
         finally
@@ -692,7 +724,7 @@ public class FolderToolsService
                     string parentName = Path.GetFileName(parent);
                     string bookPath = parent;
 
-                    if (Regex.IsMatch(parentName, @"(^|-)chap\s+\d{4}-\d{4}$", RegexOptions.IgnoreCase))
+                    if (Regex.IsMatch(parentName, @"(^|[-_\s])(chap|chapter|vol|volume|tap|tập)\s*\d+[\s\-_–—]+\d+$", RegexOptions.IgnoreCase))
                     {
                         string grandParent = Path.GetDirectoryName(parent) ?? rootFolder;
                         bookPath = grandParent;
@@ -728,16 +760,55 @@ public class FolderToolsService
     }
 
     /// <summary>
+    /// Dọn dẹp thư mục nếu rỗng hoặc chỉ chứa file rác/hệ thống (.nomedia, Thumbs.db, desktop.ini...).
+    /// </summary>
+    private static void TryCleanEmptyOrJunkDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return;
+        try
+        {
+            var entries = Directory.GetFileSystemEntries(path);
+            if (entries.Length == 0)
+            {
+                Directory.Delete(path, false);
+                return;
+            }
+
+            var junkNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".nomedia", "Thumbs.db", "desktop.ini", ".DS_Store", "ehthumbs.db", "ehthumbs_vista.db"
+            };
+
+            bool allJunk = entries.All(e => junkNames.Contains(Path.GetFileName(e)));
+            if (allJunk)
+            {
+                foreach (var e in entries)
+                {
+                    try
+                    {
+                        if (File.Exists(e)) File.Delete(e);
+                        else if (Directory.Exists(e)) Directory.Delete(e, true);
+                    }
+                    catch { }
+                }
+                Directory.Delete(path, false);
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
     /// Di chuyển thư mục an toàn tuyệt đối trên mọi hệ điều hành (kể cả Android Scoped Storage / Cross-mount).
     /// </summary>
     private static void SafeMoveDirectory(string source, string dest)
     {
         if (string.Equals(source, dest, StringComparison.OrdinalIgnoreCase)) return;
+        if (!Directory.Exists(source)) return;
 
-        // Tránh đệ quy vô tận nếu dest nằm bên trong source
+        // Tránh đệ quy vô tận nếu dest nằm bên trong source hoặc ngược lại
         string normSource = source.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         string normDest = dest.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (normDest.StartsWith(normSource, StringComparison.OrdinalIgnoreCase)) return;
+        if (normDest.StartsWith(normSource, StringComparison.OrdinalIgnoreCase) || normSource.StartsWith(normDest, StringComparison.OrdinalIgnoreCase)) return;
 
         // 1. Luôn đảm bảo thư mục cha của dest phải tồn tại TRƯỚC TIÊN
         string? parentDest = Path.GetDirectoryName(dest);
@@ -746,18 +817,8 @@ public class FolderToolsService
             try { Directory.CreateDirectory(parentDest); } catch { }
         }
 
-        // 2. Nếu dest đã tồn tại nhưng là thư mục rỗng, dọn dẹp trước để Directory.Move thành công tức thì
-        if (Directory.Exists(dest))
-        {
-            try
-            {
-                if (!Directory.EnumerateFileSystemEntries(dest).Any())
-                {
-                    Directory.Delete(dest, false);
-                }
-            }
-            catch { }
-        }
+        // 2. Nếu dest đã tồn tại, kiểm tra xem có rỗng hoặc chỉ chứa file rác (Thumbs.db, .nomedia...) không
+        TryCleanEmptyOrJunkDirectory(dest);
 
         // 3. Thử Directory.Move nhanh trước nếu thư mục đích chưa tồn tại
         try
@@ -788,6 +849,7 @@ public class FolderToolsService
     private static void MergeDirectoryContents(string source, string dest)
     {
         if (string.Equals(source, dest, StringComparison.OrdinalIgnoreCase)) return;
+        if (!Directory.Exists(source)) return;
 
         string normSource = source.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         string normDest = dest.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
@@ -845,14 +907,7 @@ public class FolderToolsService
             catch {}
         }
 
-        try
-        {
-            if (Directory.Exists(source) && !Directory.EnumerateFileSystemEntries(source).Any())
-            {
-                Directory.Delete(source, false);
-            }
-        }
-        catch {}
+        TryCleanEmptyOrJunkDirectory(source);
     }
 
     /// <summary>
@@ -894,14 +949,7 @@ public class FolderToolsService
             foreach (var dir in allDirs.OrderByDescending(d => GetPathDepth(d)).ThenByDescending(d => d.Length))
             {
                 if (string.Equals(dir, rootFolder, StringComparison.OrdinalIgnoreCase)) continue;
-                try
-                {
-                    if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
-                    {
-                        Directory.Delete(dir, false);
-                    }
-                }
-                catch {}
+                TryCleanEmptyOrJunkDirectory(dir);
             }
         }
         catch {}
