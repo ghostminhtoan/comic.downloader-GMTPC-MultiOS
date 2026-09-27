@@ -135,7 +135,7 @@ public class ImageEnhancerService
         {
             if (!File.Exists(filePath)) return null;
 
-            using var src = SKBitmap.Decode(filePath);
+            using var src = UniversalImageDecoder.DecodeToSkBitmap(filePath);
             if (src == null) return null;
 
             // Thu nhỏ nếu ảnh quá lớn để xem trước mượt mà
@@ -182,7 +182,7 @@ public class ImageEnhancerService
             var fileInfo = new FileInfo(filePath);
             long originalSize = fileInfo.Length;
 
-            using var src = SKBitmap.Decode(filePath);
+            using var src = UniversalImageDecoder.DecodeToSkBitmap(filePath);
             if (src == null) return null;
 
             int origW = src.Width;
@@ -407,7 +407,7 @@ public class ImageEnhancerService
                     Directory.CreateDirectory(destDir);
                 }
 
-                using (var src = SKBitmap.Decode(filePath))
+                using (var src = UniversalImageDecoder.DecodeToSkBitmap(filePath))
                 {
                     if (src == null) throw new InvalidOperationException("Không thể giải mã dữ liệu ảnh.");
 

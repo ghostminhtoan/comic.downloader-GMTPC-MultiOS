@@ -37,7 +37,7 @@ public class ImageSplitterService
 
         try
         {
-            using var srcBitmap = SKBitmap.Decode(filePath);
+            using var srcBitmap = UniversalImageDecoder.DecodeToSkBitmap(filePath);
             if (srcBitmap == null || srcBitmap.Height <= splitHeight)
             {
                 return false;

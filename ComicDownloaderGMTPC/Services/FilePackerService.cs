@@ -323,37 +323,7 @@ public class FilePackerService
             if (ct.IsCancellationRequested) return;
 
             byte[] rawBytes = File.ReadAllBytes(imgPath);
-            byte[] jpegBytes;
-            int width = 0;
-            int height = 0;
-
-            bool isJpeg = rawBytes.Length >= 3 && rawBytes[0] == 0xFF && rawBytes[1] == 0xD8 && rawBytes[2] == 0xFF;
-            if (isJpeg)
-            {
-                jpegBytes = rawBytes;
-                using var ms = new MemoryStream(rawBytes);
-                using var codec = SKCodec.Create(ms);
-                width = codec?.Info.Width ?? 1080;
-                height = codec?.Info.Height ?? 1920;
-            }
-            else
-            {
-                // Đối với WebP, PNG, BMP: Decode và nén sang JPEG 95% (dung lượng nhỏ gọn, chất lượng cao nhất)
-                using var bitmap = SKBitmap.Decode(rawBytes);
-                if (bitmap != null)
-                {
-                    width = bitmap.Width;
-                    height = bitmap.Height;
-                    using var data = bitmap.Encode(SKEncodedImageFormat.Jpeg, 95);
-                    jpegBytes = data != null ? data.ToArray() : rawBytes;
-                }
-                else
-                {
-                    jpegBytes = rawBytes;
-                    width = 1080;
-                    height = 1920;
-                }
-            }
+            var (jpegBytes, width, height) = UniversalImageDecoder.ConvertToStandardJpeg(rawBytes, 95);
 
             if (width <= 0) width = 1080;
             if (height <= 0) height = 1920;

@@ -738,6 +738,31 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
   - Bước 1: `build.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`) với `0 Warning(s), 0 Error(s)`.
   - Bước 2: Khởi chạy file thực tế `publish\windows\ComicDownloaderGMTPC.Desktop.exe` đạt trạng thái `Responding: True`.
 
+### 15.20. Tích Hợp Sẵn WebP Codec Độc Lập Đa Nền Tảng & Khắc Phục Triệt Để Lỗi Blank Image Khi Đóng Gói PDF
+- **Phân tích nguyên nhân lỗi Blank Image trong file PDF**:
+  1. **Tệp WebP hoặc Fake-JPG (Tên đuôi `.jpg` nhưng nội dung thực là WebP)**:
+     - Khi tải truyện tranh từ nhiều nguồn web, có nhiều trang ảnh là định dạng WebP (hoặc đặt tên `.jpg` nhưng magic bytes là `RIFF...WEBP`).
+     - Khi đóng gói PDF, nếu bộ giải mã cũ không đọc được WebP, code cũ rơi vào nhánh fallback gán dữ liệu thô `jpegBytes = rawBytes` (chứa byte WebP).
+     - Luồng stream của PDF định nghĩa `/Filter /DCTDecode` (chỉ dành riêng cho chuẩn JPEG). Khi trình đọc PDF (Adobe Acrobat, Chrome, Tachiyomi, Foxit...) giải nén DCT stream gặp phải dữ liệu WebP, nó sẽ không thể giải nén và hiển thị một trang trắng xóa (**Blank Image / Corrupted Page**).
+  2. **Phụ thuộc vào Codec hệ điều hành**:
+     - Các hệ thống Windows cũ, Linux tối giản hoặc một số phiên bản Android không có sẵn WebP WIC Codec cấp OS, khiến ứng dụng không decode được ảnh WebP nếu không có thư viện đóng gói độc lập đi kèm.
+- **Giải pháp khắc phục toàn diện (`UniversalImageDecoder.cs`)**:
+  1. **Tích hợp bộ giải mã ảnh độc lập 100% Managed (SixLabors.ImageSharp 4.x + SkiaSharp)**:
+     - Tích hợp sẵn engine giải mã WebP (hỗ trợ toàn diện VP8 lossy, VP8L lossless, VP8X extended, animated WebP, alpha channel), PNG, BMP, GIF, TIFF.
+     - Hoạt động độc lập 100% trong runtime .NET mà **không yêu cầu người dùng phải cài đặt bất kỳ codec nào vào hệ điều hành** (Windows, Linux, Android).
+  2. **Chuẩn hóa luồng JPEG cho PDF (`ConvertToStandardJpeg`)**:
+     - Kiểm tra magic bytes thực tế của file: Nếu là JPEG chuẩn thì giữ nguyên byte gốc (Zero-Copy).
+     - Nếu là WebP, Fake-JPG, PNG, BMP...: Tự động giải mã bằng engine độc lập, xử lý compositing mượt mà và nén thành luồng byte JPEG chuẩn 95% trước khi ghi vào `/Filter /DCTDecode`.
+     - Tuyệt đối không bao giờ để lọt byte WebP thô vào luồng DCT của PDF, triệt tiêu 100% hiện tượng Blank Image.
+  3. **Áp dụng đồng bộ cho toàn bộ hệ sinh thái dịch vụ**:
+     - Đóng gói PDF (`FilePackerService.cs`).
+     - Cắt ảnh dài WebP (`ImageSplitterService.cs`).
+     - Xử lý và nâng cao ảnh WebP (`ImageEnhancerService.cs`).
+- **Nghiệm Thu Toàn Diện**:
+  - Bước 1: `build.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`) với `0 Warning(s), 0 Error(s)`.
+  - Bước 2: Khởi chạy file thực tế `publish\windows\ComicDownloaderGMTPC.Desktop.exe` đạt trạng thái `Responding: True`.
+
+
 
 
 
