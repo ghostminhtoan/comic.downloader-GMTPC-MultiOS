@@ -474,16 +474,14 @@ public class DownloadEngineService
         ProgressUpdated?.Invoke();
 
         string effectiveRoot = EnsureWritableDownloadRoot(DownloadRoot);
-        string safeBookName = MakeSafeFilename(book.Title);
+        string safeBookName = MakeSafeFilename(book.Title, 80);
         string bookDir = Path.Combine(effectiveRoot, safeBookName);
         book.LocalDirectory = bookDir;
 
         try
         {
-            if (!Directory.Exists(bookDir))
-            {
-                Directory.CreateDirectory(bookDir);
-            }
+            bookDir = SafeCreateDirectory(bookDir);
+            book.LocalDirectory = bookDir;
 
             // Trích xuất danh sách chapter nếu chưa có
             if (book.Chapters.Count == 0)
@@ -553,13 +551,13 @@ public class DownloadEngineService
                 await WaitIfPausedAsync(ct).ConfigureAwait(false);
 
                 var chapter = targetChapters[chIdx];
-                string chapterDirName = MakeSafeFilename(string.IsNullOrWhiteSpace(chapter.Title) ? $"Chapter {chIdx + 1}" : chapter.Title);
+                string chapterDirName = MakeSafeChapterDirName(chapter.Title, chIdx + 1, 60);
                 
                 string chapterDir = string.Equals(mode, "Multi-comic", StringComparison.OrdinalIgnoreCase)
-                    ? Path.Combine(effectiveRoot, $"{safeBookName}-{chapterDirName}")
+                    ? Path.Combine(effectiveRoot, MakeSafeFilename($"{safeBookName}-{chapterDirName}", 100))
                     : Path.Combine(bookDir, chapterDirName);
 
-                if (!Directory.Exists(chapterDir)) Directory.CreateDirectory(chapterDir);
+                chapterDir = SafeCreateDirectory(chapterDir);
 
                 book.StatusMessage = $"Đang trích xuất ảnh {chapter.Title}...";
                 book.UpdateProgress(completedChapters, totalChapters, 0, 0);
@@ -814,13 +812,95 @@ public class DownloadEngineService
         catch {}
     }
 
-    private static string MakeSafeFilename(string name)
+    public static string MakeSafeFilename(string name, int maxBytes = 80)
     {
         if (string.IsNullOrWhiteSpace(name)) return "Unnamed";
-        foreach (char c in Path.GetInvalidFileNameChars())
+        
+        // 1. Loại bỏ các ký tự không hợp lệ trên mọi hệ điều hành (Windows, Linux, Android)
+        var invalidChars = Path.GetInvalidFileNameChars().ToHashSet();
+        var sb = new System.Text.StringBuilder();
+        foreach (char c in name)
         {
-            name = name.Replace(c, '_');
+            if (invalidChars.Contains(c) || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' || c < 32)
+            {
+                sb.Append('_');
+            }
+            else
+            {
+                sb.Append(c);
+            }
         }
-        return name.Trim().TrimEnd('.');
+
+        string cleaned = System.Text.RegularExpressions.Regex.Replace(sb.ToString().Trim(), @"\s+", " ").Trim('.', ' ', '_');
+        if (string.IsNullOrWhiteSpace(cleaned)) return "Comic";
+
+        // 2. Giới hạn độ dài theo byte UTF-8 (Android NAME_MAX = 255 bytes, đặt maxBytes 80 để an toàn cho cả path con)
+        byte[] utf8Bytes = System.Text.Encoding.UTF8.GetBytes(cleaned);
+        if (utf8Bytes.Length <= maxBytes) return cleaned;
+
+        // Cắt ngắn chuỗi an toàn tại ranh giới ký tự
+        int targetBytes = Math.Max(16, maxBytes - 7);
+        while (cleaned.Length > 0 && System.Text.Encoding.UTF8.GetByteCount(cleaned) > targetBytes)
+        {
+            cleaned = cleaned.Substring(0, cleaned.Length - 1);
+        }
+        cleaned = cleaned.TrimEnd('.', ' ', '_');
+
+        string hash = BitConverter.ToString(System.Security.Cryptography.MD5.HashData(utf8Bytes)).Replace("-", "").Substring(0, 6).ToLowerInvariant();
+        return $"{cleaned}_{hash}";
+    }
+
+    public static string MakeSafeChapterDirName(string? title, int fallbackIndex, int maxBytes = 60)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return $"Chapter {fallbackIndex}";
+
+        string t = title.Trim();
+        // Nếu title chứa "Chapter 1 - Tên truyện dài dằng dặc", chỉ rút gọn lại Chapter 1
+        var matchChapter = System.Text.RegularExpressions.Regex.Match(t, @"^(Chapter|Chương|Chap|Vol|Volume)\s*[\d\.]+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (matchChapter.Success && t.Length > 40)
+        {
+            string prefix = matchChapter.Value.Trim();
+            string rest = t.Substring(matchChapter.Length).Trim('-', ' ', ':', '_');
+            if (rest.Length > 25)
+            {
+                rest = rest.Substring(0, 25).Trim();
+            }
+            t = string.IsNullOrWhiteSpace(rest) ? prefix : $"{prefix} - {rest}";
+        }
+
+        return MakeSafeFilename(t, maxBytes);
+    }
+
+    public static string SafeCreateDirectory(string path)
+    {
+        try
+        {
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+            return path;
+        }
+        catch (Exception ex) when (ex is PathTooLongException || ex is IOException)
+        {
+            try
+            {
+                string? parent = Path.GetDirectoryName(path);
+                string leaf = Path.GetFileName(path);
+                if (!string.IsNullOrEmpty(parent))
+                {
+                    string safeLeaf = MakeSafeFilename(leaf, 40);
+                    string fallbackPath = Path.Combine(parent, safeLeaf);
+                    if (!Directory.Exists(fallbackPath))
+                    {
+                        Directory.CreateDirectory(fallbackPath);
+                    }
+                    return fallbackPath;
+                }
+            }
+            catch { }
+            throw;
+        }
     }
 }
+

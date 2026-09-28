@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
@@ -277,12 +278,22 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string _splitOrientationMode = "Auto"; // "Auto", "Horizontal", "Vertical"
 
+    public double SplitClipWidth => EnhanceImagePixelWidth * Math.Clamp(EnhanceSplitRatio, 0.0, 1.0);
+    public double SplitClipHeight => EnhanceImagePixelHeight * Math.Clamp(EnhanceSplitRatio, 0.0, 1.0);
+    public Thickness SplitDividerMarginHorizontal => new Thickness(Math.Max(0, EnhanceImagePixelWidth * Math.Clamp(EnhanceSplitRatio, 0.0, 1.0) - 16), 0, 0, 0);
+    public Thickness SplitDividerMarginVertical => new Thickness(0, Math.Max(0, EnhanceImagePixelHeight * Math.Clamp(EnhanceSplitRatio, 0.0, 1.0) - 16), 0, 0);
+
     public GridLength SplitLeftLength => new GridLength(Math.Clamp(EnhanceSplitRatio, 0.01, 0.99), GridUnitType.Star);
     public GridLength SplitRightLength => new GridLength(Math.Clamp(1.0 - EnhanceSplitRatio, 0.01, 0.99), GridUnitType.Star);
     public GridLength SplitTopLength => new GridLength(Math.Clamp(EnhanceSplitRatio, 0.01, 0.99), GridUnitType.Star);
     public GridLength SplitBottomLength => new GridLength(Math.Clamp(1.0 - EnhanceSplitRatio, 0.01, 0.99), GridUnitType.Star);
 
     public string SplitOrientationText => IsSplitVerticalOrientation ? "↕ Trên / Dưới" : "↔ Trái / Phải";
+
+    [ObservableProperty]
+    private bool _isEnhanceLogExpanded = false;
+
+    public string EnhanceLogToggleText => IsEnhanceLogExpanded ? "📋 Ẩn Log ▼" : "📋 Xem Log Chi Tiết ▲";
 
     [ObservableProperty]
     private bool _isLoupeEnabled = false;
@@ -317,8 +328,17 @@ public partial class MainViewModel : ViewModelBase
         UpdateSplitOrientation();
     }
 
+    partial void OnIsEnhanceLogExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(EnhanceLogToggleText));
+    }
+
     partial void OnEnhanceSplitRatioChanged(double value)
     {
+        OnPropertyChanged(nameof(SplitClipWidth));
+        OnPropertyChanged(nameof(SplitClipHeight));
+        OnPropertyChanged(nameof(SplitDividerMarginHorizontal));
+        OnPropertyChanged(nameof(SplitDividerMarginVertical));
         OnPropertyChanged(nameof(SplitLeftLength));
         OnPropertyChanged(nameof(SplitRightLength));
         OnPropertyChanged(nameof(SplitTopLength));
@@ -402,6 +422,26 @@ public partial class MainViewModel : ViewModelBase
     partial void OnEnhanceSharpnessChanged(float value) => TriggerLivePreviewDebounced();
     partial void OnEnhanceNoiseReduceChanged(int value) => TriggerLivePreviewDebounced();
     partial void OnEnhanceQualityChanged(int value) => TriggerLivePreviewDebounced();
+
+    partial void OnEnhanceImagePixelWidthChanged(double value)
+    {
+        OnPropertyChanged(nameof(SplitClipWidth));
+        OnPropertyChanged(nameof(SplitDividerMarginHorizontal));
+        UpdateSplitOrientation();
+    }
+
+    partial void OnEnhanceImagePixelHeightChanged(double value)
+    {
+        OnPropertyChanged(nameof(SplitClipHeight));
+        OnPropertyChanged(nameof(SplitDividerMarginVertical));
+        UpdateSplitOrientation();
+    }
+
+    [RelayCommand]
+    public void ToggleEnhanceLog()
+    {
+        IsEnhanceLogExpanded = !IsEnhanceLogExpanded;
+    }
 
     [ObservableProperty]
     private bool _isPopupPreview = true;

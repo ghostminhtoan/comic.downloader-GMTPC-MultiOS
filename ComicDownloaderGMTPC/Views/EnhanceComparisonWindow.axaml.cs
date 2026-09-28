@@ -22,6 +22,7 @@ public partial class EnhanceComparisonWindow : Window
 
         // 2. Pan & 2 ngón Pinch-to-Zoom cho Split View (Rèm trượt)
         SetupPinchAndPanGesture(SplitScrollViewer);
+        SetupSplitCurtainDrag(ComparisonSplitPanel);
 
         // 3. Pan & 2 ngón Pinch-to-Zoom cho Single View (Ảnh đơn)
         SetupPinchAndPanGesture(SingleScrollViewer);
@@ -40,6 +41,73 @@ public partial class EnhanceComparisonWindow : Window
                 vm.IsPortraitMode = e.NewSize.Width < e.NewSize.Height;
             }
         };
+    }
+
+    private void SetupSplitCurtainDrag(Panel? splitPanel)
+    {
+        if (splitPanel == null) return;
+
+        bool isDraggingSplit = false;
+
+        void UpdateSplitPosition(Point p)
+        {
+            if (DataContext is not MainViewModel vm) return;
+
+            double w = splitPanel.Bounds.Width;
+            double h = splitPanel.Bounds.Height;
+            if (w <= 0 || h <= 0)
+            {
+                w = vm.EnhanceImagePixelWidth;
+                h = vm.EnhanceImagePixelHeight;
+            }
+            if (w <= 0 || h <= 0) return;
+
+            double ratio = vm.IsSplitVerticalOrientation
+                ? (p.Y / h)
+                : (p.X / w);
+
+            vm.EnhanceSplitRatio = Math.Clamp(ratio, 0.01, 0.99);
+        }
+
+        splitPanel.AddHandler(InputElement.PointerPressedEvent, (s, ev) =>
+        {
+            if (DataContext is MainViewModel vm && vm.IsSplitView)
+            {
+                var pt = ev.GetCurrentPoint(splitPanel);
+                if (pt.Properties.IsLeftButtonPressed || ev.Pointer.Type == PointerType.Touch)
+                {
+                    isDraggingSplit = true;
+                    UpdateSplitPosition(pt.Position);
+                    ev.Pointer.Capture(splitPanel);
+                    ev.Handled = true;
+                }
+            }
+        }, RoutingStrategies.Tunnel);
+
+        splitPanel.AddHandler(InputElement.PointerMovedEvent, (s, ev) =>
+        {
+            if (isDraggingSplit && DataContext is MainViewModel vm && vm.IsSplitView)
+            {
+                var pt = ev.GetCurrentPoint(splitPanel);
+                UpdateSplitPosition(pt.Position);
+                ev.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+
+        splitPanel.AddHandler(InputElement.PointerReleasedEvent, (s, ev) =>
+        {
+            if (isDraggingSplit)
+            {
+                isDraggingSplit = false;
+                ev.Pointer.Capture(null);
+                ev.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+
+        splitPanel.AddHandler(InputElement.PointerCaptureLostEvent, (s, ev) =>
+        {
+            isDraggingSplit = false;
+        }, RoutingStrategies.Tunnel);
     }
 
     private void SetupPinchAndPanGesture(params ScrollViewer?[] viewers)

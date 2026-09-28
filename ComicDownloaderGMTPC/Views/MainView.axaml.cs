@@ -58,6 +58,10 @@ public partial class MainView : UserControl
             SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("LiveSplitScrollViewer"));
             SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("LiveSingleScrollViewer"));
 
+            // Đăng ký tương tác kéo rèm trực tiếp trên ảnh Split View
+            SetupSplitCurtainDrag(this.FindControl<Panel>("LiveSplitPanel"));
+            SetupSplitCurtainDrag(this.FindControl<Panel>("ModalSplitPanel"));
+
             var liveSingle = this.FindControl<ScrollViewer>("LiveSingleScrollViewer");
             if (liveSingle != null)
             {
@@ -346,4 +350,71 @@ public partial class MainView : UserControl
             v.AddHandler(PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel);
         }
     }
-}
+
+    private void SetupSplitCurtainDrag(Panel? splitPanel)
+    {
+        if (splitPanel == null) return;
+
+        bool isDraggingSplit = false;
+
+        void UpdateSplitPosition(Point p)
+        {
+            if (DataContext is not MainViewModel vm) return;
+
+            double w = splitPanel.Bounds.Width;
+            double h = splitPanel.Bounds.Height;
+            if (w <= 0 || h <= 0)
+            {
+                w = vm.EnhanceImagePixelWidth;
+                h = vm.EnhanceImagePixelHeight;
+            }
+            if (w <= 0 || h <= 0) return;
+
+            double ratio = vm.IsSplitVerticalOrientation
+                ? (p.Y / h)
+                : (p.X / w);
+
+            vm.EnhanceSplitRatio = Math.Clamp(ratio, 0.01, 0.99);
+        }
+
+        splitPanel.AddHandler(InputElement.PointerPressedEvent, (s, ev) =>
+        {
+            if (DataContext is MainViewModel vm && vm.IsSplitView)
+            {
+                var pt = ev.GetCurrentPoint(splitPanel);
+                if (pt.Properties.IsLeftButtonPressed || ev.Pointer.Type == PointerType.Touch)
+                {
+                    isDraggingSplit = true;
+                    UpdateSplitPosition(pt.Position);
+                    ev.Pointer.Capture(splitPanel);
+                    ev.Handled = true;
+                }
+            }
+        }, RoutingStrategies.Tunnel);
+
+        splitPanel.AddHandler(InputElement.PointerMovedEvent, (s, ev) =>
+        {
+            if (isDraggingSplit && DataContext is MainViewModel vm && vm.IsSplitView)
+            {
+                var pt = ev.GetCurrentPoint(splitPanel);
+                UpdateSplitPosition(pt.Position);
+                ev.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+
+        splitPanel.AddHandler(InputElement.PointerReleasedEvent, (s, ev) =>
+        {
+            if (isDraggingSplit)
+            {
+                isDraggingSplit = false;
+                ev.Pointer.Capture(null);
+                ev.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+
+        splitPanel.AddHandler(InputElement.PointerCaptureLostEvent, (s, ev) =>
+        {
+            isDraggingSplit = false;
+        }, RoutingStrategies.Tunnel);
+    }
+}
