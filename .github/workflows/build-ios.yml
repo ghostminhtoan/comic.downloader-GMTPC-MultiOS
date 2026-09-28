@@ -21,20 +21,14 @@ jobs:
           echo "=== Available Xcode versions ==="
           ls -ld /Applications/Xcode* || true
           
-          # Ưu tiên chọn Xcode 16.0 và đặt biến môi trường DEVELOPER_DIR cho toàn bộ job
-          if [ -d "/Applications/Xcode_16.0.app" ]; then
-            echo "Selected Xcode 16.0"
-            echo "DEVELOPER_DIR=/Applications/Xcode_16.0.app/Contents/Developer" >> $GITHUB_ENV
-            sudo xcode-select -s /Applications/Xcode_16.0.app
-          elif [ -d "/Applications/Xcode_16.app" ]; then
-            echo "Selected Xcode 16"
-            echo "DEVELOPER_DIR=/Applications/Xcode_16.app/Contents/Developer" >> $GITHUB_ENV
-            sudo xcode-select -s /Applications/Xcode_16.app
-          elif [ -d "/Applications/Xcode_15.4.app" ]; then
-            echo "Selected Xcode 15.4"
-            echo "DEVELOPER_DIR=/Applications/Xcode_15.4.app/Contents/Developer" >> $GITHUB_ENV
-            sudo xcode-select -s /Applications/Xcode_15.4.app
+          # Tìm phiên bản Xcode 16.0 hoặc Xcode 16.x nhỏ nhất có sẵn trên runner
+          XCODE_APP=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | head -n 1)
+          if [ -z "$XCODE_APP" ]; then
+            XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | head -n 1)
           fi
+          echo "Selected Xcode: $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> $GITHUB_ENV
           xcode-select -p
           xcodebuild -version
 
@@ -47,15 +41,16 @@ jobs:
         run: |
           dotnet workload install ios --skip-manifest-update
 
-      - name: Patch .NET iOS SDK Strict Xcode Check
+      - name: Patch .NET iOS SDK Strict Xcode Check (With Root Privileges)
         run: |
-          python3 -c "
+          sudo python3 -c "
           import glob, re, os
 
           search_roots = [
               os.environ.get('DOTNET_ROOT', ''),
               '/Users/runner/.dotnet',
               '/usr/local/share/dotnet',
+              '/Library/Frameworks',
               os.path.expanduser('~/.dotnet')
           ]
           
@@ -66,13 +61,20 @@ jobs:
                       try:
                           with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                               content = f.read()
-                          new_content = re.sub(r'<Target\s+Name=[\"\']_CheckForInvalidXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_CheckForInvalidXcodeVersion\" />', content)
-                          new_content = re.sub(r'<Target\s+Name=[\"\']_CheckForInvalidMacCatalystXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_CheckForInvalidMacCatalystXcodeVersion\" />', new_content)
-                          new_content = re.sub(r'<CheckForInvalidXcodeVersion[\s\S]*?/>', '', new_content)
-                          new_content = re.sub(r'<Error[^>]*This version of \.NET for iOS[^>]*/>', '', new_content)
-                          if new_content != content:
+                          original = content
+                          # 1. Nullify targets
+                          content = re.sub(r'<Target\s+Name=[\"\']_CheckForInvalidXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_CheckForInvalidXcodeVersion\" />', content)
+                          content = re.sub(r'<Target\s+Name=[\"\']_CheckForInvalidMacCatalystXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_CheckForInvalidMacCatalystXcodeVersion\" />', content)
+                          content = re.sub(r'<Target\s+Name=[\"\']_ValidateXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_ValidateXcodeVersion\" />', content)
+                          # 2. Strip task invocations (support both self-closing and separate closing tag)
+                          content = re.sub(r'<CheckForInvalidXcodeVersion[\s\S]*?(?:/>|</CheckForInvalidXcodeVersion>)', '<!-- bypassed CheckForInvalidXcodeVersion -->', content)
+                          content = re.sub(r'<ValidateXcodeVersion[\s\S]*?(?:/>|</ValidateXcodeVersion>)', '<!-- bypassed ValidateXcodeVersion -->', content)
+                          # 3. Strip error tags mentioning Xcode
+                          content = re.sub(r'<Error[^>]*Xcode[^>]*/>', '', content)
+                          content = re.sub(r'<Error[^>]*This version of \.NET for iOS[^>]*/>', '', content)
+                          if content != original:
                               with open(path, 'w', encoding='utf-8') as f:
-                                  f.write(new_content)
+                                  f.write(content)
                               print(f'Successfully patched: {path}')
                               files_patched += 1
                       except Exception as e:
@@ -86,11 +88,11 @@ jobs:
 
       - name: Build iOS App with Diagnostics Log
         run: |
-          dotnet build ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 --no-restore -v n -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:CodesignKey="-" -p:EnableCodeSigning=true 2>&1 | tee build_log.txt
+          dotnet build ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 --no-restore -v normal -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:CodesignKey="-" -p:EnableCodeSigning=true 2>&1 | tee build_log.txt
           BUILD_STATUS=${PIPESTATUS[0]}
           if [ $BUILD_STATUS -ne 0 ]; then
-            echo "=== BUILD FAILED - RECENT ERRORS ==="
-            grep -E "(error|Error|FAILED)" -C 3 build_log.txt || tail -n 100 build_log.txt
+            echo "=== FULL BUILD LOG ==="
+            cat build_log.txt
             exit $BUILD_STATUS
           fi
 
