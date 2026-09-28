@@ -125,7 +125,7 @@ jobs:
 
       - name: Build & Publish iOS App
         run: |
-          dotnet publish ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" -p:ServerAddress="" -p:ServerUser="" -p:ServerPassword=""
+          dotnet publish ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 --no-restore -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" -p:ServerAddress="" -p:ServerUser="" -p:ServerPassword=""
 
       - name: Package Unsigned IPA
         run: |
