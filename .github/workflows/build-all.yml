@@ -101,9 +101,17 @@ jobs:
       - name: Restore Dependencies
         run: dotnet restore ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj
 
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | ${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
       - name: Build & Publish Android Release APK
         run: |
-          dotnet publish ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj -c Release -f net10.0-android -p:AndroidPackageFormat=apk -v normal 2>&1 | tee android_build.log
+          dotnet publish ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj \
+            -c Release \
+            -p:AndroidPackageFormat=apk \
+            -p:AcceptAndroidSDKLicenses=true \
+            -v normal 2>&1 | tee android_build.log
           STATUS=${PIPESTATUS[0]}
           if [ $STATUS -ne 0 ]; then
             echo "=== ANDROID PUBLISH FAILED ==="
