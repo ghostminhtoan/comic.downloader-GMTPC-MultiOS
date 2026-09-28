@@ -1,8 +1,5 @@
 <Project>
-  <!-- Vô hiệu hóa triệt để mọi target kiểm tra phiên bản Xcode của Xamarin/Microsoft.iOS SDK -->
+  <!-- Override targets kiểm tra phiên bản Xcode của Xamarin/Microsoft.iOS SDK -->
   <Target Name="_CheckForInvalidXcodeVersion" />
   <Target Name="_CheckForInvalidMacCatalystXcodeVersion" />
-  <Target Name="_CheckForInvalidXcode" />
-  <Target Name="_CheckForXcodeVersion" />
-  <Target Name="_CheckXcodeVersion" />
 </Project>

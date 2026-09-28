@@ -966,8 +966,16 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
 - **Nghiệm Thu**:
   - `build.bat` biên dịch thành công cả 4 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`, iOS `net10.0-ios`) với `0 Warning(s), 0 Error(s)`.
 
-### 15.28. Nghiệm Thu Build Tự Động 100% Thành Công Trên GitHub Actions (4 Nền Tảng & iOS IPA)
-- **Tự động Fix & Vượt qua rào cản Xcode**:
-  - Áp dụng kỹ thuật Patch tự động `Xamarin.Shared.Sdk.targets` ngay trên runner macOS bằng lệnh `sed` để chuyển đổi câu lệnh chặn phiên bản Xcode thành non-blocking `<Warning>`.
-  - Cấu hình chữ ký Ad-Hoc (`CodesignKey="-"`) chuẩn Apple giúp tạo gói `.app` và nén thành **`ComicDownloaderGMTPC-iOS-AdHoc.ipa`** hoàn chỉnh 100% trên Cloud macOS mà không cần tài khoản Apple Developer Account.
-  - Toàn bộ 4 nền tảng (Windows Standalone Single-File `.exe`, Linux Single-File Binary, Android Signed `.apk`, iOS `.ipa`) đều được tự động biên dịch, đóng gói và xuất bản Artifacts thành công tuyệt đối trên GitHub Actions.
+### 15.27. Tự Động Hóa Build & CI/CD Đa Nền Tảng (Windows, Linux, Android, iOS) Trên GitHub Actions
+- **Thiết lập CI/CD**:
+  - Cấu hình workflow `.github/workflows/build-all.yml` và `build-ios.yml`.
+  - Hỗ trợ xây dựng tự động toàn bộ 4 nền tảng song song:
+    1. **Windows**: Standalone Single-File Release `ComicDownloaderGMTPC.Desktop.exe`.
+    2. **Linux**: Standalone Single-File Executable `ComicDownloaderGMTPC.Desktop`.
+    3. **Android**: Release Signed APK `com.CompanyName.ComicDownloaderGMTPC-Signed.apk`.
+    4. **iOS**: Release Ad-Hoc Signed App Package & Bundle `ComicDownloaderGMTPC-iOS-AdHoc.ipa`.
+- **Cơ chế xử lý tương thích Toolchain Xcode**:
+  - Tự động phát hiện và chọn phiên bản Xcode tối ưu (`DEVELOPER_DIR`).
+  - Tự động patch và vô hiệu hóa các kiểm tra phiên bản cứng nhắc trong .NET iOS SDK (`_CheckForInvalidXcodeVersion`) bằng Python script đa thư mục.
+  - Cho phép đóng gói Ad-Hoc IPA mà không cần chứng chỉ trả phí của Apple.
+
