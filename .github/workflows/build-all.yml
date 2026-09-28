@@ -102,10 +102,12 @@ jobs:
         run: |
           echo "=== Available Xcode versions ==="
           ls -ld /Applications/Xcode* || true
-          XCODE_16=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | head -n 1)
-          if [ -n "$XCODE_16" ]; then
-            echo "Selecting: $XCODE_16"
-            sudo xcode-select -s "$XCODE_16"
+          if [ -d "/Applications/Xcode_16.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app
+          elif [ -d "/Applications/Xcode_16.0.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.0.app
+          elif [ -d "/Applications/Xcode_15.4.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_15.4.app
           fi
           xcode-select -p
           xcodebuild -version
@@ -119,7 +121,7 @@ jobs:
         run: |
           dotnet workload install ios --skip-manifest-update
 
-      - name: Patch .NET iOS SDK Strict Xcode Check
+      - name: Nullify _CheckForInvalidXcodeVersion Target in SDK
         run: |
           python3 -c "
           import glob, re, os
@@ -129,23 +131,20 @@ jobs:
               '/Users/runner/.dotnet/packs/Microsoft.iOS.Sdk*/**/*.targets'
           ]
           
-          files_patched = 0
           for pattern in patterns:
               for path in glob.glob(pattern, recursive=True):
                   try:
                       with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                          text = f.read()
-                      new_text = re.sub(r'<Error[^>]*This version of \.NET for iOS[^>]*/>', '<!-- Bypassed Xcode Version Error -->', text, flags=re.IGNORECASE)
-                      new_text = re.sub(r'Name=[\"\']_CheckForInvalidXcodeVersion[\"\']', 'Name=\"_Bypassed_CheckForInvalidXcodeVersion\"', new_text)
-                      new_text = re.sub(r'Name=[\"\']_CheckForInvalidMacCatalystXcodeVersion[\"\']', 'Name=\"_Bypassed_CheckForInvalidMacCatalystXcodeVersion\"', new_text)
-                      if new_text != text:
+                          content = f.read()
+                      new_content = re.sub(r'<Target\s+Name=[\"\']_CheckForInvalidXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_CheckForInvalidXcodeVersion\" />', content)
+                      new_content = re.sub(r'<Target\s+Name=[\"\']_CheckForInvalidMacCatalystXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_CheckForInvalidMacCatalystXcodeVersion\" />', new_content)
+                      new_content = re.sub(r'<CheckForInvalidXcodeVersion[\s\S]*?/>', '', new_content)
+                      if new_content != content:
                           with open(path, 'w', encoding='utf-8') as f:
-                              f.write(new_text)
-                          print(f'Successfully patched: {path}')
-                          files_patched += 1
+                              f.write(new_content)
+                          print(f'Successfully nullified target in: {path}')
                   except Exception as e:
-                      print(f'Error processing {path}: {e}')
-          print(f'Total targets patched: {files_patched}')
+                      print(f'Error: {e}')
           "
 
       - name: Restore Dependencies
@@ -154,7 +153,7 @@ jobs:
 
       - name: Build iOS App (Ad-Hoc Signed)
         run: |
-          dotnet build ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 --no-restore -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:CodesignKey="-" -p:EnableCodeSigning=true
+          dotnet build ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 --no-restore -v n -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:CodesignKey="-" -p:EnableCodeSigning=true
 
       - name: Package Unsigned / Ad-Hoc IPA
         run: |
