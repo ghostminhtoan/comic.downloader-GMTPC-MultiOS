@@ -2,8 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Gif;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Formats.Webp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using SkiaSharp;
 
 namespace ComicDownloaderGMTPC.Services;
@@ -18,6 +26,7 @@ public class ImageEnhancerOptions
     public int Quality { get; set; } = 90;          // 10 to 100
     public bool OverwriteOriginal { get; set; } = false;
     public int MaxThreads { get; set; } = 4;
+    public string OutputFormat { get; set; } = "original"; // "original", "jpg", "gif", "webp"
 }
 
 public class PreviewStatsResult
@@ -36,7 +45,26 @@ public class ImageEnhancerService
     public event Action<string, string>? LogEmitted;
     public event Action<double, string>? ProgressUpdated;
 
-    private static readonly string[] SupportedExtensions = { ".jpg", ".jpeg", ".png", ".webp", ".bmp" };
+    private static readonly string[] SupportedExtensions = { ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif" };
+
+    /// <summary>
+    /// Lấy đuôi mở rộng file đích dựa trên định dạng người dùng lựa chọn.
+    /// </summary>
+    public static string GetTargetExtension(string sourceFilePath, string? outputFormat)
+    {
+        string srcExt = Path.GetExtension(sourceFilePath).ToLowerInvariant();
+        if (string.IsNullOrEmpty(srcExt)) srcExt = ".jpg";
+
+        return (outputFormat ?? "original").ToLowerInvariant() switch
+        {
+            "jpg" or "jpeg" => ".jpg",
+            "gif" => ".gif",
+            "webp" => ".webp",
+            "png" => ".png",
+            "bmp" => ".bmp",
+            _ => srcExt // "original" giữ nguyên extension gốc
+        };
+    }
 
     /// <summary>
     /// Áp dụng các bộ lọc Contrast, Brightness, Saturation, Sharpness và Noise Reduction lên SKBitmap.
@@ -67,7 +95,7 @@ public class ImageEnhancerService
         {
             c * (sr + s), c * sg,       c * sb,       0, t,
             c * sr,       c * (sg + s), c * sb,       0, t,
-            c * sr,       c * sg,       c * (sb + s), 0, t,
+            c * sr,       c * (sg + s), c * sb,       0, t,
             0,            0,            0,            1, 0
         };
 
@@ -98,89 +126,165 @@ public class ImageEnhancerService
             var sharpenFilter = SKImageFilter.CreateMatrixConvolution(
                 new SKSizeI(3, 3),
                 sharpenKernel,
-                gain: 1.0f,
-                bias: 0.0f,
-                kernelOffset: new SKPointI(1, 1),
-                tileMode: SKShaderTileMode.Clamp,
-                convolveAlpha: false,
-                input: imageFilter);
+                1.0f,
+                0.0f,
+                new SKPointI(1, 1),
+                SKShaderTileMode.Clamp,
+                false);
 
-            imageFilter = sharpenFilter;
+            imageFilter = imageFilter != null
+                ? SKImageFilter.CreateCompose(imageFilter, sharpenFilter)
+                : sharpenFilter;
         }
 
-        SKBitmap dst = new SKBitmap(src.Width, src.Height, src.ColorType, src.AlphaType);
-        try
+        // 3. Render bitmap mới với Paint phối hợp bộ lọc màu + bộ lọc ảnh
+        var dst = new SKBitmap(src.Width, src.Height, src.ColorType, src.AlphaType);
+        using (var canvas = new SKCanvas(dst))
         {
-            using var canvas = new SKCanvas(dst);
             using var paint = new SKPaint
             {
                 ColorFilter = colorFilter,
-                ImageFilter = imageFilter
+                ImageFilter = imageFilter,
+                IsAntialias = true
             };
+
             canvas.DrawBitmap(src, 0, 0, paint);
-            return dst;
         }
-        finally
-        {
-            imageFilter?.Dispose();
-        }
+
+        imageFilter?.Dispose();
+        return dst;
     }
 
     /// <summary>
-    /// Xử lý ảnh mẫu để tạo luồng byte xem trước (Live Preview).
+    /// Xử lý và lưu một file ảnh cụ thể (Tự động nhận diện Ảnh Động Animated GIF/WebP vs Ảnh Tĩnh).
     /// </summary>
-    public byte[]? GeneratePreviewBytes(string filePath, ImageEnhancerOptions options, int maxDimension = 900)
+    public void EnhanceAndSaveImage(string inputPath, string outputPath, ImageEnhancerOptions options)
     {
-        try
+        string srcExt = Path.GetExtension(inputPath).ToLowerInvariant();
+        string targetExt = GetTargetExtension(inputPath, options.OutputFormat);
+
+        bool isAnimated = false;
+        if (srcExt == ".gif" || srcExt == ".webp")
         {
-            if (!File.Exists(filePath)) return null;
-
-            using var src = UniversalImageDecoder.DecodeToSkBitmap(filePath);
-            if (src == null) return null;
-
-            // Thu nhỏ nếu ảnh quá lớn để xem trước mượt mà
-            SKBitmap workingBitmap = src;
-            bool isResized = false;
-
-            if (src.Width > maxDimension || src.Height > maxDimension)
+            try
             {
-                float scale = Math.Min((float)maxDimension / src.Width, (float)maxDimension / src.Height);
-                int w = Math.Max(1, (int)(src.Width * scale));
-                int h = Math.Max(1, (int)(src.Height * scale));
-
-                var resized = src.Resize(new SKImageInfo(w, h, src.ColorType, src.AlphaType), SKSamplingOptions.Default);
-                if (resized != null)
+                using var codec = SKCodec.Create(inputPath);
+                if (codec != null && codec.FrameCount > 1)
                 {
-                    workingBitmap = resized;
-                    isResized = true;
+                    isAnimated = true;
                 }
             }
-
-            using var enhanced = ProcessBitmap(workingBitmap, options);
-            if (isResized) workingBitmap.Dispose();
-
-            using var ms = new MemoryStream();
-            enhanced.Encode(ms, SKEncodedImageFormat.Jpeg, 85);
-            return ms.ToArray();
+            catch { }
         }
-        catch (Exception ex)
+
+        if (isAnimated)
         {
-            LogEmitted?.Invoke("WARN", $"Lỗi tạo xem trước ảnh: {ex.Message}");
-            return null;
+            // Xử lý chuỗi khung hình cho ảnh động (Animated GIF / Animated WebP)
+            using var animatedImage = Image.Load<Rgba32>(inputPath);
+            byte[] pixelBuffer = Array.Empty<byte>();
+
+            for (int f = 0; f < animatedImage.Frames.Count; f++)
+            {
+                var frame = animatedImage.Frames[f];
+                int w = frame.Width;
+                int h = frame.Height;
+                int requiredBytes = w * h * 4;
+                if (pixelBuffer.Length != requiredBytes)
+                {
+                    pixelBuffer = new byte[requiredBytes];
+                }
+                frame.CopyPixelDataTo(pixelBuffer);
+
+                using var skBmp = new SKBitmap(new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul));
+                Marshal.Copy(pixelBuffer, 0, skBmp.GetPixels(), requiredBytes);
+
+                using var processedBmp = ProcessBitmap(skBmp, options);
+                Marshal.Copy(processedBmp.GetPixels(), pixelBuffer, 0, requiredBytes);
+
+                frame.ProcessPixelRows(accessor =>
+                {
+                    for (int y = 0; y < accessor.Height; y++)
+                    {
+                        var rowSpan = accessor.GetRowSpan(y);
+                        var sourceSpan = MemoryMarshal.Cast<byte, Rgba32>(pixelBuffer.AsSpan(y * accessor.Width * 4, accessor.Width * 4));
+                        sourceSpan.CopyTo(rowSpan);
+                    }
+                });
+            }
+
+            using var fs = File.Open(outputPath, FileMode.Create, FileAccess.Write, FileShare.None);
+            if (targetExt == ".webp")
+            {
+                animatedImage.SaveAsWebp(fs, new WebpEncoder
+                {
+                    Quality = Math.Clamp(options.Quality, 10, 100),
+                    FileFormat = WebpFileFormatType.Lossy
+                });
+            }
+            else if (targetExt == ".gif")
+            {
+                animatedImage.SaveAsGif(fs, new GifEncoder
+                {
+                    ColorTableMode = GifColorTableMode.Global
+                });
+            }
+            else if (targetExt == ".jpg" || targetExt == ".jpeg")
+            {
+                animatedImage.Frames.CloneFrame(0).SaveAsJpeg(fs, new JpegEncoder
+                {
+                    Quality = Math.Clamp(options.Quality, 10, 100)
+                });
+            }
+            else
+            {
+                animatedImage.Frames.CloneFrame(0).SaveAsPng(fs);
+            }
+        }
+        else
+        {
+            // Xử lý ảnh tĩnh thông thường với SkiaSharp siêu tốc
+            using var src = UniversalImageDecoder.DecodeToSkBitmap(inputPath);
+            if (src == null) throw new InvalidOperationException("Không thể giải mã dữ liệu ảnh.");
+
+            using var enhanced = ProcessBitmap(src, options);
+
+            using var fs = File.Open(outputPath, FileMode.Create, FileAccess.Write, FileShare.None);
+            if (targetExt == ".gif")
+            {
+                using var ms = new MemoryStream();
+                using (var img = SKImage.FromBitmap(enhanced))
+                using (var data = img.Encode(SKEncodedImageFormat.Png, 100))
+                {
+                    data.SaveTo(ms);
+                }
+                ms.Position = 0;
+                using var imageSharpImg = Image.Load(ms);
+                imageSharpImg.SaveAsGif(fs);
+            }
+            else
+            {
+                var format = targetExt switch
+                {
+                    ".png" => SKEncodedImageFormat.Png,
+                    ".webp" => SKEncodedImageFormat.Webp,
+                    ".bmp" => SKEncodedImageFormat.Bmp,
+                    _ => SKEncodedImageFormat.Jpeg
+                };
+                enhanced.Encode(fs, format, Math.Clamp(options.Quality, 10, 100));
+            }
         }
     }
 
     /// <summary>
-    /// Xử lý ảnh mẫu và trích xuất đầy đủ thông số kích thước, dung lượng trước/sau và chỉ số ánh sáng (FastStone style).
+    /// Xử lý ảnh xem trước và trả về thống kê chi tiết (Dung lượng Before/After, tỉ lệ % nén, cảnh báo cháy sáng/chết tối).
     /// </summary>
-    public PreviewStatsResult? GeneratePreviewWithStats(string filePath, ImageEnhancerOptions options, int maxDimension = 0)
+    public PreviewStatsResult? GeneratePreviewStats(string filePath, ImageEnhancerOptions options, int maxDimension = 0)
     {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return null;
+
         try
         {
-            if (!File.Exists(filePath)) return null;
-
-            var fileInfo = new FileInfo(filePath);
-            long originalSize = fileInfo.Length;
+            long originalSize = new FileInfo(filePath).Length;
 
             using var src = UniversalImageDecoder.DecodeToSkBitmap(filePath);
             if (src == null) return null;
@@ -214,11 +318,12 @@ public class ImageEnhancerService
                 workingBitmap.Dispose();
             }
 
-            string ext = Path.GetExtension(filePath).ToLowerInvariant();
-            var format = ext switch
+            string targetExt = GetTargetExtension(filePath, options.OutputFormat);
+            var format = targetExt switch
             {
                 ".png" => SKEncodedImageFormat.Png,
                 ".webp" => SKEncodedImageFormat.Webp,
+                ".bmp" => SKEncodedImageFormat.Bmp,
                 _ => SKEncodedImageFormat.Jpeg
             };
 
@@ -371,8 +476,9 @@ public class ImageEnhancerService
             LogEmitted?.Invoke("INFO", $"Đã tạo thư mục lưu ảnh nâng cao: {baseTargetFolder}");
         }
 
+        string formatLabel = (options.OutputFormat ?? "ORIGINAL").ToUpperInvariant();
         string modeText = options.OverwriteOriginal ? "Ghi đè file gốc" : $"Lưu vào: {baseTargetFolder}";
-        LogEmitted?.Invoke("INFO", $"Bắt đầu xử lý {files.Count} ảnh đa tầng ({modeText}) [Độ sáng: {options.Brightness}, Tương phản: {options.Contrast}%, Bão hòa: {options.Saturation}%, Nét: {options.Sharpness}, Khử nhiễu: {options.NoiseReduce}]...");
+        LogEmitted?.Invoke("INFO", $"Bắt đầu xử lý {files.Count} ảnh đa tầng ({modeText}) [Định dạng: {formatLabel}, Độ sáng: {options.Brightness}, Tương phản: {options.Contrast}%, Bão hòa: {options.Saturation}%, Nét: {options.Sharpness}, Khử nhiễu: {options.NoiseReduce}]...");
 
         int total = files.Count;
         int completed = 0;
@@ -394,10 +500,14 @@ public class ImageEnhancerService
         {
             token.ThrowIfCancellationRequested();
             string fileName = Path.GetFileName(filePath);
+            string srcExt = Path.GetExtension(filePath).ToLowerInvariant();
+            string targetExt = GetTargetExtension(filePath, options.OutputFormat);
             string relPath = Path.GetRelativePath(inputFolder, filePath);
+            string targetRelPath = Path.ChangeExtension(relPath, targetExt);
+
             string destPath = options.OverwriteOriginal
-                ? filePath + ".tmp_enh"
-                : Path.Combine(baseTargetFolder, relPath);
+                ? Path.ChangeExtension(filePath, targetExt) + ".tmp_enh"
+                : Path.Combine(baseTargetFolder, targetRelPath);
 
             try
             {
@@ -407,31 +517,20 @@ public class ImageEnhancerService
                     Directory.CreateDirectory(destDir);
                 }
 
-                using (var src = UniversalImageDecoder.DecodeToSkBitmap(filePath))
-                {
-                    if (src == null) throw new InvalidOperationException("Không thể giải mã dữ liệu ảnh.");
-
-                    using var enhanced = ProcessBitmap(src, options);
-
-                    string ext = Path.GetExtension(filePath).ToLowerInvariant();
-                    var format = ext switch
-                    {
-                        ".png" => SKEncodedImageFormat.Png,
-                        ".webp" => SKEncodedImageFormat.Webp,
-                        _ => SKEncodedImageFormat.Jpeg
-                    };
-
-                    using var fs = File.OpenWrite(destPath);
-                    enhanced.Encode(fs, format, Math.Clamp(options.Quality, 10, 100));
-                }
+                EnhanceAndSaveImage(filePath, destPath, options);
 
                 if (options.OverwriteOriginal)
                 {
-                    File.Move(destPath, filePath, true);
+                    string finalTargetPath = Path.ChangeExtension(filePath, targetExt);
+                    if (!string.Equals(finalTargetPath, filePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (File.Exists(filePath)) File.Delete(filePath);
+                    }
+                    File.Move(destPath, finalTargetPath, true);
                 }
 
                 Interlocked.Increment(ref success);
-                LogEmitted?.Invoke("SUCCESS", $"[Xong] {relPath}");
+                LogEmitted?.Invoke("SUCCESS", $"[Xong] {targetRelPath}");
             }
             catch (OperationCanceledException)
             {
@@ -448,7 +547,7 @@ public class ImageEnhancerService
             {
                 int current = Interlocked.Increment(ref completed);
                 double percent = (double)current / total * 100.0;
-                ProgressUpdated?.Invoke(percent, relPath);
+                ProgressUpdated?.Invoke(percent, targetRelPath);
 
                 // Dọn dẹp bộ nhớ định kỳ trên Android để đảm bảo chạy mượt khi tắt màn hình/chuyển ứng dụng
                 if (OperatingSystem.IsAndroid() && current % 20 == 0)

@@ -1333,6 +1333,52 @@
                                                 <TextBox Text="{Binding EnhanceOutputFolderPath}" IsEnabled="{Binding !EnhanceOverwriteOriginal}" PlaceholderText="Chọn thư mục lưu ảnh đã xử lý..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
                                             </StackPanel>
 
+                                            <!-- Hàng 2.5: Định dạng xuất ảnh (Output Format WrapPanel: Original, JPG, GIF Tĩnh/Động, WebP Tĩnh/Động) -->
+                                            <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,0,5">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,12,2">
+                                                        <TextBlock Text="📁" FontSize="11" VerticalAlignment="Center" />
+                                                        <TextBlock Text="Định dạng xuất:" Foreground="#E2E8F0" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" />
+                                                    </StackPanel>
+
+                                                    <!-- 1. Original (Giữ nguyên gốc) -->
+                                                    <RadioButton IsChecked="{Binding IsEnhanceFormatOriginal}" GroupName="EnhanceFormatGroup"
+                                                                 Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Margin="0,0,14,2"
+                                                                 ToolTip.Tip="Giữ nguyên định dạng gốc của từng file (JPG, PNG, GIF, WebP, BMP)">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                                            <TextBlock Text="🔄 Original (Giữ nguyên gốc)" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </RadioButton>
+
+                                                    <!-- 2. JPG -->
+                                                    <RadioButton IsChecked="{Binding IsEnhanceFormatJpg}" GroupName="EnhanceFormatGroup"
+                                                                 Foreground="#F59E0B" FontWeight="SemiBold" FontSize="11" Margin="0,0,14,2"
+                                                                 ToolTip.Tip="Chuyển đổi toàn bộ ảnh sang định dạng JPEG (.jpg)">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                                            <TextBlock Text="🖼️ JPG" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </RadioButton>
+
+                                                    <!-- 3. GIF (Tĩnh / Động) -->
+                                                    <RadioButton IsChecked="{Binding IsEnhanceFormatGif}" GroupName="EnhanceFormatGroup"
+                                                                 Foreground="#C084FC" FontWeight="SemiBold" FontSize="11" Margin="0,0,14,2"
+                                                                 ToolTip.Tip="Xuất ra định dạng GIF (Tự động bảo toàn chuyển động Animated GIF nếu nguồn là ảnh động)">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                                            <TextBlock Text="🎞️ GIF (Tĩnh / Động)" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </RadioButton>
+
+                                                    <!-- 4. WebP (Tĩnh / Động) -->
+                                                    <RadioButton IsChecked="{Binding IsEnhanceFormatWebp}" GroupName="EnhanceFormatGroup"
+                                                                 Foreground="#10B981" FontWeight="Bold" FontSize="11" Margin="0,0,8,2"
+                                                                 ToolTip.Tip="Xuất ra định dạng WebP hiện đại (Ảnh tĩnh ra WebP tĩnh, ảnh GIF/WebP động ra Animated WebP siêu nhẹ)">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                                            <TextBlock Text="⚡ WebP (Tĩnh / Động)" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </RadioButton>
+                                                </WrapPanel>
+                                            </Border>
+
                                             <!-- Hàng 3: Bộ thông số tinh chỉnh (Chuẩn bố cục XnConvert: Slider ngang mỏng, NumericUpDown 3-digit nhỏ gọn, Nút Reset riêng ↺) -->
                                             <UniformGrid Columns="{Binding EnhanceDualColumns}" HorizontalAlignment="Stretch">
                                                 <UniformGrid.Resources>

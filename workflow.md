@@ -905,6 +905,25 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
   3. **Cơ Chế Bảo Vệ Ổn Định Bộ Nhớ Thiết Bị Di Động**:
      - Trên Android, dịch vụ xử lý ảnh tự động điều tiết trần luồng an toàn (2-4 luồng) nhằm tránh lỗi Out-Of-Memory (OOM) từ kernel Android khi render bitmap SkiaSharp, trong khi trên Windows và Linux được giải phóng 100% tài nguyên CPU theo cấu hình máy.
 
+### 15.29. Bổ Sung Tùy Chọn Định Dạng Xuất Ảnh (Output Format WrapPanel) & Engine Tự Động Phân Luồng Animated GIF / Animated WebP vs Ảnh Tĩnh
+- **Bối cảnh & Vấn đề**:
+  - Khi xử lý ảnh hàng loạt (chỉnh màu, lọc ố, tăng nét, nén dung lượng), người dùng cần linh hoạt chuyển đổi định dạng ảnh đầu ra giữa: `Original (Giữ nguyên gốc)`, `JPG`, `GIF` và `WebP`.
+  - Đặc biệt, với các truyện tranh hoặc webtoon có chứa ảnh động `.gif` hoặc `.webp`, các công cụ thông thường (như XnConvert) thường chỉ trích xuất frame đầu tiên khiến file xuất ra bị biến thành ảnh tĩnh mất hiệu ứng chuyển động.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Giao Diện Chọn Định Dạng Xuất Ảnh (Output Format WrapPanel)**:
+     - Tích hợp thanh tùy chọn định dạng dạng RadioButton ngay phía trên bảng thông số với 4 lựa chọn trực quan:
+       + `🔄 Original (Giữ nguyên gốc)`: Tự động nhận diện và giữ nguyên extension gốc của từng file input (`.jpg`, `.png`, `.gif`, `.webp`, `.bmp`).
+       + `🖼️ JPG`: Chuyển đổi toàn bộ ảnh sang định dạng JPEG `.jpg` chất lượng cao.
+       + `🎞️ GIF (Tĩnh / Động)`: Chuyển đổi sang `.gif`. Tự động bảo toàn 100% chuyển động Animated GIF nếu nguồn là ảnh động.
+       + `⚡ WebP (Tĩnh / Động)`: Chuyển đổi sang định dạng WebP hiện đại. Nguồn ảnh tĩnh xuất ra WebP tĩnh siêu nhẹ; nguồn ảnh GIF hoặc WebP động tự động xuất ra Animated WebP 24-bit màu mượt mà.
+  2. **Multi-Frame Animated Processing & Frame Timing Preservation Pipeline**:
+     - Phát triển `ImageEnhancerService.EnhanceAndSaveImage()` kết hợp tối ưu giữa `SixLabors.ImageSharp` và `SkiaSharp`:
+       + Tự động nhận diện số khung hình (`FrameCount > 1`).
+       + Với ảnh động: Bóc tách từng frame, áp dụng bộ lọc ma trận màu SkiaSharp lên từng frame độc lập, bảo toàn 100% siêu dữ liệu độ trễ `FrameDelay` và cờ lặp vô hạn `LoopCount`.
+       + Với ảnh tĩnh: Sử dụng SkiaSharp thuần túy cho tốc độ xử lý hàng trăm frame/giây.
+     - Cập nhật hàm `GeneratePreviewStats` phản ánh chính xác dung lượng nén theo định dạng đích được chọn.
+
+
 
 
 

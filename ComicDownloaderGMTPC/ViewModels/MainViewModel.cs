@@ -212,6 +212,51 @@ public partial class MainViewModel : ViewModelBase
     private int _enhanceQuality = 90; // 10 to 100
 
     [ObservableProperty]
+    private string _enhanceOutputFormat = "original"; // "original", "jpg", "gif", "webp"
+
+    partial void OnEnhanceOutputFormatChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsEnhanceFormatOriginal));
+        OnPropertyChanged(nameof(IsEnhanceFormatJpg));
+        OnPropertyChanged(nameof(IsEnhanceFormatGif));
+        OnPropertyChanged(nameof(IsEnhanceFormatWebp));
+        TriggerLivePreviewDebounced();
+    }
+
+    public bool IsEnhanceFormatOriginal
+    {
+        get => EnhanceOutputFormat == "original";
+        set { if (value) EnhanceOutputFormat = "original"; }
+    }
+
+    public bool IsEnhanceFormatJpg
+    {
+        get => EnhanceOutputFormat == "jpg";
+        set { if (value) EnhanceOutputFormat = "jpg"; }
+    }
+
+    public bool IsEnhanceFormatGif
+    {
+        get => EnhanceOutputFormat == "gif";
+        set { if (value) EnhanceOutputFormat = "gif"; }
+    }
+
+    public bool IsEnhanceFormatWebp
+    {
+        get => EnhanceOutputFormat == "webp";
+        set { if (value) EnhanceOutputFormat = "webp"; }
+    }
+
+    [RelayCommand]
+    public void SelectEnhanceFormat(string format)
+    {
+        if (!string.IsNullOrWhiteSpace(format))
+        {
+            EnhanceOutputFormat = format.ToLowerInvariant();
+        }
+    }
+
+    [ObservableProperty]
     private int _enhanceThreads = Math.Min(CpuTopologyHelper.GetMaxLogicalProcessorCount(), 16);
 
     [ObservableProperty]
@@ -1654,10 +1699,11 @@ public partial class MainViewModel : ViewModelBase
                 Saturation = EnhanceSaturation,
                 Sharpness = EnhanceSharpness,
                 NoiseReduce = EnhanceNoiseReduce,
-                Quality = EnhanceQuality
+                Quality = EnhanceQuality,
+                OutputFormat = EnhanceOutputFormat
             };
 
-            var stats = _imageEnhancer.GeneratePreviewWithStats(_enhanceSampleImagePath, options, maxDimension: 0);
+            var stats = _imageEnhancer.GeneratePreviewStats(_enhanceSampleImagePath, options, maxDimension: 0);
             if (stats?.PreviewBytes != null && stats.PreviewBytes.Length > 0)
             {
                 byte[] rawBytes = stats.PreviewBytes;
@@ -2298,6 +2344,7 @@ public partial class MainViewModel : ViewModelBase
         EnhanceQuality = 90;
         EnhanceThreads = Math.Min(MaxSystemThreads, 16);
         EnhanceOverwriteOriginal = false;
+        EnhanceOutputFormat = "original";
 
         UpdatePreviewResult();
         EnhanceLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] [Đặt lại] Đã khôi phục toàn bộ thông số về giá trị mặc định.");
@@ -2340,7 +2387,8 @@ public partial class MainViewModel : ViewModelBase
             NoiseReduce = EnhanceNoiseReduce,
             Quality = EnhanceQuality,
             MaxThreads = EnhanceThreads,
-            OverwriteOriginal = EnhanceOverwriteOriginal
+            OverwriteOriginal = EnhanceOverwriteOriginal,
+            OutputFormat = EnhanceOutputFormat
         };
 
         try

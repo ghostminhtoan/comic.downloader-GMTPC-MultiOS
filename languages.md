@@ -682,4 +682,10 @@
 | Pick sample image for preview | Chọn ảnh mẫu xem trước |
 | Reset settings | Đặt lại mặc định |
 | Start enhancement | Bắt đầu xử lý ảnh |
+| Output Format: | Định dạng xuất: |
+| Original (Keep Source) | Original (Giữ nguyên gốc) |
+| JPG Format | Định dạng JPG |
+| GIF (Static / Animated) | GIF (Tĩnh / Động) |
+| WebP (Static / Animated) | WebP (Tĩnh / Động) |
+
 
