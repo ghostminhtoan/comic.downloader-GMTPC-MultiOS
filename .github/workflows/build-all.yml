@@ -103,13 +103,21 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Show & Configure Xcode Toolchain
+        run: |
+          echo "=== Installed Xcode Applications ==="
+          ls -ld /Applications/Xcode* || true
+          echo "=== Current Xcode Active Path ==="
+          xcode-select -p
+          xcodebuild -version
+
       - name: Install iOS Workload
         run: |
           dotnet workload install ios --skip-manifest-update
 
       - name: Build & Publish iOS App
         run: |
-          dotnet publish ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 -p:_SuppressXcodeVersionCheck=true -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" -p:ServerAddress="" -p:ServerUser="" -p:ServerPassword=""
+          dotnet publish ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" -p:ServerAddress="" -p:ServerUser="" -p:ServerPassword=""
 
       - name: Package Unsigned IPA
         run: |
