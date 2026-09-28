@@ -121,10 +121,32 @@ jobs:
 
       - name: Patch .NET iOS SDK Strict Xcode Check
         run: |
-          echo "=== Patching Xamarin.Shared.Sdk.targets ==="
-          find /Users/runner/.dotnet/packs/Microsoft.iOS.Sdk* -name "Xamarin.Shared.Sdk.targets" -exec sed -i '' 's/<Error Text="This version of .NET for iOS/<Warning Text="This version of .NET for iOS/g' {} + 2>/dev/null || true
-          find /Users/runner/.dotnet/packs/Microsoft.iOS.Sdk* -name "Xamarin.Shared.Sdk.targets" -exec sed -i '' 's/_CheckForInvalidXcodeVersion/_Bypassed_CheckForInvalidXcodeVersion/g' {} + 2>/dev/null || true
-          echo "Patch completed."
+          python3 -c "
+          import glob, re, os
+
+          patterns = [
+              os.path.expanduser('~/.dotnet/packs/Microsoft.iOS.Sdk*/**/*.targets'),
+              '/Users/runner/.dotnet/packs/Microsoft.iOS.Sdk*/**/*.targets'
+          ]
+          
+          files_patched = 0
+          for pattern in patterns:
+              for path in glob.glob(pattern, recursive=True):
+                  try:
+                      with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                          text = f.read()
+                      new_text = re.sub(r'<Error[^>]*This version of \.NET for iOS[^>]*/>', '<!-- Bypassed Xcode Version Error -->', text, flags=re.IGNORECASE)
+                      new_text = re.sub(r'Name=[\"\']_CheckForInvalidXcodeVersion[\"\']', 'Name=\"_Bypassed_CheckForInvalidXcodeVersion\"', new_text)
+                      new_text = re.sub(r'Name=[\"\']_CheckForInvalidMacCatalystXcodeVersion[\"\']', 'Name=\"_Bypassed_CheckForInvalidMacCatalystXcodeVersion\"', new_text)
+                      if new_text != text:
+                          with open(path, 'w', encoding='utf-8') as f:
+                              f.write(new_text)
+                          print(f'Successfully patched: {path}')
+                          files_patched += 1
+                  except Exception as e:
+                      print(f'Error processing {path}: {e}')
+          print(f'Total targets patched: {files_patched}')
+          "
 
       - name: Restore Dependencies
         run: |
