@@ -255,19 +255,40 @@ public partial class MainViewModel : ViewModelBase
     private string _enhanceImageIndexText = "Chưa có ảnh";
 
     [ObservableProperty]
-    private string _enhanceViewMode = OperatingSystem.IsAndroid() ? "Split" : "Split"; // "Dual", "Single", "Split" - Mặc định Split gọn gàng
+    private string _enhanceViewMode = "Dual"; // Cố định chế độ Dual View 2 ảnh song song
 
     [ObservableProperty]
-    private bool _isDualView = false;
+    private bool _isDualView = true;
 
     [ObservableProperty]
     private bool _isSingleView = false;
 
     [ObservableProperty]
-    private bool _isSplitView = true;
+    private bool _isSplitView = false;
 
     [ObservableProperty]
     private bool _isSingleShowingBefore = false;
+
+    [ObservableProperty]
+    private bool _isSwappedDualOrder = false; // false: Before trước After sau, true: After trước Before sau
+
+    [ObservableProperty]
+    private bool _isImmersiveDualFocus = false; // Bật/Tắt chế độ Focus ẩn thanh công cụ
+
+    public Bitmap? FirstDualImage => IsSwappedDualOrder ? EnhancePreviewResult : EnhancePreviewOriginal;
+    public Bitmap? SecondDualImage => IsSwappedDualOrder ? EnhancePreviewOriginal : EnhancePreviewResult;
+
+    public string FirstDualBadgeTitle => IsSwappedDualOrder ? "✨ ĐÃ TỐI ƯU (AFTER)" : "📷 ẢNH GỐC (BEFORE)";
+    public string SecondDualBadgeTitle => IsSwappedDualOrder ? "📷 ẢNH GỐC (BEFORE)" : "✨ ĐÃ TỐI ƯU (AFTER)";
+
+    public string FirstDualBadgeBg => IsSwappedDualOrder ? "#0284C7" : "#1E293B";
+    public string SecondDualBadgeBg => IsSwappedDualOrder ? "#1E293B" : "#0284C7";
+
+    public string FirstDualBorderBrush => IsSwappedDualOrder ? "#0284C7" : "#1E293B";
+    public string SecondDualBorderBrush => IsSwappedDualOrder ? "#1E293B" : "#0284C7";
+
+    public string SwapDualOrderButtonText => IsSwappedDualOrder ? "🔄 After ⇄ Before" : "🔄 Before ⇄ After";
+    public string ImmersiveFocusButtonText => IsImmersiveDualFocus ? "⛶ Hiện công cụ" : "⛶ Focus";
 
     [ObservableProperty]
     private double _enhanceSplitRatio = 0.5; // 0.0 to 1.0
@@ -422,6 +443,36 @@ public partial class MainViewModel : ViewModelBase
     partial void OnEnhanceSharpnessChanged(float value) => TriggerLivePreviewDebounced();
     partial void OnEnhanceNoiseReduceChanged(int value) => TriggerLivePreviewDebounced();
     partial void OnEnhanceQualityChanged(int value) => TriggerLivePreviewDebounced();
+
+    partial void OnIsSwappedDualOrderChanged(bool value)
+    {
+        OnPropertyChanged(nameof(FirstDualImage));
+        OnPropertyChanged(nameof(SecondDualImage));
+        OnPropertyChanged(nameof(FirstDualBadgeTitle));
+        OnPropertyChanged(nameof(SecondDualBadgeTitle));
+        OnPropertyChanged(nameof(FirstDualBadgeBg));
+        OnPropertyChanged(nameof(SecondDualBadgeBg));
+        OnPropertyChanged(nameof(FirstDualBorderBrush));
+        OnPropertyChanged(nameof(SecondDualBorderBrush));
+        OnPropertyChanged(nameof(SwapDualOrderButtonText));
+    }
+
+    partial void OnIsImmersiveDualFocusChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ImmersiveFocusButtonText));
+    }
+
+    partial void OnEnhancePreviewOriginalChanged(Bitmap? value)
+    {
+        OnPropertyChanged(nameof(FirstDualImage));
+        OnPropertyChanged(nameof(SecondDualImage));
+    }
+
+    partial void OnEnhancePreviewResultChanged(Bitmap? value)
+    {
+        OnPropertyChanged(nameof(FirstDualImage));
+        OnPropertyChanged(nameof(SecondDualImage));
+    }
 
     partial void OnEnhanceImagePixelWidthChanged(double value)
     {
@@ -1915,18 +1966,30 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void SwapDualOrder()
+    {
+        IsSwappedDualOrder = !IsSwappedDualOrder;
+    }
+
+    [RelayCommand]
+    public void ToggleImmersiveDualFocus()
+    {
+        IsImmersiveDualFocus = !IsImmersiveDualFocus;
+    }
+
+    [RelayCommand]
     public void SetViewModeDual() => EnhanceViewMode = "Dual";
 
     [RelayCommand]
-    public void SetViewModeSingle() => EnhanceViewMode = "Single";
+    public void SetViewModeSingle() => EnhanceViewMode = "Dual";
 
     [RelayCommand]
-    public void SetViewModeSplit() => EnhanceViewMode = "Split";
+    public void SetViewModeSplit() => EnhanceViewMode = "Dual";
 
     [RelayCommand]
     public void ToggleCompareMode()
     {
-        EnhanceViewMode = EnhanceViewMode == "Dual" ? "Split" : (EnhanceViewMode == "Split" ? "Single" : "Split");
+        SwapDualOrder();
     }
 
     [RelayCommand]

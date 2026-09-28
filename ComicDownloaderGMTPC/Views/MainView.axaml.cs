@@ -53,26 +53,9 @@ public partial class MainView : UserControl
         {
             _isSyncScrollSetup = true;
 
-            // 1. Dual View (Song song Before / After): Pan & ComicScreen Zoom
+            // Dual View (Song song Before / After): Pan & ComicScreen Zoom locked-step 100%
             SetupComicScreenPanAndZoom(this.FindControl<ScrollViewer>("LiveBeforeScrollViewer"), this.FindControl<ScrollViewer>("LiveAfterScrollViewer"));
             SetupComicScreenPanAndZoom(this.FindControl<ScrollViewer>("ModalBeforeScrollViewer"), this.FindControl<ScrollViewer>("ModalAfterScrollViewer"));
-
-            // 2. Split View (Rèm trượt): Kéo rèm qua tay cầm nổi nhô ra ngoài mép ảnh + Pan/Zoom ComicScreen trên mặt ảnh
-            SetupSplitCurtainInteractive(
-                this.FindControl<ScrollViewer>("LiveSplitScrollViewer"),
-                this.FindControl<Panel>("LiveSplitPanel"),
-                this.FindControl<Panel>("LiveSplitDividerH"),
-                this.FindControl<Panel>("LiveSplitDividerV"));
-
-            SetupSplitCurtainInteractive(
-                this.FindControl<ScrollViewer>("ModalSplitScrollViewer"),
-                this.FindControl<Panel>("ModalSplitPanel"),
-                this.FindControl<Panel>("ModalSplitDividerH"),
-                this.FindControl<Panel>("ModalSplitDividerV"));
-
-            // 3. Single View (Ảnh đơn): Pan & ComicScreen Zoom tự do
-            SetupComicScreenPanAndZoom(this.FindControl<ScrollViewer>("LiveSingleScrollViewer"));
-            SetupComicScreenPanAndZoom(this.FindControl<ScrollViewer>("ModalSingleScrollViewer"));
         }
 
         // Khi bất kỳ ô nhập liệu nào (TextBox, NumericUpDown, ComboBox) nhận focus trên Android / Desktop:
@@ -91,84 +74,6 @@ public partial class MainView : UserControl
                 }, Avalonia.Threading.DispatcherPriority.Background);
             }
         }, RoutingStrategies.Bubble);
-    }
-
-    /// <summary>
-    /// Bộ điều khiển tương tác Rèm Trượt (Split View):
-    /// - Tay cầm nổi nhô ngoài mép ảnh & Viên bi dạ quang trung tâm: Kéo trượt rèm Before / After tự do 120 FPS.
-    /// - Bề mặt ảnh & Toàn khung ScrollViewer: Sử dụng trọn vẹn ComicScreen Pan & Zoom Engine (Double-tap drag zoom 1 ngón, Pinch 2 ngón, Pan 1 ngón, Quick double-tap).
-    /// </summary>
-    private void SetupSplitCurtainInteractive(ScrollViewer? viewer, Panel? splitPanel, Panel? dividerH, Panel? dividerV)
-    {
-        if (viewer == null || splitPanel == null) return;
-
-        bool isDraggingCurtain = false;
-
-        void UpdateSplitPosition(Point localPos)
-        {
-            if (DataContext is not MainViewModel vm) return;
-
-            double w = splitPanel.Bounds.Width > 0 ? splitPanel.Bounds.Width : vm.EnhanceImagePixelWidth;
-            double h = splitPanel.Bounds.Height > 0 ? splitPanel.Bounds.Height : vm.EnhanceImagePixelHeight;
-            if (w <= 0 || h <= 0) return;
-
-            double ratio = vm.IsSplitVerticalOrientation
-                ? (localPos.Y / h)
-                : (localPos.X / w);
-
-            vm.EnhanceSplitRatio = Math.Clamp(ratio, 0.01, 0.99);
-        }
-
-        void AttachDividerDrag(Panel? divider)
-        {
-            if (divider == null) return;
-
-            divider.AddHandler(InputElement.PointerPressedEvent, (s, ev) =>
-            {
-                if (DataContext is MainViewModel vm && vm.IsSplitView)
-                {
-                    var pt = ev.GetCurrentPoint(splitPanel);
-                    if (pt.Properties.IsLeftButtonPressed || ev.Pointer.Type == PointerType.Touch)
-                    {
-                        isDraggingCurtain = true;
-                        UpdateSplitPosition(pt.Position);
-                        ev.Pointer.Capture(divider);
-                        ev.Handled = true;
-                    }
-                }
-            }, RoutingStrategies.Tunnel);
-
-            divider.AddHandler(InputElement.PointerMovedEvent, (s, ev) =>
-            {
-                if (isDraggingCurtain && DataContext is MainViewModel vm && vm.IsSplitView)
-                {
-                    var pt = ev.GetCurrentPoint(splitPanel);
-                    UpdateSplitPosition(pt.Position);
-                    ev.Handled = true;
-                }
-            }, RoutingStrategies.Tunnel);
-
-            divider.AddHandler(InputElement.PointerReleasedEvent, (s, ev) =>
-            {
-                if (isDraggingCurtain)
-                {
-                    isDraggingCurtain = false;
-                    ev.Pointer.Capture(null);
-                    ev.Handled = true;
-                }
-            }, RoutingStrategies.Tunnel);
-
-            divider.AddHandler(InputElement.PointerCaptureLostEvent, (s, ev) =>
-            {
-                isDraggingCurtain = false;
-            }, RoutingStrategies.Tunnel);
-        }
-
-        AttachDividerDrag(dividerH);
-        AttachDividerDrag(dividerV);
-
-        // Gắn ComicScreen Pan & Zoom Engine cho ScrollViewer của chế độ Split View
-        SetupComicScreenPanAndZoom(viewer);
     }
 
     /// <summary>

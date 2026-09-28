@@ -51,16 +51,19 @@
 
                 <!-- View Modes & Zoom Controls (Center) -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10" VerticalAlignment="Center">
-                    <!-- Chế độ xem: Song song / Rèm trượt / Ảnh đơn -->
+                    <!-- Nút Đảo vị trí Before ⇄ After & Chế độ Focus -->
                     <Border Background="#1E293B" CornerRadius="5" Padding="3" VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="2">
-                            <Button Command="{Binding SetViewModeDualCommand}" Content="⏸ Song song"
-                                    Background="{Binding IsDualView, Converter={x:Null}}"
-                                    Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="8,4" CornerRadius="3" ToolTip.Tip="Xem 2 ảnh Trước / Sau song song (FastStone Dual View)" />
-                            <Button Command="{Binding SetViewModeSplitCommand}" Content="⮂ Rèm trượt"
-                                    Foreground="#A855F7" FontWeight="SemiBold" FontSize="11" Padding="8,4" CornerRadius="3" ToolTip.Tip="Thanh trượt rèm đối chiếu Before / After trực tiếp trên cùng ảnh" />
-                            <Button Command="{Binding SetViewModeSingleCommand}" Content="⏹ Ảnh đơn"
-                                    Foreground="#10B981" FontWeight="SemiBold" FontSize="11" Padding="8,4" CornerRadius="3" ToolTip.Tip="Ảnh đơn tràn khung: Nhấn giữ Space hoặc Click chuột để so sánh ảnh gốc" />
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Button Command="{Binding SwapDualOrderCommand}"
+                                    Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="8,4" CornerRadius="3"
+                                    ToolTip.Tip="Đổi vị trí hiển thị giữa Ảnh gốc và Ảnh đã xử lý (Before ⇄ After)">
+                                <TextBlock Text="{Binding SwapDualOrderButtonText}" FontSize="11" VerticalAlignment="Center" />
+                            </Button>
+                            <Button Command="{Binding ToggleImmersiveDualFocusCommand}"
+                                    Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="8,4" CornerRadius="3"
+                                    ToolTip.Tip="Ẩn / Hiện thanh công cụ Sliders để tập trung soi ảnh tối đa diện tích màn hình">
+                                <TextBlock Text="{Binding ImmersiveFocusButtonText}" FontSize="11" VerticalAlignment="Center" />
+                            </Button>
                         </StackPanel>
                     </Border>
 
@@ -87,7 +90,7 @@
         </Border>
 
         <!-- ROW 1: FastStone Info Bar (Dung lượng Before/After & One-Click Presets) -->
-        <Border Grid.Row="1" Background="#0E1626" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="12,6">
+        <Border Grid.Row="1" Background="#0E1626" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="12,6" IsVisible="{Binding !IsImmersiveDualFocus}">
             <Grid ColumnDefinitions="Auto, *, Auto">
                 <!-- Thông số dung lượng Trước & Sau chuẩn FastStone -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
@@ -113,8 +116,8 @@
             </Grid>
         </Border>
 
-                <!-- ROW 2: Sliders Toolbar & 3 Custom Presets (Chuẩn bố cục XnConvert: Slider ngang mỏng, NumericUpDown 3-digit nhỏ gọn, Nút Reset riêng ↺) -->
-        <Border Grid.Row="2" Background="#161F30" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="8,3">
+        <!-- ROW 2: Sliders Toolbar & 3 Custom Presets (Chuẩn bố cục XnConvert: Slider ngang mỏng, NumericUpDown 3-digit nhỏ gọn, Nút Reset riêng ↺) -->
+        <Border Grid.Row="2" Background="#161F30" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="8,3" IsVisible="{Binding !IsImmersiveDualFocus}">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <WrapPanel.Resources>
@@ -353,14 +356,13 @@
                 <TextBlock Text="❯" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Button>
 
-            <Grid>
-            <!-- CHẾ ĐỘ 1: DUAL VIEW (Responsive Portrait / Landscape) -->
-            <UniformGrid Columns="{Binding EnhanceDualColumns}" Rows="{Binding EnhanceDualRows}" IsVisible="{Binding IsDualView}">
-                <!-- Cột Trước (Before) -->
-                <Border Background="#090D16" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="4" Margin="2">
+            <!-- DUAL VIEW: Tự động responsive Portrait (2 hàng) / Landscape (2 cột) & Hỗ trợ hoán đổi Before / After tức thì -->
+            <UniformGrid Columns="{Binding EnhanceDualColumns}" Rows="{Binding EnhanceDualRows}">
+                <!-- Cột 1 (Ảnh Thứ Nhất) -->
+                <Border Background="#090D16" BorderBrush="{Binding FirstDualBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="4" Margin="2">
                     <Grid RowDefinitions="Auto, *">
-                        <Border Grid.Row="0" Background="#1E293B" CornerRadius="3" Padding="6,3" HorizontalAlignment="Left" Margin="0,0,0,4">
-                            <TextBlock Text="📷 ẢNH GỐC (BEFORE)" Foreground="#94A3B8" FontWeight="Bold" FontSize="10" />
+                        <Border Grid.Row="0" Background="{Binding FirstDualBadgeBg}" CornerRadius="3" Padding="6,3" HorizontalAlignment="Left" Margin="0,0,0,4">
+                            <TextBlock Text="{Binding FirstDualBadgeTitle}" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" />
                         </Border>
                         <ScrollViewer Grid.Row="1" x:Name="BeforeScrollViewer"
                                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
@@ -369,17 +371,17 @@
                                 <LayoutTransformControl.LayoutTransform>
                                     <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                 </LayoutTransformControl.LayoutTransform>
-                                <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" x:Name="BeforeImage" />
+                                <Image Source="{Binding FirstDualImage}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" x:Name="BeforeImage" />
                             </LayoutTransformControl>
                         </ScrollViewer>
                     </Grid>
                 </Border>
 
-                <!-- Cột Sau (After) -->
-                <Border Background="#090D16" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="6" Padding="4" Margin="2">
+                <!-- Cột 2 (Ảnh Thứ Hai) -->
+                <Border Background="#090D16" BorderBrush="{Binding SecondDualBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="4" Margin="2">
                     <Grid RowDefinitions="Auto, *">
-                        <Border Grid.Row="0" Background="#0284C7" CornerRadius="3" Padding="6,3" HorizontalAlignment="Left" Margin="0,0,0,4">
-                            <TextBlock Text="✨ ĐÃ TỐI ƯU (AFTER)" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" />
+                        <Border Grid.Row="0" Background="{Binding SecondDualBadgeBg}" CornerRadius="3" Padding="6,3" HorizontalAlignment="Left" Margin="0,0,0,4">
+                            <TextBlock Text="{Binding SecondDualBadgeTitle}" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" />
                         </Border>
                         <ScrollViewer Grid.Row="1" x:Name="AfterScrollViewer"
                                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
@@ -388,120 +390,12 @@
                                 <LayoutTransformControl.LayoutTransform>
                                     <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                 </LayoutTransformControl.LayoutTransform>
-                                <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" x:Name="AfterImage" />
+                                <Image Source="{Binding SecondDualImage}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" x:Name="AfterImage" />
                             </LayoutTransformControl>
                         </ScrollViewer>
                     </Grid>
                 </Border>
             </UniformGrid>
-
-            <!-- CHẾ ĐỘ 2: SPLIT VIEW (Thanh rèm đối chiếu Before / After trên cùng mặt ảnh) -->
-            <Border Background="#090D16" BorderBrush="#6366F1" BorderThickness="1" CornerRadius="6" Padding="4" IsVisible="{Binding IsSplitView}">
-                <Grid RowDefinitions="Auto, *">
-                    <Grid Grid.Row="0" ColumnDefinitions="Auto, *, Auto" Margin="4,0,4,4">
-                        <Border Grid.Column="0" Background="#1E293B" CornerRadius="3" Padding="6,3">
-                            <TextBlock Text="⮂ RÈM TRƯỢT ĐỐI CHIẾU: Kéo thanh chia đôi để so sánh Trước / Sau trực quan" Foreground="#A855F7" FontWeight="Bold" FontSize="10" />
-                        </Border>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <Button Command="{Binding ToggleSplitOrientationCommand}"
-                                    Background="#1E293B" Foreground="#FCD34D" FontWeight="Bold" FontSize="10"
-                                    Padding="6,3" CornerRadius="3" ToolTip.Tip="Chuyển hướng kéo rèm: Trái / Phải (↔) hoặc Trên / Dưới (↕)">
-                                <TextBlock Text="{Binding SplitOrientationText}" FontSize="10" VerticalAlignment="Center" />
-                            </Button>
-                            <TextBlock Text="Vị trí rèm:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
-                            <Slider Width="140" Minimum="0.01" Maximum="0.99" Value="{Binding EnhanceSplitRatio}" Height="20" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Grid>
-                    <ScrollViewer Grid.Row="1" x:Name="SplitScrollViewer"
-                                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                                  Background="#050811" CornerRadius="4">
-                        <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <LayoutTransformControl.LayoutTransform>
-                                <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
-                            </LayoutTransformControl.LayoutTransform>
-                            <!-- Container 2 ảnh xếp lớp tương tác trực tiếp với tay cầm nổi nhô ra ngoài -->
-                            <Panel x:Name="ComparisonSplitPanel" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Background="Transparent" ClipToBounds="False">
-                                <!-- Lớp dưới: Ảnh gốc (Before) -->
-                                <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
-                                
-                                <!-- HƯỚNG 1: Rèm trượt Trái / Phải (Horizontal Split) -->
-                                <Panel IsVisible="{Binding !IsSplitVerticalOrientation}" ClipToBounds="False">
-                                    <!-- Nửa After bên trái -->
-                                    <Border HorizontalAlignment="Left" Width="{Binding SplitClipWidth}" Height="{Binding EnhanceImagePixelHeight}" ClipToBounds="True">
-                                        <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" HorizontalAlignment="Left" />
-                                    </Border>
-                                    <!-- Thanh rèm dọc & Tay cầm nổi nhô ra ngoài mép ảnh -->
-                                    <Panel x:Name="ComparisonSplitDividerH" HorizontalAlignment="Left" Margin="{Binding SplitDividerMarginHorizontal}" Width="40" Height="{Binding EnhanceImagePixelHeight}" ClipToBounds="False">
-                                        <!-- Đường kẻ rèm phát sáng -->
-                                        <Border Width="3" Background="#38BDF8" HorizontalAlignment="Center" />
-                                        <!-- Tay cầm nhô mép trên -->
-                                        <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,-24,0,0" Width="44" Height="24" CornerRadius="6,6,0,0" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1.5,1.5,1.5,0" Cursor="SizeWestEast" ToolTip.Tip="Kéo rèm chia Trước / Sau">
-                                            <TextBlock Text="◄ ⮂ ►" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <!-- Nút dạ quang ở giữa -->
-                                        <Border Width="32" Height="32" CornerRadius="16" Background="#0284C7" BorderBrush="#FFFFFF" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center" Cursor="SizeWestEast">
-                                            <TextBlock Text="⮂" Foreground="#FFFFFF" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <!-- Tay cầm nhô mép dưới -->
-                                        <Border VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,-24" Width="44" Height="24" CornerRadius="0,0,6,6" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1.5,0,1.5,1.5" Cursor="SizeWestEast" ToolTip.Tip="Kéo rèm chia Trước / Sau">
-                                            <TextBlock Text="◄ ⮂ ►" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                    </Panel>
-                                </Panel>
-
-                                <!-- HƯỚNG 2: Rèm trượt Trên / Dưới (Vertical Split) -->
-                                <Panel IsVisible="{Binding IsSplitVerticalOrientation}" ClipToBounds="False">
-                                    <!-- Nửa After phía trên -->
-                                    <Border VerticalAlignment="Top" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding SplitClipHeight}" ClipToBounds="True">
-                                        <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" VerticalAlignment="Top" />
-                                    </Border>
-                                    <!-- Thanh rèm ngang & Tay cầm nổi nhô ra ngoài mép ảnh -->
-                                    <Panel x:Name="ComparisonSplitDividerV" VerticalAlignment="Top" Margin="{Binding SplitDividerMarginVertical}" Height="40" Width="{Binding EnhanceImagePixelWidth}" ClipToBounds="False">
-                                        <!-- Đường kẻ rèm phát sáng -->
-                                        <Border Height="3" Background="#38BDF8" VerticalAlignment="Center" />
-                                        <!-- Tay cầm nhô mép trái -->
-                                        <Border HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-24,0,0,0" Width="24" Height="44" CornerRadius="6,0,0,6" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1.5,1.5,0,1.5" Cursor="SizeNorthSouth" ToolTip.Tip="Kéo rèm chia Trước / Sau">
-                                            <TextBlock Text="▲&#x0a;⬍&#x0a;▼" Foreground="#FFFFFF" FontWeight="Bold" FontSize="8" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <!-- Nút dạ quang ở giữa -->
-                                        <Border Width="32" Height="32" CornerRadius="16" Background="#0284C7" BorderBrush="#FFFFFF" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center" Cursor="SizeNorthSouth">
-                                            <TextBlock Text="⬍" Foreground="#FFFFFF" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <!-- Tay cầm nhô mép phải -->
-                                        <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,-24,0" Width="24" Height="44" CornerRadius="0,6,6,0" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="0,1.5,1.5,1.5" Cursor="SizeNorthSouth" ToolTip.Tip="Kéo rèm chia Trước / Sau">
-                                            <TextBlock Text="▲&#x0a;⬍&#x0a;▼" Foreground="#FFFFFF" FontWeight="Bold" FontSize="8" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                    </Panel>
-                                </Panel>
-                            </Panel>
-                        </LayoutTransformControl>
-                    </ScrollViewer>
-                </Grid>
-            </Border>
-
-            <!-- CHẾ ĐỘ 3: SINGLE VIEW (Ảnh đơn tràn khung với Click-and-Hold / Spacebar peek Before) -->
-            <Border Background="#090D16" BorderBrush="#10B981" BorderThickness="1" CornerRadius="6" Padding="4" IsVisible="{Binding IsSingleView}">
-                <Grid RowDefinitions="Auto, *">
-                    <Border Grid.Row="0" Background="#064E3B" CornerRadius="3" Padding="8,4" HorizontalAlignment="Left" Margin="4,0,0,4">
-                        <TextBlock Text="💡 ĐANG HIỂN THỊ ẢNH ĐƠN (AFTER) • Nhấn giữ chuột trái hoặc phím [SPACE] để xem ảnh gốc (BEFORE)" Foreground="#6EE7B7" FontWeight="Bold" FontSize="11" />
-                    </Border>
-                    <ScrollViewer Grid.Row="1" x:Name="SingleScrollViewer"
-                                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                                  Background="#050811" CornerRadius="4">
-                        <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <LayoutTransformControl.LayoutTransform>
-                                <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
-                            </LayoutTransformControl.LayoutTransform>
-                            <!-- Tự động hoán đổi hiển thị Before / After -->
-                            <Panel x:Name="SingleImagePanel">
-                                <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" IsVisible="{Binding !IsSingleShowingBefore}" />
-                                <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" IsVisible="{Binding IsSingleShowingBefore}" />
-                            </Panel>
-                        </LayoutTransformControl>
-                    </ScrollViewer>
-                </Grid>
-            </Border>
-        </Grid>
         </Panel>
     </Grid>
 </Window>
