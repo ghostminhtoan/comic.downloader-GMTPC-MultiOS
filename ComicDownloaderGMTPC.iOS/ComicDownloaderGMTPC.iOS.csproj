@@ -8,9 +8,10 @@
     <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
     <_SuppressXcodeVersionCheck>true</_SuppressXcodeVersionCheck>
     <SuppressXcodeVersionCheck>true</SuppressXcodeVersionCheck>
-    <EnableCodeSigning>false</EnableCodeSigning>
-    <CodesignKey></CodesignKey>
+    <!-- Ký ad-hoc chuẩn Apple (CodesignKey = -) cho phép đóng gói IPA không cần Apple Developer Account -->
+    <CodesignKey>-</CodesignKey>
     <CodesignProvision></CodesignProvision>
+    <EnableCodeSigning>true</EnableCodeSigning>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,9 +21,5 @@
   <ItemGroup>
     <ProjectReference Include="..\ComicDownloaderGMTPC\ComicDownloaderGMTPC.csproj" />
   </ItemGroup>
-
-  <!-- Override target kiểm tra phiên bản Xcode của Xamarin/Microsoft.iOS SDK để chống ném lỗi khi Xcode trên runner có version khác -->
-  <Target Name="_CheckForInvalidXcodeVersion" />
-  <Target Name="_CheckForInvalidMacCatalystXcodeVersion" />
 
 </Project>

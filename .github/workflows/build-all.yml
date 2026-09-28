@@ -123,23 +123,23 @@ jobs:
         run: |
           dotnet restore ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj
 
-      - name: Build & Publish iOS App
+      - name: Build iOS App (Ad-Hoc Signed)
         run: |
-          dotnet publish ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 --no-restore -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:EnableCodeSigning=false -p:CodesignKey="" -p:CodesignProvision="" -p:ServerAddress="" -p:ServerUser="" -p:ServerPassword=""
+          dotnet build ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 --no-restore -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:CodesignKey="-" -p:EnableCodeSigning=true
 
-      - name: Package Unsigned IPA
+      - name: Package Unsigned / Ad-Hoc IPA
         run: |
           mkdir -p Payload
           APP_PATH=$(find ComicDownloaderGMTPC.iOS/bin/Release/net10.0-ios/ios-arm64 -type d -name "*.app" | head -n 1)
           if [ -n "$APP_PATH" ]; then
             echo "Found App Bundle at: $APP_PATH"
             cp -R "$APP_PATH" Payload/
-            zip -r ComicDownloaderGMTPC-iOS-Unsigned.ipa Payload
+            zip -r ComicDownloaderGMTPC-iOS-AdHoc.ipa Payload
           else
             APP_PATH=$(find ComicDownloaderGMTPC.iOS/bin/Release/net10.0-ios/ios-arm64/publish -type d -name "*.app" | head -n 1)
             if [ -n "$APP_PATH" ]; then
               cp -R "$APP_PATH" Payload/
-              zip -r ComicDownloaderGMTPC-iOS-Unsigned.ipa Payload
+              zip -r ComicDownloaderGMTPC-iOS-AdHoc.ipa Payload
             else
               zip -r ComicDownloaderGMTPC-iOS-BuildOutput.zip ComicDownloaderGMTPC.iOS/bin/Release/net10.0-ios/ios-arm64/
             fi
