@@ -7,6 +7,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   # ── 1. WINDOWS STANDALONE X64 ──
   build-windows:
@@ -303,3 +306,73 @@ jobs:
             *.ipa
             ComicDownloaderGMTPC-iOS-BuildOutput.zip
           retention-days: 14
+
+  # ── 5. PUBLISH RELEASE ASSETS TO GITHUB RELEASE ──
+  publish-release:
+    name: Publish Release Assets
+    needs: [build-windows, build-linux, build-android, build-ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ComicDownloaderGMTPC-Windows-x64
+          path: release-temp/windows
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ComicDownloaderGMTPC-Linux-x64
+          path: release-temp/linux
+
+      - name: Download Android Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ComicDownloaderGMTPC-Android-APK
+          path: release-temp/android
+
+      - name: Download iOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ComicDownloaderGMTPC-iOS
+          path: release-temp/ios
+
+      - name: Organize & Standardize Release Assets
+        run: |
+          mkdir -p release-assets
+          
+          # Windows .exe
+          find release-temp/windows -name "*.exe" -exec cp {} release-assets/ComicDownloaderGMTPC-Windows-x64.exe \;
+          
+          # Linux binary & tar.gz
+          if [ -f "release-temp/linux/ComicDownloaderGMTPC.Desktop" ]; then
+            chmod +x release-temp/linux/ComicDownloaderGMTPC.Desktop
+            cp release-temp/linux/ComicDownloaderGMTPC.Desktop release-assets/ComicDownloaderGMTPC-Linux-x64
+            tar -czvf release-assets/ComicDownloaderGMTPC-Linux-x64.tar.gz -C release-temp/linux ComicDownloaderGMTPC.Desktop
+          fi
+          
+          # Android APK
+          find release-temp/android -name "*.apk" -exec cp {} release-assets/ComicDownloaderGMTPC-Android-Signed.apk \;
+          
+          # iOS IPA
+          find release-temp/ios -name "*.ipa" -exec cp {} release-assets/ComicDownloaderGMTPC-iOS-AdHoc.ipa \;
+
+          echo "=== Prepared Release Assets ==="
+          ls -la release-assets/
+
+      - name: Upload All Assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: releases
+          name: "Comic Downloader GMTPC Multi-OS Releases"
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
