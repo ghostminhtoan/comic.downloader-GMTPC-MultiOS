@@ -102,15 +102,12 @@ jobs:
         run: dotnet restore ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj
 
       - name: Build & Publish Android Release APK
-        run: >
-          dotnet publish ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj
-          -c Release
-          -f net10.0-android
-          -p:AndroidPackageFormat=apk
-          -o publish/android
+        run: |
+          dotnet publish ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj -c Release -f net10.0-android -p:AndroidPackageFormat=apk
 
       - name: Sign APK with Debug Keystore
         run: |
+          mkdir -p publish/android
           KEYSTORE="$HOME/.android/debug.keystore"
           if [ ! -f "$KEYSTORE" ]; then
             mkdir -p "$HOME/.android"
@@ -121,19 +118,23 @@ jobs:
           BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -n 1)
           echo "Using Android Build Tools at: $BUILD_TOOLS"
           
-          for apk in publish/android/*-Signed.apk publish/android/*.apk; do
-            if [ -f "$apk" ] && [[ "$apk" != *"-Signed.apk"* ]]; then
-              echo "Aligning and Signing $apk..."
-              "$BUILD_TOOLS/zipalign" -v -p 4 "$apk" "${apk%.apk}-aligned.apk" || cp "$apk" "${apk%.apk}-aligned.apk"
-              "$BUILD_TOOLS/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android --out "${apk%.apk}-Signed.apk" "${apk%.apk}-aligned.apk"
-            fi
-          done
+          # Tìm file APK đầu ra của dotnet publish
+          APK_SRC=$(find ComicDownloaderGMTPC.Android/bin/Release/net10.0-android -name "*.apk" | head -n 1)
+          if [ -n "$APK_SRC" ] && [ -f "$APK_SRC" ]; then
+            echo "Found Android APK at: $APK_SRC"
+            "$BUILD_TOOLS/zipalign" -v -p 4 "$APK_SRC" publish/android/ComicDownloaderGMTPC-Android-aligned.apk || cp "$APK_SRC" publish/android/ComicDownloaderGMTPC-Android-aligned.apk
+            "$BUILD_TOOLS/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android --out publish/android/ComicDownloaderGMTPC-Android-Signed.apk publish/android/ComicDownloaderGMTPC-Android-aligned.apk
+            echo "Successfully signed APK: publish/android/ComicDownloaderGMTPC-Android-Signed.apk"
+          else
+            echo "Error: No APK file found in build output!"
+            exit 1
+          fi
 
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ComicDownloaderGMTPC-Android-APK
-          path: publish/android/*-Signed.apk
+          path: publish/android/ComicDownloaderGMTPC-Android-Signed.apk
           retention-days: 14
 
   # ── 4. IOS APP & IPA ──
