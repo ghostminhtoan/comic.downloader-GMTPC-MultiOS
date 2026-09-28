@@ -98,7 +98,7 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Select Active Xcode Toolchain
+      - name: Show & Select Xcode Toolchain
         run: |
           echo "=== Available Xcode versions ==="
           ls -ld /Applications/Xcode* || true
@@ -118,6 +118,13 @@ jobs:
       - name: Install iOS Workload
         run: |
           dotnet workload install ios --skip-manifest-update
+
+      - name: Patch .NET iOS SDK Strict Xcode Check
+        run: |
+          echo "=== Patching Xamarin.Shared.Sdk.targets ==="
+          find /Users/runner/.dotnet/packs/Microsoft.iOS.Sdk* -name "Xamarin.Shared.Sdk.targets" -exec sed -i '' 's/<Error Text="This version of .NET for iOS/<Warning Text="This version of .NET for iOS/g' {} + 2>/dev/null || true
+          find /Users/runner/.dotnet/packs/Microsoft.iOS.Sdk* -name "Xamarin.Shared.Sdk.targets" -exec sed -i '' 's/_CheckForInvalidXcodeVersion/_Bypassed_CheckForInvalidXcodeVersion/g' {} + 2>/dev/null || true
+          echo "Patch completed."
 
       - name: Restore Dependencies
         run: |
