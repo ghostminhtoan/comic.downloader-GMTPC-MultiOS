@@ -315,8 +315,8 @@ public class DownloadEngineService
         _lastSpeedCheckTime = DateTime.UtcNow;
         _totalBytesDownloadedInWindow = 0;
 
-        int concurrentComics = Math.Clamp(ConcurrentComicDownloads, 1, 8);
-        int imageThreads = Math.Clamp(ImageDownloadThreads, 1, 16);
+        int concurrentComics = Math.Clamp(ConcurrentComicDownloads, 1, 16);
+        int imageThreads = Math.Max(1, ImageDownloadThreads);
 
         LogEmitted?.Invoke("INFO", $"Bắt đầu tải danh sách truyện (Song song: {concurrentComics} truyện, {imageThreads} luồng ảnh | Thư mục: {mode}) tới: {DownloadRoot}");
 

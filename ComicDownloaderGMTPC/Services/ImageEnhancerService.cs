@@ -379,10 +379,10 @@ public class ImageEnhancerService
         int success = 0;
         int errors = 0;
 
-        // Giới hạn số luồng xử lý đồ họa trên thiết bị di động để tránh tràn native memory OOM killer của Android
+        // Giới hạn số luồng xử lý đồ họa trên thiết bị di động để tránh tràn native memory OOM killer của Android, trên Windows/Linux tôn trọng tối đa số luồng cấu hình
         int effectiveThreads = OperatingSystem.IsAndroid()
-            ? Math.Clamp(options.MaxThreads, 1, 2)
-            : Math.Clamp(options.MaxThreads, 1, 16);
+            ? Math.Clamp(options.MaxThreads, 1, 4)
+            : Math.Max(1, options.MaxThreads);
 
         var parallelOptions = new ParallelOptions
         {

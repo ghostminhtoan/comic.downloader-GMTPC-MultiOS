@@ -849,6 +849,63 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
   - Bước 1: `build.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`) với `0 Warning(s), 0 Error(s)`.
   - Bước 2: Khởi chạy file thực tế `publish\windows\ComicDownloaderGMTPC.Desktop.exe` đạt trạng thái `Responding: True`.
 
+### 15.25. Rebuild Cơ Chế Rèm Trượt (Floating Handle Tabs) & ComicScreen Pan & Zoom Engine (Android & Windows)
+- **Tách biệt tương tác Rèm Trượt (Split View) khỏi mặt ảnh**:
+  - Thiết kế thanh rèm trượt đối chiếu Trước / Sau (`LiveSplitDividerH`, `LiveSplitDividerV`, `ModalSplitDividerH`, `ModalSplitDividerV`, `ComparisonSplitDividerH`, `ComparisonSplitDividerV`) với thuộc tính `ClipToBounds="False"`.
+  - Bổ sung **Floating Handle Tabs (Tay cầm nổi nhô ra ngoài mép ảnh)**:
+    + Rèm dọc (Trái / Phải): Tay cầm mép trên (`Margin="0,-24,0,0"`) và mép dưới (`Margin="0,0,0,-24"`) với icon `◄ ⮂ ►`, cùng viên bi tròn dạ quang trung tâm 32x32px.
+    + Rèm ngang (Trên / Dưới): Tay cầm mép trái (`Margin="-24,0,0,0"`) và mép phải (`Margin="0,0,-24,0"`) với icon `▲ ⬍ ▼`, cùng viên bi tròn dạ quang trung tâm 32x32px.
+  - Sự kiện kéo chia tỷ lệ Before/After (`isDraggingCurtain`) được bắt trực tiếp trên các Divider/Handle nổi này. Khi chạm vuốt vào mặt ảnh thông thường, 100% cử chỉ được giải phóng cho việc Pan & Zoom, không còn xung đột nhầm lẫn thao tác.
+- **ComicScreen Pan & Zoom Gesture Engine (Chuẩn ứng dụng InstSoft ComicScreen)**:
+  - **Double-Tap & Drag 1 ngón (One-finger Double-Tap & Drag to Zoom)**:
+    + Nhấn đúp 1 ngón tay và GIỮ không buông (`timeSinceLastTap <= 350ms`, `distFromLastTap <= 40px`).
+    + Kéo ngón tay lên trên: Phóng to (Zoom In); kéo ngón tay xuống dưới: Thu nhỏ (Zoom Out).
+    + Sử dụng hàm mũ mượt mà `scaleFactor = Math.Pow(1.006, deltaY)` cho độ thu phóng liên tục 120 FPS, triệt tiêu hoàn toàn hiện tượng giật nhảy số.
+    + Căn chỉnh offset viewport tự động theo tọa độ điểm chạm ban đầu để neo đúng tâm zoom trực quan dưới ngón tay người dùng.
+  - **Quick Double-Tap Toggle**: Nhấn đúp nhanh rồi thả tay ngay (<350ms, di chuyển < 6px) để hoán đổi nhanh giữa `2.0x` (phóng to 200% tại điểm chạm) và `Fit` (vừa khung hình).
+  - **Single-finger Pan (Rê ảnh 1:1)**: Vuốt 1 ngón tay tự do để di chuyển góc nhìn mượt mà 2 chiều khi ảnh đang ở trạng thái zoom.
+  - **Pinch-to-Zoom 2 ngón & Pan đồng thời**: Thu phóng và xoay góc nhìn mượt mà theo khoảng cách và trung điểm 2 ngón tay.
+  - **Desktop Mouse Integration**: Hỗ trợ cuộn chuột (Mouse Wheel), kéo rê chuột trái/phải/giữa và double-click chuột.
+
+### 15.26. Rebuild Hoàn Toàn Chế Độ 2 Ảnh So Sánh Before / After (Dual View) & Loại Bỏ Single/Split View
+- **Kiến trúc Pure Dual View Chuyên Biệt**:
+  - Loại bỏ hoàn toàn chế độ Rèm trượt (Split View) và chế độ Ảnh đơn (Single View), tập trung 100% diện tích hiển thị và tài nguyên vào chế độ đối chiếu 2 ảnh song song Before / After.
+  - Sử dụng mô hình **FirstDual / SecondDual Pattern** trong ViewModel (`FirstDualImage`, `SecondDualImage`, `FirstDualBadgeTitle`, `SecondDualBadgeTitle`, `FirstDualBadgeBg`, `SecondDualBadgeBg`, `FirstDualBorderBrush`, `SecondDualBorderBrush`).
+  - **Nút Đảo Vị Trí Before ⇄ After (`SwapDualOrderCommand`)**: Cho phép người dùng hoán đổi vị trí hiển thị giữa 2 ảnh (Ảnh gốc bên trái hay bên phải, phía trên hay phía dưới) tức thì, màu badge và viền tự động cập nhật đồng bộ.
+  - **Chế độ Immersive Dual Focus Mode (`ToggleImmersiveDualFocusCommand`)**: Ẩn nhanh toàn bộ thanh FastStone Info Bar và Sliders Toolbar, mở rộng tối đa không gian soi ảnh cho màn hình điện thoại Portrait hoặc máy tính Landscape.
+  - **Locked-Step ComicScreen Pan & Zoom Engine**: Đồng bộ tuyệt đối tọa độ cuộn (Offset) và tỷ lệ zoom giữa 2 ScrollViewer (`BeforeScrollViewer` & `AfterScrollViewer`, `ModalBeforeScrollViewer` & `ModalAfterScrollViewer`, `LiveBeforeScrollViewer` & `LiveAfterScrollViewer`) với cử chỉ Double-tap drag zoom 1 ngón, Quick double-tap, vuốt rê 1 ngón, Pinch 2 ngón và cuộn chuột.
+
+### 15.27. Cố Định Kích Thước Khung Ảnh Live Preview Before / After (Android & Windows)
+- **Vấn đề đã giải quyết**:
+  - Khi chưa bật Toàn màn hình (Fullscreen Modal), giao diện chính nằm trong ScrollViewer tổng khiến khung Live Preview (`UniformGrid`) nhận chiều cao vô hạn, làm 2 khung ảnh bị phình to theo pixel thực của ảnh hoặc co giãn bất định, gây khó khăn khi đối chiếu trực quan Before / After trên cả Windows và Android dọc/ngang.
+- **Giải pháp Kiến trúc Khung Cố Định (Fixed-Size Live Frame Architecture)**:
+  1. Cố định chiều cao vùng hiển thị Live Preview bằng thuộc tính `EnhanceLiveFrameHeight` (Mặc định 480px, tối ưu responsive trên Android và Desktop).
+  2. Bổ sung cụm điều khiển chọn nhanh kích thước khung ảnh cố định ngay trên Toolbar: `[📏 Khung: 400px | 480px | 560px | 650px]`, hỗ trợ người dùng tùy biến linh hoạt theo độ phân giải màn hình.
+  3. Khi nạp ảnh mẫu (`LoadSamplePreview`) hoặc ấn nút `⛶ Fit`, hệ thống tự động tính toán hệ số Zoom dựa trên `EnhanceLiveFrameHeight` và `EnhanceImagePixelHeight`, đảm bảo ảnh nằm gọn gàng bên trong khung cố định ngay từ đầu.
+  4. Hai khung ảnh Trước / Sau duy trì tỷ lệ và kích thước cố định đồng bộ 100%, cho phép người dùng thực hiện Pan & Zoom bên trong khung ổn định y hệt như sau khi Fullscreen.
+
+### 15.28. Tự Động Nhận Diện Topology CPU & Số Luồng Xử Lý Phần Cứng Tối Đa (Windows, Linux & Android)
+- **Bối cảnh & Vấn đề**:
+  - Trước đây, một số điều khiển chọn số luồng (Slider & NumericUpDown) trong ứng dụng bị giới hạn cứng `Maximum="16"` hoặc gán giá trị tối đa 16 luồng (`Math.Clamp(..., 1, 16)`).
+  - Đối với các máy tính Windows và Linux hiệu năng cao (Core i7/i9, Ryzen 7/9, AMD Threadripper, Intel Xeon đa Socket 32, 64, 72, 128, 256 luồng như Dual Xeon E5-2696 v3 64 luồng), việc giới hạn cứng khiến ứng dụng không tận dụng được hết sức mạnh phần cứng của máy người dùng.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Dịch vụ Nhận Diện Cấu Trúc CPU Đa Nền Tảng (`CpuTopologyHelper.cs`)**:
+     - Phát triển `CpuTopologyHelper.GetMaxLogicalProcessorCount()`:
+       + **Windows**: Tự động gọi Win32 API `GetActiveProcessorCount(ALL_PROCESSOR_GROUPS = 0xFFFF)` kết hợp với `Environment.ProcessorCount` để nhận diện chính xác 100% số luồng CPU của các hệ thống Dual Socket / Quad Socket hoặc Processor Groups >64 luồng.
+       + **Linux**: Phân tích dải CPU đang online từ kernel sysfs `/sys/devices/system/cpu/online` (hỗ trợ các định dạng `0-63`, `0-71`, `0-15,32-47`), fallback an toàn về `Environment.ProcessorCount`.
+       + **Android**: Nhận diện an toàn số core/thread CPU của thiết bị di động.
+  2. **Giải Phóng Giới Hạn Cứng Trên Toàn Bộ Ứng Dụng**:
+     - Cung cấp thuộc tính động `MaxSystemThreads => CpuTopologyHelper.GetMaxLogicalProcessorCount()` trong `MainViewModel`.
+     - Cập nhật toàn bộ các công cụ đa luồng:
+       + **Tab Xử Lý Ảnh (Image Enhancement)**: Slider và NumericUpDown `EnhanceThreads` có `Maximum="{Binding MaxSystemThreads}"`. `ImageEnhancerService` trên Desktop chạy tối đa theo số luồng người dùng cấu hình (`Math.Max(1, options.MaxThreads)`).
+       + **Tab Cắt Ảnh Dài (Split Long Images)**: NumericUpDown `ManualSplitThreads` có `Maximum="{Binding MaxSystemThreads}"`. `ImageSplitterService` chạy song song tương ứng.
+       + **Tab Tải Về & Quản Lý**: NumericUpDown `ImageDownloadThreads` và `ConcurrentComicDownloads` có `Maximum="{Binding MaxSystemThreads}"`.
+       + **Tab Scan Thiếu Chap**: NumericUpDown `ParallelCheckCount` có `Maximum="{Binding MaxSystemThreads}"`.
+       + **Tab Tách / Gộp Folder**: NumericUpDown `FolderToolThreads` có `Maximum="{Binding MaxFolderToolThreads}"` (tối đa `Math.Max(64, MaxSystemThreads)`).
+  3. **Cơ Chế Bảo Vệ Ổn Định Bộ Nhớ Thiết Bị Di Động**:
+     - Trên Android, dịch vụ xử lý ảnh tự động điều tiết trần luồng an toàn (2-4 luồng) nhằm tránh lỗi Out-Of-Memory (OOM) từ kernel Android khi render bitmap SkiaSharp, trong khi trên Windows và Linux được giải phóng 100% tài nguyên CPU theo cấu hình máy.
+
+
 
 
 

@@ -90,20 +90,23 @@ public partial class MainViewModel : ViewModelBase
     private bool _isBackgroundWorking = false;
 
     // CONCURRENT COMIC DOWNLOADS & IMAGE THREADS
-    [ObservableProperty]
-    private int _concurrentComicDownloads = 2; // 1 đến 8
+    public int MaxSystemThreads => CpuTopologyHelper.GetMaxLogicalProcessorCount();
+    public int MaxFolderToolThreads => Math.Max(64, MaxSystemThreads);
 
     [ObservableProperty]
-    private int _imageDownloadThreads = 4; // 1 đến 16
+    private int _concurrentComicDownloads = 2; // 1 đến 16
+
+    [ObservableProperty]
+    private int _imageDownloadThreads = Math.Min(CpuTopologyHelper.GetMaxLogicalProcessorCount(), 16);
 
     partial void OnConcurrentComicDownloadsChanged(int value)
     {
-        _downloadEngine.ConcurrentComicDownloads = Math.Clamp(value, 1, 8);
+        _downloadEngine.ConcurrentComicDownloads = Math.Clamp(value, 1, 16);
     }
 
     partial void OnImageDownloadThreadsChanged(int value)
     {
-        _downloadEngine.ImageDownloadThreads = Math.Clamp(value, 1, 16);
+        _downloadEngine.ImageDownloadThreads = Math.Clamp(value, 1, MaxSystemThreads);
     }
 
     // AUTO SPLIT LONG IMAGES
@@ -134,7 +137,7 @@ public partial class MainViewModel : ViewModelBase
     private int _manualSplitQuality = 90;
 
     [ObservableProperty]
-    private int _manualSplitThreads = 4;
+    private int _manualSplitThreads = Math.Min(CpuTopologyHelper.GetMaxLogicalProcessorCount(), 16);
 
     [ObservableProperty]
     private bool _isManualSplitting = false;
@@ -209,7 +212,7 @@ public partial class MainViewModel : ViewModelBase
     private int _enhanceQuality = 90; // 10 to 100
 
     [ObservableProperty]
-    private int _enhanceThreads = 4; // 1 to 16
+    private int _enhanceThreads = Math.Min(CpuTopologyHelper.GetMaxLogicalProcessorCount(), 16);
 
     [ObservableProperty]
     private bool _enhanceOverwriteOriginal = false;
@@ -2282,7 +2285,7 @@ public partial class MainViewModel : ViewModelBase
     public void ResetQuality() => EnhanceQuality = 90;
 
     [RelayCommand]
-    public void ResetThreads() => EnhanceThreads = 4;
+    public void ResetThreads() => EnhanceThreads = Math.Min(MaxSystemThreads, 16);
 
     [RelayCommand]
     public void ResetEnhanceSettings()
@@ -2293,7 +2296,7 @@ public partial class MainViewModel : ViewModelBase
         EnhanceSharpness = 0f;
         EnhanceNoiseReduce = 0;
         EnhanceQuality = 90;
-        EnhanceThreads = 4;
+        EnhanceThreads = Math.Min(MaxSystemThreads, 16);
         EnhanceOverwriteOriginal = false;
 
         UpdatePreviewResult();

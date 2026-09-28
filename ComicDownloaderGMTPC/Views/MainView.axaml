@@ -870,7 +870,7 @@
                                     <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                             <TextBlock Text="🧵 Số luồng tải ảnh:" Foreground="#10B981" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <NumericUpDown Value="{Binding ImageDownloadThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="120" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                            <NumericUpDown Value="{Binding ImageDownloadThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" Width="120" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số luồng tải ảnh song song (Tự động nhận diện theo CPU máy)" />
                                         </StackPanel>
                                     </Border>
 
@@ -996,7 +996,7 @@
                                             <Button Command="{Binding StartScanMissingCommand}" Content="▶ Quét ngay" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="8,3" CornerRadius="3" Margin="0,0,8,2" />
                                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,8,2">
                                                 <TextBlock Text="Song song:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                <NumericUpDown Value="{Binding ParallelCheckCount}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="110" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                <NumericUpDown Value="{Binding ParallelCheckCount}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" Width="110" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số tác vụ scan song song (Tự động nhận diện theo CPU máy)" />
                                             </StackPanel>
                                             <TextBlock Text="{Binding ScanResults.Count, StringFormat='{}Đã quét: {0}'}" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
                                         </WrapPanel>
@@ -1101,7 +1101,7 @@
                                                         <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
                                                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                                                 <TextBlock Text="Song song:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="64" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder di chuyển cùng lúc (Mặc định: 20 folder)" />
+                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder di chuyển cùng lúc (Mặc định: 20 folder, tối đa theo CPU máy)" />
                                                                 <TextBlock Text="folder" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
                                                             </StackPanel>
                                                         </Border>
@@ -1152,7 +1152,7 @@
                                                         <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
                                                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                                                 <TextBlock Text="Song song:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="64" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder di chuyển cùng lúc (Mặc định: 20 folder)" />
+                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder di chuyển cùng lúc (Mặc định: 20 folder, tối đa theo CPU máy)" />
                                                                 <TextBlock Text="folder" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
                                                             </StackPanel>
                                                         </Border>
@@ -1258,7 +1258,7 @@
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,0,8,6" VerticalAlignment="Center">
                                                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                                         <TextBlock Text="Số luồng CPU:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
-                                                        <NumericUpDown Value="{Binding ManualSplitThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="120" Height="28" FontSize="11" Foreground="#F59E0B" Background="#0B0F19" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                        <NumericUpDown Value="{Binding ManualSplitThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" Width="120" Height="28" FontSize="11" Foreground="#F59E0B" Background="#0B0F19" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số luồng CPU cắt ảnh song song (Tự động nhận diện theo CPU máy)" />
                                                     </StackPanel>
                                                 </Border>
 
@@ -1536,11 +1536,11 @@
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="2,1">
                                                     <Grid ColumnDefinitions="74, *, 22, 52" VerticalAlignment="Center">
                                                         <TextBlock Grid.Column="0" Text="Số luồng:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                        <Slider Grid.Column="1" Value="{Binding EnhanceThreads}" Minimum="1" Maximum="16" SmallChange="1" LargeChange="2" />
-                                                        <Button Grid.Column="2" Command="{Binding ResetThreadsCommand}" Background="#EA580C" Foreground="#FFFFFF" Padding="0" Width="18" Height="18" CornerRadius="4" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="Đặt lại Số luồng CPU về mặc định (4)" Margin="2,0,2,0">
+                                                        <Slider Grid.Column="1" Value="{Binding EnhanceThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" SmallChange="1" LargeChange="2" />
+                                                        <Button Grid.Column="2" Command="{Binding ResetThreadsCommand}" Background="#EA580C" Foreground="#FFFFFF" Padding="0" Width="18" Height="18" CornerRadius="4" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="Đặt lại Số luồng CPU về mặc định" Margin="2,0,2,0">
                                                             <TextBlock Text="↺" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
                                                         </Button>
-                                                        <NumericUpDown Grid.Column="3" Value="{Binding EnhanceThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" ParsingNumberStyle="Integer" ToolTip.Tip="Luồng xử lý CPU" />
+                                                        <NumericUpDown Grid.Column="3" Value="{Binding EnhanceThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" ParsingNumberStyle="Integer" ToolTip.Tip="Luồng xử lý CPU (Tự động nhận diện theo CPU máy)" />
                                                     </Grid>
                                                 </Border>
 
