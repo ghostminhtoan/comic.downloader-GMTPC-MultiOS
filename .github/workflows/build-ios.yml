@@ -44,37 +44,35 @@ jobs:
           python3 -c "
           import glob, re, os
 
-          patterns = [
-              os.path.expanduser('~/.dotnet/packs/Microsoft.iOS.Sdk*/**/*.targets'),
-              '/Users/runner/.dotnet/packs/Microsoft.iOS.Sdk*/**/*.targets'
-          ]
-          
-          for pattern in patterns:
-              for path in glob.glob(pattern, recursive=True):
-                  try:
-                      with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                          content = f.read()
-                      # Thay thế toàn bộ target thành target rỗng (vô hiệu hóa C# task bên trong)
-                      new_content = re.sub(r'<Target\s+Name=[\"\']_CheckForInvalidXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_CheckForInvalidXcodeVersion\" />', content)
-                      new_content = re.sub(r'<Target\s+Name=[\"\']_CheckForInvalidMacCatalystXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_CheckForInvalidMacCatalystXcodeVersion\" />', new_content)
-                      new_content = re.sub(r'<CheckForInvalidXcodeVersion[\s\S]*?/>', '', new_content)
-                      if new_content != content:
-                          with open(path, 'w', encoding='utf-8') as f:
-                              f.write(new_content)
-                          print(f'Successfully nullified target in: {path}')
-                  except Exception as e:
-                      print(f'Error: {e}')
+          for path in glob.glob('/Users/runner/.dotnet/packs/Microsoft.iOS.Sdk*/**/*.targets', recursive=True):
+              try:
+                  with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                      content = f.read()
+                  new_content = re.sub(r'<Target\s+Name=[\"\']_CheckForInvalidXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_CheckForInvalidXcodeVersion\" />', content)
+                  new_content = re.sub(r'<Target\s+Name=[\"\']_CheckForInvalidMacCatalystXcodeVersion[\"\'][\s\S]*?</Target>', '<Target Name=\"_CheckForInvalidMacCatalystXcodeVersion\" />', new_content)
+                  new_content = re.sub(r'<CheckForInvalidXcodeVersion[\s\S]*?/>', '', new_content)
+                  if new_content != content:
+                      with open(path, 'w', encoding='utf-8') as f:
+                          f.write(new_content)
+                      print(f'Successfully nullified target in: {path}')
+              except Exception as e:
+                  print(f'Error: {e}')
           "
 
       - name: Restore Dependencies
         run: |
           dotnet restore ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj
 
-      - name: Build iOS App (Ad-Hoc Signed)
+      - name: Build iOS App with Diagnostics Log
         run: |
-          dotnet build ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 --no-restore -v n -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:CodesignKey="-" -p:EnableCodeSigning=true
+          dotnet build ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 --no-restore -p:_SuppressXcodeVersionCheck=true -p:SuppressXcodeVersionCheck=true -p:CodesignKey="-" -p:EnableCodeSigning=true 2>&1 | tee build_output.log
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "=== BUILD FAILED - SHOWING LAST 100 LINES OF LOG ==="
+            tail -n 100 build_output.log
+            exit 1
+          fi
 
-      - name: Package Unsigned / Ad-Hoc IPA (For Sideload / AltStore / TrollStore / Sideloadly)
+      - name: Package Unsigned / Ad-Hoc IPA
         run: |
           mkdir -p Payload
           APP_PATH=$(find ComicDownloaderGMTPC.iOS/bin/Release/net10.0-ios/ios-arm64 -type d -name "*.app" | head -n 1)
