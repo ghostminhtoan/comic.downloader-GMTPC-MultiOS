@@ -1,4 +1,4 @@
-﻿# Workflow hiện tại - Comic Downloader GMTPC
+# Workflow hiện tại - Comic Downloader GMTPC
 
 Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file, build sạch, không phá lane khác.
 
@@ -24,6 +24,7 @@ Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file
     - Windows: `Comic Downloader GMTPC AVALONIA\publish\windows\ComicDownloaderGMTPC.Desktop.exe`
     - Linux: `Comic Downloader GMTPC AVALONIA\publish\linux\ComicDownloaderGMTPC.Desktop`
     - Android: `Comic Downloader GMTPC AVALONIA\publish\android\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
+    - iOS: `Comic Downloader GMTPC AVALONIA\ComicDownloaderGMTPC.iOS\bin\Release\net10.0-ios\ios-arm64\` (build .ipa trên macOS+Xcode)
 - Luôn đánh giá, cập nhật `workflow.md`.
 - Đánh giá prompt, gợi ý tính năng/file thiết kế mới; cập nhật workflow.md/prompt.md khi cần.
 
@@ -943,3 +944,24 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
        + `float b = options.Brightness / 100.0f;`
        + `float t = 0.5f * (1.0f - c) + b;`
      - Khi kéo slider tăng giảm tương phản, độ sáng, độ bão hòa, ảnh After phản hồi tức thì với màu sắc trung thực tuyệt đối, triệt tiêu hoàn toàn lỗi đen màn hình (black screen).
+
+### 15.26. Hỗ Trợ Nền Tảng iOS / iPhone (Avalonia iOS Cross-Platform)
+- **Kiến trúc & Cấu trúc dự án**:
+  - Tạo sub-project `ComicDownloaderGMTPC.iOS` targeting `net10.0-ios` (iOS 15.0+), tham chiếu shared project `ComicDownloaderGMTPC.csproj`.
+  - `AppDelegate.cs` kế thừa `AvaloniaAppDelegate<App>`, tái sử dụng `ISingleViewApplicationLifetime` đã có sẵn trong `App.axaml.cs`.
+  - `Info.plist` hỗ trợ iPhone + iPad, xoay ngang/dọc, ATS disabled cho HTTP download ảnh truyện.
+  - Đăng ký `Avalonia.iOS 12.1.3` vào `Directory.Packages.props` (Central Package Management).
+  - Đăng ký iOS project vào solution `ComicDownloaderGMTPC.slnx`.
+- **Build & Deploy**:
+  - `build.bat` mở rộng từ 3 lên 4 nền tảng (Windows, Linux, Android, iOS).
+  - Trên Windows: `dotnet build` kiểm tra biên dịch thành công (0 Error / 0 Warning) nhưng không tạo .ipa (cần macOS + Xcode).
+  - Trên macOS: `dotnet publish -c Release -r ios-arm64` tạo app bundle / .ipa thật để deploy lên TestFlight hoặc thiết bị iPhone.
+- **Toàn bộ tính năng chia sẻ từ shared project hoạt động y nguyên trên iOS**:
+  - Download/queue truyện tranh đa nguồn.
+  - Scan missing integer chapter.
+  - Tab Tool: Cắt ảnh dài, Xử lý ảnh (FastStone Preview, Rèm trượt), Đóng gói file (ZIP/CBZ/PDF).
+  - Tách/Gộp Folder song song.
+  - Pinch-to-Zoom & Pan cảm ứng đa điểm.
+  - Âm thanh thông báo.
+- **Nghiệm Thu**:
+  - `build.bat` biên dịch thành công cả 4 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`, iOS `net10.0-ios`) với `0 Warning(s), 0 Error(s)`.

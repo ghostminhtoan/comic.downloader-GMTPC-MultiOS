@@ -4,4 +4,7 @@
   </Project>
   <Project Path="ComicDownloaderGMTPC.Desktop/ComicDownloaderGMTPC.Desktop.csproj" />
   <Project Path="ComicDownloaderGMTPC/ComicDownloaderGMTPC.csproj" />
+  <Project Path="ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj">
+    <Deploy />
+  </Project>
 </Solution>
