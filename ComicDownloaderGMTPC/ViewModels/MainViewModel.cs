@@ -254,22 +254,35 @@ public partial class MainViewModel : ViewModelBase
     private string _enhanceImageIndexText = "Chưa có ảnh";
 
     [ObservableProperty]
-    private string _enhanceViewMode = "Dual"; // "Dual", "Single", "Split"
+    private string _enhanceViewMode = OperatingSystem.IsAndroid() ? "Split" : "Split"; // "Dual", "Single", "Split" - Mặc định Split gọn gàng
 
     [ObservableProperty]
-    private bool _isDualView = true;
+    private bool _isDualView = false;
 
     [ObservableProperty]
     private bool _isSingleView = false;
 
     [ObservableProperty]
-    private bool _isSplitView = false;
+    private bool _isSplitView = true;
 
     [ObservableProperty]
     private bool _isSingleShowingBefore = false;
 
     [ObservableProperty]
     private double _enhanceSplitRatio = 0.5; // 0.0 to 1.0
+
+    [ObservableProperty]
+    private bool _isSplitVerticalOrientation = false; // false: Trái / Phải, true: Trên / Dưới
+
+    [ObservableProperty]
+    private string _splitOrientationMode = "Auto"; // "Auto", "Horizontal", "Vertical"
+
+    public GridLength SplitLeftLength => new GridLength(Math.Clamp(EnhanceSplitRatio, 0.01, 0.99), GridUnitType.Star);
+    public GridLength SplitRightLength => new GridLength(Math.Clamp(1.0 - EnhanceSplitRatio, 0.01, 0.99), GridUnitType.Star);
+    public GridLength SplitTopLength => new GridLength(Math.Clamp(EnhanceSplitRatio, 0.01, 0.99), GridUnitType.Star);
+    public GridLength SplitBottomLength => new GridLength(Math.Clamp(1.0 - EnhanceSplitRatio, 0.01, 0.99), GridUnitType.Star);
+
+    public string SplitOrientationText => IsSplitVerticalOrientation ? "↕ Trên / Dưới" : "↔ Trái / Phải";
 
     [ObservableProperty]
     private bool _isLoupeEnabled = false;
@@ -301,6 +314,39 @@ public partial class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(EnhanceDualColumns));
         OnPropertyChanged(nameof(EnhanceDualRows));
+        UpdateSplitOrientation();
+    }
+
+    partial void OnEnhanceSplitRatioChanged(double value)
+    {
+        OnPropertyChanged(nameof(SplitLeftLength));
+        OnPropertyChanged(nameof(SplitRightLength));
+        OnPropertyChanged(nameof(SplitTopLength));
+        OnPropertyChanged(nameof(SplitBottomLength));
+    }
+
+    partial void OnSplitOrientationModeChanged(string value)
+    {
+        UpdateSplitOrientation();
+    }
+
+    partial void OnIsSplitVerticalOrientationChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SplitOrientationText));
+    }
+
+    public void UpdateSplitOrientation()
+    {
+        if (SplitOrientationMode == "Auto")
+        {
+            // Tự động nhận diện: màn hình dọc hoặc ảnh đứng dài (Manga/Webtoon)
+            bool isTallImage = EnhanceImagePixelHeight > 0 && EnhanceImagePixelWidth > 0 && (EnhanceImagePixelHeight > EnhanceImagePixelWidth * 1.1);
+            IsSplitVerticalOrientation = IsPortraitMode || isTallImage;
+        }
+        else
+        {
+            IsSplitVerticalOrientation = SplitOrientationMode == "Vertical";
+        }
     }
 
     partial void OnEnhanceViewModeChanged(string value)
@@ -308,6 +354,10 @@ public partial class MainViewModel : ViewModelBase
         IsDualView = value == "Dual";
         IsSingleView = value == "Single";
         IsSplitView = value == "Split";
+        if (IsSplitView)
+        {
+            UpdateSplitOrientation();
+        }
     }
 
     [ObservableProperty]
@@ -1533,6 +1583,7 @@ public partial class MainViewModel : ViewModelBase
 
             EnhanceImagePixelWidth = originalBmp.PixelSize.Width;
             EnhanceImagePixelHeight = originalBmp.PixelSize.Height;
+            UpdateSplitOrientation();
             EnhancePreviewOriginal = originalBmp;
             EnhancePreviewInfoText = $"{Path.GetFileName(imagePath)} ({originalBmp.PixelSize.Width}x{originalBmp.PixelSize.Height})";
             EnhanceBeforeInfoText = $"Before: {originalBmp.PixelSize.Width} x {originalBmp.PixelSize.Height}, {origSize / 1024.0:F1} KB";
@@ -1835,8 +1886,34 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void ToggleCompareMode()
     {
-        EnhanceViewMode = EnhanceViewMode == "Dual" ? "Single" : "Dual";
+        EnhanceViewMode = EnhanceViewMode == "Dual" ? "Split" : (EnhanceViewMode == "Split" ? "Single" : "Split");
     }
+
+    [RelayCommand]
+    public void ToggleSplitOrientation()
+    {
+        if (SplitOrientationMode == "Auto")
+        {
+            SplitOrientationMode = IsSplitVerticalOrientation ? "Horizontal" : "Vertical";
+        }
+        else if (SplitOrientationMode == "Horizontal")
+        {
+            SplitOrientationMode = "Vertical";
+        }
+        else
+        {
+            SplitOrientationMode = "Auto";
+        }
+    }
+
+    [RelayCommand]
+    public void SetSplitHorizontal() => SplitOrientationMode = "Horizontal";
+
+    [RelayCommand]
+    public void SetSplitVertical() => SplitOrientationMode = "Vertical";
+
+    [RelayCommand]
+    public void SetSplitAuto() => SplitOrientationMode = "Auto";
 
     [RelayCommand]
     public void ToggleLoupe()

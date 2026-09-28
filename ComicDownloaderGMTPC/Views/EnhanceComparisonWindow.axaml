@@ -395,7 +395,7 @@
                 </Border>
             </UniformGrid>
 
-            <!-- CHẾ ĐỘ 2: SPLIT VIEW (Thanh trèm đối chiếu Before / After trên cùng mặt ảnh) -->
+            <!-- CHẾ ĐỘ 2: SPLIT VIEW (Thanh rèm đối chiếu Before / After trên cùng mặt ảnh) -->
             <Border Background="#090D16" BorderBrush="#6366F1" BorderThickness="1" CornerRadius="6" Padding="4" IsVisible="{Binding IsSplitView}">
                 <Grid RowDefinitions="Auto, *">
                     <Grid Grid.Row="0" ColumnDefinitions="Auto, *, Auto" Margin="4,0,4,4">
@@ -403,8 +403,13 @@
                             <TextBlock Text="⮂ RÈM TRƯỢT ĐỐI CHIẾU: Kéo thanh chia đôi để so sánh Trước / Sau trực quan" Foreground="#A855F7" FontWeight="Bold" FontSize="10" />
                         </Border>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Button Command="{Binding ToggleSplitOrientationCommand}"
+                                    Background="#1E293B" Foreground="#FCD34D" FontWeight="Bold" FontSize="10"
+                                    Padding="6,3" CornerRadius="3" ToolTip.Tip="Chuyển hướng kéo rèm: Trái / Phải (↔) hoặc Trên / Dưới (↕)">
+                                <TextBlock Text="{Binding SplitOrientationText}" FontSize="10" VerticalAlignment="Center" />
+                            </Button>
                             <TextBlock Text="Vị trí rèm:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
-                            <Slider Width="140" Minimum="0" Maximum="1" Value="{Binding EnhanceSplitRatio}" Height="20" VerticalAlignment="Center" />
+                            <Slider Width="140" Minimum="0.01" Maximum="0.99" Value="{Binding EnhanceSplitRatio}" Height="20" VerticalAlignment="Center" />
                         </StackPanel>
                     </Grid>
                     <ScrollViewer Grid.Row="1" x:Name="SplitScrollViewer"
@@ -415,22 +420,36 @@
                                 <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                             </LayoutTransformControl.LayoutTransform>
                             <!-- Container 2 ảnh xếp lớp -->
-                            <Panel>
+                            <Panel Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}">
                                 <!-- Lớp dưới: Ảnh gốc (Before) -->
                                 <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
                                 
-                                <!-- Lớp trên: Ảnh tối ưu (After) với độ rộng chia đôi theo SplitRatio -->
-                                <Grid ColumnDefinitions="*, Auto, *">
-                                    <!-- Phần After bên trái -->
+                                <!-- HƯỚNG 1: Rèm trượt Trái / Phải (Horizontal Split) -->
+                                <Grid IsVisible="{Binding !IsSplitVerticalOrientation}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="{Binding SplitLeftLength}" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="{Binding SplitRightLength}" />
+                                    </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" ClipToBounds="True">
                                         <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" HorizontalAlignment="Left" />
                                     </Border>
-                                    
-                                    <!-- Đường ranh giới chia rèm -->
                                     <GridSplitter Grid.Column="1" Width="4" Background="#38BDF8" ResizeDirection="Columns" />
-                                    
-                                    <!-- Phần Before lộ ra bên phải -->
                                     <Border Grid.Column="2" Background="Transparent" />
+                                </Grid>
+
+                                <!-- HƯỚNG 2: Rèm trượt Trên / Dưới (Vertical Split) -->
+                                <Grid IsVisible="{Binding IsSplitVerticalOrientation}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="{Binding SplitTopLength}" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="{Binding SplitBottomLength}" />
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" ClipToBounds="True">
+                                        <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" VerticalAlignment="Top" />
+                                    </Border>
+                                    <GridSplitter Grid.Row="1" Height="4" Background="#38BDF8" ResizeDirection="Rows" />
+                                    <Border Grid.Row="2" Background="Transparent" />
                                 </Grid>
                             </Panel>
                         </LayoutTransformControl>

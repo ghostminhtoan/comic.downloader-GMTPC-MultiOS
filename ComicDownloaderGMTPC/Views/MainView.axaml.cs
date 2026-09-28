@@ -55,6 +55,21 @@ public partial class MainView : UserControl
 
             // 1. Đồng bộ Pan & 2 ngón Pinch-to-Zoom cho Live Preview trong Tab Xử Lý Ảnh
             SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("LiveBeforeScrollViewer"), this.FindControl<ScrollViewer>("LiveAfterScrollViewer"));
+            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("LiveSplitScrollViewer"));
+            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("LiveSingleScrollViewer"));
+
+            var liveSingle = this.FindControl<ScrollViewer>("LiveSingleScrollViewer");
+            if (liveSingle != null)
+            {
+                liveSingle.AddHandler(PointerPressedEvent, (s, ev) =>
+                {
+                    if (DataContext is MainViewModel vm && vm.IsSingleView) vm.IsSingleShowingBefore = true;
+                }, RoutingStrategies.Tunnel);
+                liveSingle.AddHandler(PointerReleasedEvent, (s, ev) =>
+                {
+                    if (DataContext is MainViewModel vm && vm.IsSingleView) vm.IsSingleShowingBefore = false;
+                }, RoutingStrategies.Tunnel);
+            }
 
             // 2. Đồng bộ Pan & 2 ngón Pinch-to-Zoom cho Modal Đối Chiếu Toàn Màn Hình (Dual View)
             SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("ModalBeforeScrollViewer"), this.FindControl<ScrollViewer>("ModalAfterScrollViewer"));
@@ -62,6 +77,19 @@ public partial class MainView : UserControl
             // 3. Pan & 2 ngón Pinch-to-Zoom cho Split View & Single View trong Modal Toàn Màn Hình
             SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("ModalSplitScrollViewer"));
             SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("ModalSingleScrollViewer"));
+
+            var modalSingle = this.FindControl<ScrollViewer>("ModalSingleScrollViewer");
+            if (modalSingle != null)
+            {
+                modalSingle.AddHandler(PointerPressedEvent, (s, ev) =>
+                {
+                    if (DataContext is MainViewModel vm && vm.IsSingleView) vm.IsSingleShowingBefore = true;
+                }, RoutingStrategies.Tunnel);
+                modalSingle.AddHandler(PointerReleasedEvent, (s, ev) =>
+                {
+                    if (DataContext is MainViewModel vm && vm.IsSingleView) vm.IsSingleShowingBefore = false;
+                }, RoutingStrategies.Tunnel);
+            }
         }
 
         // Khi bất kỳ ô nhập liệu nào (TextBox, NumericUpDown, ComboBox) nhận focus trên Android / Desktop:
