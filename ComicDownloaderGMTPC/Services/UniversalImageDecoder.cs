@@ -136,15 +136,21 @@ public static class UniversalImageDecoder
     {
         if (rawBytes == null || rawBytes.Length == 0) return null;
 
-        // 1. Thử SkiaSharp trước (nhanh nhất)
+        // 1. Thử SkiaSharp trước với định dạng màu chuẩn RGBA8888 (nhanh nhất)
         try
         {
             using var data = SKData.CreateCopy(rawBytes);
             using var codec = SKCodec.Create(data);
             if (codec != null)
             {
-                var bitmap = SKBitmap.Decode(codec);
-                if (bitmap != null) return bitmap;
+                var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+                var bitmap = new SKBitmap(info);
+                var result = codec.GetPixels(info, bitmap.GetPixels());
+                if (result == SKCodecResult.Success || result == SKCodecResult.IncompleteInput)
+                {
+                    return bitmap;
+                }
+                bitmap.Dispose();
             }
         }
         catch { }
@@ -152,7 +158,20 @@ public static class UniversalImageDecoder
         try
         {
             var bmp = SKBitmap.Decode(rawBytes);
-            if (bmp != null) return bmp;
+            if (bmp != null)
+            {
+                if (bmp.ColorType != SKColorType.Rgba8888)
+                {
+                    var rgba = new SKBitmap(new SKImageInfo(bmp.Width, bmp.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
+                    using (var canvas = new SKCanvas(rgba))
+                    {
+                        canvas.DrawBitmap(bmp, 0, 0);
+                    }
+                    bmp.Dispose();
+                    return rgba;
+                }
+                return bmp;
+            }
         }
         catch { }
 
@@ -176,7 +195,21 @@ public static class UniversalImageDecoder
                 using var ms = new MemoryStream();
                 image.SaveAsJpeg(ms);
                 ms.Position = 0;
-                return SKBitmap.Decode(ms);
+                var rawBmp = SKBitmap.Decode(ms);
+                if (rawBmp != null)
+                {
+                    if (rawBmp.ColorType != SKColorType.Rgba8888)
+                    {
+                        var rgba = new SKBitmap(new SKImageInfo(rawBmp.Width, rawBmp.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
+                        using (var canvas = new SKCanvas(rgba))
+                        {
+                            canvas.DrawBitmap(rawBmp, 0, 0);
+                        }
+                        rawBmp.Dispose();
+                        return rgba;
+                    }
+                    return rawBmp;
+                }
             }
             catch { }
         }

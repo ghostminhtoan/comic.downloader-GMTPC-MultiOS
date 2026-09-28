@@ -1,4 +1,4 @@
-# Workflow hiện tại - Comic Downloader GMTPC
+﻿# Workflow hiện tại - Comic Downloader GMTPC
 
 Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file, build sạch, không phá lane khác.
 
@@ -923,20 +923,22 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
        + Với ảnh tĩnh: Sử dụng SkiaSharp thuần túy cho tốc độ xử lý hàng trăm frame/giây.
      - Cập nhật hàm `GeneratePreviewStats` phản ánh chính xác dung lượng nén theo định dạng đích được chọn.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+### 15.30. Khắc Phục Triệt Để Lỗi Sai Màu Ảnh After So Với Before & Chuẩn Hóa Ma Trận Màu (ColorMatrix RGBA8888 & Contrast Pivot 128)
+- **Bối cảnh & Vấn đề**:
+  - Khi xem trước Before / After hoặc xuất ảnh đã xử lý trong Tab Xử Lý Ảnh, ảnh After bị biến dạng màu sắc nghiêm trọng: Bầu trời màu vàng/cam chuyển thành đỏ hồng/magenta rực lửa, còn đồi núi/cây cối màu xanh lá cây chuyển thành xanh ngọc/teal rực rỡ, ảnh bị cháy sáng bệt màu dù thông số Tương phản (Contrast) và Độ sáng (Brightness) chỉ ở mức mặc định hoặc rất nhỏ (+10).
+- **Nguyên nhân cốt lõi**:
+  1. **Lỗi logic ở dòng thứ 3 của Ma trận màu (ColorMatrix) trong `ImageEnhancerService.cs`**:
+     - Trong mảng `colorMatrix`, hàng thứ 3 (kênh Blue) bị sao chép nhầm công thức của hàng thứ 2 (kênh Green): `c * sr, c * (sg + s), c * sb, 0, t` thay vì công thức đúng `c * sr, c * sg, c * (sb + s), 0, t`. Do đó kênh màu xanh lá cây (Green) bị nhân đôi và cộng dồn vào kênh Blue, làm đảo lộn toàn bộ không gian màu RGB.
+  2. **Lệch thang dịch chuyển tâm xoay tương phản (Contrast Pivot)**:
+     - Ma trận màu SkiaSharp tính giá trị translation ở cột thứ 5 theo thang byte `[0..255]`. Công thức cũ tính theo thang chuẩn hóa `[0..1]` (`t = (1-c)*0.5f + b`), dẫn đến khi tương phản tăng nhẹ, điểm xoay bị kéo về gần 0 thay vì điểm xám trung tính 128, khiến toàn bộ sắc thái màu bị bệt và cháy sáng giả tạo.
+  3. **Đảo kênh màu khi Decode trên các nền tảng (Bgra8888 vs Rgba8888)**:
+     - `SKBitmap.Decode` trên Windows mặc định giải mã JPEG dưới dạng `Bgra8888`. Khi nạp vào `SKColorFilter.CreateColorMatrix`, Skia xử lý trên thứ tự kênh `[R, G, B, A]`, dẫn đến hiện tượng tráo đổi kênh Red ⇄ Blue.
+- **Giải pháp Kiến trúc Toàn diện**:
+  1. **Chuẩn hóa Bộ Giải Mã Universal Image Decoder (`UniversalImageDecoder.cs`)**:
+     - Mọi luồng giải mã (`SKCodec`, `SKBitmap.Decode`, `ImageSharp fallback`) đều xuất ra `SKBitmap` có định dạng màu đồng nhất `SKColorType.Rgba8888` và `SKAlphaType.Premul`.
+  2. **Hiệu chỉnh Ma trận màu & Tâm xoay Tương phản trong `ImageEnhancerService.cs`**:
+     - Sửa đúng công thức hàng thứ 3 của ma trận màu: `c * sr, c * sg, c * (sb + s), 0, t`.
+     - Chuẩn hóa công thức dịch sáng và điểm xoay tương phản quanh 128:
+       + `float b = options.Brightness * 2.55f;`
+       + `float t = 128.0f * (1.0f - c) + b;`
+     - Tự động chuyển đổi `workingSrc` sang `Rgba8888` nếu đầu vào khác định dạng trước khi nạp vào Canvas vẽ, đảm bảo màu sắc ảnh After giữ nguyên 100% độ trung thực, tự nhiên và hài hòa với ảnh Before.

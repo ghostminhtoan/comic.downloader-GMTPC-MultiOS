@@ -68,18 +68,33 @@ public class ImageEnhancerService
 
     /// <summary>
     /// Áp dụng các bộ lọc Contrast, Brightness, Saturation, Sharpness và Noise Reduction lên SKBitmap.
+    /// Chuẩn hóa 100% không gian màu RGBA8888, triệt tiêu hoàn toàn lỗi đảo kênh màu Red/Blue và lệch tâm xoay tương phản.
     /// </summary>
     public SKBitmap ProcessBitmap(SKBitmap src, ImageEnhancerOptions options)
     {
+        // 0. Đảm bảo nguồn bitmap luôn chuẩn hóa định dạng RGBA8888 để ma trận màu xử lý đúng thứ tự kênh
+        SKBitmap workingSrc = src;
+        bool isTempSrc = false;
+        if (src.ColorType != SKColorType.Rgba8888)
+        {
+            var rgba = new SKBitmap(new SKImageInfo(src.Width, src.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
+            using (var tempCanvas = new SKCanvas(rgba))
+            {
+                tempCanvas.DrawBitmap(src, 0, 0);
+            }
+            workingSrc = rgba;
+            isTempSrc = true;
+        }
+
         // 1. Tính toán ma trận màu kết hợp (Combined Color Matrix: Contrast * Saturation + Brightness)
-        // Contrast: -100..100 -> hệ số c (c = 1.0 khi Contrast = 0)
+        // Contrast [-100..100] -> hệ số c (c = 1.0 khi Contrast = 0)
         float c = options.Contrast >= 0 ? 1.0f + (options.Contrast / 50.0f) : (100.0f + options.Contrast) / 100.0f;
-        // Brightness: -100..100 -> độ dịch b chuẩn hóa [-1.0 .. +1.0] cho Skia (b = 0 khi Brightness = 0)
-        float b = options.Brightness / 100.0f;
-        // Saturation: 0..200 -> hệ số s [0.0 .. 3.0] (s = 1.0 khi Saturation = 100)
+        // Brightness [-100..100] -> độ dịch sáng kênh màu byte [-255..+255] (b = 0 khi Brightness = 0)
+        float b = options.Brightness * 2.55f;
+        // Saturation [0..200] -> hệ số bão hòa s [0.0..3.0] (s = 1.0 khi Saturation = 100)
         float s = Math.Clamp(options.Saturation / 100.0f, 0.0f, 3.0f);
 
-        // Rec.709 Luma weights
+        // Chuẩn Rec.709 Luma weights
         const float rWeight = 0.2126f;
         const float gWeight = 0.7152f;
         const float bWeight = 0.0722f;
@@ -88,14 +103,15 @@ public class ImageEnhancerService
         float sg = (1.0f - s) * gWeight;
         float sb = (1.0f - s) * bWeight;
 
-        // Điểm xoay tương phản chuẩn hóa trong không gian Skia [0.0 .. 1.0] là 0.5 (tương ứng với 128 trong [0..255])
-        float t = (1.0f - c) * 0.5f + b;
+        // Điểm xoay tương phản (Pivot) chuẩn hóa quanh 128 (xám trung tính):
+        // R' = c * (R - 128) + 128 + b = c * R + (128 * (1 - c) + b)
+        float t = 128.0f * (1.0f - c) + b;
 
         float[] colorMatrix = new float[]
         {
             c * (sr + s), c * sg,       c * sb,       0, t,
             c * sr,       c * (sg + s), c * sb,       0, t,
-            c * sr,       c * (sg + s), c * sb,       0, t,
+            c * sr,       c * sg,       c * (sb + s), 0, t,
             0,            0,            0,            1, 0
         };
 
@@ -137,8 +153,8 @@ public class ImageEnhancerService
                 : sharpenFilter;
         }
 
-        // 3. Render bitmap mới với Paint phối hợp bộ lọc màu + bộ lọc ảnh
-        var dst = new SKBitmap(src.Width, src.Height, src.ColorType, src.AlphaType);
+        // 3. Render bitmap mới với Paint phối hợp bộ lọc màu + bộ lọc ảnh trên không gian RGBA8888
+        var dst = new SKBitmap(new SKImageInfo(workingSrc.Width, workingSrc.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
         using (var canvas = new SKCanvas(dst))
         {
             using var paint = new SKPaint
@@ -148,10 +164,15 @@ public class ImageEnhancerService
                 IsAntialias = true
             };
 
-            canvas.DrawBitmap(src, 0, 0, paint);
+            canvas.DrawBitmap(workingSrc, 0, 0, paint);
         }
 
         imageFilter?.Dispose();
+        if (isTempSrc)
+        {
+            workingSrc.Dispose();
+        }
+
         return dst;
     }
 
