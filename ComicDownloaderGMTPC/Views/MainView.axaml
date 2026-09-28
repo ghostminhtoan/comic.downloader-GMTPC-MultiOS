@@ -1665,15 +1665,25 @@
                                                         <Button Command="{Binding ResetEnhanceSettingsCommand}" Content="🔄" Background="#1E293B" Foreground="#94A3B8" FontSize="9" Padding="5,2" Height="22" CornerRadius="3" VerticalAlignment="Center" Margin="0,0,0,2" ToolTip.Tip="Đặt lại toàn bộ thông số về mặc định" />
                                                     </WrapPanel>
                                                     
-                                                    <!-- Cụm 4: Bộ điều khiển Zoom & Nút Toàn Màn Hình / Cửa Sổ Mới -->
+                                                    <!-- Cụm 4: Bộ điều khiển Zoom & Cố định Khung & Nút Toàn Màn Hình / Cửa Sổ Mới -->
                                                     <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,6">
                                                         <Button Command="{Binding ResetZoomPreviewCommand}" Content="1:1" Background="#1E293B" Foreground="#10B981" Padding="5,2" FontSize="10" CornerRadius="3" ToolTip.Tip="Tỷ lệ 100%" Margin="0,0,3,0" />
-                                                        <Button Command="{Binding ZoomFitPreviewCommand}" Content="⛶ Fit" Background="#1E293B" Foreground="#F59E0B" Padding="5,2" FontSize="10" CornerRadius="3" ToolTip.Tip="Tự co vừa khung" Margin="0,0,3,0" />
+                                                        <Button Command="{Binding ZoomFitPreviewCommand}" Content="⛶ Fit" Background="#1E293B" Foreground="#F59E0B" Padding="5,2" FontSize="10" CornerRadius="3" ToolTip.Tip="Tự co vừa khung cố định" Margin="0,0,3,0" />
                                                         <Button Command="{Binding ZoomOutPreviewCommand}" Content="➖" Background="#1E293B" Foreground="#94A3B8" Padding="5,2" FontSize="11" CornerRadius="3" ToolTip.Tip="Thu nhỏ" Margin="0,0,3,0" />
                                                         <Border Background="#1E293B" CornerRadius="3" Padding="6,2" VerticalAlignment="Center" Margin="0,0,3,0">
                                                             <TextBlock Text="{Binding EnhancePreviewZoomText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" Width="36" TextAlignment="Center" />
                                                         </Border>
-                                                        <Button Command="{Binding ZoomInPreviewCommand}" Content="➕" Background="#1E293B" Foreground="#38BDF8" Padding="5,2" FontSize="11" CornerRadius="3" ToolTip.Tip="Phóng to" Margin="0,0,4,0" />
+                                                        <Button Command="{Binding ZoomInPreviewCommand}" Content="➕" Background="#1E293B" Foreground="#38BDF8" Padding="5,2" FontSize="11" CornerRadius="3" ToolTip.Tip="Phóng to" Margin="0,0,6,0" />
+
+                                                        <!-- Cụm chọn nhanh Chiều cao Khung ảnh cố định -->
+                                                        <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,6,0">
+                                                            <TextBlock Text="📏 Khung:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" Margin="0,0,2,0" />
+                                                            <Button Command="{Binding SetLiveFrameHeight400Command}" Content="400" Background="#1E293B" Foreground="#94A3B8" FontSize="9" Padding="4,2" CornerRadius="3" ToolTip.Tip="Cố định khung 400px" />
+                                                            <Button Command="{Binding SetLiveFrameHeight480Command}" Content="480" Background="#1E293B" Foreground="#38BDF8" FontWeight="Bold" FontSize="9" Padding="4,2" CornerRadius="3" ToolTip.Tip="Cố định khung 480px" />
+                                                            <Button Command="{Binding SetLiveFrameHeight560Command}" Content="560" Background="#1E293B" Foreground="#94A3B8" FontSize="9" Padding="4,2" CornerRadius="3" ToolTip.Tip="Cố định khung 560px" />
+                                                            <Button Command="{Binding SetLiveFrameHeight650Command}" Content="650" Background="#1E293B" Foreground="#94A3B8" FontSize="9" Padding="4,2" CornerRadius="3" ToolTip.Tip="Cố định khung 650px" />
+                                                        </StackPanel>
+
                                                         <Button Command="{Binding ToggleFullscreenPreviewCommand}" Content="⛶ Toàn màn hình" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="6,3" FontSize="10" CornerRadius="3" Margin="0,0,4,0" ToolTip.Tip="Mở toàn màn hình đối chiếu Before / After trực tiếp" />
                                                         <Button Command="{Binding OpenComparisonWindowCommand}" IsVisible="{Binding IsDesktopLifetime}" Content="🗖 Cửa sổ riêng" Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" Padding="6,3" FontSize="10" CornerRadius="3" ToolTip.Tip="Mở đối chiếu Before/After trong cửa sổ riêng biệt" />
                                                     </WrapPanel>
@@ -1692,12 +1702,12 @@
                                                     </Border>
                                                 </WrapPanel>
 
-                                                <!-- Vùng hiển thị Đối chiếu 2 ảnh song song Before / After (Responsive Portrait & Landscape) -->
-                                                <Panel Grid.Row="2" Margin="0,2,0,0">
-                                                    <!-- DUAL VIEW (Song song) -->
+                                                <!-- Vùng hiển thị Đối chiếu 2 ảnh song song Before / After (Responsive Portrait & Landscape với Khung Cố Định) -->
+                                                <Panel Grid.Row="2" Height="{Binding EnhanceLiveFrameHeight}" Margin="0,2,0,0">
+                                                    <!-- DUAL VIEW (Song song Khung cố định) -->
                                                     <UniformGrid Columns="{Binding EnhanceDualColumns}" Rows="{Binding EnhanceDualRows}">
                                                         <!-- Ảnh 1 (Theo thứ tự Swap) -->
-                                                        <Border Background="#090D16" BorderBrush="{Binding FirstDualBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="6" Margin="2">
+                                                        <Border Background="#090D16" BorderBrush="{Binding FirstDualBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="4" Margin="2">
                                                             <Grid RowDefinitions="Auto, *">
                                                                 <Border Grid.Row="0" Background="{Binding FirstDualBadgeBg}" CornerRadius="3" Padding="6,2" HorizontalAlignment="Left" Margin="0,0,0,4">
                                                                     <TextBlock Text="{Binding FirstDualBadgeTitle}" Foreground="#FFFFFF" FontWeight="Bold" FontSize="9" />
@@ -1714,7 +1724,7 @@
                                                         </Border>
 
                                                         <!-- Ảnh 2 (Theo thứ tự Swap) -->
-                                                        <Border Background="#090D16" BorderBrush="{Binding SecondDualBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="6" Margin="2">
+                                                        <Border Background="#090D16" BorderBrush="{Binding SecondDualBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="4" Margin="2">
                                                             <Grid RowDefinitions="Auto, *">
                                                                 <Border Grid.Row="0" Background="{Binding SecondDualBadgeBg}" CornerRadius="3" Padding="6,2" HorizontalAlignment="Left" Margin="0,0,0,4">
                                                                     <TextBlock Text="{Binding SecondDualBadgeTitle}" Foreground="#FFFFFF" FontWeight="Bold" FontSize="9" />
@@ -1733,7 +1743,7 @@
 
                                                     <!-- Nút chuyển ảnh trước nổi trên ảnh -->
                                                     <Button Command="{Binding PreviousImageCommand}" IsEnabled="{Binding CanGoPrevious}"
-                                                            HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"
+                                                            ZIndex="1500" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"
                                                             Width="34" Height="48" CornerRadius="6"
                                                             Background="#B30F172A" BorderBrush="#38BDF8" BorderThickness="1"
                                                             Foreground="#38BDF8" FontWeight="Bold" FontSize="16"
@@ -1743,7 +1753,7 @@
 
                                                     <!-- Nút chuyển ảnh sau nổi trên ảnh -->
                                                     <Button Command="{Binding NextImageCommand}" IsEnabled="{Binding CanGoNext}"
-                                                            HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0"
+                                                            ZIndex="1500" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0"
                                                             Width="34" Height="48" CornerRadius="6"
                                                             Background="#B30F172A" BorderBrush="#38BDF8" BorderThickness="1"
                                                             Foreground="#38BDF8" FontWeight="Bold" FontSize="16"

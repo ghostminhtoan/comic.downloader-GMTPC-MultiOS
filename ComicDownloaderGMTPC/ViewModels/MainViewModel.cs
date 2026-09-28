@@ -291,6 +291,27 @@ public partial class MainViewModel : ViewModelBase
     public string ImmersiveFocusButtonText => IsImmersiveDualFocus ? "⛶ Hiện công cụ" : "⛶ Focus";
 
     [ObservableProperty]
+    private double _enhanceLiveFrameHeight = 480.0; // Chiều cao cố định của khung Live Preview đối chiếu Before / After (px)
+
+    [RelayCommand]
+    public void SetLiveFrameHeight(double height)
+    {
+        EnhanceLiveFrameHeight = Math.Clamp(height, 250.0, 1400.0);
+    }
+
+    [RelayCommand]
+    public void SetLiveFrameHeight400() => EnhanceLiveFrameHeight = 400.0;
+
+    [RelayCommand]
+    public void SetLiveFrameHeight480() => EnhanceLiveFrameHeight = 480.0;
+
+    [RelayCommand]
+    public void SetLiveFrameHeight560() => EnhanceLiveFrameHeight = 560.0;
+
+    [RelayCommand]
+    public void SetLiveFrameHeight650() => EnhanceLiveFrameHeight = 650.0;
+
+    [ObservableProperty]
     private double _enhanceSplitRatio = 0.5; // 0.0 to 1.0
 
     [ObservableProperty]
@@ -1679,6 +1700,7 @@ public partial class MainViewModel : ViewModelBase
             EnhancePreviewInfoText = $"{Path.GetFileName(imagePath)} ({originalBmp.PixelSize.Width}x{originalBmp.PixelSize.Height})";
             EnhanceBeforeInfoText = $"Before: {originalBmp.PixelSize.Width} x {originalBmp.PixelSize.Height}, {origSize / 1024.0:F1} KB";
 
+            ZoomFitPreview();
             UpdatePreviewResult();
         }
         catch (Exception ex)
@@ -1951,6 +1973,14 @@ public partial class MainViewModel : ViewModelBase
     {
         if (EnhanceImagePixelHeight > 0)
         {
+            double availableH = IsPortraitMode ? (EnhanceLiveFrameHeight / 2.0) - 36.0 : EnhanceLiveFrameHeight - 36.0;
+            if (availableH > 50)
+            {
+                double fitZoom = Math.Round(Math.Clamp(availableH / EnhanceImagePixelHeight, 0.1, 2.0), 2);
+                EnhancePreviewZoom = Math.Max(0.15, fitZoom);
+                return;
+            }
+
             double h = EnhanceImagePixelHeight;
             if (h > 4000) EnhancePreviewZoom = 0.25;
             else if (h > 2500) EnhancePreviewZoom = 0.35;
