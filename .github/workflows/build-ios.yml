@@ -16,21 +16,35 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Show & Select Xcode Toolchain
+      - name: Show & Select Xcode Toolchain & Link SDK Aliases
         run: |
           echo "=== Available Xcode versions ==="
           ls -ld /Applications/Xcode* || true
           
-          # Tìm phiên bản Xcode 16.0 hoặc Xcode 16.x nhỏ nhất có sẵn trên runner
-          XCODE_APP=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | head -n 1)
-          if [ -z "$XCODE_APP" ]; then
-            XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | head -n 1)
+          # Sử dụng Xcode mặc định hoặc Xcode 16 có sẵn
+          XCODE_APP="/Applications/Xcode.app"
+          if [ ! -d "$XCODE_APP" ]; then
+            XCODE_APP=$(ls -d /Applications/Xcode*.app 2>/dev/null | head -n 1)
           fi
           echo "Selected Xcode: $XCODE_APP"
           sudo xcode-select -s "$XCODE_APP/Contents/Developer"
           echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> $GITHUB_ENV
           xcode-select -p
           xcodebuild -version
+          
+          # Tạo symlink alias cho mọi phiên bản iPhoneOS SDK (iPhoneOS18.0.sdk, iPhoneOS18.1.sdk, v.v.)
+          for app in /Applications/Xcode*.app; do
+            SDK_BASE="$app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs"
+            if [ -d "$SDK_BASE" ]; then
+              echo "Linking SDK aliases in: $SDK_BASE"
+              for ver in 17.0 17.1 17.2 17.4 17.5 18.0 18.1 18.2 18.3 18.4 18.5 18.6; do
+                sudo ln -sf iPhoneOS.sdk "$SDK_BASE/iPhoneOS${ver}.sdk" 2>/dev/null || true
+              done
+            fi
+          done
+          
+          echo "=== Available Apple SDKs ==="
+          xcodebuild -showsdks || true
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
