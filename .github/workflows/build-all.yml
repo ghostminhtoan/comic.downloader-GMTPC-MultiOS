@@ -98,18 +98,15 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
+      - name: Select Xcode 16.0
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
+
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-
-      - name: Show & Configure Xcode Toolchain
-        run: |
-          echo "=== Installed Xcode Applications ==="
-          ls -ld /Applications/Xcode* || true
-          echo "=== Current Xcode Active Path ==="
-          xcode-select -p
-          xcodebuild -version
 
       - name: Install iOS Workload
         run: |
