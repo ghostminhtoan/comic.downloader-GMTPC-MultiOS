@@ -89,8 +89,8 @@ public class ImageEnhancerService
         // 1. Tính toán ma trận màu kết hợp (Combined Color Matrix: Contrast * Saturation + Brightness)
         // Contrast [-100..100] -> hệ số c (c = 1.0 khi Contrast = 0)
         float c = options.Contrast >= 0 ? 1.0f + (options.Contrast / 50.0f) : (100.0f + options.Contrast) / 100.0f;
-        // Brightness [-100..100] -> độ dịch sáng kênh màu byte [-255..+255] (b = 0 khi Brightness = 0)
-        float b = options.Brightness * 2.55f;
+        // Brightness [-100..100] -> độ dịch sáng chuẩn hóa [-1.0 .. +1.0] trong không gian màu Skia (b = 0 khi Brightness = 0)
+        float b = options.Brightness / 100.0f;
         // Saturation [0..200] -> hệ số bão hòa s [0.0..3.0] (s = 1.0 khi Saturation = 100)
         float s = Math.Clamp(options.Saturation / 100.0f, 0.0f, 3.0f);
 
@@ -103,9 +103,9 @@ public class ImageEnhancerService
         float sg = (1.0f - s) * gWeight;
         float sb = (1.0f - s) * bWeight;
 
-        // Điểm xoay tương phản (Pivot) chuẩn hóa quanh 128 (xám trung tính):
-        // R' = c * (R - 128) + 128 + b = c * R + (128 * (1 - c) + b)
-        float t = 128.0f * (1.0f - c) + b;
+        // Điểm xoay tương phản (Pivot) chuẩn hóa quanh 0.5 (xám trung tính 50% trong không gian [0.0 .. 1.0]):
+        // R' = c * (R - 0.5) + 0.5 + b = c * R + (0.5 * (1 - c) + b)
+        float t = 0.5f * (1.0f - c) + b;
 
         float[] colorMatrix = new float[]
         {
