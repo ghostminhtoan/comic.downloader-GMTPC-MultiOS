@@ -16,10 +16,17 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16.0
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '16.0'
+      - name: Select Active Xcode Toolchain
+        run: |
+          echo "=== Available Xcode versions ==="
+          ls -ld /Applications/Xcode* || true
+          XCODE_16=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | head -n 1)
+          if [ -n "$XCODE_16" ]; then
+            echo "Selecting: $XCODE_16"
+            sudo xcode-select -s "$XCODE_16"
+          fi
+          xcode-select -p
+          xcodebuild -version
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4

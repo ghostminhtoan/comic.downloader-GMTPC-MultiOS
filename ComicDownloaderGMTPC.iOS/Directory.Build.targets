@@ -1,5 +1,8 @@
 <Project>
-  <!-- File Directory.Build.targets được MSBuild nạp sau cùng (sau mọi SDK targets), đảm bảo ghi đè 100% target kiểm tra phiên bản Xcode -->
+  <!-- Vô hiệu hóa triệt để mọi target kiểm tra phiên bản Xcode của Xamarin/Microsoft.iOS SDK -->
   <Target Name="_CheckForInvalidXcodeVersion" />
   <Target Name="_CheckForInvalidMacCatalystXcodeVersion" />
+  <Target Name="_CheckForInvalidXcode" />
+  <Target Name="_CheckForXcodeVersion" />
+  <Target Name="_CheckXcodeVersion" />
 </Project>
