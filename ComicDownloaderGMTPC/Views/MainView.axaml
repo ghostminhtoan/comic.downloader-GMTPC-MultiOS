@@ -1654,13 +1654,32 @@
                                                         <Slider Width="90" Minimum="0.01" Maximum="0.99" Value="{Binding EnhanceSplitRatio}" Height="20" VerticalAlignment="Center" ToolTip.Tip="Kéo để điều chỉnh vị trí rèm cắt Before / After" />
                                                     </WrapPanel>
 
-                                                    <!-- Cụm 3: Presets nhanh dạng WrapPanel chống tràn mép -->
+                                                    <!-- Cụm 3: Presets nhanh & Custom Presets dạng WrapPanel chống tràn mép -->
                                                     <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,6">
                                                         <TextBlock Text="⚡ Presets:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
                                                         <Button Command="{Binding ApplyPresetDefaultCommand}" Content="🔘 Gốc" Background="#1E293B" Foreground="#E2E8F0" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Thông số gốc" Margin="0,0,3,2" />
                                                         <Button Command="{Binding ApplyPresetOldScanCommand}" Content="📜 Khử ố" Background="#854D0E" Foreground="#FEF08A" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Làm trắng nền giấy scan cũ" Margin="0,0,3,2" />
                                                         <Button Command="{Binding ApplyPresetWebtoonCommand}" Content="🎨 Webtoon" Background="#831843" Foreground="#FBCFE8" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Rực rỡ màu sắc webtoon" Margin="0,0,3,2" />
-                                                        <Button Command="{Binding ApplyPresetNightCommand}" Content="🌙 Đọc đêm" Background="#1E1B4B" Foreground="#C7D2FE" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Hạ sáng dịu mắt" Margin="0,0,0,2" />
+                                                        <Button Command="{Binding ApplyPresetNightCommand}" Content="🌙 Đọc đêm" Background="#1E1B4B" Foreground="#C7D2FE" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Hạ sáng dịu mắt" Margin="0,0,4,2" />
+
+                                                        <!-- 3 Custom Presets lưu trữ cá nhân -->
+                                                        <TextBlock Text="💾" Foreground="#38BDF8" FontSize="10" VerticalAlignment="Center" Margin="2,0,3,2" ToolTip.Tip="Custom Presets" />
+                                                        <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,3,2">
+                                                            <TextBox Text="{Binding UserPreset1Name}" Width="56" Height="22" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 1" />
+                                                            <Button Command="{Binding SaveUserPreset1Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="22" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 1" />
+                                                            <Button Command="{Binding LoadUserPreset1Command}" Content="📂" Background="#0D9488" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="22" CornerRadius="3" ToolTip.Tip="Tải Preset 1" />
+                                                        </StackPanel>
+                                                        <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,3,2">
+                                                            <TextBox Text="{Binding UserPreset2Name}" Width="56" Height="22" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 2" />
+                                                            <Button Command="{Binding SaveUserPreset2Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="22" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 2" />
+                                                            <Button Command="{Binding LoadUserPreset2Command}" Content="📂" Background="#0D9488" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="22" CornerRadius="3" ToolTip.Tip="Tải Preset 2" />
+                                                        </StackPanel>
+                                                        <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,3,2">
+                                                            <TextBox Text="{Binding UserPreset3Name}" Width="56" Height="22" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 3" />
+                                                            <Button Command="{Binding SaveUserPreset3Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="22" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 3" />
+                                                            <Button Command="{Binding LoadUserPreset3Command}" Content="📂" Background="#0D9488" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="22" CornerRadius="3" ToolTip.Tip="Tải Preset 3" />
+                                                        </StackPanel>
+                                                        <Button Command="{Binding ResetEnhanceSettingsCommand}" Content="🔄" Background="#1E293B" Foreground="#94A3B8" FontSize="9" Padding="5,2" Height="22" CornerRadius="3" VerticalAlignment="Center" Margin="0,0,0,2" ToolTip.Tip="Đặt lại toàn bộ thông số về mặc định" />
                                                     </WrapPanel>
                                                     
                                                     <!-- Cụm 4: Bộ điều khiển Zoom & Nút Toàn Màn Hình / Cửa Sổ Mới -->

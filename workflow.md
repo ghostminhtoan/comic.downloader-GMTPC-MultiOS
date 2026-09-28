@@ -826,6 +826,30 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
   - Bước 1: `build.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`) với `0 Warning(s), 0 Error(s)`.
   - Bước 2: Khởi chạy file thực tế `publish\windows\ComicDownloaderGMTPC.Desktop.exe` đạt trạng thái `Responding: True`.
 
+### 15.24. Tối Ưu Hóa Tương Tác Kéo Rèm Trượt Tự Do Trên Ảnh, Cơ Chế Pan/Pinch-to-Zoom Khi Phóng To & Đồng Bộ Toàn Bộ Preset Cả 2 Mode
+- **Bối cảnh & Vấn đề**:
+  1. **Không Pan được khi Zoom**: Khi người dùng phóng to ảnh (Zoom In, 100%, 150%, 200%...), thao tác kéo rê chuột hoặc vuốt chạm ngón tay trên màn hình Android / Windows không thể dịch chuyển (Pan) góc nhìn bức ảnh do xung đột PointerCapture và cơ chế tính Offset của ScrollViewer.
+  2. **Thanh rèm không kéo thả tự do trong ảnh preview**: Ở chế độ Split View, sự kiện chuột trái và chạm 1 ngón bị bộ gesture chung của ScrollViewer chặn trước (Tunneling), làm cho thao tác kéo rèm trực tiếp trên bức ảnh không hoạt động tự do.
+  3. **Thiếu Preset trước và sau Fullscreen**: Thanh công cụ Tab Xử Lý Ảnh chính (trước khi full screen) chỉ hiển thị 4 nút preset cơ bản, thiếu cụm 3 Custom Presets (`💾 Preset 1, 2, 3` kèm đổi tên, lưu trữ `💾` và nạp `📂`) cũng như nút `🔄 Đặt lại` so với giao diện Fullscreen modal và Cửa sổ riêng.
+- **Giải pháp & Kiến trúc thực hiện**:
+  1. **Hệ Thống Tương Tác Rèm Trượt Chuyên Biệt (`SetupSplitCurtainInteractive`)**:
+     - Tách riêng hoàn toàn luồng tương tác Split View: Chuột trái (Left Button) hoặc cảm ứng 1 ngón chạm (Touch 1-point) trực tiếp trên ảnh được dành 100% cho việc **Kéo Rèm Trượt Tự Do Trước / Sau**.
+     - Tọa độ con trỏ chuột / cảm ứng được quy đổi tức thì theo không gian local của ảnh (`splitPanel`), tính toán tỷ lệ cắt `EnhanceSplitRatio` và cập nhật tức thì 120 FPS không độ trễ.
+     - Chuột phải (Right drag), chuột giữa (Middle drag) hoặc chạm 2 ngón (Touch 2-point): Chuyển đổi thông minh sang Pan góc nhìn và Pinch-to-Zoom khi phóng to ảnh.
+  2. **Hệ Thống Pan & Pinch-to-Zoom Đa Điểm Chuẩn Xác (`SetupPanAndZoomGesture`)**:
+     - Xây dựng lại thuật toán Pan cho Dual View (Song song) và Single View (Ảnh đơn): Tính toán chính xác độ dịch chuyển `delta` dựa trên toạ độ khung nhìn của `ScrollViewer`, giới hạn an toàn trong khoảng `[0, Extent - Viewport]`.
+     - Đồng bộ cuộn 2 chiều mượt mà giữa ảnh Before và ảnh After trong Dual View.
+     - Hỗ trợ đầy đủ cảm ứng đa điểm: Vuốt 1 ngón để Pan mượt mà trên Android, 2 ngón tay Pinch-to-Zoom co giãn mượt mà theo khoảng cách đồng thời Pan theo trung điểm 2 ngón.
+  3. **Đồng Bộ Hoàn Chỉnh Toàn Bộ Presets Cả 2 Mode (Trước & Sau Fullscreen)**:
+     - Tích hợp đầy đủ cả **One-Click Comic Presets** (`🔘 Gốc/Mặc định`, `📜 Khử ố scan`, `🎨 Webtoon rực rỡ`, `🌙 Đọc đêm dịu mắt`) VÀ **Bộ 3 Custom Presets Cá Nhân** (`💾 Preset 1, 2, 3` với ô đổi tên, nút Lưu `💾`, nút Nạp `📂`) cùng nút `🔄 Đặt lại` vào **cả 3 giao diện**:
+       + Thanh công cụ Tab Xử Lý Ảnh chính (`MainView.axaml`).
+       + Modal Fullscreen Đối Chiếu Tràn Màn Hình (`MainView.axaml`).
+       + Cửa Sổ So Sánh Ảnh Độc Lập (`EnhanceComparisonWindow.axaml`).
+- **Nghiệm Thu Toàn Diện**:
+  - Bước 1: `build.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`) với `0 Warning(s), 0 Error(s)`.
+  - Bước 2: Khởi chạy file thực tế `publish\windows\ComicDownloaderGMTPC.Desktop.exe` đạt trạng thái `Responding: True`.
+
+
 
 
 

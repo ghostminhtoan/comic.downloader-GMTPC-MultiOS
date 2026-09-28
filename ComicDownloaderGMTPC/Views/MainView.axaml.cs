@@ -53,47 +53,17 @@ public partial class MainView : UserControl
         {
             _isSyncScrollSetup = true;
 
-            // 1. Đồng bộ Pan & 2 ngón Pinch-to-Zoom cho Live Preview trong Tab Xử Lý Ảnh
-            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("LiveBeforeScrollViewer"), this.FindControl<ScrollViewer>("LiveAfterScrollViewer"));
-            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("LiveSplitScrollViewer"));
-            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("LiveSingleScrollViewer"));
+            // 1. Dual View (Song song Before / After): Pan & 2-finger Pinch-to-Zoom
+            SetupPanAndZoomGesture(this.FindControl<ScrollViewer>("LiveBeforeScrollViewer"), this.FindControl<ScrollViewer>("LiveAfterScrollViewer"));
+            SetupPanAndZoomGesture(this.FindControl<ScrollViewer>("ModalBeforeScrollViewer"), this.FindControl<ScrollViewer>("ModalAfterScrollViewer"));
 
-            // Đăng ký tương tác kéo rèm trực tiếp trên ảnh Split View
-            SetupSplitCurtainDrag(this.FindControl<Panel>("LiveSplitPanel"));
-            SetupSplitCurtainDrag(this.FindControl<Panel>("ModalSplitPanel"));
+            // 2. Split View (Rèm trượt): Kéo rèm trượt trực tiếp trên ảnh + Pan/Zoom 2 ngón/chuột phải
+            SetupSplitCurtainInteractive(this.FindControl<ScrollViewer>("LiveSplitScrollViewer"), this.FindControl<Panel>("LiveSplitPanel"));
+            SetupSplitCurtainInteractive(this.FindControl<ScrollViewer>("ModalSplitScrollViewer"), this.FindControl<Panel>("ModalSplitPanel"));
 
-            var liveSingle = this.FindControl<ScrollViewer>("LiveSingleScrollViewer");
-            if (liveSingle != null)
-            {
-                liveSingle.AddHandler(PointerPressedEvent, (s, ev) =>
-                {
-                    if (DataContext is MainViewModel vm && vm.IsSingleView) vm.IsSingleShowingBefore = true;
-                }, RoutingStrategies.Tunnel);
-                liveSingle.AddHandler(PointerReleasedEvent, (s, ev) =>
-                {
-                    if (DataContext is MainViewModel vm && vm.IsSingleView) vm.IsSingleShowingBefore = false;
-                }, RoutingStrategies.Tunnel);
-            }
-
-            // 2. Đồng bộ Pan & 2 ngón Pinch-to-Zoom cho Modal Đối Chiếu Toàn Màn Hình (Dual View)
-            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("ModalBeforeScrollViewer"), this.FindControl<ScrollViewer>("ModalAfterScrollViewer"));
-
-            // 3. Pan & 2 ngón Pinch-to-Zoom cho Split View & Single View trong Modal Toàn Màn Hình
-            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("ModalSplitScrollViewer"));
-            SetupPinchAndPanGesture(this.FindControl<ScrollViewer>("ModalSingleScrollViewer"));
-
-            var modalSingle = this.FindControl<ScrollViewer>("ModalSingleScrollViewer");
-            if (modalSingle != null)
-            {
-                modalSingle.AddHandler(PointerPressedEvent, (s, ev) =>
-                {
-                    if (DataContext is MainViewModel vm && vm.IsSingleView) vm.IsSingleShowingBefore = true;
-                }, RoutingStrategies.Tunnel);
-                modalSingle.AddHandler(PointerReleasedEvent, (s, ev) =>
-                {
-                    if (DataContext is MainViewModel vm && vm.IsSingleView) vm.IsSingleShowingBefore = false;
-                }, RoutingStrategies.Tunnel);
-            }
+            // 3. Single View (Ảnh đơn): Pan & Zoom tự do
+            SetupPanAndZoomGesture(this.FindControl<ScrollViewer>("LiveSingleScrollViewer"));
+            SetupPanAndZoomGesture(this.FindControl<ScrollViewer>("ModalSingleScrollViewer"));
         }
 
         // Khi bất kỳ ô nhập liệu nào (TextBox, NumericUpDown, ComboBox) nhận focus trên Android / Desktop:
@@ -114,7 +84,246 @@ public partial class MainView : UserControl
         }, RoutingStrategies.Bubble);
     }
 
-    private void SetupPinchAndPanGesture(params ScrollViewer?[] viewers)
+    /// <summary>
+    /// Bộ điều khiển tương tác Rèm Trượt (Split View):
+    /// - Chuột trái / 1 ngón chạm: Kéo rèm chia Before / After tự do 120 FPS trực tiếp trên ảnh.
+    /// - Chuột phải / chuột giữa / 2 ngón chạm: Pan góc nhìn & Pinch-to-zoom khi phóng to ảnh.
+    /// - Cuộn chuột: Phóng to / Thu nhỏ.
+    /// </summary>
+    private void SetupSplitCurtainInteractive(ScrollViewer? viewer, Panel? splitPanel)
+    {
+        if (viewer == null || splitPanel == null) return;
+
+        bool isDraggingCurtain = false;
+        bool isPanning = false;
+        bool isPinching = false;
+        Point panStartPoint = default;
+        Vector panStartOffset = default;
+        Point initialPinchMidPoint = default;
+        Vector initialPinchOffset = default;
+        double initialPinchDistance = 0;
+        double initialZoom = 1.0;
+
+        var activePointers = new Dictionary<long, Point>();
+
+        static bool IsScrollBarElement(object? source, Visual? container)
+        {
+            if (source is Visual v)
+            {
+                Visual? cur = v;
+                while (cur != null && cur != container)
+                {
+                    if (cur is ScrollBar) return true;
+                    cur = cur.GetVisualParent();
+                }
+            }
+            return false;
+        }
+
+        static double GetDistance(Point p1, Point p2)
+        {
+            double dx = p1.X - p2.X;
+            double dy = p1.Y - p2.Y;
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        void UpdateSplitPosition(Point localPos)
+        {
+            if (DataContext is not MainViewModel vm) return;
+
+            double w = splitPanel.Bounds.Width > 0 ? splitPanel.Bounds.Width : vm.EnhanceImagePixelWidth;
+            double h = splitPanel.Bounds.Height > 0 ? splitPanel.Bounds.Height : vm.EnhanceImagePixelHeight;
+            if (w <= 0 || h <= 0) return;
+
+            double ratio = vm.IsSplitVerticalOrientation
+                ? (localPos.Y / h)
+                : (localPos.X / w);
+
+            vm.EnhanceSplitRatio = Math.Clamp(ratio, 0.01, 0.99);
+        }
+
+        // Tương tác kéo rèm trực tiếp trên Panel ảnh
+        splitPanel.AddHandler(InputElement.PointerPressedEvent, (s, ev) =>
+        {
+            if (DataContext is MainViewModel vm && vm.IsSplitView)
+            {
+                var pt = ev.GetCurrentPoint(splitPanel);
+                if (pt.Properties.IsLeftButtonPressed || ev.Pointer.Type == PointerType.Touch)
+                {
+                    isDraggingCurtain = true;
+                    UpdateSplitPosition(pt.Position);
+                    ev.Pointer.Capture(splitPanel);
+                    ev.Handled = true;
+                }
+            }
+        }, RoutingStrategies.Tunnel);
+
+        splitPanel.AddHandler(InputElement.PointerMovedEvent, (s, ev) =>
+        {
+            if (isDraggingCurtain && DataContext is MainViewModel vm && vm.IsSplitView)
+            {
+                var pt = ev.GetCurrentPoint(splitPanel);
+                UpdateSplitPosition(pt.Position);
+                ev.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+
+        splitPanel.AddHandler(InputElement.PointerReleasedEvent, (s, ev) =>
+        {
+            if (isDraggingCurtain)
+            {
+                isDraggingCurtain = false;
+                ev.Pointer.Capture(null);
+                ev.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
+
+        splitPanel.AddHandler(InputElement.PointerCaptureLostEvent, (s, ev) =>
+        {
+            isDraggingCurtain = false;
+        }, RoutingStrategies.Tunnel);
+
+        // Tương tác Pan & Zoom khi dùng chuột phải, chuột giữa hoặc 2 ngón tay trên ScrollViewer
+        viewer.AddHandler(InputElement.PointerPressedEvent, (s, ev) =>
+        {
+            if (IsScrollBarElement(ev.Source, viewer)) return;
+            if (isDraggingCurtain) return;
+
+            var pt = ev.GetCurrentPoint(viewer);
+            if (pt.Properties.IsRightButtonPressed || pt.Properties.IsMiddleButtonPressed || ev.Pointer.Type == PointerType.Touch)
+            {
+                if (ev.Pointer.Type == PointerType.Mouse) activePointers.Clear();
+                activePointers[ev.Pointer.Id] = pt.Position;
+
+                if (activePointers.Count == 1 && (pt.Properties.IsRightButtonPressed || pt.Properties.IsMiddleButtonPressed))
+                {
+                    isPanning = true;
+                    isPinching = false;
+                    panStartPoint = pt.Position;
+                    panStartOffset = viewer.Offset;
+                    if (ev.Pointer.Type == PointerType.Mouse) ev.Pointer.Capture(viewer);
+                    ev.Handled = true;
+                }
+                else if (activePointers.Count >= 2 && DataContext is MainViewModel vm)
+                {
+                    // 2 ngón tay chạm trên màn hình cảm ứng: Pinch-to-Zoom & Pan 2 ngón
+                    isPanning = true;
+                    isPinching = true;
+                    isDraggingCurtain = false;
+                    var pts = activePointers.Values.Take(2).ToArray();
+                    initialPinchDistance = Math.Max(10.0, GetDistance(pts[0], pts[1]));
+                    initialPinchMidPoint = new Point((pts[0].X + pts[1].X) / 2.0, (pts[0].Y + pts[1].Y) / 2.0);
+                    initialPinchOffset = viewer.Offset;
+                    initialZoom = vm.EnhancePreviewZoom;
+                    try { ev.Pointer.Capture(null); } catch { }
+                    ev.Handled = true;
+                }
+            }
+        }, RoutingStrategies.Tunnel);
+
+        viewer.AddHandler(InputElement.PointerMovedEvent, (s, ev) =>
+        {
+            if (IsScrollBarElement(ev.Source, viewer)) return;
+            if (isDraggingCurtain) return;
+
+            if (activePointers.ContainsKey(ev.Pointer.Id))
+            {
+                var curPos = ev.GetCurrentPoint(viewer).Position;
+                activePointers[ev.Pointer.Id] = curPos;
+
+                if (activePointers.Count >= 2 && DataContext is MainViewModel vm)
+                {
+                    var pts = activePointers.Values.Take(2).ToArray();
+                    double curDistance = GetDistance(pts[0], pts[1]);
+                    var curMidPoint = new Point((pts[0].X + pts[1].X) / 2.0, (pts[0].Y + pts[1].Y) / 2.0);
+
+                    if (!isPinching)
+                    {
+                        isPanning = true;
+                        isPinching = true;
+                        initialPinchDistance = Math.Max(10.0, curDistance);
+                        initialPinchMidPoint = curMidPoint;
+                        initialPinchOffset = viewer.Offset;
+                        initialZoom = vm.EnhancePreviewZoom;
+                    }
+
+                    if (initialPinchDistance > 5)
+                    {
+                        double scaleFactor = curDistance / initialPinchDistance;
+                        double targetZoom = Math.Clamp(Math.Round(initialZoom * scaleFactor, 2), 0.25, 5.0);
+                        if (Math.Abs(targetZoom - vm.EnhancePreviewZoom) >= 0.01)
+                        {
+                            vm.EnhancePreviewZoom = targetZoom;
+                        }
+                    }
+
+                    var midDelta = initialPinchMidPoint - curMidPoint;
+                    double maxOffsetX = Math.Max(0, viewer.Extent.Width - viewer.Viewport.Width);
+                    double maxOffsetY = Math.Max(0, viewer.Extent.Height - viewer.Viewport.Height);
+                    double newX = Math.Clamp(initialPinchOffset.X + midDelta.X, 0, maxOffsetX);
+                    double newY = Math.Clamp(initialPinchOffset.Y + midDelta.Y, 0, maxOffsetY);
+                    viewer.Offset = new Vector(newX, newY);
+                    ev.Handled = true;
+                }
+                else if (isPanning && !isPinching)
+                {
+                    var delta = panStartPoint - curPos;
+                    double maxOffsetX = Math.Max(0, viewer.Extent.Width - viewer.Viewport.Width);
+                    double maxOffsetY = Math.Max(0, viewer.Extent.Height - viewer.Viewport.Height);
+                    double newX = Math.Clamp(panStartOffset.X + delta.X, 0, maxOffsetX);
+                    double newY = Math.Clamp(panStartOffset.Y + delta.Y, 0, maxOffsetY);
+                    viewer.Offset = new Vector(newX, newY);
+                    ev.Handled = true;
+                }
+            }
+        }, RoutingStrategies.Tunnel);
+
+        viewer.AddHandler(InputElement.PointerReleasedEvent, (s, ev) =>
+        {
+            activePointers.Remove(ev.Pointer.Id);
+            if (activePointers.Count == 0)
+            {
+                isPanning = false;
+                isPinching = false;
+                try { ev.Pointer.Capture(null); } catch { }
+            }
+        }, RoutingStrategies.Tunnel);
+
+        viewer.AddHandler(InputElement.PointerCaptureLostEvent, (s, ev) =>
+        {
+            activePointers.Remove(ev.Pointer.Id);
+            if (activePointers.Count == 0)
+            {
+                isPanning = false;
+                isPinching = false;
+            }
+        }, RoutingStrategies.Tunnel);
+
+        viewer.AddHandler(InputElement.PointerWheelChangedEvent, (s, ev) =>
+        {
+            if (DataContext is MainViewModel vm)
+            {
+                if (ev.Delta.Y > 0)
+                {
+                    vm.ZoomInPreview();
+                    ev.Handled = true;
+                }
+                else if (ev.Delta.Y < 0)
+                {
+                    vm.ZoomOutPreview();
+                    ev.Handled = true;
+                }
+            }
+        }, RoutingStrategies.Tunnel);
+    }
+
+    /// <summary>
+    /// Bộ điều khiển Pan (kéo rê góc nhìn) và Zoom cho Dual View & Single View:
+    /// - Chuột trái / 1 ngón chạm / chuột phải / chuột giữa: Kéo rê (Pan) góc nhìn bức ảnh mượt mà 2 chiều.
+    /// - 2 ngón tay chạm (Pinch-to-zoom): Phóng to / Thu nhỏ & Pan đồng thời.
+    /// - Cuộn chuột: Phóng to / Thu nhỏ.
+    /// </summary>
+    private void SetupPanAndZoomGesture(params ScrollViewer?[] viewers)
     {
         var validViewers = viewers.Where(v => v != null).Cast<ScrollViewer>().ToList();
         if (validViewers.Count == 0) return;
@@ -129,10 +338,9 @@ public partial class MainView : UserControl
         double initialPinchDistance = 0;
         double initialZoom = 1.0;
 
-        // Bảng theo dõi các con trỏ chạm đa điểm (Multi-touch Touch Tracking)
         var activePointers = new Dictionary<long, Point>();
 
-        // Đồng bộ cuộn giữa các ScrollViewer nếu có nhiều hơn 1
+        // Đồng bộ cuộn giữa các ScrollViewer trong nhóm (Before & After)
         if (validViewers.Count > 1)
         {
             foreach (var v in validViewers)
@@ -151,7 +359,6 @@ public partial class MainView : UserControl
             }
         }
 
-        // Kiểm tra xem nguồn sự kiện có nằm trên thanh ScrollBar (Track/Thumb/Buttons) hay không
         static bool IsScrollBarElement(object? source, Visual? container)
         {
             if (source is Visual v)
@@ -175,43 +382,36 @@ public partial class MainView : UserControl
 
         void OnPressed(object? sender, PointerPressedEventArgs ev)
         {
-            if (IsScrollBarElement(ev.Source, sender as Visual)) return;
+            var currentViewer = sender as ScrollViewer ?? validViewers[0];
+            if (IsScrollBarElement(ev.Source, currentViewer)) return;
 
-            var p = ev.GetCurrentPoint(this);
-            if (p.Properties.IsLeftButtonPressed || p.Properties.IsMiddleButtonPressed || ev.Pointer.Type == PointerType.Touch)
+            var p = ev.GetCurrentPoint(currentViewer);
+            if (p.Properties.IsLeftButtonPressed || p.Properties.IsMiddleButtonPressed || p.Properties.IsRightButtonPressed || ev.Pointer.Type == PointerType.Touch)
             {
-                if (ev.Pointer.Type == PointerType.Mouse)
-                {
-                    activePointers.Clear();
-                }
-
+                if (ev.Pointer.Type == PointerType.Mouse) activePointers.Clear();
                 activePointers[ev.Pointer.Id] = p.Position;
-                var firstViewer = validViewers[0];
 
                 if (activePointers.Count == 1)
                 {
-                    // 1 ngón tay / Chuột: Chế độ Pan (kéo rê ảnh tự do 2 chiều)
                     isDragging = true;
                     isPinching = false;
                     dragStartPoint = p.Position;
-                    dragStartOffset = firstViewer.Offset;
+                    dragStartOffset = currentViewer.Offset;
 
-                    // Chỉ capture khi là chuột máy tính, KHÔNG capture trên Touch để không khóa đa chạm 2 ngón trên Android
                     if (ev.Pointer.Type == PointerType.Mouse)
                     {
-                        ev.Pointer.Capture(sender as IInputElement);
+                        ev.Pointer.Capture(currentViewer);
                     }
                     ev.Handled = true;
                 }
                 else if (activePointers.Count >= 2 && DataContext is MainViewModel vm)
                 {
-                    // 2 ngón tay trên Android / Màn hình cảm ứng: Kích hoạt Pinch-to-Zoom & Pan 2 ngón đồng thời
                     isDragging = true;
                     isPinching = true;
                     var pts = activePointers.Values.Take(2).ToArray();
                     initialPinchDistance = Math.Max(10.0, GetDistance(pts[0], pts[1]));
                     initialPinchMidPoint = new Point((pts[0].X + pts[1].X) / 2.0, (pts[0].Y + pts[1].Y) / 2.0);
-                    initialPinchOffset = firstViewer.Offset;
+                    initialPinchOffset = currentViewer.Offset;
                     initialZoom = vm.EnhancePreviewZoom;
 
                     try { ev.Pointer.Capture(null); } catch { }
@@ -222,13 +422,13 @@ public partial class MainView : UserControl
 
         void OnMoved(object? sender, PointerEventArgs ev)
         {
-            if (IsScrollBarElement(ev.Source, sender as Visual)) return;
+            var currentViewer = sender as ScrollViewer ?? validViewers[0];
+            if (IsScrollBarElement(ev.Source, currentViewer)) return;
 
             if (activePointers.ContainsKey(ev.Pointer.Id))
             {
-                var curPos = ev.GetCurrentPoint(this).Position;
+                var curPos = ev.GetCurrentPoint(currentViewer).Position;
                 activePointers[ev.Pointer.Id] = curPos;
-                var firstViewer = validViewers[0];
 
                 if (activePointers.Count >= 2 && DataContext is MainViewModel vm)
                 {
@@ -242,34 +442,29 @@ public partial class MainView : UserControl
                         isPinching = true;
                         initialPinchDistance = Math.Max(10.0, curDistance);
                         initialPinchMidPoint = curMidPoint;
-                        initialPinchOffset = firstViewer.Offset;
+                        initialPinchOffset = currentViewer.Offset;
                         initialZoom = vm.EnhancePreviewZoom;
                     }
 
-                    // 1. Phóng to / Thu nhỏ (Pinch-to-Zoom) theo tỷ lệ khoảng cách 2 ngón tay
                     if (initialPinchDistance > 5)
                     {
                         double scaleFactor = curDistance / initialPinchDistance;
-                        double targetZoom = Math.Clamp(initialZoom * scaleFactor, 0.25, 5.0);
-                        targetZoom = Math.Round(targetZoom, 2);
+                        double targetZoom = Math.Clamp(Math.Round(initialZoom * scaleFactor, 2), 0.25, 5.0);
                         if (Math.Abs(targetZoom - vm.EnhancePreviewZoom) >= 0.01)
                         {
                             vm.EnhancePreviewZoom = targetZoom;
                         }
                     }
 
-                    // 2. Kéo rê (Pan) đồng thời theo độ dịch chuyển của trung điểm 2 ngón tay
                     var midDelta = initialPinchMidPoint - curMidPoint;
-                    var newOffset = new Vector(
-                        Math.Max(0, initialPinchOffset.X + midDelta.X),
-                        Math.Max(0, initialPinchOffset.Y + midDelta.Y)
-                    );
+                    double maxOffsetX = Math.Max(0, currentViewer.Extent.Width - currentViewer.Viewport.Width);
+                    double maxOffsetY = Math.Max(0, currentViewer.Extent.Height - currentViewer.Viewport.Height);
+                    double newX = Math.Clamp(initialPinchOffset.X + midDelta.X, 0, maxOffsetX);
+                    double newY = Math.Clamp(initialPinchOffset.Y + midDelta.Y, 0, maxOffsetY);
+                    var newOffset = new Vector(newX, newY);
 
                     isSyncing = true;
-                    foreach (var v in validViewers)
-                    {
-                        v.Offset = newOffset;
-                    }
+                    foreach (var v in validViewers) v.Offset = newOffset;
                     isSyncing = false;
 
                     ev.Handled = true;
@@ -277,16 +472,14 @@ public partial class MainView : UserControl
                 else if (isDragging && !isPinching)
                 {
                     var delta = dragStartPoint - curPos;
-                    var newOffset = new Vector(
-                        Math.Max(0, dragStartOffset.X + delta.X),
-                        Math.Max(0, dragStartOffset.Y + delta.Y)
-                    );
+                    double maxOffsetX = Math.Max(0, currentViewer.Extent.Width - currentViewer.Viewport.Width);
+                    double maxOffsetY = Math.Max(0, currentViewer.Extent.Height - currentViewer.Viewport.Height);
+                    double newX = Math.Clamp(dragStartOffset.X + delta.X, 0, maxOffsetX);
+                    double newY = Math.Clamp(dragStartOffset.Y + delta.Y, 0, maxOffsetY);
+                    var newOffset = new Vector(newX, newY);
 
                     isSyncing = true;
-                    foreach (var v in validViewers)
-                    {
-                        v.Offset = newOffset;
-                    }
+                    foreach (var v in validViewers) v.Offset = newOffset;
                     isSyncing = false;
 
                     ev.Handled = true;
@@ -297,14 +490,14 @@ public partial class MainView : UserControl
         void OnReleased(object? sender, PointerReleasedEventArgs ev)
         {
             activePointers.Remove(ev.Pointer.Id);
-            var firstViewer = validViewers[0];
+            var currentViewer = sender as ScrollViewer ?? validViewers[0];
 
             if (activePointers.Count == 1)
             {
                 isPinching = false;
                 isDragging = true;
                 dragStartPoint = activePointers.Values.First();
-                dragStartOffset = firstViewer.Offset;
+                dragStartOffset = currentViewer.Offset;
             }
             else if (activePointers.Count == 0)
             {
@@ -349,72 +542,5 @@ public partial class MainView : UserControl
             v.AddHandler(PointerCaptureLostEvent, OnCaptureLost, RoutingStrategies.Tunnel);
             v.AddHandler(PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel);
         }
-    }
-
-    private void SetupSplitCurtainDrag(Panel? splitPanel)
-    {
-        if (splitPanel == null) return;
-
-        bool isDraggingSplit = false;
-
-        void UpdateSplitPosition(Point p)
-        {
-            if (DataContext is not MainViewModel vm) return;
-
-            double w = splitPanel.Bounds.Width;
-            double h = splitPanel.Bounds.Height;
-            if (w <= 0 || h <= 0)
-            {
-                w = vm.EnhanceImagePixelWidth;
-                h = vm.EnhanceImagePixelHeight;
-            }
-            if (w <= 0 || h <= 0) return;
-
-            double ratio = vm.IsSplitVerticalOrientation
-                ? (p.Y / h)
-                : (p.X / w);
-
-            vm.EnhanceSplitRatio = Math.Clamp(ratio, 0.01, 0.99);
-        }
-
-        splitPanel.AddHandler(InputElement.PointerPressedEvent, (s, ev) =>
-        {
-            if (DataContext is MainViewModel vm && vm.IsSplitView)
-            {
-                var pt = ev.GetCurrentPoint(splitPanel);
-                if (pt.Properties.IsLeftButtonPressed || ev.Pointer.Type == PointerType.Touch)
-                {
-                    isDraggingSplit = true;
-                    UpdateSplitPosition(pt.Position);
-                    ev.Pointer.Capture(splitPanel);
-                    ev.Handled = true;
-                }
-            }
-        }, RoutingStrategies.Tunnel);
-
-        splitPanel.AddHandler(InputElement.PointerMovedEvent, (s, ev) =>
-        {
-            if (isDraggingSplit && DataContext is MainViewModel vm && vm.IsSplitView)
-            {
-                var pt = ev.GetCurrentPoint(splitPanel);
-                UpdateSplitPosition(pt.Position);
-                ev.Handled = true;
-            }
-        }, RoutingStrategies.Tunnel);
-
-        splitPanel.AddHandler(InputElement.PointerReleasedEvent, (s, ev) =>
-        {
-            if (isDraggingSplit)
-            {
-                isDraggingSplit = false;
-                ev.Pointer.Capture(null);
-                ev.Handled = true;
-            }
-        }, RoutingStrategies.Tunnel);
-
-        splitPanel.AddHandler(InputElement.PointerCaptureLostEvent, (s, ev) =>
-        {
-            isDraggingSplit = false;
-        }, RoutingStrategies.Tunnel);
     }
 }
