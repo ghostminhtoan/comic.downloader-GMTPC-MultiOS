@@ -1760,36 +1760,56 @@
                                                                         <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                                                     </LayoutTransformControl.LayoutTransform>
                                                                     <!-- Container 2 ảnh xếp lớp tương tác trực tiếp -->
-                                                                    <Panel x:Name="LiveSplitPanel" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Background="Transparent">
+                                                                    <Panel x:Name="LiveSplitPanel" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Background="Transparent" ClipToBounds="False">
                                                                         <!-- Lớp dưới: Ảnh gốc Before -->
                                                                         <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
 
                                                                         <!-- HƯỚNG 1: Rèm trượt Trái / Phải (Horizontal Split) -->
-                                                                        <Panel IsVisible="{Binding !IsSplitVerticalOrientation}">
+                                                                        <Panel IsVisible="{Binding !IsSplitVerticalOrientation}" ClipToBounds="False">
                                                                             <!-- Nửa After bên trái -->
                                                                             <Border HorizontalAlignment="Left" Width="{Binding SplitClipWidth}" Height="{Binding EnhanceImagePixelHeight}" ClipToBounds="True">
                                                                                 <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" HorizontalAlignment="Left" />
                                                                             </Border>
-                                                                            <!-- Thanh rèm dọc & Tay cầm nổi -->
-                                                                            <Panel HorizontalAlignment="Left" Margin="{Binding SplitDividerMarginHorizontal}" Width="32" Height="{Binding EnhanceImagePixelHeight}">
+                                                                            <!-- Thanh rèm dọc & Tay cầm nổi nhô ra ngoài mép ảnh -->
+                                                                            <Panel x:Name="LiveSplitDividerH" HorizontalAlignment="Left" Margin="{Binding SplitDividerMarginHorizontal}" Width="40" Height="{Binding EnhanceImagePixelHeight}" ClipToBounds="False">
+                                                                                <!-- Đường kẻ rèm phát sáng -->
                                                                                 <Border Width="3" Background="#38BDF8" HorizontalAlignment="Center" />
-                                                                                <Border Width="30" Height="30" CornerRadius="15" Background="#0284C7" BorderBrush="#FFFFFF" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                                <!-- Tay cầm nhô mép trên -->
+                                                                                <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,-24,0,0" Width="44" Height="24" CornerRadius="6,6,0,0" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1.5,1.5,1.5,0" Cursor="SizeWestEast" ToolTip.Tip="Kéo rèm chia Trước / Sau">
+                                                                                    <TextBlock Text="◄ ⮂ ►" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                </Border>
+                                                                                <!-- Nút dạ quang ở giữa -->
+                                                                                <Border Width="32" Height="32" CornerRadius="16" Background="#0284C7" BorderBrush="#FFFFFF" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center" Cursor="SizeWestEast">
                                                                                     <TextBlock Text="⮂" Foreground="#FFFFFF" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                </Border>
+                                                                                <!-- Tay cầm nhô mép dưới -->
+                                                                                <Border VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,-24" Width="44" Height="24" CornerRadius="0,0,6,6" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1.5,0,1.5,1.5" Cursor="SizeWestEast" ToolTip.Tip="Kéo rèm chia Trước / Sau">
+                                                                                    <TextBlock Text="◄ ⮂ ►" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                                                 </Border>
                                                                             </Panel>
                                                                         </Panel>
 
                                                                         <!-- HƯỚNG 2: Rèm trượt Trên / Dưới (Vertical Split) -->
-                                                                        <Panel IsVisible="{Binding IsSplitVerticalOrientation}">
+                                                                        <Panel IsVisible="{Binding IsSplitVerticalOrientation}" ClipToBounds="False">
                                                                             <!-- Nửa After phía trên -->
                                                                             <Border VerticalAlignment="Top" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding SplitClipHeight}" ClipToBounds="True">
                                                                                 <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" VerticalAlignment="Top" />
                                                                             </Border>
-                                                                            <!-- Thanh rèm ngang & Tay cầm nổi -->
-                                                                            <Panel VerticalAlignment="Top" Margin="{Binding SplitDividerMarginVertical}" Height="32" Width="{Binding EnhanceImagePixelWidth}">
+                                                                            <!-- Thanh rèm ngang & Tay cầm nổi nhô ra ngoài mép ảnh -->
+                                                                            <Panel x:Name="LiveSplitDividerV" VerticalAlignment="Top" Margin="{Binding SplitDividerMarginVertical}" Height="40" Width="{Binding EnhanceImagePixelWidth}" ClipToBounds="False">
+                                                                                <!-- Đường kẻ rèm phát sáng -->
                                                                                 <Border Height="3" Background="#38BDF8" VerticalAlignment="Center" />
-                                                                                <Border Width="30" Height="30" CornerRadius="15" Background="#0284C7" BorderBrush="#FFFFFF" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                                <!-- Tay cầm nhô mép trái -->
+                                                                                <Border HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-24,0,0,0" Width="24" Height="44" CornerRadius="6,0,0,6" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1.5,1.5,0,1.5" Cursor="SizeNorthSouth" ToolTip.Tip="Kéo rèm chia Trước / Sau">
+                                                                                    <TextBlock Text="▲&#x0a;⬍&#x0a;▼" Foreground="#FFFFFF" FontWeight="Bold" FontSize="8" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                </Border>
+                                                                                <!-- Nút dạ quang ở giữa -->
+                                                                                <Border Width="32" Height="32" CornerRadius="16" Background="#0284C7" BorderBrush="#FFFFFF" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center" Cursor="SizeNorthSouth">
                                                                                     <TextBlock Text="⬍" Foreground="#FFFFFF" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                </Border>
+                                                                                <!-- Tay cầm nhô mép phải -->
+                                                                                <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,-24,0" Width="24" Height="44" CornerRadius="0,6,6,0" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="0,1.5,1.5,1.5" Cursor="SizeNorthSouth" ToolTip.Tip="Kéo rèm chia Trước / Sau">
+                                                                                    <TextBlock Text="▲&#x0a;⬍&#x0a;▼" Foreground="#FFFFFF" FontWeight="Bold" FontSize="8" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                                                 </Border>
                                                                             </Panel>
                                                                         </Panel>
@@ -2477,32 +2497,57 @@
                                     <LayoutTransformControl.LayoutTransform>
                                         <ScaleTransform ScaleX="{Binding EnhancePreviewZoom}" ScaleY="{Binding EnhancePreviewZoom}" />
                                     </LayoutTransformControl.LayoutTransform>
-                                    <Panel x:Name="ModalSplitPanel" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Background="Transparent">
+                                    <!-- Container 2 ảnh xếp lớp tương tác trực tiếp với tay cầm nổi nhô ra ngoài -->
+                                    <Panel x:Name="ModalSplitPanel" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Background="Transparent" ClipToBounds="False">
                                         <!-- Lớp dưới: Ảnh gốc (Before) -->
                                         <Image Source="{Binding EnhancePreviewOriginal}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" />
                                         
                                         <!-- HƯỚNG 1: Rèm trượt Trái / Phải (Horizontal Split) -->
-                                        <Panel IsVisible="{Binding !IsSplitVerticalOrientation}">
+                                        <Panel IsVisible="{Binding !IsSplitVerticalOrientation}" ClipToBounds="False">
+                                            <!-- Nửa After bên trái -->
                                             <Border HorizontalAlignment="Left" Width="{Binding SplitClipWidth}" Height="{Binding EnhanceImagePixelHeight}" ClipToBounds="True">
                                                 <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" HorizontalAlignment="Left" />
                                             </Border>
-                                            <Panel HorizontalAlignment="Left" Margin="{Binding SplitDividerMarginHorizontal}" Width="32" Height="{Binding EnhanceImagePixelHeight}">
+                                            <!-- Thanh rèm dọc & Tay cầm nổi nhô ra ngoài mép ảnh -->
+                                            <Panel x:Name="ModalSplitDividerH" HorizontalAlignment="Left" Margin="{Binding SplitDividerMarginHorizontal}" Width="40" Height="{Binding EnhanceImagePixelHeight}" ClipToBounds="False">
+                                                <!-- Đường kẻ rèm phát sáng -->
                                                 <Border Width="3" Background="#38BDF8" HorizontalAlignment="Center" />
-                                                <Border Width="30" Height="30" CornerRadius="15" Background="#0284C7" BorderBrush="#FFFFFF" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <!-- Tay cầm nhô mép trên -->
+                                                <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,-24,0,0" Width="44" Height="24" CornerRadius="6,6,0,0" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1.5,1.5,1.5,0" Cursor="SizeWestEast" ToolTip.Tip="Kéo rèm chia Trước / Sau">
+                                                    <TextBlock Text="◄ ⮂ ►" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <!-- Nút dạ quang ở giữa -->
+                                                <Border Width="32" Height="32" CornerRadius="16" Background="#0284C7" BorderBrush="#FFFFFF" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center" Cursor="SizeWestEast">
                                                     <TextBlock Text="⮂" Foreground="#FFFFFF" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <!-- Tay cầm nhô mép dưới -->
+                                                <Border VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,-24" Width="44" Height="24" CornerRadius="0,0,6,6" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1.5,0,1.5,1.5" Cursor="SizeWestEast" ToolTip.Tip="Kéo rèm chia Trước / Sau">
+                                                    <TextBlock Text="◄ ⮂ ►" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                 </Border>
                                             </Panel>
                                         </Panel>
 
                                         <!-- HƯỚNG 2: Rèm trượt Trên / Dưới (Vertical Split) -->
-                                        <Panel IsVisible="{Binding IsSplitVerticalOrientation}">
+                                        <Panel IsVisible="{Binding IsSplitVerticalOrientation}" ClipToBounds="False">
+                                            <!-- Nửa After phía trên -->
                                             <Border VerticalAlignment="Top" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding SplitClipHeight}" ClipToBounds="True">
                                                 <Image Source="{Binding EnhancePreviewResult}" Width="{Binding EnhanceImagePixelWidth}" Height="{Binding EnhanceImagePixelHeight}" Stretch="Fill" VerticalAlignment="Top" />
                                             </Border>
-                                            <Panel VerticalAlignment="Top" Margin="{Binding SplitDividerMarginVertical}" Height="32" Width="{Binding EnhanceImagePixelWidth}">
+                                            <!-- Thanh rèm ngang & Tay cầm nổi nhô ra ngoài mép ảnh -->
+                                            <Panel x:Name="ModalSplitDividerV" VerticalAlignment="Top" Margin="{Binding SplitDividerMarginVertical}" Height="40" Width="{Binding EnhanceImagePixelWidth}" ClipToBounds="False">
+                                                <!-- Đường kẻ rèm phát sáng -->
                                                 <Border Height="3" Background="#38BDF8" VerticalAlignment="Center" />
-                                                <Border Width="30" Height="30" CornerRadius="15" Background="#0284C7" BorderBrush="#FFFFFF" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <!-- Tay cầm nhô mép trái -->
+                                                <Border HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-24,0,0,0" Width="24" Height="44" CornerRadius="6,0,0,6" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1.5,1.5,0,1.5" Cursor="SizeNorthSouth" ToolTip.Tip="Kéo rèm chia Trước / Sau">
+                                                    <TextBlock Text="▲&#x0a;⬍&#x0a;▼" Foreground="#FFFFFF" FontWeight="Bold" FontSize="8" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <!-- Nút dạ quang ở giữa -->
+                                                <Border Width="32" Height="32" CornerRadius="16" Background="#0284C7" BorderBrush="#FFFFFF" BorderThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center" Cursor="SizeNorthSouth">
                                                     <TextBlock Text="⬍" Foreground="#FFFFFF" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <!-- Tay cầm nhô mép phải -->
+                                                <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,-24,0" Width="24" Height="44" CornerRadius="0,6,6,0" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="0,1.5,1.5,1.5" Cursor="SizeNorthSouth" ToolTip.Tip="Kéo rèm chia Trước / Sau">
+                                                    <TextBlock Text="▲&#x0a;⬍&#x0a;▼" Foreground="#FFFFFF" FontWeight="Bold" FontSize="8" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                 </Border>
                                             </Panel>
                                         </Panel>
