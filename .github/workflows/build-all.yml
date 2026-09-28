@@ -114,16 +114,54 @@ jobs:
           xcode-select -p
           xcodebuild -version
           
-          # Tạo symlink alias cho mọi phiên bản iPhoneOS SDK (iPhoneOS18.0.sdk, iPhoneOS18.1.sdk, v.v.)
-          for app in /Applications/Xcode*.app; do
-            SDK_BASE="$app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs"
-            if [ -d "$SDK_BASE" ]; then
-              echo "Linking SDK aliases in: $SDK_BASE"
-              for ver in 17.0 17.1 17.2 17.4 17.5 18.0 18.1 18.2 18.3 18.4 18.5 18.6; do
-                sudo ln -sf iPhoneOS.sdk "$SDK_BASE/iPhoneOS${ver}.sdk" 2>/dev/null || true
-              done
-            fi
-          done
+          # Quét và tạo symlink aliases toàn diện cho mọi Apple SDK (MacOSX, iPhoneOS, iPhoneSimulator)
+          sudo python3 -c "
+          import os, glob
+
+          for app in glob.glob('/Applications/Xcode*.app'):
+              platforms_dir = os.path.join(app, 'Contents/Developer/Platforms')
+              if not os.path.isdir(platforms_dir):
+                  continue
+              for platform in os.listdir(platforms_dir):
+                  sdks_dir = os.path.join(platforms_dir, platform, 'Developer/SDKs')
+                  if not os.path.isdir(sdks_dir):
+                      continue
+                  all_items = os.listdir(sdks_dir)
+                  sdk_dirs = [d for d in all_items if d.endswith('.sdk')]
+                  if not sdk_dirs:
+                      continue
+                  real_sdks = [d for d in sdk_dirs if not os.path.islink(os.path.join(sdks_dir, d))]
+                  target_sdk = real_sdks[0] if real_sdks else sdk_dirs[0]
+                  print(f'Configuring SDK aliases for {app}/{platform} -> {target_sdk}')
+                  
+                  if 'MacOSX' in platform:
+                      prefix = 'MacOSX'
+                  elif 'iPhoneSimulator' in platform:
+                      prefix = 'iPhoneSimulator'
+                  elif 'iPhoneOS' in platform:
+                      prefix = 'iPhoneOS'
+                  else:
+                      prefix = platform.replace('.platform', '')
+                  
+                  base_name = f'{prefix}.sdk'
+                  base_path = os.path.join(sdks_dir, base_name)
+                  if not os.path.exists(base_path) and base_name != target_sdk:
+                      try:
+                          os.symlink(target_sdk, base_path)
+                          print(f'  Created base link: {base_name} -> {target_sdk}')
+                      except Exception as e:
+                          print(f'  Failed base link: {e}')
+                  
+                  for major in range(10, 28):
+                      for minor in ['', '.0', '.1', '.2', '.3', '.4', '.5', '.6']:
+                          alias_name = f'{prefix}{major}{minor}.sdk'
+                          alias_path = os.path.join(sdks_dir, alias_name)
+                          if not os.path.exists(alias_path) and alias_name != target_sdk:
+                              try:
+                                  os.symlink(target_sdk, alias_path)
+                              except Exception as e:
+                                  pass
+          "
           
           echo "=== Available Apple SDKs ==="
           xcodebuild -showsdks || true
