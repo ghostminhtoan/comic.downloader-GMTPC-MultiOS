@@ -79,7 +79,7 @@ jobs:
   # ── 3. ANDROID APK ──
   build-android:
     name: Build Android (APK)
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -87,7 +87,7 @@ jobs:
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'microsoft'
+          distribution: 'temurin'
           java-version: '17'
 
       - name: Setup .NET SDK
@@ -101,48 +101,25 @@ jobs:
       - name: Restore Dependencies
         run: dotnet restore ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj
 
-      - name: Accept Android SDK Licenses
-        run: |
-          yes | ${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
       - name: Build & Publish Android Release APK
-        run: |
-          dotnet publish ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj \
-            -c Release \
-            -p:AndroidPackageFormat=apk \
-            -p:AcceptAndroidSDKLicenses=true \
-            -v normal 2>&1 | tee android_build.log
-          STATUS=${PIPESTATUS[0]}
-          if [ $STATUS -ne 0 ]; then
-            echo "=== ANDROID PUBLISH FAILED ==="
-            cat android_build.log
-            exit $STATUS
-          fi
+        run: dotnet publish ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj -c Release -p:AndroidPackageFormat=apk
 
-      - name: Sign APK with Debug Keystore
+      - name: Prepare & Sign Android Artifact
+        shell: pwsh
         run: |
-          mkdir -p publish/android
-          KEYSTORE="$HOME/.android/debug.keystore"
-          if [ ! -f "$KEYSTORE" ]; then
-            mkdir -p "$HOME/.android"
-            keytool -genkey -v -keystore "$KEYSTORE" -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          fi
-          
-          # Tìm zipalign và apksigner trong Android SDK
-          BUILD_TOOLS=$(ls -d ${ANDROID_SDK_ROOT:-$ANDROID_HOME}/build-tools/* | sort -V | tail -n 1)
-          echo "Using Android Build Tools at: $BUILD_TOOLS"
-          
-          # Tìm file APK đầu ra
-          APK_SRC=$(find ComicDownloaderGMTPC.Android/bin/Release -name "*Signed.apk" -o -name "*.apk" 2>/dev/null | head -n 1)
-          if [ -n "$APK_SRC" ] && [ -f "$APK_SRC" ]; then
-            echo "Found Android APK at: $APK_SRC"
-            cp "$APK_SRC" publish/android/ComicDownloaderGMTPC-Android-Signed.apk
-            echo "Successfully copied APK to: publish/android/ComicDownloaderGMTPC-Android-Signed.apk"
-          else
-            echo "Error: No APK file found in build output!"
-            find ComicDownloaderGMTPC.Android/bin/ -type f || true
+          New-Item -ItemType Directory -Force -Path publish/android | Out-Null
+          $apk = Get-ChildItem -Path ComicDownloaderGMTPC.Android/bin/Release -Filter "*Signed.apk" -Recurse | Select-Object -First 1
+          if (-not $apk) {
+            $apk = Get-ChildItem -Path ComicDownloaderGMTPC.Android/bin/Release -Filter "*.apk" -Recurse | Select-Object -First 1
+          }
+          if ($apk) {
+            Write-Host "Found Android APK at: $($apk.FullName)"
+            Copy-Item -Path $apk.FullName -Destination "publish/android/ComicDownloaderGMTPC-Android-Signed.apk" -Force
+            Write-Host "Successfully prepared: publish/android/ComicDownloaderGMTPC-Android-Signed.apk"
+          } else {
+            Write-Error "Error: No APK file found in build output!"
             exit 1
-          fi
+          }
 
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4
