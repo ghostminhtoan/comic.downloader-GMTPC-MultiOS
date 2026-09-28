@@ -1,0 +1,63 @@
+name: Build iOS App (.ipa)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build & Package iOS IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install iOS Workload
+        run: |
+          dotnet workload install ios --skip-manifest-update
+
+      - name: Restore Dependencies
+        run: |
+          dotnet restore ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj
+
+      - name: Build & Publish iOS App
+        run: |
+          dotnet publish ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 -p:ServerAddress="" -p:ServerUser="" -p:ServerPassword=""
+
+      - name: Package Unsigned IPA (For Sideload / AltStore / TrollStore / Sideloadly)
+        run: |
+          mkdir -p Payload
+          APP_PATH=$(find ComicDownloaderGMTPC.iOS/bin/Release/net10.0-ios/ios-arm64 -type d -name "*.app" | head -n 1)
+          if [ -n "$APP_PATH" ]; then
+            echo "Found App Bundle at: $APP_PATH"
+            cp -R "$APP_PATH" Payload/
+            zip -r ComicDownloaderGMTPC-iOS-Unsigned.ipa Payload
+          else
+            echo "Searching in publish directory..."
+            APP_PATH=$(find ComicDownloaderGMTPC.iOS/bin/Release/net10.0-ios/ios-arm64/publish -type d -name "*.app" | head -n 1)
+            if [ -n "$APP_PATH" ]; then
+              cp -R "$APP_PATH" Payload/
+              zip -r ComicDownloaderGMTPC-iOS-Unsigned.ipa Payload
+            else
+              echo "App bundle not found! Creating zip of build output directory."
+              zip -r ComicDownloaderGMTPC-iOS-BuildOutput.zip ComicDownloaderGMTPC.iOS/bin/Release/net10.0-ios/ios-arm64/
+            fi
+          fi
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ComicDownloaderGMTPC-iOS
+          path: |
+            *.ipa
+            ComicDownloaderGMTPC-iOS-BuildOutput.zip
+          retention-days: 14

@@ -1,0 +1,138 @@
+name: Build All Platforms (Windows, Linux, Android, iOS)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  # ── 1. WINDOWS STANDALONE EXE ──
+  build-windows:
+    name: Build Windows (win-x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Windows Standalone Single-File
+        run: |
+          dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish\windows
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ComicDownloaderGMTPC-Windows-x64
+          path: publish\windows\ComicDownloaderGMTPC.Desktop.exe
+          retention-days: 14
+
+  # ── 2. LINUX STANDALONE BINARY ──
+  build-linux:
+    name: Build Linux (linux-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Linux Standalone Single-File
+        run: |
+          dotnet publish ComicDownloaderGMTPC.Desktop/ComicDownloaderGMTPC.Desktop.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish/linux
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ComicDownloaderGMTPC-Linux-x64
+          path: publish/linux/ComicDownloaderGMTPC.Desktop
+          retention-days: 14
+
+  # ── 3. ANDROID APK PACKAGE ──
+  build-android:
+    name: Build Android (APK)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Android Workload
+        run: |
+          dotnet workload install android --skip-manifest-update
+
+      - name: Build Android Release Package
+        run: |
+          dotnet build ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj -c Release -o publish/android
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ComicDownloaderGMTPC-Android-APK
+          path: publish/android/*-Signed.apk
+          retention-days: 14
+
+  # ── 4. IOS APP & IPA ──
+  build-ios:
+    name: Build iOS (IPA)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install iOS Workload
+        run: |
+          dotnet workload install ios --skip-manifest-update
+
+      - name: Build & Publish iOS App
+        run: |
+          dotnet publish ComicDownloaderGMTPC.iOS/ComicDownloaderGMTPC.iOS.csproj -c Release -r ios-arm64 -p:ServerAddress="" -p:ServerUser="" -p:ServerPassword=""
+
+      - name: Package Unsigned IPA
+        run: |
+          mkdir -p Payload
+          APP_PATH=$(find ComicDownloaderGMTPC.iOS/bin/Release/net10.0-ios/ios-arm64 -type d -name "*.app" | head -n 1)
+          if [ -n "$APP_PATH" ]; then
+            cp -R "$APP_PATH" Payload/
+            zip -r ComicDownloaderGMTPC-iOS-Unsigned.ipa Payload
+          else
+            APP_PATH=$(find ComicDownloaderGMTPC.iOS/bin/Release/net10.0-ios/ios-arm64/publish -type d -name "*.app" | head -n 1)
+            if [ -n "$APP_PATH" ]; then
+              cp -R "$APP_PATH" Payload/
+              zip -r ComicDownloaderGMTPC-iOS-Unsigned.ipa Payload
+            else
+              zip -r ComicDownloaderGMTPC-iOS-BuildOutput.zip ComicDownloaderGMTPC.iOS/bin/Release/net10.0-ios/ios-arm64/
+            fi
+          fi
+
+      - name: Upload iOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ComicDownloaderGMTPC-iOS
+          path: |
+            *.ipa
+            ComicDownloaderGMTPC-iOS-BuildOutput.zip
+          retention-days: 14
