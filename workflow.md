@@ -968,14 +968,15 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
 
 ### 15.27. Tự Động Hóa Build & CI/CD Đa Nền Tảng (Windows, Linux, Android, iOS) Trên GitHub Actions
 - **Thiết lập CI/CD**:
-  - Cấu hình workflow `.github/workflows/build-all.yml` và `build-ios.yml`.
+  - Cấu hình workflow `.github/workflows/build-all.yml` và `.github/workflows/build-ios.yml`.
   - Hỗ trợ xây dựng tự động toàn bộ 4 nền tảng song song:
     1. **Windows**: Standalone Single-File Release `ComicDownloaderGMTPC.Desktop.exe`.
     2. **Linux**: Standalone Single-File Executable `ComicDownloaderGMTPC.Desktop`.
-    3. **Android**: Release Signed APK `com.CompanyName.ComicDownloaderGMTPC-Signed.apk`.
+    3. **Android**: Release Signed APK `ComicDownloaderGMTPC-Android-Signed.apk`.
     4. **iOS**: Release Ad-Hoc Signed App Package & Bundle `ComicDownloaderGMTPC-iOS-AdHoc.ipa`.
 - **Cơ chế xử lý tương thích Toolchain Xcode**:
   - Tự động phát hiện và chọn phiên bản Xcode tối ưu (`DEVELOPER_DIR`).
-  - Tự động patch và vô hiệu hóa các kiểm tra phiên bản cứng nhắc trong .NET iOS SDK (`_CheckForInvalidXcodeVersion`) bằng Python script đa thư mục.
-  - Cho phép đóng gói Ad-Hoc IPA mà không cần chứng chỉ trả phí của Apple.
+  - Tự động tạo Canonical Apple SDK symlinks (`MacOSX.sdk`, `iPhoneOS.sdk`) và phiên bản aliases chống broken/circular links.
+  - Tự động patch và vô hiệu hóa các kiểm tra phiên bản cứng nhắc trong .NET iOS SDK (`_CheckForInvalidXcodeVersion`, `_ValidateXcodeVersion`) bằng Python script đa thư mục.
+  - Cho phép đóng gói Ad-Hoc IPA mà không cần chứng chỉ lập trình viên trả phí của Apple.
 
