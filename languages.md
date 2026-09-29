@@ -42,7 +42,9 @@
 | AUTO RETRY UNTIL SETTLED | TỰ THỬ LẠI ĐẾN KHI XONG |
 | AUTO SCROLL TO DOWNLOADING | TỰ CUỘN ĐẾN TRUYỆN ĐANG TẢI |
 | CANCELLING... | ĐANG HỦY... |
+| DOWNLOAD | TẢI |
 | DOWNLOAD ALL | TẢI TẤT CẢ |
+| DOWNLOAD NEW | TẢI TIẾP |
 | Download queue | Hàng chờ tải |
 | No errors to retry. | Không có lỗi để thử lại. |
 | RETRY | Thử lại |

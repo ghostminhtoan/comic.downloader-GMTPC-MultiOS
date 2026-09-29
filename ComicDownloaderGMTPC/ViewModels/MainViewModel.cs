@@ -97,7 +97,7 @@ public partial class MainViewModel : ViewModelBase
     private int _concurrentComicDownloads = 2; // 1 đến 16
 
     [ObservableProperty]
-    private int _imageDownloadThreads = Math.Min(CpuTopologyHelper.GetMaxLogicalProcessorCount(), 16);
+    private int _imageDownloadThreads = 3;
 
     partial void OnConcurrentComicDownloadsChanged(int value)
     {
@@ -733,6 +733,7 @@ public partial class MainViewModel : ViewModelBase
 
         UpdateLanguageStrings();
         InitFolderToolsService();
+        LoadPasswordManagerSettings();
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
         SoundNotificationService.Instance.PlaySound(SoundNotificationType.Startup);
     }
@@ -1063,6 +1064,21 @@ public partial class MainViewModel : ViewModelBase
 
         AddLog("INFO", $"Bắt đầu tải {ComicBooks.Count(b => b.IsChecked)} truyện...");
         await _downloadEngine.StartDownloadAsync(ComicBooks, ModeSelection);
+        UpdateStats();
+    }
+
+    [RelayCommand]
+    public async Task DownloadNewAsync()
+    {
+        var newItems = ComicBooks.Where(b => b.IsChecked && (b.Status == "Waiting" || b.Status == "Chờ tải" || string.IsNullOrEmpty(b.Status))).ToList();
+        if (newItems.Count == 0)
+        {
+            AddLog("INFO", "Không có truyện mới nào đang chờ tải.");
+            return;
+        }
+
+        AddLog("INFO", $"Tiếp tục nạp thêm {newItems.Count} truyện vào hàng đợi tải...");
+        await _downloadEngine.DownloadNewAsync(newItems, ModeSelection);
         UpdateStats();
     }
 

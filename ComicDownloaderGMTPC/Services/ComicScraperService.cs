@@ -95,6 +95,11 @@ public class ComicScraperService
                 return await ScrapeDilibBookAsync(url, index, domain, ct).ConfigureAwait(false);
             }
 
+            if (domain.Contains("hentaiforce"))
+            {
+                return await ScrapeHentaiforceBookAsync(url, index, domain, ct).ConfigureAwait(false);
+            }
+
             if (domain.Contains("hentai2read"))
             {
                 return await ScrapeHentai2readBookAsync(url, index, domain, ct).ConfigureAwait(false);
@@ -164,6 +169,11 @@ public class ComicScraperService
             if (domain.Contains("e-hentai") || domain.Contains("exhentai"))
             {
                 return await ExtractEHentaiChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
+            }
+
+            if (domain.Contains("hentaiforce"))
+            {
+                return await ExtractHentaiforceChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
             }
 
             if (domain.Contains("hitomi"))
@@ -463,6 +473,7 @@ public class ComicScraperService
 
     private async Task<ComicBookItem> ScrapeDaomeodenBookAsync(string url, int index, string domain, CancellationToken ct)
     {
+        url = DomainRoutingService.NormalizeUrl(url);
         var item = new ComicBookItem
         {
             Index = index,
@@ -472,6 +483,7 @@ public class ComicScraperService
         };
 
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.Add("Referer", "https://daomeoden.net/");
         using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
         if (!res.IsSuccessStatusCode)
         {
@@ -485,26 +497,54 @@ public class ComicScraperService
         item.Title = ExtractTitle(html, url);
         item.CoverUrl = ExtractCoverUrl(html, url);
 
-        var chapterMatches = Regex.Matches(
+        // Bóc tách thẻ <a> có link đọc truyện tranh và text hiển thị
+        var anchorMatches = Regex.Matches(
             html,
-            @"(?:href|openUrl\()\s*(?:=\s*|['""])(?<link>/doc-truyen-tranh/[^'"")\s>]+)",
+            @"<a[^>]+href=[""'](?<link>/doc-truyen-tranh/[^""']+)[""'][^>]*>(?<text>[\s\S]*?)</a>",
             RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match m in chapterMatches)
+        foreach (Match m in anchorMatches)
         {
             string link = m.Groups["link"].Value.Trim();
+            string rawText = Regex.Replace(m.Groups["text"].Value, @"<[^>]+>", " ").Trim();
             string fullUrl = MakeAbsoluteUrl(link, url);
             if (seen.Add(fullUrl))
             {
-                double chapNum = ExtractChapterNumber(fullUrl, item.Chapters.Count + 1);
+                double chapNum = ParseDaomeodenChapterNumber(rawText, link, item.Chapters.Count + 1);
                 item.Chapters.Add(new ChapterItem
                 {
                     ChapterNumber = chapNum,
-                    Title = $"Chương {chapNum}",
+                    Title = string.IsNullOrWhiteSpace(rawText) ? $"Chương {chapNum}" : rawText,
                     Url = fullUrl,
                     Status = "Waiting"
                 });
+            }
+        }
+
+        // Fallback nếu không bóc tách được từ thẻ <a>
+        if (item.Chapters.Count == 0)
+        {
+            var chapterMatches = Regex.Matches(
+                html,
+                @"(?:href|openUrl\()\s*(?:=\s*|['""])(?<link>/doc-truyen-tranh/[^'"")\s>]+)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            foreach (Match m in chapterMatches)
+            {
+                string link = m.Groups["link"].Value.Trim();
+                string fullUrl = MakeAbsoluteUrl(link, url);
+                if (seen.Add(fullUrl))
+                {
+                    double chapNum = ParseDaomeodenChapterNumber(string.Empty, link, item.Chapters.Count + 1);
+                    item.Chapters.Add(new ChapterItem
+                    {
+                        ChapterNumber = chapNum,
+                        Title = $"Chương {chapNum}",
+                        Url = fullUrl,
+                        Status = "Waiting"
+                    });
+                }
             }
         }
 
@@ -525,8 +565,41 @@ public class ComicScraperService
         return item;
     }
 
+    private double ParseDaomeodenChapterNumber(string text, string link, double fallback)
+    {
+        // 1. Parse từ inner text: "Chương 11", "Chap 11.5"
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            var matchText = Regex.Match(text, @"(?:chap(?:ter)?|chương|chuong|tập|tap)[\s\-_:/#]*([0-9]+(?:\.[0-9]+)?)", RegexOptions.IgnoreCase);
+            if (matchText.Success && double.TryParse(matchText.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedText))
+            {
+                return parsedText;
+            }
+        }
+
+        // 2. Parse từ link: ví dụ "...-chuong-11-63057-11.html"
+        if (!string.IsNullOrWhiteSpace(link))
+        {
+            var matchLink = Regex.Match(link, @"(?:chuong|chap|tap|chapter)[\s\-_:/#]*([0-9]+(?:\.[0-9]+)?)", RegexOptions.IgnoreCase);
+            if (matchLink.Success && double.TryParse(matchLink.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedLink))
+            {
+                return parsedLink;
+            }
+
+            // Lấy số ở đuôi segment cuối: "-(\d+)\.html"
+            var matchTail = Regex.Match(link, @"-(\d+(?:\.\d+)?)\.html", RegexOptions.IgnoreCase);
+            if (matchTail.Success && double.TryParse(matchTail.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedTail))
+            {
+                return parsedTail;
+            }
+        }
+
+        return fallback;
+    }
+
     private async Task<ComicBookItem> ScrapeDamconuongBookAsync(string url, int index, string domain, CancellationToken ct)
     {
+        url = DomainRoutingService.NormalizeUrl(url);
         var item = new ComicBookItem
         {
             Index = index,
@@ -536,6 +609,7 @@ public class ComicScraperService
         };
 
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.Add("Referer", url);
         using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
         if (!res.IsSuccessStatusCode)
         {
@@ -553,7 +627,7 @@ public class ComicScraperService
         string[] segs = uri.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
         string bookSlug = segs.Length > 1 ? segs[1] : (segs.Length > 0 ? segs[0] : string.Empty);
 
-        string pattern = @"href\s*=\s*[""'](?<href>(?:(?:https?:)?\/\/(?:www\.)?damconuong\.[^\/""']+)?\/truyen\/" + Regex.Escape(bookSlug) + @"/(?<chapter>[^""'?#>]+)(?:\.html)?)[""']";
+        string pattern = @"href\s*=\s*[""'](?<href>(?:(?:https?:)?\/\/(?:www\.)?damconuong\.[^\/""']+)?\/truyen\/" + Regex.Escape(bookSlug) + @"\/(?<chapter>[^""'?#>]+)(?:\.html)?)[""']";
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (Match m in Regex.Matches(html, pattern, RegexOptions.IgnoreCase))
@@ -1117,19 +1191,21 @@ public class ComicScraperService
     private List<string> ExtractDamconuongChapterImages(string html, string chapterUrl)
     {
         var imageUrls = new List<string>();
+        if (string.IsNullOrWhiteSpace(html)) return imageUrls;
+
         string contentHtml = string.Empty;
 
-        var contentMatch = Regex.Match(html, @"<(?:div|article|section)[^>]*(?:id=[""']chapter-content[""']|class=[""'][^""']*reading-detail[^""']*box_doc[^""']*[""'])[^>]*>.*?</(?:div|article|section)>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        var contentMatch = Regex.Match(html, @"<(?:div|article|section)[^>]*(?:id=[""']chapter-content[""']|class=[""'][^""']*(?:reading-detail|box_doc|chapter-content)[^""']*[""'])[^>]*>.*?</(?:div|article|section)>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
         if (contentMatch.Success) contentHtml = contentMatch.Value;
         else contentHtml = html;
 
-        var matches = Regex.Matches(contentHtml, @"<img[^>]+(?:data-src|src)\s*=\s*[""'](?<url>[^""']+)[""']", RegexOptions.IgnoreCase);
+        var matches = Regex.Matches(contentHtml, @"<img[^>]+(?:data-src|data-original|data-lazy-src|src)\s*=\s*[""'](?<url>[^""']+)[""']", RegexOptions.IgnoreCase);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (Match m in matches)
         {
             string url = WebUtility.HtmlDecode(m.Groups["url"].Value.Trim()).Replace("\\/", "/");
-            if (string.IsNullOrWhiteSpace(url) || url.StartsWith("data:")) continue;
+            if (string.IsNullOrWhiteSpace(url) || url.StartsWith("data:") || IsIgnoredImage(url)) continue;
             string fullUrl = MakeAbsoluteUrl(url, chapterUrl);
             if (seen.Add(fullUrl)) imageUrls.Add(fullUrl);
         }
@@ -1820,13 +1896,31 @@ public class ComicScraperService
 
     private double ExtractChapterNumber(string text, double fallback)
     {
-        var match = Regex.Match(text, @"(?:chap(?:ter)?|chương|tập)\s*([0-9]+(?:\.[0-9]+)?)", RegexOptions.IgnoreCase);
+        if (string.IsNullOrWhiteSpace(text)) return fallback;
+
+        // Nếu là URL, trích xuất từ segment cuối cùng trước để tránh số ở slug truyện làm sai lệch
+        string searchScope = text;
+        if (text.Contains("/"))
+        {
+            try
+            {
+                var uri = new Uri(DomainRoutingService.NormalizeUrl(text));
+                string lastSegment = uri.AbsolutePath.Trim('/').Split('/').LastOrDefault() ?? text;
+                searchScope = lastSegment;
+            }
+            catch
+            {
+                searchScope = text.Split('/').LastOrDefault() ?? text;
+            }
+        }
+
+        var match = Regex.Match(searchScope, @"(?:chap(?:ter)?|chương|chuong|tập|tap|ep(?:isode)?)[\s\-_:/#]*([0-9]+(?:\.[0-9]+)?)", RegexOptions.IgnoreCase);
         if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed))
         {
             return parsed;
         }
 
-        var numMatch = Regex.Match(text, @"([0-9]+(?:\.[0-9]+)?)");
+        var numMatch = Regex.Match(searchScope, @"([0-9]+(?:\.[0-9]+)?)");
         if (numMatch.Success && double.TryParse(numMatch.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double num))
         {
             return num;
@@ -2633,6 +2727,201 @@ public class ComicScraperService
         {
             // Bỏ qua lỗi giải mã ảnh
         }
+
+        return imageUrls;
+    }
+
+    private async Task<ComicBookItem> ScrapeHentaiforceBookAsync(string url, int index, string domain, CancellationToken ct)
+    {
+        url = DomainRoutingService.NormalizeUrl(url);
+        var item = new ComicBookItem
+        {
+            Index = index,
+            Url = url,
+            Domain = domain,
+            Status = "Extracting...",
+            StatusMessage = "Fetching gallery metadata..."
+        };
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Add("Referer", "https://hentaiforce.net/");
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                item.Title = ExtractFallbackTitleFromUrl(url);
+                item.Status = "Error";
+                item.StatusMessage = $"HTTP {(int)res.StatusCode}";
+                return item;
+            }
+
+            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            item.Title = ExtractTitle(html, url);
+
+            // Cover
+            var coverMatch = Regex.Match(html, @"<div[^>]+id=""gallery-main-cover""[^>]*>.*?<img[^>]+(?:src|data-src)=""(?<cover>[^""]+)""", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (coverMatch.Success)
+            {
+                item.CoverUrl = MakeAbsoluteUrl(coverMatch.Groups["cover"].Value, url);
+            }
+            else
+            {
+                item.CoverUrl = ExtractCoverUrl(html, url);
+            }
+
+            // Pages
+            int totalPages = 1;
+            var pagesMatch = Regex.Match(html, @"Pages:\s*(\d+)", RegexOptions.IgnoreCase);
+            if (pagesMatch.Success)
+            {
+                totalPages = int.Parse(pagesMatch.Groups[1].Value);
+            }
+            else
+            {
+                var thumbMatches = Regex.Matches(html, @"href=""[^""]*?/view/\d+/(\d+)""", RegexOptions.IgnoreCase);
+                foreach (Match m in thumbMatches)
+                {
+                    if (int.TryParse(m.Groups[1].Value, out int pageNum) && pageNum > totalPages)
+                    {
+                        totalPages = pageNum;
+                    }
+                }
+            }
+
+            item.TotalChapters = 1;
+            item.LatestChapter = $"{totalPages} Pages";
+            item.Status = "Ready";
+            item.StatusMessage = $"Extracted {totalPages} pages";
+
+            item.Chapters.Clear();
+            item.Chapters.Add(new ChapterItem
+            {
+                ChapterNumber = 1,
+                Title = "Full Gallery",
+                Url = url,
+                TotalPages = totalPages,
+                Status = "Waiting"
+            });
+
+            return item;
+        }
+        catch (Exception ex)
+        {
+            item.Title = ExtractFallbackTitleFromUrl(url);
+            item.Status = "Error";
+            item.StatusMessage = ex.Message;
+            return item;
+        }
+    }
+
+    private async Task<List<string>> ExtractHentaiforceChapterImagesAsync(string galleryUrl, CancellationToken ct)
+    {
+        var imageUrls = new List<string>();
+        if (string.IsNullOrWhiteSpace(galleryUrl)) return imageUrls;
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, galleryUrl);
+            req.Headers.Add("Referer", "https://hentaiforce.net/");
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode) return imageUrls;
+
+            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            // 1. Total pages
+            int totalPages = 1;
+            var pagesMatch = Regex.Match(html, @"Pages:\s*(\d+)", RegexOptions.IgnoreCase);
+            if (pagesMatch.Success)
+            {
+                totalPages = int.Parse(pagesMatch.Groups[1].Value);
+            }
+            else
+            {
+                var thumbMatches = Regex.Matches(html, @"href=""[^""]*?/view/\d+/(\d+)""", RegexOptions.IgnoreCase);
+                foreach (Match m in thumbMatches)
+                {
+                    if (int.TryParse(m.Groups[1].Value, out int p) && p > totalPages)
+                    {
+                        totalPages = p;
+                    }
+                }
+            }
+
+            // 2. Fast Path: Identify prefix & extension from thumbnail URL (bỏ 't' để lấy ảnh gốc)
+            string prefix = string.Empty;
+            string ext = "jpg";
+            var patternMatch = Regex.Match(html, @"(?<prefix>https?://[a-zA-Z0-9.-]+/img/\d+-)1t\.(?<ext>[a-zA-Z0-9]+)", RegexOptions.IgnoreCase);
+            if (patternMatch.Success)
+            {
+                prefix = patternMatch.Groups["prefix"].Value;
+                ext = patternMatch.Groups["ext"].Value;
+            }
+            else
+            {
+                var generalMatch = Regex.Match(html, @"(https?://[a-zA-Z0-9.-]+/img/\d+-)\d+t\.(jpg|png|jpeg|webp)", RegexOptions.IgnoreCase);
+                if (generalMatch.Success)
+                {
+                    prefix = generalMatch.Groups[1].Value;
+                    ext = generalMatch.Groups[2].Value;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(prefix))
+            {
+                for (int p = 1; p <= totalPages; p++)
+                {
+                    imageUrls.Add($"{prefix}{p}.{ext}");
+                }
+                return imageUrls;
+            }
+
+            // 3. Fallback Slow Path: Fetch reader pages in parallel
+            string cleanGalleryUrl = galleryUrl.TrimEnd('/');
+            var pageImageDict = new System.Collections.Concurrent.ConcurrentDictionary<int, string>();
+            using var sem = new SemaphoreSlim(8, 8);
+
+            var tasks = Enumerable.Range(1, totalPages).Select(async pageNum =>
+            {
+                await sem.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    string pageUrl = $"{cleanGalleryUrl}/{pageNum}";
+                    using var pReq = new HttpRequestMessage(HttpMethod.Get, pageUrl);
+                    pReq.Headers.Add("Referer", cleanGalleryUrl);
+                    using var pRes = await _httpClient.SendAsync(pReq, ct).ConfigureAwait(false);
+                    if (pRes.IsSuccessStatusCode)
+                    {
+                        string pHtml = await pRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                        var imgMatch = Regex.Match(pHtml, @"<img[^>]+class\s*=\s*""[^""]*\bjs-main-img\b[^""]*""[^>]+(?:src|data-src)\s*=\s*""(?<url>https?://[^""]+)""", RegexOptions.IgnoreCase);
+                        if (!imgMatch.Success)
+                        {
+                            imgMatch = Regex.Match(pHtml, @"<img[^>]+(?:src|data-src)\s*=\s*""(?<url>https?://[^""]+)""[^>]+class\s*=\s*""[^""]*\bjs-main-img\b[^""]*""", RegexOptions.IgnoreCase);
+                        }
+                        if (imgMatch.Success)
+                        {
+                            pageImageDict[pageNum] = imgMatch.Groups["url"].Value;
+                        }
+                    }
+                }
+                catch {}
+                finally
+                {
+                    sem.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+
+            for (int p = 1; p <= totalPages; p++)
+            {
+                if (pageImageDict.TryGetValue(p, out string? imgUrl) && !string.IsNullOrWhiteSpace(imgUrl))
+                {
+                    imageUrls.Add(imgUrl);
+                }
+            }
+        }
+        catch {}
 
         return imageUrls;
     }

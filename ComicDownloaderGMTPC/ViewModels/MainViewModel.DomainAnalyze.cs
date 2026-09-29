@@ -46,6 +46,15 @@ public partial class MainViewModel
     [ObservableProperty]
     private string _domainHentai2readTagUrl = "https://hentai2read.com/";
 
+    [ObservableProperty]
+    private string _domainHitomiTagUrl = "https://hitomi.la/type/manga-all.html";
+
+    [ObservableProperty]
+    private string _domainHentaiforceTagUrl = "https://hentaiforce.net/";
+
+    [ObservableProperty]
+    private string _domainEhentaiTagUrl = "https://e-hentai.org/";
+
     // ==========================================
     // DOMAIN ANALYZE & BATCH SCRAPING STATE
     // ==========================================
@@ -249,6 +258,9 @@ public partial class MainViewModel
         if (domain.Contains("damconuong")) return DomainDamconuongTagUrl;
         if (domain.Contains("sayhentai")) return DomainSayhentaiTagUrl;
         if (domain.Contains("hentai2read")) return DomainHentai2readTagUrl;
+        if (domain.Contains("hitomi")) return DomainHitomiTagUrl;
+        if (domain.Contains("hentaiforce")) return DomainHentaiforceTagUrl;
+        if (domain.Contains("e-hentai") || domain.Contains("exhentai")) return DomainEhentaiTagUrl;
         return UrlInput;
     }
 
@@ -265,6 +277,9 @@ public partial class MainViewModel
         else if (domain.Contains("damconuong")) DomainDamconuongTagUrl = value;
         else if (domain.Contains("sayhentai")) DomainSayhentaiTagUrl = value;
         else if (domain.Contains("hentai2read")) DomainHentai2readTagUrl = value;
+        else if (domain.Contains("hitomi")) DomainHitomiTagUrl = value;
+        else if (domain.Contains("hentaiforce")) DomainHentaiforceTagUrl = value;
+        else if (domain.Contains("e-hentai") || domain.Contains("exhentai")) DomainEhentaiTagUrl = value;
         UrlInput = value;
     }
 
@@ -281,6 +296,9 @@ public partial class MainViewModel
         if (domain.Contains("damconuong")) return "https://damconuong.shop/";
         if (domain.Contains("sayhentai")) return "https://sayhentai.cx/";
         if (domain.Contains("hentai2read")) return "https://hentai2read.com/";
+        if (domain.Contains("hitomi")) return "https://hitomi.la/";
+        if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/";
+        if (domain.Contains("e-hentai") || domain.Contains("exhentai")) return "https://e-hentai.org/";
         return "https://google.com";
     }
 
@@ -297,6 +315,9 @@ public partial class MainViewModel
         if (domain.Contains("damconuong")) return "https://damconuong.shop/the-loai/elf";
         if (domain.Contains("sayhentai")) return "https://sayhentai.cx/genre/romance";
         if (domain.Contains("hentai2read")) return "https://hentai2read.com/";
+        if (domain.Contains("hitomi")) return "https://hitomi.la/type/manga-all.html";
+        if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/";
+        if (domain.Contains("e-hentai") || domain.Contains("exhentai")) return "https://e-hentai.org/";
         return "";
     }
 }

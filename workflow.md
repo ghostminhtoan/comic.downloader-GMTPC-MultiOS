@@ -1020,3 +1020,31 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      - Tự động dọn dẹp các thư mục con legacy.
   2. **Tích Hợp `MainViewModel.cs` & `AppUpdateService.cs`**:
      - Nhận diện hệ điều hành động (`OperatingSystem.IsAndroid()`, `OperatingSystem.IsLinux()`, `OperatingSystem.IsWindows()`), tự động chọn đúng link GitHub Releases tương ứng khi người dùng ấn nút Cập Nhật (`AutoUpdateCommand`).
+
+
+### 15.37. Phân Tầng Thư Mục Tải Theo Server, Tải Tiếp Động (DownloadNewCommand), Mật Khẩu Chuẩn Cyberpunk & Nâng Cấp Scraper Toàn Diện
+- **Bối cảnh & Yêu cầu**:
+  1. Toàn bộ truyện tranh tải về được tự động phân luồng vào thư mục tương ứng theo server: `downloads\<tên server>\<tên truyện>` (ví dụ: `downloads\truyenqq\book a`, `downloads\nettruyenviet10\book b`, `downloads\loppytoonn\book c`...).
+  2. Đổi nhãn nút `⬇️ TẢI TẤT CẢ` thành `⬇️ TẢI`, bổ sung nút `➕ TẢI TIẾP` (`DownloadNewCommand`) cho phép nạp thêm truyện mới vào hàng đợi tải khi đang tải mà không ngắt quãng hoặc tải lại từ đầu.
+  3. Thiết lập mặc định số luồng tải ảnh là **3**, số truyện tải cùng lúc là **2**.
+  4. Sửa triệt để lỗi Daomeoden gom tất cả chương vào cùng một thư mục do regex trích xuất số chương fallback.
+  5. Sửa lỗi Damconuong tự động nhận diện redirect domain và bóc tách ảnh chapter.
+  6. Triệt tiêu thư mục con thừa `Full Gallery` cho các bộ 1 chapter trên E-Hentai và Hitomi.
+  7. Bóc tách và tải ảnh gốc chất lượng cao cho Hentaiforce thay vì thumbnail.
+  8. Bổ sung 3 subtab `hitomi.la`, `hentaiforce`, `e-hentai.org` vào `🔞 Source Hentai`.
+  9. Thiết kế lại tab `🔑 Password` chuẩn giao diện bảng Cyberpunk, hỗ trợ Apply, Import, Export, Apply All và autosave `autosave_password.md`.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  - `DomainRoutingService.cs`: Cung cấp hàm `GetServerFolderName(domain, url)` ánh xạ chuẩn xác tên server sạch cho từng domain.
+  - `DownloadEngineService.cs`:
+    - Áp dụng cấu trúc đường dẫn `Path.Combine(effectiveRoot, serverFolder, safeBookName)`.
+    - Xây dựng cơ chế hàng đợi tải động `_downloadQueue` và `_enqueuedItems` cho `StartDownloadAsync` và `DownloadNewAsync`.
+    - Mặc định `ConcurrentComicDownloads = 2`, `ImageDownloadThreads = 3`.
+  - `ComicScraperService.cs`:
+    - Fix trích xuất số chương Daomeoden (`ParseDaomeodenChapterNumber`, nâng cấp `ExtractChapterNumber` hỗ trợ phân tách `[\s\-_:/#]*`).
+    - Nâng cấp scraper Damconuong và cơ chế xử lý domain redirect.
+    - Bổ sung engine crawl Hentaiforce (`ScrapeHentaiforceBookAsync`, `ExtractHentaiforceChapterImagesAsync`) tự động giải mã link ảnh gốc chất lượng cao.
+  - `MainViewModel.PasswordManager.cs`:
+    - Xây dựng riêng partial class quản lý thông tin đăng nhập đa domain (damconuong.shop, mangadex.org).
+    - Hỗ trợ lưu trữ bền vững vào `.portable/autosave_password.md` định dạng Markdown.
+  - `MainView.axaml` & `languages.md`:
+    - Cập nhật giao diện bảng Cyberpunk cho Tab Password, thêm 3 subtab Hentai, cập nhật nút Tải & Tải tiếp.
