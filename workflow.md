@@ -943,19 +943,3 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
        + `float b = options.Brightness / 100.0f;`
        + `float t = 0.5f * (1.0f - c) + b;`
      - Khi kéo slider tăng giảm tương phản, độ sáng, độ bão hòa, ảnh After phản hồi tức thì với màu sắc trung thực tuyệt đối, triệt tiêu hoàn toàn lỗi đen màn hình (black screen).
-
-### 15.31. Tích Hợp Toàn Diện Bộ Cào & Tải Truyện E-Hentai.org / ExHentai.org Đa Nền Tảng
-- **Bối cảnh & Vấn đề**:
-  - Khi tải link gallery từ `e-hentai.org` (ví dụ: `https://e-hentai.org/g/4219377/399f951d2d`):
-    + Ứng dụng Avalonia chưa có module Scraper riêng cho E-Hentai, rơi vào fallback parser không có Cookie `nw=1` và không xử lý được cấu trúc gallery/reader của E-Hentai.
-    + Thẻ ảnh reader CDN `hath.network` và `ehgt.org` cần cấu hình Referer và Cookie hợp lệ, đồng thời cần xử lý fallback qua `nlParam` khi node CDN H@H bị timeout hoặc rate limit.
-- **Giải pháp Kiến trúc**:
-  1. **Tích hợp Official E-Hentai GData API (`api.e-hentai.org/api.php`)**:
-     - Bóc tách `gid` và `token` từ URL gallery, gửi request JSON GData API để trích xuất tức thì và chuẩn xác 100% Title, Cover Thumbnail, tổng số trang ảnh (`filecount`) và Tags.
-     - Fallback cào HTML linh hoạt khi API không phản hồi (hỗ trợ `#gn`, `#gj`, `<title>`, bypass `Content Warning` qua cookie `nw=1` & `nw=always`).
-  2. **Thu thập Reader URLs Đa Trang & Giải Mã Direct CDN Images Song Song**:
-     - Bóc tách toàn bộ liên kết reader (`/s/[token]/[gid]-[page]`) trên trang 1 và các trang phân trang `?p=1..maxPIndex` với Semaphore điều tiết.
-     - Regex trích xuất reader link hỗ trợ đầy đủ absolute URL, protocol-relative và relative link.
-     - Trích xuất direct image URL từ thẻ `<img id="img">`, `<img src="..." id="img">`, hoặc Hath network CDN, tự động bắt tham số `nlParam` để kích hoạt server dự phòng khi gặp sự cố mạng.
-  3. **Cấu hình Download Engine Service**:
-     - Thêm điều hướng Referer `https://e-hentai.org/` và Cookie `nw=1` cho toàn bộ tài nguyên từ `hath.network`, `ehgt.org`, `e-hentai.org`, `exhentai.org`.
