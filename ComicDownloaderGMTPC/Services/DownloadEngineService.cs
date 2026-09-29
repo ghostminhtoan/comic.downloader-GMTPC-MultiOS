@@ -45,12 +45,15 @@ public class DownloadEngineService
     public int ConcurrentComicDownloads { get; set; } = 2; // 1 đến 8 (mặc định 2)
     public int ImageDownloadThreads { get; set; } = 3; // 1 đến 16 (mặc định 3)
 
+    public void NotifyConcurrencyChanged()
+    {
+        ProgressUpdated?.Invoke();
+    }
+
     private readonly System.Collections.Concurrent.ConcurrentQueue<ComicBookItem> _downloadQueue = new();
     private readonly HashSet<ComicBookItem> _enqueuedItems = new();
     private readonly object _queueLock = new();
     private string _activeMode = "Single comic";
-    private int _activeWorkerCount = 0;
-    private TaskCompletionSource<bool>? _downloadFinishedTcs;
 
     public void RequestOpenStorageSettings() => OpenStorageSettingsRequested?.Invoke();
 
@@ -323,7 +326,6 @@ public class DownloadEngineService
         var ct = _cts.Token;
         _lastSpeedCheckTime = DateTime.UtcNow;
         _totalBytesDownloadedInWindow = 0;
-        _downloadFinishedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         int concurrentComics = Math.Clamp(ConcurrentComicDownloads, 1, 16);
         int imageThreads = Math.Max(1, ImageDownloadThreads);
@@ -332,7 +334,6 @@ public class DownloadEngineService
         {
             while (_downloadQueue.TryDequeue(out _)) { }
             _enqueuedItems.Clear();
-            _activeWorkerCount = 0;
 
             var validItems = items.Where(item => item.IsChecked && item.Status != "Completed").ToList();
             if (validItems.Count == 0)
@@ -360,17 +361,42 @@ public class DownloadEngineService
 
         LogEmitted?.Invoke("INFO", $"Bắt đầu tải danh sách truyện (Song song: {concurrentComics} truyện, {imageThreads} luồng ảnh | Thư mục: {mode}) tới: {DownloadRoot}");
 
-        using var cancelRegistration = ct.Register(() => _downloadFinishedTcs?.TrySetCanceled(ct));
-
         try
         {
             BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", "Bắt đầu tải danh sách truyện...", 0, true);
 
-            // Kích hoạt các worker theo số lượng luồng cấu hình
-            DispatchDownloadWorkers(ct);
+            var workerTasks = Enumerable.Range(0, concurrentComics).Select(async _ =>
+            {
+                while (!ct.IsCancellationRequested)
+                {
+                    ComicBookItem? item = null;
+                    lock (_queueLock)
+                    {
+                        if (!_downloadQueue.TryDequeue(out item))
+                        {
+                            break;
+                        }
+                    }
 
-            // Đợi cho đến khi toàn bộ hàng đợi tải hoàn tất
-            await _downloadFinishedTcs.Task.ConfigureAwait(false);
+                    if (item != null)
+                    {
+                        try
+                        {
+                            await DownloadComicBookAsync(item, _activeMode, imageThreads, ct).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            LogEmitted?.Invoke("ERROR", $"Lỗi tải truyện '{item.Title}': {ex.Message}");
+                        }
+                    }
+                }
+            }).ToList();
+
+            await Task.WhenAll(workerTasks).ConfigureAwait(false);
             LogEmitted?.Invoke("SUCCESS", "Hoàn tất toàn bộ tác vụ tải trong hàng chờ.");
             SoundNotificationService.Instance.PlaySound(SoundNotificationType.DownloadFinish);
         }
@@ -421,89 +447,12 @@ public class DownloadEngineService
                     }
                 }
             }
-
             LogEmitted?.Invoke("INFO", $"Đã nạp thêm {enqueuedCount} truyện mới vào tiến trình tải đang chạy.");
             ProgressUpdated?.Invoke();
-
-            if (_cts != null && !_cts.IsCancellationRequested)
-            {
-                DispatchDownloadWorkers(_cts.Token);
-            }
         }
         else
         {
             await StartDownloadAsync(pendingItems, mode, externalCt).ConfigureAwait(false);
-        }
-    }
-
-    public void NotifyConcurrencyChanged()
-    {
-        if (_isDownloading && _cts != null && !_cts.IsCancellationRequested)
-        {
-            DispatchDownloadWorkers(_cts.Token);
-        }
-    }
-
-    private void DispatchDownloadWorkers(CancellationToken ct)
-    {
-        lock (_queueLock)
-        {
-            if (!_isDownloading || ct.IsCancellationRequested) return;
-
-            int maxConcurrent = Math.Clamp(ConcurrentComicDownloads, 1, 16);
-            int neededWorkers = maxConcurrent - _activeWorkerCount;
-
-            for (int i = 0; i < neededWorkers && !_downloadQueue.IsEmpty; i++)
-            {
-                _activeWorkerCount++;
-                _ = Task.Run(() => ProcessQueueWorkerLoopAsync(ct), ct);
-            }
-        }
-    }
-
-    private async Task ProcessQueueWorkerLoopAsync(CancellationToken ct)
-    {
-        try
-        {
-            int imageThreads = Math.Max(1, ImageDownloadThreads);
-            while (!ct.IsCancellationRequested)
-            {
-                ComicBookItem? item = null;
-                lock (_queueLock)
-                {
-                    if (!_downloadQueue.TryDequeue(out item))
-                    {
-                        break;
-                    }
-                }
-
-                if (item != null)
-                {
-                    try
-                    {
-                        await DownloadComicBookAsync(item, _activeMode, imageThreads, ct).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        LogEmitted?.Invoke("ERROR", $"Lỗi tải truyện '{item.Title}': {ex.Message}");
-                    }
-                }
-            }
-        }
-        finally
-        {
-            lock (_queueLock)
-            {
-                _activeWorkerCount--;
-                if (_activeWorkerCount <= 0 && _downloadQueue.IsEmpty)
-                {
-                    _downloadFinishedTcs?.TrySetResult(true);
-                }
-            }
         }
     }
 
@@ -555,7 +504,6 @@ public class DownloadEngineService
         _isPaused = false;
         _pauseTcs?.TrySetCanceled();
         _pauseTcs = null;
-        _downloadFinishedTcs?.TrySetCanceled();
         if (_cts != null && !_cts.IsCancellationRequested)
         {
             _cts.Cancel();
@@ -819,6 +767,45 @@ public class DownloadEngineService
 
     private async Task<bool> DownloadImageWithRetryAsync(string imageUrl, string destinationPath, string refererUrl, CancellationToken ct)
     {
+        // 1. Đối với MangaDex Network (*.mangadex.network, uploads.mangadex.org, mangadex.org)
+        if (imageUrl.Contains("mangadex", StringComparison.OrdinalIgnoreCase))
+        {
+            for (int mdAttempt = 1; mdAttempt <= 3; mdAttempt++)
+            {
+                if (ct.IsCancellationRequested) return false;
+                try
+                {
+                    bool ok = await MangaDexNetworkService.Instance.DownloadImageFileAsync(imageUrl, destinationPath, "https://mangadex.org/", ct).ConfigureAwait(false);
+                    if (ok && File.Exists(destinationPath))
+                    {
+                        long fileLen = new FileInfo(destinationPath).Length;
+                        Interlocked.Add(ref _totalBytesDownloadedInWindow, fileLen);
+
+                        if (AutoSplitLongImages)
+                        {
+                            try
+                            {
+                                bool wasSplit = ImageSplitterService.TrySplitImageFile(destinationPath, AutoSplitHeight, AutoSplitQuality);
+                                if (wasSplit)
+                                {
+                                    LogEmitted?.Invoke("INFO", $"[Cắt ảnh dài] Đã tự động cắt ảnh '{Path.GetFileName(destinationPath)}' (ngưỡng {AutoSplitHeight}px)");
+                                }
+                            }
+                            catch { }
+                        }
+
+                        return true;
+                    }
+                }
+                catch
+                {
+                    // Retry MangaDex image
+                }
+
+                await Task.Delay(350 * mdAttempt, ct).ConfigureAwait(false);
+            }
+        }
+
         for (int attempt = 1; attempt <= 3; attempt++)
         {
             if (ct.IsCancellationRequested) return false;
