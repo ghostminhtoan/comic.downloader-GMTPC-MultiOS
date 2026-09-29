@@ -992,3 +992,16 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      - **Đóng Gói Debian Package (.deb) Chuẩn AR Archive**: Tự động tạo file `comicdownloadergmtpc_1.0.0_amd64.deb` và alias `ComicDownloaderGMTPC.deb` với đầy đủ `debian-binary`, `control.tar.gz` (metadata package, maintainer, dependencies, `postinst`, `postrm`), và `data.tar.gz` (`/usr/bin/comicdownloader`, `/usr/share/applications/comicdownloader.desktop`, `/usr/share/pixmaps/comicdownloader.png`, `/opt/comicdownloader/`). Cài đặt một chạm qua `sudo apt install ./ComicDownloaderGMTPC.deb`.
   2. **Tích Hợp Tự Động Vào `build.bat`**:
      - `build.bat` biên dịch sạch sẽ cả 3 nền tảng: Windows Standalone EXE (`publish\windows\`), Linux Portable .tar.gz & Debian .deb (`publish\linux\`), Android Single APK (`publish\android\`) với 0 Error, 0 Warning.
+
+### 15.35. Tối Ưu Hóa Nhận Diện File Executable Trên GNOME/Ubuntu (Loại Bỏ Hậu Tố `.Desktop` & Bổ Sung `AppRun`, `integrate-desktop.sh`)
+- **Bối cảnh & Vấn đề**:
+  - Khi người dùng giải nén bản Portable `.tar.gz` trên Ubuntu / GNOME Files (Nautilus):
+    1. Binary có tên gốc `ComicDownloaderGMTPC.Desktop` bị GNOME Files nhận diện nhầm là file cấu hình Desktop Entry (`application/x-desktop` không hợp lệ) do có đuôi `.Desktop`. Khi double-click, GNOME mở trình soạn thảo văn bản (Text Editor) thay vì chạy chương trình.
+    2. File `.desktop` và `.sh` trong thư mục Downloads mặc định bị GNOME chặn thực thi vì lý do bảo mật.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Chuẩn Hóa Tên Binary Thực Thi Thành `ComicDownloaderGMTPC`**:
+     - Bỏ hoàn toàn hậu tố `.Desktop` ở tên file binary, giúp kernel và trình quản lý file GNOME / KDE / XFCE nhận diện chính xác 100% đây là `ELF 64-bit LSB executable / Program`. Double-click vào file là ứng dụng Avalonia khởi chạy ngay lập tức.
+  2. **Bổ Sung File Thực Thi Entry Point Chuẩn Linux (`AppRun`)**:
+     - Cung cấp file `AppRun` (POSIX mode `0755`) cấu hình đầy đủ biến môi trường `DOTNET_BUNDLE_EXTRACT_BASE_DIR` và `LD_LIBRARY_PATH`.
+  3. **Script 1-Click Tích Hợp Desktop & Menu Ứng Dụng (`integrate-desktop.sh`)**:
+     - Cung cấp script tự động tạo shortcut ra màn hình Desktop (`~/Desktop/ComicDownloaderGMTPC.desktop`) và Menu ứng dụng (`~/.local/share/applications/ComicDownloaderGMTPC.desktop`), tự động cấu hình `gio set ... metadata::trusted true` (Allow Launching) để người dùng có thể nhấp đúp từ Desktop một cách trực quan.
