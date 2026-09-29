@@ -1049,28 +1049,27 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `MainView.axaml` & `languages.md`:
     - Cập nhật giao diện bảng Cyberpunk cho Tab Password, thêm 3 subtab Hentai, cập nhật nút Tải & Tải tiếp.
 
-### 15.39. Nâng Cấp Toàn Diện MangaDex v5 Scraper: Aggregate API, Multi-Language Fallback, Single Chapter Support & Multi-Layer Downloader
-- **Bối cảnh & Vấn đề**:
-  - Khi cào truyện từ MangaDex (ví dụ bộ Fabulous Beasts: `https://mangadex.org/title/151bca3e-db98-4ad2-8d8d-239943b91437/you-shou-yan`), scraper cũ chỉ lọc cứng `translatedLanguage[]=vi` hoặc `translatedLanguage[]=en`. Với các bộ truyện gốc tiếng Trung (`zh`, `zh-hk`) hoặc tiếng Nhật (`ja`) chưa có bản dịch tiếng Việt, hệ thống báo lỗi không tìm thấy chapter và không cào được.
-  - Kết nối tới `api.mangadex.org` và CDN ảnh bị ISP Việt Nam chặn SNI/TLS Handshake (TCP RST).
-  - Cờ `--compressed` trong lệnh curl gây lỗi trên các bản Windows có curl không hỗ trợ nén.
-  - Chưa hỗ trợ link chapter đơn lẻ `https://mangadex.org/chapter/{id}`.
+### 15.38. Channel-Based Dynamic Worker Pool Cho Tải Song Song Đa Truyện & Hệ Thống Tự Dán (Auto Paste) Đa Link Bất Đồng Bộ
+- **Bối cảnh & Yêu cầu**:
+  1. **Khắc phục triệt để lỗi không tải song song khi thêm truyện thứ 2 và bấm `➕ TẢI TIẾP`**:
+     - Khi đang tải truyện 1, nếu người dùng thêm truyện 2 và bấm nút `➕ TẢI TIẾP`, hệ thống phải tức thì kích hoạt tải song song ngay lập tức theo đúng số lượng truyện tải cùng lúc cấu hình (mặc định là 2 truyện).
+  2. **Khôi phục nút `📋 DÁN LINK` và CheckBox `⚡ Tự dán` trên thanh Quick Direct Link Bar**:
+     - Hiển thị đầy đủ các nút chức năng trên thanh dán link nhanh toàn cục: `🔍 LẤY LINK`, `➕ THÊM`, `📋 DÁN LINK`, `🗑️ XÓA`, `⚡ Tự dán`.
+  3. **Nâng cấp tính năng `⚡ Tự dán` (Auto Paste Clipboard)**:
+     - Khi người dùng copy link bên ngoài ứng dụng (dù copy lần lượt nhiều link hoặc copy một đoạn văn bản/markdown chứa nhiều link cùng lúc), hệ thống tự động bóc tách 100% toàn bộ URL hợp lệ bằng biểu thức chính quy (Regex) và nạp hết vào hàng chờ (Queue), không bỏ sót bất kỳ link nào và không chỉ lấy mỗi link mới nhất.
+     - Với liên kết MangaDex khi ở chế độ Auto Paste chạy ngầm, tự động áp dụng ngôn ngữ mặc định Tiếng Việt (kèm Fallback Tiếng Anh) mà không hiển thị Modal Dialog chặn luồng UI.
 - **Kiến trúc & Giải pháp Thực hiện**:
-  1. **Nghiên Cứu & Cập Nhật MangaDex API v5 Hiện Đại**:
-     - **Manga Metadata**: `GET /manga/{id}?includes[]=cover_art&includes[]=author&includes[]=artist` (Lấy đa ngôn ngữ tiêu đề: `vi` -> `en` -> `ja-ro` -> `zh` -> `altTitles`, bóc tách ảnh bìa 256px `uploads.mangadex.org/covers/{mangaId}/{coverFile}.256.jpg`).
-     - **Chapter Feed API**: `GET /manga/{id}/feed?offset={offset}&limit=500&includes[]=scanlation_group&order[volume]=asc&order[chapter]=asc` (Nâng limit lên 500 chương/batch thay vì 100).
-     - **Aggregate API**: `GET /manga/{id}/aggregate` (Quét toàn bộ cấu trúc cây Volumes và Chapters trong 1 request duy nhất).
-     - **At-Home Image Server API**: `GET /at-home/server/{chapterId}` (Trích xuất `baseUrl`, `hash` và danh sách tệp ảnh `data` chất lượng cao `{baseUrl}/data/{hash}/{filename}`).
-  2. **Cơ Chế Smart Multi-Language Fallback (Bắt Chước Chuẩn WPF)**:
-     - Tầng 1: Quét Feed theo ngôn ngữ ưu tiên người dùng đã chọn (`vi` hoặc `en`).
-     - Tầng 2: Nếu không có chapter nào và bật `useFallback`, quét Feed theo ngôn ngữ dự phòng (`en` <-> `vi`).
-     - Tầng 3: Nếu vẫn không có chapter nào (truyện gốc `zh`, `ja`, `ko`), tự động quét Feed với **All Available Languages** (không truyền param `translatedLanguage[]`), gom nhóm theo số chương `chapter` number để tránh trùng lặp bản dịch.
-     - Tầng 4: Nếu Feed rỗng, fallback sang **Aggregate API** duyệt toàn bộ các volume để lấy 100% chapter khả dụng.
-     - Nhờ đó, 100% các bộ truyện trên MangaDex đều được bóc tách và tải đầy đủ thành công.
-  3. **Hỗ Trợ Direct Single Chapter (`/chapter/{id}`)**:
-     - Tự động nhận diện URL chapter đơn lẻ, truy vấn metadata manga liên kết qua endpoint `/chapter/{id}?includes[]=manga` và khởi tạo tải đúng 1 chapter mục tiêu.
-  4. **Nâng Cấp `MangaDexNetworkService.cs` & Tải Ảnh Đa Tầng**:
-     - Loại bỏ cờ `--compressed` không tương thích, chuẩn hóa cờ curl an toàn `-s -L --max-time 15 --insecure`.
-     - Tích hợp bộ giải mã JSON bọc `TryUnwrapProxyJson` hỗ trợ chuỗi Reverse Proxy Gateways (AllOrigins, CORSProxy, CodeTabs, CorsFix).
-     - `DownloadEngineService.cs` tích hợp `MangaDexNetworkService.Instance.DownloadImageFileAsync` với Referer `https://mangadex.org/` cho toàn bộ ảnh CDN `*.mangadex.network` và `uploads.mangadex.org`.
+  - `DownloadEngineService.cs`:
+    - Chuyển đổi toàn diện cơ chế hàng đợi sang kiến trúc **Channel-based Dynamic Worker Pool** (`System.Threading.Channels.Channel<ComicBookItem>`).
+    - Các worker trong `WorkerLoopAsync` duy trì lắng nghe qua `_downloadChannel.Reader.WaitToReadAsync(ct)`. Khi có truyện mới nạp vào qua `DownloadNewAsync`, worker đang rảnh lập tức thức dậy và bắt đầu tải song song ngay tức thì.
+    - Bổ sung bộ đếm `_activeBusyWorkers` kết hợp `CheckAllFinished()` để phát hiện chính xác thời điểm hoàn tất toàn bộ hàng chờ mà không bị deadlock.
+    - Hàm `NotifyConcurrencyChanged()` tự động spawn thêm worker khi người dùng tăng "Số truyện cùng lúc" trong khi đang tải.
+  - `MainViewModel.cs`:
+    - `ExtractUrlsFromTextAsync`: Nâng cấp regex `https?://[^\s"'<>\[\]\(\)\,\;\`\r\n\t]+` bóc tách trọn vẹn toàn bộ các đường link từ mọi định dạng văn bản (markdown, plain text, text có chứa dấu câu/ngoặc kép).
+    - Duy trì `HashSet<string> _autoPastedUrls` để lọc trùng lặp thông minh.
+    - Hỗ trợ tham số `isAutoPaste` cho phép tự động phân loại chế độ tương tác trực tiếp vs chạy nền.
+    - Nâng cấp `DownloadNewAsync` lọc toàn bộ các truyện chưa tải (`b.Status != "Downloading" && b.Status != "Completed"`).
+  - `MainView.axaml`:
+    - Khôi phục nút `📋 DÁN LINK` và CheckBox `⚡ Tự dán` trên hàng Quick Direct Link Bar.
+
 

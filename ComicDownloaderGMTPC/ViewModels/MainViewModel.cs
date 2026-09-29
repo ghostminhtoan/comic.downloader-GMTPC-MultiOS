@@ -116,6 +116,7 @@ public partial class MainViewModel : ViewModelBase
 
     private CancellationTokenSource? _autoPasteCts;
     private string _lastAutoPasteText = string.Empty;
+    private readonly HashSet<string> _autoPastedUrls = new(StringComparer.OrdinalIgnoreCase);
 
     partial void OnIsAutoPasteClipboardChanged(bool value)
     {
@@ -143,7 +144,7 @@ public partial class MainViewModel : ViewModelBase
             {
                 try
                 {
-                    await Task.Delay(800, ct).ConfigureAwait(false);
+                    await Task.Delay(600, ct).ConfigureAwait(false);
 
                     var clipboard = GetClipboard();
                     if (clipboard != null)
@@ -168,7 +169,7 @@ public partial class MainViewModel : ViewModelBase
                                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
                                 {
                                     AddLog("INFO", "📋 Phát hiện link mới từ Clipboard, đang tự động phân tích và thêm vào Queue...");
-                                    await ExtractUrlsFromTextAsync(text, clearExisting: false);
+                                    await ExtractUrlsFromTextAsync(text, clearExisting: false, isAutoPaste: true);
                                 });
                             }
                         }
@@ -1114,13 +1115,13 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task GetLinkAsync()
     {
-        await ExtractUrlsFromTextAsync(UrlInput, clearExisting: true);
+        await ExtractUrlsFromTextAsync(UrlInput, clearExisting: true, isAutoPaste: false);
     }
 
     [RelayCommand]
     public async Task GetMoreAsync()
     {
-        await ExtractUrlsFromTextAsync(UrlInput, clearExisting: false);
+        await ExtractUrlsFromTextAsync(UrlInput, clearExisting: false, isAutoPaste: false);
     }
 
     [RelayCommand]
@@ -1143,7 +1144,7 @@ public partial class MainViewModel : ViewModelBase
             }
 
             AddLog("INFO", "📋 Đang trích xuất liên kết từ Clipboard...");
-            await ExtractUrlsFromTextAsync(text, clearExisting: false);
+            await ExtractUrlsFromTextAsync(text, clearExisting: false, isAutoPaste: false);
             SelectedRootTabIndex = 1; // Chuyển sang Tab Download để theo dõi tiến độ
         }
         catch (Exception ex)
@@ -1180,7 +1181,11 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task DownloadNewAsync()
     {
-        var newItems = ComicBooks.Where(b => b.IsChecked && (b.Status == "Waiting" || b.Status == "Chờ tải" || string.IsNullOrEmpty(b.Status))).ToList();
+        var newItems = ComicBooks.Where(b => b.IsChecked && 
+                                             b.Status != "Downloading" && 
+                                             b.Status != "Đang tải" && 
+                                             b.Status != "Completed" && 
+                                             b.Status != "Hoàn tất").ToList();
         if (newItems.Count == 0)
         {
             AddLog("INFO", "Không có truyện mới nào đang chờ tải.");
@@ -1583,41 +1588,77 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
-    private async Task ExtractUrlsFromTextAsync(string? rawText, bool clearExisting)
+    private async Task ExtractUrlsFromTextAsync(string? rawText, bool clearExisting, bool isAutoPaste = false)
     {
         if (string.IsNullOrWhiteSpace(rawText))
         {
-            AddLog("WARN", "Vui lòng dán ít nhất 1 đường link truyện!");
+            if (!isAutoPaste)
+            {
+                AddLog("WARN", "Vui lòng dán ít nhất 1 đường link truyện!");
+            }
             return;
         }
 
-        var rawTokens = rawText.Split(new[] { '\r', '\n', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                               .Select(l => l.Trim())
-                               .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
-                               .Distinct()
-                               .ToList();
+        // Bóc tách toàn bộ URL hợp lệ bằng Regex (hỗ trợ văn bản chứa nhiều link, markdown, text thường)
+        var urlMatches = System.Text.RegularExpressions.Regex.Matches(rawText, @"https?://[^\s""'<>\[\]\(\)\,\;\`\r\n\t]+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var candidateUrls = new List<string>();
 
-        var candidateUrls = rawTokens.Where(t => t.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                                                 t.StartsWith("https://", StringComparison.OrdinalIgnoreCase)).ToList();
-
-        if (candidateUrls.Count == 0 && rawTokens.Count > 0)
+        foreach (System.Text.RegularExpressions.Match match in urlMatches)
         {
-            candidateUrls = rawTokens;
+            string url = match.Value.Trim().TrimEnd('.', ',', ')', ']', ';', '>', '\"', '\'');
+            if (!string.IsNullOrWhiteSpace(url) && (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+            {
+                candidateUrls.Add(url);
+            }
+        }
+
+        if (candidateUrls.Count == 0)
+        {
+            var rawTokens = rawText.Split(new[] { '\r', '\n', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                                   .Select(l => l.Trim())
+                                   .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
+                                   .Distinct()
+                                   .ToList();
+            candidateUrls = rawTokens.Where(t => t.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                                 t.StartsWith("https://", StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        if (candidateUrls.Count == 0)
+        {
+            if (!isAutoPaste)
+            {
+                AddLog("WARN", "Không tìm thấy liên kết truyện hợp lệ nào trong nội dung!");
+            }
+            return;
         }
 
         if (clearExisting)
         {
             ComicBooks.Clear();
             ScanResults.Clear();
+            _autoPastedUrls.Clear();
         }
 
         var existingUrls = new HashSet<string>(ComicBooks.Select(b => b.Url.Trim()), StringComparer.OrdinalIgnoreCase);
-        var targetUrls = candidateUrls.Where(u => !existingUrls.Contains(u)).Distinct().ToList();
+        var targetUrls = candidateUrls.Where(u => !existingUrls.Contains(u)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        if (isAutoPaste)
+        {
+            targetUrls = targetUrls.Where(u => !_autoPastedUrls.Contains(u)).ToList();
+        }
 
         if (targetUrls.Count == 0)
         {
-            AddLog("INFO", "Tất cả link truyện vừa dán đã có sẵn trong danh sách (hoặc không tìm thấy link mới).");
+            if (!isAutoPaste)
+            {
+                AddLog("INFO", "Tất cả link truyện vừa dán đã có sẵn trong danh sách.");
+            }
             return;
+        }
+
+        if (isAutoPaste)
+        {
+            foreach (var u in targetUrls) _autoPastedUrls.Add(u);
         }
 
         AddLog("INFO", $"Đang trích xuất thông tin cho {targetUrls.Count} link truyện mới...");
@@ -1628,16 +1669,25 @@ public partial class MainViewModel : ViewModelBase
 
         if (hasMangadex)
         {
-            AddLog("INFO", "Phát hiện liên kết MangaDex. Vui lòng chọn ngôn ngữ tải (Tiếng Việt / Tiếng Anh)...");
-            var choice = await PromptMangadexLanguageAsync();
-            if (choice == null)
+            if (isAutoPaste)
             {
-                AddLog("WARN", "Đã hủy thao tác lấy link MangaDex theo yêu cầu.");
-                return;
+                mangadexLang = "vi";
+                mangadexFallback = true;
+                AddLog("INFO", "📋 [Tự dán MangaDex] Tự động chọn ngôn ngữ Tiếng Việt (Fallback: Tiếng Anh).");
             }
-            mangadexLang = choice.PrimaryLanguage;
-            mangadexFallback = choice.UseFallback;
-            AddLog("INFO", $"Đã xác nhận ngôn ngữ MangaDex: {(mangadexLang == "vi" ? "Tiếng Việt" : "Tiếng Anh")} (Fallback: {(mangadexFallback ? "Bật" : "Tắt")})");
+            else
+            {
+                AddLog("INFO", "Phát hiện liên kết MangaDex. Vui lòng chọn ngôn ngữ tải (Tiếng Việt / Tiếng Anh)...");
+                var choice = await PromptMangadexLanguageAsync();
+                if (choice == null)
+                {
+                    AddLog("WARN", "Đã hủy thao tác lấy link MangaDex theo yêu cầu.");
+                    return;
+                }
+                mangadexLang = choice.PrimaryLanguage;
+                mangadexFallback = choice.UseFallback;
+                AddLog("INFO", $"Đã xác nhận ngôn ngữ MangaDex: {(mangadexLang == "vi" ? "Tiếng Việt" : "Tiếng Anh")} (Fallback: {(mangadexFallback ? "Bật" : "Tắt")})");
+            }
         }
 
         int startIndex = ComicBooks.Count + 1;
