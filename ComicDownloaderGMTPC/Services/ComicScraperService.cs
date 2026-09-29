@@ -100,6 +100,11 @@ public class ComicScraperService
                 return await ScrapeHentai2readBookAsync(url, index, domain, ct).ConfigureAwait(false);
             }
 
+            if (domain.Contains("e-hentai") || domain.Contains("exhentai"))
+            {
+                return await ScrapeEHentaiBookAsync(url, index, domain, ct).ConfigureAwait(false);
+            }
+
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
 
@@ -149,6 +154,11 @@ public class ComicScraperService
             if (domain.Contains("mangadex"))
             {
                 return await ExtractMangaDexChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
+            }
+
+            if (domain.Contains("e-hentai") || domain.Contains("exhentai"))
+            {
+                return await ExtractEHentaiChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
             }
 
             using var req = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
@@ -2088,5 +2098,368 @@ public class ComicScraperService
         }
 
         return result;
+    }
+
+    private async Task<string> FetchEHentaiHtmlAsync(string url, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+        url = DomainRoutingService.NormalizeUrl(url);
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Add("Cookie", "nw=1");
+            using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode) return string.Empty;
+
+            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(html) && (html.Contains("Content Warning") || html.Contains("Offensive For Everyone")))
+            {
+                string sep = url.Contains('?') ? "&" : "?";
+                string bypassUrl = url + sep + "nw=always";
+                using var bypassReq = new HttpRequestMessage(HttpMethod.Get, bypassUrl);
+                bypassReq.Headers.Add("Cookie", "nw=1; nw=always");
+                using var bypassRes = await _httpClient.SendAsync(bypassReq, ct).ConfigureAwait(false);
+                if (bypassRes.IsSuccessStatusCode)
+                {
+                    string bypassHtml = await bypassRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(bypassHtml) && !bypassHtml.Contains("Content Warning"))
+                    {
+                        return bypassHtml;
+                    }
+                }
+            }
+            return html;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private async Task<ComicBookItem> ScrapeEHentaiBookAsync(string url, int index, string domain, CancellationToken ct)
+    {
+        var item = new ComicBookItem
+        {
+            Index = index,
+            Url = url,
+            Domain = domain,
+            Status = "Extracting...",
+            StatusMessage = "Connecting to e-hentai.org..."
+        };
+
+        // 1. Phân tích GID và Token từ URL (vd: /g/4219377/399f951d2d)
+        var gidMatch = Regex.Match(url, @"/g/(?<gid>\d+)/(?<token>[a-zA-Z0-9]+)", RegexOptions.IgnoreCase);
+        string title = string.Empty;
+        string coverUrl = string.Empty;
+        int totalPages = 0;
+
+        if (gidMatch.Success && long.TryParse(gidMatch.Groups["gid"].Value, out long gid))
+        {
+            string token = gidMatch.Groups["token"].Value;
+            try
+            {
+                // Ưu tiên Official GData API: siêu tốc và không lo bị vướng HTML layout
+                var apiPayload = new
+                {
+                    method = "gdata",
+                    gidlist = new object[] { new object[] { gid, token } },
+                    @namespace = 1
+                };
+
+                using var apiReq = new HttpRequestMessage(HttpMethod.Post, "https://api.e-hentai.org/api.php");
+                apiReq.Content = new StringContent(JsonSerializer.Serialize(apiPayload), System.Text.Encoding.UTF8, "application/json");
+                using var apiRes = await _httpClient.SendAsync(apiReq, ct).ConfigureAwait(false);
+                if (apiRes.IsSuccessStatusCode)
+                {
+                    string json = await apiRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("gmetadata", out var gmeta) && gmeta.GetArrayLength() > 0)
+                    {
+                        var first = gmeta[0];
+                        if (first.TryGetProperty("title", out var tProp)) title = tProp.GetString() ?? "";
+                        if (string.IsNullOrWhiteSpace(title) && first.TryGetProperty("title_jpn", out var tjProp)) title = tjProp.GetString() ?? "";
+                        if (first.TryGetProperty("thumb", out var thumbProp)) coverUrl = thumbProp.GetString() ?? "";
+                        if (first.TryGetProperty("filecount", out var fcProp))
+                        {
+                            if (int.TryParse(fcProp.GetString(), out int fc)) totalPages = fc;
+                        }
+                    }
+                }
+            }
+            catch {}
+        }
+
+        // 2. Fallback sang cào HTML nếu API không trả về
+        if (string.IsNullOrWhiteSpace(title) || totalPages == 0)
+        {
+            string html = await FetchEHentaiHtmlAsync(url, ct).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(html))
+            {
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    var gnMatch = Regex.Match(html, @"<h1[^>]*id=""gn""[^>]*>(.*?)</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                    if (gnMatch.Success) title = WebUtility.HtmlDecode(Regex.Replace(gnMatch.Groups[1].Value, @"<[^>]+>", "")).Trim();
+                    if (string.IsNullOrWhiteSpace(title))
+                    {
+                        var gjMatch = Regex.Match(html, @"<h1[^>]*id=""gj""[^>]*>(.*?)</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                        if (gjMatch.Success) title = WebUtility.HtmlDecode(Regex.Replace(gjMatch.Groups[1].Value, @"<[^>]+>", "")).Trim();
+                    }
+                    if (string.IsNullOrWhiteSpace(title))
+                    {
+                        var tMatch = Regex.Match(html, @"<title[^>]*>(.*?)</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                        if (tMatch.Success) title = WebUtility.HtmlDecode(Regex.Replace(tMatch.Groups[1].Value, @"\s*-\s*E-Hentai Galleries\s*$", "", RegexOptions.IgnoreCase)).Trim();
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(coverUrl))
+                {
+                    var bgMatch = Regex.Match(html, @"id=""gd1""[^>]*>.*?url\((['""]?)(?<url>https?://[^'"")]+)\1\)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                    if (bgMatch.Success) coverUrl = bgMatch.Groups["url"].Value;
+                    else
+                    {
+                        var imgMatch = Regex.Match(html, @"id=""gd1""[^>]*>.*?<img[^>]+src=['""](?<url>https?://[^'""]+)['""]", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                        if (imgMatch.Success) coverUrl = imgMatch.Groups["url"].Value;
+                    }
+                }
+
+                if (totalPages == 0)
+                {
+                    var countMatch = Regex.Match(html, @"Showing\s+[\d,]+\s*-\s*[\d,]+\s+of\s+([\d,]+)\s+images", RegexOptions.IgnoreCase);
+                    if (!countMatch.Success) countMatch = Regex.Match(html, @"<td[^>]*class=""gdt2""[^>]*>(\d+)\s+pages</td>", RegexOptions.IgnoreCase);
+                    if (countMatch.Success && int.TryParse(countMatch.Groups[1].Value.Replace(",", ""), out int parsed)) totalPages = parsed;
+                }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            title = ExtractFallbackTitleFromUrl(url);
+        }
+
+        item.Title = title;
+        item.CoverUrl = coverUrl;
+        item.Chapters.Clear();
+        item.Chapters.Add(new ChapterItem
+        {
+            ChapterNumber = 1,
+            Title = "Full Gallery",
+            Url = url,
+            TotalPages = totalPages,
+            Status = "Waiting"
+        });
+
+        item.TotalChapters = 1;
+        item.LatestChapter = totalPages > 0 ? $"{totalPages} Pages" : "Gallery";
+        item.Status = "Ready";
+        item.StatusMessage = totalPages > 0 ? $"Extracted {totalPages} pages" : "Ready";
+
+        return item;
+    }
+
+    private async Task<List<string>> ExtractEHentaiChapterImagesAsync(string galleryUrl, CancellationToken ct)
+    {
+        var imageUrls = new List<string>();
+        galleryUrl = DomainRoutingService.NormalizeUrl(galleryUrl);
+
+        string firstHtml = await FetchEHentaiHtmlAsync(galleryUrl, ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(firstHtml)) return imageUrls;
+
+        // Bóc tách tổng số trang ảnh
+        int totalImages = 0;
+        var countMatch = Regex.Match(firstHtml, @"Showing\s+[\d,]+\s*-\s*[\d,]+\s+of\s+([\d,]+)\s+images", RegexOptions.IgnoreCase);
+        if (!countMatch.Success) countMatch = Regex.Match(firstHtml, @"<td[^>]*class=""gdt2""[^>]*>(\d+)\s+pages</td>", RegexOptions.IgnoreCase);
+        if (countMatch.Success && int.TryParse(countMatch.Groups[1].Value.Replace(",", ""), out int parsedCount))
+        {
+            totalImages = parsedCount;
+        }
+
+        var readerUrlByPage = new System.Collections.Concurrent.ConcurrentDictionary<int, string>();
+
+        void HarvestReaderUrls(string htmlContent)
+        {
+            if (string.IsNullOrWhiteSpace(htmlContent)) return;
+            var matches = Regex.Matches(htmlContent, @"<a[^>]+href=['""](?<url>(?:https?://(?:e-hentai|exhentai)\.org)?/s/[a-zA-Z0-9]+/(?<gid>\d+)-(?<page>\d+))['""][^>]*>", RegexOptions.IgnoreCase);
+            foreach (Match m in matches)
+            {
+                string rUrl = m.Groups["url"].Value;
+                if (!rUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                {
+                    rUrl = "https://e-hentai.org" + (rUrl.StartsWith("/") ? "" : "/") + rUrl;
+                }
+                if (int.TryParse(m.Groups["page"].Value, out int pNum))
+                {
+                    readerUrlByPage[pNum] = rUrl;
+                }
+            }
+        }
+
+        HarvestReaderUrls(firstHtml);
+
+        int imagesPerPage = readerUrlByPage.Count > 0 ? readerUrlByPage.Count : 20;
+        int maxPIndex = 0;
+        var pttMatches = Regex.Matches(firstHtml, @"[?&]p=(\d+)", RegexOptions.IgnoreCase);
+        foreach (Match m in pttMatches)
+        {
+            if (int.TryParse(m.Groups[1].Value, out int pVal))
+            {
+                if (pVal > maxPIndex) maxPIndex = pVal;
+            }
+        }
+
+        if (totalImages > 0)
+        {
+            int calculatedMaxP = (int)Math.Ceiling((double)totalImages / imagesPerPage) - 1;
+            maxPIndex = Math.Max(maxPIndex, Math.Max(0, calculatedMaxP));
+        }
+
+        string baseGalleryUrl = Regex.Replace(galleryUrl, @"([?&])p=\d+(&|$)", "$1", RegexOptions.IgnoreCase).TrimEnd('&', '?');
+        string sep = baseGalleryUrl.Contains('?') ? "&" : "?";
+
+        // Thu thập các trang danh mục còn lại song song
+        if (maxPIndex >= 1)
+        {
+            using var pageSem = new SemaphoreSlim(4, 4);
+            var pageTasks = new List<Task>();
+            for (int p = 1; p <= maxPIndex; p++)
+            {
+                int pNum = p;
+                pageTasks.Add(Task.Run(async () =>
+                {
+                    await pageSem.WaitAsync(ct).ConfigureAwait(false);
+                    try
+                    {
+                        string pUrl = $"{baseGalleryUrl}{sep}p={pNum}";
+                        for (int attempt = 1; attempt <= 3; attempt++)
+                        {
+                            ct.ThrowIfCancellationRequested();
+                            string pHtml = await FetchEHentaiHtmlAsync(pUrl, ct).ConfigureAwait(false);
+                            if (!string.IsNullOrWhiteSpace(pHtml))
+                            {
+                                HarvestReaderUrls(pHtml);
+                                break;
+                            }
+                            await Task.Delay(200 * attempt, ct).ConfigureAwait(false);
+                        }
+                    }
+                    catch {}
+                    finally
+                    {
+                        pageSem.Release();
+                    }
+                }, ct));
+            }
+            await Task.WhenAll(pageTasks).ConfigureAwait(false);
+        }
+
+        int finalTotalPages = totalImages > 0 ? totalImages : (readerUrlByPage.Count > 0 ? readerUrlByPage.Keys.Max() : 1);
+        var directImageByPage = new System.Collections.Concurrent.ConcurrentDictionary<int, string>();
+
+        // Resolve direct image URLs từ các trang reader
+        using var resolveSem = new SemaphoreSlim(6, 6);
+        var resolveTasks = new List<Task>();
+
+        for (int p = 1; p <= finalTotalPages; p++)
+        {
+            int pageNum = p;
+            resolveTasks.Add(Task.Run(async () =>
+            {
+                await resolveSem.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (!readerUrlByPage.TryGetValue(pageNum, out string? readerUrl) || string.IsNullOrWhiteSpace(readerUrl))
+                    {
+                        return;
+                    }
+
+                    for (int attempt = 1; attempt <= 3; attempt++)
+                    {
+                        try
+                        {
+                            string readerHtml = await FetchEHentaiHtmlAsync(readerUrl, ct).ConfigureAwait(false);
+                            if (!string.IsNullOrWhiteSpace(readerHtml))
+                            {
+                                string? directImgUrl = ExtractEHentaiDirectImageUrl(readerHtml);
+                                string? nlParam = ExtractEHentaiNlParam(readerHtml);
+
+                                if (string.IsNullOrWhiteSpace(directImgUrl) && !string.IsNullOrWhiteSpace(nlParam))
+                                {
+                                    string sepChar = readerUrl.Contains('?') ? "&" : "?";
+                                    string fallbackUrl = $"{readerUrl}{sepChar}nl={Uri.EscapeDataString(nlParam)}";
+                                    string fbHtml = await FetchEHentaiHtmlAsync(fallbackUrl, ct).ConfigureAwait(false);
+                                    directImgUrl = ExtractEHentaiDirectImageUrl(fbHtml);
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(directImgUrl))
+                                {
+                                    directImageByPage[pageNum] = WebUtility.HtmlDecode(directImgUrl);
+                                    break;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            if (attempt >= 3) break;
+                            await Task.Delay(250 * attempt, ct).ConfigureAwait(false);
+                        }
+                    }
+                }
+                catch {}
+                finally
+                {
+                    resolveSem.Release();
+                }
+            }, ct));
+        }
+
+        await Task.WhenAll(resolveTasks).ConfigureAwait(false);
+
+        // Gom ảnh theo đúng thứ tự 1..N
+        for (int p = 1; p <= finalTotalPages; p++)
+        {
+            if (directImageByPage.TryGetValue(p, out string? imgUrl) && !string.IsNullOrWhiteSpace(imgUrl))
+            {
+                imageUrls.Add(imgUrl);
+            }
+        }
+
+        return imageUrls;
+    }
+
+    private static string? ExtractEHentaiDirectImageUrl(string readerHtml)
+    {
+        if (string.IsNullOrWhiteSpace(readerHtml)) return null;
+
+        // 1. Thẻ <img id="img" src="..."> hoặc <img src="..." id="img">
+        var imgTagMatch = Regex.Match(readerHtml, @"<img[^>]+id=['""]?img['""]?[^>]*>", RegexOptions.IgnoreCase);
+        if (imgTagMatch.Success)
+        {
+            var srcMatch = Regex.Match(imgTagMatch.Value, @"src=['""](?<url>[^'""]+?)['""]", RegexOptions.IgnoreCase);
+            if (srcMatch.Success) return srcMatch.Groups["url"].Value;
+        }
+
+        var reverseImgMatch = Regex.Match(readerHtml, @"<img[^>]+src=['""](?<url>[^'""]+?)['""][^>]+id=['""]?img['""]?", RegexOptions.IgnoreCase);
+        if (reverseImgMatch.Success)
+        {
+            return reverseImgMatch.Groups["url"].Value;
+        }
+
+        // 2. Fallback hath.network / ehgt.org
+        var hathMatch = Regex.Match(readerHtml, @"<img[^>]+src=['""](?<url>https?://[^'""]*?\.(?:hath\.network|ehgt\.org)[^'""]*)['""]", RegexOptions.IgnoreCase);
+        if (hathMatch.Success) return hathMatch.Groups["url"].Value;
+
+        var genMatch = Regex.Match(readerHtml, @"['""](?<url>https?://[^'""]*?\.(?:hath\.network|ehgt\.org)[^'""]*?\.(?:jpg|png|jpeg|webp|gif|bmp)[^'""]*)['""]", RegexOptions.IgnoreCase);
+        if (genMatch.Success) return genMatch.Groups["url"].Value;
+
+        return null;
+    }
+
+    private static string? ExtractEHentaiNlParam(string readerHtml)
+    {
+        if (string.IsNullOrWhiteSpace(readerHtml)) return null;
+        var match = Regex.Match(readerHtml, @"nl\(['""](?<nl>[^'""]+)['""]\)", RegexOptions.IgnoreCase);
+        if (match.Success) return match.Groups["nl"].Value;
+        return null;
     }
 }

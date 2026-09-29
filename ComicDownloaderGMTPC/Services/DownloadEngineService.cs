@@ -694,6 +694,13 @@ public class DownloadEngineService
                 {
                     effectiveReferer = "https://vi-hentai.pro/";
                 }
+                else if (imageUrl.Contains("hath.network", StringComparison.OrdinalIgnoreCase) ||
+                         imageUrl.Contains("ehgt.org", StringComparison.OrdinalIgnoreCase) ||
+                         (refererUrl != null && (refererUrl.Contains("e-hentai.org", StringComparison.OrdinalIgnoreCase) || refererUrl.Contains("exhentai.org", StringComparison.OrdinalIgnoreCase))))
+                {
+                    effectiveReferer = refererUrl ?? "https://e-hentai.org/";
+                    req.Headers.Add("Cookie", "nw=1");
+                }
 
                 if (!string.IsNullOrEmpty(effectiveReferer))
                 {
