@@ -52,7 +52,7 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo [OK] Linux distribution packages succeeded:
-echo      -^> publish\linux\ComicDownloaderGMTPC
+echo      -^> publish\linux\ComicDownloaderGMTPC.Desktop
 echo      -^> publish\linux\ComicDownloaderGMTPC-linux-x64.tar.gz
 echo      -^> publish\linux\comicdownloadergmtpc_1.0.0_amd64.deb
 
@@ -79,7 +79,7 @@ echo   [SUCCESS] All 3 Platforms published cleanly with 0 errors!
 echo   - Windows: publish\windows\ComicDownloaderGMTPC.Desktop.exe
 echo   - Linux Portable .tar.gz: publish\linux\ComicDownloaderGMTPC-linux-x64.tar.gz
 echo   - Linux Debian Package:   publish\linux\comicdownloadergmtpc_1.0.0_amd64.deb
-echo   - Linux Executable:       publish\linux\ComicDownloaderGMTPC
+echo   - Linux Raw Binary:       publish\linux\ComicDownloaderGMTPC.Desktop
 echo   - Android APK:            publish\android\com.CompanyName.ComicDownloaderGMTPC-Signed.apk
 echo ========================================================
 endlocal

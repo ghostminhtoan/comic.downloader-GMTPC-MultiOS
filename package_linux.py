@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 Linux Packaging Script for Comic Downloader GMTPC Avalonia
-- Creates portable .tar.gz with explicit POSIX 0755 execute permissions and LF shebang.
-- Fixes GNOME/Nautilus treating .Desktop as a desktop config file by renaming binary to ComicDownloaderGMTPC.
-- Adds AppRun and integrate-desktop.sh for 1-click desktop integration on Ubuntu/Debian.
-- Creates standard Debian (.deb) package for Ubuntu / Debian.
+- Creates 100% self-contained portable .tar.gz for Ubuntu/Debian/Linux Mint/Fedora/Arch.
+- Renames binary to pure 'ComicDownloaderGMTPC' (no .Desktop suffix) so GNOME/Nautilus executes it directly on double-click.
+- Generates AppRun, run.sh, integrate-desktop.sh, desktop entry, and icon.
+- Creates standard Debian (.deb) package for 1-click system installation.
 """
 
 import os
@@ -47,12 +47,12 @@ def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     publish_linux_dir = os.path.join(base_dir, "publish", "linux")
     
-    # Check binary source
+    # Locate published binary
     desktop_bin_original = os.path.join(publish_linux_dir, "ComicDownloaderGMTPC.Desktop")
     pure_bin_path = os.path.join(publish_linux_dir, "ComicDownloaderGMTPC")
     
     if os.path.isfile(desktop_bin_original):
-        # Make a copy without .Desktop suffix so GNOME Files recognises it as ELF Program, NOT desktop file
+        # Create pure binary WITHOUT .Desktop suffix
         shutil.copyfile(desktop_bin_original, pure_bin_path)
     elif not os.path.isfile(pure_bin_path):
         print(f"[ERROR] Linux binary not found at: {desktop_bin_original} or {pure_bin_path}")
@@ -66,7 +66,7 @@ def main():
     if os.path.isfile(icon_src):
         shutil.copyfile(icon_src, icon_dst)
     
-    # 2. Generate run.sh & AppRun with strictly LF line endings and robust environment setup
+    # 2. Generate run.sh & AppRun (Strict Unix LF \n)
     run_sh_content = """#!/bin/bash
 # ========================================================
 # Launcher for Comic Downloader GMTPC (Linux Portable)
@@ -79,7 +79,7 @@ mkdir -p "$DOTNET_BUNDLE_EXTRACT_BASE_DIR" 2>/dev/null || true
 
 export LD_LIBRARY_PATH="$SCRIPT_DIR:${LD_LIBRARY_PATH:-}"
 
-# Check ICU Globalization fallback
+# Fallback for minimal systems without libicu
 if ! ldconfig -p 2>/dev/null | grep -q "libicu" && [ ! -f /usr/lib/x86_64-linux-gnu/libicuuc.so ] && [ ! -f /usr/lib/libicuuc.so ]; then
     export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 fi
@@ -184,7 +184,7 @@ StartupNotify=true
 StartupWMClass=ComicDownloaderGMTPC
 """.replace('\r\n', '\n').encode('utf-8')
 
-    desktop_entry_path = os.path.join(publish_linux_dir, "comic-downloader.desktop")
+    desktop_entry_path = os.path.join(publish_linux_dir, "ComicDownloaderGMTPC.desktop")
     with open(desktop_entry_path, 'wb') as f:
         f.write(desktop_entry_content)
 
@@ -193,12 +193,11 @@ StartupWMClass=ComicDownloaderGMTPC
 Comic Downloader GMTPC - Linux Portable & Debian Package
 ========================================================
 
-1. CÁCH CHẠY BẢN PORTABLE (.tar.gz):
-   - Mở thư mục đã giải nén.
+1. CÁCH CHẠY BẢN PORTABLE (.tar.gz) - KHÔNG CẦN CÀI ĐẶT:
+   - Mở thư mục đã giải nén (ComicDownloaderGMTPC).
    - Nhấp đúp (Double-click) trực tiếp vào file: ComicDownloaderGMTPC (hoặc AppRun).
    - Hoặc chạy từ Terminal: ./ComicDownloaderGMTPC hoặc ./run.sh
-   - Tùy chọn: Nhấp đúp vào integrate-desktop.sh (hoặc ./integrate-desktop.sh trong Terminal)
-     để tự động tạo biểu tượng ra Màn hình Desktop và Menu ứng dụng hệ thống!
+   - Tùy chọn tiện ích: Chạy ./integrate-desktop.sh để tự động tạo icon ra màn hình Desktop và Start Menu!
 
 2. CÁCH CÀI ĐẶT BẢN DEBIAN (.deb) CHO UBUNTU / DEBIAN / LINUX MINT:
    - Cài đặt nhanh bằng apt:
@@ -206,9 +205,9 @@ Comic Downloader GMTPC - Linux Portable & Debian Package
    - Khởi chạy trực tiếp từ Terminal bằng lệnh: comicdownloader
    - Hoặc tìm và mở "Comic Downloader GMTPC" trong menu ứng dụng hệ thống.
 
-3. YÊU CẦU HỆ THỐNG / DEPENDENCIES:
-   - Hỗ trợ x86_64 (amd64) trên Ubuntu 20.04+, Debian 11+, Fedora 34+, Arch Linux...
-   - Yêu cầu thư viện cơ bản: libc6, libfontconfig1, libx11-6, libice6, libsm6, libxext6.
+3. TƯƠNG THÍCH HỆ THỐNG:
+   - Tương thích 100% các bản phân phối Linux x86_64: Ubuntu 20.04/22.04/24.04/26.04, Debian 11/12, Linux Mint, Fedora, Arch Linux...
+   - Đã nhúng sẵn toàn bộ .NET 10.0 Runtime và Native Libraries (Self-Contained Single-File).
 ========================================================
 """.replace('\r\n', '\n').encode('utf-8')
 
@@ -232,14 +231,14 @@ Comic Downloader GMTPC - Linux Portable & Debian Package
     
     with gzip.GzipFile(tar_gz_path, 'wb', mtime=0) as gz_out:
         with tarfile.open(fileobj=gz_out, mode='w') as tar:
-            # Root directory
+            # Root directory (mode 0755)
             root_dir_info = tarfile.TarInfo(name="ComicDownloaderGMTPC")
             root_dir_info.type = tarfile.DIRTYPE
             root_dir_info.mode = 0o755
             root_dir_info.mtime = int(time.time())
             tar.addfile(root_dir_info)
             
-            # Binary executable (0755) - Pure binary name WITHOUT .Desktop
+            # Binary executable (0755) - Pure binary name WITHOUT .Desktop suffix
             bin_info = tarfile.TarInfo(name="ComicDownloaderGMTPC/ComicDownloaderGMTPC")
             bin_info.type = tarfile.REGTYPE
             bin_info.size = len(desktop_bin_data)
