@@ -1,6 +1,6 @@
 # ==============================================================================
 # Comic Downloader GMTPC - Multi-OS GitHub Release Downloader
-# Tự động tải trực tiếp các bản phát hành (Windows, Linux, Android, iOS) từ GitHub Release
+# Tự động tải trực tiếp các bản phát hành (Windows, Linux, Android) từ GitHub Release
 # ==============================================================================
 
 [CmdletBinding()]
@@ -23,8 +23,7 @@ $files = @(
     "ComicDownloaderGMTPC-Windows-x64.exe",
     "ComicDownloaderGMTPC-Linux-x64.tar.gz",
     "ComicDownloaderGMTPC-Linux-x64",
-    "ComicDownloaderGMTPC-Android-Signed.apk",
-    "ComicDownloaderGMTPC-iOS-AdHoc.ipa"
+    "ComicDownloaderGMTPC-Android-Signed.apk"
 )
 
 $baseUrl = "https://github.com/$Repo/releases/download/$Tag"

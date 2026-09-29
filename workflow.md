@@ -17,14 +17,14 @@ Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file
 - Không revert thay đổi của user nếu không yêu cầu.
 - Xong việc: đánh giá, gợi ý file cần sửa/kiểm tra, rà soát EN/VI.
 - Luôn luôn test build 2 bước: bước 1 là tự tải khởi tạo thư viện, bước 2 là app mở lên, có UI hoàn tất thì mới xem như là build thành công.
-- Luôn xuất 3 dòng trạng thái chuẩn ở cuối câu trả lời:
+- Luôn xuất khối trạng thái chuẩn ở cuối câu trả lời:
   - `commit local: <mã hash>`
-  - `commit remote local: "không"`
+  - `commit github: "thành công"`
+  - `link release: https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/releases`
   - `path publish file chạy windows, linux, android:`
     - Windows: `Comic Downloader GMTPC AVALONIA\publish\windows\ComicDownloaderGMTPC.Desktop.exe`
     - Linux: `Comic Downloader GMTPC AVALONIA\publish\linux\ComicDownloaderGMTPC.Desktop`
     - Android: `Comic Downloader GMTPC AVALONIA\publish\android\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
-    - iOS: `Comic Downloader GMTPC AVALONIA\ComicDownloaderGMTPC.iOS\bin\Release\net10.0-ios\ios-arm64\` (build .ipa trên macOS+Xcode)
 - Luôn đánh giá, cập nhật `workflow.md`.
 - Đánh giá prompt, gợi ý tính năng/file thiết kế mới; cập nhật workflow.md/prompt.md khi cần.
 
