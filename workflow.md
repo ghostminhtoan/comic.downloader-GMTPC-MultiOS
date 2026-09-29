@@ -977,3 +977,18 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   2. **Tích Hợp Đóng Gói Lưu Trữ 	ar.gz Tự Động Vào uild.bat**:
      - Sử dụng công cụ 	ar (bsdtar) tích hợp trên Windows để nén thành ComicDownloaderGMTPC-linux-x64.tar.gz và alias ComicDownloaderGMTPC.tar.gz trong thư mục publish\linux\.
      - Xuất bản đồng bộ 3 nền tảng: Windows Standalone EXE (publish\windows\), Linux Binary & .tar.gz (publish\linux\), Android Single APK (publishndroid\).
+
+
+### 15.34. Khắc Phục Triệt Để Khởi Chạy Linux (Ubuntu/Debian) & Tự Động Đóng Gói Chuẩn POSIX Mode 0755 (.tar.gz & .deb)
+- **Bối cảnh & Vấn đề**:
+  - Trên các bản phân phối Linux như Ubuntu, Debian, Linux Mint, Fedora, Arch... gói Portable `.tar.gz` nén trên Windows bị mất thuộc tính quyền thực thi POSIX (`mode 0644`), khiến người dùng giải nén ra bị lỗi `Permission Denied`.
+  - File `run.sh` tạo từ Windows chứa ký tự kết dòng `\r\n` (CRLF) dẫn đến lỗi kernel `bad interpreter: No such file or directory`.
+  - .NET Single-File trích xuất thư viện native vào `/tmp` bị chặn nếu `/tmp` mount cờ `noexec`.
+  - Thiếu gói cài đặt chuẩn `.deb` cho người dùng Ubuntu/Debian.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Xây dựng Engine Đóng Gói Đa Nền Tảng `package_linux.py`**:
+     - **POSIX TarInfo Mode 0755**: Tự động gán quyền thực thi `0o755` trực tiếp cho `ComicDownloaderGMTPC.Desktop`, `run.sh`, `comic-downloader.desktop` và thư mục gốc bên trong file nén `ComicDownloaderGMTPC-linux-x64.tar.gz`. Khi giải nén trên Linux (`tar -xvf ...`), ứng dụng sẵn sàng thực thi ngay mà không cần `chmod +x`.
+     - **Launcher `run.sh` Chuẩn Unix (LF `\n`)**: Tự động cấu hình `DOTNET_BUNDLE_EXTRACT_BASE_DIR` về thư mục cache người dùng `$HOME/.cache/dotnet_bundle_extract` (tránh phân vùng `/tmp` bị `noexec`), bổ sung `LD_LIBRARY_PATH`, và cơ chế tự động fallback `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` nếu hệ thống thiếu `libicu`.
+     - **Đóng Gói Debian Package (.deb) Chuẩn AR Archive**: Tự động tạo file `comicdownloadergmtpc_1.0.0_amd64.deb` và alias `ComicDownloaderGMTPC.deb` với đầy đủ `debian-binary`, `control.tar.gz` (metadata package, maintainer, dependencies, `postinst`, `postrm`), và `data.tar.gz` (`/usr/bin/comicdownloader`, `/usr/share/applications/comicdownloader.desktop`, `/usr/share/pixmaps/comicdownloader.png`, `/opt/comicdownloader/`). Cài đặt một chạm qua `sudo apt install ./ComicDownloaderGMTPC.deb`.
+  2. **Tích Hợp Tự Động Vào `build.bat`**:
+     - `build.bat` biên dịch sạch sẽ cả 3 nền tảng: Windows Standalone EXE (`publish\windows\`), Linux Portable .tar.gz & Debian .deb (`publish\linux\`), Android Single APK (`publish\android\`) với 0 Error, 0 Warning.
