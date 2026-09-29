@@ -105,6 +105,11 @@ public class ComicScraperService
                 return await ScrapeEHentaiBookAsync(url, index, domain, ct).ConfigureAwait(false);
             }
 
+            if (domain.Contains("hitomi"))
+            {
+                return await ScrapeHitomiBookAsync(url, index, domain, ct).ConfigureAwait(false);
+            }
+
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
 
@@ -159,6 +164,11 @@ public class ComicScraperService
             if (domain.Contains("e-hentai") || domain.Contains("exhentai"))
             {
                 return await ExtractEHentaiChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
+            }
+
+            if (domain.Contains("hitomi"))
+            {
+                return await ExtractHitomiChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
             }
 
             using var req = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
@@ -2461,5 +2471,169 @@ public class ComicScraperService
         var match = Regex.Match(readerHtml, @"nl\(['""](?<nl>[^'""]+)['""]\)", RegexOptions.IgnoreCase);
         if (match.Success) return match.Groups["nl"].Value;
         return null;
+    }
+
+    private async Task<ComicBookItem> ScrapeHitomiBookAsync(string url, int index, string domain, CancellationToken ct)
+    {
+        url = DomainRoutingService.NormalizeUrl(url);
+        string id = HitomiResolverService.ExtractGalleryId(url);
+
+        var item = new ComicBookItem
+        {
+            Index = index,
+            Url = url,
+            Domain = domain,
+            Status = "Extracting...",
+            StatusMessage = "Fetching gallery metadata..."
+        };
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            item.Title = ExtractFallbackTitleFromUrl(url);
+            item.Status = "Error";
+            item.StatusMessage = "Không thể trích xuất ID gallery từ URL";
+            return item;
+        }
+
+        try
+        {
+            await HitomiResolverService.RefreshGGAsync(_httpClient, ct).ConfigureAwait(false);
+            using var doc = await HitomiResolverService.FetchGalleryInfoDocAsync(id, _httpClient, ct).ConfigureAwait(false);
+
+            if (doc == null)
+            {
+                item.Title = ExtractFallbackTitleFromUrl(url);
+                item.Status = "Error";
+                item.StatusMessage = "Không thể tải metadata galleryinfo từ server";
+                return item;
+            }
+
+            var root = doc.RootElement;
+            string title = string.Empty;
+            if (root.TryGetProperty("title", out var tProp) && tProp.ValueKind == JsonValueKind.String)
+            {
+                title = tProp.GetString() ?? string.Empty;
+            }
+            if (string.IsNullOrWhiteSpace(title) && root.TryGetProperty("japanese_title", out var jtProp) && jtProp.ValueKind == JsonValueKind.String)
+            {
+                title = jtProp.GetString() ?? string.Empty;
+            }
+
+            string artist = string.Empty;
+            if (root.TryGetProperty("artists", out var artProp) && artProp.ValueKind == JsonValueKind.Array && artProp.GetArrayLength() > 0)
+            {
+                var firstArt = artProp[0];
+                if (firstArt.TryGetProperty("artist", out var aNameProp) && aNameProp.ValueKind == JsonValueKind.String)
+                {
+                    artist = aNameProp.GetString() ?? string.Empty;
+                }
+            }
+
+            string displayName = string.IsNullOrWhiteSpace(artist) ? title : $"[{artist}] {title}";
+
+            string language = string.Empty;
+            if (root.TryGetProperty("language_localname", out var langProp) && langProp.ValueKind == JsonValueKind.String)
+            {
+                string rawLang = langProp.GetString() ?? string.Empty;
+                if (rawLang == "中文") language = "Chinese";
+                else if (rawLang == "日本語") language = "Japanese";
+                else if (rawLang == "한국어") language = "Korean";
+                else if (rawLang == "Español") language = "Spanish";
+                else language = rawLang;
+            }
+            if (!string.IsNullOrWhiteSpace(language))
+            {
+                string langSuffix = $"[{language}]";
+                if (!displayName.EndsWith(langSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    displayName = $"{displayName} {langSuffix}";
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                displayName = ExtractFallbackTitleFromUrl(url);
+            }
+
+            int totalPages = 0;
+            string coverUrl = string.Empty;
+            if (root.TryGetProperty("files", out var filesProp) && filesProp.ValueKind == JsonValueKind.Array)
+            {
+                totalPages = filesProp.GetArrayLength();
+                if (totalPages > 0)
+                {
+                    var firstFile = filesProp[0];
+                    string firstHash = firstFile.TryGetProperty("hash", out var hProp) ? (hProp.GetString() ?? string.Empty) : string.Empty;
+                    string firstName = firstFile.TryGetProperty("name", out var nProp) ? (nProp.GetString() ?? string.Empty) : string.Empty;
+                    if (!string.IsNullOrWhiteSpace(firstHash))
+                    {
+                        coverUrl = HitomiResolverService.ResolveImageUrl(firstHash, firstName, isThumbnail: true);
+                    }
+                }
+            }
+
+            item.Title = displayName;
+            item.CoverUrl = coverUrl;
+            item.TotalChapters = 1;
+            item.LatestChapter = totalPages > 0 ? $"{totalPages} Pages" : "Gallery";
+            item.Status = "Ready";
+            item.StatusMessage = totalPages > 0 ? $"Extracted {totalPages} pages" : "Ready";
+
+            item.Chapters.Clear();
+            item.Chapters.Add(new ChapterItem
+            {
+                ChapterNumber = 1,
+                Title = "Full Gallery",
+                Url = url,
+                TotalPages = totalPages,
+                Status = "Waiting"
+            });
+
+            return item;
+        }
+        catch (Exception ex)
+        {
+            item.Title = ExtractFallbackTitleFromUrl(url);
+            item.Status = "Error";
+            item.StatusMessage = $"Lỗi: {ex.Message}";
+            return item;
+        }
+    }
+
+    private async Task<List<string>> ExtractHitomiChapterImagesAsync(string chapterUrl, CancellationToken ct)
+    {
+        var imageUrls = new List<string>();
+        string id = HitomiResolverService.ExtractGalleryId(chapterUrl);
+        if (string.IsNullOrWhiteSpace(id)) return imageUrls;
+
+        try
+        {
+            await HitomiResolverService.RefreshGGAsync(_httpClient, ct).ConfigureAwait(false);
+            using var doc = await HitomiResolverService.FetchGalleryInfoDocAsync(id, _httpClient, ct).ConfigureAwait(false);
+            if (doc == null) return imageUrls;
+
+            var root = doc.RootElement;
+            if (root.TryGetProperty("files", out var filesProp) && filesProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var fileEl in filesProp.EnumerateArray())
+                {
+                    string hash = fileEl.TryGetProperty("hash", out var hProp) ? (hProp.GetString() ?? string.Empty) : string.Empty;
+                    string name = fileEl.TryGetProperty("name", out var nProp) ? (nProp.GetString() ?? string.Empty) : string.Empty;
+                    if (string.IsNullOrWhiteSpace(hash)) continue;
+
+                    string directUrl = HitomiResolverService.ResolveImageUrl(hash, name, "webp", false);
+                    if (!string.IsNullOrWhiteSpace(directUrl))
+                    {
+                        imageUrls.Add(directUrl);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Bỏ qua lỗi giải mã ảnh
+        }
+
+        return imageUrls;
     }
 }

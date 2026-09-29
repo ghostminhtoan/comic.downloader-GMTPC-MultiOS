@@ -35,6 +35,7 @@ public static class DomainRoutingService
             if (host.Contains("hentai2read")) return "hentai2read";
             if (host.Contains("hentaiera")) return "hentaiera";
             if (host.Contains("e-hentai") || host.Contains("exhentai")) return "e-hentai.org";
+            if (host.Contains("hitomi")) return "hitomi.la";
 
             return host;
         }

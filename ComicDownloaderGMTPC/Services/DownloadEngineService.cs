@@ -586,7 +586,8 @@ public class DownloadEngineService
                             if (ct.IsCancellationRequested) return;
                             await WaitIfPausedAsync(ct).ConfigureAwait(false);
 
-                            string pageFileName = $"{(pIdx + 1):D3}.jpg";
+                            string pageExt = GetSafeImageExtensionFromUrl(pageUrl);
+                            string pageFileName = $"{(pIdx + 1):D3}{pageExt}";
                             string pageFilePath = Path.Combine(chapterDir, pageFileName);
 
                             if (File.Exists(pageFilePath) && new FileInfo(pageFilePath).Length > 1024 && manifest.ContainsKey(pageFileName))
@@ -693,6 +694,12 @@ public class DownloadEngineService
                 else if (imageUrl.Contains("vi-hentai", StringComparison.OrdinalIgnoreCase))
                 {
                     effectiveReferer = "https://vi-hentai.pro/";
+                }
+                else if (imageUrl.Contains("gold-usergeneratedcontent.net", StringComparison.OrdinalIgnoreCase) ||
+                         imageUrl.Contains("hitomi.la", StringComparison.OrdinalIgnoreCase) ||
+                         (refererUrl != null && refererUrl.Contains("hitomi", StringComparison.OrdinalIgnoreCase)))
+                {
+                    effectiveReferer = "https://hitomi.la/";
                 }
 
                 if (!string.IsNullOrEmpty(effectiveReferer))
@@ -900,6 +907,36 @@ public class DownloadEngineService
             }
             catch { }
             throw;
+        }
+    }
+
+    public static string GetSafeImageExtensionFromUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return ".jpg";
+        string path = url;
+        if (Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) && uri != null)
+        {
+            path = uri.AbsolutePath;
+        }
+        else
+        {
+            int queryIndex = url.IndexOf('?');
+            if (queryIndex >= 0) path = url.Substring(0, queryIndex);
+        }
+
+        string ext = (Path.GetExtension(path) ?? string.Empty).ToLowerInvariant();
+        switch (ext)
+        {
+            case ".jpg":
+            case ".jpeg":
+            case ".png":
+            case ".gif":
+            case ".bmp":
+            case ".webp":
+            case ".avif":
+                return ext;
+            default:
+                return ".jpg";
         }
     }
 }
