@@ -963,3 +963,17 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
   3. **Tối Ưu DownloadEngineService.cs**:
      - Tự động gán header Referer: https://hitomi.la/ cho toàn bộ request tới gold-usergeneratedcontent.net và hitomi.la.
      - Đặt tên file lưu trữ trên đĩa tự động nhận diện đúng extension ảnh (.webp, .jpg, .png).
+
+
+### 15.33. Nâng Cấp Đóng Gói Phân Phối Đa Nền Tảng (Windows EXE, Linux .tar.gz & Android APK) trong uild.bat
+- **Bối cảnh & Yêu cầu**:
+  - Người dùng cần phân phối ứng dụng Avalonia trên hệ điều hành Linux dưới dạng lưu trữ đóng gói chuẩn .tar.gz sẵn sàng giải nén và thực thi trực tiếp trên mọi bản phân phối (Ubuntu, Debian, Fedora, Arch...).
+- **Giải pháp Thực hiện**:
+  1. **Tạo Launcher Script 
+un.sh & Desktop Entry comic-downloader.desktop**:
+     - 
+un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền thực thi chmod +x và khởi chạy binary ComicDownloaderGMTPC.Desktop.
+     - comic-downloader.desktop: Cấu hình desktop entry độc lập tên file, tránh xung đột tên trên các hệ thống tệp không phân biệt hoa thường.
+  2. **Tích Hợp Đóng Gói Lưu Trữ 	ar.gz Tự Động Vào uild.bat**:
+     - Sử dụng công cụ 	ar (bsdtar) tích hợp trên Windows để nén thành ComicDownloaderGMTPC-linux-x64.tar.gz và alias ComicDownloaderGMTPC.tar.gz trong thư mục publish\linux\.
+     - Xuất bản đồng bộ 3 nền tảng: Windows Standalone EXE (publish\windows\), Linux Binary & .tar.gz (publish\linux\), Android Single APK (publishndroid\).

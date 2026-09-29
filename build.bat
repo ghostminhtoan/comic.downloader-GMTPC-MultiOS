@@ -2,9 +2,9 @@
 setlocal
 echo ========================================================
 echo   Building and Publishing Comic Downloader GMTPC Avalonia
-echo   Standalone Single-File Executables for 3 Platforms:
+echo   Standalone Executables ^& Packages for 3 Platforms:
 echo   1. Windows (win-x64, standalone single-file exe)
-echo   2. Linux   (linux-x64, standalone single-file binary)
+echo   2. Linux   (linux-x64, standalone binary + .tar.gz package)
 echo   3. Android (net10.0-android, single APK package)
 echo ========================================================
 
@@ -32,7 +32,7 @@ echo [OK] Windows standalone single-file exe succeeded:
 echo      -^> publish\windows\ComicDownloaderGMTPC.Desktop.exe
 
 echo.
-echo [2/3] Publishing Linux (linux-x64, standalone single-file binary)...
+echo [2/3] Publishing Linux (linux-x64, standalone binary + .tar.gz package)...
 dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish\linux
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Linux build failed!
@@ -45,8 +45,25 @@ del /f /q "publish\linux\*.xml" >nul 2>&1
 del /f /q "publish\linux\*.json" >nul 2>&1
 del /f /q "publish\linux\*.old" >nul 2>&1
 
-echo [OK] Linux standalone single-file binary succeeded:
+:: Tạo launcher script cho Linux
+(
+echo #!/bin/bash
+echo SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" ^&^& pwd)"
+echo chmod +x "$SCRIPT_DIR/ComicDownloaderGMTPC.Desktop"
+echo "$SCRIPT_DIR/ComicDownloaderGMTPC.Desktop" "$@"
+) > "publish\linux\run.sh"
+
+:: Đóng gói file .tar.gz cho Linux
+if exist "publish\linux\ComicDownloaderGMTPC-linux-x64.tar.gz" del /f /q "publish\linux\ComicDownloaderGMTPC-linux-x64.tar.gz"
+if exist "publish\linux\ComicDownloaderGMTPC.tar.gz" del /f /q "publish\linux\ComicDownloaderGMTPC.tar.gz"
+
+tar -czf "publish\linux\ComicDownloaderGMTPC-linux-x64.tar.gz" -C "publish\linux" ComicDownloaderGMTPC.Desktop run.sh
+copy /y "publish\linux\ComicDownloaderGMTPC-linux-x64.tar.gz" "publish\linux\ComicDownloaderGMTPC.tar.gz" >nul 2>&1
+
+echo [OK] Linux binary and .tar.gz succeeded:
 echo      -^> publish\linux\ComicDownloaderGMTPC.Desktop
+echo      -^> publish\linux\ComicDownloaderGMTPC-linux-x64.tar.gz
+echo      -^> publish\linux\ComicDownloaderGMTPC.tar.gz
 
 echo.
 echo [3/3] Building and Packaging Android (net10.0-android, single APK package)...
@@ -68,8 +85,9 @@ echo      -^> publish\android\com.CompanyName.ComicDownloaderGMTPC-Signed.apk
 echo.
 echo ========================================================
 echo   [SUCCESS] All 3 Platforms published cleanly with 0 errors!
-echo   - Windows (win-x64 standalone): publish\windows\ComicDownloaderGMTPC.Desktop.exe
-echo   - Linux   (linux-x64 standalone): publish\linux\ComicDownloaderGMTPC.Desktop
-echo   - Android (single APK):          publish\android\com.CompanyName.ComicDownloaderGMTPC-Signed.apk
+echo   - Windows (win-x64 exe):       publish\windows\ComicDownloaderGMTPC.Desktop.exe
+echo   - Linux   (linux-x64 binary):  publish\linux\ComicDownloaderGMTPC.Desktop
+echo   - Linux   (.tar.gz archive):   publish\linux\ComicDownloaderGMTPC-linux-x64.tar.gz
+echo   - Android (single APK):        publish\android\com.CompanyName.ComicDownloaderGMTPC-Signed.apk
 echo ========================================================
 endlocal
