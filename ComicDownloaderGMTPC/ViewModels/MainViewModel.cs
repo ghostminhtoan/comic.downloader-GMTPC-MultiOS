@@ -102,11 +102,94 @@ public partial class MainViewModel : ViewModelBase
     partial void OnConcurrentComicDownloadsChanged(int value)
     {
         _downloadEngine.ConcurrentComicDownloads = Math.Clamp(value, 1, 16);
+        _downloadEngine.NotifyConcurrencyChanged();
     }
 
     partial void OnImageDownloadThreadsChanged(int value)
     {
         _downloadEngine.ImageDownloadThreads = Math.Clamp(value, 1, MaxSystemThreads);
+    }
+
+    // AUTO PASTE CLIPBOARD MONITORING
+    [ObservableProperty]
+    private bool _isAutoPasteClipboard = false;
+
+    private CancellationTokenSource? _autoPasteCts;
+    private string _lastAutoPasteText = string.Empty;
+
+    partial void OnIsAutoPasteClipboardChanged(bool value)
+    {
+        if (value)
+        {
+            StartAutoPasteClipboardMonitoring();
+            AddLog("SUCCESS", "📋 Đã BẬT tính năng Tự dán (Auto Paste) - Mọi link sao chép sẽ tự động thêm vào Queue.");
+        }
+        else
+        {
+            StopAutoPasteClipboardMonitoring();
+            AddLog("INFO", "📋 Đã TẮT tính năng Tự dán (Auto Paste).");
+        }
+    }
+
+    private void StartAutoPasteClipboardMonitoring()
+    {
+        StopAutoPasteClipboardMonitoring();
+        _autoPasteCts = new CancellationTokenSource();
+        var ct = _autoPasteCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(800, ct).ConfigureAwait(false);
+
+                    var clipboard = GetClipboard();
+                    if (clipboard != null)
+                    {
+                        string? text = await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+                        {
+                            try
+                            {
+                                return await clipboard.TryGetTextAsync();
+                            }
+                            catch
+                            {
+                                return null;
+                            }
+                        });
+
+                        if (!string.IsNullOrWhiteSpace(text) && text != _lastAutoPasteText)
+                        {
+                            _lastAutoPasteText = text;
+                            if (text.Contains("http://", StringComparison.OrdinalIgnoreCase) || text.Contains("https://", StringComparison.OrdinalIgnoreCase))
+                            {
+                                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+                                {
+                                    AddLog("INFO", "📋 Phát hiện link mới từ Clipboard, đang tự động phân tích và thêm vào Queue...");
+                                    await ExtractUrlsFromTextAsync(text, clearExisting: false);
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch
+                {
+                    // Safe swallow
+                }
+            }
+        }, ct);
+    }
+
+    private void StopAutoPasteClipboardMonitoring()
+    {
+        _autoPasteCts?.Cancel();
+        _autoPasteCts = null;
     }
 
     // AUTO SPLIT LONG IMAGES
@@ -1031,15 +1114,42 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task GetLinkAsync()
     {
-        ComicBooks.Clear();
-        ScanResults.Clear();
-        await ExtractUrlsInternalAsync();
+        await ExtractUrlsFromTextAsync(UrlInput, clearExisting: true);
     }
 
     [RelayCommand]
     public async Task GetMoreAsync()
     {
-        await ExtractUrlsInternalAsync();
+        await ExtractUrlsFromTextAsync(UrlInput, clearExisting: false);
+    }
+
+    [RelayCommand]
+    public async Task PasteLinkAsync()
+    {
+        try
+        {
+            var clipboard = GetClipboard();
+            if (clipboard == null)
+            {
+                AddLog("WARN", "Không thể truy cập Clipboard hệ thống.");
+                return;
+            }
+
+            string? text = await clipboard.TryGetTextAsync();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                AddLog("WARN", "Clipboard hiện đang trống hoặc không chứa văn bản.");
+                return;
+            }
+
+            AddLog("INFO", "📋 Đang trích xuất liên kết từ Clipboard...");
+            await ExtractUrlsFromTextAsync(text, clearExisting: false);
+            SelectedRootTabIndex = 1; // Chuyển sang Tab Download để theo dõi tiến độ
+        }
+        catch (Exception ex)
+        {
+            AddLog("ERROR", $"Lỗi đọc Clipboard: {ex.Message}");
+        }
     }
 
     [RelayCommand]
@@ -1426,6 +1536,11 @@ public partial class MainViewModel : ViewModelBase
         return null;
     }
 
+    private Avalonia.Input.Platform.IClipboard? GetClipboard()
+    {
+        return GetTopLevel()?.Clipboard;
+    }
+
     // ==========================================
     // SCAN MISSING INTEGER CHAPTERS
     // ==========================================
@@ -1468,29 +1583,46 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
-    private async Task ExtractUrlsInternalAsync()
+    private async Task ExtractUrlsFromTextAsync(string? rawText, bool clearExisting)
     {
-        if (string.IsNullOrWhiteSpace(UrlInput))
+        if (string.IsNullOrWhiteSpace(rawText))
         {
-            AddLog("WARN", "Vui lòng dán ít nhất 1 đường link truyện vào ô nhập!");
+            AddLog("WARN", "Vui lòng dán ít nhất 1 đường link truyện!");
             return;
         }
 
-        var lines = UrlInput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                            .Select(l => l.Trim())
-                            .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
-                            .Distinct()
-                            .ToList();
+        var rawTokens = rawText.Split(new[] { '\r', '\n', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                               .Select(l => l.Trim())
+                               .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
+                               .Distinct()
+                               .ToList();
 
-        if (lines.Count == 0)
+        var candidateUrls = rawTokens.Where(t => t.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                                 t.StartsWith("https://", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (candidateUrls.Count == 0 && rawTokens.Count > 0)
         {
-            AddLog("WARN", "Không tìm thấy link hợp lệ nào.");
+            candidateUrls = rawTokens;
+        }
+
+        if (clearExisting)
+        {
+            ComicBooks.Clear();
+            ScanResults.Clear();
+        }
+
+        var existingUrls = new HashSet<string>(ComicBooks.Select(b => b.Url.Trim()), StringComparer.OrdinalIgnoreCase);
+        var targetUrls = candidateUrls.Where(u => !existingUrls.Contains(u)).Distinct().ToList();
+
+        if (targetUrls.Count == 0)
+        {
+            AddLog("INFO", "Tất cả link truyện vừa dán đã có sẵn trong danh sách (hoặc không tìm thấy link mới).");
             return;
         }
 
-        AddLog("INFO", $"Đang trích xuất thông tin cho {lines.Count} link truyện...");
+        AddLog("INFO", $"Đang trích xuất thông tin cho {targetUrls.Count} link truyện mới...");
 
-        bool hasMangadex = lines.Any(l => DomainRoutingService.DetectDomain(l).Contains("mangadex"));
+        bool hasMangadex = targetUrls.Any(l => DomainRoutingService.DetectDomain(l).Contains("mangadex"));
         string mangadexLang = "vi";
         bool mangadexFallback = true;
 
@@ -1509,9 +1641,9 @@ public partial class MainViewModel : ViewModelBase
         }
 
         int startIndex = ComicBooks.Count + 1;
-        for (int i = 0; i < lines.Count; i++)
+        for (int i = 0; i < targetUrls.Count; i++)
         {
-            string url = lines[i];
+            string url = targetUrls[i];
             int currentIndex = startIndex + i;
 
             var book = await _scraperService.ScrapeBookAsync(url, currentIndex, mangadexLang, mangadexFallback);
@@ -1525,7 +1657,14 @@ public partial class MainViewModel : ViewModelBase
         if (IsAutoDownload)
         {
             AddLog("INFO", "Tự động kích hoạt tải xuống theo thiết lập 'Tự động tải'.");
-            _ = DownloadAllAsync();
+            if (_downloadEngine.IsDownloading)
+            {
+                _ = DownloadNewAsync();
+            }
+            else
+            {
+                _ = DownloadAllAsync();
+            }
         }
     }
 

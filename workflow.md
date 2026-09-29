@@ -1049,19 +1049,20 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `MainView.axaml` & `languages.md`:
     - Cập nhật giao diện bảng Cyberpunk cho Tab Password, thêm 3 subtab Hentai, cập nhật nút Tải & Tải tiếp.
 
-### 15.38. Nâng Cấp Dynamic Worker Dispatcher Cho Tải Tiếp Song Song, Bổ Sung Tính Năng Dán Link Hàng Loạt & Clipboard Auto Paste Toàn Cục
+### 15.38. Triển Khai Dynamic Worker Dispatcher Tải Song Song, Bổ Sung Tính Năng Dán Link Hàng Loạt & Clipboard Auto Paste Toàn Cục
 - **Bối cảnh & Vấn đề**:
-  1. Khi đang tải 1 truyện (với cấu hình số truyện cùng lúc `ConcurrentComicDownloads = 2` hoặc lớn hơn), nếu người dùng nạp thêm link truyện mới và bấm "TẢI TIẾP" (`DownloadNewCommand`), truyện thứ 2 vẫn chưa tự động tải song song ngay do các worker ban đầu đã thoát khỏi vòng lặp khi hàng đợi rỗng.
-  2. Người dùng cần tính năng dán nhanh hàng loạt liên kết truyện trực tiếp từ Clipboard chỉ bằng một cú nhấp chuột mà không cần thao tác dán thủ công vào ô nhập.
-  3. Cần tính năng Auto Paste: khi bật toggle/checkbox, mọi link truyện người dùng sao chép từ trình duyệt hoặc ứng dụng ngoài sẽ tự động được nhận diện, phân tích và đưa thẳng vào Queue.
+  1. Khi đang tải 1 truyện, nạp thêm link truyện mới và bấm "TẢI TIẾP" (`DownloadNewCommand`), truyện thứ 2 chưa tự động tải song song do các worker cũ đã thoát khi queue rỗng.
+  2. Người dùng cần nút `📋 DÁN LINK` để đọc Clipboard và nạp hàng loạt link vào hàng đợi chỉ bằng 1 thao tác.
+  3. Cần tính năng `📋 Tự dán` (Auto Paste): khi bật, ứng dụng tự động lắng nghe Clipboard hệ thống ngầm và nạp link vào Queue ngay khi người dùng Copy link ngoài trình duyệt.
 - **Kiến trúc & Giải pháp Thực hiện**:
   1. **Dynamic Worker Dispatcher trong `DownloadEngineService.cs`**:
-     - Thay thế cơ chế tạo worker tĩnh `Task.WhenAll(Enumerable.Range(...))` bằng hệ thống điều phối worker động (`DispatchDownloadWorkers` + `ProcessQueueWorkerLoopAsync` + `TaskCompletionSource<bool> _downloadFinishedTcs`).
-     - Khi `DownloadNewAsync` nạp thêm truyện mới vào `_downloadQueue`, hệ thống tự động kiểm tra số lượng active worker hiện tại so với `ConcurrentComicDownloads`. Nếu còn slot trống, ngay lập tức kích hoạt worker mới để tải song song truyện tiếp theo mà không làm gián đoạn các truyện đang tải dở.
-     - Khi người dùng điều chỉnh tăng `ConcurrentComicDownloads` trong lúc tải, hàm `NotifyConcurrencyChanged()` tự động spawn thêm worker để lấp đầy số luồng cho phép.
-  2. **Tích Hợp Dán Link Hàng Loạt (`PasteLinkCommand`) & Clipboard Auto Paste**:
-     - `MainViewModel.cs`: Cung cấp hàm `GetClipboard()` trích xuất `IClipboard` đa nền tảng, tương thích Avalonia 12 với `TryGetTextAsync()`.
-     - `PasteLinkCommand`: Đọc toàn bộ nội dung từ Clipboard, tự động tách các link theo dòng/khoảng trắng, lọc các domain hợp lệ và nạp hàng loạt vào Queue.
-     - `IsAutoPasteClipboard`: Giám sát Clipboard ngầm định kỳ 800ms. Khi phát hiện liên kết truyện mới, tự động nạp thẳng vào Queue và thông báo log rõ ràng.
-  3. **Đồng Bộ Giao Diện `MainView.axaml` & `languages.md`**:
-     - Bổ sung nút `📋 DÁN LINK` và CheckBox `📋 Tự dán (Auto Paste)` trên cả thanh Quick Link Bar toàn cục và thanh Toolbar của Tab Download.
+     - Điều phối worker động (`DispatchDownloadWorkers` + `ProcessQueueWorkerLoopAsync` + `TaskCompletionSource<bool> _downloadFinishedTcs`).
+     - Khi `DownloadNewAsync` nạp truyện mới, tự động spawn thêm worker để lấp đầy số lượng luồng cho phép (`ConcurrentComicDownloads`), chạy song song ngay với các truyện đang tải.
+     - Hàm `NotifyConcurrencyChanged()` tự động spawn worker khi người dùng tăng số truyện tải cùng lúc trên giao diện.
+  2. **Dán Link Hàng Loạt (`PasteLinkCommand`) & Clipboard Auto Paste (`IsAutoPasteClipboard`) trong `MainViewModel.cs`**:
+     - `GetClipboard()` trích xuất `IClipboard` đa nền tảng (`TryGetTextAsync` trong Avalonia 12).
+     - `PasteLinkAsync`: Đọc toàn bộ nội dung từ Clipboard, bóc tách hàng loạt link, lọc trùng và nạp thẳng vào Queue.
+     - `IsAutoPasteClipboard`: Lắng nghe Clipboard định kỳ 800ms, tự động nạp link truyện mới và thông báo log rõ ràng.
+     - Nâng cấp `ExtractUrlsFromTextAsync(text, clearExisting)` hỗ trợ đa luồng, lọc trùng thông minh và tự động kích hoạt tải theo `IsAutoDownload`.
+  3. **Đồng Bộ Giao Diện `MainView.axaml`**:
+     - Bổ sung nút `📋 DÁN LINK` và CheckBox `📋 Tự dán` trên cả thanh Quick Link Bar toàn cục và thanh Toolbar của Tab Download.
