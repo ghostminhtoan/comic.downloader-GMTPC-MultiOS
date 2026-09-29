@@ -1326,24 +1326,42 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        string[] updateUrls = OperatingSystem.IsAndroid()
-            ? new[]
+        string[] updateUrls;
+        string platformName;
+
+        if (OperatingSystem.IsAndroid())
+        {
+            platformName = "Android APK";
+            updateUrls = new[]
             {
-                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/com.CompanyName.ComicDownloaderGMTPC-Signed.apk",
-                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/latest/download/com.CompanyName.ComicDownloaderGMTPC-Signed.apk"
-            }
-            : new[]
-            {
-                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/download/release/ComicDownloaderGMTPC.Desktop.exe",
-                "https://github.com/ghostminhtoan/comic.downloader.gmtpc/releases/latest/download/ComicDownloaderGMTPC.Desktop.exe"
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/com.CompanyName.ComicDownloaderGMTPC-Signed.apk",
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/latest/download/com.CompanyName.ComicDownloaderGMTPC-Signed.apk"
             };
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            platformName = "Linux Portable .tar.gz";
+            updateUrls = new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/ComicDownloaderGMTPC-linux-x64.tar.gz",
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/latest/download/ComicDownloaderGMTPC-linux-x64.tar.gz"
+            };
+        }
+        else
+        {
+            platformName = "Windows Standalone EXE";
+            updateUrls = new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/ComicDownloaderGMTPC.Desktop.exe",
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/latest/download/ComicDownloaderGMTPC.Desktop.exe"
+            };
+        }
 
         IsUpdating = true;
         UpdateButtonLabel = "⏳ Đang kết nối...";
 
         try
         {
-            string platformName = OperatingSystem.IsAndroid() ? "Android APK" : "Windows Standalone EXE";
             AddLog("INFO", $"🚀 Bắt đầu tự động tải bản cập nhật mới nhất cho {platformName}...");
 
             bool success = await AppUpdateService.Instance.DownloadAndInstallUpdateAsync(

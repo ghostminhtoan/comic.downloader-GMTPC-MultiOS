@@ -154,8 +154,8 @@ public class AppUpdateService
 
                 string updateDir = GetWritableUpdateDirectory();
                 string fileName = OperatingSystem.IsAndroid()
-                    ? "ComicDownloaderGMTPC_Update.apk"
-                    : (OperatingSystem.IsWindows() ? "ComicDownloaderGMTPC.Desktop.exe" : "ComicDownloaderGMTPC.Desktop");
+                    ? "com.CompanyName.ComicDownloaderGMTPC-Signed.apk"
+                    : (OperatingSystem.IsWindows() ? "ComicDownloaderGMTPC.Desktop.exe" : "ComicDownloaderGMTPC-linux-x64.tar.gz");
                 string targetPath = Path.Combine(updateDir, fileName);
 
                 if (File.Exists(targetPath))
@@ -163,7 +163,9 @@ public class AppUpdateService
                     try { File.Delete(targetPath); } catch { }
                 }
 
-                string fileTypeDesc = OperatingSystem.IsAndroid() ? "APK Android" : "Executable Desktop";
+                string fileTypeDesc = OperatingSystem.IsAndroid() 
+                    ? "APK Android" 
+                    : (OperatingSystem.IsWindows() ? "Windows EXE" : "Linux Portable .tar.gz");
                 if (totalBytes > 0)
                 {
                     logCallback("INFO", $"[Cập nhật tự động] Đã tìm thấy gói {fileTypeDesc} ({totalMb:F1} MB). Bắt đầu tải...");

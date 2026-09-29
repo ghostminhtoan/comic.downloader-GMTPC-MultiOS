@@ -1005,3 +1005,18 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      - Cung cấp file `AppRun` (POSIX mode `0755`) cấu hình đầy đủ biến môi trường `DOTNET_BUNDLE_EXTRACT_BASE_DIR` và `LD_LIBRARY_PATH`.
   3. **Script 1-Click Tích Hợp Desktop & Menu Ứng Dụng (`integrate-desktop.sh`)**:
      - Cung cấp script tự động tạo shortcut ra màn hình Desktop (`~/Desktop/ComicDownloaderGMTPC.desktop`) và Menu ứng dụng (`~/.local/share/applications/ComicDownloaderGMTPC.desktop`), tự động cấu hình `gio set ... metadata::trusted true` (Allow Launching) để người dùng có thể nhấp đúp từ Desktop một cách trực quan.
+
+### 15.36. Gom Toàn Bộ Gói Phân Phối Vào Thư Mục Gốc `\publish\` & Cập Nhật Hệ Thống URL Auto-Update Cho Từng Hệ Điều Hành
+- **Bối cảnh & Yêu cầu**:
+  1. Loại bỏ cấu trúc phân nhánh thư mục con (`publish\windows\`, `publish\linux\`, `publish\android\`), gom tất cả các file phân phối cuối cùng trực tiếp vào một thư mục gốc duy nhất `\publish\`.
+  2. Cập nhật chính xác địa chỉ máy chủ tải bản cập nhật tự động (GitHub Releases) cho cả 3 hệ điều hành:
+     - **Windows**: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/ComicDownloaderGMTPC.Desktop.exe`
+     - **Android**: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
+     - **Linux**: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/ComicDownloaderGMTPC-linux-x64.tar.gz`
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Tối Ưu Hóa `build.bat` & `package_linux.py`**:
+     - Toàn bộ lệnh `dotnet publish` và `dotnet build` xuất trực tiếp ra `publish\`.
+     - `package_linux.py` đóng gói `.tar.gz` và `.deb` trực tiếp vào `publish\`.
+     - Tự động dọn dẹp các thư mục con legacy.
+  2. **Tích Hợp `MainViewModel.cs` & `AppUpdateService.cs`**:
+     - Nhận diện hệ điều hành động (`OperatingSystem.IsAndroid()`, `OperatingSystem.IsLinux()`, `OperatingSystem.IsWindows()`), tự động chọn đúng link GitHub Releases tương ứng khi người dùng ấn nút Cập Nhật (`AutoUpdateCommand`).

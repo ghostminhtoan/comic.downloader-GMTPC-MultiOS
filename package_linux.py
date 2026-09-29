@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 Linux Packaging Script for Comic Downloader GMTPC Avalonia
+- Packages Linux distributions directly into 'publish/' root directory (no subfolders).
 - Creates 100% self-contained portable .tar.gz for Ubuntu/Debian/Linux Mint/Fedora/Arch.
 - Renames binary to pure 'ComicDownloaderGMTPC' (no .Desktop suffix) so GNOME/Nautilus executes it directly on double-click.
-- Generates AppRun, run.sh, integrate-desktop.sh, desktop entry, and icon.
+- Generates AppRun, run.sh, integrate-desktop.sh, desktop entry, and icon inside archives.
 - Creates standard Debian (.deb) package for 1-click system installation.
 """
 
@@ -45,28 +46,29 @@ def create_ar_archive(out_path: str, members: list):
 
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    publish_linux_dir = os.path.join(base_dir, "publish", "linux")
+    publish_dir = os.path.join(base_dir, "publish")
     
-    # Locate published binary
-    desktop_bin_original = os.path.join(publish_linux_dir, "ComicDownloaderGMTPC.Desktop")
-    pure_bin_path = os.path.join(publish_linux_dir, "ComicDownloaderGMTPC")
+    # Locate published binary in publish/
+    desktop_bin_original = os.path.join(publish_dir, "ComicDownloaderGMTPC.Desktop")
+    pure_bin_path = os.path.join(publish_dir, "ComicDownloaderGMTPC")
     
     if os.path.isfile(desktop_bin_original):
         # Create pure binary WITHOUT .Desktop suffix
         shutil.copyfile(desktop_bin_original, pure_bin_path)
     elif not os.path.isfile(pure_bin_path):
-        print(f"[ERROR] Linux binary not found at: {desktop_bin_original} or {pure_bin_path}")
+        print(f"[ERROR] Linux binary not found in {publish_dir}")
         sys.exit(1)
         
-    print(f"[PACKAGING] Packaging Linux distributions in: {publish_linux_dir}")
+    print(f"[PACKAGING] Packaging Linux distributions directly in: {publish_dir}")
     
-    # 1. Copy icon to publish/linux
+    # Read icon data
     icon_src = os.path.join(base_dir, "ComicDownloaderGMTPC.Android", "Icon.png")
-    icon_dst = os.path.join(publish_linux_dir, "comicdownloader.png")
+    icon_data = b''
     if os.path.isfile(icon_src):
-        shutil.copyfile(icon_src, icon_dst)
+        with open(icon_src, 'rb') as f:
+            icon_data = f.read()
     
-    # 2. Generate run.sh & AppRun (Strict Unix LF \n)
+    # Generate run.sh & AppRun (Strict Unix LF \n)
     run_sh_content = """#!/bin/bash
 # ========================================================
 # Launcher for Comic Downloader GMTPC (Linux Portable)
@@ -94,15 +96,7 @@ elif [ -f "$SCRIPT_DIR/ComicDownloaderGMTPC.Desktop" ]; then
 fi
 """.replace('\r\n', '\n').encode('utf-8')
 
-    run_sh_path = os.path.join(publish_linux_dir, "run.sh")
-    with open(run_sh_path, 'wb') as f:
-        f.write(run_sh_content)
-
-    apprun_path = os.path.join(publish_linux_dir, "AppRun")
-    with open(apprun_path, 'wb') as f:
-        f.write(run_sh_content)
-        
-    # 3. Generate desktop integration helper script
+    # Generate desktop integration helper script
     integrate_script_content = """#!/bin/bash
 # ========================================================
 # Comic Downloader GMTPC - Desktop Integration Script
@@ -166,11 +160,7 @@ fi
 echo "========================================================"
 """.replace('\r\n', '\n').encode('utf-8')
 
-    integrate_path = os.path.join(publish_linux_dir, "integrate-desktop.sh")
-    with open(integrate_path, 'wb') as f:
-        f.write(integrate_script_content)
-
-    # 4. Generate portable desktop entry file
+    # Generate portable desktop entry file
     desktop_entry_content = """[Desktop Entry]
 Name=Comic Downloader GMTPC
 GenericName=Manga & Comic Downloader
@@ -184,11 +174,7 @@ StartupNotify=true
 StartupWMClass=ComicDownloaderGMTPC
 """.replace('\r\n', '\n').encode('utf-8')
 
-    desktop_entry_path = os.path.join(publish_linux_dir, "ComicDownloaderGMTPC.desktop")
-    with open(desktop_entry_path, 'wb') as f:
-        f.write(desktop_entry_content)
-
-    # 5. Generate README-LINUX.txt
+    # Generate README-LINUX.txt
     readme_content = """========================================================
 Comic Downloader GMTPC - Linux Portable & Debian Package
 ========================================================
@@ -211,23 +197,14 @@ Comic Downloader GMTPC - Linux Portable & Debian Package
 ========================================================
 """.replace('\r\n', '\n').encode('utf-8')
 
-    readme_path = os.path.join(publish_linux_dir, "README-LINUX.txt")
-    with open(readme_path, 'wb') as f:
-        f.write(readme_content)
-
-    # 6. Read binary and icon data
+    # Read binary data
     with open(pure_bin_path, 'rb') as f:
         desktop_bin_data = f.read()
-    
-    icon_data = b''
-    if os.path.isfile(icon_dst):
-        with open(icon_dst, 'rb') as f:
-            icon_data = f.read()
 
-    # 7. Build Portable .tar.gz
-    tar_gz_path = os.path.join(publish_linux_dir, "ComicDownloaderGMTPC-linux-x64.tar.gz")
-    tar_gz_alias = os.path.join(publish_linux_dir, "ComicDownloaderGMTPC.tar.gz")
-    print(" -> Creating Portable tar.gz archive...")
+    # Build Portable .tar.gz directly into publish/
+    tar_gz_path = os.path.join(publish_dir, "ComicDownloaderGMTPC-linux-x64.tar.gz")
+    tar_gz_alias = os.path.join(publish_dir, "ComicDownloaderGMTPC.tar.gz")
+    print(" -> Creating Portable tar.gz archive in publish/...")
     
     with gzip.GzipFile(tar_gz_path, 'wb', mtime=0) as gz_out:
         with tarfile.open(fileobj=gz_out, mode='w') as tar:
@@ -298,15 +275,15 @@ Comic Downloader GMTPC - Linux Portable & Debian Package
     shutil.copyfile(tar_gz_path, tar_gz_alias)
     print(f"    [OK] Generated {tar_gz_path} ({os.path.getsize(tar_gz_path) / 1024 / 1024:.2f} MB)")
 
-    # 8. Build Debian .deb package
-    deb_path = os.path.join(publish_linux_dir, "comicdownloadergmtpc_1.0.0_amd64.deb")
-    deb_alias = os.path.join(publish_linux_dir, "ComicDownloaderGMTPC.deb")
-    print(" -> Creating Debian package (.deb)...")
+    # Build Debian .deb package directly into publish/
+    deb_path = os.path.join(publish_dir, "comicdownloadergmtpc_1.0.0_amd64.deb")
+    deb_alias = os.path.join(publish_dir, "ComicDownloaderGMTPC.deb")
+    print(" -> Creating Debian package (.deb) in publish/...")
     
-    # 8.1 debian-binary
+    # debian-binary
     debian_binary = b"2.0\n"
     
-    # 8.2 control.tar.gz
+    # control.tar.gz
     installed_size_kb = int((len(desktop_bin_data) + len(icon_data) + 1024 * 1024) / 1024)
     control_content = f"""Package: comicdownloadergmtpc
 Version: 1.0.0
@@ -363,7 +340,7 @@ exit 0
                 tar.addfile(ti, io.BytesIO(data))
     control_tar_gz = control_tar_buf.getvalue()
 
-    # 8.3 data.tar.gz
+    # data.tar.gz
     usr_bin_wrapper = """#!/bin/sh
 exec /opt/comicdownloader/run.sh "$@"
 """.replace('\r\n', '\n').encode('utf-8')
@@ -433,7 +410,7 @@ StartupWMClass=ComicDownloaderGMTPC
 
     data_tar_gz = data_tar_buf.getvalue()
 
-    # 8.4 Combine into .deb AR archive
+    # Combine into .deb AR archive
     create_ar_archive(deb_path, [
         ("debian-binary", debian_binary),
         ("control.tar.gz", control_tar_gz),
@@ -441,7 +418,7 @@ StartupWMClass=ComicDownloaderGMTPC
     ])
     shutil.copyfile(deb_path, deb_alias)
     print(f"    [OK] Generated {deb_path} ({os.path.getsize(deb_path) / 1024 / 1024:.2f} MB)")
-    print("[SUCCESS] Linux distribution packaging completed successfully!")
+    print("[SUCCESS] Linux distribution packaging completed successfully in publish/!")
 
 if __name__ == "__main__":
     main()
