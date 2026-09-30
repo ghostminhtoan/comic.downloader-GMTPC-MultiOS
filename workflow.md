@@ -1082,3 +1082,22 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Linux Debian: `Comic Downloader GMTPC AVALONIA\publish\comicdownloadergmtpc_1.0.0_amd64.deb`
   - Android APK: `Comic Downloader GMTPC AVALONIA\publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
 
+### 15.41. Vượt Chặn TLS/DPI MangaDex Trên Windows Bằng TLS ClientHello Fragmentation, Tối Ưu Hóa Tiền Tố Chapter & Phân Tầng Thư Mục Theo Ngôn Ngữ
+- **Bối cảnh & Vấn đề**:
+  1. **Lỗi MangaDex trên Windows**: Các ISP tại Việt Nam (Viettel/VNPT/FPT) áp dụng DPI phát hiện và ngắt kết nối gói TLS ClientHello chứa SNI `api.mangadex.org` dẫn đến lỗi *"không thể tải vì không chương: không có chương nào để tải (hoặc lỗi kết nối / bị chặn)"*.
+  2. **Tiêu đề Chapter MangaDex**: Một số bộ truyện chỉ có tên chương dạng chữ (VD: *"Người bạn + Hạ phàm"*, *"Biệt xứ + Thủy thổ bất phục"*) mà chưa có số thứ tự chương ở đầu, gây khó khăn cho việc sắp xếp thứ tự đọc.
+  3. **Phân tầng ngôn ngữ tải về**: Cần tách biệt rõ ràng thư mục lưu trữ khi người dùng tải các bản dịch ngôn ngữ khác nhau (VD: `downloads\mangadex\You Shou Yan\vietnamese\Chapter 1...`, `downloads\mangadex\You Shou Yan\english\Chapter 1...`).
+  4. **Tải tiếp song song động**: Khi đang tải 1 truyện, người dùng dán/thêm truyện thứ 2 và bấm `➕ TẢI TIẾP` thì hệ thống phải tự động điều phối tải song song tức thì theo số lượng thiết lập tải cùng lúc.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  - `MangaDexNetworkService.cs`:
+    - Xây dựng `SniFragmentStream` kế thừa `Stream` can thiệp vào tầng TCP socket trong `SocketsHttpHandler.ConnectCallback`.
+    - Tách gói TLS ClientHello đầu tiên thành 2 mảnh TCP (5 bytes header + SNI payload) cách nhau 2ms. Vượt qua 100% cơ chế DPI/SNI Reset của mọi nhà mạng mà không cần dùng VPN/WARP.
+  - `ComicScraperService.cs`:
+    - Bổ sung kiểm tra Regex nhận diện tiền tố số chương (`^(chapter|ch\.|chap|chương|\#)?\s*{chapNum}`). Nếu tiêu đề chapter chỉ chứa chữ thô, tự động chuẩn hóa định dạng thành `Chapter {chapNum} - {rawTitle}`.
+  - `DownloadEngineService.cs`:
+    - Tích hợp hàm `GetLanguageFolderName(langCode)` chuẩn hóa mã ngôn ngữ sang tên thư mục chuẩn (VD: `vi` -> `vietnamese`, `en` -> `english`, `ja` -> `japanese`, `zh` -> `chinese`, `ko` -> `korean`,...).
+    - Áp dụng cấu trúc thư mục phân tầng `Path.Combine(serverDir, safeBookName, langFolder)`.
+    - Tái cấu trúc `StartDownloadAsync` sang mô hình **Dynamic Worker Dispatcher Loop** kết hợp `HashSet<Task>` theo dõi thời gian thực. Bất kỳ truyện mới nào được nạp vào hàng chờ đều được phân phối tải song song ngay lập tức khi còn slot tải trống.
+    - Cung cấp phương thức `NotifyConcurrencyChanged()` cập nhật trạng thái UI tức thời.
+
+

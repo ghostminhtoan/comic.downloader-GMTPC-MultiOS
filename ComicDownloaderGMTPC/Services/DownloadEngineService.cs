@@ -44,7 +44,6 @@ public class DownloadEngineService
     // SỐ TRUYỆN TẢI CÙNG LÚC & SỐ LUỒNG TẢI ẢNH
     public int ConcurrentComicDownloads { get; set; } = 2; // 1 đến 8 (mặc định 2)
     public int ImageDownloadThreads { get; set; } = 3; // 1 đến 16 (mặc định 3)
-    public void NotifyConcurrencyChanged() { }
 
     private readonly System.Collections.Concurrent.ConcurrentQueue<ComicBookItem> _downloadQueue = new();
     private readonly HashSet<ComicBookItem> _enqueuedItems = new();
