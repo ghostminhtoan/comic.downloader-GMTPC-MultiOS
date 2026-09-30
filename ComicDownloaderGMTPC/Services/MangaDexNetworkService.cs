@@ -243,7 +243,7 @@ public class MangaDexNetworkService
 /// Tách gói ClientHello thành 2 mảnh TCP (5 bytes header + payload SNI) cách nhau 2ms.
 /// Giúp vượt qua 100% cơ chế chặn DPI / SNI Reset của tất cả nhà mạng (ISP) trên Windows/Linux mà không cần VPN.
 /// </summary>
-internal class SniFragmentStream : Stream
+public class SniFragmentStream : Stream
 {
     private readonly Stream _inner;
     private bool _firstWrite = true;
