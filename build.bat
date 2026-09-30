@@ -4,18 +4,11 @@ echo ========================================================
 echo   Building and Publishing Comic Downloader GMTPC Avalonia
 echo   Cross-Platform Standalone Packages in unified \publish\
 echo   1. Windows (win-x64, standalone single-file exe)
-echo   2. Linux   (linux-x64, portable .tar.gz & deb package)
+echo   2. Linux   (linux-x64, portable .tar.gz ^& deb package)
 echo   3. Android (net10.0-android, single APK package)
 echo ========================================================
 
 if not exist "publish" mkdir "publish"
-
-:: Cleanup legacy subdirectories
-if exist "publish\windows" rmdir /s /q "publish\windows" >nul 2>&1
-if exist "publish\linux" rmdir /s /q "publish\linux" >nul 2>&1
-if exist "publish\android" rmdir /s /q "publish\android" >nul 2>&1
-if exist "publish\test_linux_dir" rmdir /s /q "publish\test_linux_dir" >nul 2>&1
-if exist "publish\test_linux_single" rmdir /s /q "publish\test_linux_single" >nul 2>&1
 
 taskkill /F /IM ComicDownloaderGMTPC.Desktop.exe >nul 2>&1
 
@@ -74,13 +67,6 @@ del /f /q "publish\*.pdb" >nul 2>&1
 del /f /q "publish\*.xml" >nul 2>&1
 del /f /q "publish\*.json" >nul 2>&1
 del /f /q "publish\*.so" >nul 2>&1
-
-:: Remove legacy subdirectories if any were created
-if exist "publish\windows" rmdir /s /q "publish\windows" >nul 2>&1
-if exist "publish\linux" rmdir /s /q "publish\linux" >nul 2>&1
-if exist "publish\android" rmdir /s /q "publish\android" >nul 2>&1
-if exist "publish\test_linux_dir" rmdir /s /q "publish\test_linux_dir" >nul 2>&1
-if exist "publish\test_linux_single" rmdir /s /q "publish\test_linux_single" >nul 2>&1
 
 echo [OK] Android single APK package succeeded:
 echo      -^> publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk
