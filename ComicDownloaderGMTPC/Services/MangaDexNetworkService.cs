@@ -25,7 +25,6 @@ public class MangaDexNetworkService
     private static readonly Lazy<MangaDexNetworkService> _instance = new(() => new MangaDexNetworkService());
     public static MangaDexNetworkService Instance => _instance.Value;
 
-    private readonly HttpClient _standardClient;
     private readonly HttpClient _dohClient;
     private readonly HttpClient _proxyClient;
 
@@ -33,28 +32,11 @@ public class MangaDexNetworkService
     private static readonly string[] GatewayProxies =
     [
         "https://corsproxy.io/?url=",
-        "https://api.allorigins.win/raw?url=",
         "https://api.codetabs.com/v1/proxy?quest="
     ];
 
     public MangaDexNetworkService()
     {
-        // 1. Standard HttpClient: Tận dụng hoàn hảo Cloudflare WARP, VPN và System Proxy của Windows/Linux/Android
-        var standardHandler = new SocketsHttpHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-            ConnectTimeout = TimeSpan.FromSeconds(10),
-            SslOptions = new SslClientAuthenticationOptions
-            {
-                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
-            }
-        };
-        _standardClient = new HttpClient(standardHandler) { Timeout = TimeSpan.FromSeconds(15) };
-        _standardClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
-        _standardClient.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
-
-        // 2. DoH Client với SniFragmentStream (Vượt DPI SNI khi người dùng tại VN không dùng WARP/VPN)
         var dohHandler = new SocketsHttpHandler
         {
             AutomaticDecompression = DecompressionMethods.All,
@@ -85,11 +67,11 @@ public class MangaDexNetworkService
                 }
             }
         };
+
         _dohClient = new HttpClient(dohHandler) { Timeout = TimeSpan.FromSeconds(15) };
         _dohClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
         _dohClient.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
 
-        // 3. Reverse Proxy Client
         var proxyHandler = new SocketsHttpHandler
         {
             AutomaticDecompression = DecompressionMethods.All,
@@ -102,29 +84,14 @@ public class MangaDexNetworkService
     }
 
     /// <summary>
-    /// Lấy chuỗi JSON từ MangaDex API với cơ chế kết hợp Standard HttpClient (WARP/VPN), DoH SNI Fragment, Curl (-g), Reverse Proxies và Native Headless Browser.
+    /// Lấy chuỗi JSON từ MangaDex API với cơ chế kết hợp Native WebView Service và DoH / Cloudflare WARP / Reverse Proxy.
     /// </summary>
     public async Task<string> GetJsonAsync(string originalUrl, CancellationToken ct = default)
     {
         Exception? lastError = null;
 
-        // Tầng 1: Standard System HttpClient (Hoạt động tốt nhất và tức thì khi bật Cloudflare WARP / VPN / Proxy hệ thống)
-        try
-        {
-            using var req = new HttpRequestMessage(HttpMethod.Get, originalUrl);
-            using var res = await _standardClient.SendAsync(req, ct).ConfigureAwait(false);
-            if (res.IsSuccessStatusCode)
-            {
-                string json = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                if (IsValidJson(json)) return json;
-            }
-        }
-        catch (Exception ex)
-        {
-            lastError = ex;
-        }
-
-        // Tầng 2: DoH Client với SNI Packet Fragmentation (Vượt DPI ISP khi không bật WARP)
+        // Tầng 1: Direct HttpClient với DNS-over-HTTPS (DoH)
+        // Nhanh nhất khi người dùng bật 1.1.1.1 WARP hoặc mạng không bị chặn SNI/TLS
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, originalUrl);
@@ -140,15 +107,16 @@ public class MangaDexNetworkService
             lastError = ex;
         }
 
-        // Tầng 3: Curl Fallback (Đặc biệt hiệu quả trên Windows 10/11 có sẵn curl.exe, dùng cờ -g để tránh lỗi globbing brackets)
-        if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        // Tầng 2: Native WebView Service (Headless Edge / Chromium engine)
+        // Dùng stack BoringSSL của Chromium vượt tường lửa SNI của ISP
+        if (NativeWebViewService.Instance.IsAvailable)
         {
             try
             {
-                string curlResult = await FetchWithCurlAsync(originalUrl, ct).ConfigureAwait(false);
-                if (IsValidJson(curlResult))
+                string? webViewJson = await NativeWebViewService.Instance.FetchJsonAsync(originalUrl, timeoutSeconds: 15, ct).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(webViewJson) && IsValidJson(webViewJson))
                 {
-                    return curlResult;
+                    return webViewJson;
                 }
             }
             catch (Exception ex)
@@ -157,7 +125,7 @@ public class MangaDexNetworkService
             }
         }
 
-        // Tầng 4: Reverse Proxy Gateways
+        // Tầng 3: Reverse Proxy Gateways
         foreach (string gateway in GatewayProxies)
         {
             if (ct.IsCancellationRequested) break;
@@ -182,15 +150,15 @@ public class MangaDexNetworkService
             }
         }
 
-        // Tầng 5: Native WebView Service (Headless Chromium / Edge engine)
-        if (NativeWebViewService.Instance.IsAvailable)
+        // Tầng 4: Curl fallback (nếu có sẵn trên hệ thống)
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
             try
             {
-                string? webViewJson = await NativeWebViewService.Instance.FetchJsonAsync(originalUrl, timeoutSeconds: 15, ct).ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(webViewJson) && IsValidJson(webViewJson))
+                string curlResult = await FetchWithCurlAsync(originalUrl, ct).ConfigureAwait(false);
+                if (IsValidJson(curlResult))
                 {
-                    return webViewJson;
+                    return curlResult;
                 }
             }
             catch (Exception ex)
@@ -208,6 +176,49 @@ public class MangaDexNetworkService
         }
 
         throw new HttpRequestException(errMsg);
+    }
+
+    /// <summary>
+    /// Tải mảng byte dữ liệu (ảnh, tài nguyên nhị phân) từ MangaDex với cơ chế DoH, SniFragmentStream và Proxy dự phòng.
+    /// </summary>
+    public async Task<byte[]?> DownloadBytesAsync(string url, string? referer = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+
+        // Tầng 1: Direct HttpClient với DoH + SniFragmentStream
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Add("Referer", referer ?? "https://mangadex.org/");
+            using var res = await _dohClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            if (res.IsSuccessStatusCode)
+            {
+                var bytes = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                if (bytes.Length > 0) return bytes;
+            }
+        }
+        catch { }
+
+        // Tầng 2: Reverse Proxy Gateway
+        foreach (string gateway in GatewayProxies)
+        {
+            if (ct.IsCancellationRequested) break;
+            try
+            {
+                string proxyUrl = gateway + Uri.EscapeDataString(url);
+                using var pReq = new HttpRequestMessage(HttpMethod.Get, proxyUrl);
+                pReq.Headers.Add("Referer", referer ?? "https://mangadex.org/");
+                using var pRes = await _proxyClient.SendAsync(pReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                if (pRes.IsSuccessStatusCode)
+                {
+                    var pBytes = await pRes.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                    if (pBytes.Length > 0) return pBytes;
+                }
+            }
+            catch { }
+        }
+
+        return null;
     }
 
     private static bool IsValidJson(string text)
@@ -244,11 +255,10 @@ public class MangaDexNetworkService
                 curlPath = "curl.exe";
             }
 
-            // BẮT BUỘC: Thêm cờ -g (--globoff) để curl không parse các ký tự [ ] trong query param MangaDex thành globbing range
             var startInfo = new ProcessStartInfo
             {
                 FileName = curlPath,
-                Arguments = $"-g -s -L --max-time 15 --compressed -H \"Accept: application/json\" -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\" \"{url}\"",
+                Arguments = $"-s -L --max-time 10 -H \"Accept: application/json\" -H \"User-Agent: Mozilla/5.0\" \"{url}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true,
@@ -259,7 +269,7 @@ public class MangaDexNetworkService
             process.Start();
 
             string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(16000);
+            process.WaitForExit(12000);
 
             if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
             {

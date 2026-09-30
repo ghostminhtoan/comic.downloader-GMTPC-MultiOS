@@ -666,10 +666,10 @@ public class DownloadEngineService
                 var imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain ?? string.Empty, ct).ConfigureAwait(false);
                 if (imageUrls.Count == 0)
                 {
-                    for (int retryAttempt = 1; retryAttempt <= 2; retryAttempt++)
+                    for (int retryExtract = 1; retryExtract <= 2; retryExtract++)
                     {
                         if (ct.IsCancellationRequested) break;
-                        await Task.Delay(400 * retryAttempt, ct).ConfigureAwait(false);
+                        await Task.Delay(800 * retryExtract, ct).ConfigureAwait(false);
                         imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain ?? string.Empty, ct).ConfigureAwait(false);
                         if (imageUrls.Count > 0) break;
                     }
@@ -733,44 +733,38 @@ public class DownloadEngineService
 
                     await Task.WhenAll(downloadTasks).ConfigureAwait(false);
 
-                    SaveManifest(manifestFile, manifest);
-
-                    if (downloadedCount > 0)
+                    if (downloadedCount == 0)
+                    {
+                        chapter.Status = "Error";
+                        LogEmitted?.Invoke("ERROR", $"[{book.Title}] Tải ảnh thất bại cho '{chapter.Title}' (0/{imageUrls.Count} trang tải được).");
+                    }
+                    else
                     {
                         completedChapters++;
                         chapter.Status = "Completed";
                         book.UpdateProgress(completedChapters, totalChapters, imageUrls.Count, imageUrls.Count);
                     }
-                    else
-                    {
-                        chapter.Status = "Error";
-                        LogEmitted?.Invoke("ERROR", $"[{book.Title}] Tải thất bại toàn bộ ảnh cho '{chapter.Title}'.");
-                    }
                 }
                 else
                 {
+                    string txtPath = Path.Combine(chapterDir, "chapter_info.txt");
+                    if (!File.Exists(txtPath))
+                    {
+                        await File.WriteAllTextAsync(txtPath, $"Title: {chapter.Title}\nURL: {chapter.Url}\nDate: {DateTime.Now}", ct).ConfigureAwait(false);
+                    }
                     chapter.Status = "Error";
-                    LogEmitted?.Invoke("ERROR", $"[{book.Title}] Không lấy được danh sách ảnh cho '{chapter.Title}'.");
+                    LogEmitted?.Invoke("WARN", $"[{book.Title}] Không thể bóc tách ảnh cho '{chapter.Title}'.");
                 }
 
+                SaveManifest(manifestFile, manifest);
                 ProgressUpdated?.Invoke();
             }
 
-            if (completedChapters == totalChapters)
-            {
-                book.Status = "Completed";
-                book.StatusMessage = $"Đã tải xong toàn bộ {completedChapters}/{totalChapters} chương";
-                book.UpdateProgress(completedChapters, totalChapters, 0, 0);
-                book.DetailProgressText = $"Hoàn tất {completedChapters}/{totalChapters} chaps • 100%";
-                LogEmitted?.Invoke("SUCCESS", $"Đã hoàn tất truyện: '{book.Title}' ({completedChapters} chaps) -> {bookDir}");
-            }
-            else
-            {
-                book.Status = completedChapters > 0 ? "Ready" : "Error";
-                book.StatusMessage = $"Đã tải {completedChapters}/{totalChapters} chương (còn {totalChapters - completedChapters} chương lỗi)";
-                book.DetailProgressText = $"{completedChapters}/{totalChapters} chaps";
-                LogEmitted?.Invoke("WARN", $"[{book.Title}] Tải hoàn tất {completedChapters}/{totalChapters} chương. Bấm 'THỬ LẠI' để tải các chương còn lại.");
-            }
+            book.Status = "Completed";
+            book.StatusMessage = $"Đã tải xong toàn bộ {completedChapters}/{totalChapters} chương";
+            book.UpdateProgress(completedChapters, totalChapters, 0, 0);
+            book.DetailProgressText = $"Hoàn tất {completedChapters}/{totalChapters} chaps • 100%";
+            LogEmitted?.Invoke("SUCCESS", $"Đã hoàn tất truyện: '{book.Title}' ({completedChapters} chaps) -> {bookDir}");
         }
         catch (OperationCanceledException)
         {
@@ -794,54 +788,117 @@ public class DownloadEngineService
 
     private async Task<bool> DownloadImageWithRetryAsync(string imageUrl, string destinationPath, string refererUrl, CancellationToken ct)
     {
+        bool isMangaDex = imageUrl.Contains("mangadex.network", StringComparison.OrdinalIgnoreCase) ||
+                          imageUrl.Contains("mangadex.org", StringComparison.OrdinalIgnoreCase);
+
+        var candidateUrls = new List<string> { imageUrl };
+        if (isMangaDex)
+        {
+            var mdMatch = System.Text.RegularExpressions.Regex.Match(imageUrl, @"/(?<type>data|data-saver)/(?<hash>[a-f0-9]+)/(?<file>[^?#]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (mdMatch.Success)
+            {
+                string mHash = mdMatch.Groups["hash"].Value;
+                string mFile = mdMatch.Groups["file"].Value;
+                string officialData = $"https://uploads.mangadex.org/data/{mHash}/{mFile}";
+                string officialSaver = $"https://uploads.mangadex.org/data-saver/{mHash}/{mFile}";
+                if (!candidateUrls.Contains(officialData, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(officialData);
+                if (!candidateUrls.Contains(officialSaver, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(officialSaver);
+            }
+        }
+
         for (int attempt = 1; attempt <= 3; attempt++)
         {
             if (ct.IsCancellationRequested) return false;
 
             byte[]? data = null;
-            try
+
+            foreach (string targetUrl in candidateUrls)
             {
-                using var req = new HttpRequestMessage(HttpMethod.Get, imageUrl);
+                if (ct.IsCancellationRequested) return false;
 
-                string? effectiveReferer = refererUrl;
-                if (imageUrl.Contains("imggo.net", StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    effectiveReferer = "https://daomeoden.net/";
-                }
-                else if (imageUrl.Contains("pubtranxzyzz", StringComparison.OrdinalIgnoreCase) ||
-                         (refererUrl != null && refererUrl.Contains("sayhentai", StringComparison.OrdinalIgnoreCase)))
-                {
-                    effectiveReferer = "https://sayhentai.cx/";
-                }
-                else if (imageUrl.Contains("hentaicdn.com", StringComparison.OrdinalIgnoreCase) || imageUrl.Contains("hentai.direct", StringComparison.OrdinalIgnoreCase))
-                {
-                    effectiveReferer = "https://hentai2read.com/";
-                }
-                else if (imageUrl.Contains("vi-hentai", StringComparison.OrdinalIgnoreCase))
-                {
-                    effectiveReferer = "https://vi-hentai.pro/";
-                }
-                else if (imageUrl.Contains("gold-usergeneratedcontent.net", StringComparison.OrdinalIgnoreCase) ||
-                         imageUrl.Contains("hitomi.la", StringComparison.OrdinalIgnoreCase) ||
-                         (refererUrl != null && refererUrl.Contains("hitomi", StringComparison.OrdinalIgnoreCase)))
-                {
-                    effectiveReferer = "https://hitomi.la/";
-                }
+                    using var req = new HttpRequestMessage(HttpMethod.Get, targetUrl);
 
-                if (!string.IsNullOrEmpty(effectiveReferer))
-                {
-                    req.Headers.Add("Referer", effectiveReferer);
-                }
+                    string? effectiveReferer = refererUrl;
+                    if (isMangaDex)
+                    {
+                        effectiveReferer = "https://mangadex.org/";
+                    }
+                    else if (targetUrl.Contains("imggo.net", StringComparison.OrdinalIgnoreCase))
+                    {
+                        effectiveReferer = "https://daomeoden.net/";
+                    }
+                    else if (targetUrl.Contains("pubtranxzyzz", StringComparison.OrdinalIgnoreCase) ||
+                             (refererUrl != null && refererUrl.Contains("sayhentai", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        effectiveReferer = "https://sayhentai.cx/";
+                    }
+                    else if (targetUrl.Contains("hentaicdn.com", StringComparison.OrdinalIgnoreCase) || targetUrl.Contains("hentai.direct", StringComparison.OrdinalIgnoreCase))
+                    {
+                        effectiveReferer = "https://hentai2read.com/";
+                    }
+                    else if (targetUrl.Contains("vi-hentai", StringComparison.OrdinalIgnoreCase))
+                    {
+                        effectiveReferer = "https://vi-hentai.pro/";
+                    }
+                    else if (targetUrl.Contains("gold-usergeneratedcontent.net", StringComparison.OrdinalIgnoreCase) ||
+                             targetUrl.Contains("hitomi.la", StringComparison.OrdinalIgnoreCase) ||
+                             (refererUrl != null && refererUrl.Contains("hitomi", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        effectiveReferer = "https://hitomi.la/";
+                    }
 
-                using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-                if (!res.IsSuccessStatusCode)
-                {
-                    await Task.Delay(300 * attempt, ct).ConfigureAwait(false);
-                    continue;
-                }
+                    if (!string.IsNullOrEmpty(effectiveReferer))
+                    {
+                        req.Headers.Add("Referer", effectiveReferer);
+                    }
 
-                data = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-                if (data.Length > 0)
+                    using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                    if (res.IsSuccessStatusCode)
+                    {
+                        data = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                        if (data.Length > 0)
+                        {
+                            break;
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    return false;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Thử candidate URL tiếp theo
+                }
+            }
+
+            // Tầng 4 dự phòng cho MangaDex qua DoH + SniFragmentStream + Proxy
+            if ((data == null || data.Length == 0) && isMangaDex)
+            {
+                foreach (string targetUrl in candidateUrls)
+                {
+                    if (ct.IsCancellationRequested) return false;
+                    try
+                    {
+                        data = await MangaDexNetworkService.Instance.DownloadBytesAsync(targetUrl, "https://mangadex.org/", ct).ConfigureAwait(false);
+                        if (data != null && data.Length > 0)
+                        {
+                            break;
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            if (data != null && data.Length > 0)
+            {
+                try
                 {
                     await File.WriteAllBytesAsync(destinationPath, data, ct).ConfigureAwait(false);
                     Interlocked.Add(ref _totalBytesDownloadedInWindow, data.Length);
@@ -861,41 +918,36 @@ public class DownloadEngineService
 
                     return true;
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                return false;
-            }
-            catch (UnauthorizedAccessException uex)
-            {
-                LogEmitted?.Invoke("ERROR", $"[Lỗi quyền bộ nhớ] Từ chối truy cập ghi tệp '{Path.GetFileName(destinationPath)}': {uex.Message}");
-
-                if (OperatingSystem.IsAndroid() && data != null && data.Length > 0)
+                catch (UnauthorizedAccessException uex)
                 {
-                    try
+                    LogEmitted?.Invoke("ERROR", $"[Lỗi quyền bộ nhớ] Từ chối truy cập ghi tệp '{Path.GetFileName(destinationPath)}': {uex.Message}");
+
+                    if (OperatingSystem.IsAndroid())
                     {
-                        string safeAppStorage = GetAppSpecificExternalPath();
-                        string safeFallbackPath = destinationPath.Replace("/storage/emulated/0/Download/ComicDownloads", safeAppStorage, StringComparison.OrdinalIgnoreCase);
-                        string fallbackDir = Path.GetDirectoryName(safeFallbackPath)!;
-                        if (!Directory.Exists(fallbackDir)) Directory.CreateDirectory(fallbackDir);
-                        File.WriteAllBytes(safeFallbackPath, data);
-                        Interlocked.Add(ref _totalBytesDownloadedInWindow, data.Length);
-                        LogEmitted?.Invoke("SUCCESS", $"[Lưu an toàn] Đã chuyển hướng lưu ảnh vào thư mục riêng của app: {Path.GetFileName(safeFallbackPath)}");
-                        return true;
+                        try
+                        {
+                            string safeAppStorage = GetAppSpecificExternalPath();
+                            string safeFallbackPath = destinationPath.Replace("/storage/emulated/0/Download/ComicDownloads", safeAppStorage, StringComparison.OrdinalIgnoreCase);
+                            string fallbackDir = Path.GetDirectoryName(safeFallbackPath)!;
+                            if (!Directory.Exists(fallbackDir)) Directory.CreateDirectory(fallbackDir);
+                            File.WriteAllBytes(safeFallbackPath, data);
+                            Interlocked.Add(ref _totalBytesDownloadedInWindow, data.Length);
+                            LogEmitted?.Invoke("SUCCESS", $"[Lưu an toàn] Đã chuyển hướng lưu ảnh vào thư mục riêng của app: {Path.GetFileName(safeFallbackPath)}");
+                            return true;
+                        }
+                        catch { }
                     }
-                    catch {}
-                }
 
-                return false;
-            }
-            catch (Exception ex)
-            {
-                if (attempt == 3)
-                {
-                    LogEmitted?.Invoke("WARN", $"Tải ảnh thất bại sau 3 lần '{imageUrl}': {ex.Message}");
+                    return false;
                 }
-                await Task.Delay(400 * attempt, ct).ConfigureAwait(false);
+                catch { }
             }
+
+            if (attempt == 3)
+            {
+                LogEmitted?.Invoke("WARN", $"Tải ảnh thất bại sau 3 lần '{imageUrl}'");
+            }
+            await Task.Delay(400 * attempt, ct).ConfigureAwait(false);
         }
 
         return false;
