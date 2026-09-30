@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia;
@@ -103,6 +102,7 @@ public partial class MainViewModel : ViewModelBase
     partial void OnConcurrentComicDownloadsChanged(int value)
     {
         _downloadEngine.ConcurrentComicDownloads = Math.Clamp(value, 1, 16);
+        _downloadEngine.NotifyConcurrencyChanged();
     }
 
     partial void OnImageDownloadThreadsChanged(int value)
@@ -1583,7 +1583,7 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
-    private async Task ExtractUrlsFromTextAsync(string? rawText, bool clearExisting, bool isAutoPaste = false)
+    private async Task ExtractUrlsFromTextAsync(string? rawText, bool clearExisting)
     {
         if (string.IsNullOrWhiteSpace(rawText))
         {
@@ -1591,24 +1591,17 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        var matches = Regex.Matches(rawText, @"https?://[^\s""'<>\[\]\(\)\,\;\`\r\n\t]+", RegexOptions.IgnoreCase);
-        var candidateUrls = new List<string>();
-        foreach (Match m in matches)
-        {
-            string clean = m.Value.Trim().TrimEnd('.', ',', ';', ':', ')', ']', '>', '"', '\'');
-            if (!string.IsNullOrWhiteSpace(clean) && !candidateUrls.Contains(clean, StringComparer.OrdinalIgnoreCase))
-            {
-                candidateUrls.Add(clean);
-            }
-        }
+        var rawTokens = rawText.Split(new[] { '\r', '\n', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                               .Select(l => l.Trim())
+                               .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
+                               .Distinct()
+                               .ToList();
 
-        if (candidateUrls.Count == 0)
+        var candidateUrls = rawTokens.Where(t => t.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                                 t.StartsWith("https://", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (candidateUrls.Count == 0 && rawTokens.Count > 0)
         {
-            var rawTokens = rawText.Split(new[] { '\r', '\n', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                                   .Select(l => l.Trim())
-                                   .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
-                                   .Distinct()
-                                   .ToList();
             candidateUrls = rawTokens;
         }
 
@@ -1635,25 +1628,16 @@ public partial class MainViewModel : ViewModelBase
 
         if (hasMangadex)
         {
-            if (isAutoPaste)
+            AddLog("INFO", "Phát hiện liên kết MangaDex. Vui lòng chọn ngôn ngữ tải (Tiếng Việt / Tiếng Anh)...");
+            var choice = await PromptMangadexLanguageAsync();
+            if (choice == null)
             {
-                mangadexLang = "vi";
-                mangadexFallback = true;
-                AddLog("INFO", "📋 [Tự dán MangaDex] Tự động chọn ngôn ngữ Tiếng Việt (Fallback: Tiếng Anh).");
+                AddLog("WARN", "Đã hủy thao tác lấy link MangaDex theo yêu cầu.");
+                return;
             }
-            else
-            {
-                AddLog("INFO", "Phát hiện liên kết MangaDex. Vui lòng chọn ngôn ngữ tải (Tiếng Việt / Tiếng Anh)...");
-                var choice = await PromptMangadexLanguageAsync();
-                if (choice == null)
-                {
-                    AddLog("WARN", "Đã hủy thao tác lấy link MangaDex theo yêu cầu.");
-                    return;
-                }
-                mangadexLang = choice.PrimaryLanguage;
-                mangadexFallback = choice.UseFallback;
-                AddLog("INFO", $"Đã xác nhận ngôn ngữ MangaDex: {(mangadexLang == "vi" ? "Tiếng Việt" : "Tiếng Anh")} (Fallback: {(mangadexFallback ? "Bật" : "Tắt")})");
-            }
+            mangadexLang = choice.PrimaryLanguage;
+            mangadexFallback = choice.UseFallback;
+            AddLog("INFO", $"Đã xác nhận ngôn ngữ MangaDex: {(mangadexLang == "vi" ? "Tiếng Việt" : "Tiếng Anh")} (Fallback: {(mangadexFallback ? "Bật" : "Tắt")})");
         }
 
         int startIndex = ComicBooks.Count + 1;

@@ -17,13 +17,14 @@ Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file
 - Không revert thay đổi của user nếu không yêu cầu.
 - Xong việc: đánh giá, gợi ý file cần sửa/kiểm tra, rà soát EN/VI.
 - Luôn luôn test build 2 bước: bước 1 là tự tải khởi tạo thư viện, bước 2 là app mở lên, có UI hoàn tất thì mới xem như là build thành công.
+- **Quy tắc thư mục Publish**: Khi build / publish file cho toàn bộ các hệ điều hành (Windows, Linux, Android), toàn bộ file `.deb`, `.exe`, `.tar.gz`, binary Linux và `.apk` **bắt buộc luôn luôn ở chung một folder duy nhất `\Comic Downloader GMTPC AVALONIA\publish\`**, tuyệt đối **không được cho vào các subfolder như `windows`, `linux`, `android`**.
 - Luôn xuất 3 dòng trạng thái chuẩn ở cuối câu trả lời:
   - `commit local: <mã hash>`
   - `commit remote local: "không"`
   - `path publish file chạy windows, linux, android:`
-    - Windows: `Comic Downloader GMTPC AVALONIA\publish\windows\ComicDownloaderGMTPC.Desktop.exe`
-    - Linux: `Comic Downloader GMTPC AVALONIA\publish\linux\ComicDownloaderGMTPC.Desktop`
-    - Android: `Comic Downloader GMTPC AVALONIA\publish\android\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
+    - Windows: `Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC.Desktop.exe`
+    - Linux: `Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC`
+    - Android: `Comic Downloader GMTPC AVALONIA\publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
 - Luôn đánh giá, cập nhật `workflow.md`.
 - Đánh giá prompt, gợi ý tính năng/file thiết kế mới; cập nhật workflow.md/prompt.md khi cần.
 
@@ -556,17 +557,17 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
   - *Nguyên nhân*: ScrollViewer ngoài cùng có VerticalScrollBarVisibility=Auto và HorizontalScrollBarVisibility=Disabled. Khi vuốt ngang, ScrollViewer ngoài cùng bỏ qua nên ảnh pan ngang được; nhưng khi vuốt dọc, ScrollViewer ngoài cùng chiếm quyền cử chỉ cuộn cả trang, đồng thời OnMoved không đánh dấu ev.Handled = true, dẫn đến cử chỉ vuốt dọc bị nuốt mất và ảnh không pan lên xuống được.
   - *Khắc phục*: Đánh dấu ev.Handled = true; trong cả OnPressed và OnMoved khi đang kéo rê ảnh (Pan), cô lập hoàn toàn sự kiện cử chỉ trong khung ảnh, ngăn chặn triệt để ScrollViewer ngoài cùng can thiệp, cho phép pan tự do 2 chiều (trái/phải/lên/xuống).
 
-### 15.10. Quy Chuẩn Build & Publish Standalone Single-File (1 File Duy Nhất Mỗi OS Sang Folder Publish)
-- **Mục tiêu**: Đóng gói ứng dụng sang folder `publish\` (thay vì folder `release\`), mỗi hệ điều hành đúng **1 file duy nhất** (standalone, embed runtime, nén kích thước) tiện lợi đăng tải trực tiếp lên GitHub Release.
-- **Quy định output**:
-  + **Windows (`win-x64`)**: `publish\windows\ComicDownloaderGMTPC.Desktop.exe` (Standalone Single-File Executable chứa đầy đủ .NET 10 runtime + SkiaSharp + native libraries + toàn bộ Assets).
-  + **Linux (`linux-x64`)**: `publish\linux\ComicDownloaderGMTPC.Desktop` (Standalone Single-File Executable ELF).
-  + **Android (`net10.0-android`)**: `publish\android\com.CompanyName.ComicDownloaderGMTPC-Signed.apk` (Single APK Package hoàn chỉnh).
+### 15.10. Quy Chuẩn Build & Publish Standalone Single-File (Tất Cả Ở Chung Một Thư Mục \publish\, Không Dùng Subfolder)
+- **Mục tiêu**: Đóng gói ứng dụng sang folder `publish\` (thay vì folder `release\`), toàn bộ file `.deb`, `.exe`, `.tar.gz`, binary Linux và `.apk` đều nằm chung trực tiếp trong một thư mục duy nhất `\publish\`, tuyệt đối không phân nhánh subfolder `windows`, `linux`, `android`.
+- **Quy định output chuẩn trong `\publish\`**:
+  + **Windows (`win-x64`)**: `publish\ComicDownloaderGMTPC.Desktop.exe` (Standalone Single-File Executable chứa đầy đủ .NET runtime + SkiaSharp + native libraries + toàn bộ Assets).
+  + **Linux (`linux-x64`)**: `publish\ComicDownloaderGMTPC` (Standalone Single-File Executable ELF), `publish\ComicDownloaderGMTPC-linux-x64.tar.gz` (Portable tar.gz), `publish\comicdownloadergmtpc_1.0.0_amd64.deb` (Debian Package).
+  + **Android (`net10.0-android`)**: `publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk` (Single APK Package hoàn chỉnh).
 - **Lệnh thực thi chuẩn (tích hợp trong `build.bat`)**:
-  + Windows: `dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish\windows`
-  + Linux: `dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish\linux`
-  + Android: `dotnet build ComicDownloaderGMTPC.Android\ComicDownloaderGMTPC.Android.csproj -c Release -o publish\android`
-  + Tự động dọn dẹp các tệp trung gian (`.pdb`, `.xml`, `.json`, `.dll`, `.so`) sau khi xuất bản để mỗi folder chỉ chứa đúng duy nhất 1 file executable/package chính.
+  + Windows: `dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish`
+  + Linux: `dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish`
+  + Android: `dotnet build ComicDownloaderGMTPC.Android\ComicDownloaderGMTPC.Android.csproj -c Release -o publish`
+  + Tự động dọn dẹp các tệp trung gian (`.pdb`, `.xml`, `.json`, `.dll`, `.so`) sau khi xuất bản để thư mục `publish\` chỉ chứa các gói thành phẩm chính.
 
 ### 15.11. Cấu Trúc Thư Mục Xuất Bản Cùng Cấp & Bảo Toàn Cây Thư Mục Gốc (Sibling Output & Folder Structure Preservation)
 - **Quy tắc output cùng cấp (Sibling Output Directory)**:
@@ -1069,4 +1070,15 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
     - Cấu trúc lại `FetchMangaDexFeedChaptersAsync` và `ScrapeMangaDexBookAsync` với `MangaDexChapterRawItem` và cơ chế fallback 3 tầng.
   - `MainViewModel.cs`:
     - Nâng cấp `ExtractUrlsFromTextAsync` sử dụng Regex bóc tách sạch URL từ văn bản tự do, hỗ trợ cờ `isAutoPaste` tự động nhận diện MangaDex không chặn modal dialog UI.
+
+### 15.40. Chuẩn Hóa Cấu Trúc Thư Mục Xuất Bản \publish\ Duy Nhất (Không Sử Dụng Subfolder)
+- **Quy tắc cốt lõi**:
+  - Toàn bộ các gói phân phối và file thực thi cuối cùng của tất cả các hệ điều hành (`.exe`, `.tar.gz`, `.deb`, ELF binary và `.apk`) **bắt buộc luôn luôn nằm chung trực tiếp trong một thư mục duy nhất `\Comic Downloader GMTPC AVALONIA\publish\`**.
+  - Tuyệt đối không tạo hoặc phân chia vào các thư mục con như `publish\windows\`, `publish\linux\`, `publish\android\`.
+- **Cấu trúc thành phẩm trong `\publish\`**:
+  - Windows: `Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC.Desktop.exe`
+  - Linux Executable: `Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC`
+  - Linux Portable: `Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC-linux-x64.tar.gz`
+  - Linux Debian: `Comic Downloader GMTPC AVALONIA\publish\comicdownloadergmtpc_1.0.0_amd64.deb`
+  - Android APK: `Comic Downloader GMTPC AVALONIA\publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
 
