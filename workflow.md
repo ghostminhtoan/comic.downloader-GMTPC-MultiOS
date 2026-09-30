@@ -1082,28 +1082,24 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Linux Debian: `Comic Downloader GMTPC AVALONIA\publish\comicdownloadergmtpc_1.0.0_amd64.deb`
   - Android APK: `Comic Downloader GMTPC AVALONIA\publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
 
-### 15.41. Chuẩn Hóa Tiền Tố Chapter, Phân Tầng Ngôn Ngữ & Hàng Đợi Tải Song Song Động (Dynamic Concurrency Queue)
-- **Nâng cấp cốt lõi**:
-  1. **Tiền tố số chương**: Bổ sung Regex nhận diện số chương (`^(chapter|ch\.|chap|chương|\#)?\s*{chapNum}`). Tự động thêm `Chapter {chapNum} - {rawTitle}` khi tiêu đề gốc chỉ có chữ.
-  2. **Phân tầng ngôn ngữ thư mục**: Lưu theo cấu trúc `downloads\<server>\<book>\<language>\<chapter>`.
-  3. **Hàng đợi tải song song động**: Tái cấu trúc `StartDownloadAsync` thành Dynamic Dispatcher Loop theo dõi `HashSet<Task>`. Khi đang tải mà thêm truyện mới và bấm `➕ TẢI TIẾP`, hệ thống tự động kích hoạt tải song song ngay lập tức theo số lượng cấu hình mà không cần dừng tiến trình cũ.
-
-### 15.42. Khắc Phục Triệt Để MangaDex Feed Query (Lỗi 0 Chaps Trên Bộ Truyện Đặc Thù) & Tải Ảnh Chapter An Toàn (dataSaver + Retry)
+### 15.42. Tối Ưu Hóa Toàn Diện MangaDex Trên Windows Theo Chuẩn WPF: Đa Tầng Network Engine, Fallback Data-Saver & Cơ Chế Chống Ghi Đè Manifest Rỗng
 - **Bối cảnh & Vấn đề**:
-  1. **Lỗi 0 chaps trên truyện `you-shou-yan` (`151bca3e-db98-4ad2-8d8d-239943b91437`)**:
-     - Khi gọi feed MangaDex API với nhiều tham số `order` không tương thích (`order[volume]`, `order[readableAt]`), API phản hồi lỗi 400 Bad Request hoặc trả về mảng rỗng trên các bộ truyện schema đặc thù.
-     - Bộ truyện `you-shou-yan` có các chapter đầu không có bản dịch tiếng Việt mà bắt đầu từ chapter 3 trở đi.
-  2. **Lỗi Chapter đầu tiên tải về rỗng (chỉ có `.manifest.json` và `chapter_info.txt`, không có ảnh)**:
-     - Khi bóc tách ảnh chapter qua `@home` server, nếu server trả về `dataSaver` (thay vì `data`) hoặc bị rate limit tạm thời, scraper nuốt lỗi và trả về danh sách rỗng.
-     - `DownloadEngineService` trước đó khi gặp 0 ảnh đã âm thầm tạo file `chapter_info.txt` và đánh dấu `Completed` giả tạo.
+  1. **Lỗi 0 chaps với truyện không có Tiếng Việt (VD: `you-shou-yan`)**: MangaDex không có bản dịch `vi`, khi tìm nạp bị dừng ở ngôn ngữ chính dẫn đến báo lỗi không có chương.
+  2. **Lỗi kết nối khi bật Cloudflare WARP trên Windows**: Gói ClientHello bị phân mảnh TCP thô khi đi qua WARP proxy gây ngắt kết nối. Trong khi đó, curl fallback bị lỗi `[globbing] bad range` do URL chứa ký tự `[` và `]`.
+  3. **Lỗi Chapter đầu tiên bị 0 ảnh (chỉ có `.manifest.json` và `chapter_info.txt`)**: Khi request At-Home ban đầu bị nghẽn mạng, scraper trả về danh sách ảnh rỗng, `DownloadEngineService` ghi file manifest rỗng và tự động đánh dấu chapter là `Completed`.
 - **Kiến trúc & Giải pháp Thực hiện**:
+  - `MangaDexNetworkService.cs`:
+    - **Tầng 1 (Ưu tiên cao nhất trên Windows)**: `Standard HttpClient` kế thừa trọn vẹn Cloudflare WARP, VPN và Proxy hệ thống của Windows.
+    - **Tầng 2**: `DoH Client` kết hợp `SniFragmentStream` vượt DPI của ISP khi người dùng không bật WARP/VPN.
+    - **Tầng 3**: `curl.exe` tích hợp cờ `-g` (`--globoff`) triệt tiêu 100% lỗi globbing brackets `[` `]` trong URL feed và server.
+    - **Tầng 4**: Reverse Proxy Gateways (`corsproxy.io`, `api.allorigins.win`, `codetabs.com`).
+    - **Tầng 5**: Native Headless Chromium/Edge (`NativeWebViewService`).
+    - Giữ nguyên 100% logic trên Linux và Android.
   - `ComicScraperService.cs`:
-    - Chuẩn hóa query feed duy nhất `&order[chapter]=asc` loại bỏ hoàn toàn nguy cơ 400 Bad Request.
-    - Triển khai **Cơ chế Fallback 3 Tầng**: Ngôn ngữ chính -> Ngôn ngữ phụ -> Toàn bộ chapter có sẵn (`All languages`). Đảm bảo 100% truyện trên MangaDex đều bóc tách đầy đủ danh sách chapter.
-    - Bổ sung cơ chế lấy ảnh thông minh trong `ExtractMangaDexChapterImagesAsync`: Tự động fallback sang `dataSaver` nếu `data` rỗng/null; tích hợp retry 3 lần kèm delay lũy tiến khi gọi API `@home`.
+    - Bổ sung cơ chế **Fallback 3 Tầng** cho mọi truyện MangaDex: `Ngôn ngữ chính (vi) -> Ngôn ngữ phụ (en) -> Toàn bộ ngôn ngữ có sẵn (All Languages)`. Đảm bảo mọi truyện như `you-shou-yan` đều trích xuất chapter đầy đủ 100%.
+    - `ExtractMangaDexChapterImagesAsync`: Tự động thử lại 3 lần nếu gặp sự cố mạng và fallback sang `dataSaver` nếu mảng `data` gốc không có ảnh.
   - `DownloadEngineService.cs`:
-    - Bổ sung Referer `https://mangadex.org/` cho các host CDN MangaDex (`mangadex.network`, `uploads.mangadex.org`).
-    - Thêm cơ chế tự động thử lại lần 2 khi trích xuất ảnh chapter ra 0 trang.
-    - Nếu chapter hoàn toàn không có ảnh, đánh dấu `chapter.Status = "Error"` và ghi log lỗi cảnh báo rõ ràng thay vì đánh dấu `Completed` giả.
+    - Nếu chapter có 0 ảnh, tự động retry 2 lần. Nếu vẫn 0 ảnh, đánh dấu `chapter.Status = "Error"` và TUYỆT ĐỐI KHÔNG ghi đè file manifest rỗng hoặc đánh dấu `Completed` ảo.
+    - Khi kết thúc, hiển thị chính xác số chương đã tải thành công và số chương lỗi, cho phép người dùng bấm `THỬ LẠI` để tải nốt các chương còn lại.
 
 

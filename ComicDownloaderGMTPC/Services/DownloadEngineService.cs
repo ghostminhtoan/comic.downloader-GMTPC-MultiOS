@@ -365,97 +365,38 @@ public class DownloadEngineService
         {
             BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", "Bắt đầu tải danh sách truyện...", 0, true);
 
-            var activeTasks = new HashSet<Task>();
-            var activeTasksLock = new object();
-
-            while (!ct.IsCancellationRequested)
+            var workerTasks = Enumerable.Range(0, concurrentComics).Select(async _ =>
             {
-                await WaitIfPausedAsync(ct).ConfigureAwait(false);
-
-                int maxConcurrent = Math.Clamp(ConcurrentComicDownloads, 1, 16);
-
-                ComicBookItem? item = null;
-                bool shouldDequeue = false;
-
-                lock (activeTasksLock)
+                while (!ct.IsCancellationRequested)
                 {
-                    if (activeTasks.Count < maxConcurrent)
-                    {
-                        shouldDequeue = true;
-                    }
-                }
-
-                if (shouldDequeue)
-                {
+                    ComicBookItem? item = null;
                     lock (_queueLock)
                     {
-                        _downloadQueue.TryDequeue(out item);
+                        if (!_downloadQueue.TryDequeue(out item))
+                        {
+                            break;
+                        }
                     }
-                }
 
-                if (item != null)
-                {
-                    var bookTask = Task.Run(async () =>
+                    if (item != null)
                     {
                         try
                         {
-                            int currentImageThreads = Math.Max(1, ImageDownloadThreads);
-                            await DownloadComicBookAsync(item, _activeMode, currentImageThreads, ct).ConfigureAwait(false);
+                            await DownloadComicBookAsync(item, _activeMode, imageThreads, ct).ConfigureAwait(false);
                         }
-                        catch (OperationCanceledException) { }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
                         catch (Exception ex)
                         {
                             LogEmitted?.Invoke("ERROR", $"Lỗi tải truyện '{item.Title}': {ex.Message}");
                         }
-                    }, ct);
-
-                    lock (activeTasksLock)
-                    {
-                        activeTasks.Add(bookTask);
                     }
-
-                    _ = bookTask.ContinueWith(t =>
-                    {
-                        lock (activeTasksLock)
-                        {
-                            activeTasks.Remove(t);
-                        }
-                        ProgressUpdated?.Invoke();
-                    }, TaskScheduler.Default);
                 }
-                else
-                {
-                    bool anyRunning;
-                    lock (activeTasksLock)
-                    {
-                        anyRunning = activeTasks.Count > 0;
-                    }
+            }).ToList();
 
-                    bool queueHasItems;
-                    lock (_queueLock)
-                    {
-                        queueHasItems = !_downloadQueue.IsEmpty;
-                    }
-
-                    if (!anyRunning && !queueHasItems)
-                    {
-                        break;
-                    }
-
-                    await Task.Delay(100, ct).ConfigureAwait(false);
-                }
-            }
-
-            Task[] remaining;
-            lock (activeTasksLock)
-            {
-                remaining = activeTasks.ToArray();
-            }
-            if (remaining.Length > 0)
-            {
-                await Task.WhenAll(remaining).ConfigureAwait(false);
-            }
-
+            await Task.WhenAll(workerTasks).ConfigureAwait(false);
             LogEmitted?.Invoke("SUCCESS", "Hoàn tất toàn bộ tác vụ tải trong hàng chờ.");
             SoundNotificationService.Instance.PlaySound(SoundNotificationType.DownloadFinish);
         }
@@ -723,12 +664,15 @@ public class DownloadEngineService
 
                 await WaitIfPausedAsync(ct).ConfigureAwait(false);
                 var imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain ?? string.Empty, ct).ConfigureAwait(false);
-
-                // Nếu lần đầu bóc tách ra 0 ảnh (do rate limit hoặc mạng chập chờn), tự động retry lần 2 sau 800ms
-                if (imageUrls.Count == 0 && !ct.IsCancellationRequested)
+                if (imageUrls.Count == 0)
                 {
-                    await Task.Delay(800, ct).ConfigureAwait(false);
-                    imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain ?? string.Empty, ct).ConfigureAwait(false);
+                    for (int retryAttempt = 1; retryAttempt <= 2; retryAttempt++)
+                    {
+                        if (ct.IsCancellationRequested) break;
+                        await Task.Delay(400 * retryAttempt, ct).ConfigureAwait(false);
+                        imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain ?? string.Empty, ct).ConfigureAwait(false);
+                        if (imageUrls.Count > 0) break;
+                    }
                 }
 
                 chapter.ImageUrls = imageUrls;
@@ -790,25 +734,43 @@ public class DownloadEngineService
                     await Task.WhenAll(downloadTasks).ConfigureAwait(false);
 
                     SaveManifest(manifestFile, manifest);
-                    completedChapters++;
-                    chapter.Status = "Completed";
-                    book.UpdateProgress(completedChapters, totalChapters, imageUrls.Count, imageUrls.Count);
-                    ProgressUpdated?.Invoke();
+
+                    if (downloadedCount > 0)
+                    {
+                        completedChapters++;
+                        chapter.Status = "Completed";
+                        book.UpdateProgress(completedChapters, totalChapters, imageUrls.Count, imageUrls.Count);
+                    }
+                    else
+                    {
+                        chapter.Status = "Error";
+                        LogEmitted?.Invoke("ERROR", $"[{book.Title}] Tải thất bại toàn bộ ảnh cho '{chapter.Title}'.");
+                    }
                 }
                 else
                 {
-                    // Đánh dấu lỗi nếu hoàn toàn không có ảnh nào
                     chapter.Status = "Error";
-                    LogEmitted?.Invoke("ERROR", $"[{book.Title}] Không thể trích xuất trang ảnh nào cho '{chapter.Title}' (0 ảnh).");
-                    ProgressUpdated?.Invoke();
+                    LogEmitted?.Invoke("ERROR", $"[{book.Title}] Không lấy được danh sách ảnh cho '{chapter.Title}'.");
                 }
+
+                ProgressUpdated?.Invoke();
             }
 
-            book.Status = "Completed";
-            book.StatusMessage = $"Đã tải xong toàn bộ {completedChapters}/{totalChapters} chương";
-            book.UpdateProgress(completedChapters, totalChapters, 0, 0);
-            book.DetailProgressText = $"Hoàn tất {completedChapters}/{totalChapters} chaps • 100%";
-            LogEmitted?.Invoke("SUCCESS", $"Đã hoàn tất truyện: '{book.Title}' ({completedChapters} chaps) -> {bookDir}");
+            if (completedChapters == totalChapters)
+            {
+                book.Status = "Completed";
+                book.StatusMessage = $"Đã tải xong toàn bộ {completedChapters}/{totalChapters} chương";
+                book.UpdateProgress(completedChapters, totalChapters, 0, 0);
+                book.DetailProgressText = $"Hoàn tất {completedChapters}/{totalChapters} chaps • 100%";
+                LogEmitted?.Invoke("SUCCESS", $"Đã hoàn tất truyện: '{book.Title}' ({completedChapters} chaps) -> {bookDir}");
+            }
+            else
+            {
+                book.Status = completedChapters > 0 ? "Ready" : "Error";
+                book.StatusMessage = $"Đã tải {completedChapters}/{totalChapters} chương (còn {totalChapters - completedChapters} chương lỗi)";
+                book.DetailProgressText = $"{completedChapters}/{totalChapters} chaps";
+                LogEmitted?.Invoke("WARN", $"[{book.Title}] Tải hoàn tất {completedChapters}/{totalChapters} chương. Bấm 'THỬ LẠI' để tải các chương còn lại.");
+            }
         }
         catch (OperationCanceledException)
         {
@@ -864,12 +826,6 @@ public class DownloadEngineService
                          (refererUrl != null && refererUrl.Contains("hitomi", StringComparison.OrdinalIgnoreCase)))
                 {
                     effectiveReferer = "https://hitomi.la/";
-                }
-                else if (imageUrl.Contains("mangadex.network", StringComparison.OrdinalIgnoreCase) ||
-                         imageUrl.Contains("mangadex.org", StringComparison.OrdinalIgnoreCase) ||
-                         (refererUrl != null && refererUrl.Contains("mangadex", StringComparison.OrdinalIgnoreCase)))
-                {
-                    effectiveReferer = "https://mangadex.org/";
                 }
 
                 if (!string.IsNullOrEmpty(effectiveReferer))
