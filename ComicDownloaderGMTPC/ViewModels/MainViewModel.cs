@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia;
@@ -102,7 +103,6 @@ public partial class MainViewModel : ViewModelBase
     partial void OnConcurrentComicDownloadsChanged(int value)
     {
         _downloadEngine.ConcurrentComicDownloads = Math.Clamp(value, 1, 16);
-        _downloadEngine.NotifyConcurrencyChanged();
     }
 
     partial void OnImageDownloadThreadsChanged(int value)
@@ -116,7 +116,6 @@ public partial class MainViewModel : ViewModelBase
 
     private CancellationTokenSource? _autoPasteCts;
     private string _lastAutoPasteText = string.Empty;
-    private readonly HashSet<string> _autoPastedUrls = new(StringComparer.OrdinalIgnoreCase);
 
     partial void OnIsAutoPasteClipboardChanged(bool value)
     {
@@ -144,7 +143,7 @@ public partial class MainViewModel : ViewModelBase
             {
                 try
                 {
-                    await Task.Delay(600, ct).ConfigureAwait(false);
+                    await Task.Delay(800, ct).ConfigureAwait(false);
 
                     var clipboard = GetClipboard();
                     if (clipboard != null)
@@ -169,7 +168,7 @@ public partial class MainViewModel : ViewModelBase
                                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
                                 {
                                     AddLog("INFO", "📋 Phát hiện link mới từ Clipboard, đang tự động phân tích và thêm vào Queue...");
-                                    await ExtractUrlsFromTextAsync(text, clearExisting: false, isAutoPaste: true);
+                                    await ExtractUrlsFromTextAsync(text, clearExisting: false);
                                 });
                             }
                         }
@@ -1115,13 +1114,13 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task GetLinkAsync()
     {
-        await ExtractUrlsFromTextAsync(UrlInput, clearExisting: true, isAutoPaste: false);
+        await ExtractUrlsFromTextAsync(UrlInput, clearExisting: true);
     }
 
     [RelayCommand]
     public async Task GetMoreAsync()
     {
-        await ExtractUrlsFromTextAsync(UrlInput, clearExisting: false, isAutoPaste: false);
+        await ExtractUrlsFromTextAsync(UrlInput, clearExisting: false);
     }
 
     [RelayCommand]
@@ -1144,7 +1143,7 @@ public partial class MainViewModel : ViewModelBase
             }
 
             AddLog("INFO", "📋 Đang trích xuất liên kết từ Clipboard...");
-            await ExtractUrlsFromTextAsync(text, clearExisting: false, isAutoPaste: false);
+            await ExtractUrlsFromTextAsync(text, clearExisting: false);
             SelectedRootTabIndex = 1; // Chuyển sang Tab Download để theo dõi tiến độ
         }
         catch (Exception ex)
@@ -1181,11 +1180,7 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task DownloadNewAsync()
     {
-        var newItems = ComicBooks.Where(b => b.IsChecked && 
-                                             b.Status != "Downloading" && 
-                                             b.Status != "Đang tải" && 
-                                             b.Status != "Completed" && 
-                                             b.Status != "Hoàn tất").ToList();
+        var newItems = ComicBooks.Where(b => b.IsChecked && (b.Status == "Waiting" || b.Status == "Chờ tải" || string.IsNullOrEmpty(b.Status))).ToList();
         if (newItems.Count == 0)
         {
             AddLog("INFO", "Không có truyện mới nào đang chờ tải.");
@@ -1592,23 +1587,18 @@ public partial class MainViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(rawText))
         {
-            if (!isAutoPaste)
-            {
-                AddLog("WARN", "Vui lòng dán ít nhất 1 đường link truyện!");
-            }
+            AddLog("WARN", "Vui lòng dán ít nhất 1 đường link truyện!");
             return;
         }
 
-        // Bóc tách toàn bộ URL hợp lệ bằng Regex (hỗ trợ văn bản chứa nhiều link, markdown, text thường)
-        var urlMatches = System.Text.RegularExpressions.Regex.Matches(rawText, @"https?://[^\s""'<>\[\]\(\)\,\;\`\r\n\t]+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var matches = Regex.Matches(rawText, @"https?://[^\s""'<>\[\]\(\)\,\;\`\r\n\t]+", RegexOptions.IgnoreCase);
         var candidateUrls = new List<string>();
-
-        foreach (System.Text.RegularExpressions.Match match in urlMatches)
+        foreach (Match m in matches)
         {
-            string url = match.Value.Trim().TrimEnd('.', ',', ')', ']', ';', '>', '\"', '\'');
-            if (!string.IsNullOrWhiteSpace(url) && (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+            string clean = m.Value.Trim().TrimEnd('.', ',', ';', ':', ')', ']', '>', '"', '\'');
+            if (!string.IsNullOrWhiteSpace(clean) && !candidateUrls.Contains(clean, StringComparer.OrdinalIgnoreCase))
             {
-                candidateUrls.Add(url);
+                candidateUrls.Add(clean);
             }
         }
 
@@ -1619,46 +1609,22 @@ public partial class MainViewModel : ViewModelBase
                                    .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
                                    .Distinct()
                                    .ToList();
-            candidateUrls = rawTokens.Where(t => t.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                                                 t.StartsWith("https://", StringComparison.OrdinalIgnoreCase)).ToList();
-        }
-
-        if (candidateUrls.Count == 0)
-        {
-            if (!isAutoPaste)
-            {
-                AddLog("WARN", "Không tìm thấy liên kết truyện hợp lệ nào trong nội dung!");
-            }
-            return;
+            candidateUrls = rawTokens;
         }
 
         if (clearExisting)
         {
             ComicBooks.Clear();
             ScanResults.Clear();
-            _autoPastedUrls.Clear();
         }
 
         var existingUrls = new HashSet<string>(ComicBooks.Select(b => b.Url.Trim()), StringComparer.OrdinalIgnoreCase);
-        var targetUrls = candidateUrls.Where(u => !existingUrls.Contains(u)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-
-        if (isAutoPaste)
-        {
-            targetUrls = targetUrls.Where(u => !_autoPastedUrls.Contains(u)).ToList();
-        }
+        var targetUrls = candidateUrls.Where(u => !existingUrls.Contains(u)).Distinct().ToList();
 
         if (targetUrls.Count == 0)
         {
-            if (!isAutoPaste)
-            {
-                AddLog("INFO", "Tất cả link truyện vừa dán đã có sẵn trong danh sách.");
-            }
+            AddLog("INFO", "Tất cả link truyện vừa dán đã có sẵn trong danh sách (hoặc không tìm thấy link mới).");
             return;
-        }
-
-        if (isAutoPaste)
-        {
-            foreach (var u in targetUrls) _autoPastedUrls.Add(u);
         }
 
         AddLog("INFO", $"Đang trích xuất thông tin cho {targetUrls.Count} link truyện mới...");

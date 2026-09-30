@@ -1049,27 +1049,24 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `MainView.axaml` & `languages.md`:
     - Cập nhật giao diện bảng Cyberpunk cho Tab Password, thêm 3 subtab Hentai, cập nhật nút Tải & Tải tiếp.
 
-### 15.38. Channel-Based Dynamic Worker Pool Cho Tải Song Song Đa Truyện & Hệ Thống Tự Dán (Auto Paste) Đa Link Bất Đồng Bộ
+### 15.38. Dynamic Worker Queue Cho Tải Song Song Đa Truyện & Hệ Thống Tự Dán (Auto Paste) Đa Link Bất Đồng Bộ
 - **Bối cảnh & Yêu cầu**:
-  1. **Khắc phục triệt để lỗi không tải song song khi thêm truyện thứ 2 và bấm `➕ TẢI TIẾP`**:
-     - Khi đang tải truyện 1, nếu người dùng thêm truyện 2 và bấm nút `➕ TẢI TIẾP`, hệ thống phải tức thì kích hoạt tải song song ngay lập tức theo đúng số lượng truyện tải cùng lúc cấu hình (mặc định là 2 truyện).
-  2. **Khôi phục nút `📋 DÁN LINK` và CheckBox `⚡ Tự dán` trên thanh Quick Direct Link Bar**:
-     - Hiển thị đầy đủ các nút chức năng trên thanh dán link nhanh toàn cục: `🔍 LẤY LINK`, `➕ THÊM`, `📋 DÁN LINK`, `🗑️ XÓA`, `⚡ Tự dán`.
-  3. **Nâng cấp tính năng `⚡ Tự dán` (Auto Paste Clipboard)**:
-     - Khi người dùng copy link bên ngoài ứng dụng (dù copy lần lượt nhiều link hoặc copy một đoạn văn bản/markdown chứa nhiều link cùng lúc), hệ thống tự động bóc tách 100% toàn bộ URL hợp lệ bằng biểu thức chính quy (Regex) và nạp hết vào hàng chờ (Queue), không bỏ sót bất kỳ link nào và không chỉ lấy mỗi link mới nhất.
-     - Với liên kết MangaDex khi ở chế độ Auto Paste chạy ngầm, tự động áp dụng ngôn ngữ mặc định Tiếng Việt (kèm Fallback Tiếng Anh) mà không hiển thị Modal Dialog chặn luồng UI.
-- **Kiến trúc & Giải pháp Thực hiện**:
-  - `DownloadEngineService.cs`:
-    - Chuyển đổi toàn diện cơ chế hàng đợi sang kiến trúc **Channel-based Dynamic Worker Pool** (`System.Threading.Channels.Channel<ComicBookItem>`).
-    - Các worker trong `WorkerLoopAsync` duy trì lắng nghe qua `_downloadChannel.Reader.WaitToReadAsync(ct)`. Khi có truyện mới nạp vào qua `DownloadNewAsync`, worker đang rảnh lập tức thức dậy và bắt đầu tải song song ngay tức thì.
-    - Bổ sung bộ đếm `_activeBusyWorkers` kết hợp `CheckAllFinished()` để phát hiện chính xác thời điểm hoàn tất toàn bộ hàng chờ mà không bị deadlock.
-    - Hàm `NotifyConcurrencyChanged()` tự động spawn thêm worker khi người dùng tăng "Số truyện cùng lúc" trong khi đang tải.
-  - `MainViewModel.cs`:
-    - `ExtractUrlsFromTextAsync`: Nâng cấp regex `https?://[^\s"'<>\[\]\(\)\,\;\`\r\n\t]+` bóc tách trọn vẹn toàn bộ các đường link từ mọi định dạng văn bản (markdown, plain text, text có chứa dấu câu/ngoặc kép).
-    - Duy trì `HashSet<string> _autoPastedUrls` để lọc trùng lặp thông minh.
-    - Hỗ trợ tham số `isAutoPaste` cho phép tự động phân loại chế độ tương tác trực tiếp vs chạy nền.
-    - Nâng cấp `DownloadNewAsync` lọc toàn bộ các truyện chưa tải (`b.Status != "Downloading" && b.Status != "Completed"`).
-  - `MainView.axaml`:
-    - Khôi phục nút `📋 DÁN LINK` và CheckBox `⚡ Tự dán` trên hàng Quick Direct Link Bar.
+  1. Khi đang tải 1 truyện, nếu thêm link truyện khác và bấm `➕ TẢI TIẾP`, hệ thống tự động nạp tiếp vào queue và kích hoạt worker rảnh tải song song ngay lập tức theo cấu hình số truyện cùng lúc (mặc định 2).
+  2. Bổ sung tính năng Tự dán (`⚡ Tự dán` / Auto Paste Clipboard): Khi bật, mọi link sao chép từ trình duyệt bên ngoài dù copy lần lượt hay copy 1 đoạn văn bản chứa nhiều link đều tự động nạp vào Queue.
+  3. Bổ sung nút `📋 DÁN LINK` (Paste link) hỗ trợ dán hàng loạt link cùng lúc.
 
+### 15.39. Responsive Word-Wrap Quick Direct Link Bar Cho Android & Tối Ưu Hóa Bóc Tách MangaDex Chapter Fallback 3 Tầng
+- **Bối cảnh & Yêu cầu**:
+  1. **Khắc phục tràn viền Quick Direct Link Bar trên Android**: Màn hình hẹp khiến ô TextBox bị ép nhỏ (`tps://m`) và hàng nút bị tràn mép ngang. Cần chuyển sang bố cục 2 tầng (Tầng 1: TextBox chiếm 100% full width; Tầng 2: `WrapPanel` chứa toàn bộ nút `🔍 LẤY LINK`, `➕ THÊM`, `📋 DÁN LINK`, `🗑️ XÓA`, `⚡ Tự dán` tự động xuống dòng linh hoạt).
+  2. **Khắc phục triệt để lỗi MangaDex không tải được (0 chaps) trên Android**:
+     - Khi bóc tách chapter qua feed API, loại bỏ các tham số `order` thừa gây lỗi 400 Bad Request; chuẩn hóa query `order[chapter]=asc`.
+     - Phân tích và chuyển đổi dữ liệu chapter ngay trong khối `JsonDocument` thành DTO `MangaDexChapterRawItem` độc lập vùng nhớ, loại bỏ hoàn toàn nguy cơ `ObjectDisposedException`.
+     - Triển khai cơ chế Fallback 3 tầng thông minh: Ngôn ngữ chính (VD: Tiếng Việt) -> Ngôn ngữ phụ (Tiếng Anh) -> Toàn bộ chapter có sẵn trên MangaDex (All Available Languages). Đảm bảo mọi truyện có chapter trên MangaDex đều được tải trọn vẹn, không bao giờ báo 0 chaps.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  - `MainView.axaml`:
+    - Tái cấu trúc Row 1 sang `StackPanel` chứa `TextBox` Full Width và `WrapPanel` chứa trọn bộ nút điều khiển thao tác link, đảm bảo responsive mượt mà trên mọi kích thước màn hình Android & Desktop.
+  - `ComicScraperService.cs`:
+    - Cấu trúc lại `FetchMangaDexFeedChaptersAsync` và `ScrapeMangaDexBookAsync` với `MangaDexChapterRawItem` và cơ chế fallback 3 tầng.
+  - `MainViewModel.cs`:
+    - Nâng cấp `ExtractUrlsFromTextAsync` sử dụng Regex bóc tách sạch URL từ văn bản tự do, hỗ trợ cờ `isAutoPaste` tự động nhận diện MangaDex không chặn modal dialog UI.
 

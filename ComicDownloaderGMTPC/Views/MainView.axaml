@@ -71,40 +71,43 @@
 
             <!-- 2. QUICK DIRECT LINK BAR (TIỆN ÍCH DÁN LINK NHANH TOÀN CỤC) -->
             <Border Grid.Row="1" Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="12,6">
-                <Grid ColumnDefinitions="*, Auto">
-                    <TextBox Grid.Column="0" Text="{Binding UrlInput}"
+                <StackPanel Spacing="6">
+                    <!-- Tầng 1: TextBox chiếm trọn vẹn bề ngang màn hình (Responsive trên cả Desktop & Mobile) -->
+                    <TextBox Text="{Binding UrlInput}"
                              PlaceholderText="⚡ Dán link truyện tại đây (TruyenQQ, MangaDex, NetTruyen, Vi-Hentai, Đảo Mèo Đen, Dâm Cô Nương, SayHentai...)"
                              Height="34" CornerRadius="5" VerticalContentAlignment="Center"
                              Background="#0F172A" BorderBrush="#334155" Foreground="#F8FAFC" FontSize="11"
-                             Margin="0,0,8,0" />
-                    <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                             HorizontalAlignment="Stretch" />
+
+                    <!-- Tầng 2: Hàng nút điều khiển bọc trong WrapPanel (Tự động xuống dòng khi màn hình hẹp trên Android) -->
+                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Command="{Binding GetLinkCommand}"
                                 Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
-                                CornerRadius="5" Padding="12,4" Height="32" Margin="0,0,6,0">
+                                CornerRadius="5" Padding="12,4" Height="32" Margin="0,0,6,4">
                             <TextBlock Text="🔍 LẤY LINK" FontSize="11" />
                         </Button>
                         <Button Command="{Binding GetMoreCommand}"
                                 Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold"
-                                CornerRadius="5" Padding="10,4" Height="32" Margin="0,0,6,0">
+                                CornerRadius="5" Padding="10,4" Height="32" Margin="0,0,6,4">
                             <TextBlock Text="➕ THÊM" FontSize="11" />
                         </Button>
                         <Button Command="{Binding PasteLinkCommand}"
                                 Background="#7C3AED" Foreground="#FFFFFF" FontWeight="SemiBold"
-                                CornerRadius="5" Padding="10,4" Height="32" Margin="0,0,6,0"
+                                CornerRadius="5" Padding="10,4" Height="32" Margin="0,0,6,4"
                                 ToolTip.Tip="Dán một hoặc nhiều link truyện từ Clipboard vào danh sách">
                             <TextBlock Text="📋 DÁN LINK" FontSize="11" />
                         </Button>
                         <Button Command="{Binding ClearLinksCommand}"
                                 Background="#1E293B" Foreground="#94A3B8"
-                                CornerRadius="5" Padding="8,4" Height="32" Margin="0,0,6,0">
+                                CornerRadius="5" Padding="8,4" Height="32" Margin="0,0,6,4">
                             <TextBlock Text="🗑️ XÓA" FontSize="11" />
                         </Button>
                         <CheckBox IsChecked="{Binding IsAutoPasteClipboard}"
                                   Content="⚡ Tự dán" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11"
-                                  VerticalAlignment="Center" Margin="4,0,0,0"
+                                  VerticalAlignment="Center" Margin="4,0,0,4"
                                   ToolTip.Tip="Tự động theo dõi Clipboard: Khi copy bất kỳ link truyện nào bên ngoài trình duyệt, app sẽ tự động thêm vào hàng chờ (Queue)" />
                     </WrapPanel>
-                </Grid>
+                </StackPanel>
             </Border>
 
             <!-- 3. HAI TAB GỐC CHÍNH: TAB SOURCE & TAB DOWNLOAD (GIỐNG 100% WPF GỐC) -->
