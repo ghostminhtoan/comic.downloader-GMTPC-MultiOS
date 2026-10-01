@@ -29,6 +29,9 @@ public class ComicBackgroundService : Service
         AcquireWakeLock();
     }
 
+    public static bool IsRunning { get; private set; }
+    private static readonly object _serviceLock = new();
+
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
         if (intent == null) return StartCommandResult.NotSticky;
@@ -36,16 +39,21 @@ public class ComicBackgroundService : Service
         string action = intent.Action ?? "";
         if (action == ActionStop)
         {
-            if (OperatingSystem.IsAndroidVersionAtLeast(24))
+            IsRunning = false;
+            try
             {
-                StopForeground(StopForegroundFlags.Remove);
+                if (OperatingSystem.IsAndroidVersionAtLeast(24))
+                {
+                    StopForeground(StopForegroundFlags.Remove);
+                }
+                else
+                {
+                    StopForeground(true);
+                }
+                StopSelf();
+                ReleaseWakeLock();
             }
-            else
-            {
-                StopForeground(true);
-            }
-            StopSelf();
-            ReleaseWakeLock();
+            catch { }
             return StartCommandResult.NotSticky;
         }
 
@@ -53,15 +61,27 @@ public class ComicBackgroundService : Service
         string text = intent.GetStringExtra(ExtraText) ?? "Đang xử lý tác vụ nền...";
         int progress = intent.GetIntExtra(ExtraProgress, 0);
 
-        var notification = BuildNotification(title, text, progress);
+        var notification = BuildNotification(this, title, text, progress);
 
-        if (OperatingSystem.IsAndroidVersionAtLeast(34))
+        try
         {
-            StartForeground(NotificationId, notification, ForegroundService.TypeDataSync);
+            if (OperatingSystem.IsAndroidVersionAtLeast(34))
+            {
+                StartForeground(NotificationId, notification, ForegroundService.TypeDataSync);
+            }
+            else
+            {
+                StartForeground(NotificationId, notification);
+            }
+            IsRunning = true;
         }
-        else
+        catch (Java.Lang.Throwable jex)
         {
-            StartForeground(NotificationId, notification);
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi Java StartForeground: {jex.Message}");
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi C# StartForeground: {ex.Message}");
         }
 
         return StartCommandResult.Sticky;
@@ -69,6 +89,7 @@ public class ComicBackgroundService : Service
 
     public override void OnDestroy()
     {
+        IsRunning = false;
         ReleaseWakeLock();
         base.OnDestroy();
     }
@@ -128,17 +149,17 @@ public class ComicBackgroundService : Service
         }
     }
 
-    private Notification BuildNotification(string title, string text, int progress)
+    public static Notification BuildNotification(Context context, string title, string text, int progress)
     {
-        var openIntent = new Intent(this, typeof(MainActivity));
+        var openIntent = new Intent(context, typeof(MainActivity));
         openIntent.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
         var pendingIntent = PendingIntent.GetActivity(
-            this,
+            context,
             0,
             openIntent,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
 
-        var builder = new NotificationCompat.Builder(this, ChannelId);
+        var builder = new NotificationCompat.Builder(context, ChannelId);
         builder.SetContentTitle(title);
         builder.SetContentText(text);
         builder.SetSmallIcon(Resource.Drawable.Icon);
@@ -167,34 +188,73 @@ public class ComicBackgroundService : Service
     {
         try
         {
-            var intent = new Intent(context, typeof(ComicBackgroundService));
-            intent.SetAction(ActionStartOrUpdate);
-            intent.PutExtra(ExtraTitle, title);
-            intent.PutExtra(ExtraText, text);
-            intent.PutExtra(ExtraProgress, progress);
+            var appContext = context.ApplicationContext ?? context;
 
-            if (OperatingSystem.IsAndroidVersionAtLeast(26))
+            // Nếu Service đã chạy: CHỈ cập nhật Notification trực tiếp qua NotificationManager!
+            // Tuyệt đối không gọi StartForegroundService() khi app ở background (tránh ForegroundServiceStartNotAllowedException).
+            if (IsRunning)
             {
-                context.StartForegroundService(intent);
+                try
+                {
+                    var notification = BuildNotification(appContext, title, text, progress);
+                    var nm = NotificationManagerCompat.From(appContext);
+                    nm?.Notify(NotificationId, notification);
+                }
+                catch (Exception ex)
+                {
+                    global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi cập nhật Notification: {ex.Message}");
+                }
+                return;
             }
-            else
+
+            // Nếu Service chưa chạy: Khởi động Service ở Foreground
+            lock (_serviceLock)
             {
-                context.StartService(intent);
+                if (IsRunning)
+                {
+                    var notification = BuildNotification(appContext, title, text, progress);
+                    NotificationManagerCompat.From(appContext)?.Notify(NotificationId, notification);
+                    return;
+                }
+
+                var intent = new Intent(appContext, typeof(ComicBackgroundService));
+                intent.SetAction(ActionStartOrUpdate);
+                intent.PutExtra(ExtraTitle, title);
+                intent.PutExtra(ExtraText, text);
+                intent.PutExtra(ExtraProgress, progress);
+
+                if (OperatingSystem.IsAndroidVersionAtLeast(26))
+                {
+                    appContext.StartForegroundService(intent);
+                }
+                else
+                {
+                    appContext.StartService(intent);
+                }
             }
+        }
+        catch (Java.Lang.Throwable jex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi Java khởi chạy BackgroundService: {jex.Message}");
         }
         catch (Exception ex)
         {
-            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi khởi chạy BackgroundService: {ex.Message}");
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi C# khởi chạy BackgroundService: {ex.Message}");
         }
     }
 
     public static void Stop(Context context)
     {
+        IsRunning = false;
         try
         {
-            var intent = new Intent(context, typeof(ComicBackgroundService));
+            var appContext = context.ApplicationContext ?? context;
+            var intent = new Intent(appContext, typeof(ComicBackgroundService));
             intent.SetAction(ActionStop);
-            context.StartService(intent);
+            appContext.StartService(intent);
+
+            var nm = NotificationManagerCompat.From(appContext);
+            nm?.Cancel(NotificationId);
         }
         catch (Exception ex)
         {

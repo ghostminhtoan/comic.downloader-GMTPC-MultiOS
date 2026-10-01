@@ -143,29 +143,35 @@ public partial class MainViewModel
         // 3. Nhận sự kiện thay đổi tiến trình mượt mà
         _folderTools.ProgressChanged += (current, total, msg) =>
         {
+            double pct = 0;
+            if (total > 0)
+            {
+                pct = Math.Clamp((double)current / total * 100.0, 0.0, 100.0);
+            }
+
+            // A. Báo cáo tiến trình chạy ngầm trực tiếp từ luồng nền (không kẹt trong UI Dispatcher khi app ở background)
+            long now = Environment.TickCount64;
+            if (current == total || current == 0 || now - Interlocked.Read(ref _lastFolderBgReportTicks) >= 500)
+            {
+                Interlocked.Exchange(ref _lastFolderBgReportTicks, now);
+                try
+                {
+                    BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", msg, pct, true);
+                }
+                catch { }
+            }
+
+            // B. Cập nhật UI ViewModel mượt mà qua Dispatcher
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 try
                 {
-                    double pct = 0;
                     if (total > 0)
                     {
-                        pct = Math.Clamp((double)current / total * 100.0, 0.0, 100.0);
                         FolderToolProgress = pct;
                         FolderToolProgressText = $"{FolderToolProgress:F0}%";
                     }
                     FolderToolStatusText = msg;
-
-                    long now = Environment.TickCount64;
-                    if (current == total || current == 0 || now - _lastFolderBgReportTicks >= 500)
-                    {
-                        _lastFolderBgReportTicks = now;
-                        try
-                        {
-                            BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", msg, pct, true);
-                        }
-                        catch { }
-                    }
                 }
                 catch
                 {

@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using Android;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using Android.Provider;
+using Android.Runtime;
 using Android.Views;
 using Android.Widget;
 using Avalonia;
@@ -37,18 +39,50 @@ public class MainActivity : AvaloniaMainActivity
         CurrentInstance = this;
         Window?.SetSoftInputMode(SoftInput.AdjustResize);
 
+        // Bảo vệ toàn diện chống crash unhandled khi chạy ngầm hoặc thay đổi focus/cử chỉ screenshot
+        AndroidEnvironment.UnhandledExceptionRaiser += (sender, args) =>
+        {
+            try
+            {
+                global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[AndroidEnvironment Unhandled] {args.Exception}");
+                args.Handled = true;
+            }
+            catch { }
+        };
+        AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
+        {
+            try
+            {
+                var ex = args.ExceptionObject as Exception;
+                global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[AppDomain Unhandled] {ex?.Message}\n{ex?.StackTrace}");
+            }
+            catch { }
+        };
+        TaskScheduler.UnobservedTaskException += (sender, args) =>
+        {
+            try
+            {
+                global::Android.Util.Log.Warn("ComicGMTPC_Task", $"[UnobservedTask] {args.Exception?.Message}");
+                args.SetObserved();
+            }
+            catch { }
+        };
+
         // Đăng ký bridge chạy ngầm và bong bóng
         Services.BackgroundExecutionService.NativeStartOrUpdateForegroundNotification = (title, text, progress) =>
         {
-            ComicBackgroundService.StartOrUpdate(this, title, text, progress);
+            var ctx = ApplicationContext ?? this;
+            ComicBackgroundService.StartOrUpdate(ctx, title, text, progress);
         };
         Services.BackgroundExecutionService.NativeStopForegroundNotification = () =>
         {
-            ComicBackgroundService.Stop(this);
+            var ctx = ApplicationContext ?? this;
+            ComicBackgroundService.Stop(ctx);
         };
         Services.BackgroundExecutionService.NativeRequestEnterBubbleMode = () =>
         {
-            ComicBackgroundService.StartOrUpdate(this, "Comic Downloader GMTPC", "Ứng dụng đang chạy ngầm...", 0);
+            var ctx = ApplicationContext ?? this;
+            ComicBackgroundService.StartOrUpdate(ctx, "Comic Downloader GMTPC", "Ứng dụng đang chạy ngầm...", 0);
             MoveTaskToBack(true);
         };
         Services.BackgroundExecutionService.NativeRequestExitBubbleMode = null;
@@ -122,6 +156,42 @@ public class MainActivity : AvaloniaMainActivity
     protected override void OnResume()
     {
         base.OnResume();
+    }
+
+    protected override void OnPause()
+    {
+        try
+        {
+            base.OnPause();
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi OnPause: {ex.Message}");
+        }
+    }
+
+    protected override void OnStop()
+    {
+        try
+        {
+            base.OnStop();
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi OnStop: {ex.Message}");
+        }
+    }
+
+    public override void OnWindowFocusChanged(bool hasFocus)
+    {
+        try
+        {
+            base.OnWindowFocusChanged(hasFocus);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi OnWindowFocusChanged: {ex.Message}");
+        }
     }
 
     protected override void OnDestroy()

@@ -1164,3 +1164,21 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `BackgroundExecutionService.cs`: Bọc `try-catch` toàn bộ các sự kiện notification và task progress.
   - `MainViewModel.cs` & `MainViewModel.FolderTools.cs`: Bọc `try-catch` tuyệt đối cho toàn bộ delegate đẩy vào `Dispatcher.UIThread.Post`, nới lỏng chu kỳ ReportProgress lên 500ms, cô lập Timer log.
   - `FolderToolsService.cs`: Tích hợp cơ chế tự động Retry 3 lần kèm độ trễ 30ms trong `SafeRenameDirectory` khi gặp folder bị khóa tạm thời; thêm rào chắn độ sâu `depth > 10` chống StackOverflow trong `MergeDirectoryContents`; bọc `try-catch` khối `finally` của `Parallel.ForEachAsync`.
+
+### 15.46. Triệt Tiêu Lỗi Crash Khi Chạy Ngầm / Chuyển App / Vuốt Screenshot Trên Android (Foreground Service Lifecycle & Notification Manager Shield)
+- **Bối cảnh & Nguyên nhân Gốc rễ**:
+  1. *Lỗi `ForegroundServiceStartNotAllowedException` trên Android 12+ (API 31+)*: Mỗi khi `ReportProgress` được gọi (mỗi 500ms), phương thức `StartOrUpdate` liên tục gọi lại `context.StartForegroundService(intent)`. Khi người dùng chuyển sang app khác (Home/Switch App) hoặc vuốt cử chỉ chụp màn hình (screenshot 3 ngón tay), Activity rơi vào trạng thái Paused/Stopped hoặc mất Window Focus. Android OS cấm tuyệt đối việc gọi `StartForegroundService()` từ background, ném ra ngoại lệ `android.app.ForegroundServiceStartNotAllowedException` làm sập process ngay tức khắc.
+  2. *Tắc nghẽn Avalonia Dispatcher Queue*: Trước đó lệnh `BackgroundExecutionService.Instance.ReportProgress` bị lồng bên trong `Dispatcher.UIThread.Post(...)`. Khi Activity bị suspend ở background, Avalonia UI Dispatcher bị ngưng xử lý, các lệnh cập nhật tiến trình bị dồn ứ lại. Khi người dùng vuốt screenshot hoặc quay lại app làm kích hoạt focus/render, toàn bộ hàng chục lệnh `StartForegroundService` tích lũy đồng loạt phát nổ cùng lúc, gây quá tải Binder IPC và tràn JNI.
+  3. *Thiếu Global Exception Handlers*: Toàn bộ ứng dụng thiếu bộ lắng nghe unhandled exception cho `AndroidEnvironment`, khiến các exception bất đồng bộ từ phía hệ thống Android làm chết app mà không được bắt.
+- **Giải pháp Toàn diện**:
+  - `ComicBackgroundService.cs`:
+    + Thêm cờ static `public static bool IsRunning { get; private set; }`.
+    + Trong `StartOrUpdate`: Nếu `IsRunning == true`, tuyệt đối KHÔNG gọi lại `StartForegroundService()`. Thay vào đó, cập nhật trực tiếp Notification qua `NotificationManagerCompat.From(appContext)?.Notify(NotificationId, notification)`. Phương thức `Notify()` hợp lệ 100% từ background và không bao giờ bị giới hạn bởi `ForegroundServiceStartNotAllowedException`.
+    + Trong `OnStartCommand`: Bọc lệnh `StartForeground` trong `try-catch (Java.Lang.Throwable)` và `try-catch (Exception)` để bắt an toàn mọi ngoại lệ từ Android OS. Đánh dấu `IsRunning = true`.
+    + Trong `OnDestroy` và `Stop`: Đánh dấu `IsRunning = false`, hủy Notification và giải phóng WakeLock an toàn.
+  - `MainViewModel.FolderTools.cs`:
+    + Tách rời `ReportProgress` chạy ngầm ra khỏi `Dispatcher.UIThread.Post(...)`. Lệnh này được gọi trực tiếp từ background thread với throttle an toàn bằng `Interlocked.Read/Exchange`, đảm bảo Notification hệ thống được cập nhật liên tục mượt mà khi chạy ngầm mà không làm nghẽn UI Dispatcher.
+    + Chỉ đưa các thuộc tính ViewModel UI vào `Dispatcher.UIThread.Post`.
+  - `MainActivity.cs`:
+    + Đăng ký bộ lọc lỗi toàn cục `AndroidEnvironment.UnhandledExceptionRaiser`, `AppDomain.CurrentDomain.UnhandledException` và `TaskScheduler.UnobservedTaskException`.
+    + Override các lifecycle events `OnWindowFocusChanged`, `OnPause`, `OnStop` bọc trong `try-catch` an toàn, ngăn chặn hoàn toàn việc sập ứng dụng khi hệ thống Android can thiệp chụp ảnh màn hình hoặc đa nhiệm.
