@@ -1137,5 +1137,20 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `MainView.axaml`:
     - Thiết kế Khu vực 3 trong Tab `📁 Tách / Gộp Folder`: Bố cục responsive 2 tầng chống tràn mép trên Android, ComboBox lựa chọn định dạng rõ ràng kèm ToolTip hướng dẫn chi tiết.
 
-
-
+### 15.44. Khắc Phục Triệt Để Sự Cố Crash Khi Đổi Tên Thư Mục Chapter Đa Tầng Sâu (Folder Tools Crash Fix)
+- **Bối cảnh & Các Nguyên nhân Gốc rễ gây Crash**:
+  1. *Lỗi StorageProvider Path trên Android SAF*: Tại `BrowseFolderRenameRootAsync`, `BrowseFolderSplitRootAsync`, `BrowseFolderAlphabetRootAsync`, việc gọi trực tiếp `folders[0].Path.LocalPath` không bọc `try-catch` khiến ứng dụng sập ngay lập tức với `InvalidOperationException` khi chọn folder trên Android Scoped Storage / FUSE do scheme là `content://`.
+  2. *Thao tác `Directory.Move` thô*: Trong luồng song song, việc gọi trực tiếp `Directory.Move` khi thư mục đích đã tồn tại hoặc khác filesystem/mount point gây `IOException` / `UnauthorizedAccessException`.
+  3. *Spam UI Dispatcher & Foreground Service JNI Overflow*: Khi chạy 20 luồng, `ProgressChanged?.Invoke` bị gọi trên từng folder một khiến hàng nghìn event dồn dập vào UI Thread và Android Notification Service, gây đơ giao diện hoặc sập app do tràn JNI Local References.
+  4. *Thuật toán gom nhầm Thư mục Bộ Truyện thành Chapter*: Biểu thức `if (!isBucket && (hasImages || isChapterName))` với toán tử `||` khiến thư mục bộ truyện (có chứa `cover.jpg`) bị coi là chapter, làm bỏ qua toàn bộ chapter con bên trong và gây xung đột đường dẫn I/O chết người khi chạy song song.
+- **Giải pháp Khắc phục Triệt để**:
+  - `FolderToolsService.cs`:
+    + Bổ sung hàm `HasSubdirectoriesWithImages`: Nhận diện thư mục lá (leaf container) một cách tuyệt đối. Chỉ coi một folder là Chapter Folder khi nó chứa ảnh VÀ không chứa bất kỳ thư mục con nào cũng chứa ảnh.
+    + Bổ sung hàm `ResolveBookInfo`: Truy vết ngược cây thư mục cha chính xác, tự động nhảy qua các thư mục gom trung gian (`chap 0001-0200`, `Vol 1`...) để lấy đúng tên bộ truyện (`BookName`) và đường dẫn gốc của truyện (`BookFolderPath`).
+    + Tích hợp `SafeRenameDirectory`: Sử dụng cơ chế đổi tên an toàn, fallback sang `SafeMoveDirectory` và `MergeDirectoryContents` đệ quy bảo vệ dữ liệu 100%, tự động sinh UUID temp path khi đổi hoa/thường trên Windows.
+    + Throttling tiến trình: Sử dụng `Environment.TickCount64` và `Volatile.Read/Write` điều tiết `ProgressChanged` cách nhau tối thiểu 150ms, triệt tiêu 100% tình trạng nghẽn UI Dispatcher và tràn JNI Foreground Service.
+    + Giới hạn luồng Android: Tự động điều chỉnh `effectiveDegree` tối đa 4 luồng trên Android (`OperatingSystem.IsAndroid()`) để chống cạn kiệt file descriptors.
+    + Đổi tên Book Folder hậu kỳ: Khi `isSlugify` bật, tự động đổi tên các thư mục bộ truyện sang slug sau khi toàn bộ chapter con đã đổi tên hoàn tất, đảm bảo chuẩn `{book-name-slug}\{chapter-slug}` và `{book-name-slug}\{book-name-slug}-{chapter-slug}` mà không làm gãy đường dẫn con.
+  - `MainViewModel.FolderTools.cs`:
+    + Chuẩn hóa cả 3 hàm `BrowseFolderRenameRootAsync`, `BrowseFolderSplitRootAsync`, `BrowseFolderAlphabetRootAsync` với `selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString()`, chuẩn hóa qua `DownloadEngineService.NormalizeStoragePath` và bọc trong khối `try-catch` toàn diện.
+    + Bổ sung rào chắn chống re-entrancy (`if (IsFolderToolRunning) return;`) tại `RenameChapterFoldersAsync`.

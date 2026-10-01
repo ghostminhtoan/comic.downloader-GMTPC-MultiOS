@@ -154,20 +154,32 @@ public partial class MainViewModel
     [RelayCommand]
     public async Task BrowseFolderSplitRootAsync()
     {
-        var topLevel = GetTopLevel();
-        if (topLevel?.StorageProvider == null) return;
-
-        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        try
         {
-            Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục truyện gốc" : "Select Comic Root Folder",
-            AllowMultiple = false
-        });
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider == null) return;
 
-        if (folders.Count > 0)
+            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục truyện gốc" : "Select Comic Root Folder",
+                AllowMultiple = false
+            });
+
+            if (folders != null && folders.Count > 0)
+            {
+                var selected = folders[0];
+                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    FolderSplitRootPath = normalized;
+                    AddLog("INFO", $"[Tách/Gộp] Đã chọn thư mục: {FolderSplitRootPath}");
+                }
+            }
+        }
+        catch (Exception ex)
         {
-            string raw = folders[0].Path.LocalPath;
-            FolderSplitRootPath = DownloadEngineService.NormalizeStoragePath(raw, folders[0].Name);
-            AddLog("INFO", $"[Tách/Gộp] Đã chọn thư mục: {FolderSplitRootPath}");
+            AddLog("WARN", $"[Tách/Gộp] Lỗi khi chọn thư mục: {ex.Message}");
         }
     }
 
@@ -282,20 +294,32 @@ public partial class MainViewModel
     [RelayCommand]
     public async Task BrowseFolderAlphabetRootAsync()
     {
-        var topLevel = GetTopLevel();
-        if (topLevel?.StorageProvider == null) return;
-
-        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        try
         {
-            Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục gốc cần phân loại chữ cái" : "Select Alphabet Root Folder",
-            AllowMultiple = false
-        });
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider == null) return;
 
-        if (folders.Count > 0)
+            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục gốc cần phân loại chữ cái" : "Select Alphabet Root Folder",
+                AllowMultiple = false
+            });
+
+            if (folders != null && folders.Count > 0)
+            {
+                var selected = folders[0];
+                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    FolderAlphabetRootPath = normalized;
+                    AddLog("INFO", $"[Alphabet] Đã chọn thư mục: {FolderAlphabetRootPath}");
+                }
+            }
+        }
+        catch (Exception ex)
         {
-            string raw = folders[0].Path.LocalPath;
-            FolderAlphabetRootPath = DownloadEngineService.NormalizeStoragePath(raw, folders[0].Name);
-            AddLog("INFO", $"[Alphabet] Đã chọn thư mục: {FolderAlphabetRootPath}");
+            AddLog("WARN", $"[Alphabet] Lỗi khi chọn thư mục: {ex.Message}");
         }
     }
 
@@ -439,20 +463,32 @@ public partial class MainViewModel
     [RelayCommand]
     public async Task BrowseFolderRenameRootAsync()
     {
-        var topLevel = GetTopLevel();
-        if (topLevel?.StorageProvider == null) return;
-
-        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        try
         {
-            Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục chứa truyện cần đổi tên" : "Select Root Folder To Rename",
-            AllowMultiple = false
-        });
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider == null) return;
 
-        if (folders.Count > 0)
+            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục chứa truyện cần đổi tên" : "Select Root Folder To Rename",
+                AllowMultiple = false
+            });
+
+            if (folders != null && folders.Count > 0)
+            {
+                var selected = folders[0];
+                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    FolderRenameRootPath = normalized;
+                    AddLog("INFO", $"[Đổi Tên] Đã chọn thư mục: {FolderRenameRootPath}");
+                }
+            }
+        }
+        catch (Exception ex)
         {
-            string raw = folders[0].Path.LocalPath;
-            FolderRenameRootPath = DownloadEngineService.NormalizeStoragePath(raw, folders[0].Name);
-            AddLog("INFO", $"[Đổi Tên] Đã chọn thư mục: {FolderRenameRootPath}");
+            AddLog("WARN", $"[Đổi Tên] Lỗi khi chọn thư mục: {ex.Message}");
         }
     }
 
@@ -466,6 +502,12 @@ public partial class MainViewModel
     [RelayCommand]
     public async Task RenameChapterFoldersAsync()
     {
+        if (IsFolderToolRunning)
+        {
+            AddLog("WARN", "[Đổi Tên] Đang có tiến trình xử lý thư mục khác đang chạy!");
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(FolderRenameRootPath) || !Directory.Exists(FolderRenameRootPath))
         {
             AddLog("WARN", "[Đổi Tên] Vui lòng chọn thư mục hợp lệ trước!");
