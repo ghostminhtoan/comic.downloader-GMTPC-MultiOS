@@ -67,6 +67,17 @@ public class AppUpdateService
             }
         }
 
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                string winTemp = Path.Combine(Path.GetTempPath(), "ComicGMTPC_Update");
+                if (!Directory.Exists(winTemp)) Directory.CreateDirectory(winTemp);
+                return winTemp;
+            }
+            catch { }
+        }
+
         string userDownloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
         if (!Directory.Exists(userDownloads)) userDownloads = AppContext.BaseDirectory;
         return userDownloads;
@@ -235,22 +246,14 @@ public class AppUpdateService
                         logCallback("WARN", "[Cập nhật tự động] Trình cài đặt Android chưa sẵn sàng. Tệp APK lưu tại: " + targetPath);
                     }
                 }
+                else if (OperatingSystem.IsWindows())
+                {
+                    logCallback("INFO", "[Cập nhật tự động] Đang kích hoạt trình tự động ghi đè và khởi động lại ứng dụng...");
+                    return ApplyWindowsUpdateAndRestart(targetPath, logCallback);
+                }
                 else
                 {
-                    try
-                    {
-                        if (OperatingSystem.IsWindows())
-                        {
-                            logCallback("SUCCESS", $"[Cập nhật tự động] Đã tải bản mới về: {targetPath}");
-                            Process.Start(new ProcessStartInfo
-                            {
-                                FileName = "explorer.exe",
-                                Arguments = $"/select,\"{targetPath}\"",
-                                UseShellExecute = true
-                            });
-                        }
-                    }
-                    catch { }
+                    logCallback("SUCCESS", $"[Cập nhật tự động] Đã tải bản mới về: {targetPath}");
                 }
 
                 return true;
@@ -264,6 +267,113 @@ public class AppUpdateService
         catch (Exception ex)
         {
             logCallback("ERROR", $"[Cập nhật tự động] Thất bại: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool ApplyWindowsUpdateAndRestart(string newExePath, Action<string, string> logCallback)
+    {
+        try
+        {
+            if (!File.Exists(newExePath))
+            {
+                logCallback("ERROR", "[Cập nhật tự động] Không tìm thấy tệp bản mới đã tải.");
+                return false;
+            }
+
+            var fi = new FileInfo(newExePath);
+            if (fi.Length < 1024 * 1024)
+            {
+                logCallback("ERROR", $"[Cập nhật tự động] Tệp tải về không hợp lệ (kích thước quá nhỏ: {fi.Length} bytes).");
+                return false;
+            }
+
+            string currentExePath = Environment.ProcessPath ?? "";
+            if (string.IsNullOrWhiteSpace(currentExePath) || !File.Exists(currentExePath))
+            {
+                try
+                {
+                    using var curProc = Process.GetCurrentProcess();
+                    currentExePath = curProc.MainModule?.FileName ?? "";
+                }
+                catch { }
+            }
+            if (string.IsNullOrWhiteSpace(currentExePath) || !File.Exists(currentExePath))
+            {
+                currentExePath = Path.Combine(AppContext.BaseDirectory, "ComicDownloaderGMTPC.Desktop.exe");
+            }
+
+            int currentPid = Environment.ProcessId;
+            string targetDir = Path.GetDirectoryName(currentExePath) ?? AppContext.BaseDirectory;
+            string scriptPath = Path.Combine(Path.GetTempPath(), $"gmtpc_updater_{Guid.NewGuid():N}.cmd");
+
+            // Tạo nội dung script batch tự động ghi đè và khởi động lại ngầm không cửa sổ
+            string scriptContent = $@"@echo off
+chcp 65001 >nul
+set PID={currentPid}
+set NEW_EXE=""{newExePath}""
+set TARGET_EXE=""{currentExePath}""
+
+:: 1. Doi ung dung cu thoat hoan toan
+:wait_loop
+timeout /t 1 /nobreak >nul 2>&1
+tasklist /fi ""PID eq %PID%"" 2>nul | findstr /i ""%PID%"" >nul 2>&1
+if not errorlevel 1 goto wait_loop
+
+:: Cho them 500ms de Windows giai phong toan bo handle
+timeout /t 1 /nobreak >nul 2>&1
+
+:: 2. Tien hanh ghi de file moi vao vi tri file cu (thu toi da 10 lan)
+set RETRY=0
+:copy_loop
+move /y %NEW_EXE% %TARGET_EXE% >nul 2>&1
+if errorlevel 1 (
+    copy /y %NEW_EXE% %TARGET_EXE% >nul 2>&1
+    if errorlevel 1 (
+        set /a RETRY+=1
+        if %RETRY% leq 10 (
+            timeout /t 1 /nobreak >nul 2>&1
+            goto copy_loop
+        )
+    )
+)
+
+:: 3. Khoi dong lai ung dung moi
+start """" %TARGET_EXE%
+
+:: 4. Tu dong don dep file script
+del /f /q %NEW_EXE% >nul 2>&1
+(goto) 2>nul & del /f /q ""%~f0"" >nul 2>&1
+";
+
+            File.WriteAllText(scriptPath, scriptContent, new System.Text.UTF8Encoding(false));
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c \"\"{scriptPath}\"\"",
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                WorkingDirectory = targetDir
+            };
+
+            Process.Start(psi);
+
+            logCallback("SUCCESS", "[Cập nhật tự động] Đã chuẩn bị xong bản mới! Ứng dụng sẽ tự động khởi động lại sau 2 giây...");
+
+            // Đóng ứng dụng an toàn sau 2 giây để nhường quyền ghi đè file
+            Task.Run(async () =>
+            {
+                await Task.Delay(2000).ConfigureAwait(false);
+                Environment.Exit(0);
+            });
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logCallback("ERROR", $"[Cập nhật tự động] Lỗi khi tạo tiến trình cập nhật Windows: {ex.Message}");
             return false;
         }
     }

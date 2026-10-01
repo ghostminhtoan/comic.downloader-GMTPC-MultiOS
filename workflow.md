@@ -1182,3 +1182,18 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `MainActivity.cs`:
     + Đăng ký bộ lọc lỗi toàn cục `AndroidEnvironment.UnhandledExceptionRaiser`, `AppDomain.CurrentDomain.UnhandledException` và `TaskScheduler.UnobservedTaskException`.
     + Override các lifecycle events `OnWindowFocusChanged`, `OnPause`, `OnStop` bọc trong `try-catch` an toàn, ngăn chặn hoàn toàn việc sập ứng dụng khi hệ thống Android can thiệp chụp ảnh màn hình hoặc đa nhiệm.
+
+### 15.47. Tự Động Hóa 100% Quy Trình Cập Nhật Trên Windows (Zero-Touch In-Place Auto Updater)
+- **Bối cảnh & Vấn đề Cũ**:
+  Trước đây trên Windows, sau khi tải xong bản cập nhật mới, ứng dụng chỉ lưu vào thư mục Downloads của người dùng rồi gọi `explorer.exe /select,...`. Người dùng phải tự đóng app, mở Downloads, copy/cut file `ComicDownloaderGMTPC.Desktop.exe` dán đè vào thư mục app cũ rồi tự click chạy lại. Quy trình này rất thủ công và bất tiện.
+- **Giải pháp Kiến trúc Tự động hóa Toàn diện**:
+  - `AppUpdateService.cs`:
+    + `GetWritableUpdateDirectory`: Trên Windows, tự động chuyển vùng lưu trữ bản cập nhật sang thư mục tạm chuyên biệt `%TEMP%\ComicGMTPC_Update\`, đảm bảo 100% quyền ghi và không làm bẩn thư mục Downloads cá nhân.
+    + Thêm hàm `ApplyWindowsUpdateAndRestart`:
+      * Kiểm tra tính toàn vẹn của tệp tải về (`Length > 1MB`) chống lỗi file rỗng hoặc trang 404 HTML.
+      * Tự động xác định chính xác đường dẫn file thực thi đang chạy qua `Environment.ProcessPath`, `Process.GetCurrentProcess().MainModule.FileName` và `AppContext.BaseDirectory` (thích ứng hoàn hảo kể cả khi người dùng đổi tên file exe).
+      * Tự động tạo script batch helper ẩn (`gmtpc_updater_*.cmd`) mã hóa UTF-8 (`chcp 65001`), khởi chạy ngầm không hiện cửa sổ đen (`CreateNoWindow = true`, `WindowStyle = Hidden`).
+      * Script tự động giám sát PID của app cũ (`tasklist /fi "PID eq %PID%"`), chờ app đóng hẳn để giải phóng file locks, thực hiện ghi đè an toàn (`move /y` kèm retry 10 lần), tự khởi động lại app mới (`start "" %TARGET_EXE%`), và tự hủy file script cùng file tạm.
+      * Ứng dụng tự động đóng an toàn sau 2 giây (`Environment.Exit(0)`) để nhường quyền ghi đè.
+  - `MainViewModel.cs`:
+    + Khi cập nhật thành công trên Windows, nút bấm tự động cập nhật nhãn `🔄 Đang khởi động lại...` mang lại phản hồi trực quan, liền mạch, giúp người dùng chỉ cần click 1 lần duy nhất là toàn bộ quá trình tải về, thay thế file và mở lại phiên bản mới diễn ra tự động 100%.

@@ -1518,16 +1518,25 @@ public partial class MainViewModel : ViewModelBase
             if (!success)
             {
                 AddLog("WARN", "[Cập nhật tự động] Không thể tải bản cập nhật. Vui lòng kiểm tra lại kết nối mạng và thử lại sau.");
+                UpdateButtonLabel = "🚀 CẬP NHẬT";
+            }
+            else if (OperatingSystem.IsWindows())
+            {
+                UpdateButtonLabel = "🔄 Đang khởi động lại...";
+            }
+            else
+            {
+                UpdateButtonLabel = "🚀 CẬP NHẬT";
             }
         }
         catch (Exception ex)
         {
             AddLog("ERROR", $"Lỗi cập nhật tự động: {ex.Message}");
+            UpdateButtonLabel = "🚀 CẬP NHẬT";
         }
         finally
         {
             IsUpdating = false;
-            UpdateButtonLabel = "🚀 CẬP NHẬT";
         }
     }
 
