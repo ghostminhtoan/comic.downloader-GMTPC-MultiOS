@@ -86,22 +86,29 @@ public class BackgroundExecutionService
             };
         }
 
-        TaskProgressChanged?.Invoke(task);
-        bool anyRunning = HasActiveTasks;
-        AnyTaskRunningChanged?.Invoke(anyRunning);
+        try
+        {
+            TaskProgressChanged?.Invoke(task);
+            bool anyRunning = HasActiveTasks;
+            AnyTaskRunningChanged?.Invoke(anyRunning);
 
-        // Kích hoạt Native Foreground Notification khi có tác vụ
-        if (anyRunning)
-        {
-            var primary = GetPrimaryTask() ?? task;
-            int percent = (int)Math.Round(primary.ProgressPercentage);
-            string title = $"Comic-GMTPC: {primary.Title}";
-            string notifText = $"{primary.Detail} ({percent}%)";
-            NativeStartOrUpdateForegroundNotification?.Invoke(title, notifText, percent);
+            // Kích hoạt Native Foreground Notification khi có tác vụ
+            if (anyRunning)
+            {
+                var primary = GetPrimaryTask() ?? task;
+                int percent = (int)Math.Round(primary.ProgressPercentage);
+                string title = $"Comic-GMTPC: {primary.Title}";
+                string notifText = $"{primary.Detail} ({percent}%)";
+                NativeStartOrUpdateForegroundNotification?.Invoke(title, notifText, percent);
+            }
+            else
+            {
+                NativeStopForegroundNotification?.Invoke();
+            }
         }
-        else
+        catch
         {
-            NativeStopForegroundNotification?.Invoke();
+            // Bảo vệ an toàn tuyệt đối chống sập ứng dụng khi cập nhật thông báo hệ điều hành
         }
     }
 

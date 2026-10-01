@@ -1154,3 +1154,13 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `MainViewModel.FolderTools.cs`:
     + Chuẩn hóa cả 3 hàm `BrowseFolderRenameRootAsync`, `BrowseFolderSplitRootAsync`, `BrowseFolderAlphabetRootAsync` với `selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString()`, chuẩn hóa qua `DownloadEngineService.NormalizeStoragePath` và bọc trong khối `try-catch` toàn diện.
     + Bổ sung rào chắn chống re-entrancy (`if (IsFolderToolRunning) return;`) tại `RenameChapterFoldersAsync`.
+
+### 15.45. Xử Lý Dứt Điểm Crash Khi Xử Lý Từ 5 Thư Mục Trở Lên (Transient Folder Lock & Background Service Shield)
+- **Bối cảnh & Nguyên nhân Triệt để**:
+  1. *Ngưỡng Thời gian 350ms & Kích hoạt Background Service*: Khi xử lý tuần tự hoặc song song ít luồng, từ folder thứ 5 trở đi thời gian đạt mốc 350ms, lần đầu tiên kích hoạt `BackgroundExecutionService.Instance.ReportProgress`. Việc thiếu `try-catch` tại tầng phát sự kiện notification và UI dispatcher khiến bất kỳ từ chối nào từ hệ điều hành (Foreground Notification limit) hoặc Avalonia UI thread làm sập ứng dụng ngay lập tức.
+  2. *Transient Folder Lock trên Hệ điều hành*: Khi đổi tên liên tiếp nhiều thư mục trong cùng một folder cha, Windows Explorer / Antivirus / Shell thumbnail cache khóa tạm thời thư mục cha trong vài chục mili-giây, khiến `Directory.Move` ném `IOException: Access denied / File in use`.
+  3. *Xung đột `ObservableCollection` trên `ItemsControl`*: Việc gọi liên tiếp nhiều lần `Insert(0)` trong cùng một chu kỳ Timer khiến Avalonia `ItemContainerGenerator` bị lỗi index/layout khi danh sách log vượt qua chiều cao hiển thị.
+- **Giải pháp Toàn diện**:
+  - `BackgroundExecutionService.cs`: Bọc `try-catch` toàn bộ các sự kiện notification và task progress.
+  - `MainViewModel.cs` & `MainViewModel.FolderTools.cs`: Bọc `try-catch` tuyệt đối cho toàn bộ delegate đẩy vào `Dispatcher.UIThread.Post`, nới lỏng chu kỳ ReportProgress lên 500ms, cô lập Timer log.
+  - `FolderToolsService.cs`: Tích hợp cơ chế tự động Retry 3 lần kèm độ trễ 30ms trong `SafeRenameDirectory` khi gặp folder bị khóa tạm thời; thêm rào chắn độ sâu `depth > 10` chống StackOverflow trong `MergeDirectoryContents`; bọc `try-catch` khối `finally` của `Parallel.ForEachAsync`.

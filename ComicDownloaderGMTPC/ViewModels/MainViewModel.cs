@@ -825,33 +825,40 @@ public partial class MainViewModel : ViewModelBase
     {
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            if (task.IsRunning)
+            try
             {
-                BubbleStatusTitle = task.Title;
-                BubbleStatusDetail = task.Detail;
-                BubbleProgress = task.ProgressPercentage;
-                BubbleProgressText = $"{task.ProgressPercentage:0}%";
-                IsBackgroundWorking = true;
-            }
-            else
-            {
-                var primary = BackgroundExecutionService.Instance.GetPrimaryTask();
-                if (primary != null)
+                if (task.IsRunning)
                 {
-                    BubbleStatusTitle = primary.Title;
-                    BubbleStatusDetail = primary.Detail;
-                    BubbleProgress = primary.ProgressPercentage;
-                    BubbleProgressText = $"{primary.ProgressPercentage:0}%";
+                    BubbleStatusTitle = task.Title;
+                    BubbleStatusDetail = task.Detail;
+                    BubbleProgress = task.ProgressPercentage;
+                    BubbleProgressText = $"{task.ProgressPercentage:0}%";
                     IsBackgroundWorking = true;
                 }
                 else
                 {
-                    BubbleStatusTitle = "Hoàn tất";
-                    BubbleStatusDetail = task.Detail;
-                    BubbleProgress = 100;
-                    BubbleProgressText = "100%";
-                    IsBackgroundWorking = false;
+                    var primary = BackgroundExecutionService.Instance.GetPrimaryTask();
+                    if (primary != null)
+                    {
+                        BubbleStatusTitle = primary.Title;
+                        BubbleStatusDetail = primary.Detail;
+                        BubbleProgress = primary.ProgressPercentage;
+                        BubbleProgressText = $"{primary.ProgressPercentage:0}%";
+                        IsBackgroundWorking = true;
+                    }
+                    else
+                    {
+                        BubbleStatusTitle = "Hoàn tất";
+                        BubbleStatusDetail = task.Detail;
+                        BubbleProgress = 100;
+                        BubbleProgressText = "100%";
+                        IsBackgroundWorking = false;
+                    }
                 }
+            }
+            catch
+            {
+                // Bảo vệ an toàn luồng UI
             }
         });
     }
@@ -860,11 +867,18 @@ public partial class MainViewModel : ViewModelBase
     {
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            IsBackgroundWorking = anyRunning;
-            if (!anyRunning)
+            try
             {
-                BubbleStatusTitle = "Sẵn sàng";
-                BubbleStatusDetail = "Tất cả tác vụ nền đã hoàn thành";
+                IsBackgroundWorking = anyRunning;
+                if (!anyRunning)
+                {
+                    BubbleStatusTitle = "Sẵn sàng";
+                    BubbleStatusDetail = "Tất cả tác vụ nền đã hoàn thành";
+                }
+            }
+            catch
+            {
+                // Bảo vệ an toàn luồng UI
             }
         });
     }

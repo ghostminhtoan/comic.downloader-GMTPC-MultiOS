@@ -92,33 +92,51 @@ public partial class MainViewModel
         // 1. Nhận log từ service đưa vào Queue an toàn đa luồng
         _folderTools.LogEmitted += (lvl, msg) =>
         {
-            _folderLogBuffer.Enqueue($"[{DateTime.Now:HH:mm:ss}] [{lvl}] {msg}");
+            try
+            {
+                _folderLogBuffer.Enqueue($"[{DateTime.Now:HH:mm:ss}] [{lvl}] {msg}");
+            }
+            catch { }
         };
 
         // 2. Timer xả log định kỳ (200ms) theo mẻ để UI Thread không bao giờ bị nghẽn/đơ/tràn JNI
         _folderLogFlushTimer = new System.Threading.Timer(_ =>
         {
-            if (_folderLogBuffer.IsEmpty) return;
-
-            var batch = new List<string>();
-            while (batch.Count < 15 && _folderLogBuffer.TryDequeue(out var logItem))
+            try
             {
-                batch.Add(logItem);
-            }
+                if (_folderLogBuffer.IsEmpty) return;
 
-            if (batch.Count > 0)
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                var batch = new List<string>();
+                while (batch.Count < 15 && _folderLogBuffer.TryDequeue(out var logItem))
                 {
-                    for (int i = 0; i < batch.Count; i++)
+                    batch.Add(logItem);
+                }
+
+                if (batch.Count > 0)
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
-                        FolderToolLogs.Insert(0, batch[i]);
-                    }
-                    while (FolderToolLogs.Count > 100)
-                    {
-                        FolderToolLogs.RemoveAt(FolderToolLogs.Count - 1);
-                    }
-                }, Avalonia.Threading.DispatcherPriority.Background);
+                        try
+                        {
+                            for (int i = 0; i < batch.Count; i++)
+                            {
+                                FolderToolLogs.Insert(0, batch[i]);
+                            }
+                            while (FolderToolLogs.Count > 100)
+                            {
+                                FolderToolLogs.RemoveAt(FolderToolLogs.Count - 1);
+                            }
+                        }
+                        catch
+                        {
+                            // Bảo vệ tuyệt đối luồng UI chống lỗi layout của ObservableCollection
+                        }
+                    }, Avalonia.Threading.DispatcherPriority.Background);
+                }
+            }
+            catch
+            {
+                // Ngăn chặn unhandled exception trên threadpool của Timer
             }
         }, null, 200, 200);
 
@@ -127,20 +145,31 @@ public partial class MainViewModel
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                double pct = 0;
-                if (total > 0)
+                try
                 {
-                    pct = Math.Clamp((double)current / total * 100.0, 0.0, 100.0);
-                    FolderToolProgress = pct;
-                    FolderToolProgressText = $"{FolderToolProgress:F0}%";
-                }
-                FolderToolStatusText = msg;
+                    double pct = 0;
+                    if (total > 0)
+                    {
+                        pct = Math.Clamp((double)current / total * 100.0, 0.0, 100.0);
+                        FolderToolProgress = pct;
+                        FolderToolProgressText = $"{FolderToolProgress:F0}%";
+                    }
+                    FolderToolStatusText = msg;
 
-                long now = Environment.TickCount64;
-                if (current == total || current == 0 || now - _lastFolderBgReportTicks >= 350)
+                    long now = Environment.TickCount64;
+                    if (current == total || current == 0 || now - _lastFolderBgReportTicks >= 500)
+                    {
+                        _lastFolderBgReportTicks = now;
+                        try
+                        {
+                            BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", msg, pct, true);
+                        }
+                        catch { }
+                    }
+                }
+                catch
                 {
-                    _lastFolderBgReportTicks = now;
-                    BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", msg, pct, true);
+                    // Bảo vệ luồng UI
                 }
             }, Avalonia.Threading.DispatcherPriority.Background);
         };

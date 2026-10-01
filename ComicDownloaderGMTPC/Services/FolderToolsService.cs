@@ -818,8 +818,9 @@ public class FolderToolsService
         }
     }
 
-    private static void MergeDirectoryContents(string source, string dest)
+    private static void MergeDirectoryContents(string source, string dest, int depth = 0)
     {
+        if (depth > 10) return; // Bảo vệ chống đệ quy lặp vô tận (StackOverflow)
         if (string.Equals(source, dest, StringComparison.OrdinalIgnoreCase)) return;
         if (!Directory.Exists(source)) return;
 
@@ -874,7 +875,7 @@ public class FolderToolsService
 
             try
             {
-                MergeDirectoryContents(dir, Path.Combine(dest, Path.GetFileName(dir)));
+                MergeDirectoryContents(dir, Path.Combine(dest, Path.GetFileName(dir)), depth + 1);
             }
             catch {}
         }
@@ -1182,17 +1183,31 @@ public class FolderToolsService
 
         try
         {
-            // Trường hợp chỉ khác chữ hoa/thường trên Windows filesystem
+            // Trường hợp chỉ khác chữ hoa/thường trên Windows filesystem (case-insensitive)
             if (string.Equals(currentPath, targetPath, StringComparison.OrdinalIgnoreCase))
             {
                 string tempPath = Path.Combine(parentDir, $"{Path.GetFileName(currentPath)}_rnmtmp_{Guid.NewGuid():N}");
-                try
+                bool tempMoved = false;
+                for (int retry = 0; retry < 3; retry++)
                 {
-                    Directory.Move(currentPath, tempPath);
-                    SafeMoveDirectory(tempPath, targetPath);
-                    return true;
+                    try
+                    {
+                        Directory.Move(currentPath, tempPath);
+                        tempMoved = true;
+                        break;
+                    }
+                    catch
+                    {
+                        Thread.Sleep(30);
+                    }
                 }
-                catch
+
+                if (tempMoved)
+                {
+                    SafeMoveDirectory(tempPath, targetPath);
+                    return Directory.Exists(targetPath);
+                }
+                else
                 {
                     SafeMoveDirectory(currentPath, targetPath);
                     return Directory.Exists(targetPath);
@@ -1200,6 +1215,23 @@ public class FolderToolsService
             }
             else
             {
+                // Thử rename nhanh với retry 3 lần trước khi fallback sang SafeMoveDirectory
+                if (!Directory.Exists(targetPath))
+                {
+                    for (int retry = 0; retry < 3; retry++)
+                    {
+                        try
+                        {
+                            Directory.Move(currentPath, targetPath);
+                            return true;
+                        }
+                        catch
+                        {
+                            Thread.Sleep(30);
+                        }
+                    }
+                }
+
                 SafeMoveDirectory(currentPath, targetPath);
                 return Directory.Exists(targetPath);
             }
@@ -1343,12 +1375,19 @@ public class FolderToolsService
                 }
                 finally
                 {
-                    int done = Interlocked.Increment(ref processed);
-                    long now = Environment.TickCount64;
-                    if (done == total || now - Volatile.Read(ref lastProgressTicks) >= 150)
+                    try
                     {
-                        Volatile.Write(ref lastProgressTicks, now);
-                        ProgressChanged?.Invoke(done, total, $"Đang đổi tên: {done}/{total} ({Volatile.Read(ref successCount)} thành công, {Volatile.Read(ref skippedCount)} bỏ qua, {Volatile.Read(ref errorCount)} lỗi)...");
+                        int done = Interlocked.Increment(ref processed);
+                        long now = Environment.TickCount64;
+                        if (done == total || now - Volatile.Read(ref lastProgressTicks) >= 150)
+                        {
+                            Volatile.Write(ref lastProgressTicks, now);
+                            ProgressChanged?.Invoke(done, total, $"Đang đổi tên: {done}/{total} ({Volatile.Read(ref successCount)} thành công, {Volatile.Read(ref skippedCount)} bỏ qua, {Volatile.Read(ref errorCount)} lỗi)...");
+                        }
+                    }
+                    catch
+                    {
+                        // Nuốt lỗi progress notification không để ném ra Parallel.ForEachAsync
                     }
                 }
 
