@@ -1197,3 +1197,28 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       * Ứng dụng tự động đóng an toàn sau 2 giây (`Environment.Exit(0)`) để nhường quyền ghi đè.
   - `MainViewModel.cs`:
     + Khi cập nhật thành công trên Windows, nút bấm tự động cập nhật nhãn `🔄 Đang khởi động lại...` mang lại phản hồi trực quan, liền mạch, giúp người dùng chỉ cần click 1 lần duy nhất là toàn bộ quá trình tải về, thay thế file và mở lại phiên bản mới diễn ra tự động 100%.
+
+### 15.48. Batch Analyze Đa Nguồn Toàn Diện & Cơ Chế Crawl More (Cào Thêm Nối Tiếp) Cho Toàn Bộ 13 Domain Trên Avalonia
+- **Bối cảnh & Vấn đề Cũ**:
+  - Trên ứng dụng WPF, người dùng có cơ chế `GET LINK` (lấy mới/xóa queue cũ) và `GET MORE` (lấy thêm nối tiếp vào queue hiện tại mà không làm mất danh sách cũ).
+  - Trước đây, ứng dụng Avalonia chỉ có duy nhất 1 nút `CÀO DANH SÁCH THEO TRANG`, mỗi lần cào là danh sách truyện cũ bị xóa trắng hoàn toàn (`Clear()`), gây ức chế khi người dùng muốn gom nhiều thể loại hoặc nhiều nguồn truyện khác nhau vào cùng một đợt tải.
+  - Ngoài ra, ô nhập link thể loại trước đây chỉ hỗ trợ 1 dòng (`AcceptsReturn="False"`, `Height="34"`), không hỗ trợ dán hàng loạt nhiều URL cùng lúc (Batch Analyze). Khi dán nhiều link hoặc dán link truyện đơn lẻ trực tiếp vào ô Tag thì app báo lỗi hoặc không nhận diện được.
+- **Giải pháp Kiến trúc & Thực hiện Toàn diện**:
+  - `ComicScraperService.cs`:
+    + Bổ sung phương thức nhận diện URL phân cấp `IsCategoryOrTagUrl(string url, string domain)` cho toàn bộ 13 domain (`truyenqq`, `nettruyen`, `mangadex`, `loppy`, `thuviensach`, `daomeoden`, `vihentai`, `damconuong`, `sayhentai`, `hentai2read`, `hitomi`, `hentaiforce`, `ehentai`), phân biệt rạch ròi giữa URL Danh mục/Thể loại (chứa `/the-loai/`, `/tim-truyen/`, `/tag/`, `/genre/`, `/type/`) và URL Bộ truyện Trực tiếp (Direct Comic Book).
+    + Nâng cấp `AnalyzeTagUrlAsync`: Tích hợp phân tích MangaDex Official Tag API (`https://api.mangadex.org/manga?includedTags[]={tagId}&limit=32`) để tính chuẩn số trang (`Math.Ceiling(total / 32.0)`), đồng thời hỗ trợ trích xuất số trang regex cho toàn bộ các domain.
+    + Nâng cấp `ScrapeBatchComicsFromTagPagesAsync`: Tích hợp cào phân trang MangaDex từ Official Tag API, trực tiếp lấy metadata, cover và title của manga rồi đưa vào danh sách truyện.
+  - `MainViewModel.DomainAnalyze.cs`:
+    + Viết hàm `ExtractCandidateUrls(string? rawText)`: Tự động tách đa ký tự phân cách (`\r`, `\n`, `\t`, khoảng trắng, dấu phẩy), loại bỏ chú thích dòng bắt đầu bằng `#` và lọc trùng lặp (`Distinct()`).
+    + Nâng cấp `AnalyzeDomainTagAsync` thành cơ chế kép:
+      * **Single URL**: Nếu là Direct Book -> tự động trích xuất nạp thẳng vào Queue truyện thời gian thực (`ScrapeBookAsync`); nếu là Tag URL -> gọi `AnalyzeTagUrlAsync` tính số trang và cập nhật UI.
+      * **Batch Analyze Hàng Loạt**: Tự động lặp qua toàn bộ URL, định tuyến tự động domain qua `DomainRoutingService.DetectDomain(targetUrl)`, nạp trực tiếp truyện vào queue hoặc ghi nhận tổng số trang tối đa của các danh mục, hiển thị tiến trình `[{i + 1}/{total}] Đang phân tích...` mượt mà.
+    + Thêm 2 RelayCommand phân quyền cào truyện rõ ràng:
+      * `ScrapeDomainBatchPagesAsync`: Nút `📥 CÀO MỚI (CRAWL)` -> Xóa sạch queue cũ (`clearExisting = true`), cào mới từ đầu.
+      * `CrawlMoreDomainBatchPagesAsync`: Nút `➕ CÀO THÊM (CRAWL MORE)` -> Giữ nguyên queue hiện tại (`clearExisting = false`), cào nối tiếp thêm vào danh sách và tự động lọc trùng URL.
+    + Nâng cấp `ExecuteDomainBatchScrapeAsync`: Hỗ trợ duyệt qua toàn bộ danh sách URL tag nếu người dùng nhập nhiều dòng, gom kết quả từ mọi domain vào Queue và tự chuyển sang Tab Queue khi hoàn tất.
+  - `MainView.axaml`:
+    + Nâng cấp toàn bộ 13 tab domain (`truyenqq`, `nettruyen`, `loppy`, `thuviensach`, `mangadex`, `daomeoden`, `vihentai`, `damconuong`, `sayhentai`, `hentai2read`, `hitomi`, `hentaiforce`, `ehentai`):
+      * Chuyển đổi TextBox Tag URL sang `AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap"`, Placeholder hướng dẫn "Dán 1 hoặc nhiều link thể loại ... (mỗi dòng 1 link)...".
+      * Tích hợp đồng bộ cụm nút hành động chuẩn: `🔍 ANALYZE (KIỂM TRA TRANG)` + `📥 CÀO MỚI (CRAWL)` + `➕ CÀO THÊM (CRAWL MORE)` + `⏹ Dừng cào` kèm ToolTip trực quan.
+
