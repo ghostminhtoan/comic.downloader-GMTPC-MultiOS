@@ -926,4 +926,310 @@ public class FolderToolsService
         }
         catch {}
     }
+
+    /// <summary>
+    /// Item đại diện cho một thư mục chapter phục vụ đổi tên đa tầng sâu.
+    /// </summary>
+    public class RenameChapterItem
+    {
+        public string SourcePath { get; set; } = string.Empty;
+        public string FolderName { get; set; } = string.Empty;
+        public string BookFolderPath { get; set; } = string.Empty;
+        public string BookName { get; set; } = string.Empty;
+        public int Depth { get; set; }
+    }
+
+    /// <summary>
+    /// Chuẩn hóa chuỗi văn bản thành slug ASCII chữ thường không dấu (URL/FileSystem friendly).
+    /// </summary>
+    public static string ToSlug(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+
+        string text = input.Replace("đ", "d").Replace("Đ", "d");
+        string normalized = text.Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder();
+        foreach (char c in normalized)
+        {
+            var uc = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (uc != UnicodeCategory.NonSpacingMark)
+            {
+                if (char.IsLetterOrDigit(c))
+                {
+                    sb.Append(char.ToLowerInvariant(c));
+                }
+                else if (c == ' ' || c == '-' || c == '_' || c == '.')
+                {
+                    sb.Append('-');
+                }
+            }
+        }
+
+        string result = sb.ToString();
+        result = Regex.Replace(result, @"-+", "-").Trim('-');
+        return string.IsNullOrWhiteSpace(result) ? "chapter" : result;
+    }
+
+    /// <summary>
+    /// Bóc tách phần tên chapter thuần túy bằng cách loại bỏ book name prefix (nếu đã có).
+    /// </summary>
+    public static string ExtractPureChapterName(string currentName, string bookName)
+    {
+        if (string.IsNullOrWhiteSpace(currentName)) return string.Empty;
+        if (string.IsNullOrWhiteSpace(bookName)) return currentName;
+
+        string trimmedCurrent = currentName.Trim();
+        string trimmedBook = bookName.Trim();
+
+        var prefixes = new List<string>
+        {
+            trimmedBook + " - ",
+            trimmedBook + "-",
+            trimmedBook + "_",
+            trimmedBook + " ",
+            ToSlug(trimmedBook) + "-"
+        };
+
+        foreach (var prefix in prefixes)
+        {
+            if (trimmedCurrent.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                string pure = trimmedCurrent.Substring(prefix.Length).Trim();
+                if (!string.IsNullOrEmpty(pure))
+                {
+                    return pure;
+                }
+            }
+        }
+
+        var match = Regex.Match(trimmedCurrent, @"^.+?[-_–—]\s*(?<chap>(?:chap|chapter|chuong|chương|vol|volume|tap|tập|c)\s*\d+.*)$", RegexOptions.IgnoreCase);
+        if (match.Success)
+        {
+            string extracted = match.Groups["chap"].Value.Trim();
+            if (!string.IsNullOrEmpty(extracted))
+            {
+                return extracted;
+            }
+        }
+
+        return trimmedCurrent;
+    }
+
+    /// <summary>
+    /// Thu thập danh sách các thư mục chapter trong cây thư mục đa tầng sâu.
+    /// </summary>
+    private List<RenameChapterItem> CollectChapterFoldersForRename(string rootFolder)
+    {
+        var items = new List<RenameChapterItem>();
+        if (!Directory.Exists(rootFolder)) return items;
+
+        var stack = new Stack<string>();
+        stack.Push(rootFolder);
+
+        while (stack.Count > 0)
+        {
+            string current = stack.Pop();
+            string[] subDirs;
+            try { subDirs = Directory.GetDirectories(current); } catch { continue; }
+
+            var sortedSubDirs = subDirs.OrderBy(d => Path.GetFileName(d), NaturalSortComparer.Instance);
+
+            foreach (var folder in sortedSubDirs)
+            {
+                string folderName = Path.GetFileName(folder);
+                if (folderName.StartsWith(".") || folderName.EndsWith("-tmp", StringComparison.OrdinalIgnoreCase)) continue;
+
+                bool isBucket = IsGroupBucketFolder(folderName);
+                bool hasImages = DirectoryContainsImages(folder);
+                bool isChapterName = ChapterFilter.TryParseChapterNumber(folderName, out _) ||
+                                     Regex.IsMatch(folderName, @"(^|[-_\s])(chap|chapter|chuong|chương|vol|volume|c|tap|tập)[\s\-_]*\d+", RegexOptions.IgnoreCase);
+
+                if (!isBucket && (hasImages || isChapterName))
+                {
+                    string parent = Path.GetDirectoryName(folder) ?? rootFolder;
+                    string parentName = Path.GetFileName(parent);
+                    string bookPath = parent;
+
+                    if (IsGroupBucketFolder(parentName))
+                    {
+                        string grandParent = Path.GetDirectoryName(parent) ?? rootFolder;
+                        bookPath = grandParent;
+                    }
+
+                    string bookName = Path.GetFileName(bookPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    if (string.IsNullOrWhiteSpace(bookName))
+                    {
+                        bookName = Path.GetFileName(rootFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    }
+                    if (string.IsNullOrWhiteSpace(bookName))
+                    {
+                        bookName = "Comic";
+                    }
+
+                    items.Add(new RenameChapterItem
+                    {
+                        SourcePath = folder,
+                        FolderName = folderName,
+                        BookFolderPath = bookPath,
+                        BookName = bookName,
+                        Depth = folder.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries).Length
+                    });
+                }
+                else
+                {
+                    stack.Push(folder);
+                }
+            }
+        }
+
+        return items;
+    }
+
+    /// <summary>
+    /// Đổi tên thư mục chapter đa tầng sâu theo 2 chế độ:
+    /// - "Single comic": {book-name}\{chapter-slug} (lược bỏ book name prefix nếu có)
+    /// - "Multi-comic": {book-name}\{book-name}-{chapter-slug} (ghép book name prefix vào tên chapter)
+    /// </summary>
+    public async Task<int> RenameChapterFoldersAsync(
+        string rootFolder,
+        string renameMode,
+        bool isSlugify,
+        int maxDegree,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(rootFolder) || !Directory.Exists(rootFolder))
+        {
+            return 0;
+        }
+
+        await _folderLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            int effectiveDegree = Math.Clamp(maxDegree, 1, 128);
+            LogEmitted?.Invoke("INFO", $"[Đổi Tên Thư Mục] Bắt đầu quét thư mục tại: {rootFolder} | Chế độ: {renameMode} | Slugify: {isSlugify} | Song song: {effectiveDegree} folder");
+            ProgressChanged?.Invoke(0, 1, "Đang quét danh sách chapter...");
+
+            var chapterItems = CollectChapterFoldersForRename(rootFolder);
+            int total = chapterItems.Count;
+
+            if (total == 0)
+            {
+                LogEmitted?.Invoke("WARN", $"[Đổi Tên Thư Mục] Không tìm thấy thư mục chapter chứa ảnh nào tại: {rootFolder}");
+                ProgressChanged?.Invoke(1, 1, "Không tìm thấy thư mục chapter nào.");
+                return 0;
+            }
+
+            LogEmitted?.Invoke("INFO", $"[Đổi Tên Thư Mục] Tìm thấy {total} thư mục chapter. Bắt đầu xử lý...");
+            int processed = 0;
+            int successCount = 0;
+            int skippedCount = 0;
+            int errorCount = 0;
+
+            bool isMultiComic = renameMode.Contains("Multi", StringComparison.OrdinalIgnoreCase);
+
+            await Parallel.ForEachAsync(chapterItems, new ParallelOptions
+            {
+                MaxDegreeOfParallelism = effectiveDegree,
+                CancellationToken = ct
+            }, (item, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                try
+                {
+                    string currentPath = item.SourcePath;
+                    if (!Directory.Exists(currentPath))
+                    {
+                        Interlocked.Increment(ref skippedCount);
+                        return ValueTask.CompletedTask;
+                    }
+
+                    string currentName = item.FolderName;
+                    string bookName = item.BookName;
+
+                    string pureChapter = ExtractPureChapterName(currentName, bookName);
+
+                    string newName;
+                    if (isMultiComic)
+                    {
+                        if (isSlugify)
+                        {
+                            string bSlug = ToSlug(bookName);
+                            string cSlug = ToSlug(pureChapter);
+                            newName = $"{bSlug}-{cSlug}";
+                        }
+                        else
+                        {
+                            string safeBook = DownloadEngineService.MakeSafeFilename(bookName, 80);
+                            string safeChap = DownloadEngineService.MakeSafeFilename(pureChapter, 80);
+                            newName = $"{safeBook}-{safeChap}";
+                        }
+                    }
+                    else
+                    {
+                        if (isSlugify)
+                        {
+                            newName = ToSlug(pureChapter);
+                        }
+                        else
+                        {
+                            newName = pureChapter;
+                        }
+                    }
+
+                    if (string.Equals(currentName, newName, StringComparison.Ordinal))
+                    {
+                        Interlocked.Increment(ref skippedCount);
+                        return ValueTask.CompletedTask;
+                    }
+
+                    string parentDir = Path.GetDirectoryName(currentPath)!;
+                    string targetPath = Path.Combine(parentDir, newName);
+
+                    if (string.Equals(currentName, newName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Khác chữ hoa/thường trên Windows filesystem -> di chuyển qua tên tạm
+                        string tempPath = Path.Combine(parentDir, $"{currentName}_rnmtmp_{Guid.NewGuid():N}");
+                        Directory.Move(currentPath, tempPath);
+                        Directory.Move(tempPath, targetPath);
+                        Interlocked.Increment(ref successCount);
+                        LogEmitted?.Invoke("SUCCESS", $"[Đổi tên] {currentName} -> {newName}");
+                    }
+                    else
+                    {
+                        if (Directory.Exists(targetPath))
+                        {
+                            LogEmitted?.Invoke("WARN", $"[Đổi tên bỏ qua] Thư mục đích đã tồn tại: {targetPath}");
+                            Interlocked.Increment(ref skippedCount);
+                        }
+                        else
+                        {
+                            Directory.Move(currentPath, targetPath);
+                            Interlocked.Increment(ref successCount);
+                            LogEmitted?.Invoke("SUCCESS", $"[Đổi tên] {currentName} -> {newName}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Interlocked.Increment(ref errorCount);
+                    LogEmitted?.Invoke("ERROR", $"[Đổi tên lỗi] {item.FolderName}: {ex.Message}");
+                }
+                finally
+                {
+                    int done = Interlocked.Increment(ref processed);
+                    ProgressChanged?.Invoke(done, total, $"Đang đổi tên: {done}/{total} ({successCount} thành công, {skippedCount} bỏ qua, {errorCount} lỗi)...");
+                }
+
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
+
+            LogEmitted?.Invoke("INFO", $"[Đổi Tên Thư Mục] Hoàn tất! Đã đổi: {successCount}, Giữ nguyên/Bỏ qua: {skippedCount}, Lỗi: {errorCount}.");
+            ProgressChanged?.Invoke(total, total, $"Hoàn tất: {successCount} đổi tên, {skippedCount} bỏ qua.");
+            return successCount;
+        }
+        finally
+        {
+            _folderLock.Release();
+        }
+    }
 }

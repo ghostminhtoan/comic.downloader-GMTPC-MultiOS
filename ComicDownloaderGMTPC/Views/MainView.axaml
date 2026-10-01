@@ -1418,6 +1418,64 @@
                                                 </StackPanel>
                                             </Border>
 
+                                            <!-- KHU VỰC 3: ĐỔI TÊN THƯ MỤC CHAPTER (SINGLE / MULTI-COMIC RENAME) -->
+                                            <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                <StackPanel Spacing="8">
+                                                    <TextBlock Text="3. Đổi Tên Thư Mục Chapter (Rename Folders: Single / Multi-Comic)" FontWeight="Bold" Foreground="#A78BFA" FontSize="12" />
+                                                    <TextBlock Text="Đổi tên các thư mục chapter đa tầng sâu để hiển thị rõ tên truyện trên Comic Screen, tránh bị lẫn lộn giữa các bộ truyện." Foreground="#94A3B8" FontSize="10.5" TextWrapping="Wrap" />
+
+                                                    <!-- Thư mục gốc (Bố cục 2 tầng xem Full Path trên Android) -->
+                                                    <StackPanel Spacing="3">
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="📁 Thư mục gốc chứa truyện (Root Folder):" Foreground="#94A3B8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                            <Button Command="{Binding BrowseFolderRenameRootCommand}" Content="📁 Chọn Thư Mục" Background="#7C3AED" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                            <Button Command="{Binding OpenFolderRenameRootCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#A78BFA" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục trên thiết bị" />
+                                                        </WrapPanel>
+                                                        <TextBox Text="{Binding FolderRenameRootPath}" PlaceholderText="Chọn thư mục gốc chứa truyện cần đổi tên (hỗ trợ thư mục đa tầng sâu)..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#8B5CF6" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                    </StackPanel>
+
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <!-- Chế độ đổi tên -->
+                                                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,3" Margin="0,0,8,4" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                                <TextBlock Text="Định dạng:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                                <ComboBox SelectedItem="{Binding FolderRenameMode}" Width="260" Height="26" FontSize="10">
+                                                                    <x:String>Multi-comic ({book-name}-{chapter})</x:String>
+                                                                    <x:String>Single comic ({chapter})</x:String>
+                                                                </ComboBox>
+                                                            </StackPanel>
+                                                        </Border>
+
+                                                        <!-- Tùy chọn Slugify ASCII -->
+                                                        <CheckBox IsChecked="{Binding IsFolderRenameSlugify}" Content="Chuẩn hóa slug (chữ thường không dấu)" FontSize="10" Foreground="#D1D5DB" Margin="0,0,8,4" ToolTip.Tip="Bật để chuyển thành tên ASCII không dấu (VD: a-good-day-to-camp-chuong-01). Tắt để giữ nguyên tiếng Việt có dấu." />
+
+                                                        <!-- NumericUpDown Song song -->
+                                                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                                <TextBlock Text="Song song:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder đổi tên cùng lúc (Mặc định: 20 folder)" />
+                                                                <TextBlock Text="folder" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                        </Border>
+
+                                                        <Button Command="{Binding RenameChapterFoldersCommand}" IsEnabled="{Binding !IsFolderToolRunning}"
+                                                                Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="12,5" Height="28" CornerRadius="4" Margin="0,0,6,4">
+                                                            <TextBlock Text="🏷️ ĐỔI TÊN THƯ MỤC (RENAME)" />
+                                                        </Button>
+
+                                                        <Button Command="{Binding StopFolderToolCommand}" IsEnabled="{Binding IsFolderToolRunning}"
+                                                                Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="10,5" Height="28" CornerRadius="4" Margin="0,0,6,4">
+                                                            <TextBlock Text="⏹ DỪNG" />
+                                                        </Button>
+
+                                                        <Button Command="{Binding ClearFolderToolLogsCommand}"
+                                                                Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="8,5" Height="28" CornerRadius="4" Margin="0,0,0,4">
+                                                            <TextBlock Text="🧹 Xóa log" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </Border>
+
                                             <!-- Thanh tiến trình & Trạng thái (Bố cục thông minh chống Overlap 100%) -->
                                             <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8">
                                                 <StackPanel Spacing="6">

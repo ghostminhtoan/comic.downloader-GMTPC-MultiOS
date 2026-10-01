@@ -1117,6 +1117,25 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
     - Bổ sung phương thức `DownloadBytesAsync(url, referer, ct)` tải dữ liệu nhị phân với DoH, SniFragmentStream và Reverse Proxy Gateway.
   - `DownloadEngineService.cs`:
     - Nâng cấp `DownloadImageWithRetryAsync`: Tự động nhận diện URL MangaDex, bóc tách `hash` và `filename` để sinh danh sách Candidate URLs (Node MangaDex@Home -> Official Uploads CDN -> DataSaver CDN -> DoH/SniFragmentStream/Proxy).
-    - Cập nhật `DownloadComicBookAsync`: Tự động thử lại bóc tách ảnh chapter tối đa 3 lần nếu mạng nghẽn; kiểm tra xác thực số ảnh tải được (`downloadedCount > 0`) trước khi đánh dấu `Completed`, tránh hoàn tất giả tạo khi folder rỗng.
+### 15.43. Tính Năng Đổi Tên Thư Mục Chapter Đa Tầng Sâu (Rename Folders: Single Comic vs Multi-Comic)
+- **Bối cảnh & Vấn đề**:
+  - Khi lưu trữ truyện trên máy tính hoặc điện thoại Android, người dùng thường tổ chức cây thư mục đa tầng sâu (ví dụ: `Download\A-G\A Good Day To Camp\chuong 01` hoặc `Comics\A Good Day To Camp\chap 0001-0200\chuong 01`).
+  - Khi xem bằng ứng dụng Comic Screen trên Android/PC hoặc khi nén nhiều bộ truyện vào 1 file ZIP (`A-G.zip`), Comic Screen duyệt phẳng danh sách thư mục chapter. Do các folder chỉ có tên đơn thuần là `chuong 01`, `chuong 02`, `chap 1`... mà không có tên bộ truyện kèm theo, người đọc không thể phân biệt được chương nào thuộc bộ truyện nào, gây rối mắt và lẫn lộn.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  - `FolderToolsService.cs`:
+    - Phát triển thuật toán duyệt đệ quy đa tầng sâu `CollectChapterFoldersForRename(rootFolder)` phát hiện chính xác các thư mục chứa ảnh chapter thực tế (`DirectoryContainsImages`), đồng thời truy vết ngược cây thư mục cha để định danh đúng tên bộ truyện (`BookName`), tự động vượt qua các thư mục nhóm trung gian (`chap 0001-0200`, `Vol 1`...).
+    - Xây dựng bộ bóc tách tiền tố thông minh `ExtractPureChapterName(currentName, bookName)` loại bỏ các biến thể tiền tố tên truyện (`{BookName}-`, `{BookName} - `, `{BookName}_`, `{Slug}-`) để lấy lại tên chapter thuần túy mà không làm hỏng số thứ tự chương.
+    - Cung cấp hàm chuyển đổi slug URL/FileSystem `ToSlug(input)` loại bỏ dấu tiếng Việt chuẩn Unicode FormD và ký tự đặc biệt.
+    - Phương thức `RenameChapterFoldersAsync`:
+      + **Option 1: Single comic** (`{book-name}\{chapter-slug}`): Đưa thư mục chapter về dạng tên chapter thuần túy (loại bỏ prefix tên truyện nếu trước đó đã gắn).
+      + **Option 2: Multi-comic** (`{book-name}\{book-name}-{chapter-slug}`): Ghép tiền tố tên truyện vào phía trước tên chapter con, nối bằng dấu `-` (Ví dụ: `A Good Day To Camp-chuong 01`).
+      + Tùy chọn `isSlugify`: Cho phép chuẩn hóa sang slug ASCII chữ thường không dấu (`a-good-day-to-camp-chuong-01`) hoặc giữ nguyên tên tiếng Việt có dấu tự nhiên (`A Good Day To Camp-chuong 01`).
+      + Cơ chế đổi tên an toàn đa luồng (`Parallel.ForEachAsync` với `effectiveDegree` từ 1 - 128 luồng), xử lý chuyển qua tên tạm trung gian trên Windows khi chỉ đổi chữ hoa/thường, tự động kiểm tra thư mục đích tránh ghi đè dữ liệu.
+  - `MainViewModel.FolderTools.cs`:
+    - Bổ sung các thuộc tính `FolderRenameRootPath`, `FolderRenameMode` ("Multi-comic" / "Single comic"), `IsFolderRenameSlugify`.
+    - Tích hợp các RelayCommand: `BrowseFolderRenameRootAsync`, `OpenFolderRenameRoot`, `RenameChapterFoldersAsync`, kết nối mượt mà với thanh tiến trình % và batch logger nền.
+  - `MainView.axaml`:
+    - Thiết kế Khu vực 3 trong Tab `📁 Tách / Gộp Folder`: Bố cục responsive 2 tầng chống tràn mép trên Android, ComboBox lựa chọn định dạng rõ ràng kèm ToolTip hướng dẫn chi tiết.
+
 
 

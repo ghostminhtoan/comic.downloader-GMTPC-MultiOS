@@ -50,6 +50,18 @@ public partial class MainViewModel
     private ObservableCollection<string> _alphabetRanges = new() { "A-G", "H-P", "Q-Z" };
 
     // ==========================================
+    // ĐỔI TÊN THƯ MỤC CHAPTER (SINGLE / MULTI-COMIC)
+    // ==========================================
+    [ObservableProperty]
+    private string _folderRenameRootPath = string.Empty;
+
+    [ObservableProperty]
+    private string _folderRenameMode = "Multi-comic ({book-name}-{chapter})"; // "Multi-comic ({book-name}-{chapter})" hoặc "Single comic ({chapter})"
+
+    [ObservableProperty]
+    private bool _isFolderRenameSlugify = false;
+
+    // ==========================================
     // CẤU HÌNH XỬ LÝ SONG SONG (THREADS / CONCURRENCY)
     // ==========================================
     [ObservableProperty]
@@ -136,6 +148,7 @@ public partial class MainViewModel
         // Gợi ý thư mục mặc định
         if (string.IsNullOrEmpty(FolderSplitRootPath)) FolderSplitRootPath = _downloadEngine.DownloadRoot;
         if (string.IsNullOrEmpty(FolderAlphabetRootPath)) FolderAlphabetRootPath = _downloadEngine.DownloadRoot;
+        if (string.IsNullOrEmpty(FolderRenameRootPath)) FolderRenameRootPath = _downloadEngine.DownloadRoot;
     }
 
     [RelayCommand]
@@ -414,6 +427,81 @@ public partial class MainViewModel
         {
             FolderToolStatusText = "Lỗi: " + ex.Message;
             AddLog("ERROR", $"[Alphabet Lỗi] {ex.Message}");
+            try { SoundNotificationService.Instance.PlayDownloadError(); } catch { }
+        }
+        finally
+        {
+            IsFolderToolRunning = false;
+            BackgroundExecutionService.Instance.CompleteTask("folder_tools", "Tách/Gộp Thư Mục", "Hoàn tất");
+        }
+    }
+
+    [RelayCommand]
+    public async Task BrowseFolderRenameRootAsync()
+    {
+        var topLevel = GetTopLevel();
+        if (topLevel?.StorageProvider == null) return;
+
+        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục chứa truyện cần đổi tên" : "Select Root Folder To Rename",
+            AllowMultiple = false
+        });
+
+        if (folders.Count > 0)
+        {
+            string raw = folders[0].Path.LocalPath;
+            FolderRenameRootPath = DownloadEngineService.NormalizeStoragePath(raw, folders[0].Name);
+            AddLog("INFO", $"[Đổi Tên] Đã chọn thư mục: {FolderRenameRootPath}");
+        }
+    }
+
+    [RelayCommand]
+    public void OpenFolderRenameRoot()
+    {
+        string path = string.IsNullOrWhiteSpace(FolderRenameRootPath) ? _downloadEngine.DownloadRoot : FolderRenameRootPath;
+        _downloadEngine.OpenDirectoryInExplorer(path);
+    }
+
+    [RelayCommand]
+    public async Task RenameChapterFoldersAsync()
+    {
+        if (string.IsNullOrWhiteSpace(FolderRenameRootPath) || !Directory.Exists(FolderRenameRootPath))
+        {
+            AddLog("WARN", "[Đổi Tên] Vui lòng chọn thư mục hợp lệ trước!");
+            return;
+        }
+
+        IsFolderToolRunning = true;
+        FolderToolProgress = 0;
+        FolderToolProgressText = "0%";
+        FolderToolStatusText = "Đang quét và đổi tên thư mục chapter...";
+        BackgroundExecutionService.Instance.ReportProgress("folder_tools", "Tách/Gộp Thư Mục", "Đang đổi tên thư mục...", 0, true);
+        _folderToolsCts = new CancellationTokenSource();
+
+        try
+        {
+            int count = await _folderTools.RenameChapterFoldersAsync(
+                FolderRenameRootPath,
+                FolderRenameMode,
+                IsFolderRenameSlugify,
+                FolderToolThreads,
+                _folderToolsCts.Token);
+
+            FolderToolProgress = 100;
+            FolderToolProgressText = "100%";
+            FolderToolStatusText = $"Hoàn tất: Đã đổi tên {count} thư mục chapter.";
+            AddLog("SUCCESS", $"[Đổi Tên] Hoàn tất đổi tên {count} chapter folders ({FolderToolThreads} folders cùng lúc) tại {FolderRenameRootPath}");
+            try { SoundNotificationService.Instance.PlayDownloadFinish(); } catch { }
+        }
+        catch (OperationCanceledException)
+        {
+            FolderToolStatusText = "Đã dừng bởi người dùng.";
+        }
+        catch (Exception ex)
+        {
+            FolderToolStatusText = "Lỗi: " + ex.Message;
+            AddLog("ERROR", $"[Đổi Tên Lỗi] {ex.Message}");
             try { SoundNotificationService.Instance.PlayDownloadError(); } catch { }
         }
         finally
