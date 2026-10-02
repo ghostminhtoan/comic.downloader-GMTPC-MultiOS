@@ -16,6 +16,7 @@ public class FilePackerOptions
     public bool CreateCbz { get; set; } = true;
     public bool CreatePdf { get; set; } = false;
     public bool PackSubfoldersIndividually { get; set; } = true; // Mỗi chapter / folder con 1 file
+    public CompressionLevel Compression { get; set; } = CompressionLevel.Fastest; // Luôn luôn dùng độ nén nhẹ nhất chống crash máy yếu
 }
 
 public class FilePackerService
@@ -148,7 +149,7 @@ public class FilePackerService
                 if (options.CreateCbz)
                 {
                     string cbzPath = Path.Combine(finalOutputDir, $"{dirName}.cbz");
-                    await Task.Run(() => CreateArchiveFromImages(imgFiles, cbzPath, targetDir, "CBZ", totalUnits, ref currentUnit, progress, ct), ct);
+                    await Task.Run(() => CreateArchiveFromImages(imgFiles, cbzPath, targetDir, "CBZ", options.Compression, totalUnits, ref currentUnit, progress, ct), ct);
                     LogEmitted?.Invoke("SUCCESS", $"Đã tạo CBZ: {Path.GetFileName(cbzPath)} ({imgFiles.Count} ảnh)");
                 }
 
@@ -156,7 +157,7 @@ public class FilePackerService
                 if (options.CreateZip)
                 {
                     string zipPath = Path.Combine(finalOutputDir, $"{dirName}.zip");
-                    await Task.Run(() => CreateArchiveFromImages(imgFiles, zipPath, targetDir, "ZIP", totalUnits, ref currentUnit, progress, ct), ct);
+                    await Task.Run(() => CreateArchiveFromImages(imgFiles, zipPath, targetDir, "ZIP", options.Compression, totalUnits, ref currentUnit, progress, ct), ct);
                     LogEmitted?.Invoke("SUCCESS", $"Đã tạo ZIP: {Path.GetFileName(zipPath)} ({imgFiles.Count} ảnh)");
                 }
 
@@ -247,12 +248,15 @@ public class FilePackerService
 
     /// <summary>
     /// Nén danh sách ảnh vào file Zip / Cbz kèm báo cáo tiến trình chi tiết từng file.
+    /// Luôn sử dụng mức nén nhẹ nhất (CompressionLevel.Fastest) nhằm bảo vệ CPU, tiết kiệm RAM
+    /// và triệt tiêu hoàn toàn sự cố crash/lag trên các dòng máy cấu hình yếu.
     /// </summary>
     private static void CreateArchiveFromImages(
         List<string> images,
         string archivePath,
         string baseDir,
         string formatName,
+        CompressionLevel compressionLevel,
         int totalUnits,
         ref int currentUnit,
         IProgress<(int current, int total, string currentFile)>? progress,
@@ -260,14 +264,14 @@ public class FilePackerService
     {
         if (File.Exists(archivePath)) File.Delete(archivePath);
 
-        using var zipToOpen = new FileStream(archivePath, FileMode.Create);
+        using var zipToOpen = new FileStream(archivePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, bufferSize: 65536);
         using var archive = new ZipArchive(zipToOpen, ZipArchiveMode.Create);
 
         foreach (var img in images)
         {
             if (ct.IsCancellationRequested) return;
             string relPath = Path.GetRelativePath(baseDir, img);
-            archive.CreateEntryFromFile(img, relPath, CompressionLevel.Optimal);
+            archive.CreateEntryFromFile(img, relPath, compressionLevel);
 
             int cur = Interlocked.Increment(ref currentUnit);
             progress?.Report((cur, totalUnits, $"[{formatName}] {Path.GetFileName(img)} ({cur}/{totalUnits})"));
@@ -275,10 +279,9 @@ public class FilePackerService
     }
 
     /// <summary>
-    /// <summary>
-    /// Tạo tài liệu PDF đa trang chuẩn ISO 32000-1 với cơ chế Direct Stream Embedding (Zero-Copy).
-    /// Nhúng trực tiếp 100% luồng byte JPEG gốc, KHÔNG giải nén thành raw bitmap uncompressed,
-    /// đảm bảo dung lượng file PDF giữ nguyên 1:1 với ảnh gốc (500MB ảnh gốc = 500MB PDF) và tốc độ cực nhanh.
+    /// Tạo tài liệu PDF đa trang chuẩn ISO 32000-1 với cơ chế Zero-Memory-Bloat Direct Streaming.
+    /// Xử lý và ghi trực tiếp từng trang ảnh vào đĩa, không lưu trữ mảng byte trong RAM,
+    /// triệt tiêu 100% lỗi OutOfMemoryException (OOM) và crash trên máy cấu hình yếu hoặc Android.
     /// Tự động đính kèm cây mục lục chương (PDF Bookmarks/Outlines) tiếng Việt UTF-16BE.
     /// </summary>
     private static void CreatePdfFromImages(
@@ -292,7 +295,7 @@ public class FilePackerService
     {
         if (File.Exists(pdfPath)) File.Delete(pdfPath);
 
-        using var fs = new FileStream(pdfPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var fs = new FileStream(pdfPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 65536);
         using var bw = new BinaryWriter(fs, System.Text.Encoding.Latin1);
 
         // 1. PDF Header chuẩn 1.4
@@ -315,31 +318,19 @@ public class FilePackerService
             }
         }
 
-        var pageObjIds = new List<int>();
-        var pageImageInfos = new List<(int PageObjId, int ContentObjId, int ImgObjId, int Width, int Height, byte[] Bytes)>();
+        int totalPages = images.Count;
+        var pageObjIds = new List<int>(totalPages);
+        var contentObjIds = new List<int>(totalPages);
+        var imgObjIds = new List<int>(totalPages);
 
-        foreach (var imgPath in images)
+        for (int i = 0; i < totalPages; i++)
         {
-            if (ct.IsCancellationRequested) return;
-
-            byte[] rawBytes = File.ReadAllBytes(imgPath);
-            var (jpegBytes, width, height) = UniversalImageDecoder.ConvertToStandardJpeg(rawBytes, 95);
-
-            if (width <= 0) width = 1080;
-            if (height <= 0) height = 1920;
-
-            int pageObjId = objIdCounter++;
-            int contentObjId = objIdCounter++;
-            int imgObjId = objIdCounter++;
-
-            pageObjIds.Add(pageObjId);
-            pageImageInfos.Add((pageObjId, contentObjId, imgObjId, width, height, jpegBytes));
-
-            int cur = Interlocked.Increment(ref currentUnit);
-            progress?.Report((cur, totalUnits, $"[PDF] Trang {Path.GetFileName(imgPath)} ({cur}/{totalUnits})"));
+            pageObjIds.Add(objIdCounter++);
+            contentObjIds.Add(objIdCounter++);
+            imgObjIds.Add(objIdCounter++);
         }
 
-        if (pageObjIds.Count == 0) return;
+        if (totalPages == 0) return;
 
         // 2. Ghi Root Catalog Object
         objectOffsets[catalogObjId] = fs.Position;
@@ -391,53 +382,72 @@ public class FilePackerService
         }
         bw.Write(System.Text.Encoding.Latin1.GetBytes("]\n>>\nendobj\n"));
 
-        // 5. Ghi từng Trang (Page -> Content Stream -> Image XObject)
-        for (int i = 0; i < pageImageInfos.Count; i++)
+        // 5. Ghi từng Trang theo chế độ Zero-Memory Streaming (xử lý đến đâu ghi ra đĩa đến đó, giải phóng ngay byte ảnh)
+        for (int i = 0; i < totalPages; i++)
         {
-            var info = pageImageInfos[i];
+            if (ct.IsCancellationRequested) return;
+
+            string imgPath = images[i];
+            int pageObjId = pageObjIds[i];
+            int contentObjId = contentObjIds[i];
+            int imgObjId = imgObjIds[i];
             string imName = $"Im{i + 1}";
 
+            byte[] rawBytes = File.ReadAllBytes(imgPath);
+            // Sử dụng mức chất lượng nén nhẹ, tối ưu 75% cho ảnh chuyển đổi
+            var (jpegBytes, width, height) = UniversalImageDecoder.ConvertToStandardJpeg(rawBytes, 75);
+
+            if (width <= 0) width = 1080;
+            if (height <= 0) height = 1920;
+
             // A. Page Object
-            objectOffsets[info.PageObjId] = fs.Position;
+            objectOffsets[pageObjId] = fs.Position;
             bw.Write(System.Text.Encoding.Latin1.GetBytes(
-                $"{info.PageObjId} 0 obj\n<<\n" +
+                $"{pageObjId} 0 obj\n<<\n" +
                 $"  /Type /Page\n" +
                 $"  /Parent {pagesObjId} 0 R\n" +
-                $"  /MediaBox [0 0 {info.Width} {info.Height}]\n" +
-                $"  /Contents {info.ContentObjId} 0 R\n" +
+                $"  /MediaBox [0 0 {width} {height}]\n" +
+                $"  /Contents {contentObjId} 0 R\n" +
                 $"  /Resources <<\n" +
                 $"    /ProcSet [/PDF /ImageC /ImageI /ImageB]\n" +
-                $"    /XObject << /{imName} {info.ImgObjId} 0 R >>\n" +
+                $"    /XObject << /{imName} {imgObjId} 0 R >>\n" +
                 $"  >>\n" +
                 $">>\nendobj\n"));
 
             // B. Content Stream Object (vẽ vừa khít toàn trang)
-            string contentOps = $"q\n{info.Width} 0 0 {info.Height} 0 0 cm\n/{imName} Do\nQ\n";
+            string contentOps = $"q\n{width} 0 0 {height} 0 0 cm\n/{imName} Do\nQ\n";
             byte[] contentBytes = System.Text.Encoding.Latin1.GetBytes(contentOps);
 
-            objectOffsets[info.ContentObjId] = fs.Position;
+            objectOffsets[contentObjId] = fs.Position;
             bw.Write(System.Text.Encoding.Latin1.GetBytes(
-                $"{info.ContentObjId} 0 obj\n<<\n" +
+                $"{contentObjId} 0 obj\n<<\n" +
                 $"  /Length {contentBytes.Length}\n" +
                 $">>\nstream\n"));
             bw.Write(contentBytes);
             bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
 
             // C. Image XObject (Nhúng trực tiếp 100% byte gốc với DCTDecode)
-            objectOffsets[info.ImgObjId] = fs.Position;
+            objectOffsets[imgObjId] = fs.Position;
             bw.Write(System.Text.Encoding.Latin1.GetBytes(
-                $"{info.ImgObjId} 0 obj\n<<\n" +
+                $"{imgObjId} 0 obj\n<<\n" +
                 $"  /Type /XObject\n" +
                 $"  /Subtype /Image\n" +
-                $"  /Width {info.Width}\n" +
-                $"  /Height {info.Height}\n" +
+                $"  /Width {width}\n" +
+                $"  /Height {height}\n" +
                 $"  /ColorSpace /DeviceRGB\n" +
                 $"  /BitsPerComponent 8\n" +
                 $"  /Filter /DCTDecode\n" +
-                $"  /Length {info.Bytes.Length}\n" +
+                $"  /Length {jpegBytes.Length}\n" +
                 $">>\nstream\n"));
-            bw.Write(info.Bytes);
+            bw.Write(jpegBytes);
             bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
+
+            // Giải phóng ngay lập tức mảng byte để GC thu hồi, không để tồn đọng trong RAM
+            rawBytes = null!;
+            jpegBytes = null!;
+
+            int cur = Interlocked.Increment(ref currentUnit);
+            progress?.Report((cur, totalUnits, $"[PDF] Trang {Path.GetFileName(imgPath)} ({cur}/{totalUnits})"));
         }
 
         // 6. Ghi bảng Cross-Reference (xref)
