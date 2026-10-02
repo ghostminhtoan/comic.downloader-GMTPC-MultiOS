@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -318,7 +320,7 @@ public class ComicScraperService
 
             if (domain.Contains("damconuong"))
             {
-                var dcnImages = ExtractDamconuongChapterImages(html, chapterUrl);
+                var dcnImages = await ExtractDamconuongChapterImagesAsync(html, chapterUrl, ct).ConfigureAwait(false);
                 if (dcnImages.Count > 0) return dcnImages;
             }
 
@@ -1296,13 +1298,62 @@ public class ComicScraperService
         return imageUrls;
     }
 
-    private List<string> ExtractDamconuongChapterImages(string html, string chapterUrl)
+    private const string DamconuongRootKeyBase64Url = "YVdGuT8RjDWkeQjt7s7mv53smMpLrcKBuGMs8erg8Bs";
+
+    private static byte[] Base64UrlDecode(string input)
+    {
+        string padded = input.Replace('-', '+').Replace('_', '/');
+        switch (padded.Length % 4)
+        {
+            case 2: padded += "=="; break;
+            case 3: padded += "="; break;
+        }
+        return Convert.FromBase64String(padded);
+    }
+
+    private static string Base64UrlEncode(byte[] input)
+    {
+        return Convert.ToBase64String(input)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
+    private static bool IsDamconuongAdUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return true;
+        string lower = url.ToLowerInvariant();
+        if (lower.EndsWith(".gif") || lower.Contains(".gif?") || lower.Contains("/ads/") || lower.Contains("/banners/"))
+            return true;
+        if (lower.Contains("9922") || lower.Contains("au88") || lower.Contains("vsbet") || lower.Contains("boyka") || lower.Contains("dcn-gold"))
+            return true;
+        if (lower.Contains("quang-cao") || lower.Contains("quangcao") || lower.Contains("nhacai") || lower.Contains("bet"))
+            return true;
+        return false;
+    }
+
+    private async Task<List<string>> ExtractDamconuongChapterImagesAsync(string html, string chapterUrl, CancellationToken ct)
     {
         var imageUrls = new List<string>();
         if (string.IsNullOrWhiteSpace(html)) return imageUrls;
 
-        string contentHtml = string.Empty;
+        // 1. Kiểm tra cơ chế mã hóa động mới (data-cipher-path)
+        var cipherMatch = Regex.Match(html, @"data-cipher-path\s*=\s*[""'](?<path>[^""']+)[""']", RegexOptions.IgnoreCase);
+        if (cipherMatch.Success)
+        {
+            string cipherPath = cipherMatch.Groups["path"].Value.Trim();
+            if (!string.IsNullOrEmpty(cipherPath))
+            {
+                var decryptedImages = await DecryptDamconuongCipherPagesAsync(cipherPath, chapterUrl, ct).ConfigureAwait(false);
+                if (decryptedImages.Count > 0)
+                {
+                    return decryptedImages;
+                }
+            }
+        }
 
+        // 2. Fallback cho HTML tĩnh cũ (nếu có)
+        string contentHtml = string.Empty;
         var contentMatch = Regex.Match(html, @"<(?:div|article|section)[^>]*(?:id=[""']chapter-content[""']|class=[""'][^""']*(?:reading-detail|box_doc|chapter-content)[^""']*[""'])[^>]*>.*?</(?:div|article|section)>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
         if (contentMatch.Success) contentHtml = contentMatch.Value;
         else contentHtml = html;
@@ -1313,12 +1364,86 @@ public class ComicScraperService
         foreach (Match m in matches)
         {
             string url = WebUtility.HtmlDecode(m.Groups["url"].Value.Trim()).Replace("\\/", "/");
-            if (string.IsNullOrWhiteSpace(url) || url.StartsWith("data:") || IsIgnoredImage(url)) continue;
+            if (string.IsNullOrWhiteSpace(url) || url.StartsWith("data:") || IsIgnoredImage(url) || IsDamconuongAdUrl(url)) continue;
             string fullUrl = MakeAbsoluteUrl(url, chapterUrl);
             if (seen.Add(fullUrl)) imageUrls.Add(fullUrl);
         }
 
         return imageUrls;
+    }
+
+    private async Task<List<string>> DecryptDamconuongCipherPagesAsync(string cipherPath, string chapterUrl, CancellationToken ct)
+    {
+        var result = new List<string>();
+        try
+        {
+            byte[] rootKey = Base64UrlDecode(DamconuongRootKeyBase64Url);
+
+            using var hmacRoot = new HMACSHA256(rootKey);
+            byte[] key1 = hmacRoot.ComputeHash(Encoding.UTF8.GetBytes("tok"));
+            byte[] key2 = hmacRoot.ComputeHash(Encoding.UTF8.GetBytes("enc"));
+
+            using var hmacKey1 = new HMACSHA256(key1);
+            byte[] cipherPathBytes = Encoding.UTF8.GetBytes(cipherPath);
+            byte[] pathHash = hmacKey1.ComputeHash(cipherPathBytes);
+
+            byte[] tokenBytes = new byte[17];
+            tokenBytes[0] = 0x01;
+            Buffer.BlockCopy(pathHash, 0, tokenBytes, 1, 16);
+            string queryParam = Base64UrlEncode(tokenBytes);
+
+            var baseUri = new Uri(chapterUrl);
+            string apiUrl = $"{baseUri.Scheme}://{baseUri.Authority}/_c/mangas/{cipherPath}/pages?_={Uri.EscapeDataString(queryParam)}";
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+            req.Headers.Add("Accept", "application/json, text/plain, */*");
+            req.Headers.Add("X-Requested-With", "XMLHttpRequest");
+            req.Headers.Referrer = baseUri;
+
+            using var resp = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return result;
+
+            string respJson = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(respJson);
+            if (!doc.RootElement.TryGetProperty("e", out var eProp)) return result;
+
+            string? encryptedBase64Url = eProp.GetString();
+            if (string.IsNullOrEmpty(encryptedBase64Url)) return result;
+
+            using var hmacKey2 = new HMACSHA256(key2);
+            byte[] aesKey = hmacKey2.ComputeHash(Encoding.UTF8.GetBytes(queryParam));
+
+            byte[] cipherBytes = Base64UrlDecode(encryptedBase64Url);
+            if (cipherBytes.Length < 28) return result; // 12 (iv) + 16 (tag)
+
+            byte[] iv = cipherBytes[..12];
+            byte[] tag = cipherBytes[^16..];
+            byte[] ciphertext = cipherBytes[12..^16];
+            byte[] plaintext = new byte[ciphertext.Length];
+
+            using var aesGcm = new AesGcm(aesKey, 16);
+            aesGcm.Decrypt(iv, ciphertext, tag, plaintext, cipherPathBytes);
+
+            string decryptedJson = Encoding.UTF8.GetString(plaintext);
+            using var pagesDoc = JsonDocument.Parse(decryptedJson);
+            if (pagesDoc.RootElement.TryGetProperty("p", out var pArray) && pArray.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in pArray.EnumerateArray())
+                {
+                    string? pageUrl = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(pageUrl) && !IsDamconuongAdUrl(pageUrl))
+                    {
+                        result.Add(MakeAbsoluteUrl(pageUrl, chapterUrl));
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Decrypt failure fallback
+        }
+
+        return result;
     }
 
     private List<string> ExtractSayHentaiChapterImages(string html, string chapterUrl)

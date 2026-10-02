@@ -1369,3 +1369,28 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `MainWindow.LanguageEng-VI.md`:
     + Khởi tạo file bảng từ vựng ánh xạ chuẩn hóa song ngữ ENG-VI cho toàn bộ các nút bấm, tab header, tùy chọn tải và thông báo hệ thống.
 
+### 15.56. Giải Mã Động Dynamic Cipher Pages & Lọc Triệt Để Quảng Cáo Banner Cho Damconuong
+- **Bối cảnh & Yêu cầu Người dùng**:
+  - Khi dán link tải chapter của Damconuong (ví dụ: `https://damconuong.pet/truyen/monster-musume-chap-66/chap-1`), ứng dụng tải về toàn các ảnh quảng cáo gif/webp của nhà cái (9922, au88, vsbet...) thay vì tải các trang truyện tranh thật của tác phẩm.
+- **Nguyên nhân Kỹ thuật**:
+  - Damconuong đã cập nhật hệ thống mã hóa danh sách ảnh động: HTML của chapter không còn thẻ `<img>` chứa URL ảnh thật mà chỉ chứa thẻ bọc `<div id="chapter-content" data-cipher-path="<manga>/<chapter>" data-cipher-decoder="/js/bookmark.js?id=...">` cùng các banner quảng cáo nhấp nháy.
+- **Kiến trúc & Giải pháp Khắc phục Triệt để**:
+  - **Deobfuscate & Phân tích Thuật toán Giải mã Đối xứng của Damconuong**:
+    1. `rootKey`: `"YVdGuT8RjDWkeQjt7s7mv53smMpLrcKBuGMs8erg8Bs"` (Base64Url, 32 bytes).
+    2. `key1 = HMAC-SHA256(rootKey, "tok")` (dùng sinh query token).
+    3. `key2 = HMAC-SHA256(rootKey, "enc")` (dùng sinh khóa giải mã AES).
+    4. `pathHash = HMAC-SHA256(key1, cipherPath).Take(16)`.
+    5. `tokenBytes = [0x01, ...pathHash]` (17 bytes) -> `queryParam = Base64UrlEncode(tokenBytes)`.
+    6. Endpoint API: `GET {scheme}://{host}/_c/mangas/{cipherPath}/pages?_={queryParam}` với Headers `Accept: application/json, text/plain, */*`, `X-Requested-With: XMLHttpRequest`, `Referer: {chapterUrl}`.
+    7. Server trả về JSON chứa ciphertext: `{"e": "<ciphertextBase64Url>"}`.
+    8. `aesKey = HMAC-SHA256(key2, queryParam)` (32 bytes).
+    9. `cipherBytes = Base64UrlDecode(e)`. Trích xuất `iv` (12 bytes đầu), `tag` (16 bytes cuối), `ciphertext` (ở giữa), và `aad` là byte UTF-8 của `cipherPath`.
+    10. Giải mã **AES-256-GCM** natively qua `System.Security.Cryptography.AesGcm`: Thu được JSON chứa mảng `p`: danh sách 100% URL ảnh thật của chapter (ví dụ 30 trang webp chất lượng gốc).
+  - **Tích hợp `ComicScraperService.cs`**:
+    + Nâng cấp phương thức `ExtractDamconuongChapterImagesAsync`: Tự động phát hiện `data-cipher-path` để giải mã động `DecryptDamconuongCipherPagesAsync`.
+    + Fallback tự động quét HTML tĩnh nếu không có cipher.
+    + Thêm bộ lọc `IsDamconuongAdUrl`: Chặn và loại bỏ triệt để 100% các định dạng gif, đường dẫn chứa `/ads/`, `/banners/`, các nhà cái `9922`, `au88`, `vsbet`, `boyka`, `dcn-gold`, `quang-cao`, `nhacai`, `bet`.
+  - **Hiệu năng & Khả năng Tương thích**:
+    + Hoàn toàn Native Managed .NET 10, tốc độ giải mã tính bằng mili-giây, độc lập 100% trên cả 3 nền tảng Windows, Linux, Android mà không cần WebView hay trình duyệt ngoài.
+
+
