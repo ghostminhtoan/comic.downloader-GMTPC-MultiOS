@@ -1338,3 +1338,22 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       * Task con (`IsParallelSplitChild == true`): Thụt lề với ký hiệu rẽ nhánh `↳ ` màu hồng tím `#F472B6` nổi bật và badge `↳ NHÁNH: {range}`.
       * Truyện cha (`IsParallelSplitParent == true`): Hiển thị badge `📁 THƯ MỤC GỐC` màu xanh ngọc và nút Toggle `[+] Xem thêm {N} phần` / `[-] Thu gọn` màu xanh biển đậm sắc nét.
 
+### 15.55. Toggle Auto Scroll (10s/lần Thấp Nhất), Click Card Để Expand-Collapse, Tự Động Xóa Truyện Đã Tải Xong & Chuẩn Hóa Song Ngữ ENG-VI
+- **Bối cảnh & Yêu cầu Người dùng**:
+  1. *Toggle Auto Scroll*: Bổ sung tùy chọn tự động cuộn danh sách hàng đợi mỗi 10 giây một lần xuống vị trí của bộ truyện/task con đang ở trạng thái `Downloading` (Đang tải) nằm ở vị trí thấp nhất trong Queue.
+  2. *Click Card Để Expand - Collapse*: Với bất kỳ truyện nào đã tách chương (`IsParallelSplitParent == true`), người dùng có thể nhấp chuột/chạm trực tiếp vào bất kỳ vùng trống nào trên Card truyện cha để tự động thu gọn hoặc mở rộng danh sách các nhánh con.
+  3. *Tự Động Xóa Truyện Đã Tải Xong*: Bổ sung nút `[🧹 Xóa đã xong]` (`ClearCompletedCommand`) tự động lọc và xóa sạch toàn bộ các truyện và dải chương có trạng thái `Completed` / `Hoàn tất` khỏi Queue.
+  4. *Chuẩn Hóa Song Ngữ ENG-VI*: Tạo file `MainWindow.LanguageEng-VI.md` chuẩn hóa toàn bộ thuật ngữ giao diện song ngữ Tiếng Anh - Tiếng Việt cho toàn bộ ứng dụng.
+- **Kiến trúc & Giải pháp Khắc phục Triệt để**:
+  - `MainViewModel.cs`:
+    + Bổ sung thuộc tính `IsAutoScrollToActive` (mặc định `false`).
+    + Viết lệnh `ClearCompletedCommand`: Lọc tất cả các mục có `Status == "Completed" || Status == "Hoàn tất" || ProgressPercentage >= 100.0` và gọi `DeleteItem` xóa cascade an toàn.
+  - `MainView.axaml` & `MainView.axaml.cs`:
+    + Thêm CheckBox `📜 Auto Scroll (10s)` (`IsAutoScrollToActive`) trên WrapPanel thanh thiết lập tải.
+    + Thêm nút `[🧹 Xóa đã xong]` (`ClearCompletedCommand`) màu xanh ngọc tươi sáng trên thanh công cụ Queue.
+    + Đặt `x:Name="QueueScrollViewer"` cho danh sách hàng đợi.
+    + Tạo `DispatcherTimer` 10 giây trong `MainView.axaml.cs`: Tự động tìm item `Downloading` thấp nhất (`lowestIndex`) và tính toán tỷ lệ cuộn offset `QueueScrollViewer.Offset = new Vector(x, targetY)` cực kỳ mượt mà.
+    + Bổ sung handler `PointerPressed="OnQueueItemPointerPressed"` trên Card truyện: Tự động toggle `vm.ToggleSplitCollapse(item)` khi click vào card truyện cha (loại trừ các sự kiện click trên Button, CheckBox, TextBox, NumericUpDown).
+  - `MainWindow.LanguageEng-VI.md`:
+    + Khởi tạo file bảng từ vựng ánh xạ chuẩn hóa song ngữ ENG-VI cho toàn bộ các nút bấm, tab header, tùy chọn tải và thông báo hệ thống.
+

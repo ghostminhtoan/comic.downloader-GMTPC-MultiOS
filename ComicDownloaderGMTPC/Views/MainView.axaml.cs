@@ -429,5 +429,79 @@ public partial class MainView : UserControl
             v.AddHandler(PointerCaptureLostEvent, OnCaptureLost, RoutingStrategies.Tunnel);
             v.AddHandler(PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel);
         }
+
+        SetupAutoScrollTimer();
     }
-}
+
+    private Avalonia.Threading.DispatcherTimer? _autoScrollTimer;
+
+    private void SetupAutoScrollTimer()
+    {
+        _autoScrollTimer = new Avalonia.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(10)
+        };
+        _autoScrollTimer.Tick += (s, e) =>
+        {
+            try
+            {
+                if (DataContext is MainViewModel vm && vm.IsAutoScrollToActive)
+                {
+                    ScrollToLowestDownloadingItem(vm);
+                }
+            }
+            catch { }
+        };
+        _autoScrollTimer.Start();
+    }
+
+    private void ScrollToLowestDownloadingItem(MainViewModel vm)
+    {
+        var queueScrollViewer = this.FindControl<ScrollViewer>("QueueScrollViewer");
+        if (queueScrollViewer == null || vm.ComicBooks == null || vm.ComicBooks.Count == 0) return;
+
+        int lowestIndex = -1;
+        for (int i = vm.ComicBooks.Count - 1; i >= 0; i--)
+        {
+            var b = vm.ComicBooks[i];
+            if (b != null && (string.Equals(b.Status, "Downloading", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(b.Status, "Đang tải", StringComparison.OrdinalIgnoreCase)))
+            {
+                lowestIndex = i;
+                break;
+            }
+        }
+
+        if (lowestIndex >= 0)
+        {
+            double totalHeight = queueScrollViewer.Extent.Height;
+            if (totalHeight <= 0) return;
+
+            double ratio = (double)lowestIndex / Math.Max(1, vm.ComicBooks.Count);
+            double targetY = Math.Max(0, (totalHeight * ratio) - 40);
+
+            queueScrollViewer.Offset = new Vector(queueScrollViewer.Offset.X, targetY);
+        }
+    }
+
+    private void OnQueueItemPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Control ctrl && ctrl.DataContext is ComicDownloaderGMTPC.Models.ComicBookItem item && item.IsParallelSplitParent)
+        {
+            var src = e.Source as Control;
+            while (src != null && src != ctrl)
+            {
+                if (src is Button || src is CheckBox || src is TextBox || src is NumericUpDown)
+                {
+                    return;
+                }
+                src = src.Parent as Control;
+            }
+
+            if (DataContext is MainViewModel vm)
+            {
+                vm.ToggleSplitCollapse(item);
+            }
+        }
+    }
+}

@@ -212,6 +212,10 @@ public partial class MainViewModel : ViewModelBase
         _downloadEngine.AutoSplitHeight = Math.Max(100, value);
     }
 
+    // AUTO SCROLL TO LOWEST DOWNLOADING ITEM
+    [ObservableProperty]
+    private bool _isAutoScrollToActive = false;
+
     // AUTO SPLIT CHAPTERS (TỰ ĐỘNG TÁCH CHƯƠNG ĐỂ TẢI SONG SONG SIÊU NHANH)
     [ObservableProperty]
     private string _autoSplitChaptersSelection = "OFF";
@@ -1578,6 +1582,31 @@ public partial class MainViewModel : ViewModelBase
         ScanResults.Clear();
         UpdateStats();
         AddLog("INFO", "Đã xóa sạch hàng chờ tải.");
+    }
+
+    [RelayCommand]
+    public void ClearCompleted()
+    {
+        var completedItems = ComicBooks
+            .Where(b => b != null && (string.Equals(b.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(b.Status, "Hoàn tất", StringComparison.OrdinalIgnoreCase) ||
+                                     b.ProgressPercentage >= 100.0))
+            .ToList();
+
+        if (completedItems.Count == 0)
+        {
+            AddLog("INFO", "Không có truyện nào đã tải xong trong danh sách hàng đợi.");
+            return;
+        }
+
+        foreach (var item in completedItems)
+        {
+            DeleteItem(item);
+        }
+
+        ReindexComicBooks();
+        UpdateStats();
+        AddLog("SUCCESS", $"Đã tự động dọn dẹp {completedItems.Count} mục đã tải xong khỏi danh sách.");
     }
 
     // ==========================================

@@ -1217,6 +1217,7 @@
                                     <CheckBox IsChecked="{Binding IsAutoDownload}" Content="⚡ Tự động tải" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
                                     <CheckBox IsChecked="{Binding IsAutoRetry}" Content="🔁 Tự thử lại" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
                                     <CheckBox IsChecked="{Binding IsCompactRow}" Content="📏 Nén dòng" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
+                                    <CheckBox IsChecked="{Binding IsAutoScrollToActive}" Content="📜 Auto Scroll (10s)" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" Margin="0,0,10,4" ToolTip.Tip="Mỗi 10 giây tự động cuộn danh sách hàng đợi xuống vị trí truyện đang tải nằm ở vị trí thấp nhất" />
                                     <CheckBox IsChecked="{Binding IsAutoSplitLongImages}" Content="✂️ Tự cắt ảnh dài" FontSize="11" Foreground="#F43F5E" FontWeight="SemiBold" Margin="0,0,6,4" ToolTip.Tip="Tự động cắt ảnh có chiều cao lớn hơn ngưỡng chỉ định thành các mảnh nhỏ trong khi tải" />
                                     <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding IsAutoSplitLongImages}" Margin="0,0,0,4">
                                         <TextBlock Text="Cao:" FontSize="11" Foreground="#F43F5E" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -1242,16 +1243,17 @@
                                             <Button Command="{Binding CheckSelectedRowsCommand}" Content="☑ Tích" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
                                             <Button Command="{Binding CheckErrorsCommand}" Content="⚠️ Lỗi" Background="#1E293B" Foreground="#F43F5E" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
                                             <Button Command="{Binding CheckDuplicatesCommand}" Content="🔍 Trùng" Background="#1E293B" Foreground="#F59E0B" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
+                                            <Button Command="{Binding ClearCompletedCommand}" Content="🧹 Xóa đã xong" Background="#1E293B" Foreground="#10B981" FontWeight="Bold" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" ToolTip.Tip="Tự động dọn dẹp tất cả các bộ truyện và dải chương đã tải xong (Completed / Hoàn tất) khỏi hàng đợi" />
                                             <Button Command="{Binding DeleteSelectedCommand}" Content="🗑️ Xóa" Background="#1E293B" Foreground="#EF4444" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,0,2" />
                                         </WrapPanel>
                                     </Border>
 
                                     <!-- Danh sách các hàng truyện -->
-                                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260">
+                                    <ScrollViewer x:Name="QueueScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260">
                                         <ItemsControl ItemsSource="{Binding ComicBooks}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Margin="0,0,0,2" CornerRadius="4" ClipToBounds="True">
+                                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Margin="0,0,0,2" CornerRadius="4" ClipToBounds="True" PointerPressed="OnQueueItemPointerPressed">
                                                         <Grid RowDefinitions="Auto, Auto">
                                                             <!-- Hàng 0: Toàn bộ thông tin truyện & Nút thao tác -->
                                                             <Grid Grid.Row="0" ColumnDefinitions="Auto, Auto, Auto, *, Auto" VerticalAlignment="Center" Margin="8,6,8,4">
