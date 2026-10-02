@@ -54,3 +54,4 @@ File quy chuẩn bảng ánh xạ ngôn ngữ và giao diện song ngữ Tiếng
 1. **Hiển thị trực quan**: Mọi nhãn nút bấm và tiêu đề tab trên giao diện đều có icon minh họa kèm theo thuật ngữ tiếng Việt rõ ràng, ngắn gọn và dễ hiểu.
 2. **Tooltip song ngữ**: Các ToolTip hướng dẫn chi tiết hỗ trợ tiếng Việt đầy đủ, giúp người dùng trên mọi hệ điều hành (Windows, Linux, Android) thao tác thuận tiện.
 3. **Đồng bộ runtime**: `LanguageService.cs` tự động nạp bảng từ vựng từ `languages.md` và `MainWindow.LanguageEng-VI.md`, hỗ trợ chuyển đổi ngôn ngữ tức thì không cần khởi động lại ứng dụng.
+

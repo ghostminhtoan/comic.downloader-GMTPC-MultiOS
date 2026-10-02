@@ -494,6 +494,7 @@ public class FilePackerService
                 $"  /Type /Page\n" +
                 $"  /Parent {pagesObjId} 0 R\n" +
                 $"  /MediaBox [0 0 {width} {height}]\n" +
+                $"  /CropBox [0 0 {width} {height}]\n" +
                 $"  /Contents {contentObjId} 0 R\n" +
                 $"  /Resources <<\n" +
                 $"    /ProcSet [/PDF /ImageC /ImageI /ImageB]\n" +
@@ -528,6 +529,7 @@ public class FilePackerService
                     $"  /ColorSpace /DeviceRGB\n" +
                     $"  /BitsPerComponent 8\n" +
                     $"  /Filter /DCTDecode\n" +
+                    $"  /Interpolate false\n" +
                     $"  /Length {fileLength}\n" +
                     $">>\nstream\n"));
 
@@ -571,6 +573,7 @@ public class FilePackerService
                     $"  /BitsPerComponent {pngInfo.BitDepth}\n" +
                     $"  /Filter /FlateDecode\n" +
                     $"  /DecodeParms << /Predictor 15 /Columns {width} /Colors {pngInfo.Colors} /BitsPerComponent {pngInfo.BitDepth} >>\n" +
+                    $"  /Interpolate false\n" +
                     $"  /Length {pngInfo.TotalIdatLength}\n" +
                     $">>\nstream\n"));
 
@@ -590,6 +593,7 @@ public class FilePackerService
                     $"  /ColorSpace /DeviceRGB\n" +
                     $"  /BitsPerComponent 8\n" +
                     $"  /Filter /DCTDecode\n" +
+                    $"  /Interpolate false\n" +
                     $"  /Length {fallbackBytes!.Length}\n" +
                     $">>\nstream\n"));
 

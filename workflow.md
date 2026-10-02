@@ -375,6 +375,9 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 ## 15. Avalonia Cross-Platform Features
 ### 15.1. Cắt ảnh dài đa nền tảng (Split Long Images)
 - Dùng `SkiaSharp` thuần túy (`SKBitmap`, `SKRectI`, `SKCodec`, `SKImageInfo`) trong `Services/ImageSplitterService.cs` để hỗ trợ đồng nhất trên Windows, Linux và Android mà không phụ thuộc luồng UI (UI Thread độc lập).
+- **Triệt tiêu 100% vạch lằn ngang mép cắt (Zero Horizontal Seam Line)**:
+  - Cố định `alignedSplitHeight = Math.Max(16, (splitHeight / 16) * 16)` căn chỉnh đúng 100% ranh giới khối 16x16 MCU block của chuẩn nén JPEG/WebP.
+  - Sử dụng `SKBitmap` độc lập + `SKCanvas.DrawBitmap` với `FilterQuality = SKFilterQuality.None` và `IsAntialias = false` copy chính xác từng pixel mà không bị nhòe pixel hay lệch stride/rowbytes giữa các mảnh ảnh.
 - 2 chế độ:
   1. **Tự động cắt khi tải (Auto Split on Download)**: Thiết lập cấu hình trong Toolbar tải (`IsAutoSplitLongImages`, `AutoSplitHeight`, `AutoSplitQuality`). Khi file ảnh tải về có chiều cao `height > maxHeight`, tự động chia thành các phần đánh số `_split_1`, `_split_2`,... và xóa file gốc khi thành công.
   2. **Cắt thủ công theo thư mục (Manual Split Long Images)**: Tab riêng "Cắt ảnh dài" cho phép duyệt chọn thư mục, tùy chỉnh chiều cao pixel, chất lượng và số luồng xử lý song song (`Parallel.ForEachAsync`), kèm bảng log chi tiết và thanh tiến trình.

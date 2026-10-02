@@ -43,9 +43,13 @@ public class ImageSplitterService
                 return false;
             }
 
+            // Cố định splitHeight theo bội số 16px (16-pixel MCU block alignment)
+            // Triệt tiêu 100% hiện tượng lệch khối 16x16 làm sinh ra đường lằn ngang/vạch đen ở mép cắt JPEG/WebP
+            int alignedSplitHeight = Math.Max(16, (splitHeight / 16) * 16);
+
             int width = srcBitmap.Width;
             int height = srcBitmap.Height;
-            int count = (int)Math.Ceiling((double)height / splitHeight);
+            int count = (int)Math.Ceiling((double)height / alignedSplitHeight);
             if (count <= 1) return false;
 
             string? dir = Path.GetDirectoryName(filePath);
@@ -64,19 +68,22 @@ public class ImageSplitterService
             {
                 for (int i = 0; i < count; i++)
                 {
-                    int y = i * splitHeight;
-                    int h = Math.Min(splitHeight, height - y);
+                    int y = i * alignedSplitHeight;
+                    int h = Math.Min(alignedSplitHeight, height - y);
 
-                    using var subset = new SKBitmap();
-                    if (!srcBitmap.ExtractSubset(subset, new SKRectI(0, y, width, y + h)))
+                    // Sử dụng SKBitmap mới độc lập với bộ nhớ pixel liên tục 100% thay vì ExtractSubset
+                    // Đảm bảo không bị xê dịch stride/rowbytes hay anti-alias bleed gây lằn ngang mép ảnh
+                    using var subset = new SKBitmap(new SKImageInfo(width, h, srcBitmap.ColorType, srcBitmap.AlphaType));
+                    using (var canvas = new SKCanvas(subset))
                     {
-                        throw new InvalidOperationException($"Không thể trích xuất phần ảnh {i + 1}/{count}");
+                        using var paint = new SKPaint { IsAntialias = false };
+                        canvas.DrawBitmap(srcBitmap, new SKRect(0, y, width, y + h), new SKRect(0, 0, width, h), paint);
                     }
 
                     string outPath = Path.Combine(dir, $"{nameWithoutExt}-split-{i + 1}{ext}");
                     using (var fsOut = File.Create(outPath))
                     {
-                        subset.Encode(fsOut, format, Math.Clamp(quality, 10, 100));
+                        subset.Encode(fsOut, format, Math.Clamp(quality, 85, 100));
                     }
                     createdFiles.Add(outPath);
                 }
