@@ -398,6 +398,15 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   2. Trong mã nguồn HTML, tham số URL bị mã hóa thực thể HTML (`&amp;expires=`). Bắt buộc phải dùng `WebUtility.HtmlDecode` để khôi phục tham số query `&expires=`, nếu không CDN sẽ báo lỗi 403.
   3. Header Referer khi tải ảnh từ sayhentai / pubtranxzyzz bắt buộc phải là `https://sayhentai.cx/`.
 
+### 15.9. Damconuong.shop Auto-Redirect Domain & Authentication (Đăng Nhập & Domain Redirect)
+- **Tự động dò tìm domain redirect (Auto-Probe Redirect Domain)**:
+  - Tự động dò tìm URL gốc của `damconuong.shop` (ví dụ `https://mbpro.vip` hoặc `https://damconuong.store`) qua endpoint probe `https://damconuong.shop/the-loai/elf` với cờ `AllowAutoRedirect = true`.
+  - Tự động cập nhật `DomainDamconuongRedirectDomain` và áp dụng chuyển đổi domain cho toàn bộ liên kết trong Queue, Analyze và Downloader.
+  - Ô nhập liệu "🔄 REDIRECT DOMAIN" hiển thị trực quan trong Tab `damconuong.shop` cho phép người dùng tùy chỉnh hoặc xem domain đang áp dụng.
+- **Xác thực Đăng nhập Đa phương thức (HTTP POST Login & Cookie Persistence)**:
+  - `ComicScraperService.LoginDamconuongAsync()` thực hiện đăng nhập trực tiếp với thông tin tài khoản người dùng (`ghostminhtoan@gmail.com`), tự động nạp session cookie vào `CookieContainer` toàn cục.
+  - Tự động lưu thông tin đăng nhập vào `autosave_password.md` để tự động khôi phục khi khởi động ứng dụng.
+
 ### 15.4. Batch Image Enhancement (Dạng 2: Xử Lý & Tối Ưu Hóa Ảnh Hàng Loạt)
 - Hỗ trợ đầy đủ 5 bộ lọc hình ảnh bằng SkiaSharp thuần túy (chạy song song độc lập, đa nền tảng Windows, Linux, Android):
   1. **Độ tương phản (Contrast)**: -100% đến +100%

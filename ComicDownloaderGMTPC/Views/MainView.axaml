@@ -611,6 +611,9 @@
 
                                                 <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
                                                     <StackPanel Spacing="6">
+                                                        <TextBlock Text="🔄 REDIRECT DOMAIN (Tự động phát hiện hoặc nhập tay domain mới):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainDamconuongRedirectDomain}" PlaceholderText="Ví dụ: https://mbpro.vip (để trống nếu sử dụng https://damconuong.shop gốc)..." Height="32" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" Margin="0,0,0,4" />
+
                                                         <TextBlock Text="🔍 Phân Tích Thể Loại Dâm Cô Nương:" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
                                                         <TextBox Text="{Binding DomainDamconuongTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại Dâm Cô Nương (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
                                                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">

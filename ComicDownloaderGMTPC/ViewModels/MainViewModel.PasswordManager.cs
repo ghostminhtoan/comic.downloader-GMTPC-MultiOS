@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ComicDownloaderGMTPC.Services;
 
 namespace ComicDownloaderGMTPC.ViewModels;
 
@@ -74,10 +75,26 @@ public partial class MainViewModel
                     return;
                 }
 
-                PasswordManagerStatusText = CurrentLanguage == "VI" ? "Đang áp dụng tài khoản cho damconuong.shop..." : "Applying credentials for damconuong.shop...";
-                await Task.Delay(200);
-                PasswordManagerStatusText = CurrentLanguage == "VI" ? "Đã lưu và áp dụng thông tin đăng nhập damconuong.shop thành công!" : "Successfully saved and applied credentials for damconuong.shop!";
-                AddLog("INFO", "Password Manager: Đã áp dụng tài khoản cho damconuong.shop.");
+                PasswordManagerStatusText = CurrentLanguage == "VI" ? "Đang kiểm tra redirect & đăng nhập damconuong.shop..." : "Probing redirect & logging in to damconuong.shop...";
+                await EnsureDamconuongRedirectDomainAsync().ConfigureAwait(false);
+
+                string baseDomain = string.IsNullOrWhiteSpace(DomainDamconuongRedirectDomain) ? "https://damconuong.shop" : DomainDamconuongRedirectDomain;
+                bool loginSuccess = await ComicScraperService.Instance.LoginDamconuongAsync(baseDomain, DamconuongUsername, DamconuongPassword).ConfigureAwait(false);
+
+                if (loginSuccess)
+                {
+                    PasswordManagerStatusText = CurrentLanguage == "VI"
+                        ? $"Đã đăng nhập tài khoản '{DamconuongUsername}' cho {baseDomain} thành công!"
+                        : $"Successfully logged in as '{DamconuongUsername}' for {baseDomain}!";
+                    AddLog("SUCCESS", $"[damconuong.shop] Đã đăng nhập tài khoản '{DamconuongUsername}' thành công ({baseDomain})");
+                }
+                else
+                {
+                    PasswordManagerStatusText = CurrentLanguage == "VI"
+                        ? $"Đã áp dụng thông tin tài khoản '{DamconuongUsername}' cho {baseDomain}."
+                        : $"Applied credentials for '{DamconuongUsername}' ({baseDomain}).";
+                    AddLog("INFO", "Password Manager: Đã áp dụng tài khoản cho damconuong.shop.");
+                }
             }
             else if (string.Equals(domain, "mangadex.org", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(domain, "mangadex", StringComparison.OrdinalIgnoreCase))

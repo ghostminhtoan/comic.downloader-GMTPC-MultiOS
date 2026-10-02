@@ -18,11 +18,13 @@ public class ComicScraperService
     public static ComicScraperService Instance => _instance.Value;
 
     private readonly HttpClient _httpClient;
+    private readonly CookieContainer _cookieContainer = new();
 
     public ComicScraperService()
     {
         var handler = new SocketsHttpHandler
         {
+            CookieContainer = _cookieContainer,
             AutomaticDecompression = DecompressionMethods.All,
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
             ConnectTimeout = TimeSpan.FromSeconds(15)
@@ -34,6 +36,54 @@ public class ComicScraperService
         };
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
         _httpClient.DefaultRequestHeaders.Add("Accept-Language", "vi,en-US;q=0.9,en;q=0.8");
+    }
+
+    public async Task<bool> LoginDamconuongAsync(string baseUrl, string username, string password, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return false;
+
+        if (string.IsNullOrWhiteSpace(baseUrl)) baseUrl = "https://damconuong.shop";
+        baseUrl = baseUrl.TrimEnd('/');
+
+        string loginEndpoint = $"{baseUrl}/wp-login.php";
+
+        try
+        {
+            var content = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("log", username),
+                new KeyValuePair<string, string>("pwd", password),
+                new KeyValuePair<string, string>("rememberme", "forever"),
+                new KeyValuePair<string, string>("wp-submit", "Log In")
+            });
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, loginEndpoint) { Content = content };
+            req.Headers.Add("Referer", $"{baseUrl}/wp-login.php");
+
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (res.IsSuccessStatusCode || res.StatusCode == HttpStatusCode.Redirect || res.StatusCode == HttpStatusCode.Found)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            try
+            {
+                var contentAlt = new FormUrlEncodedContent(new[]
+                {
+                    new KeyValuePair<string, string>("username", username),
+                    new KeyValuePair<string, string>("password", password)
+                });
+
+                using var reqAlt = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/login") { Content = contentAlt };
+                using var resAlt = await _httpClient.SendAsync(reqAlt, ct).ConfigureAwait(false);
+                if (resAlt.IsSuccessStatusCode) return true;
+            }
+            catch { }
+        }
+
+        return true;
     }
 
     public static bool IsCategoryOrTagUrl(string url, string domain)
@@ -685,7 +735,7 @@ public class ComicScraperService
         string[] segs = uri.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
         string bookSlug = segs.Length > 1 ? segs[1] : (segs.Length > 0 ? segs[0] : string.Empty);
 
-        string pattern = @"href\s*=\s*[""'](?<href>(?:(?:https?:)?\/\/(?:www\.)?damconuong\.[^\/""']+)?\/truyen\/" + Regex.Escape(bookSlug) + @"\/(?<chapter>[^""'?#>]+)(?:\.html)?)[""']";
+        string pattern = @"href\s*=\s*[""'](?<href>(?:(?:https?:)?\/\/(?:www\.)?(?:damconuong|mbpro)\.[^\/""']+)?\/truyen\/" + Regex.Escape(bookSlug) + @"\/(?<chapter>[^""'?#>]+)(?:\.html)?)[""']";
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (Match m in Regex.Matches(html, pattern, RegexOptions.IgnoreCase))
