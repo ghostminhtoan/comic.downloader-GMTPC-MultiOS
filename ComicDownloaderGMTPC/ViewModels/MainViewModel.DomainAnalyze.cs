@@ -43,6 +43,18 @@ public partial class MainViewModel
     [ObservableProperty]
     private string _domainDamconuongRedirectDomain = string.Empty;
 
+    partial void OnDomainDamconuongRedirectDomainChanged(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            string redirectBase = NormalizeDamconuongRedirectInput(value);
+            if (!string.IsNullOrWhiteSpace(redirectBase))
+            {
+                DomainDamconuongTagUrl = ApplyDamconuongRedirectDomain(DomainDamconuongTagUrl);
+            }
+        }
+    }
+
     [ObservableProperty]
     private string _domainSayhentaiTagUrl = "https://sayhentai.cx/genre/romance";
 
@@ -501,6 +513,37 @@ public partial class MainViewModel
     // ==========================================
     private int _damconuongRedirectProbeStarted = 0;
 
+    public void CheckAndAutoExtractDamconuongRedirectDomain(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        if (!url.Contains("damconuong", StringComparison.OrdinalIgnoreCase) &&
+            !url.Contains("mbpro", StringComparison.OrdinalIgnoreCase)) return;
+
+        try
+        {
+            string candidate = url.Trim();
+            if (!candidate.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !candidate.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                candidate = "https://" + candidate;
+            }
+            var uri = new Uri(candidate);
+            string host = uri.Host.ToLowerInvariant();
+            if (host.StartsWith("www.")) host = host.Substring(4);
+
+            string detectedBase = $"{uri.Scheme}://{host}";
+            if (string.IsNullOrWhiteSpace(DomainDamconuongRedirectDomain) ||
+                (!host.Equals("damconuong.shop", StringComparison.OrdinalIgnoreCase) &&
+                 !DomainDamconuongRedirectDomain.Contains(host, StringComparison.OrdinalIgnoreCase)))
+            {
+                DomainDamconuongRedirectDomain = detectedBase;
+                DomainDamconuongTagUrl = ApplyDamconuongRedirectDomain(DomainDamconuongTagUrl);
+                AddLog("INFO", $"[damconuong.shop] Đã tự động ghi nhận redirect domain từ liên kết: {detectedBase}");
+            }
+        }
+        catch {}
+    }
+
     public string ApplyDamconuongRedirectDomain(string url)
     {
         if (string.IsNullOrWhiteSpace(url)) return url;
@@ -558,7 +601,9 @@ public partial class MainViewModel
 
     public async Task EnsureDamconuongRedirectDomainAsync()
     {
-        if (!string.IsNullOrWhiteSpace(NormalizeDamconuongRedirectInput(DomainDamconuongRedirectDomain)))
+        string currentRedirect = NormalizeDamconuongRedirectInput(DomainDamconuongRedirectDomain);
+        if (!string.IsNullOrWhiteSpace(currentRedirect) &&
+            !currentRedirect.Contains("damconuong.shop", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -580,32 +625,44 @@ public partial class MainViewModel
 
     public async Task RefreshDamconuongRedirectDomainAsync()
     {
-        const string probeUrl = "https://damconuong.shop/the-loai/elf";
-        try
+        string[] candidateProbeUrls = new[]
         {
-            using var handler = new System.Net.Http.HttpClientHandler { AllowAutoRedirect = true };
-            using var client = new System.Net.Http.HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            "https://damconuong.shop/the-loai/elf",
+            "https://damconuong.pet/the-loai/elf",
+            "https://damconuong.store/the-loai/elf",
+            "https://mbpro.vip/the-loai/elf"
+        };
 
-            using var res = await client.GetAsync(probeUrl).ConfigureAwait(false);
-            var finalUri = res.RequestMessage?.RequestUri;
-            if (finalUri != null && !string.Equals(finalUri.Host, "damconuong.shop", StringComparison.OrdinalIgnoreCase))
-            {
-                string resolvedBaseUrl = $"{finalUri.Scheme}://{finalUri.Host}";
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    if (string.IsNullOrWhiteSpace(DomainDamconuongRedirectDomain))
-                    {
-                        DomainDamconuongRedirectDomain = resolvedBaseUrl;
-                        DomainDamconuongTagUrl = ApplyDamconuongRedirectDomain(DomainDamconuongTagUrl);
-                        AddLog("INFO", $"[damconuong.shop redirect] Đã tự động phát hiện domain redirect: {resolvedBaseUrl}");
-                    }
-                });
-            }
-        }
-        catch (Exception ex)
+        foreach (var probeUrl in candidateProbeUrls)
         {
-            AddLog("INFO", $"[damconuong.shop redirect probe] Không thể tự động kiểm tra redirect: {ex.Message}");
+            try
+            {
+                using var handler = new System.Net.Http.HttpClientHandler { AllowAutoRedirect = true };
+                using var client = new System.Net.Http.HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+                using var res = await client.GetAsync(probeUrl).ConfigureAwait(false);
+                var finalUri = res.RequestMessage?.RequestUri;
+                if (res.IsSuccessStatusCode || (int)res.StatusCode < 400)
+                {
+                    string targetHost = finalUri?.Host ?? new Uri(probeUrl).Host;
+                    if (!string.IsNullOrWhiteSpace(targetHost))
+                    {
+                        string resolvedBaseUrl = $"https://{targetHost}";
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            DomainDamconuongRedirectDomain = resolvedBaseUrl;
+                            DomainDamconuongTagUrl = ApplyDamconuongRedirectDomain("https://damconuong.shop/the-loai/elf");
+                            AddLog("SUCCESS", $"[damconuong.shop redirect] Đã tự động phát hiện domain redirect: {resolvedBaseUrl}");
+                        });
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("INFO", $"[damconuong.shop redirect probe] Probe {probeUrl}: {ex.Message}");
+            }
         }
     }
 }

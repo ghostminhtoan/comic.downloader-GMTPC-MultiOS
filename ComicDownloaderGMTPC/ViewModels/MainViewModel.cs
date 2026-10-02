@@ -55,6 +55,11 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string _urlInput = string.Empty;
 
+    partial void OnUrlInputChanged(string value)
+    {
+        CheckAndAutoExtractDamconuongRedirectDomain(value);
+    }
+
     [ObservableProperty]
     private string _modeSelection = "Single comic";
 
