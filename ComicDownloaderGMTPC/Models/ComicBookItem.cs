@@ -75,6 +75,36 @@ public partial class ComicBookItem : ObservableObject
     [ObservableProperty]
     private string _localDirectory = string.Empty;
 
+    // Phân cấp Tree Folder cho tính năng Tự động tách chương (Auto Split Chapters)
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasParallelSplitChildren))]
+    [NotifyPropertyChangedFor(nameof(ParallelSplitToggleText))]
+    private bool _isParallelSplitParent = false;
+
+    [ObservableProperty]
+    private bool _isParallelSplitChild = false;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ParallelSplitToggleText))]
+    private bool _isParallelSplitCollapsed = false;
+
+    [ObservableProperty]
+    private string _parallelSplitParentUrl = string.Empty;
+
+    public List<ComicBookItem> ParallelSplitChildren { get; set; } = new();
+
+    public bool HasParallelSplitChildren => IsParallelSplitParent && ParallelSplitChildren != null && ParallelSplitChildren.Count > 0;
+
+    public string ParallelSplitToggleText =>
+        !HasParallelSplitChildren ? string.Empty :
+        (IsParallelSplitCollapsed ? $"[+] Xem thêm {ParallelSplitChildren.Count} phần" : "[-] Thu gọn");
+
+    public void NotifySplitHierarchyChanged()
+    {
+        OnPropertyChanged(nameof(HasParallelSplitChildren));
+        OnPropertyChanged(nameof(ParallelSplitToggleText));
+    }
+
     public List<ChapterItem> Chapters { get; set; } = new();
 
     partial void OnProgressPercentageChanged(double value)

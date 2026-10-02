@@ -216,13 +216,61 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string _autoSplitChaptersSelection = "OFF";
 
+    /// <summary>
+    /// Gộp sạch toàn bộ các task con đã tách về lại truyện cha ban đầu, xóa bỏ hoàn toàn dải task con cũ.
+    /// </summary>
+    public void CollapseAllSplitBooks()
+    {
+        // 1. Tìm tất cả các task con trong ComicBooks và xóa sạch
+        var childItems = ComicBooks
+            .Where(b => b != null && (b.IsParallelSplitChild || !string.IsNullOrEmpty(b.ParallelSplitParentUrl)))
+            .ToList();
+
+        foreach (var child in childItems)
+        {
+            ComicBooks.Remove(child);
+        }
+
+        // 2. Khôi phục tất cả các truyện cha về trạng thái nguyên bản ban đầu
+        foreach (var parent in ComicBooks)
+        {
+            if (parent != null && (parent.IsParallelSplitParent || (parent.ParallelSplitChildren != null && parent.ParallelSplitChildren.Count > 0)))
+            {
+                parent.IsParallelSplitParent = false;
+                parent.IsParallelSplitChild = false;
+                parent.IsParallelSplitCollapsed = false;
+                parent.ParallelSplitParentUrl = string.Empty;
+                if (parent.ParallelSplitChildren != null)
+                {
+                    parent.ParallelSplitChildren.Clear();
+                }
+                parent.IsChecked = true;
+                parent.Status = "Waiting";
+                parent.ChapterSelectionText = string.Empty;
+                parent.DetailProgressText = "Sẵn sàng";
+                parent.NotifySplitHierarchyChanged();
+            }
+        }
+
+        ReindexComicBooks();
+        UpdateStats();
+    }
+
     [RelayCommand]
     public async Task ApplyAutoSplitChaptersAsync()
     {
-        if (string.Equals(AutoSplitChaptersSelection, "OFF", StringComparison.OrdinalIgnoreCase) ||
-            !int.TryParse(AutoSplitChaptersSelection, out int bucketSize) || bucketSize <= 0)
+        // Luôn luôn hoàn nguyên, gộp sạch các task con cũ trước để không bao giờ bị chồng dải chương
+        CollapseAllSplitBooks();
+
+        if (string.Equals(AutoSplitChaptersSelection, "OFF", StringComparison.OrdinalIgnoreCase))
         {
-            AddLog("WARN", "Vui lòng chọn một ngưỡng chia chương cụ thể (50, 100,...) thay vì OFF.");
+            AddLog("INFO", "Đã hủy tách chương và khôi phục toàn bộ truyện trong danh sách về trạng thái nguyên bản ban đầu.");
+            return;
+        }
+
+        if (!int.TryParse(AutoSplitChaptersSelection, out int bucketSize) || bucketSize <= 0)
+        {
+            AddLog("WARN", "Vui lòng chọn một ngưỡng chia chương cụ thể (50, 100, 200,...) hoặc OFF.");
             return;
         }
 
@@ -237,12 +285,53 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Thu gọn hoặc mở rộng danh sách các nhánh con của truyện cha trên giao diện
+    /// </summary>
+    [RelayCommand]
+    public void ToggleSplitCollapse(ComicBookItem? parent)
+    {
+        if (parent == null || !parent.HasParallelSplitChildren) return;
+
+        int parentIndex = ComicBooks.IndexOf(parent);
+        if (parentIndex < 0) return;
+
+        parent.IsParallelSplitCollapsed = !parent.IsParallelSplitCollapsed;
+        parent.NotifySplitHierarchyChanged();
+
+        if (parent.IsParallelSplitCollapsed)
+        {
+            // Thu gọn: Gỡ tất cả các task con ra khỏi danh sách hiển thị
+            foreach (var child in parent.ParallelSplitChildren)
+            {
+                ComicBooks.Remove(child);
+            }
+            AddLog("INFO", $"Đã thu gọn {parent.ParallelSplitChildren.Count} nhánh con của truyện '{parent.Title}'.");
+        }
+        else
+        {
+            // Mở rộng: Chèn lại tất cả các task con ngay phía sau truyện cha
+            for (int i = 0; i < parent.ParallelSplitChildren.Count; i++)
+            {
+                var child = parent.ParallelSplitChildren[i];
+                if (!ComicBooks.Contains(child))
+                {
+                    ComicBooks.Insert(parentIndex + 1 + i, child);
+                }
+            }
+            AddLog("INFO", $"Đã mở rộng {parent.ParallelSplitChildren.Count} nhánh con của truyện '{parent.Title}'.");
+        }
+
+        ReindexComicBooks();
+        UpdateStats();
+    }
+
     public async Task<int> SplitEligibleBooksAsync(int bucketSize)
     {
         if (bucketSize <= 0 || ComicBooks.Count == 0) return 0;
 
         var itemsToSplit = ComicBooks
-            .Where(b => b != null && string.IsNullOrWhiteSpace(b.ChapterSelectionText) && b.Status != "Completed" && b.Status != "Hoàn tất")
+            .Where(b => b != null && !b.IsParallelSplitChild && string.IsNullOrWhiteSpace(b.ChapterSelectionText) && b.Status != "Completed" && b.Status != "Hoàn tất")
             .ToList();
 
         if (itemsToSplit.Count == 0) return 0;
@@ -287,11 +376,15 @@ public partial class MainViewModel : ViewModelBase
                     if (insertIndex >= 0)
                     {
                         // Đánh dấu item cha
+                        book.IsParallelSplitParent = true;
+                        book.IsParallelSplitChild = false;
+                        book.IsParallelSplitCollapsed = false; // Mặc định mở rộng để thấy rõ các task con
                         book.IsChecked = false;
                         book.Status = "Stopped";
                         book.DetailProgressText = $"Đã tách thành {ranges.Count} dải chương";
 
                         // Tạo các task con
+                        var children = new List<ComicBookItem>();
                         int addedCount = 0;
                         foreach (var range in ranges)
                         {
@@ -306,7 +399,10 @@ public partial class MainViewModel : ViewModelBase
                                 Status = "Waiting",
                                 DetailProgressText = $"Chờ tải (Chương {range})",
                                 IsChecked = true,
-                                LocalDirectory = book.LocalDirectory
+                                LocalDirectory = book.LocalDirectory,
+                                IsParallelSplitChild = true,
+                                IsParallelSplitParent = false,
+                                ParallelSplitParentUrl = book.Url
                             };
 
                             var filter = ChapterRangeParser.Parse(range);
@@ -321,9 +417,13 @@ public partial class MainViewModel : ViewModelBase
                                 clone.TotalChapters = book.TotalChapters;
                             }
 
+                            children.Add(clone);
                             addedCount++;
                             ComicBooks.Insert(insertIndex + addedCount, clone);
                         }
+
+                        book.ParallelSplitChildren = children;
+                        book.NotifySplitHierarchyChanged();
 
                         totalSplit++;
                         AddLog("INFO", $"Đã tách '{book.Title}' ({totalChaps} chaps) thành {ranges.Count} task tải song song ({string.Join(", ", ranges.Take(3))}...).");
@@ -334,10 +434,7 @@ public partial class MainViewModel : ViewModelBase
 
         if (totalSplit > 0)
         {
-            for (int i = 0; i < ComicBooks.Count; i++)
-            {
-                ComicBooks[i].Index = i + 1;
-            }
+            ReindexComicBooks();
             UpdateStats();
         }
 
@@ -1321,11 +1418,10 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        // Tự động tách chương nếu người dùng chọn ngưỡng khác OFF
-        if (!string.Equals(AutoSplitChaptersSelection, "OFF", StringComparison.OrdinalIgnoreCase) &&
-            int.TryParse(AutoSplitChaptersSelection, out int bucketSize) && bucketSize > 0)
+        // Tự động mở rộng các truyện đang thu gọn để hiển thị thanh tiến trình các task con đang tải song song
+        foreach (var book in ComicBooks.Where(b => b.IsParallelSplitParent && b.IsParallelSplitCollapsed).ToList())
         {
-            await SplitEligibleBooksAsync(bucketSize);
+            ToggleSplitCollapse(book);
         }
 
         AddLog("INFO", $"Bắt đầu tải {ComicBooks.Count(b => b.IsChecked)} truyện...");
@@ -1336,11 +1432,10 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task DownloadNewAsync()
     {
-        // Tự động tách chương nếu người dùng chọn ngưỡng khác OFF
-        if (!string.Equals(AutoSplitChaptersSelection, "OFF", StringComparison.OrdinalIgnoreCase) &&
-            int.TryParse(AutoSplitChaptersSelection, out int bucketSize) && bucketSize > 0)
+        // Tự động mở rộng các truyện đang thu gọn để hiển thị thanh tiến trình các task con đang tải song song
+        foreach (var book in ComicBooks.Where(b => b.IsParallelSplitParent && b.IsParallelSplitCollapsed).ToList())
         {
-            await SplitEligibleBooksAsync(bucketSize);
+            ToggleSplitCollapse(book);
         }
 
         var newItems = ComicBooks.Where(b => b.IsChecked && (b.Status == "Waiting" || b.Status == "Chờ tải" || string.IsNullOrEmpty(b.Status))).ToList();
@@ -1506,27 +1601,114 @@ public partial class MainViewModel : ViewModelBase
             toRemove.Add(SelectedComic);
         }
 
+        if (toRemove.Count == 0) return;
+
+        // Tập hợp toàn bộ các mục cần xóa, bao gồm cascade xóa các task con nếu cha bị xóa
+        var allToRemove = new HashSet<ComicBookItem>(toRemove);
         foreach (var b in toRemove)
+        {
+            if (b.IsParallelSplitParent && b.ParallelSplitChildren != null)
+            {
+                foreach (var child in b.ParallelSplitChildren)
+                {
+                    allToRemove.Add(child);
+                }
+            }
+        }
+
+        // Xóa khỏi danh sách ComicBooks
+        foreach (var b in allToRemove)
         {
             ComicBooks.Remove(b);
         }
 
+        // Rà soát lại các truyện cha còn lại xem có task con nào bị xóa lẻ tẻ không
+        foreach (var parent in ComicBooks.Where(b => b.IsParallelSplitParent).ToList())
+        {
+            if (parent.ParallelSplitChildren != null)
+            {
+                parent.ParallelSplitChildren.RemoveAll(c => allToRemove.Contains(c));
+                if (parent.ParallelSplitChildren.Count == 0)
+                {
+                    parent.IsParallelSplitParent = false;
+                    parent.IsParallelSplitChild = false;
+                    parent.IsParallelSplitCollapsed = false;
+                    parent.ParallelSplitParentUrl = string.Empty;
+                    parent.IsChecked = true;
+                    parent.Status = "Waiting";
+                    parent.ChapterSelectionText = string.Empty;
+                    parent.DetailProgressText = "Sẵn sàng";
+                }
+                parent.NotifySplitHierarchyChanged();
+            }
+        }
+
         ReindexComicBooks();
         UpdateStats();
-        AddLog("INFO", $"Đã xóa {toRemove.Count} truyện khỏi danh sách.");
+        AddLog("INFO", $"Đã xóa {allToRemove.Count} mục khỏi danh sách.");
     }
 
     [RelayCommand]
     public void DeleteItem(ComicBookItem? item)
     {
         var target = item ?? SelectedComic;
-        if (target != null)
+        if (target == null) return;
+
+        if (target.IsParallelSplitParent)
+        {
+            // Xóa cascade truyện cha cùng tất cả các task con của nó
+            if (target.ParallelSplitChildren != null)
+            {
+                foreach (var child in target.ParallelSplitChildren)
+                {
+                    ComicBooks.Remove(child);
+                }
+                target.ParallelSplitChildren.Clear();
+            }
+
+            // Dọn sạch bất kỳ task con nào còn sót trong ComicBooks cùng link/Url
+            var leftoverChildren = ComicBooks.Where(b => b.IsParallelSplitChild && (b.Url == target.Url || b.ParallelSplitParentUrl == target.Url)).ToList();
+            foreach (var c in leftoverChildren)
+            {
+                ComicBooks.Remove(c);
+            }
+
+            ComicBooks.Remove(target);
+            AddLog("INFO", $"Đã xóa truyện gốc '{target.Title}' cùng toàn bộ các nhánh con đã tách.");
+        }
+        else if (target.IsParallelSplitChild)
+        {
+            // Tìm truyện cha tương ứng
+            var parent = ComicBooks.FirstOrDefault(b => b.IsParallelSplitParent && (b.Url == target.Url || b.Url == target.ParallelSplitParentUrl));
+            if (parent != null && parent.ParallelSplitChildren != null)
+            {
+                parent.ParallelSplitChildren.Remove(target);
+                if (parent.ParallelSplitChildren.Count == 0)
+                {
+                    // Nếu đã xóa hết tất cả các task con thì khôi phục truyện cha về bình thường
+                    parent.IsParallelSplitParent = false;
+                    parent.IsParallelSplitChild = false;
+                    parent.IsParallelSplitCollapsed = false;
+                    parent.ParallelSplitParentUrl = string.Empty;
+                    parent.IsChecked = true;
+                    parent.Status = "Waiting";
+                    parent.ChapterSelectionText = string.Empty;
+                    parent.DetailProgressText = "Sẵn sàng";
+                }
+                parent.NotifySplitHierarchyChanged();
+            }
+
+            ComicBooks.Remove(target);
+            AddLog("INFO", $"Đã xóa nhánh chương '{target.ChapterSelectionText}' của truyện '{target.Title}'.");
+        }
+        else
         {
             ComicBooks.Remove(target);
-            ReindexComicBooks();
-            UpdateStats();
             AddLog("INFO", $"Đã xóa '{target.Title}' khỏi danh sách.");
         }
+
+        ReindexComicBooks();
+        UpdateStats();
     }
 
     [RelayCommand]

@@ -1254,16 +1254,36 @@
                                                     <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Margin="0,0,0,2" CornerRadius="4" ClipToBounds="True">
                                                         <Grid RowDefinitions="Auto, Auto">
                                                             <!-- Hàng 0: Toàn bộ thông tin truyện & Nút thao tác -->
-                                                            <Grid Grid.Row="0" ColumnDefinitions="Auto, Auto, *, Auto" VerticalAlignment="Center" Margin="8,6,8,4">
-                                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" Margin="0,0,6,0" VerticalAlignment="Center" />
-                                                                <TextBlock Grid.Column="1" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" Width="24" VerticalAlignment="Center" />
+                                                            <Grid Grid.Row="0" ColumnDefinitions="Auto, Auto, Auto, *, Auto" VerticalAlignment="Center" Margin="8,6,8,4">
+                                                                <TextBlock Grid.Column="0" Text="↳ " IsVisible="{Binding IsParallelSplitChild}"
+                                                                           Foreground="#F472B6" FontWeight="ExtraBold" FontSize="14"
+                                                                           VerticalAlignment="Center" Margin="14,0,2,0" ToolTip.Tip="Nhánh con tách chương" />
+                                                                <CheckBox Grid.Column="1" IsChecked="{Binding IsChecked}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                                                <TextBlock Grid.Column="2" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" Width="24" VerticalAlignment="Center" />
 
                                                                 <!-- Thông tin truyện & Tiến trình -->
-                                                                <StackPanel Grid.Column="2" Margin="4,0,8,0" VerticalAlignment="Center" Spacing="3">
+                                                                <StackPanel Grid.Column="3" Margin="4,0,8,0" VerticalAlignment="Center" Spacing="3">
                                                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                                                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="11" TextTrimming="CharacterEllipsis" />
                                                                         <Border IsVisible="{Binding IsDuplicate}" Background="#78350F" CornerRadius="2" Padding="3,1" VerticalAlignment="Center">
                                                                             <TextBlock Text="TRÙNG" FontSize="8" FontWeight="Bold" Foreground="#FDE047" />
+                                                                        </Border>
+                                                                        <!-- Badge Thư mục gốc cho truyện cha đã tách -->
+                                                                        <Border IsVisible="{Binding IsParallelSplitParent}" Background="#064E3B" BorderBrush="#059669" BorderThickness="1" CornerRadius="2" Padding="4,1" VerticalAlignment="Center">
+                                                                            <TextBlock Text="📁 THƯ MỤC GỐC" FontSize="8" FontWeight="Bold" Foreground="#34D399" />
+                                                                        </Border>
+                                                                        <!-- Nút Thu gọn / Mở rộng cây thư mục con -->
+                                                                        <Button IsVisible="{Binding HasParallelSplitChildren}"
+                                                                                Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleSplitCollapseCommand}"
+                                                                                CommandParameter="{Binding .}"
+                                                                                Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
+                                                                                Padding="6,1" Height="20" CornerRadius="3"
+                                                                                ToolTip.Tip="Thu gọn hoặc mở rộng danh sách các nhánh con đã tách để theo dõi">
+                                                                            <TextBlock Text="{Binding ParallelSplitToggleText}" FontSize="8" FontWeight="ExtraBold" VerticalAlignment="Center" />
+                                                                        </Button>
+                                                                        <!-- Badge Nhánh con cho task con -->
+                                                                        <Border IsVisible="{Binding IsParallelSplitChild}" Background="#831843" BorderBrush="#DB2777" BorderThickness="1" CornerRadius="2" Padding="4,1" VerticalAlignment="Center">
+                                                                            <TextBlock Text="{Binding ChapterSelectionText, StringFormat='{}↳ NHÁNH: {0}'}" FontSize="8" FontWeight="Bold" Foreground="#F472B6" />
                                                                         </Border>
                                                                     </StackPanel>
 
@@ -1285,7 +1305,7 @@
                                                                 </StackPanel>
 
                                                                 <!-- Nút thao tác hàng -->
-                                                                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                                                                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                                                                     <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenBookFolderCommand}"
                                                                             CommandParameter="{Binding .}" ToolTip.Tip="Mở thư mục"
                                                                             Background="#1E293B" Foreground="#38BDF8" Padding="4,2" FontSize="9" CornerRadius="3">

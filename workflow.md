@@ -1315,3 +1315,25 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `MainView.axaml`:
     + Tab Download / Queue: Thêm cụm điều khiển `⚡ TỰ ĐỘNG TÁCH CHƯƠNG:` + ComboBox (OFF, 50, 100, 200, 300, 400) + Nút `ÁP` nền xanh chữ nổi bật trong WrapPanel thanh thiết lập tải.
     + Tab Source (Analyze Panel): Mở rộng toàn bộ `Width="80"` lên `Width="105"` cho cả 2 ô `DomainPageFrom` và `DomainPageTo` trên tất cả 13 domain (`truyenqq`, `nettruyen`, `loppy`, `thuviensach`, `mangadex`, `daomeoden`, `vihentai`, `damconuong`, `sayhentai`, `hentai2read`, `hitomi`, `hentaiforce`, `ehentai`), đảm bảo hiển thị thoải mái 3-4 chữ số mà vẫn giữ nguyên bố cục responsive không tràn viền trên Android.
+
+### 15.54. Hoàn Thiện Cấu Trúc Tree Folder (Collapse / Expand), Re-Split Tự Động Gộp Và Xóa Cascade Cho Tự Động Tách Chương
+- **Bối cảnh & Các Bug Được Khắc Phục**:
+  1. *Bug 1 (Tree folder Collapse / Expand)*: Các truyện đã tách chương hiển thị phẳng lì, không có cây phân cấp cha - con để người dùng bấm `[-] Thu gọn` / `[+] Xem thêm X phần` nhằm ẩn/hiện các task con cho giao diện gọn gàng.
+  2. *Bug 2 (State ô nhiễm khi xóa & Get link lại)*: Khi truyện đang được tách chương mà người dùng xóa khỏi Queue, sau đó Get Link lại URL đó thì truyện bị bug tự động bung lại các chương đã tách do lệnh auto-split ngầm trong `DownloadAllAsync` / `DownloadNewAsync` và hàm `DeleteItem` không xóa các task con.
+  3. *Bug 3 (Re-split gộp lại trước khi tách ngưỡng mới hoặc khi chọn OFF)*: Khi đã tách chương ở ngưỡng cũ (ví dụ 50 chap ra `1-50`, `51-100`...), nếu người dùng đổi sang ngưỡng khác (ví dụ 100 chap) hoặc `OFF` rồi nhấn "ÁP", hệ thống không gộp lại các task con cũ mà lại chèn thêm các task mới (`1-100`, `101-200`) chồng lên task cũ, gây duplicate dải chương.
+- **Kiến trúc & Giải pháp Khắc phục Triệt để**:
+  - `ComicBookItem.cs`:
+    + Bổ sung các thuộc tính phân cấp tree folder: `IsParallelSplitParent`, `IsParallelSplitChild`, `IsParallelSplitCollapsed`, `ParallelSplitParentUrl`, và danh sách `ParallelSplitChildren`.
+    + Bổ sung getter `HasParallelSplitChildren` và `ParallelSplitToggleText`: Nếu đang thu gọn (`IsParallelSplitCollapsed == true`) thì hiển thị `[+] Xem thêm {N} phần`, nếu đang mở rộng thì hiển thị `[-] Thu gọn`.
+    + Tích hợp source generator `[NotifyPropertyChangedFor]` và hàm `NotifySplitHierarchyChanged()`.
+  - `MainViewModel.cs`:
+    + **Cơ chế Re-Collapse Triệt để (`CollapseAllSplitBooks`)**: Quét và gỡ sạch toàn bộ các task con (`IsParallelSplitChild == true`) khỏi `ComicBooks`, khôi phục tất cả các truyện cha về trạng thái nguyên bản ban đầu (`IsParallelSplitParent = false`, `IsChecked = true`, `Status = "Waiting"`, `ChapterSelectionText = ""`, `DetailProgressText = "Sẵn sàng"`).
+    + **Nâng cấp `ApplyAutoSplitChaptersAsync`**: Luôn luôn gọi `CollapseAllSplitBooks()` trước tiên. Nếu chọn `OFF` -> gộp sạch về trạng thái ban đầu; nếu chọn số (50, 100...) -> gộp sạch dải cũ rồi mới tách mới theo ngưỡng mới, triệt tiêu 100% bug chồng chéo dải chương.
+    + **Lệnh Toggle Cây Phân Cấp (`ToggleSplitCollapseCommand`)**: Khi thu gọn (`[-] Thu gọn`), gỡ tất cả task con ra khỏi `ComicBooks` nhưng vẫn lưu trong `parent.ParallelSplitChildren`; khi mở rộng (`[+] Xem thêm`), chèn lại các task con vào `ComicBooks` ngay sau truyện cha.
+    + **Bỏ Auto-Split Ngầm**: Xóa bỏ hoàn toàn việc tự ý gọi `SplitEligibleBooksAsync` trong `DownloadAllAsync` và `DownloadNewAsync`, đảm bảo tách chương CHỈ kích hoạt khi người dùng chủ động nhấn nút "ÁP". Khi Get Link mới, truyện luôn ở trạng thái nguyên bản 100%.
+    + **Cascade Delete An Toàn (`DeleteItem` & `DeleteSelected`)**: Khi xóa truyện cha, tự động xóa sạch toàn bộ các task con của nó trong `ComicBooks`; khi xóa task con riêng lẻ, tự động gỡ khỏi cha và khôi phục cha nếu hết con.
+  - `MainView.axaml`:
+    + Thiết kế giao diện Tree Folder cho từng hàng truyện trong Queue:
+      * Task con (`IsParallelSplitChild == true`): Thụt lề với ký hiệu rẽ nhánh `↳ ` màu hồng tím `#F472B6` nổi bật và badge `↳ NHÁNH: {range}`.
+      * Truyện cha (`IsParallelSplitParent == true`): Hiển thị badge `📁 THƯ MỤC GỐC` màu xanh ngọc và nút Toggle `[+] Xem thêm {N} phần` / `[-] Thu gọn` màu xanh biển đậm sắc nét.
+
