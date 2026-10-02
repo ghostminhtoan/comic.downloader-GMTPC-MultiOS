@@ -44,7 +44,10 @@ public partial class MainViewModel : ViewModelBase
     private bool _isUpdating = false;
 
     [ObservableProperty]
-    private string _updateButtonLabel = "🚀 CẬP NHẬT";
+    private string _updateButtonLabel = "🚀 UPDATE STABLE";
+
+    [ObservableProperty]
+    private string _updateBetaButtonLabel = "🧪 UPDATE BETA";
 
     [ObservableProperty]
     private int _selectedRootTabIndex = 0;
@@ -1517,8 +1520,8 @@ public partial class MainViewModel : ViewModelBase
 
             if (!success)
             {
-                AddLog("WARN", "[Cập nhật tự động] Không thể tải bản cập nhật. Vui lòng kiểm tra lại kết nối mạng và thử lại sau.");
-                UpdateButtonLabel = "🚀 CẬP NHẬT";
+                AddLog("WARN", "[Cập nhật tự động] Không thể tải bản cập nhật Stable. Vui lòng kiểm tra lại kết nối mạng và thử lại sau.");
+                UpdateButtonLabel = "🚀 UPDATE STABLE";
             }
             else if (OperatingSystem.IsWindows())
             {
@@ -1526,13 +1529,94 @@ public partial class MainViewModel : ViewModelBase
             }
             else
             {
-                UpdateButtonLabel = "🚀 CẬP NHẬT";
+                UpdateButtonLabel = "🚀 UPDATE STABLE";
             }
         }
         catch (Exception ex)
         {
             AddLog("ERROR", $"Lỗi cập nhật tự động: {ex.Message}");
-            UpdateButtonLabel = "🚀 CẬP NHẬT";
+            UpdateButtonLabel = "🚀 UPDATE STABLE";
+        }
+        finally
+        {
+            IsUpdating = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task AutoUpdateBetaAsync()
+    {
+        if (IsUpdating)
+        {
+            AddLog("WARN", "Tiến trình cập nhật đang chạy, vui lòng đợi...");
+            return;
+        }
+
+        string[] updateUrls;
+        string platformName;
+
+        if (OperatingSystem.IsAndroid())
+        {
+            platformName = "Android APK (Beta)";
+            updateUrls = new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/com.CompanyName.ComicDownloaderGMTPC-Signed.apk"
+            };
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            platformName = "Linux Portable .tar.gz (Beta)";
+            updateUrls = new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC.tar.gz",
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC-linux-x64.tar.gz"
+            };
+        }
+        else
+        {
+            platformName = "Windows Standalone EXE (Beta)";
+            updateUrls = new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC.Desktop.exe"
+            };
+        }
+
+        IsUpdating = true;
+        UpdateBetaButtonLabel = "⏳ Đang kết nối...";
+
+        try
+        {
+            AddLog("INFO", $"🧪 Bắt đầu tự động tải bản cập nhật BETA cho {platformName}...");
+
+            bool success = await AppUpdateService.Instance.DownloadAndInstallUpdateAsync(
+                updateUrls,
+                (level, msg) => AddLog(level, msg),
+                (percent) =>
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        UpdateBetaButtonLabel = $"⏳ {percent:F0}%";
+                    });
+                });
+
+            if (!success)
+            {
+                AddLog("WARN", "[Cập nhật Beta] Không thể tải bản cập nhật Beta. Vui lòng kiểm tra lại kết nối mạng và thử lại sau.");
+                UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+            }
+            else if (OperatingSystem.IsWindows())
+            {
+                UpdateBetaButtonLabel = "🔄 Đang khởi động lại...";
+            }
+            else
+            {
+                UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("ERROR", $"Lỗi cập nhật Beta: {ex.Message}");
+            UpdateBetaButtonLabel = "🧪 UPDATE BETA";
         }
         finally
         {

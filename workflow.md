@@ -1258,3 +1258,23 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 
 
 
+
+### 15.51. Responsive Quick Direct Link Bar 2 Row, Wrap Toàn Bộ Tab Source Cho Android & Tách Biệt Nút Cập Nhật Stable / Beta
+- **Bối cảnh & Yêu cầu Người dùng**:
+  1. *Quick Direct Link Bar*: Đưa đường dẫn dán link lên một row riêng biệt full width; chuyển toàn bộ các nút `LẤY LINK`, `THÊM`, `XÓA` xuống row bên dưới, đồng thời bổ sung nút `📋 DÁN LINK` và toggle `⚡ Tự dán` kế bên nút xóa.
+  2. *Tràn viền Tab Source trên Android*: Toàn bộ 13 subtab trong Tab Source bị tràn viền ở hàng Analyze do cụm `StackPanel` cứng chứa `Từ:`, `NumericUpDown (Width="140")`, `Đến:`, `NumericUpDown (Width="140")`, `(Tổng: X trang)` chiếm hơn 400px chiều ngang, vượt quá màn hình điện thoại dọc Android (360-400px).
+  3. *Tách biệt Nút Cập Nhật Stable & Beta*: Nút cập nhật tự động cũ đổi nhãn thành `🚀 UPDATE STABLE` (link giữ nguyên). Tạo thêm nút `🧪 UPDATE BETA` trỏ tới dải release beta cho cả Android (APK), Windows (EXE) và Linux (tar.gz).
+- **Kiến trúc & Giải pháp Khắc phục Triệt để**:
+  - `MainView.axaml`:
+    + Tái cấu trúc Quick Direct Link Bar thành Grid 2 Row: Row 0 chứa TextBox dán link 100% bề ngang; Row 1 chứa `WrapPanel` chứa `[🔍 LẤY LINK]`, `[➕ THÊM]`, `[🗑️ XÓA]`, `[📋 DÁN LINK]` (`PasteLinkCommand`), và CheckBox `⚡ Tự dán` (`IsAutoPasteClipboard`) tự động xuống dòng linh hoạt.
+    + Tái cấu trúc toàn diện hàng Analyze cho **toàn bộ 13 domain** (`truyenqq`, `nettruyen`, `loppy`, `thuviensach`, `mangadex`, `daomeoden`, `vihentai`, `damconuong`, `sayhentai`, `hentai2read`, `hitomi`, `hentaiforce`, `ehentai`): Tách `StackPanel` cứng thành các khối nhỏ độc lập trong `WrapPanel` với `NumericUpDown Width="80"` (thay vì 140), cho phép trên Desktop dàn hàng ngang phẳng đẹp mắt, trên Android tự động wrap thành 2-3 hàng không bao giờ bị tràn viền.
+    + Chuyển Footer Action của Subtab Password sang `StackPanel` + `WrapPanel` chống tràn viền.
+    + Header Bar: Đổi nhãn nút cập nhật chính thức thành `🚀 UPDATE STABLE`, bổ sung nút `🧪 UPDATE BETA` cạnh bên.
+  - `MainViewModel.cs`:
+    + Chuẩn hóa thuộc tính `UpdateButtonLabel` mặc định `"🚀 UPDATE STABLE"`.
+    + Bổ sung thuộc tính `UpdateBetaButtonLabel` mặc định `"🧪 UPDATE BETA"`.
+    + Viết lệnh `[RelayCommand] AutoUpdateBetaAsync`: Tự động tải và cài đặt phiên bản Beta từ đường dẫn release beta chính thức của GitHub cho từng hệ điều hành.
+  - `ComicScraperService.cs`:
+    + Hoàn thiện phương thức `public static bool IsCategoryOrTagUrl(string url, string domain)` cho đủ 13 domain.
+  - `App.axaml`:
+    + Bổ sung Style `TabControl` với `ItemsPanel = WrapPanel`, giúp toàn bộ các Tab Header con trong Tab Source và Tab Download tự động xuống hàng linh hoạt trên màn hình hẹp và điện thoại Android mà không bị tràn mép.

@@ -32,5 +32,14 @@
             <Setter Property="FontSize" Value="11" />
             <Setter Property="CornerRadius" Value="4" />
         </Style>
+
+        <!-- Cho phép các Header của TabControl tự động xuống hàng (Wrap) linh hoạt trên màn hình hẹp / Android -->
+        <Style Selector="TabControl">
+            <Setter Property="ItemsPanel">
+                <ItemsPanelTemplate>
+                    <WrapPanel />
+                </ItemsPanelTemplate>
+            </Setter>
+        </Style>
     </Application.Styles>
 </Application>

@@ -36,6 +36,64 @@ public class ComicScraperService
         _httpClient.DefaultRequestHeaders.Add("Accept-Language", "vi,en-US;q=0.9,en;q=0.8");
     }
 
+    public static bool IsCategoryOrTagUrl(string url, string domain)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        string lowerUrl = url.ToLowerInvariant();
+        string lowerDomain = (domain ?? string.Empty).ToLowerInvariant();
+
+        // Mẫu chung nhận diện URL danh mục / thể loại / tag / artist / author
+        if (lowerUrl.Contains("/the-loai/") ||
+            lowerUrl.Contains("/the-loai") ||
+            lowerUrl.Contains("/tim-truyen") ||
+            lowerUrl.Contains("/tag/") ||
+            lowerUrl.Contains("/tags/") ||
+            lowerUrl.Contains("/genre/") ||
+            lowerUrl.Contains("/genres/") ||
+            lowerUrl.Contains("/category/") ||
+            lowerUrl.Contains("/categories/") ||
+            lowerUrl.Contains("/artist/") ||
+            lowerUrl.Contains("/author/") ||
+            lowerUrl.Contains("/group/") ||
+            lowerUrl.Contains("/type/") ||
+            lowerUrl.Contains("?tag=") ||
+            lowerUrl.Contains("&tag=") ||
+            lowerUrl.Contains("search?"))
+        {
+            return true;
+        }
+
+        // Nhận diện riêng biệt theo từng domain cụ thể
+        if (lowerDomain.Contains("truyenqq") || lowerUrl.Contains("truyenqq"))
+            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/tim-truyen");
+        if (lowerDomain.Contains("nettruyen") || lowerUrl.Contains("nettruyen"))
+            return lowerUrl.Contains("/tim-truyen") || lowerUrl.Contains("/the-loai");
+        if (lowerDomain.Contains("mangadex") || lowerUrl.Contains("mangadex"))
+            return lowerUrl.Contains("/tag/") || lowerUrl.Contains("includedtags") || lowerUrl.Contains("/genre/");
+        if (lowerDomain.Contains("damconuong") || lowerUrl.Contains("damconuong"))
+            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/the-loai");
+        if (lowerDomain.Contains("vihentai") || lowerUrl.Contains("vi-hentai") || lowerUrl.Contains("vihentai"))
+            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/tag/") || lowerUrl.Contains("/genre/");
+        if (lowerDomain.Contains("sayhentai") || lowerUrl.Contains("sayhentai"))
+            return lowerUrl.Contains("/genre/") || lowerUrl.Contains("/tag/");
+        if (lowerDomain.Contains("hentai2read") || lowerUrl.Contains("hentai2read"))
+            return lowerUrl.Contains("/hentai-list/") || lowerUrl.Contains("/tag/");
+        if (lowerDomain.Contains("hitomi") || lowerUrl.Contains("hitomi"))
+            return lowerUrl.Contains("/tag/") || lowerUrl.Contains("/artist/") || lowerUrl.Contains("/series/") || lowerUrl.Contains("/type/");
+        if (lowerDomain.Contains("hentaiforce") || lowerUrl.Contains("hentaiforce"))
+            return lowerUrl.Contains("/tag/") || lowerUrl.Contains("/category/");
+        if (lowerDomain.Contains("e-hentai") || lowerDomain.Contains("ehentai") || lowerUrl.Contains("e-hentai") || lowerUrl.Contains("exhentai"))
+            return lowerUrl.Contains("/tag/") || lowerUrl.Contains("?f_search=") || !lowerUrl.Contains("/g/");
+        if (lowerDomain.Contains("thuviensach") || lowerUrl.Contains("thuviensach"))
+            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/tac-gia/");
+        if (lowerDomain.Contains("daomeoden") || lowerUrl.Contains("daomeoden"))
+            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/tag/");
+        if (lowerDomain.Contains("loppy") || lowerUrl.Contains("loppy"))
+            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/genre/");
+
+        return false;
+    }
+
     public Task<ComicBookItem> ScrapeBookAsync(string url, int index, CancellationToken ct) => ScrapeBookAsync(url, index, "vi", true, ct);
 
     public async Task<ComicBookItem> ScrapeBookAsync(string url, int index, string mangadexLang = "vi", bool mangadexFallback = true, CancellationToken ct = default)
