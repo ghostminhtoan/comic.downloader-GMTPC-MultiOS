@@ -1127,6 +1127,7 @@ public partial class MainViewModel : ViewModelBase
         UpdateLanguageStrings();
         InitFolderToolsService();
         LoadPasswordManagerSettings();
+        _ = Task.Run(async () => await EnsureDamconuongRedirectDomainAsync().ConfigureAwait(false));
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
         SoundNotificationService.Instance.PlaySound(SoundNotificationType.Startup);
     }
