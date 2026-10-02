@@ -362,13 +362,7 @@ public partial class MainViewModel : ViewModelBase
             if (book.Chapters != null && book.Chapters.Count > bucketSize)
             {
                 int totalChaps = book.Chapters.Count;
-                var ranges = new List<string>();
-
-                for (int start = 1; start <= totalChaps; start += bucketSize)
-                {
-                    int end = Math.Min(start + bucketSize - 1, totalChaps);
-                    ranges.Add($"{start}-{end}");
-                }
+                var ranges = BuildAutoSplitRanges(book.Chapters, bucketSize);
 
                 if (ranges.Count > 1)
                 {
@@ -439,6 +433,86 @@ public partial class MainViewModel : ViewModelBase
         }
 
         return totalSplit;
+    }
+
+    /// <summary>
+    /// Xây dựng các dải chương (Auto Split Ranges) dựa trên giá trị ChapterNumber thực tế của các chương,
+    /// tránh lỗi thừa dải chương khi danh sách chứa nhiều chương thập phân.
+    /// </summary>
+    private static List<string> BuildAutoSplitRanges(List<ChapterItem> chapters, int bucketSize)
+    {
+        if (chapters == null || chapters.Count == 0 || bucketSize <= 0)
+            return new List<string>();
+
+        var chapterNumbers = chapters
+            .Select(c => c.ChapterNumber)
+            .Where(n => n >= 0)
+            .Distinct()
+            .OrderBy(n => n)
+            .ToList();
+
+        if (chapterNumbers.Count == 0)
+        {
+            int total = chapters.Count;
+            var fallbackRanges = new List<string>();
+            for (int start = 1; start <= total; start += bucketSize)
+            {
+                int end = Math.Min(start + bucketSize - 1, total);
+                fallbackRanges.Add($"{start}-{end}");
+            }
+            return fallbackRanges;
+        }
+
+        bool startsAtZero = chapterNumbers[0] < 1.0;
+        double actualLastChapter = chapterNumbers[chapterNumbers.Count - 1];
+
+        int GetBucketIndex(double num)
+        {
+            if (startsAtZero)
+            {
+                return (int)Math.Floor(num / bucketSize);
+            }
+            return (int)Math.Floor((Math.Max(1.0, num) - 1.0) / bucketSize);
+        }
+
+        int lastBucketIndex = GetBucketIndex(actualLastChapter);
+        var bucketIndices = chapterNumbers
+            .Select(GetBucketIndex)
+            .Distinct()
+            .OrderBy(b => b)
+            .ToList();
+
+        var ranges = new List<string>(bucketIndices.Count);
+        foreach (int bIndex in bucketIndices)
+        {
+            double start = startsAtZero && bIndex == 0 ? 0 : (bIndex * bucketSize) + 1;
+            double end = bIndex == lastBucketIndex
+                ? actualLastChapter
+                : (startsAtZero && bIndex == 0 ? bucketSize : (bIndex + 1) * bucketSize);
+
+            string startStr = FormatChapterNum(start);
+            string endStr = FormatChapterNum(end);
+
+            if (startStr == endStr)
+            {
+                ranges.Add(startStr);
+            }
+            else
+            {
+                ranges.Add($"{startStr}-{endStr}");
+            }
+        }
+
+        return ranges;
+    }
+
+    private static string FormatChapterNum(double val)
+    {
+        if (Math.Abs(val - Math.Round(val)) < 0.0001)
+        {
+            return ((int)Math.Round(val)).ToString();
+        }
+        return val.ToString("0.#");
     }
 
     // MANUAL SPLIT LONG IMAGES IN FOLDER
