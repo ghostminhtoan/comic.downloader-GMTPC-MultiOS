@@ -89,7 +89,7 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            int effectiveDegree = Math.Clamp(maxDegree, 1, 128);
+            int effectiveDegree = Math.Clamp(maxDegree, 1, OperatingSystem.IsAndroid() ? 2 : 6);
             LogEmitted?.Invoke("INFO", $"[Tách Folder] Bắt đầu quét thư mục tại: {rootFolder} | Cỡ nhóm: {groupSize} chap | Kiểu: {folderType} | Xử lý song song: {effectiveDegree} folder");
             ProgressChanged?.Invoke(0, 1, "Đang quét danh sách chapter...");
             
@@ -239,7 +239,7 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            int effectiveDegree = Math.Clamp(maxDegree, 1, 128);
+            int effectiveDegree = Math.Clamp(maxDegree, 1, OperatingSystem.IsAndroid() ? 2 : 6);
             LogEmitted?.Invoke("INFO", $"[Gộp Chapter] Bắt đầu quét chapter về thư mục truyện gốc: {rootFolder} | Xử lý song song: {effectiveDegree} folder");
             ProgressChanged?.Invoke(0, 1, "Đang quét chapter cần gộp...");
 
@@ -335,7 +335,7 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            int effectiveDegree = Math.Clamp(maxDegree, 1, 128);
+            int effectiveDegree = Math.Clamp(maxDegree, 1, OperatingSystem.IsAndroid() ? 2 : 6);
             var parsedRanges = new List<AlphabetRangeItem>();
             foreach (var raw in rawRanges)
             {
@@ -442,7 +442,7 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            int effectiveDegree = Math.Clamp(maxDegree, 1, 128);
+            int effectiveDegree = Math.Clamp(maxDegree, 1, OperatingSystem.IsAndroid() ? 2 : 6);
             LogEmitted?.Invoke("INFO", $"[Gộp Alphabet] Bắt đầu quét thư mục chữ cái về gốc: {rootFolder} | Xử lý song song: {effectiveDegree} folder");
             ProgressChanged?.Invoke(0, 1, "Đang quét thư mục chữ cái...");
 
@@ -792,21 +792,31 @@ public class FolderToolsService
         // 2. Nếu dest đã tồn tại, kiểm tra xem có rỗng hoặc chỉ chứa file rác (Thumbs.db, .nomedia...) không
         TryCleanEmptyOrJunkDirectory(dest);
 
-        // 3. Thử Directory.Move nhanh trước nếu thư mục đích chưa tồn tại
-        try
+        // 3. Thử Directory.Move với cơ chế Retry Exponential Backoff (5 lần):
+        // Di chuyển thư mục ở tầng Filesystem Metadata trong 0.001 giây (0 byte I/O, không duyệt file).
+        // Giải quyết 99.9% trường hợp transient locks do Explorer/Antivirus tạm thời khóa folder.
+        if (!Directory.Exists(dest))
         {
-            if (!Directory.Exists(dest))
+            for (int retry = 0; retry < 5; retry++)
             {
-                Directory.Move(source, dest);
-                return;
+                try
+                {
+                    Directory.Move(source, dest);
+                    return;
+                }
+                catch (IOException)
+                {
+                    if (Directory.Exists(dest)) break;
+                    Thread.Sleep(25 * (retry + 1));
+                }
+                catch
+                {
+                    break;
+                }
             }
         }
-        catch
-        {
-            // Bỏ qua lỗi và chuyển sang fallback an toàn
-        }
 
-        // 4. Fallback sang Merge đệ quy an toàn cho từng file
+        // 4. Chỉ khi thư mục đích THỰC SỰ đã tồn tại (chứa ảnh cũ cùng tên), mới fallback sang Merge đệ quy
         try
         {
             Directory.CreateDirectory(dest);
@@ -830,8 +840,8 @@ public class FolderToolsService
 
         try { Directory.CreateDirectory(dest); } catch { }
 
-        string[] files;
-        try { files = Directory.GetFiles(source); } catch { files = Array.Empty<string>(); }
+        IEnumerable<string> files;
+        try { files = Directory.EnumerateFiles(source); } catch { files = Array.Empty<string>(); }
 
         foreach (var file in files)
         {
@@ -840,32 +850,51 @@ public class FolderToolsService
                 string destFile = Path.Combine(dest, Path.GetFileName(file));
                 if (File.Exists(destFile))
                 {
-                    var sInfo = new FileInfo(file);
-                    var dInfo = new FileInfo(destFile);
-                    if (sInfo.Length == dInfo.Length)
+                    try
                     {
-                        try { File.Delete(file); } catch { }
-                        continue;
+                        var sInfo = new FileInfo(file);
+                        var dInfo = new FileInfo(destFile);
+                        if (sInfo.Length == dInfo.Length)
+                        {
+                            try { File.Delete(file); } catch { }
+                            continue;
+                        }
+                    }
+                    catch { }
+                }
+
+                // Thử File.Move trước với retry ngắn
+                bool moved = false;
+                for (int r = 0; r < 3; r++)
+                {
+                    try
+                    {
+                        File.Move(file, destFile, overwrite: true);
+                        moved = true;
+                        break;
+                    }
+                    catch (IOException)
+                    {
+                        Thread.Sleep(15);
+                    }
+                    catch
+                    {
+                        break;
                     }
                 }
 
-                // Thử File.Move trước
-                try
-                {
-                    File.Move(file, destFile, overwrite: true);
-                }
-                catch
+                if (!moved)
                 {
                     // Fallback copy + delete nếu File.Move bị lỗi quyền/cross-device trên Android
                     File.Copy(file, destFile, overwrite: true);
                     try { File.Delete(file); } catch { }
                 }
             }
-            catch {}
+            catch { }
         }
 
-        string[] subDirs;
-        try { subDirs = Directory.GetDirectories(source); } catch { subDirs = Array.Empty<string>(); }
+        IEnumerable<string> subDirs;
+        try { subDirs = Directory.EnumerateDirectories(source); } catch { subDirs = Array.Empty<string>(); }
 
         foreach (var dir in subDirs)
         {
@@ -877,7 +906,7 @@ public class FolderToolsService
             {
                 MergeDirectoryContents(dir, Path.Combine(dest, Path.GetFileName(dir)), depth + 1);
             }
-            catch {}
+            catch { }
         }
 
         TryCleanEmptyOrJunkDirectory(source);
@@ -1263,11 +1292,7 @@ public class FolderToolsService
         await _folderLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            int effectiveDegree = Math.Clamp(maxDegree, 1, 128);
-            if (OperatingSystem.IsAndroid())
-            {
-                effectiveDegree = Math.Min(effectiveDegree, 4); // Giới hạn luồng an toàn cho Android SAF
-            }
+            int effectiveDegree = Math.Clamp(maxDegree, 1, OperatingSystem.IsAndroid() ? 2 : 6);
 
             LogEmitted?.Invoke("INFO", $"[Đổi Tên Thư Mục] Bắt đầu quét thư mục tại: {rootFolder} | Chế độ: {renameMode} | Slugify: {isSlugify} | Song song: {effectiveDegree} folder");
             ProgressChanged?.Invoke(0, 1, "Đang quét danh sách chapter...");

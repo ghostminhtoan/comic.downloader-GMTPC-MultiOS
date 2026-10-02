@@ -202,45 +202,60 @@ public class FilePackerService
         var allImages = new List<string>();
         var bookmarks = new List<(string Title, int PageIndex)>();
 
-        var subDirs = Directory.GetDirectories(targetDir, "*", SearchOption.TopDirectoryOnly);
+        string[] subDirs;
+        try { subDirs = Directory.GetDirectories(targetDir, "*", SearchOption.TopDirectoryOnly); }
+        catch { subDirs = Array.Empty<string>(); }
+
         if (subDirs.Length > 0)
         {
             var sortedSubDirs = NaturalSort(subDirs);
 
             // 1. Kiểm tra ảnh ở thư mục gốc (nếu có: bìa, cover, info)
-            var rootImages = NaturalSort(
-                Directory.GetFiles(targetDir, "*.*", SearchOption.TopDirectoryOnly)
-                    .Where(f => ValidImageExtensions.Contains(Path.GetExtension(f)))
-            );
-            if (rootImages.Count > 0)
+            try
             {
-                bookmarks.Add(("Bìa / Giới thiệu", 0));
-                allImages.AddRange(rootImages);
+                var rootImages = NaturalSort(
+                    Directory.EnumerateFiles(targetDir, "*.*", SearchOption.TopDirectoryOnly)
+                        .Where(f => ValidImageExtensions.Contains(Path.GetExtension(f)))
+                );
+                if (rootImages.Count > 0)
+                {
+                    bookmarks.Add(("Bìa / Giới thiệu", 0));
+                    allImages.AddRange(rootImages);
+                }
             }
+            catch { }
 
             // 2. Thu thập ảnh theo từng thư mục con (Chapter)
             foreach (var sub in sortedSubDirs)
             {
-                var subImages = NaturalSort(
-                    Directory.GetFiles(sub, "*.*", SearchOption.AllDirectories)
-                        .Where(f => ValidImageExtensions.Contains(Path.GetExtension(f)))
-                );
-
-                if (subImages.Count > 0)
+                try
                 {
-                    string chapterName = Path.GetFileName(sub);
-                    bookmarks.Add((chapterName, allImages.Count));
-                    allImages.AddRange(subImages);
+                    var subImages = NaturalSort(
+                        Directory.EnumerateFiles(sub, "*.*", SearchOption.AllDirectories)
+                            .Where(f => ValidImageExtensions.Contains(Path.GetExtension(f)))
+                    );
+
+                    if (subImages.Count > 0)
+                    {
+                        string chapterName = Path.GetFileName(sub);
+                        bookmarks.Add((chapterName, allImages.Count));
+                        allImages.AddRange(subImages);
+                    }
                 }
+                catch { }
             }
         }
         else
         {
             // Không có thư mục con, quét toàn bộ ảnh
-            allImages = NaturalSort(
-                Directory.GetFiles(targetDir, "*.*", SearchOption.AllDirectories)
-                    .Where(f => ValidImageExtensions.Contains(Path.GetExtension(f)))
-            );
+            try
+            {
+                allImages = NaturalSort(
+                    Directory.EnumerateFiles(targetDir, "*.*", SearchOption.AllDirectories)
+                        .Where(f => ValidImageExtensions.Contains(Path.GetExtension(f)))
+                );
+            }
+            catch { }
         }
 
         return (allImages, bookmarks);
@@ -267,14 +282,29 @@ public class FilePackerService
         using var zipToOpen = new FileStream(archivePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, bufferSize: 65536);
         using var archive = new ZipArchive(zipToOpen, ZipArchiveMode.Create);
 
+        long lastReportTicks = 0;
+
         foreach (var img in images)
         {
             if (ct.IsCancellationRequested) return;
-            string relPath = Path.GetRelativePath(baseDir, img);
-            archive.CreateEntryFromFile(img, relPath, compressionLevel);
+
+            try
+            {
+                string relPath = Path.GetRelativePath(baseDir, img);
+                archive.CreateEntryFromFile(img, relPath, compressionLevel);
+            }
+            catch (Exception)
+            {
+                // Bỏ qua file lỗi/lock để bảo toàn toàn bộ batch nén không bị sập
+            }
 
             int cur = Interlocked.Increment(ref currentUnit);
-            progress?.Report((cur, totalUnits, $"[{formatName}] {Path.GetFileName(img)} ({cur}/{totalUnits})"));
+            long now = Environment.TickCount64;
+            if (cur == totalUnits || now - Volatile.Read(ref lastReportTicks) >= 150)
+            {
+                Volatile.Write(ref lastReportTicks, now);
+                progress?.Report((cur, totalUnits, $"[{formatName}] {Path.GetFileName(img)} ({cur}/{totalUnits})"));
+            }
         }
     }
 
@@ -382,7 +412,9 @@ public class FilePackerService
         }
         bw.Write(System.Text.Encoding.Latin1.GetBytes("]\n>>\nendobj\n"));
 
-        // 5. Ghi từng Trang theo chế độ Zero-Memory Streaming (xử lý đến đâu ghi ra đĩa đến đó, giải phóng ngay byte ảnh)
+        long lastReportTicks = 0;
+
+        // 5. Ghi từng Trang theo chế độ Zero-Memory Direct Embedding (nhúng trực tiếp 100% byte ảnh gốc, cấm convert/re-encode làm nặng ảnh)
         for (int i = 0; i < totalPages; i++)
         {
             if (ct.IsCancellationRequested) return;
@@ -393,12 +425,49 @@ public class FilePackerService
             int imgObjId = imgObjIds[i];
             string imName = $"Im{i + 1}";
 
-            byte[] rawBytes = File.ReadAllBytes(imgPath);
-            // Sử dụng mức chất lượng nén nhẹ, tối ưu 75% cho ảnh chuyển đổi
-            var (jpegBytes, width, height) = UniversalImageDecoder.ConvertToStandardJpeg(rawBytes, 75);
+            byte[]? rawBytes = null;
+            byte[]? imageBytesToEmbed = null;
+            int width = 0;
+            int height = 0;
+
+            try
+            {
+                rawBytes = File.ReadAllBytes(imgPath);
+
+                // Ưu tiên số 1: Nhúng trực tiếp 100% byte gốc của ảnh JPEG (không convert, không nén lại, 0% CPU, dung lượng 1:1)
+                if (UniversalImageDecoder.IsJpeg(rawBytes))
+                {
+                    imageBytesToEmbed = rawBytes;
+                    if (!UniversalImageDecoder.TryGetJpegDimensions(rawBytes, out width, out height) || width <= 0 || height <= 0)
+                    {
+                        width = 1080;
+                        height = 1920;
+                    }
+                }
+                else
+                {
+                    // Chỉ khi nguồn là WebP / PNG (PDF không hỗ trợ native WebP) mới chuyển sang JPEG với chất lượng cao (95%)
+                    var converted = UniversalImageDecoder.ConvertToStandardJpeg(rawBytes, 95);
+                    imageBytesToEmbed = converted.JpegBytes;
+                    width = converted.Width;
+                    height = converted.Height;
+                }
+            }
+            catch
+            {
+                // Nếu file hỏng/không đọc được, tạo placeholder an toàn tránh sập file PDF
+                imageBytesToEmbed = Array.Empty<byte>();
+            }
 
             if (width <= 0) width = 1080;
             if (height <= 0) height = 1920;
+            if (imageBytesToEmbed == null || imageBytesToEmbed.Length == 0)
+            {
+                var blank = UniversalImageDecoder.ConvertToStandardJpeg(Array.Empty<byte>(), 95);
+                imageBytesToEmbed = blank.JpegBytes;
+                width = blank.Width;
+                height = blank.Height;
+            }
 
             // A. Page Object
             objectOffsets[pageObjId] = fs.Position;
@@ -437,17 +506,22 @@ public class FilePackerService
                 $"  /ColorSpace /DeviceRGB\n" +
                 $"  /BitsPerComponent 8\n" +
                 $"  /Filter /DCTDecode\n" +
-                $"  /Length {jpegBytes.Length}\n" +
+                $"  /Length {imageBytesToEmbed.Length}\n" +
                 $">>\nstream\n"));
-            bw.Write(jpegBytes);
+            bw.Write(imageBytesToEmbed);
             bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
 
             // Giải phóng ngay lập tức mảng byte để GC thu hồi, không để tồn đọng trong RAM
-            rawBytes = null!;
-            jpegBytes = null!;
+            rawBytes = null;
+            imageBytesToEmbed = null;
 
             int cur = Interlocked.Increment(ref currentUnit);
-            progress?.Report((cur, totalUnits, $"[PDF] Trang {Path.GetFileName(imgPath)} ({cur}/{totalUnits})"));
+            long now = Environment.TickCount64;
+            if (cur == totalUnits || now - Volatile.Read(ref lastReportTicks) >= 150)
+            {
+                Volatile.Write(ref lastReportTicks, now);
+                progress?.Report((cur, totalUnits, $"[PDF] Trang {Path.GetFileName(imgPath)} ({cur}/{totalUnits})"));
+            }
         }
 
         // 6. Ghi bảng Cross-Reference (xref)

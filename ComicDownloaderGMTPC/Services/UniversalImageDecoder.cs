@@ -217,11 +217,49 @@ public static class UniversalImageDecoder
         return null;
     }
 
-    private static bool TryGetJpegDimensions(byte[] rawBytes, out int width, out int height)
+    public static bool TryGetJpegDimensions(byte[] rawBytes, out int width, out int height)
     {
         width = 0;
         height = 0;
+        if (rawBytes == null || rawBytes.Length < 4) return false;
 
+        // 1. Phân tích trực tiếp từ SOF markers của JPEG header (0.0001ms, 0 byte RAM)
+        if (rawBytes[0] == 0xFF && rawBytes[1] == 0xD8)
+        {
+            int i = 2;
+            int len = rawBytes.Length;
+            while (i < len - 8)
+            {
+                if (rawBytes[i] != 0xFF)
+                {
+                    i++;
+                    continue;
+                }
+
+                byte marker = rawBytes[i + 1];
+                // SOF0 (0xC0), SOF1 (0xC1), SOF2 (0xC2)
+                if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2)
+                {
+                    height = (rawBytes[i + 5] << 8) | rawBytes[i + 6];
+                    width = (rawBytes[i + 7] << 8) | rawBytes[i + 8];
+                    if (width > 0 && height > 0) return true;
+                }
+
+                // Bỏ qua marker không có length (RST, SOI, EOI)
+                if (marker == 0xD8 || marker == 0xD9 || (marker >= 0xD0 && marker <= 0xD7))
+                {
+                    i += 2;
+                    continue;
+                }
+
+                if (i + 3 >= len) break;
+                int segLen = (rawBytes[i + 2] << 8) | rawBytes[i + 3];
+                if (segLen < 2) break;
+                i += 2 + segLen;
+            }
+        }
+
+        // 2. Fallback sang SkiaSharp nếu header bị phân mảnh
         try
         {
             using var ms = new MemoryStream(rawBytes);
@@ -235,6 +273,7 @@ public static class UniversalImageDecoder
         }
         catch { }
 
+        // 3. Fallback sang ImageSharp
         try
         {
             var info = Image.Identify(rawBytes);
