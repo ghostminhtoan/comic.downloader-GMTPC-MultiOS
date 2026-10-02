@@ -212,6 +212,138 @@ public partial class MainViewModel : ViewModelBase
         _downloadEngine.AutoSplitHeight = Math.Max(100, value);
     }
 
+    // AUTO SPLIT CHAPTERS (TỰ ĐỘNG TÁCH CHƯƠNG ĐỂ TẢI SONG SONG SIÊU NHANH)
+    [ObservableProperty]
+    private string _autoSplitChaptersSelection = "OFF";
+
+    [RelayCommand]
+    public async Task ApplyAutoSplitChaptersAsync()
+    {
+        if (string.Equals(AutoSplitChaptersSelection, "OFF", StringComparison.OrdinalIgnoreCase) ||
+            !int.TryParse(AutoSplitChaptersSelection, out int bucketSize) || bucketSize <= 0)
+        {
+            AddLog("WARN", "Vui lòng chọn một ngưỡng chia chương cụ thể (50, 100,...) thay vì OFF.");
+            return;
+        }
+
+        int splitCount = await SplitEligibleBooksAsync(bucketSize);
+        if (splitCount > 0)
+        {
+            AddLog("SUCCESS", $"Đã tự động chia nhỏ {splitCount} bộ truyện theo ngưỡng {bucketSize} chương để tải song song siêu nhanh!");
+        }
+        else
+        {
+            AddLog("INFO", $"Không tìm thấy bộ truyện nào đủ số chương cần chia nhỏ (ngưỡng: {bucketSize} chương).");
+        }
+    }
+
+    public async Task<int> SplitEligibleBooksAsync(int bucketSize)
+    {
+        if (bucketSize <= 0 || ComicBooks.Count == 0) return 0;
+
+        var itemsToSplit = ComicBooks
+            .Where(b => b != null && string.IsNullOrWhiteSpace(b.ChapterSelectionText) && b.Status != "Completed" && b.Status != "Hoàn tất")
+            .ToList();
+
+        if (itemsToSplit.Count == 0) return 0;
+
+        int totalSplit = 0;
+
+        foreach (var book in itemsToSplit)
+        {
+            // Nạp chapter nếu chưa có
+            if (book.Chapters == null || book.Chapters.Count == 0)
+            {
+                try
+                {
+                    AddLog("INFO", $"Đang nạp danh sách chương cho '{book.Title}' để phân tích tách chương...");
+                    var scraped = await _scraperService.ScrapeBookAsync(book.Url, book.Index, book.PreferredLanguage);
+                    if (scraped != null && scraped.Chapters != null && scraped.Chapters.Count > 0)
+                    {
+                        book.Chapters = scraped.Chapters;
+                        book.TotalChapters = scraped.Chapters.Count;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AddLog("WARN", $"Không thể nạp chapters cho '{book.Title}': {ex.Message}");
+                }
+            }
+
+            if (book.Chapters != null && book.Chapters.Count > bucketSize)
+            {
+                int totalChaps = book.Chapters.Count;
+                var ranges = new List<string>();
+
+                for (int start = 1; start <= totalChaps; start += bucketSize)
+                {
+                    int end = Math.Min(start + bucketSize - 1, totalChaps);
+                    ranges.Add($"{start}-{end}");
+                }
+
+                if (ranges.Count > 1)
+                {
+                    int insertIndex = ComicBooks.IndexOf(book);
+                    if (insertIndex >= 0)
+                    {
+                        // Đánh dấu item cha
+                        book.IsChecked = false;
+                        book.Status = "Stopped";
+                        book.DetailProgressText = $"Đã tách thành {ranges.Count} dải chương";
+
+                        // Tạo các task con
+                        int addedCount = 0;
+                        foreach (var range in ranges)
+                        {
+                            var clone = new ComicBookItem
+                            {
+                                Title = book.Title,
+                                Url = book.Url,
+                                Domain = book.Domain,
+                                CoverUrl = book.CoverUrl,
+                                PreferredLanguage = book.PreferredLanguage,
+                                ChapterSelectionText = range,
+                                Status = "Waiting",
+                                DetailProgressText = $"Chờ tải (Chương {range})",
+                                IsChecked = true,
+                                LocalDirectory = book.LocalDirectory
+                            };
+
+                            var filter = ChapterRangeParser.Parse(range);
+                            if (filter != null)
+                            {
+                                clone.Chapters = book.Chapters.Where(c => filter.IsMatch(c.Title, c.ChapterNumber)).ToList();
+                                clone.TotalChapters = clone.Chapters.Count > 0 ? clone.Chapters.Count : bucketSize;
+                            }
+                            else
+                            {
+                                clone.Chapters = new List<ChapterItem>(book.Chapters);
+                                clone.TotalChapters = book.TotalChapters;
+                            }
+
+                            addedCount++;
+                            ComicBooks.Insert(insertIndex + addedCount, clone);
+                        }
+
+                        totalSplit++;
+                        AddLog("INFO", $"Đã tách '{book.Title}' ({totalChaps} chaps) thành {ranges.Count} task tải song song ({string.Join(", ", ranges.Take(3))}...).");
+                    }
+                }
+            }
+        }
+
+        if (totalSplit > 0)
+        {
+            for (int i = 0; i < ComicBooks.Count; i++)
+            {
+                ComicBooks[i].Index = i + 1;
+            }
+            UpdateStats();
+        }
+
+        return totalSplit;
+    }
+
     // MANUAL SPLIT LONG IMAGES IN FOLDER
     [ObservableProperty]
     private string _manualSplitFolderPath = string.Empty;
@@ -1189,6 +1321,13 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
+        // Tự động tách chương nếu người dùng chọn ngưỡng khác OFF
+        if (!string.Equals(AutoSplitChaptersSelection, "OFF", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(AutoSplitChaptersSelection, out int bucketSize) && bucketSize > 0)
+        {
+            await SplitEligibleBooksAsync(bucketSize);
+        }
+
         AddLog("INFO", $"Bắt đầu tải {ComicBooks.Count(b => b.IsChecked)} truyện...");
         await _downloadEngine.StartDownloadAsync(ComicBooks, ModeSelection);
         UpdateStats();
@@ -1197,6 +1336,13 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task DownloadNewAsync()
     {
+        // Tự động tách chương nếu người dùng chọn ngưỡng khác OFF
+        if (!string.Equals(AutoSplitChaptersSelection, "OFF", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(AutoSplitChaptersSelection, out int bucketSize) && bucketSize > 0)
+        {
+            await SplitEligibleBooksAsync(bucketSize);
+        }
+
         var newItems = ComicBooks.Where(b => b.IsChecked && (b.Status == "Waiting" || b.Status == "Chờ tải" || string.IsNullOrEmpty(b.Status))).ToList();
         if (newItems.Count == 0)
         {

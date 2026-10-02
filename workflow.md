@@ -1302,3 +1302,16 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
     + Thời gian trước đây: ~180 giây (gần 3 phút).
     + Thời gian mới: **2.78 giây** (nhanh gấp **65 lần**, đạt tốc độ I/O đĩa ngang ngửa đóng gói ZIP).
   - Dung lượng file PDF sinh ra bảo toàn 100% nguyên bản dữ liệu nén gốc của ảnh.
+
+### 15.53. Tự Động Tách Chương (Auto Split Chapters) Tải Song Song Siêu Tốc & Mở Rộng Ô Nhập Analyze Đủ 3-4 Chữ Số
+- **Bối cảnh & Yêu cầu Người dùng**:
+  1. *Tính năng Tự Động Tách Chương (Porting từ WPF sang Avalonia)*: Với những bộ truyện dài có hàng trăm chương (ví dụ 460 chương), việc tải một truyện đơn lẻ trong 1 luồng khiến tiến trình kéo dài. Trong WPF có tính năng "TỰ ĐỘNG TÁCH CHƯƠNG" với ComboBox ngưỡng chia (OFF, 50, 100, 200, 300, 400) và nút "ÁP", tự động chia nhỏ bộ truyện thành nhiều dải chương con (`1-50`, `51-100`, `101-150`...) để tải song song nhiều luồng vào cùng một thư mục truyện, tăng tốc tải gấp 5-10 lần.
+  2. *Ô Từ/Đến ở hàng Analyze Tab Source quá hẹp*: Chiều rộng 80px bị chiếm khoảng 30-36px bởi hai nút spinner buttons (lên/xuống), khiến phần hiển thị số chỉ còn khoảng 40px, che khuất hoặc cắt cụt khi nhập 3 chữ số (100, 200, 999...).
+- **Kiến trúc & Giải pháp Khắc phục Triệt để**:
+  - `MainViewModel.cs`:
+    + Thêm thuộc tính `AutoSplitChaptersSelection` (mặc định "OFF").
+    + Viết lệnh `ApplyAutoSplitChaptersAsync()` và phương thức lõi `SplitEligibleBooksAsync(int bucketSize)`: Duyệt qua các truyện trong Queue, tự động nạp chapters nếu chưa nạp, tính toán các dải range (`1-50`, `51-100`...), tạo các task con với `ChapterSelectionText = range`, lọc `Chapters` tương ứng qua `ChapterFilter.IsMatch`, chèn nối tiếp ngay sau truyện cha và uncheck truyện cha.
+    + Tích hợp tự động trong `DownloadAllAsync` và `DownloadNewAsync`: Nếu người dùng chọn ngưỡng khác "OFF" và bấm tải, hệ thống tự động tách các truyện đủ điều kiện trước khi bắt đầu tải đa luồng.
+  - `MainView.axaml`:
+    + Tab Download / Queue: Thêm cụm điều khiển `⚡ TỰ ĐỘNG TÁCH CHƯƠNG:` + ComboBox (OFF, 50, 100, 200, 300, 400) + Nút `ÁP` nền xanh chữ nổi bật trong WrapPanel thanh thiết lập tải.
+    + Tab Source (Analyze Panel): Mở rộng toàn bộ `Width="80"` lên `Width="105"` cho cả 2 ô `DomainPageFrom` và `DomainPageTo` trên tất cả 13 domain (`truyenqq`, `nettruyen`, `loppy`, `thuviensach`, `mangadex`, `daomeoden`, `vihentai`, `damconuong`, `sayhentai`, `hentai2read`, `hitomi`, `hentaiforce`, `ehentai`), đảm bảo hiển thị thoải mái 3-4 chữ số mà vẫn giữ nguyên bố cục responsive không tràn viền trên Android.

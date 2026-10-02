@@ -163,11 +163,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="truyenqq" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -228,11 +228,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="nettruyen" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -292,11 +292,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="loppy" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -356,11 +356,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="thuviensach" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -420,11 +420,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="mangadex" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -484,11 +484,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="daomeoden" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -555,11 +555,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="vihentai" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -619,11 +619,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="damconuong" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -683,11 +683,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="sayhentai" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -747,11 +747,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="hentai2read" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -811,11 +811,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="hitomi" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -875,11 +875,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="hentaiforce" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -939,11 +939,11 @@
                                                             </Button>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Từ:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageFrom}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,4">
                                                                 <TextBlock Text="Đến:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="80" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
+                                                                <NumericUpDown Value="{Binding DomainPageTo}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="105" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding DomainTotalPages, StringFormat='{}(Tổng: {0} trang)'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
                                                             <Button Command="{Binding ScrapeDomainBatchPagesCommand}" CommandParameter="ehentai" IsEnabled="{Binding !IsDomainBatchScraping}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Cào danh sách từ đầu (xóa danh sách queue cũ)">
@@ -1190,6 +1190,27 @@
                                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                             <TextBlock Text="🧵 Số luồng tải ảnh:" Foreground="#10B981" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
                                             <NumericUpDown Value="{Binding ImageDownloadThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" Width="120" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số luồng tải ảnh song song (Tự động nhận diện theo CPU máy)" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- TỰ ĐỘNG TÁCH CHƯƠNG (Port từ WPF: Chia nhỏ tải song song siêu tốc) -->
+                                    <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <TextBlock Text="⚡ TỰ ĐỘNG TÁCH CHƯƠNG:" Foreground="#F59E0B" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
+                                            <ComboBox SelectedItem="{Binding AutoSplitChaptersSelection}" Width="85" Height="28" FontSize="11" VerticalContentAlignment="Center">
+                                                <x:String>OFF</x:String>
+                                                <x:String>50</x:String>
+                                                <x:String>100</x:String>
+                                                <x:String>200</x:String>
+                                                <x:String>300</x:String>
+                                                <x:String>400</x:String>
+                                            </ComboBox>
+                                            <Button Command="{Binding ApplyAutoSplitChaptersCommand}"
+                                                    Background="#0284C7" Foreground="#FFFFFF" FontWeight="ExtraBold"
+                                                    Padding="10,3" Height="28" CornerRadius="4"
+                                                    ToolTip.Tip="Tự động chia nhỏ các bộ truyện nhiều chương thành các dải chương (1-50, 51-100...) để tải song song nhiều luồng siêu nhanh">
+                                                <TextBlock Text="ÁP" FontSize="11" FontWeight="ExtraBold" VerticalAlignment="Center" />
+                                            </Button>
                                         </StackPanel>
                                     </Border>
 
