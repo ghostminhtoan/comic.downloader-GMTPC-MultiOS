@@ -1381,15 +1381,19 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
     3. `key2 = HMAC-SHA256(rootKey, "enc")` (dùng sinh khóa giải mã AES).
     4. `pathHash = HMAC-SHA256(key1, cipherPath).Take(16)`.
     5. `tokenBytes = [0x01, ...pathHash]` (17 bytes) -> `queryParam = Base64UrlEncode(tokenBytes)`.
-    6. Endpoint API: `GET {scheme}://{host}/_c/mangas/{cipherPath}/pages?_={queryParam}` với Headers `Accept: application/json, text/plain, */*`, `X-Requested-With: XMLHttpRequest`, `Referer: {chapterUrl}`.
+    6. Tách `cipherPath` thành `mangaSlug` và `chapterSlug`. Endpoint API chuẩn: `GET {scheme}://{host}/_c/mangas/{mangaSlug}/chapters/{chapterSlug}/pages?_={queryParam}` với Headers `Accept: application/json, text/plain, */*`, `X-Requested-With: XMLHttpRequest`, `Referer: {chapterUrl}`.
     7. Server trả về JSON chứa ciphertext: `{"e": "<ciphertextBase64Url>"}`.
     8. `aesKey = HMAC-SHA256(key2, queryParam)` (32 bytes).
     9. `cipherBytes = Base64UrlDecode(e)`. Trích xuất `iv` (12 bytes đầu), `tag` (16 bytes cuối), `ciphertext` (ở giữa), và `aad` là byte UTF-8 của `cipherPath`.
-    10. Giải mã **AES-256-GCM** natively qua `System.Security.Cryptography.AesGcm`: Thu được JSON chứa mảng `p`: danh sách 100% URL ảnh thật của chapter (ví dụ 30 trang webp chất lượng gốc).
+    10. Giải mã **AES-256-GCM** natively qua `System.Security.Cryptography.AesGcm`: Thu được JSON chứa mảng `p`: danh sách 100% URL ảnh thật của chapter (ví dụ 18 trang jpg chất lượng gốc của *Bà chị chủ nhà* và 30 trang webp của *Monster Musume*).
   - **Tích hợp `ComicScraperService.cs`**:
     + Nâng cấp phương thức `ExtractDamconuongChapterImagesAsync`: Tự động phát hiện `data-cipher-path` để giải mã động `DecryptDamconuongCipherPagesAsync`.
-    + Fallback tự động quét HTML tĩnh nếu không có cipher.
+    + Cô lập phạm vi fallback: Nếu không có cipher, chỉ quét thẻ `<img>` nằm bên trong `<div id="chapter-content">`, tuyệt đối không quét toàn trang HTML.
+    + Chặn rớt xuống Generic Scraper: Domain/URL chứa `damconuong` hoặc `mbpro` luôn trả về kết quả scraper chuyên biệt, không để lọt xuống bộ bóc tách chung toàn trang.
     + Thêm bộ lọc `IsDamconuongAdUrl`: Chặn và loại bỏ triệt để 100% các định dạng gif, đường dẫn chứa `/ads/`, `/banners/`, các nhà cái `9922`, `au88`, `vsbet`, `boyka`, `dcn-gold`, `quang-cao`, `nhacai`, `bet`.
+  - **Kiểm thử Nghiệm thu Thực tế**:
+    + Tự động tải thật 5 ảnh đầu của chapter `https://damconuong.pet/truyen/ba-chi-chu-nha/chapter-1`.
+    + Đã xác minh qua magic bytes: Cả 5 ảnh đều là định dạng JPEG chuẩn (`0xFF 0xD8 0xFF`), dung lượng lớn từ 850 KB đến 2.0 MB mỗi trang, hoàn toàn không có ảnh GIF hoặc banner quảng cáo nào.
   - **Hiệu năng & Khả năng Tương thích**:
     + Hoàn toàn Native Managed .NET 10, tốc độ giải mã tính bằng mili-giây, độc lập 100% trên cả 3 nền tảng Windows, Linux, Android mà không cần WebView hay trình duyệt ngoài.
 

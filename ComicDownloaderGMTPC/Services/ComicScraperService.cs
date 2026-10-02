@@ -318,10 +318,9 @@ public class ComicScraperService
                 if (dmdImages.Count > 0) return dmdImages;
             }
 
-            if (domain.Contains("damconuong"))
+            if (domain.Contains("damconuong") || domain.Contains("mbpro") || chapterUrl.Contains("damconuong") || chapterUrl.Contains("mbpro"))
             {
-                var dcnImages = await ExtractDamconuongChapterImagesAsync(html, chapterUrl, ct).ConfigureAwait(false);
-                if (dcnImages.Count > 0) return dcnImages;
+                return await ExtractDamconuongChapterImagesAsync(html, chapterUrl, ct).ConfigureAwait(false);
             }
 
             if (domain.Contains("sayhentai"))
@@ -1356,7 +1355,7 @@ public class ComicScraperService
         string contentHtml = string.Empty;
         var contentMatch = Regex.Match(html, @"<(?:div|article|section)[^>]*(?:id=[""']chapter-content[""']|class=[""'][^""']*(?:reading-detail|box_doc|chapter-content)[^""']*[""'])[^>]*>.*?</(?:div|article|section)>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
         if (contentMatch.Success) contentHtml = contentMatch.Value;
-        else contentHtml = html;
+        else return imageUrls;
 
         var matches = Regex.Matches(contentHtml, @"<img[^>]+(?:data-src|data-original|data-lazy-src|src)\s*=\s*[""'](?<url>[^""']+)[""']", RegexOptions.IgnoreCase);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1393,7 +1392,10 @@ public class ComicScraperService
             string queryParam = Base64UrlEncode(tokenBytes);
 
             var baseUri = new Uri(chapterUrl);
-            string apiUrl = $"{baseUri.Scheme}://{baseUri.Authority}/_c/mangas/{cipherPath}/pages?_={Uri.EscapeDataString(queryParam)}";
+            string[] parts = cipherPath.Split('/', 2);
+            string mangaSlug = Uri.EscapeDataString(parts[0]);
+            string chapterSlug = parts.Length > 1 ? Uri.EscapeDataString(parts[1]) : string.Empty;
+            string apiUrl = $"{baseUri.Scheme}://{baseUri.Authority}/_c/mangas/{mangaSlug}/chapters/{chapterSlug}/pages?_={Uri.EscapeDataString(queryParam)}";
 
             using var req = new HttpRequestMessage(HttpMethod.Get, apiUrl);
             req.Headers.Add("Accept", "application/json, text/plain, */*");
