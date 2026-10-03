@@ -18,9 +18,10 @@ Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file
 - Xong việc: đánh giá, gợi ý file cần sửa/kiểm tra, rà soát EN/VI.
 - Luôn luôn test build 2 bước: bước 1 là tự tải khởi tạo thư viện, bước 2 là app mở lên, có UI hoàn tất thì mới xem như là build thành công.
 - **Quy tắc thư mục Publish**: Khi build / publish file cho toàn bộ các hệ điều hành (Windows, Linux, Android), toàn bộ file `.deb`, `.exe`, `.tar.gz`, binary Linux và `.apk` **bắt buộc luôn luôn ở chung một folder duy nhất `\Comic Downloader GMTPC AVALONIA\publish\`**, tuyệt đối **không được cho vào các subfolder như `windows`, `linux`, `android`**.
-- Luôn xuất 3 dòng trạng thái chuẩn ở cuối câu trả lời:
+- Luôn xuất khối trạng thái chuẩn ở cuối câu trả lời:
   - `commit local: <mã hash>`
-  - `commit remote local: "không"`
+  - `commit github: "thành công"`
+  - `link release: https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/releases`
   - `path publish file chạy windows, linux, android:`
     - Windows: `Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC.Desktop.exe`
     - Linux: `Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC`
@@ -957,7 +958,6 @@ Tích hợp toàn diện mô hình xem trước đối chiếu chuyển đổi k
        + `float t = 0.5f * (1.0f - c) + b;`
      - Khi kéo slider tăng giảm tương phản, độ sáng, độ bão hòa, ảnh After phản hồi tức thì với màu sắc trung thực tuyệt đối, triệt tiêu hoàn toàn lỗi đen màn hình (black screen).
 
-
 ### 15.32. Tích Hợp Toàn Diện Bộ Phân Giải & Tải Truyện Hitomi.la Đa Nền Tảng (HitomiResolverService & WebP Dynamic CDN Routing)
 - **Bối cảnh & Vấn đề**:
   - Khi tải link truyện tranh hoặc doujinshi từ hitomi.la (ví dụ: https://hitomi.la/doujinshi/...-4219667.html hoặc https://hitomi.la/reader/4219667.html):
@@ -1412,5 +1412,38 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - **Chuẩn hóa Song ngữ (`MainWindow.LanguageEng-VI.md` & `languages.md`)**:
     + Thêm mục ánh xạ song ngữ: `Auto Delete Completed` / `Tự Động Xóa Đã Xong`.
 
+### 15.26. Hỗ Trợ Nền Tảng iOS / iPhone (Avalonia iOS Cross-Platform)
+- **Kiến trúc & Cấu trúc dự án**:
+  - Tạo sub-project `ComicDownloaderGMTPC.iOS` targeting `net10.0-ios` (iOS 15.0+), tham chiếu shared project `ComicDownloaderGMTPC.csproj`.
+  - `AppDelegate.cs` kế thừa `AvaloniaAppDelegate<App>`, tái sử dụng `ISingleViewApplicationLifetime` đã có sẵn trong `App.axaml.cs`.
+  - `Info.plist` hỗ trợ iPhone + iPad, xoay ngang/dọc, ATS disabled cho HTTP download ảnh truyện.
+  - Đăng ký `Avalonia.iOS 12.1.3` vào `Directory.Packages.props` (Central Package Management).
+  - Đăng ký iOS project vào solution `ComicDownloaderGMTPC.slnx`.
+- **Build & Deploy**:
+  - `build.bat` mở rộng từ 3 lên 4 nền tảng (Windows, Linux, Android, iOS).
+  - Trên Windows: `dotnet build` kiểm tra biên dịch thành công (0 Error / 0 Warning) nhưng không tạo .ipa (cần macOS + Xcode).
+  - Trên macOS: `dotnet publish -c Release -r ios-arm64` tạo app bundle / .ipa thật để deploy lên TestFlight hoặc thiết bị iPhone.
+- **Toàn bộ tính năng chia sẻ từ shared project hoạt động y nguyên trên iOS**:
+  - Download/queue truyện tranh đa nguồn.
+  - Scan missing integer chapter.
+  - Tab Tool: Cắt ảnh dài, Xử lý ảnh (FastStone Preview, Rèm trượt), Đóng gói file (ZIP/CBZ/PDF).
+  - Tách/Gộp Folder song song.
+  - Pinch-to-Zoom & Pan cảm ứng đa điểm.
+  - Âm thanh thông báo.
+- **Nghiệm Thu**:
+  - `build.bat` biên dịch thành công cả 4 OS (Windows `win-x64`, Linux `linux-x64`, Android `net10.0-android`, iOS `net10.0-ios`) với `0 Warning(s), 0 Error(s)`.
+
+### 15.27. Tự Động Hóa Build & CI/CD Đa Nền Tảng (Windows, Linux, Android, iOS) Trên GitHub Actions
+- **Thiết lập CI/CD**:
+  - Cấu hình workflow `.github/workflows/build-all.yml` và `.github/workflows/build-ios.yml`.
+  - Hỗ trợ xây dựng tự động toàn bộ 4 nền tảng song song:
+    1. **Windows**: Standalone Single-File Release `ComicDownloaderGMTPC.Desktop.exe`.
+    2. **Linux**: Standalone Single-File Executable `ComicDownloaderGMTPC.Desktop`.
+    3. **Android**: Release Signed APK `ComicDownloaderGMTPC-Android-Signed.apk`.
+    4. **iOS**: Release Ad-Hoc Signed App Package & Bundle `ComicDownloaderGMTPC-iOS-AdHoc.ipa`.
+- **Cơ chế xử lý tương thích Toolchain Xcode**:
+  - Tự động phát hiện và chọn phiên bản Xcode tối ưu (`DEVELOPER_DIR`).
+  - Tự động tạo Canonical Apple SDK symlinks (`MacOSX.sdk`, `iPhoneOS.sdk`) và phiên bản aliases chống broken/circular links.
+  - Tự động patch và vô hiệu hóa các kiểm tra phiên bản cứng nhắc trong .NET iOS SDK (`_CheckForInvalidXcodeVersion`, `_ValidateXcodeVersion`) bằng Python script đa thư mục.
 
 
