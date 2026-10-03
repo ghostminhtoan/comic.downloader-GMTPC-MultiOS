@@ -3,6 +3,8 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:ComicDownloaderGMTPC.ViewModels"
+             xmlns:services="using:ComicDownloaderGMTPC.Services"
+             xmlns:models="using:ComicDownloaderGMTPC.Models"
              mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="850"
              x:Class="ComicDownloaderGMTPC.Views.MainView"
              x:DataType="vm:MainViewModel"
@@ -2357,6 +2359,379 @@
                                             </ItemsControl>
                                         </ScrollViewer>
                                     </Border>
+                                </Grid>
+                            </TabItem>
+
+                            <!-- ========================================================================= -->
+                            <!-- CHILD TAB 3.5: QUÉT CHAP THIẾU OFFLINE (OFFLINE MISSING CHAPTERS) -->
+                            <!-- ========================================================================= -->
+                            <TabItem Header="🔍 Quét Chap Thiếu Offline" FontSize="12" FontWeight="SemiBold">
+                                <Grid RowDefinitions="Auto, *">
+                                    <!-- Panel cấu hình quét & công cụ hành động -->
+                                    <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                                        <StackPanel Spacing="10">
+                                            <!-- Hàng 1: Chọn thư mục cần quét -->
+                                            <StackPanel Spacing="4">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="📁 Thư mục truyện / Thư mục tải về:" Foreground="#94A3B8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
+                                                    <Button Command="{Binding BrowseOfflineScanFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,4" CornerRadius="4" Margin="0,0,6,4" />
+                                                    <Button Command="{Binding ScanOfflineFolderCommand}" IsEnabled="{Binding !IsScanningOfflineMissing}" Content="🔄 Quét Lại" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,4" CornerRadius="4" Margin="0,0,6,4" />
+                                                    <Button Command="{Binding StopScanOfflineFolderCommand}" IsEnabled="{Binding IsScanningOfflineMissing}" Content="⏹ Dừng" Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,4" CornerRadius="4" Margin="0,0,6,4" />
+                                                    <Button Command="{Binding OpenSelectedMangaFolderCommand}" Content="📂 Mở Thư Mục Truyện" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="10,4" CornerRadius="4" Margin="0,0,0,4" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding OfflineScanRootPath}" PlaceholderText="Đường dẫn thư mục truyện tranh tải về..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" VerticalContentAlignment="Center" Padding="8,2" />
+                                            </StackPanel>
+
+                                            <!-- Hàng 2: Bộ lọc & Công cụ thao tác nhanh (WrapPanel Responsive) -->
+                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <!-- Ô tìm kiếm tên truyện -->
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="4,2" Margin="0,0,8,4" VerticalAlignment="Center">
+                                                    <TextBox Text="{Binding OfflineSearchQuery}" PlaceholderText="🔍 Lọc tên truyện..." Width="180" Height="26" CornerRadius="3" Background="Transparent" Foreground="#F8FAFC" BorderThickness="0" FontSize="11" VerticalContentAlignment="Center" />
+                                                </Border>
+
+                                                <!-- CheckBox chỉ hiện truyện thiếu chap -->
+                                                <CheckBox IsChecked="{Binding OfflineFilterOnlyMissing}" Content="⚠️ Chỉ hiện truyện thiếu chap" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,12,4" />
+
+                                                <!-- Các nút sao chép & tìm kiếm -->
+                                                <Button Command="{Binding CopySelectedMissingCommand}" Content="📋 Sao Chép Chap Thiếu (Truyện Này)" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,4" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Sao chép các khoảng chap thiếu của bộ truyện đang chọn" />
+                                                <Button Command="{Binding CopyAllMissingCommand}" Content="📋 Sao Chép Tất Cả Chap Thiếu" Background="#4F46E5" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,4" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Sao chép danh sách toàn bộ truyện bị thiếu chap vào Clipboard" />
+                                                <Button Command="{Binding GoogleSearchMissingCommand}" Content="🌐 Google Tìm Chap Thiếu" Background="#D97706" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,4" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Mở trình duyệt Google tìm kiếm chương thiếu của truyện này" />
+                                            </WrapPanel>
+
+                                            <!-- Thông điệp trạng thái -->
+                                            <TextBlock Text="{Binding OfflineStatusMessage}" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Panel nội dung 2 cột: Danh sách truyện (trái) & Chi tiết chapter (phải) -->
+                                    <Grid Grid.Row="1" ColumnDefinitions="320, *">
+                                        <!-- CỘT TRÁI: DANH SÁCH BỘ TRUYỆN -->
+                                        <Border Grid.Column="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,1,0" Padding="8">
+                                            <Grid RowDefinitions="Auto, *">
+                                                <TextBlock Grid.Row="0" Text="{Binding OfflineFilteredMangaList.Count, StringFormat='{}DANH SÁCH BỘ TRUYỆN ({0})'}" Foreground="#94A3B8" FontWeight="Bold" FontSize="11" Margin="2,0,0,8" />
+                                                <ListBox Grid.Row="1" ItemsSource="{Binding OfflineFilteredMangaList}" SelectedItem="{Binding SelectedOfflineManga}" Background="Transparent">
+                                                    <ListBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,2">
+                                                                <Grid RowDefinitions="Auto, Auto">
+                                                                    <TextBlock Grid.Row="0" Text="{Binding Title}" Foreground="#F8FAFC" FontWeight="Bold" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                                                    <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,4,0,0" VerticalAlignment="Center">
+                                                                        <TextBlock Text="{Binding ChapterCount, StringFormat='{}{0} chap'}" Foreground="#94A3B8" FontSize="10" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                                                        <Border Background="{Binding StatusBadgeBackground}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
+                                                                            <TextBlock Text="{Binding StatusBadgeText}" Foreground="{Binding StatusBadgeForeground}" FontSize="9.5" FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxWidth="190" />
+                                                                        </Border>
+                                                                    </WrapPanel>
+                                                                </Grid>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ListBox.ItemTemplate>
+                                                </ListBox>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- CỘT PHẢI: CHI TIẾT TRUYỆN & CÁC CHƯƠNG -->
+                                        <Border Grid.Column="1" Background="#0A0E17" Padding="12">
+                                            <Grid RowDefinitions="Auto, Auto, *">
+                                                <!-- Card tóm tắt thống kê chuẩn theo phong cách WPF -->
+                                                <Border Grid.Row="0" Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,10">
+                                                    <StackPanel Spacing="6">
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="📖 " FontSize="14" VerticalAlignment="Center" />
+                                                            <TextBlock Text="{Binding SelectedOfflineManga.Title, FallbackValue='(Chưa chọn bộ truyện nào)'}" Foreground="#FBBF24" FontWeight="ExtraBold" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="500" Margin="0,0,12,0" />
+                                                            <TextBlock Text="{Binding SelectedOfflineChapters.Count, StringFormat='{}(Đã tải: {0} chap)'}" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
+                                                        </WrapPanel>
+
+                                                        <!-- Hàng thống kê số nguyên, thập phân & dải thiếu -->
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="Chap nguyên: " Foreground="#94A3B8" FontSize="11" />
+                                                            <TextBlock Text="{Binding SelectedOfflineManga.Analysis.IntegerCount, FallbackValue='0'}" Foreground="#F8FAFC" FontWeight="Bold" FontSize="11" Margin="0,0,8,0" />
+
+                                                            <TextBlock Text="| chap thập phân: " Foreground="#94A3B8" FontSize="11" />
+                                                            <TextBlock Text="{Binding SelectedOfflineManga.Analysis.DecimalCount, FallbackValue='0'}" Foreground="#22D3EE" FontWeight="Bold" FontSize="11" Margin="0,0,8,0" />
+
+                                                            <TextBlock Text="| chap khác: " Foreground="#94A3B8" FontSize="11" />
+                                                            <TextBlock Text="{Binding SelectedOfflineManga.Analysis.UnknownCount, FallbackValue='0'}" Foreground="#94A3B8" FontWeight="Bold" FontSize="11" Margin="0,0,8,0" />
+
+                                                            <TextBlock Text="| " Foreground="#94A3B8" FontSize="11" />
+                                                            <TextBlock Text="thiếu: " Foreground="#F87171" FontWeight="ExtraBold" FontSize="12" />
+                                                            <TextBlock Text="{Binding SelectedOfflineManga.Analysis.MissingSummaryText, FallbackValue='không có'}" Foreground="#F87171" FontWeight="ExtraBold" FontSize="12.5" TextWrapping="Wrap" />
+                                                        </WrapPanel>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- Header bảng danh sách chương -->
+                                                <Grid Grid.Row="1" ColumnDefinitions="*, 90, 130, 90" Margin="4,0,4,6">
+                                                    <TextBlock Grid.Column="0" Text="TÊN CHƯƠNG / FOLDER" Foreground="#64748B" FontWeight="Bold" FontSize="10" />
+                                                    <TextBlock Grid.Column="1" Text="SỐ TRANG" Foreground="#64748B" FontWeight="Bold" FontSize="10" TextAlignment="Center" />
+                                                    <TextBlock Grid.Column="2" Text="NGÀY CẬP NHẬT" Foreground="#64748B" FontWeight="Bold" FontSize="10" TextAlignment="Center" />
+                                                    <TextBlock Grid.Column="3" Text="THAO TÁC" Foreground="#64748B" FontWeight="Bold" FontSize="10" TextAlignment="Right" />
+                                                </Grid>
+
+                                                <!-- Danh sách các chapter đã tải -->
+                                                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                                    <ItemsControl ItemsSource="{Binding SelectedOfflineChapters}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Background="#101726" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="6,6">
+                                                                    <Grid ColumnDefinitions="*, 90, 130, 90">
+                                                                        <!-- Tên chapter với màu sắc phân biệt -->
+                                                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                                            <TextBlock Text="📁" FontSize="11" VerticalAlignment="Center" />
+                                                                            <TextBlock Text="{Binding Name}" Foreground="{Binding DisplayForeground}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                                        </StackPanel>
+
+                                                                        <!-- Số trang ảnh -->
+                                                                        <TextBlock Grid.Column="1" Text="{Binding PageCount, StringFormat='{}{0} pages'}" Foreground="#94A3B8" FontSize="10.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                                                        <!-- Ngày cập nhật -->
+                                                                        <TextBlock Grid.Column="2" Text="{Binding LastModified, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Foreground="#64748B" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                                                        <!-- Nút mở thư mục -->
+                                                                        <Button Grid.Column="3" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenSelectedChapterFolderCommand}" CommandParameter="{Binding}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="8,2" CornerRadius="3" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </ScrollViewer>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+                            </TabItem>
+
+                            <!-- ========================================================================= -->
+                            <!-- CHILD TAB 3.6: ĐỔI TÊN HÀNG LOẠT (BATCH RENAME FILE / FOLDER) -->
+                            <!-- ========================================================================= -->
+                            <TabItem Header="🏷️ Đổi Tên (Rename)" FontSize="12" FontWeight="SemiBold">
+                                <Grid RowDefinitions="Auto, *">
+                                    <!-- Toolbar trên cùng (WrapPanel Responsive) -->
+                                    <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                                        <StackPanel Spacing="8">
+                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <!-- Thêm File & Thư mục -->
+                                                <Button Command="{Binding AddRenameFilesCommand}" Content="📄 + Thêm File" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Chọn một hoặc nhiều file để đổi tên" />
+                                                <Button Command="{Binding AddRenameFolderCommand}" Content="📁 + Thêm Thư Mục" Background="#0D9488" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Chọn thư mục để đổi tên chính thư mục hoặc nạp file bên trong" />
+
+                                                <!-- Chế độ mục tiêu đổi tên -->
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="0,0,8,4" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                        <TextBlock Text="Mục tiêu:" Foreground="#94A3B8" FontSize="10.5" VerticalAlignment="Center" />
+                                                        <RadioButton Content="File" IsChecked="{Binding RenameTargetMode, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Files}" GroupName="RenameTarget" Foreground="#38BDF8" FontSize="10.5" VerticalAlignment="Center" />
+                                                        <RadioButton Content="Thư mục (Folder)" IsChecked="{Binding RenameTargetMode, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Folders}" GroupName="RenameTarget" Foreground="#F59E0B" FontSize="10.5" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- Xóa danh sách -->
+                                                <Button Command="{Binding RemoveSelectedRenameItemCommand}" Content="🗑 Xóa Đã Chọn" Background="#1E293B" Foreground="#EF4444" FontSize="10.5" Padding="8,5" CornerRadius="4" Margin="0,0,6,4" />
+                                                <Button Command="{Binding ClearRenameItemsCommand}" Content="🧹 Xóa Tất Cả" Background="#1E293B" Foreground="#94A3B8" FontSize="10.5" Padding="8,5" CornerRadius="4" Margin="0,0,12,4" />
+
+                                                <!-- Thực thi & Hoàn tác -->
+                                                <Button Command="{Binding ExecuteBatchRenameCommand}" IsEnabled="{Binding !IsRenamingBatch}" Content="▶ START BATCH" Background="#059669" Foreground="#FFFFFF" FontWeight="ExtraBold" FontSize="11" Padding="14,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Bắt đầu đổi tên an toàn cho toàn bộ các mục hợp lệ" />
+                                                <Button Command="{Binding UndoBatchRenameCommand}" IsEnabled="{Binding CanUndoRename}" Content="↩️ UNDO ĐỔI TÊN" Background="#D97706" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Hoàn tác khôi phục lại tên cũ cho lần đổi tên vừa rồi" />
+                                            </WrapPanel>
+
+                                            <!-- Trạng thái & thống kê -->
+                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding RenameStatusMessage}" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" Margin="0,0,12,0" />
+                                                <TextBlock Text="{Binding RenameItems.Count, StringFormat='{}Tổng: {0} mục | '}" Foreground="#94A3B8" FontSize="10.5" />
+                                                <TextBlock Text="{Binding RenameItemsValidCount, StringFormat='{}Hợp lệ: {0} | '}" Foreground="#10B981" FontSize="10.5" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding RenameItemsChangedCount, StringFormat='{}Có thay đổi: {0}'}" Foreground="#FBBF24" FontSize="10.5" FontWeight="SemiBold" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Panel nội dung 2 cột: Danh sách File/Folder (trái) & Pipeline Method (phải) -->
+                                    <Grid Grid.Row="1" ColumnDefinitions="3*, 2*">
+                                        <!-- CỘT TRÁI: DANH SÁCH FILE / FOLDER PREVIEW -->
+                                        <Border Grid.Column="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,1,0" Padding="8"
+                                                DragDrop.AllowDrop="True" DragDrop.DragOver="OnRenameDragOver" DragDrop.Drop="OnRenameDrop">
+                                            <Grid RowDefinitions="Auto, *">
+                                                <!-- Header bảng danh sách -->
+                                                <Grid Grid.Row="0" ColumnDefinitions="*, *, 120" Margin="6,0,6,6">
+                                                    <TextBlock Grid.Column="0" Text="TÊN GỐC (ORIGINAL)" Foreground="#64748B" FontWeight="Bold" FontSize="10.5" />
+                                                    <TextBlock Grid.Column="1" Text="TÊN MỚI (NEW NAME)" Foreground="#38BDF8" FontWeight="Bold" FontSize="10.5" />
+                                                    <TextBlock Grid.Column="2" Text="TRẠNG THÁI" Foreground="#64748B" FontWeight="Bold" FontSize="10.5" TextAlignment="Right" />
+                                                </Grid>
+
+                                                <!-- Bảng danh sách mục -->
+                                                <Grid Grid.Row="1">
+                                                    <ListBox ItemsSource="{Binding RenameItems}" SelectedItem="{Binding SelectedRenameItem}" Background="Transparent">
+                                                        <ListBox.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="8,5" Margin="0,1.5">
+                                                                    <Grid ColumnDefinitions="*, *, 120">
+                                                                        <!-- Tên gốc -->
+                                                                        <TextBlock Grid.Column="0" Text="{Binding OriginalName}" Foreground="#CBD5E1" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,0,6,0" VerticalAlignment="Center" />
+
+                                                                        <!-- Tên mới -->
+                                                                        <TextBlock Grid.Column="1" Text="{Binding NewName}" Foreground="{Binding StatusColor}" FontWeight="SemiBold" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,0,6,0" VerticalAlignment="Center" />
+
+                                                                        <!-- Trạng thái -->
+                                                                        <TextBlock Grid.Column="2" Text="{Binding StatusText}" Foreground="{Binding StatusColor}" FontSize="10" FontWeight="SemiBold" TextAlignment="Right" VerticalAlignment="Center" />
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ListBox.ItemTemplate>
+                                                    </ListBox>
+
+                                                    <!-- Gợi ý kéo thả khi danh sách trống (chuẩn WPF) -->
+                                                    <Border Background="Transparent" IsVisible="{Binding !RenameItems.Count}" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                                                            <TextBlock Text="📥" FontSize="28" HorizontalAlignment="Center" Foreground="#475569" />
+                                                            <TextBlock Text="Kéo - thả file hoặc thư mục vào đây để thêm..." Foreground="#64748B" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                                            <TextBlock Text="Hoặc bấm nút '+ Thêm File' / '+ Thêm Thư Mục' ở thanh công cụ" Foreground="#475569" FontSize="10.5" HorizontalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Grid>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- CỘT PHẢI: QUẢN LÝ METHOD & CẤU HÌNH CHI TIẾT -->
+                                        <Border Grid.Column="1" Background="#0A0E17" Padding="10">
+                                            <Grid RowDefinitions="Auto, 160, Auto, *">
+                                                <!-- Header khu vực Method -->
+                                                <WrapPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,6">
+                                                    <TextBlock Text="DANH SÁCH METHOD (PIPELINE)" Foreground="#FBBF24" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" />
+                                                    <ComboBox SelectedItem="{Binding NewMethodSelection}" Width="150" Height="26" VerticalAlignment="Center" Margin="0,0,6,4" FontSize="10.5">
+                                                        <x:String>NewName</x:String>
+                                                        <x:String>Replace</x:String>
+                                                        <x:String>Renumber</x:String>
+                                                        <x:String>Case</x:String>
+                                                        <x:String>Remove</x:String>
+                                                        <x:String>OptimizeZero</x:String>
+                                                    </ComboBox>
+                                                    <Button Command="{Binding AddRenameMethodCommand}" Content="+ Thêm method" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="3" Margin="0,0,6,4" />
+                                                    <Button Command="{Binding MoveRenameMethodUpCommand}" Content="⬆️" Background="#1E293B" Foreground="#38BDF8" FontSize="10.5" Padding="6,3" CornerRadius="3" Margin="0,0,3,4" ToolTip.Tip="Đẩy lên trước" />
+                                                    <Button Command="{Binding MoveRenameMethodDownCommand}" Content="⬇️" Background="#1E293B" Foreground="#38BDF8" FontSize="10.5" Padding="6,3" CornerRadius="3" Margin="0,0,3,4" ToolTip.Tip="Đẩy xuống sau" />
+                                                    <Button Command="{Binding RemoveSelectedRenameMethodCommand}" Content="❌" Background="#1E293B" Foreground="#EF4444" FontSize="10.5" Padding="6,3" CornerRadius="3" Margin="0,0,0,4" ToolTip.Tip="Xóa method đang chọn" />
+                                                </WrapPanel>
+
+                                                <!-- ListBox danh sách method trong pipeline -->
+                                                <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="4" Margin="0,0,0,10">
+                                                    <ListBox ItemsSource="{Binding RenameMethods}" SelectedItem="{Binding SelectedRenameMethod}" Background="Transparent">
+                                                        <ListBox.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Grid ColumnDefinitions="Auto, *, Auto">
+                                                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                                        <TextBlock Text="{Binding Icon}" FontSize="12" VerticalAlignment="Center" />
+                                                                        <TextBlock Text="{Binding Name}" Foreground="#F8FAFC" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                                    </StackPanel>
+                                                                    <TextBlock Grid.Column="2" Text="{Binding ApplyTo, StringFormat='{}({0})'}" Foreground="#64748B" FontSize="10" VerticalAlignment="Center" />
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ListBox.ItemTemplate>
+                                                    </ListBox>
+                                                </Border>
+
+                                                <!-- Tiêu đề Cấu hình chi tiết -->
+                                                <TextBlock Grid.Row="2" Text="CẤU HÌNH CHI TIẾT (CONFIG)" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" Margin="0,0,0,6" />
+
+                                                <!-- Khung cấu hình động tùy theo loại method đang chọn -->
+                                                <Border Grid.Row="3" Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                        <StackPanel Spacing="10">
+                                                            <!-- Phạm vi áp dụng chung -->
+                                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <TextBlock Text="Áp dụng cho:" Foreground="#94A3B8" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,8,4" />
+                                                                <ComboBox SelectedItem="{Binding SelectedRenameMethod.ApplyTo}" Width="150" Height="26" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,12,4">
+                                                                    <x:String>Name</x:String>
+                                                                    <x:String>Extension</x:String>
+                                                                    <x:String>Both</x:String>
+                                                                </ComboBox>
+                                                                <CheckBox IsChecked="{Binding SelectedRenameMethod.Backwards}" Content="Quét ngược (Backwards)" Foreground="#CBD5E1" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,8,4" />
+                                                                <CheckBox IsChecked="{Binding SelectedRenameMethod.UseRegex}" Content="Sử dụng Regex" Foreground="#38BDF8" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,0,4" />
+                                                            </WrapPanel>
+
+                                                            <!-- CẤU HÌNH 1: NEW NAME METHOD -->
+                                                            <StackPanel Spacing="6" IsVisible="{Binding SelectedRenameMethod, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                                                <!-- Khi là NewNameMethod -->
+                                                                <StackPanel Spacing="4">
+                                                                    <TextBlock Text="Định dạng tên mới (Tags: &lt;Name&gt;, &lt;Ext&gt;, &lt;Counter:3&gt;, &lt;Date:yyyy-MM-dd&gt;):" Foreground="#CBD5E1" FontSize="10.5" FontWeight="SemiBold" />
+                                                                    <TextBox Text="{Binding ((services:NewNameMethod)SelectedRenameMethod).Format}" PlaceholderText="Ví dụ: &lt;Name&gt; - chap &lt;Counter:3&gt;" Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" VerticalContentAlignment="Center" Padding="8,2" />
+                                                                </StackPanel>
+
+                                                                <!-- Khi là ReplaceMethod -->
+                                                                <StackPanel Spacing="6">
+                                                                    <Grid ColumnDefinitions="*, *">
+                                                                        <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,6,0">
+                                                                            <TextBlock Text="Tìm chuỗi (Find):" Foreground="#CBD5E1" FontSize="10.5" />
+                                                                            <TextBox Text="{Binding ((services:ReplaceMethod)SelectedRenameMethod).FindText}" Height="28" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" VerticalContentAlignment="Center" Padding="6,2" />
+                                                                        </StackPanel>
+                                                                        <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0">
+                                                                            <TextBlock Text="Thay bằng (Replace With):" Foreground="#CBD5E1" FontSize="10.5" />
+                                                                            <TextBox Text="{Binding ((services:ReplaceMethod)SelectedRenameMethod).ReplaceWithText}" Height="28" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" VerticalContentAlignment="Center" Padding="6,2" />
+                                                                        </StackPanel>
+                                                                    </Grid>
+                                                                    <CheckBox IsChecked="{Binding ((services:ReplaceMethod)SelectedRenameMethod).CaseSensitive}" Content="Phân biệt chữ hoa/thường (Case Sensitive)" Foreground="#CBD5E1" FontSize="10.5" />
+                                                                </StackPanel>
+
+                                                                <!-- Khi là RenumberMethod -->
+                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <StackPanel Spacing="2" Margin="0,0,10,6">
+                                                                        <TextBlock Text="Bắt đầu từ:" Foreground="#CBD5E1" FontSize="10.5" />
+                                                                        <NumericUpDown Value="{Binding ((services:RenumberMethod)SelectedRenameMethod).StartNumber}" Minimum="0" Maximum="99999" Height="26" Width="90" FontSize="11" />
+                                                                    </StackPanel>
+                                                                    <StackPanel Spacing="2" Margin="0,0,10,6">
+                                                                        <TextBlock Text="Bước nhảy:" Foreground="#CBD5E1" FontSize="10.5" />
+                                                                        <NumericUpDown Value="{Binding ((services:RenumberMethod)SelectedRenameMethod).Step}" Minimum="1" Maximum="1000" Height="26" Width="80" FontSize="11" />
+                                                                    </StackPanel>
+                                                                    <StackPanel Spacing="2" Margin="0,0,10,6">
+                                                                        <TextBlock Text="Số chữ số 0:" Foreground="#CBD5E1" FontSize="10.5" />
+                                                                        <NumericUpDown Value="{Binding ((services:RenumberMethod)SelectedRenameMethod).ZeroPadding}" Minimum="0" Maximum="10" Height="26" Width="80" FontSize="11" />
+                                                                    </StackPanel>
+                                                                    <StackPanel Spacing="2" Margin="0,0,10,6">
+                                                                        <TextBlock Text="Vị trí chèn:" Foreground="#CBD5E1" FontSize="10.5" />
+                                                                        <ComboBox SelectedItem="{Binding ((services:RenumberMethod)SelectedRenameMethod).Location}" Width="110" Height="26" FontSize="10.5">
+                                                                            <x:String>Prepend</x:String>
+                                                                            <x:String>Append</x:String>
+                                                                            <x:String>Replace</x:String>
+                                                                        </ComboBox>
+                                                                    </StackPanel>
+                                                                </WrapPanel>
+
+                                                                <!-- Khi là ChangeCaseMethod -->
+                                                                <StackPanel Spacing="4">
+                                                                    <TextBlock Text="Kiểu chuyển đổi chữ hoa/thường:" Foreground="#CBD5E1" FontSize="10.5" />
+                                                                    <ComboBox SelectedItem="{Binding ((services:ChangeCaseMethod)SelectedRenameMethod).CaseType}" Width="200" Height="28" FontSize="11">
+                                                                        <x:String>Title Case</x:String>
+                                                                        <x:String>lowercase</x:String>
+                                                                        <x:String>UPPERCASE</x:String>
+                                                                        <x:String>Sentence case</x:String>
+                                                                    </ComboBox>
+                                                                </StackPanel>
+
+                                                                <!-- Khi là RemoveMethod -->
+                                                                <StackPanel Spacing="6">
+                                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                        <TextBlock Text="Kiểu xóa:" Foreground="#CBD5E1" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,8,4" />
+                                                                        <ComboBox SelectedItem="{Binding ((services:RemoveMethod)SelectedRenameMethod).RemoveType}" Width="160" Height="26" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                            <x:String>String</x:String>
+                                                                            <x:String>Range</x:String>
+                                                                            <x:String>ExtraWhitespace</x:String>
+                                                                            <x:String>SpecialChars</x:String>
+                                                                            <x:String>Digits</x:String>
+                                                                        </ComboBox>
+                                                                    </WrapPanel>
+                                                                    <StackPanel Spacing="4">
+                                                                        <TextBlock Text="Chuỗi cần xóa:" Foreground="#CBD5E1" FontSize="10.5" />
+                                                                        <TextBox Text="{Binding ((services:RemoveMethod)SelectedRenameMethod).TargetText}" Height="28" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" VerticalContentAlignment="Center" Padding="6,2" />
+                                                                    </StackPanel>
+                                                                </StackPanel>
+
+                                                                <!-- Khi là OptimizeZeroMethod -->
+                                                                <StackPanel Spacing="4">
+                                                                    <TextBlock Text="Độ dài chuẩn hóa số 0 đệm (Ví dụ: 3 chữ số -> 001, 002):" Foreground="#CBD5E1" FontSize="10.5" />
+                                                                    <NumericUpDown Value="{Binding ((services:OptimizeZeroMethod)SelectedRenameMethod).PadLength}" Minimum="1" Maximum="10" Height="26" Width="100" HorizontalAlignment="Left" FontSize="11" />
+                                                                </StackPanel>
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </ScrollViewer>
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
                                 </Grid>
                             </TabItem>
 

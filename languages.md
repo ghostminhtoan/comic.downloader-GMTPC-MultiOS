@@ -691,4 +691,66 @@
 | GIF (Static / Animated) | GIF (Tĩnh / Động) |
 | WebP (Static / Animated) | WebP (Tĩnh / Động) |
 
+## 15. Offline Missing Chapter Scan
+
+| English | Vietnamese |
+| :--- | :--- |
+| Scan Missing Chapters Offline | Quét Chap Thiếu Offline |
+| Root scan folder: | Thư mục quét gốc: |
+| Filter manga name... | Lọc tên truyện... |
+| Only show missing | Chỉ hiện thiếu chap |
+| Scan Offline Folder | Quét Thư Mục |
+| Cancel Scan | Hủy Quét |
+| Manga List | Danh Sách Truyện |
+| Missing chapter list: | Danh sách chap thiếu: |
+| Copy Missing (Range) | Sao Chép Thiếu (Range) |
+| Copy All (List) | Sao Chép Tất Cả (List) |
+| Search Google | Tìm Google |
+| Open Manga Folder | Mở Folder Truyện |
+| Open Chapter Folder | Mở Folder Chap |
+| Chapters | Chương |
+| Missing | Thiếu |
+| Page Count | Trang |
+| Integer Count | Số nguyên |
+| Decimal Count | Thập phân |
+| Other Count | Khác |
+
+## 16. Batch Rename Tool
+
+| English | Vietnamese |
+| :--- | :--- |
+| Batch Rename | Đổi Tên (Rename) |
+| Add Files | Thêm File |
+| Add Folder | Thêm Folder |
+| Clear List | Xóa Hết |
+| Remove Item | Xóa Mục |
+| Target Type | Đối tượng |
+| Both Files & Folders | Cả File & Thư mục |
+| Files Only | Chỉ File |
+| Folders Only | Chỉ Thư mục |
+| Include Subfolders | Bao gồm thư mục con |
+| Pipeline Methods | Bộ Quy Tắc Đổi Tên |
+| Add Method | Thêm Quy Tắc |
+| Remove Method | Xóa Quy Tắc |
+| Move Up | Lên |
+| Move Down | Xuống |
+| Execute Batch Rename | Thực Hiện Đổi Tên |
+| Undo Last Batch | Hoàn Tác (Undo) |
+| Original Name | Tên Gốc |
+| New Name (Preview) | Tên Mới (Xem Trước) |
+| Status | Trạng Thái |
+| Full Path | Đường Dẫn |
+| New Name | Đặt Tên Mới |
+| Find & Replace | Tìm & Thay Thế |
+| Renumber | Đánh Số |
+| Change Case | Đổi Kiểu Chữ |
+| Remove Characters | Xóa Ký Tự |
+| Optimize Zero Padding | Chuẩn Hóa Số 0 Đệm |
+| Ready | Sẵn sàng |
+| Valid | Hợp lệ |
+| Name Conflict | Trùng tên |
+| Error | Lỗi |
+| Success | Thành công |
+| Undone | Đã hoàn tác |
+
 

@@ -1491,9 +1491,36 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
          - Nếu item ở trên viewport: cuộn lên vừa đủ.
          - Nếu item đã nằm trọn vẹn trong Viewport: giữ nguyên trạng thái cuộn, không gây rung giật màn hình (chuẩn xác như WPF `ScrollIntoView`).
       5. Fallback an toàn qua `targetControl.BringIntoView()` hoặc ước tính tỷ lệ nếu container chưa kịp layout.
+### 15.30. Sáng Tạo 2 Subtab Mới Trong Tab Công Cụ (Tool): Quét Chap Thiếu Offline & Đổi Tên Hàng Loạt (Batch Rename)
+- **Bối cảnh & Yêu cầu**:
+  - Không sao chép cứng 100% giao diện WPF mà sáng tạo thành 2 subtab hiện đại, gọn gàng, trực quan và responsive trong Tab Công Cụ của Avalonia:
+    1. **Subtab `🔍 Quét Chap Thiếu Offline`**:
+       - Kế thừa và cải tiến logic check chương bị thiếu từ phần Watch của WPF đối với các truyện đã tải về ổ cứng offline.
+       - Tự động phát hiện cấu trúc Single-comic (folder chứa trực tiếp các folder chapter) hoặc Multi-comic (folder root chứa các folder truyện, bên trong là chapter).
+       - Tách số chương thành 3 nhóm rõ ràng: Số nguyên (`IntegerCount`), Thập phân (`DecimalCount`), Khác (`UnknownCount`).
+       - Thuật toán trích xuất các dải chương thiếu (`MissingRanges`, vd: `1-10, 12-50, 57-100`).
+       - Đếm chính xác số trang ảnh (`PageCount`) trong từng folder chương.
+       - Màu sắc phân loại trực quan: Cyan cho thập phân, Vàng cho chương kề khoảng thiếu, Trắng/Xám cho chương đầy đủ bình thường.
+       - Hỗ trợ sao chép dải chap thiếu (Range), danh sách đầy đủ (List), mở tìm kiếm Google nhanh (`tên truyện + chap thiếu`), mở thư mục truyện / chương trực tiếp trên Windows, Linux (`xdg-open`), macOS (`open`).
+       - Thanh công cụ WrapPanel co giãn responsive, bộ lọc tìm kiếm tên truyện thời gian thực và toggle chỉ hiện truyện thiếu.
+    2. **Subtab `🏷️ Đổi Tên (Rename)`**:
+       - Cải tiến vượt trội logic đổi tên file/thư mục hàng loạt an toàn, trực quan, hỗ trợ kéo thả (Drag & Drop).
+       - Hỗ trợ đổi tên cả File và Folder hoặc tùy chọn chỉ File / chỉ Folder, hỗ trợ duyệt đệ quy thư mục con.
+       - Pipeline đa quy tắc (Multiple Methods Pipeline): Cho phép áp dụng chuỗi nhiều quy tắc đổi tên tuần tự, thêm/xóa/di chuyển thứ tự (Move Up/Down).
+       - 6 bộ quy tắc chuyên sâu:
+         * **Đặt Tên Mới (NewNameMethod)**: Định dạng template tag động (`<Name>`, `<Ext>`, `<Counter:N>`, `<Date:format>`).
+         * **Tìm & Thay Thế (ReplaceMethod)**: Case-sensitive, Regular Expression (Regex), Backwards.
+         * **Đánh Số (RenumberMethod)**: StartNumber, Step, ZeroPadding, Vị trí (Prepend, Append, Replace), Ký tự phân cách (Separator).
+         * **Đổi Kiểu Chữ (ChangeCaseMethod)**: Lowercase, UPPERCASE, Title Case, Sentence case.
+         * **Xóa Ký Tự (RemoveMethod)**: Theo vị trí/độ dài (Range), chuỗi ký tự (String), khoảng trắng thừa (Extra whitespace), ký tự đặc biệt, số.
+         * **Chuẩn Hóa Số 0 Đệm (OptimizeZeroMethod)**: Tự động phát hiện và đồng bộ độ dài số 0 đệm (`PadLength`).
+       - **Engine Preview Real-time**: Cập nhật tức thì tên mới (`NewName`), kiểm tra xung đột trùng tên (Name Conflict), ký tự cấm OS.
+       - **Engine Thực Thi 2 Pha An Toàn**: Đổi tên thông qua file/folder trung gian GUID tạm thời để triệt tiêu hoàn toàn xung đột trùng tên chéo hoặc giới hạn case-insensitive của hệ điều hành Windows.
+       - **Engine Hoàn Tác (Undo Batch)**: Tự động lưu snapshot lịch sử đổi tên gần nhất và hỗ trợ hoàn tác 1-click trả lại chính xác tên gốc ban đầu.
 - **Nghiệm Thu**:
-  - Chạy `build.bat` biên dịch sạch cả 4 nền tảng (0 Error, 0 Warning).
-  - Kiểm thử 2 bước khởi chạy desktop thành công (`Responding: True`, `HasExited: False`).
+  - `dotnet build` biên dịch sạch sẽ `0 Error(s), 0 Warning(s)`.
+  - Cập nhật song ngữ đầy đủ vào `languages.md` (Section 15 & 16).
+
 
 
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -651,5 +652,42 @@ public partial class MainView : UserControl
                 vm.ToggleSplitCollapse(item);
             }
         }
+    }
+
+    private void OnRenameDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void OnRenameDrop(object? sender, DragEventArgs e)
+    {
+        try
+        {
+            if (e.DataTransfer != null)
+            {
+                var paths = new List<string>();
+                foreach (var item in e.DataTransfer.Items)
+                {
+                    try
+                    {
+                        dynamic dItem = item;
+                        string p = string.Empty;
+                        try { p = dItem.Path?.LocalPath ?? dItem.Path?.ToString() ?? dItem.ToString() ?? string.Empty; } catch { }
+                        if (!string.IsNullOrEmpty(p) && (File.Exists(p) || Directory.Exists(p)))
+                        {
+                            paths.Add(p);
+                        }
+                    }
+                    catch { }
+                }
+
+                if (paths.Count > 0 && DataContext is MainViewModel vm)
+                {
+                    vm.AddDroppedPathsToRename(paths);
+                }
+            }
+        }
+        catch { }
     }
 }
