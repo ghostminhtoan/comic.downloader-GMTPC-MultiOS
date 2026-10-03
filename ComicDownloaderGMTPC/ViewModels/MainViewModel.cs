@@ -221,6 +221,18 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isAutoScrollToActive = false;
 
+    // AUTO DELETE COMPLETED COMICS (TỰ ĐỘNG XÓA TRUYỆN ĐÃ TẢI XONG)
+    [ObservableProperty]
+    private bool _isAutoDeleteCompleted = false;
+
+    partial void OnIsAutoDeleteCompletedChanged(bool value)
+    {
+        if (value)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(CheckAndAutoDeleteCompleted);
+        }
+    }
+
     // AUTO SPLIT CHAPTERS (TỰ ĐỘNG TÁCH CHƯƠNG ĐỂ TẢI SONG SONG SIÊU NHANH)
     [ObservableProperty]
     private string _autoSplitChaptersSelection = "OFF";
@@ -1286,8 +1298,15 @@ public partial class MainViewModel : ViewModelBase
 
     private void OnProgressUpdated()
     {
-        DownloadSpeedText = _downloadEngine.CurrentSpeedText;
-        UpdateStats();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            DownloadSpeedText = _downloadEngine.CurrentSpeedText;
+            UpdateStats();
+            if (IsAutoDeleteCompleted)
+            {
+                CheckAndAutoDeleteCompleted();
+            }
+        });
     }
 
     [RelayCommand]
@@ -1615,6 +1634,28 @@ public partial class MainViewModel : ViewModelBase
         AddLog("SUCCESS", $"Đã tự động dọn dẹp {completedItems.Count} mục đã tải xong khỏi danh sách.");
     }
 
+    public void CheckAndAutoDeleteCompleted()
+    {
+        if (!IsAutoDeleteCompleted) return;
+
+        var completedItems = ComicBooks
+            .Where(b => b != null && (string.Equals(b.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(b.Status, "Hoàn tất", StringComparison.OrdinalIgnoreCase) ||
+                                     b.ProgressPercentage >= 100.0))
+            .ToList();
+
+        if (completedItems.Count == 0) return;
+
+        foreach (var item in completedItems)
+        {
+            DeleteItem(item);
+        }
+
+        ReindexComicBooks();
+        UpdateStats();
+        AddLog("SUCCESS", $"[Tự Xóa] Đã tự động dọn dẹp {completedItems.Count} mục đã hoàn tất khỏi hàng đợi.");
+    }
+
     // ==========================================
     // DATA GRID SELECTION & ADVANCED OPTIONS
     // ==========================================
@@ -1794,17 +1835,32 @@ public partial class MainViewModel : ViewModelBase
                 parent.ParallelSplitChildren.Remove(target);
                 if (parent.ParallelSplitChildren.Count == 0)
                 {
-                    // Nếu đã xóa hết tất cả các task con thì khôi phục truyện cha về bình thường
-                    parent.IsParallelSplitParent = false;
-                    parent.IsParallelSplitChild = false;
-                    parent.IsParallelSplitCollapsed = false;
-                    parent.ParallelSplitParentUrl = string.Empty;
-                    parent.IsChecked = true;
-                    parent.Status = "Waiting";
-                    parent.ChapterSelectionText = string.Empty;
-                    parent.DetailProgressText = "Sẵn sàng";
+                    // Nếu nhánh con vừa xóa là Completed (tức là đã tải xong toàn bộ), dọn sạch luôn truyện cha
+                    if (string.Equals(target.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(target.Status, "Hoàn tất", StringComparison.OrdinalIgnoreCase) ||
+                        target.ProgressPercentage >= 100.0)
+                    {
+                        ComicBooks.Remove(parent);
+                        AddLog("INFO", $"Đã hoàn tất toàn bộ các nhánh của truyện '{parent.Title}', tự động dọn sạch truyện gốc khỏi hàng đợi.");
+                    }
+                    else
+                    {
+                        // Nếu người dùng xóa dở dang khi chưa hoàn tất thì khôi phục truyện cha về bình thường
+                        parent.IsParallelSplitParent = false;
+                        parent.IsParallelSplitChild = false;
+                        parent.IsParallelSplitCollapsed = false;
+                        parent.ParallelSplitParentUrl = string.Empty;
+                        parent.IsChecked = true;
+                        parent.Status = "Waiting";
+                        parent.ChapterSelectionText = string.Empty;
+                        parent.DetailProgressText = "Sẵn sàng";
+                        parent.NotifySplitHierarchyChanged();
+                    }
                 }
-                parent.NotifySplitHierarchyChanged();
+                else
+                {
+                    parent.NotifySplitHierarchyChanged();
+                }
             }
 
             ComicBooks.Remove(target);

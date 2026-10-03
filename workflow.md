@@ -1397,4 +1397,20 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - **Hiệu năng & Khả năng Tương thích**:
     + Hoàn toàn Native Managed .NET 10, tốc độ giải mã tính bằng mili-giây, độc lập 100% trên cả 3 nền tảng Windows, Linux, Android mà không cần WebView hay trình duyệt ngoài.
 
+### 15.57. Checkbox Tự Động Xóa Truyện Đã Tải Xong (Auto Delete Completed Comics)
+- **Bối cảnh & Yêu cầu Người dùng**:
+  - Người dùng muốn có một checkbox tùy chọn tự động dọn dẹp và xóa sạch các bộ truyện hoặc các nhánh chương đã tải xong (Completed / 100%) khỏi danh sách hàng đợi (Queue) ngay lập tức mà không cần phải bấm nút xóa thủ công.
+- **Kiến trúc & Giải pháp Khắc phục Triệt để**:
+  - **`MainViewModel.cs`**:
+    + Bổ sung thuộc tính `[ObservableProperty] private bool _isAutoDeleteCompleted = false;`.
+    + Khi checkbox được kích hoạt (`OnIsAutoDeleteCompletedChanged`), ngay lập tức quét và dọn sạch các truyện/nhánh đã hoàn tất trong hàng đợi qua `Dispatcher.UIThread.Post(CheckAndAutoDeleteCompleted)`.
+    + Viết hàm `CheckAndAutoDeleteCompleted()`: Lọc các item có trạng thái `Completed`, `Hoàn tất` hoặc `ProgressPercentage >= 100.0` và gọi `DeleteItem(item)` để xóa an toàn.
+    + Tích hợp trực tiếp vào luồng sự kiện tải `OnProgressUpdated()`: Mỗi khi engine phát tín hiệu cập nhật tiến trình hoặc hoàn thành tải một bộ truyện, nếu `IsAutoDeleteCompleted == true`, tự động kích hoạt dọn dẹp tức thì trên UI thread.
+    + Nâng cấp xử lý cây phân cấp tách chương trong `DeleteItem`: Khi tất cả các nhánh con của một truyện cha hoàn tất và bị xóa bởi Auto Delete, truyện cha cũng tự động được dọn dẹp sạch sẽ khỏi hàng đợi (thay vì bị reset về `Waiting`), giúp hàng đợi luôn gọn gàng và không bị tải lại lặp lại.
+  - **`MainView.axaml`**:
+    + Bổ sung CheckBox `🧹 Tự xóa đã xong` (`IsAutoDeleteCompleted`) với màu xanh ngọc `#10B981` nổi bật ngay trên thanh tùy chọn tải (WrapPanel) cạnh `📜 Auto Scroll (10s)`.
+  - **Chuẩn hóa Song ngữ (`MainWindow.LanguageEng-VI.md` & `languages.md`)**:
+    + Thêm mục ánh xạ song ngữ: `Auto Delete Completed` / `Tự Động Xóa Đã Xong`.
+
+
 

@@ -1221,6 +1221,7 @@
                                     <CheckBox IsChecked="{Binding IsAutoRetry}" Content="🔁 Tự thử lại" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
                                     <CheckBox IsChecked="{Binding IsCompactRow}" Content="📏 Nén dòng" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
                                     <CheckBox IsChecked="{Binding IsAutoScrollToActive}" Content="📜 Auto Scroll (10s)" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" Margin="0,0,10,4" ToolTip.Tip="Mỗi 10 giây tự động cuộn danh sách hàng đợi xuống vị trí truyện đang tải nằm ở vị trí thấp nhất" />
+                                    <CheckBox IsChecked="{Binding IsAutoDeleteCompleted}" Content="🧹 Tự xóa đã xong" FontSize="11" Foreground="#10B981" FontWeight="SemiBold" Margin="0,0,10,4" ToolTip.Tip="Tự động dọn dẹp xóa truyện hoặc dải chương khỏi hàng đợi ngay khi tải xong 100%" />
                                     <CheckBox IsChecked="{Binding IsAutoSplitLongImages}" Content="✂️ Tự cắt ảnh dài" FontSize="11" Foreground="#F43F5E" FontWeight="SemiBold" Margin="0,0,6,4" ToolTip.Tip="Tự động cắt ảnh có chiều cao lớn hơn ngưỡng chỉ định thành các mảnh nhỏ trong khi tải" />
                                     <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding IsAutoSplitLongImages}" Margin="0,0,0,4">
                                         <TextBlock Text="Cao:" FontSize="11" Foreground="#F43F5E" FontWeight="SemiBold" VerticalAlignment="Center" />
