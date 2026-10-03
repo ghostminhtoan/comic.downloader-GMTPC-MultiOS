@@ -125,33 +125,45 @@ public class OfflineMissingChapterService
         {
             if (!Directory.Exists(folderPath)) return null;
 
-            string mangaTitle = Path.GetFileName(folderPath);
-            var chapterDirs = Directory.GetDirectories(folderPath);
-            var chapters = new List<OfflineChapterItem>();
-
-            foreach (var chDir in chapterDirs)
+            string cleanPath = folderPath.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string mangaTitle = Path.GetFileName(cleanPath);
+            if (string.IsNullOrWhiteSpace(mangaTitle))
             {
-                string chName = Path.GetFileName(chDir);
+                mangaTitle = cleanPath;
+            }
+
+            var chapterDirs = Directory.GetDirectories(folderPath);
+            if (chapterDirs.Length == 0) return null;
+
+            var chaptersArray = new OfflineChapterItem[chapterDirs.Length];
+            int maxThreads = Math.Clamp(Environment.ProcessorCount, 4, 16);
+
+            Parallel.For(0, chapterDirs.Length, new ParallelOptions { MaxDegreeOfParallelism = maxThreads }, i =>
+            {
+                string chDir = chapterDirs[i];
+                string chName = Path.GetFileName(chDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                 int pageCount = 0;
                 DateTime lastModified = DateTime.MinValue;
 
                 try
                 {
-                    var files = Directory.GetFiles(chDir);
-                    pageCount = files.Count(f => SupportedImageExtensions.Contains(Path.GetExtension(f)));
-                    lastModified = Directory.GetLastWriteTime(chDir);
+                    var dirInfo = new DirectoryInfo(chDir);
+                    lastModified = dirInfo.LastWriteTime;
+                    pageCount = dirInfo.EnumerateFiles("*.*", SearchOption.TopDirectoryOnly)
+                                       .Count(f => SupportedImageExtensions.Contains(f.Extension));
                 }
                 catch { }
 
-                chapters.Add(new OfflineChapterItem
+                chaptersArray[i] = new OfflineChapterItem
                 {
                     Name = chName,
                     FolderPath = chDir,
                     PageCount = pageCount,
                     LastModified = lastModified
-                });
-            }
+                };
+            });
 
+            var chapters = chaptersArray.Where(c => c != null).ToList();
             if (chapters.Count == 0) return null;
 
             var analysis = AnalyzeChapters(chapters);

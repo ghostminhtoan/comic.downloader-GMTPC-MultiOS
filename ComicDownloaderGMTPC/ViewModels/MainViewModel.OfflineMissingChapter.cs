@@ -60,20 +60,21 @@ public partial class MainViewModel
 
     partial void OnSelectedOfflineMangaChanged(OfflineMangaItem? value)
     {
-        SelectedOfflineChapters.Clear();
         if (value != null && value.Chapters != null)
         {
-            foreach (var ch in value.Chapters)
-            {
-                SelectedOfflineChapters.Add(ch);
-            }
+            SelectedOfflineChapters = new ObservableCollection<OfflineChapterItem>(value.Chapters);
+        }
+        else
+        {
+            SelectedOfflineChapters = new ObservableCollection<OfflineChapterItem>();
         }
     }
 
     private void ApplyOfflineMangaFilter()
     {
-        OfflineFilteredMangaList.Clear();
+        var previousSelected = SelectedOfflineManga;
         var query = (OfflineSearchQuery ?? string.Empty).Trim();
+        var filtered = new List<OfflineMangaItem>();
 
         foreach (var m in OfflineMangaList)
         {
@@ -87,10 +88,20 @@ public partial class MainViewModel
                 continue;
             }
 
-            OfflineFilteredMangaList.Add(m);
+            filtered.Add(m);
         }
 
-        if (SelectedOfflineManga != null && !OfflineFilteredMangaList.Contains(SelectedOfflineManga))
+        OfflineFilteredMangaList.Clear();
+        foreach (var item in filtered)
+        {
+            OfflineFilteredMangaList.Add(item);
+        }
+
+        if (previousSelected != null && OfflineFilteredMangaList.Contains(previousSelected))
+        {
+            SelectedOfflineManga = previousSelected;
+        }
+        else
         {
             SelectedOfflineManga = OfflineFilteredMangaList.FirstOrDefault();
         }
@@ -113,7 +124,9 @@ public partial class MainViewModel
                 var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
                 if (folders != null && folders.Count > 0)
                 {
-                    string path = folders[0].Path.LocalPath;
+                    var selected = folders[0];
+                    string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                    string path = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
                     if (!string.IsNullOrWhiteSpace(path))
                     {
                         OfflineScanRootPath = path;

@@ -47,13 +47,109 @@ public partial class MainViewModel
     private string _newMethodSelection = "NewName"; // "NewName", "Replace", "Renumber", "Case", "Remove", "OptimizeZero"
 
     [ObservableProperty]
-    private string _renameTargetMode = "Files"; // "Files" hoặc "Folders"
+    private string _renameTargetMode = "Files"; // "Files", "Folders", "All"
+
+    [ObservableProperty]
+    private bool _isRecursiveScan = true; // Quét đa tầng tất cả thư mục con
+
+    [ObservableProperty]
+    private string _manualRenameFolderPath = string.Empty;
 
     public void RefreshRenamePreview()
     {
         _batchRenameService.UpdatePreview(RenameItems, RenameMethods);
         RenameItemsValidCount = RenameItems.Count(it => it.IsValid);
         RenameItemsChangedCount = RenameItems.Count(it => it.IsChanged);
+    }
+
+    private static string ResolveStorageItemPath(IStorageItem item)
+    {
+        string? raw = item.TryGetLocalPath();
+        if (string.IsNullOrWhiteSpace(raw) && item.Path != null)
+        {
+            raw = item.Path.IsAbsoluteUri ? item.Path.LocalPath : item.Path.ToString();
+        }
+        return DownloadEngineService.NormalizeStoragePath(raw, item.Name);
+    }
+
+    private int ScanFolderInternal(string rootDir, bool recursive, string targetMode)
+    {
+        int added = 0;
+        if (string.IsNullOrWhiteSpace(rootDir) || !Directory.Exists(rootDir)) return 0;
+
+        var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+
+        // 1. Quét Thư mục nếu targetMode là Folders hoặc All
+        if (targetMode.Equals("Folders", StringComparison.OrdinalIgnoreCase) || targetMode.Equals("All", StringComparison.OrdinalIgnoreCase))
+        {
+            // Thêm chính rootDir nếu chưa có
+            if (!RenameItems.Any(it => it.OriginalPath.Equals(rootDir, StringComparison.OrdinalIgnoreCase)))
+            {
+                RenameItems.Add(new RenameItem
+                {
+                    OriginalPath = rootDir,
+                    IsDirectory = true
+                });
+                added++;
+            }
+
+            try
+            {
+                var directories = Directory.GetDirectories(rootDir, "*", searchOption);
+                foreach (var dir in directories)
+                {
+                    string dirName = Path.GetFileName(dir);
+                    if (dirName.StartsWith(".") || dirName.Equals(".tmp", StringComparison.OrdinalIgnoreCase) || dirName.Equals(".portable", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (!RenameItems.Any(it => it.OriginalPath.Equals(dir, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        RenameItems.Add(new RenameItem
+                        {
+                            OriginalPath = dir,
+                            IsDirectory = true
+                        });
+                        added++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("WARN", $"[Rename] Lỗi quét thư mục con tại '{rootDir}': {ex.Message}");
+            }
+        }
+
+        // 2. Quét File nếu targetMode là Files hoặc All
+        if (targetMode.Equals("Files", StringComparison.OrdinalIgnoreCase) || targetMode.Equals("All", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var files = Directory.GetFiles(rootDir, "*.*", searchOption);
+                foreach (var file in files)
+                {
+                    string fileName = Path.GetFileName(file);
+                    if (fileName.StartsWith(".")) continue;
+
+                    if (!RenameItems.Any(it => it.OriginalPath.Equals(file, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        RenameItems.Add(new RenameItem
+                        {
+                            OriginalPath = file,
+                            IsDirectory = false
+                        });
+                        added++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("WARN", $"[Rename] Lỗi quét file tại '{rootDir}': {ex.Message}");
+            }
+        }
+
+        return added;
     }
 
     [RelayCommand]
@@ -73,9 +169,10 @@ public partial class MainViewModel
                 var files = await topLevel.StorageProvider.OpenFilePickerAsync(options);
                 if (files != null && files.Count > 0)
                 {
+                    int added = 0;
                     foreach (var f in files)
                     {
-                        string path = f.Path.LocalPath;
+                        string path = ResolveStorageItemPath(f);
                         if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
                         {
                             if (!RenameItems.Any(it => it.OriginalPath.Equals(path, StringComparison.OrdinalIgnoreCase)))
@@ -85,11 +182,12 @@ public partial class MainViewModel
                                     OriginalPath = path,
                                     IsDirectory = false
                                 });
+                                added++;
                             }
                         }
                     }
                     RefreshRenamePreview();
-                    RenameStatusMessage = $"Đã thêm {files.Count} file vào danh sách.";
+                    RenameStatusMessage = $"Đã thêm {added} file vào danh sách.";
                 }
             }
         }
@@ -109,7 +207,7 @@ public partial class MainViewModel
             {
                 var options = new FolderPickerOpenOptions
                 {
-                    Title = "Chọn Thư Mục (Đổi Tên Thư Mục Hoặc File Bên Trong)",
+                    Title = "Chọn Thư Mục Để Nạp Đổi Tên (Hỗ Trợ Quét Đa Tầng)",
                     AllowMultiple = true
                 };
 
@@ -119,53 +217,15 @@ public partial class MainViewModel
                     int addedCount = 0;
                     foreach (var f in folders)
                     {
-                        string path = f.Path.LocalPath;
+                        string path = ResolveStorageItemPath(f);
                         if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
                         {
-                            if (RenameTargetMode == "Folders")
-                            {
-                                if (!RenameItems.Any(it => it.OriginalPath.Equals(path, StringComparison.OrdinalIgnoreCase)))
-                                {
-                                    RenameItems.Add(new RenameItem
-                                    {
-                                        OriginalPath = path,
-                                        IsDirectory = true
-                                    });
-                                    addedCount++;
-                                }
-
-                                foreach (var subDir in Directory.GetDirectories(path))
-                                {
-                                    if (!RenameItems.Any(it => it.OriginalPath.Equals(subDir, StringComparison.OrdinalIgnoreCase)))
-                                    {
-                                        RenameItems.Add(new RenameItem
-                                        {
-                                            OriginalPath = subDir,
-                                            IsDirectory = true
-                                        });
-                                        addedCount++;
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                foreach (var file in Directory.GetFiles(path))
-                                {
-                                    if (!RenameItems.Any(it => it.OriginalPath.Equals(file, StringComparison.OrdinalIgnoreCase)))
-                                    {
-                                        RenameItems.Add(new RenameItem
-                                        {
-                                            OriginalPath = file,
-                                            IsDirectory = false
-                                        });
-                                        addedCount++;
-                                    }
-                                }
-                            }
+                            ManualRenameFolderPath = path;
+                            addedCount += ScanFolderInternal(path, IsRecursiveScan, RenameTargetMode);
                         }
                     }
                     RefreshRenamePreview();
-                    RenameStatusMessage = $"Đã nạp {addedCount} mục vào danh sách.";
+                    RenameStatusMessage = $"Đã nạp {addedCount} mục vào danh sách đổi tên (Đa tầng: {(IsRecursiveScan ? "BẬT" : "TẮT")}).";
                 }
             }
         }
@@ -175,49 +235,88 @@ public partial class MainViewModel
         }
     }
 
+    [RelayCommand]
+    public async Task BrowseManualRenameFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null)
+            {
+                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+                {
+                    Title = "Chọn Thư Mục Quét Đổi Tên",
+                    AllowMultiple = false
+                });
+
+                if (folders != null && folders.Count > 0)
+                {
+                    string path = ResolveStorageItemPath(folders[0]);
+                    if (!string.IsNullOrWhiteSpace(path))
+                    {
+                        ManualRenameFolderPath = path;
+                        ScanManualRenameFolder();
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            RenameStatusMessage = $"Lỗi chọn thư mục: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public void ScanManualRenameFolder()
+    {
+        string path = (ManualRenameFolderPath ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            RenameStatusMessage = "Vui lòng nhập hoặc chọn đường dẫn thư mục!";
+            return;
+        }
+
+        path = DownloadEngineService.NormalizeStoragePath(path);
+        if (!Directory.Exists(path))
+        {
+            RenameStatusMessage = "Thư mục không tồn tại!";
+            return;
+        }
+
+        ManualRenameFolderPath = path;
+        int added = ScanFolderInternal(path, IsRecursiveScan, RenameTargetMode);
+        RefreshRenamePreview();
+        RenameStatusMessage = $"Đã quét và nạp {added} mục từ '{path}' (Đa tầng: {(IsRecursiveScan ? "BẬT" : "TẮT")}).";
+    }
+
     public void AddDroppedPathsToRename(IEnumerable<string> paths)
     {
         if (paths == null) return;
         int added = 0;
-        foreach (var path in paths)
+        foreach (var p in paths)
         {
-            if (string.IsNullOrWhiteSpace(path)) continue;
-            if (File.Exists(path))
+            if (string.IsNullOrWhiteSpace(p)) continue;
+            string clean = DownloadEngineService.NormalizeStoragePath(p);
+
+            if (File.Exists(clean))
             {
-                if (!RenameItems.Any(it => it.OriginalPath.Equals(path, StringComparison.OrdinalIgnoreCase)))
+                if (!RenameItems.Any(it => it.OriginalPath.Equals(clean, StringComparison.OrdinalIgnoreCase)))
                 {
-                    RenameItems.Add(new RenameItem { OriginalPath = path, IsDirectory = false });
+                    RenameItems.Add(new RenameItem { OriginalPath = clean, IsDirectory = false });
                     added++;
                 }
             }
-            else if (Directory.Exists(path))
+            else if (Directory.Exists(clean))
             {
-                if (RenameTargetMode == "Folders")
-                {
-                    if (!RenameItems.Any(it => it.OriginalPath.Equals(path, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        RenameItems.Add(new RenameItem { OriginalPath = path, IsDirectory = true });
-                        added++;
-                    }
-                }
-                else
-                {
-                    foreach (var file in Directory.GetFiles(path))
-                    {
-                        if (!RenameItems.Any(it => it.OriginalPath.Equals(file, StringComparison.OrdinalIgnoreCase)))
-                        {
-                            RenameItems.Add(new RenameItem { OriginalPath = file, IsDirectory = false });
-                            added++;
-                        }
-                    }
-                }
+                ManualRenameFolderPath = clean;
+                added += ScanFolderInternal(clean, IsRecursiveScan, RenameTargetMode);
             }
         }
 
         if (added > 0)
         {
             RefreshRenamePreview();
-            RenameStatusMessage = $"Đã kéo thả thêm {added} mục vào danh sách.";
+            RenameStatusMessage = $"Đã kéo thả thêm {added} mục vào danh sách (Đa tầng: {(IsRecursiveScan ? "BẬT" : "TẮT")}).";
         }
     }
 

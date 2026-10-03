@@ -2467,33 +2467,36 @@
                                                     <TextBlock Grid.Column="3" Text="THAO TÁC" Foreground="#64748B" FontWeight="Bold" FontSize="10" TextAlignment="Right" />
                                                 </Grid>
 
-                                                <!-- Danh sách các chapter đã tải -->
-                                                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                                                    <ItemsControl ItemsSource="{Binding SelectedOfflineChapters}">
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Border Background="#101726" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="6,6">
-                                                                    <Grid ColumnDefinitions="*, 90, 130, 90">
-                                                                        <!-- Tên chapter với màu sắc phân biệt -->
-                                                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                                            <TextBlock Text="📁" FontSize="11" VerticalAlignment="Center" />
-                                                                            <TextBlock Text="{Binding Name}" Foreground="{Binding DisplayForeground}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                                                        </StackPanel>
+                                                <!-- Danh sách các chapter đã tải (ListBox Virtualizing chống lag với hàng ngàn chap) -->
+                                                <ListBox Grid.Row="2" ItemsSource="{Binding SelectedOfflineChapters}" Background="Transparent">
+                                                    <ListBox.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <VirtualizingStackPanel />
+                                                        </ItemsPanelTemplate>
+                                                    </ListBox.ItemsPanel>
+                                                    <ListBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Background="#101726" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="6,6">
+                                                                <Grid ColumnDefinitions="*, 90, 130, 90">
+                                                                    <!-- Tên chapter với màu sắc phân biệt -->
+                                                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                                        <TextBlock Text="📁" FontSize="11" VerticalAlignment="Center" />
+                                                                        <TextBlock Text="{Binding Name}" Foreground="{Binding DisplayForeground}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                                    </StackPanel>
 
-                                                                        <!-- Số trang ảnh -->
-                                                                        <TextBlock Grid.Column="1" Text="{Binding PageCount, StringFormat='{}{0} pages'}" Foreground="#94A3B8" FontSize="10.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                    <!-- Số trang ảnh -->
+                                                                    <TextBlock Grid.Column="1" Text="{Binding PageCount, StringFormat='{}{0} pages'}" Foreground="#94A3B8" FontSize="10.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
-                                                                        <!-- Ngày cập nhật -->
-                                                                        <TextBlock Grid.Column="2" Text="{Binding LastModified, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Foreground="#64748B" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                    <!-- Ngày cập nhật -->
+                                                                    <TextBlock Grid.Column="2" Text="{Binding LastModified, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" Foreground="#64748B" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
-                                                                        <!-- Nút mở thư mục -->
-                                                                        <Button Grid.Column="3" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenSelectedChapterFolderCommand}" CommandParameter="{Binding}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="8,2" CornerRadius="3" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                                                    </Grid>
-                                                                </Border>
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
-                                                </ScrollViewer>
+                                                                    <!-- Nút mở thư mục -->
+                                                                    <Button Grid.Column="3" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenSelectedChapterFolderCommand}" CommandParameter="{Binding}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="8,2" CornerRadius="3" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                                                </Grid>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ListBox.ItemTemplate>
+                                                </ListBox>
                                             </Grid>
                                         </Border>
                                     </Grid>
@@ -2508,6 +2511,13 @@
                                     <!-- Toolbar trên cùng (WrapPanel Responsive) -->
                                     <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                                         <StackPanel Spacing="8">
+                                            <!-- Hàng 0: Nhập/Dán đường dẫn thư mục quét nhanh đa tầng -->
+                                            <Grid ColumnDefinitions="*, Auto, Auto" Margin="0,0,0,2">
+                                                <TextBox Text="{Binding ManualRenameFolderPath}" PlaceholderText="Dán hoặc nhập đường dẫn thư mục cần đổi tên (hỗ trợ quét đa tầng)..." Height="30" CornerRadius="4,0,0,4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="11" VerticalContentAlignment="Center" Padding="8,2" />
+                                                <Button Grid.Column="1" Command="{Binding BrowseManualRenameFolderCommand}" Content="📁 Duyệt" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,4" Height="30" CornerRadius="0" ToolTip.Tip="Chọn thư mục từ máy" />
+                                                <Button Grid.Column="2" Command="{Binding ScanManualRenameFolderCommand}" Content="🔍 Quét Folder" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,4" Height="30" CornerRadius="0,4,4,0" ToolTip.Tip="Quét thư mục và nạp vào danh sách đổi tên" />
+                                            </Grid>
+
                                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <!-- Thêm File & Thư mục -->
                                                 <Button Command="{Binding AddRenameFilesCommand}" Content="📄 + Thêm File" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,4" ToolTip.Tip="Chọn một hoặc nhiều file để đổi tên" />
@@ -2517,10 +2527,16 @@
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="0,0,8,4" VerticalAlignment="Center">
                                                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                                         <TextBlock Text="Mục tiêu:" Foreground="#94A3B8" FontSize="10.5" VerticalAlignment="Center" />
-                                                        <RadioButton Content="File" IsChecked="{Binding RenameTargetMode, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Files}" GroupName="RenameTarget" Foreground="#38BDF8" FontSize="10.5" VerticalAlignment="Center" />
-                                                        <RadioButton Content="Thư mục (Folder)" IsChecked="{Binding RenameTargetMode, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Folders}" GroupName="RenameTarget" Foreground="#F59E0B" FontSize="10.5" VerticalAlignment="Center" />
+                                                        <ComboBox SelectedItem="{Binding RenameTargetMode}" Width="105" Height="26" FontSize="10.5" VerticalAlignment="Center">
+                                                            <x:String>Files</x:String>
+                                                            <x:String>Folders</x:String>
+                                                            <x:String>All</x:String>
+                                                        </ComboBox>
                                                     </StackPanel>
                                                 </Border>
+
+                                                <!-- Toggle Quét Đa Tầng -->
+                                                <CheckBox IsChecked="{Binding IsRecursiveScan}" Content="⚡ Đa tầng (Quét mọi thư mục con)" Foreground="#10B981" FontWeight="Bold" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,10,4" ToolTip.Tip="Quét đệ quy tất cả các thư mục con và file con bên trong" />
 
                                                 <!-- Xóa danh sách -->
                                                 <Button Command="{Binding RemoveSelectedRenameItemCommand}" Content="🗑 Xóa Đã Chọn" Background="#1E293B" Foreground="#EF4444" FontSize="10.5" Padding="8,5" CornerRadius="4" Margin="0,0,6,4" />

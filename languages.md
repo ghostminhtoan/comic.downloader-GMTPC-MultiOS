@@ -752,5 +752,9 @@
 | Error | Lỗi |
 | Success | Thành công |
 | Undone | Đã hoàn tác |
+| Recursive scan (all subfolders) | Đa tầng (Quét mọi thư mục con) |
+| Scan Folder | Quét Folder |
+| Browse | Duyệt |
+
 
 
