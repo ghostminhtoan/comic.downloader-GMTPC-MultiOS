@@ -1521,30 +1521,37 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `dotnet build` biên dịch sạch sẽ `0 Error(s), 0 Warning(s)`.
   - Cập nhật song ngữ đầy đủ vào `languages.md` (Section 15 & 16).
 
-### 15.31. Tối Ưu Hiệu Năng Quét Chap Thiếu Offline & Nâng Cấp Batch Rename Hỗ Trợ Quét Đa Tầng
-- **Vấn đề đã khắc phục**:
-  1. **Quét chap thiếu offline bị lag, Not Responding khi có hàng ngàn chap**:
-     - *Nguyên nhân 1*: Giao diện cũ dùng `ScrollViewer` bọc `ItemsControl` không có Virtualization khiến Avalonia phải render đồng thời ~30.000 visual controls khi bộ truyện có gần 4.000 chapter.
-     - *Nguyên nhân 2*: Vòng lặp `foreach` add từng chapter vào `ObservableCollection` kích hoạt 3.896 sự kiện `CollectionChanged` liên tiếp trên UI thread.
-     - *Nguyên nhân 3*: Quét I/O đĩa cứng HDD tuần tự từng chapter folder với `Directory.GetFiles()` và `GetLastWriteTime()`.
-     - *Giải pháp*:
-       + Thay thế toàn bộ bằng `ListBox` với `VirtualizingStackPanel` ảo hóa giao diện, chỉ render các item trong khung nhìn nhìn thấy (tốc độ 60fps mượt mà).
-       + Gán cả cụm `SelectedOfflineChapters = new ObservableCollection(...)` chỉ bắn duy nhất 1 lần `PropertyChanged` (0ms delay).
-       + Dùng `Parallel.For` đa luồng CPU và `DirectoryInfo.EnumerateFiles` stream nhanh, giảm thời gian quét 3.896 chapter từ 40 giây xuống còn 1-2 giây.
-  2. **Lỗi hiển thị tên truyện và mất chọn bộ truyện khi click "Chỉ hiện truyện thiếu chap"**:
-     - *Nguyên nhân 1*: `folderPath` có dấu gạch chéo cuối (`\`) khiến `Path.GetFileName()` trả về rỗng `""`.
-     - *Nguyên nhân 2*: Khi `OfflineFilteredMangaList.Clear()` để lọc lại, ListBox set `SelectedItem = null`, dẫn đến mất `SelectedOfflineManga` và hiện `(Chưa chọn bộ truyện nào)`.
-     - *Giải pháp*: Chuẩn hóa `cleanPath = folderPath.Trim().TrimEnd('\\', '/')` để lấy chính xác tên truyện; ghi nhớ `previousSelected` và khôi phục lại sau khi lọc.
-  3. **Tab Rename chưa scan được file/folder và thiếu quét đa tầng**:
-     - *Nguyên nhân*: Đường dẫn từ StorageProvider chứa ký tự escape (`%20` cho symlink/khoảng trắng) khiến `File.Exists`/`Directory.Exists` trả về false; RadioButton One-way converter không set được chế độ mục tiêu.
-     - *Giải pháp*:
-       + Bổ sung cơ chế `ResolveStorageItemPath` và `DownloadEngineService.NormalizeStoragePath` giải mã toàn diện đường dẫn.
-       + Bổ sung tính năng **Quét Đa Tầng (`IsRecursiveScan`)** duyệt đệ quy tất cả thư mục con và file con (`SearchOption.AllDirectories`).
-       + Bổ sung thanh nhập/dán đường dẫn trực tiếp và nút `🔍 Quét Folder`.
-       + Hỗ trợ đầy đủ 3 chế độ mục tiêu: `Files`, `Folders`, `All` (Cả File & Thư mục).
+### 15.32. Tối Ưu Toàn Diện Đăng Nhập & Tải Truyện Damconuong Trên Android, Đồng Bộ Password Manager & Responsive Mobile UI
+- **Bối cảnh & Vấn đề**:
+  1. *Lỗi đăng nhập trên Android*:
+     - `GetPasswordManagerSettingsPath()` trước đây cố định dùng `AppDomain.CurrentDomain.BaseDirectory` + `.portable`. Trên Android, thư mục ứng dụng gốc là read-only khiến app quăng `UnauthorizedAccessException` hoặc không bao giờ lưu được `autosave_password.md`.
+     - Request đăng nhập `LoginDamconuongAsync` cũ gửi theo format WordPress (`wp-login.php`), trong khi Damconuong là hệ thống web chạy **Laravel Framework** bảo vệ CSRF nghiêm ngặt: yêu cầu bắt buộc phải lấy `_token` từ trang `/login` và session cookie trước khi POST dữ liệu (`_token`, `email`, `password`, `remember: "on"`).
+  2. *Lỗi tải truyện bị khóa / yêu cầu đăng nhập*:
+     - Khi truyện yêu cầu đăng nhập (như `https://damconuong.pet/truyen/truyen-chinh-phat-milf-o-the-gioi-khac-1`), HTML trả về thông báo "Yêu cầu đăng nhập" và không chứa danh sách chapter. Scraper cũ fallback tạo 1 chapter giả trỏ vào book URL và thất bại khi giải mã ảnh.
+     - Thiếu cơ chế tự động nhận diện truyện bị khóa để kích hoạt auto-login và re-fetch danh sách chapter thật.
+  3. *Lỗi giao diện tràn màn hình (Viewport Overflow) trên Android*:
+     - Tab Password dùng `Grid ColumnDefinitions="180, 10, *, 10, 360"` (tổng chiều ngang tối thiểu > 660px) cùng `HorizontalScrollBarVisibility="Disabled"`.
+     - Màn hình điện thoại Android portrait thường chỉ rộng 360-400px khiến toàn bộ cột Password, nút 👁️ và nút `APPLY` bị tràn hoàn toàn ra ngoài mép phải màn hình, người dùng không thể nhìn thấy và không thể bấm được nút Apply.
+- **Giải pháp xử lý (3-Layer Solution)**:
+  1. **Tái Cấu Trúc Form Đăng Nhập Laravel & Persistence Layer (`ComicScraperService.cs`)**:
+     - Viết lại quy trình đăng nhập chuẩn 2 bước:
+       * Bước 1: GET `/login` lấy session cookie ban đầu và bóc tách CSRF `_token` qua Regex (`name="_token"`).
+       * Bước 2: POST `/login` với `_token`, `email`, `password`, `remember="on"`.
+       * Bước 3: Đón nhận HTTP 302 Found, lưu cookie `dcn_li=1`, `remember_web_...`, `dam_co_nuong_session`.
+     - Bổ sung `LoadDamconuongCookies(baseUrl)` / `SaveDamconuongCookies(baseUrl)` lưu trữ qua `damconuong_cookies.json` tại `GetConfigDirectory()` (trên Android trỏ vào `DownloadEngineService.GetAppSpecificExternalPath()` có quyền ghi 100%).
+     - Bổ sung `LoadCredentialsFromPasswordManagerFile()`: Scraper tự động nạp tài khoản từ `autosave_password.md` ngay cả khi background thread chạy độc lập không qua UI.
+     - Bổ sung `EnsureDamconuongLoggedInAsync`: Tự động kiểm tra cookie và tự đăng nhập lại khi cần.
+  2. **Tự Động Auto-Login Khi Bóc Tách Book & Chapter Bị Khóa (`ComicScraperService.cs`)**:
+     - Trong `ScrapeDamconuongBookAsync`: Nạp cookie trước khi GET. Nếu HTML chứa `Yêu cầu đăng nhập` hoặc `Nội dung này dành cho người dùng đã xác thực`, tự động gọi `EnsureDamconuongLoggedInAsync` và re-fetch HTML mới.
+     - Trích xuất chuẩn xác toàn bộ 164 chapters từ khối `#md-chapter-list`.
+     - Trong `ExtractDamconuongChapterImagesAsync`: Nếu không tìm thấy `data-cipher-path` do phiên đăng nhập hết hạn, tự động login lại và re-fetch HTML chapter trước khi giải mã qua `DecryptDamconuongCipherPagesAsync`.
+  3. **Đồng Bộ ViewModel & Card UI Responsive Cho Android (`MainViewModel.PasswordManager.cs` & `MainView.axaml`)**:
+     - `GetPasswordManagerSettingsPath()` chuyển sang dùng `ComicScraperService.GetConfigDirectory()`, đồng bộ `SetDamconuongCredentials` khi nạp từ disk và khi bấm APPLY.
+     - Hỗ trợ cả hai domain `.pet` và `.shop`.
+     - Chuyển đổi toàn bộ layout Tab Password sang Card UI hiện đại với `WrapPanel Orientation="Horizontal"` và nút `👁️` lồng bên trong cạnh phải ô Password. Trên màn hình máy tính hiển thị thành hàng ngang gọn gàng; trên điện thoại Android tự động rớt dòng thông minh, không bao giờ bị cắt cụt hay tràn màn hình.
 - **Nghiệm Thu**:
-  - `dotnet build` biên dịch sạch sẽ `0 Error(s), 0 Warning(s)`.
-  - Đóng gói đa nền tảng sạch qua `build.bat`.
+  - Biên dịch và đóng gói sạch sẽ `0 Error(s), 0 Warning(s)` trên cả 3 nền tảng (Windows, Linux, Android).
+
 
 
 

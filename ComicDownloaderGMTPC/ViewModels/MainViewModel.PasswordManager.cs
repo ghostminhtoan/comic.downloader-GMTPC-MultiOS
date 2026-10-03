@@ -67,7 +67,8 @@ public partial class MainViewModel
             SavePasswordManagerSettings();
 
             if (string.Equals(domain, "damconuong.shop", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(domain, "damconuong", StringComparison.OrdinalIgnoreCase))
+                string.Equals(domain, "damconuong", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(domain, "damconuong.pet", StringComparison.OrdinalIgnoreCase))
             {
                 if (string.IsNullOrWhiteSpace(DamconuongUsername) || string.IsNullOrWhiteSpace(DamconuongPassword))
                 {
@@ -75,25 +76,32 @@ public partial class MainViewModel
                     return;
                 }
 
-                PasswordManagerStatusText = CurrentLanguage == "VI" ? "Đang kiểm tra redirect & đăng nhập damconuong.shop..." : "Probing redirect & logging in to damconuong.shop...";
+                ComicScraperService.Instance.SetDamconuongCredentials(DamconuongUsername, DamconuongPassword);
+
+                PasswordManagerStatusText = CurrentLanguage == "VI" ? "Đang kiểm tra redirect & đăng nhập damconuong..." : "Probing redirect & logging in to damconuong...";
                 await EnsureDamconuongRedirectDomainAsync().ConfigureAwait(false);
 
-                string baseDomain = string.IsNullOrWhiteSpace(DomainDamconuongRedirectDomain) ? "https://damconuong.shop" : DomainDamconuongRedirectDomain;
+                string baseDomain = string.IsNullOrWhiteSpace(DomainDamconuongRedirectDomain) ? "https://damconuong.pet" : DomainDamconuongRedirectDomain;
                 bool loginSuccess = await ComicScraperService.Instance.LoginDamconuongAsync(baseDomain, DamconuongUsername, DamconuongPassword).ConfigureAwait(false);
+
+                if (!loginSuccess && !baseDomain.Contains("shop", StringComparison.OrdinalIgnoreCase))
+                {
+                    loginSuccess = await ComicScraperService.Instance.LoginDamconuongAsync("https://damconuong.shop", DamconuongUsername, DamconuongPassword).ConfigureAwait(false);
+                }
 
                 if (loginSuccess)
                 {
                     PasswordManagerStatusText = CurrentLanguage == "VI"
                         ? $"Đã đăng nhập tài khoản '{DamconuongUsername}' cho {baseDomain} thành công!"
                         : $"Successfully logged in as '{DamconuongUsername}' for {baseDomain}!";
-                    AddLog("SUCCESS", $"[damconuong.shop] Đã đăng nhập tài khoản '{DamconuongUsername}' thành công ({baseDomain})");
+                    AddLog("SUCCESS", $"[damconuong] Đã đăng nhập tài khoản '{DamconuongUsername}' thành công ({baseDomain})");
                 }
                 else
                 {
                     PasswordManagerStatusText = CurrentLanguage == "VI"
-                        ? $"Đã áp dụng thông tin tài khoản '{DamconuongUsername}' cho {baseDomain}."
-                        : $"Applied credentials for '{DamconuongUsername}' ({baseDomain}).";
-                    AddLog("INFO", "Password Manager: Đã áp dụng tài khoản cho damconuong.shop.");
+                        ? $"Đã lưu thông tin tài khoản '{DamconuongUsername}' cho Dâm Cô Nương (sẽ tự động đăng nhập khi tải)."
+                        : $"Saved credentials for '{DamconuongUsername}' (will auto-login on download).";
+                    AddLog("INFO", "Password Manager: Đã lưu thông tin tài khoản cho damconuong.");
                 }
             }
             else if (string.Equals(domain, "mangadex.org", StringComparison.OrdinalIgnoreCase) ||
@@ -129,6 +137,7 @@ public partial class MainViewModel
             int applied = 0;
             if (!string.IsNullOrWhiteSpace(DamconuongUsername) && !string.IsNullOrWhiteSpace(DamconuongPassword))
             {
+                ComicScraperService.Instance.SetDamconuongCredentials(DamconuongUsername, DamconuongPassword);
                 applied++;
             }
             if (!string.IsNullOrWhiteSpace(MangadexUsername) && !string.IsNullOrWhiteSpace(MangadexPassword))
@@ -197,13 +206,21 @@ public partial class MainViewModel
 
     private string GetPasswordManagerSettingsPath()
     {
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        string portableDir = Path.Combine(baseDir, ".portable");
-        if (!Directory.Exists(portableDir))
+        string dir = ComicScraperService.GetConfigDirectory();
+        if (!OperatingSystem.IsAndroid())
         {
-            try { Directory.CreateDirectory(portableDir); } catch { }
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string portableDir = Path.Combine(baseDir, ".portable");
+            if (Directory.Exists(portableDir))
+            {
+                dir = portableDir;
+            }
+            else
+            {
+                try { Directory.CreateDirectory(portableDir); dir = portableDir; } catch { }
+            }
         }
-        return Path.Combine(portableDir, "autosave_password.md");
+        return Path.Combine(dir, "autosave_password.md");
     }
 
     public void LoadPasswordManagerSettings()
@@ -216,6 +233,11 @@ public partial class MainViewModel
                 string content = File.ReadAllText(path, Encoding.UTF8);
                 LoadPasswordManagerSettingsFromMarkdown(content);
                 SyncPasswordManagerEntriesToUi();
+
+                if (!string.IsNullOrWhiteSpace(DamconuongUsername) && !string.IsNullOrWhiteSpace(DamconuongPassword))
+                {
+                    ComicScraperService.Instance.SetDamconuongCredentials(DamconuongUsername, DamconuongPassword);
+                }
             }
         }
         catch (Exception ex)

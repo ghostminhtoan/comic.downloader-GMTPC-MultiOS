@@ -1052,45 +1052,54 @@
 
                             <!-- 1.5 PASSWORD / MẬT KHẨU -->
                             <TabItem Header="🔑 Password" FontSize="12" FontWeight="SemiBold">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
                                     <Border Background="#131B2E" CornerRadius="6" Padding="15" Margin="0,4,0,0">
                                         <StackPanel Spacing="14">
                                             <!-- Title -->
                                             <TextBlock Text="PASSWORD MANAGER" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" />
 
-                                            <!-- Table Header -->
-                                            <Grid ColumnDefinitions="180, 10, *, 10, 360" Margin="0,0,0,2">
-                                                <TextBlock Grid.Column="0" Text="DOMAIN" Foreground="#94A3B8" FontSize="11" FontWeight="Bold" />
-                                                <TextBlock Grid.Column="2" Text="USERNAME" Foreground="#94A3B8" FontSize="11" FontWeight="Bold" />
-                                                <TextBlock Grid.Column="4" Text="PASSWORD" Foreground="#94A3B8" FontSize="11" FontWeight="Bold" />
-                                            </Grid>
+                                            <!-- Row 1: damconuong.pet / damconuong.shop -->
+                                            <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12,10">
+                                                <StackPanel Spacing="8">
+                                                    <DockPanel LastChildFill="False">
+                                                        <TextBlock DockPanel.Dock="Left" Text="🌐 damconuong.pet / damconuong.shop" Foreground="#38BDF8" FontWeight="Bold" FontSize="12.5" VerticalAlignment="Center" />
+                                                        <Border DockPanel.Dock="Right" Background="#1E293B" CornerRadius="3" Padding="6,2" VerticalAlignment="Center">
+                                                            <TextBlock Text="Auto-Login &amp; Sync" FontSize="9.5" Foreground="#94A3B8" />
+                                                        </Border>
+                                                    </DockPanel>
 
-                                            <!-- Row 1: damconuong.shop -->
-                                            <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="10,8">
-                                                <Grid ColumnDefinitions="180, 10, *, 10, 360" VerticalAlignment="Center">
-                                                    <TextBlock Grid.Column="0" Text="damconuong.shop" Foreground="#F8FAFC" VerticalAlignment="Center" FontWeight="Bold" FontSize="12" />
-                                                    <TextBox Grid.Column="2" Text="{Binding DamconuongUsername}" PlaceholderText="Username / Email..." Height="32" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11" CornerRadius="4" VerticalContentAlignment="Center" />
-                                                    <Grid Grid.Column="4" ColumnDefinitions="*, 38, 90">
-                                                        <TextBox Grid.Column="0" Text="{Binding DamconuongPassword}" PasswordChar="●" IsVisible="{Binding !IsDamconuongPasswordVisible}" PlaceholderText="Password..." Height="32" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11" CornerRadius="4" VerticalContentAlignment="Center" />
-                                                        <TextBox Grid.Column="0" Text="{Binding DamconuongPassword}" IsVisible="{Binding IsDamconuongPasswordVisible}" PlaceholderText="Password..." Height="32" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11" CornerRadius="4" VerticalContentAlignment="Center" />
-                                                        <Button Grid.Column="1" Command="{Binding TogglePasswordVisibilityCommand}" CommandParameter="damconuong.shop" Content="👁" Height="32" Background="#1E293B" Foreground="#38BDF8" CornerRadius="4" Margin="6,0,0,0" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="Xem / Ẩn mật khẩu" />
-                                                        <Button Grid.Column="2" Command="{Binding ApplyPasswordCommand}" CommandParameter="damconuong.shop" Content="APPLY" FontWeight="Bold" FontSize="11" Height="32" Background="#0284C7" Foreground="#FFFFFF" CornerRadius="4" Margin="6,0,0,0" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
-                                                    </Grid>
-                                                </Grid>
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <TextBox Text="{Binding DamconuongUsername}" PlaceholderText="Username / Email..." Width="240" Height="34" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11.5" CornerRadius="4" VerticalContentAlignment="Center" Margin="0,0,8,6" />
+                                                        <Grid Width="200" Height="34" Margin="0,0,8,6">
+                                                            <TextBox Text="{Binding DamconuongPassword}" PasswordChar="●" IsVisible="{Binding !IsDamconuongPasswordVisible}" PlaceholderText="Password..." Height="34" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11.5" CornerRadius="4" VerticalContentAlignment="Center" Padding="8,0,36,0" />
+                                                            <TextBox Text="{Binding DamconuongPassword}" IsVisible="{Binding IsDamconuongPasswordVisible}" PlaceholderText="Password..." Height="34" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11.5" CornerRadius="4" VerticalContentAlignment="Center" Padding="8,0,36,0" />
+                                                            <Button Command="{Binding TogglePasswordVisibilityCommand}" CommandParameter="damconuong.shop" Content="👁" Width="30" Height="28" Background="Transparent" BorderThickness="0" Foreground="#38BDF8" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,3,0" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="Xem / Ẩn mật khẩu" />
+                                                        </Grid>
+                                                        <Button Command="{Binding ApplyPasswordCommand}" CommandParameter="damconuong.shop" Content="APPLY" FontWeight="Bold" FontSize="11" Height="34" Padding="16,0" Background="#0284C7" Foreground="#FFFFFF" CornerRadius="4" Margin="0,0,0,6" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </Border>
 
                                             <!-- Row 2: mangadex.org -->
-                                            <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="10,8">
-                                                <Grid ColumnDefinitions="180, 10, *, 10, 360" VerticalAlignment="Center">
-                                                    <TextBlock Grid.Column="0" Text="mangadex.org" Foreground="#F8FAFC" VerticalAlignment="Center" FontWeight="Bold" FontSize="12" />
-                                                    <TextBox Grid.Column="2" Text="{Binding MangadexUsername}" PlaceholderText="Username / Email..." Height="32" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11" CornerRadius="4" VerticalContentAlignment="Center" />
-                                                    <Grid Grid.Column="4" ColumnDefinitions="*, 38, 90">
-                                                        <TextBox Grid.Column="0" Text="{Binding MangadexPassword}" PasswordChar="●" IsVisible="{Binding !IsMangadexPasswordVisible}" PlaceholderText="Password..." Height="32" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11" CornerRadius="4" VerticalContentAlignment="Center" />
-                                                        <TextBox Grid.Column="0" Text="{Binding MangadexPassword}" IsVisible="{Binding IsMangadexPasswordVisible}" PlaceholderText="Password..." Height="32" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11" CornerRadius="4" VerticalContentAlignment="Center" />
-                                                        <Button Grid.Column="1" Command="{Binding TogglePasswordVisibilityCommand}" CommandParameter="mangadex.org" Content="👁" Height="32" Background="#1E293B" Foreground="#38BDF8" CornerRadius="4" Margin="6,0,0,0" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="Xem / Ẩn mật khẩu" />
-                                                        <Button Grid.Column="2" Command="{Binding ApplyPasswordCommand}" CommandParameter="mangadex.org" Content="APPLY" FontWeight="Bold" FontSize="11" Height="32" Background="#0284C7" Foreground="#FFFFFF" CornerRadius="4" Margin="6,0,0,0" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
-                                                    </Grid>
-                                                </Grid>
+                                            <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12,10">
+                                                <StackPanel Spacing="8">
+                                                    <DockPanel LastChildFill="False">
+                                                        <TextBlock DockPanel.Dock="Left" Text="🌐 mangadex.org" Foreground="#38BDF8" FontWeight="Bold" FontSize="12.5" VerticalAlignment="Center" />
+                                                        <Border DockPanel.Dock="Right" Background="#1E293B" CornerRadius="3" Padding="6,2" VerticalAlignment="Center">
+                                                            <TextBlock Text="API / Account" FontSize="9.5" Foreground="#94A3B8" />
+                                                        </Border>
+                                                    </DockPanel>
+
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <TextBox Text="{Binding MangadexUsername}" PlaceholderText="Username / Email..." Width="240" Height="34" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11.5" CornerRadius="4" VerticalContentAlignment="Center" Margin="0,0,8,6" />
+                                                        <Grid Width="200" Height="34" Margin="0,0,8,6">
+                                                            <TextBox Text="{Binding MangadexPassword}" PasswordChar="●" IsVisible="{Binding !IsMangadexPasswordVisible}" PlaceholderText="Password..." Height="34" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11.5" CornerRadius="4" VerticalContentAlignment="Center" Padding="8,0,36,0" />
+                                                            <TextBox Text="{Binding MangadexPassword}" IsVisible="{Binding IsMangadexPasswordVisible}" PlaceholderText="Password..." Height="34" Background="#161F30" BorderBrush="#1E293B" Foreground="#F8FAFC" FontSize="11.5" CornerRadius="4" VerticalContentAlignment="Center" Padding="8,0,36,0" />
+                                                            <Button Command="{Binding TogglePasswordVisibilityCommand}" CommandParameter="mangadex.org" Content="👁" Width="30" Height="28" Background="Transparent" BorderThickness="0" Foreground="#38BDF8" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,3,0" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="Xem / Ẩn mật khẩu" />
+                                                        </Grid>
+                                                        <Button Command="{Binding ApplyPasswordCommand}" CommandParameter="mangadex.org" Content="APPLY" FontWeight="Bold" FontSize="11" Height="34" Padding="16,0" Background="#0284C7" Foreground="#FFFFFF" CornerRadius="4" Margin="0,0,0,6" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </Border>
 
                                             <!-- Status Text -->

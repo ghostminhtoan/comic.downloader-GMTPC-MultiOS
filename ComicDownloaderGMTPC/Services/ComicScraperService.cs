@@ -38,54 +38,245 @@ public class ComicScraperService
         };
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
         _httpClient.DefaultRequestHeaders.Add("Accept-Language", "vi,en-US;q=0.9,en;q=0.8");
+
+        try
+        {
+            LoadDamconuongCookies("https://damconuong.pet");
+            LoadDamconuongCookies("https://damconuong.shop");
+        }
+        catch { }
+    }
+
+    private (string? username, string? password) _damconuongCredentials;
+
+    public void SetDamconuongCredentials(string username, string password)
+    {
+        _damconuongCredentials = (username?.Trim(), password);
+    }
+
+    public static string GetConfigDirectory()
+    {
+        if (OperatingSystem.IsAndroid())
+        {
+            string appDir = DownloadEngineService.GetAppSpecificExternalPath();
+            if (!Directory.Exists(appDir))
+            {
+                try { Directory.CreateDirectory(appDir); } catch { }
+            }
+            return appDir;
+        }
+
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string portableDir = Path.Combine(baseDir, ".portable");
+        if (Directory.Exists(portableDir)) return portableDir;
+        return baseDir;
+    }
+
+    public void SaveDamconuongCookies(string baseUrl)
+    {
+        try
+        {
+            var uri = new Uri(baseUrl);
+            var cookies = _cookieContainer.GetCookies(uri);
+            if (cookies.Count == 0) return;
+
+            var list = new List<SerializableCookie>();
+            foreach (Cookie c in cookies)
+            {
+                list.Add(new SerializableCookie
+                {
+                    Name = c.Name,
+                    Value = c.Value,
+                    Domain = c.Domain,
+                    Path = c.Path
+                });
+            }
+
+            string dir = GetConfigDirectory();
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            string file = Path.Combine(dir, "damconuong_cookies.json");
+            File.WriteAllText(file, JsonSerializer.Serialize(list));
+        }
+        catch { }
+    }
+
+    public void LoadDamconuongCookies(string? baseUrl = null)
+    {
+        try
+        {
+            string file = Path.Combine(GetConfigDirectory(), "damconuong_cookies.json");
+            if (!File.Exists(file)) return;
+
+            string json = File.ReadAllText(file);
+            var list = JsonSerializer.Deserialize<List<SerializableCookie>>(json);
+            if (list == null || list.Count == 0) return;
+
+            string targetUrl = string.IsNullOrWhiteSpace(baseUrl) ? "https://damconuong.pet" : baseUrl;
+            var uri = new Uri(targetUrl);
+
+            foreach (var sc in list)
+            {
+                if (string.IsNullOrWhiteSpace(sc.Name) || sc.Value == null) continue;
+                string cookieDomain = string.IsNullOrWhiteSpace(sc.Domain) ? uri.Host : sc.Domain;
+                string cookiePath = string.IsNullOrWhiteSpace(sc.Path) ? "/" : sc.Path;
+
+                try
+                {
+                    _cookieContainer.Add(uri, new Cookie(sc.Name, sc.Value, cookiePath, cookieDomain));
+                }
+                catch
+                {
+                    try
+                    {
+                        _cookieContainer.Add(new Cookie(sc.Name, sc.Value, cookiePath, uri.Host));
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+    }
+
+    public async Task<bool> EnsureDamconuongLoggedInAsync(string? preferredUrl = null, CancellationToken ct = default)
+    {
+        string baseUrl = "https://damconuong.pet";
+        if (!string.IsNullOrWhiteSpace(preferredUrl) && Uri.TryCreate(preferredUrl, UriKind.Absolute, out var uri))
+        {
+            baseUrl = $"{uri.Scheme}://{uri.Authority}";
+        }
+
+        // Kiểm tra xem đã có cookie login dcn_li hay remember chưa
+        try
+        {
+            var cookies = _cookieContainer.GetCookies(new Uri(baseUrl));
+            foreach (Cookie c in cookies)
+            {
+                if (c.Name.Equals("dcn_li", StringComparison.OrdinalIgnoreCase) && c.Value == "1")
+                {
+                    return true;
+                }
+            }
+        }
+        catch { }
+
+        // Chưa có hoặc hết hạn -> thử đăng nhập lại bằng credentials đã lưu
+        if (!string.IsNullOrWhiteSpace(_damconuongCredentials.username) && !string.IsNullOrWhiteSpace(_damconuongCredentials.password))
+        {
+            return await LoginDamconuongAsync(baseUrl, _damconuongCredentials.username, _damconuongCredentials.password, ct).ConfigureAwait(false);
+        }
+
+        return false;
     }
 
     public async Task<bool> LoginDamconuongAsync(string baseUrl, string username, string password, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return false;
 
-        if (string.IsNullOrWhiteSpace(baseUrl)) baseUrl = "https://damconuong.shop";
+        if (string.IsNullOrWhiteSpace(baseUrl)) baseUrl = "https://damconuong.pet";
         baseUrl = baseUrl.TrimEnd('/');
 
-        string loginEndpoint = $"{baseUrl}/wp-login.php";
+        SetDamconuongCredentials(username, password);
 
         try
         {
-            var content = new FormUrlEncodedContent(new[]
-            {
-                new KeyValuePair<string, string>("log", username),
-                new KeyValuePair<string, string>("pwd", password),
-                new KeyValuePair<string, string>("rememberme", "forever"),
-                new KeyValuePair<string, string>("wp-submit", "Log In")
-            });
+            // 1. GET /login để lấy Session Cookie và CSRF _token của Laravel
+            string loginUrl = $"{baseUrl}/login";
+            using var getReq = new HttpRequestMessage(HttpMethod.Get, loginUrl);
+            getReq.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+            getReq.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+            getReq.Headers.Add("Accept-Language", "vi,en-US;q=0.9,en;q=0.8");
 
-            using var req = new HttpRequestMessage(HttpMethod.Post, loginEndpoint) { Content = content };
-            req.Headers.Add("Referer", $"{baseUrl}/wp-login.php");
-
-            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-            if (res.IsSuccessStatusCode || res.StatusCode == HttpStatusCode.Redirect || res.StatusCode == HttpStatusCode.Found)
+            using var getRes = await _httpClient.SendAsync(getReq, ct).ConfigureAwait(false);
+            if (!getRes.IsSuccessStatusCode)
             {
-                return true;
+                return false;
             }
-        }
-        catch
-        {
-            try
+
+            string getHtml = await getRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            // Bắt CSRF _token từ form HTML
+            var tokenMatch = Regex.Match(getHtml, @"name=[""']_token[""']\s+value=[""'](?<token>[^""']+)[""']", RegexOptions.IgnoreCase);
+            if (!tokenMatch.Success)
             {
-                var contentAlt = new FormUrlEncodedContent(new[]
+                tokenMatch = Regex.Match(getHtml, @"value=[""'](?<token>[^""']+)[""']\s+name=[""']_token[""']", RegexOptions.IgnoreCase);
+            }
+
+            string csrfToken = tokenMatch.Success ? tokenMatch.Groups["token"].Value : string.Empty;
+            if (string.IsNullOrWhiteSpace(csrfToken))
+            {
+                var metaMatch = Regex.Match(getHtml, @"name=[""']csrf-token[""']\s+content=[""'](?<token>[^""']+)[""']", RegexOptions.IgnoreCase);
+                if (metaMatch.Success) csrfToken = metaMatch.Groups["token"].Value;
+            }
+
+            if (string.IsNullOrWhiteSpace(csrfToken))
+            {
+                return false;
+            }
+
+            // 2. POST /login với _token, email, password, remember
+            var postData = new List<KeyValuePair<string, string>>
+            {
+                new("_token", csrfToken),
+                new("email", username),
+                new("password", password),
+                new("remember", "on")
+            };
+
+            using var postReq = new HttpRequestMessage(HttpMethod.Post, loginUrl)
+            {
+                Content = new FormUrlEncodedContent(postData)
+            };
+            postReq.Headers.Add("Referer", loginUrl);
+            postReq.Headers.Add("Origin", baseUrl);
+            postReq.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+
+            using var postRes = await _httpClient.SendAsync(postReq, ct).ConfigureAwait(false);
+
+            if (postRes.StatusCode == HttpStatusCode.Redirect || postRes.StatusCode == HttpStatusCode.Found ||
+                postRes.StatusCode == HttpStatusCode.SeeOther || postRes.IsSuccessStatusCode)
+            {
+                var baseUri = new Uri(baseUrl);
+                var cookies = _cookieContainer.GetCookies(baseUri);
+                bool hasLoginCookie = false;
+                foreach (Cookie c in cookies)
                 {
-                    new KeyValuePair<string, string>("username", username),
-                    new KeyValuePair<string, string>("password", password)
-                });
+                    if (c.Name.Equals("dcn_li", StringComparison.OrdinalIgnoreCase) ||
+                        c.Name.StartsWith("remember_web", StringComparison.OrdinalIgnoreCase) ||
+                        c.Name.Contains("session", StringComparison.OrdinalIgnoreCase))
+                    {
+                        hasLoginCookie = true;
+                        break;
+                    }
+                }
 
-                using var reqAlt = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/login") { Content = contentAlt };
-                using var resAlt = await _httpClient.SendAsync(reqAlt, ct).ConfigureAwait(false);
-                if (resAlt.IsSuccessStatusCode) return true;
+                if (hasLoginCookie || postRes.StatusCode == HttpStatusCode.Redirect || postRes.StatusCode == HttpStatusCode.Found)
+                {
+                    SaveDamconuongCookies(baseUrl);
+                    // Đồng bộ thêm cho domain .pet và .shop
+                    try
+                    {
+                        if (baseUrl.Contains("pet")) SaveDamconuongCookies("https://damconuong.shop");
+                        else SaveDamconuongCookies("https://damconuong.pet");
+                    }
+                    catch { }
+                    return true;
+                }
             }
-            catch { }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LoginDamconuongAsync] Error: {ex.Message}");
         }
 
-        return true;
+        return false;
+    }
+
+    public class SerializableCookie
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+        public string Domain { get; set; } = string.Empty;
+        public string Path { get; set; } = "/";
     }
 
     public static bool IsCategoryOrTagUrl(string url, string domain)
