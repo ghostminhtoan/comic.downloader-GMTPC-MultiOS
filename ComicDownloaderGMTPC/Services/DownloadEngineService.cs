@@ -25,6 +25,7 @@ public class DownloadEngineService
     private TaskCompletionSource<bool>? _pauseTcs;
     private long _totalBytesDownloadedInWindow;
     private DateTime _lastSpeedCheckTime = DateTime.UtcNow;
+    private string? _lastSuccessfulNettruyenCdnServer;
 
     public bool IsDownloading => _isDownloading;
     public bool IsPaused => _isPaused;
@@ -791,6 +792,10 @@ public class DownloadEngineService
         bool isMangaDex = imageUrl.Contains("mangadex.network", StringComparison.OrdinalIgnoreCase) ||
                           imageUrl.Contains("mangadex.org", StringComparison.OrdinalIgnoreCase);
 
+        bool isNettruyen = imageUrl.Contains("kcgsbok.com", StringComparison.OrdinalIgnoreCase) ||
+                           imageUrl.Contains("/nettruyen/", StringComparison.OrdinalIgnoreCase) ||
+                           (refererUrl != null && refererUrl.Contains("nettruyen", StringComparison.OrdinalIgnoreCase));
+
         var candidateUrls = new List<string> { imageUrl };
         if (isMangaDex)
         {
@@ -803,6 +808,40 @@ public class DownloadEngineService
                 string officialSaver = $"https://uploads.mangadex.org/data-saver/{mHash}/{mFile}";
                 if (!candidateUrls.Contains(officialData, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(officialData);
                 if (!candidateUrls.Contains(officialSaver, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(officialSaver);
+            }
+        }
+        else if (isNettruyen)
+        {
+            var ntMatch = System.Text.RegularExpressions.Regex.Match(imageUrl, @"^(?<prefix>https?://)image\d*(?<suffix>\.[^/]+/.+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (ntMatch.Success)
+            {
+                string prefix = ntMatch.Groups["prefix"].Value;
+                string suffix = ntMatch.Groups["suffix"].Value;
+
+                var candidateServers = new List<string> { "image2", "image1", "image3", "image4", "image" };
+                if (!string.IsNullOrEmpty(_lastSuccessfulNettruyenCdnServer))
+                {
+                    candidateServers.Remove(_lastSuccessfulNettruyenCdnServer);
+                    candidateServers.Insert(0, _lastSuccessfulNettruyenCdnServer);
+                }
+
+                foreach (var srv in candidateServers)
+                {
+                    string candidate = $"{prefix}{srv}{suffix}";
+                    if (!candidateUrls.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+                    {
+                        candidateUrls.Add(candidate);
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(_lastSuccessfulNettruyenCdnServer))
+                {
+                    string preferredUrl = $"{prefix}{_lastSuccessfulNettruyenCdnServer}{suffix}";
+                    if (candidateUrls.Remove(preferredUrl))
+                    {
+                        candidateUrls.Insert(0, preferredUrl);
+                    }
+                }
             }
         }
 
@@ -824,6 +863,10 @@ public class DownloadEngineService
                     if (isMangaDex)
                     {
                         effectiveReferer = "https://mangadex.org/";
+                    }
+                    else if (isNettruyen)
+                    {
+                        effectiveReferer = !string.IsNullOrEmpty(refererUrl) ? refererUrl : "https://nettruyenviet10.com/";
                     }
                     else if (targetUrl.Contains("imggo.net", StringComparison.OrdinalIgnoreCase))
                     {
@@ -860,6 +903,14 @@ public class DownloadEngineService
                         data = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
                         if (data.Length > 0)
                         {
+                            if (isNettruyen)
+                            {
+                                var m = System.Text.RegularExpressions.Regex.Match(targetUrl, @"https?://(?<srv>image\d*)\.", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                if (m.Success)
+                                {
+                                    _lastSuccessfulNettruyenCdnServer = m.Groups["srv"].Value;
+                                }
+                            }
                             break;
                         }
                     }

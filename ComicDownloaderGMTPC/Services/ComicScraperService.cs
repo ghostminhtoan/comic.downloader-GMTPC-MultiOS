@@ -443,35 +443,63 @@ public class ComicScraperService
                 if (apiRes.IsSuccessStatusCode)
                 {
                     string json = await apiRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    var chapterMatches = Regex.Matches(json, @"\{(?<obj>[^{}]*""chapter_num""[^{}]*)\}", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                    foreach (Match m in chapterMatches)
+                    try
                     {
-                        string obj = m.Groups["obj"].Value;
-                        var numMatch = Regex.Match(obj, @"""chapter_num""\s*:\s*""?(?<num>\d+(?:\.\d+)?)", RegexOptions.IgnoreCase);
-                        if (!numMatch.Success) continue;
-
-                        string numStr = numMatch.Groups["num"].Value;
-                        string chapUrl = $"{activeDomain}/truyen-tranh/{slug}/chuong-{numStr}".TrimEnd('/');
-                        if (seen.Add(chapUrl))
+                        using var doc = JsonDocument.Parse(json);
+                        if (doc.RootElement.TryGetProperty("data", out var dataProp) && dataProp.ValueKind == JsonValueKind.Array)
                         {
-                            var nameMatch = Regex.Match(obj, @"""chapter_name""\s*:\s*""(?<name>(?:\\.|[^""\\])*)""", RegexOptions.IgnoreCase);
-                            string chapName = nameMatch.Success
-                                ? WebUtility.HtmlDecode(Regex.Unescape(nameMatch.Groups["name"].Value)).Trim()
-                                : $"Chapter {numStr}";
-
-                            double.TryParse(numStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedNum);
-
-                            item.Chapters.Add(new ChapterItem
+                            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var el in dataProp.EnumerateArray())
                             {
-                                ChapterNumber = parsedNum,
-                                Title = string.IsNullOrWhiteSpace(chapName) ? $"Chapter {numStr}" : chapName,
-                                Url = chapUrl,
-                                Status = "Waiting"
-                            });
+                                string numStr = string.Empty;
+                                if (el.TryGetProperty("chapter_num", out var numEl))
+                                {
+                                    numStr = numEl.ValueKind == JsonValueKind.Number ? numEl.GetRawText() : (numEl.GetString() ?? string.Empty);
+                                }
+                                if (string.IsNullOrWhiteSpace(numStr)) continue;
+
+                                string chapName = string.Empty;
+                                if (el.TryGetProperty("chapter_name", out var nameEl))
+                                {
+                                    chapName = nameEl.GetString() ?? string.Empty;
+                                }
+                                chapName = string.IsNullOrWhiteSpace(chapName) ? $"Chapter {numStr}" : WebUtility.HtmlDecode(chapName).Trim();
+
+                                string chapSlug = string.Empty;
+                                if (el.TryGetProperty("chapter_slug", out var slugEl))
+                                {
+                                    chapSlug = slugEl.GetString() ?? string.Empty;
+                                }
+
+                                string chapUrl;
+                                if (!string.IsNullOrWhiteSpace(chapSlug))
+                                {
+                                    string normalizedSlug = chapSlug.StartsWith("chapter-", StringComparison.OrdinalIgnoreCase)
+                                        ? "chuong-" + chapSlug.Substring(8)
+                                        : chapSlug;
+                                    chapUrl = $"{activeDomain}/truyen-tranh/{slug}/{normalizedSlug}".TrimEnd('/');
+                                }
+                                else
+                                {
+                                    chapUrl = $"{activeDomain}/truyen-tranh/{slug}/chuong-{numStr}".TrimEnd('/');
+                                }
+
+                                if (seen.Add(chapUrl))
+                                {
+                                    double.TryParse(numStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedNum);
+
+                                    item.Chapters.Add(new ChapterItem
+                                    {
+                                        ChapterNumber = parsedNum,
+                                        Title = chapName,
+                                        Url = chapUrl,
+                                        Status = "Waiting"
+                                    });
+                                }
+                            }
                         }
                     }
+                    catch { }
                 }
             }
             catch {}
