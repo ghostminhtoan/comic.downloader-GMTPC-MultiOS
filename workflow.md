@@ -1467,6 +1467,33 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 - **Kết quả nghiệm thu**:
   - Tải mượt mà, siêu tốc toàn bộ các chương cũ lẫn mới của *Võ Luyện Đỉnh Phong* và mọi bộ truyện NetTruyen.
   - `build.bat` biên dịch sạch sẽ `0 Error(s), 0 Warning(s)`.
+### 15.29. Đồng Bộ Tính Năng Auto Scroll Đến Truyện Đang Tải Ở Hàng Thấp Nhất (Lowest Downloading Item) Chuẩn 100% WPF
+- **Bối cảnh & Vấn đề trên Avalonia cũ**:
+  - Tính năng "Tự động cuộn đến truyện đang tải ở hàng thấp nhất" (`IsAutoScrollToActive`) trên Avalonia hoạt động không giống WPF:
+    + Bản cũ tính toạ độ dựa trên công thức ước lượng tuyến tính mù quáng `(lowestIndex / Count) * Extent.Height`, khiến toạ độ cuộn bị lệch hoàn toàn khỏi vị trí truyện thực tế (đặc biệt khi danh sách có truyện cha tách chương nhiều dòng chiều cao khác biệt lớn).
+    + Timer 10s cưỡng bức gán lại `Offset` liên tục ngay cả khi item đã nằm trong khung nhìn, gây giật rung màn hình liên tục.
+    + Khi người dùng click bật CheckBox `IsAutoScrollToActive` hoặc bấm tải truyện, app không cuộn ngay lập tức mà phải chờ hết chu kỳ timer 10s.
+- **Giải pháp xử lý (Chuẩn hóa 100% cơ chế WPF `ScrollIntoView` & `PerformAutoScrollToLowestDownloadingItem`)**:
+  - **`MainViewModel.cs`**:
+    + Bổ sung event `public event Action? AutoScrollRequested;`.
+    + Trong `partial void OnIsAutoScrollToActiveChanged(bool value)`: khi chuyển sang `true`, lập tức bắn event `AutoScrollRequested?.Invoke()`.
+    + Trong `DownloadAllAsync` và `DownloadNewAsync`: tự động kích hoạt `AutoScrollRequested?.Invoke()` nếu `IsAutoScrollToActive == true` để giao diện cuộn ngay đến truyện bắt đầu tải.
+  - **`MainView.axaml` & `MainView.axaml.cs`**:
+    + Gán tên `x:Name="QueueItemsControl"` cho `ItemsControl` trong danh sách hàng đợi.
+    + Gán sự kiện `Click="OnAutoScrollCheckBoxClicked"` cho CheckBox để cuộn tức thì ngay lúc click chuột.
+    + Lắng nghe `vm.AutoScrollRequested` từ ViewModel thông qua `DataContextChanged`.
+    + Viết lại toàn diện `PerformAutoScrollToLowestDownloadingItem()`:
+      1. Duyệt ngược từ cuối danh sách lên đầu: `for (int i = vm.ComicBooks.Count - 1; i >= 0; i--)` để luôn bắt đúng truyện ở hàng thấp nhất đang tải.
+      2. Hàm `IsComicBookDownloading(b)` kiểm tra trạng thái song ngữ (tiếng Anh/Việt), hỗ trợ cả truyện cha tách chương đang thu gọn có task con tải, và các tiến trình tải thực tế, loại trừ các trạng thái kết thúc (Hoàn tất/Dừng/Lỗi/Chờ).
+      3. Xác định container trực quan qua `QueueItemsControl.ContainerFromIndex(lowestIndex)` hoặc `ContainerFromItem(lowestItem)`.
+      4. Đo toạ độ thực tế qua `targetControl.TransformToVisual(queueScrollViewer)`:
+         - Nếu item ở dưới viewport: cuộn xuống vừa đủ thấy trọn vẹn item + 14px đệm.
+         - Nếu item ở trên viewport: cuộn lên vừa đủ.
+         - Nếu item đã nằm trọn vẹn trong Viewport: giữ nguyên trạng thái cuộn, không gây rung giật màn hình (chuẩn xác như WPF `ScrollIntoView`).
+      5. Fallback an toàn qua `targetControl.BringIntoView()` hoặc ước tính tỷ lệ nếu container chưa kịp layout.
+- **Nghiệm Thu**:
+  - Chạy `build.bat` biên dịch sạch cả 4 nền tảng (0 Error, 0 Warning).
   - Kiểm thử 2 bước khởi chạy desktop thành công (`Responding: True`, `HasExited: False`).
+
 
 

@@ -7,6 +7,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.ViewModels;
 
 namespace ComicDownloaderGMTPC.Views;
@@ -43,12 +44,33 @@ public partial class MainView : UserControl
                 }
             }
         }, RoutingStrategies.Tunnel);
+
+        DataContextChanged += (s, e) =>
+        {
+            if (_subscribedVm != null)
+            {
+                _subscribedVm.AutoScrollRequested -= OnVmAutoScrollRequested;
+                _subscribedVm = null;
+            }
+            if (DataContext is MainViewModel newVm)
+            {
+                _subscribedVm = newVm;
+                _subscribedVm.AutoScrollRequested += OnVmAutoScrollRequested;
+            }
+        };
     }
 
+    private MainViewModel? _subscribedVm;
     private bool _isSyncScrollSetup = false;
 
     private void OnMainViewLoaded(object? sender, RoutedEventArgs e)
     {
+        if (DataContext is MainViewModel vm)
+        {
+            vm.AutoScrollRequested -= OnVmAutoScrollRequested;
+            vm.AutoScrollRequested += OnVmAutoScrollRequested;
+        }
+
         if (!_isSyncScrollSetup)
         {
             _isSyncScrollSetup = true;
@@ -447,7 +469,7 @@ public partial class MainView : UserControl
             {
                 if (DataContext is MainViewModel vm && vm.IsAutoScrollToActive)
                 {
-                    ScrollToLowestDownloadingItem(vm);
+                    PerformAutoScrollToLowestDownloadingItem();
                 }
             }
             catch { }
@@ -455,33 +477,159 @@ public partial class MainView : UserControl
         _autoScrollTimer.Start();
     }
 
-    private void ScrollToLowestDownloadingItem(MainViewModel vm)
+    private void OnVmAutoScrollRequested()
     {
-        var queueScrollViewer = this.FindControl<ScrollViewer>("QueueScrollViewer");
-        if (queueScrollViewer == null || vm.ComicBooks == null || vm.ComicBooks.Count == 0) return;
-
-        int lowestIndex = -1;
-        for (int i = vm.ComicBooks.Count - 1; i >= 0; i--)
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            var b = vm.ComicBooks[i];
-            if (b != null && (string.Equals(b.Status, "Downloading", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(b.Status, "Đang tải", StringComparison.OrdinalIgnoreCase)))
+            PerformAutoScrollToLowestDownloadingItem();
+        }, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private void OnAutoScrollCheckBoxClicked(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && vm.IsAutoScrollToActive)
+        {
+            // Cuộn tức thì khi người dùng vừa bấm bật CheckBox (chuẩn 100% giống WPF)
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                lowestIndex = i;
-                break;
+                PerformAutoScrollToLowestDownloadingItem();
+            }, Avalonia.Threading.DispatcherPriority.Background);
+
+            _autoScrollTimer?.Stop();
+            _autoScrollTimer?.Start();
+        }
+    }
+
+    private void PerformAutoScrollToLowestDownloadingItem()
+    {
+        try
+        {
+            if (DataContext is not MainViewModel vm || vm.ComicBooks == null || vm.ComicBooks.Count == 0) return;
+
+            var queueScrollViewer = this.FindControl<ScrollViewer>("QueueScrollViewer");
+            if (queueScrollViewer == null) return;
+
+            var queueItemsControl = this.FindControl<ItemsControl>("QueueItemsControl");
+
+            ComicBookItem? lowestItem = null;
+            int lowestIndex = -1;
+
+            // Duyệt từ cuối danh sách lên đầu để luôn bắt chính xác truyện ở hàng thấp nhất đang tải (chuẩn WPF)
+            for (int i = vm.ComicBooks.Count - 1; i >= 0; i--)
+            {
+                var b = vm.ComicBooks[i];
+                if (b != null && IsComicBookDownloading(b))
+                {
+                    lowestItem = b;
+                    lowestIndex = i;
+                    break;
+                }
+            }
+
+            if (lowestItem == null || lowestIndex < 0) return;
+
+            // Tìm Container Control tương ứng trong Visual Tree
+            Control? targetControl = null;
+            if (queueItemsControl != null)
+            {
+                targetControl = queueItemsControl.ContainerFromIndex(lowestIndex) as Control
+                             ?? queueItemsControl.ContainerFromItem(lowestItem) as Control;
+            }
+
+            if (targetControl != null)
+            {
+                var transform = targetControl.TransformToVisual(queueScrollViewer);
+                if (transform.HasValue)
+                {
+                    var pt = transform.Value.Transform(new Point(0, 0));
+                    double itemHeight = Math.Max(28, targetControl.Bounds.Height);
+                    double viewportHeight = queueScrollViewer.Viewport.Height;
+
+                    // Nếu item nằm ở phía dưới ngoài tầm nhìn (bị che khuất hoặc vượt đáy)
+                    if (pt.Y + itemHeight > viewportHeight)
+                    {
+                        double diff = (pt.Y + itemHeight) - viewportHeight + 14;
+                        double targetY = queueScrollViewer.Offset.Y + diff;
+                        double maxScroll = Math.Max(0, queueScrollViewer.Extent.Height - viewportHeight);
+                        queueScrollViewer.Offset = new Vector(queueScrollViewer.Offset.X, Math.Clamp(targetY, 0, maxScroll));
+                    }
+                    // Nếu item nằm ở phía trên ngoài tầm nhìn
+                    else if (pt.Y < 0)
+                    {
+                        double targetY = Math.Max(0, queueScrollViewer.Offset.Y + pt.Y - 14);
+                        queueScrollViewer.Offset = new Vector(queueScrollViewer.Offset.X, targetY);
+                    }
+                    // Nếu item đã nằm trọn vẹn trong Viewport (0 <= pt.Y && pt.Y + itemHeight <= viewportHeight)
+                    // -> Giữ nguyên trạng thái cuộn, không làm rung giật màn hình giống chuẩn WPF ScrollIntoView!
+                }
+                else
+                {
+                    targetControl.BringIntoView();
+                }
+            }
+            else
+            {
+                // Fallback khi Container chưa kịp layout: ước tính vị trí theo tỷ lệ chiều cao danh sách
+                double totalHeight = queueScrollViewer.Extent.Height;
+                double viewportHeight = queueScrollViewer.Viewport.Height;
+                if (totalHeight > viewportHeight && vm.ComicBooks.Count > 0)
+                {
+                    double avgHeight = totalHeight / vm.ComicBooks.Count;
+                    double itemTop = lowestIndex * avgHeight;
+                    double targetY = itemTop - (viewportHeight - avgHeight) / 2;
+                    double maxScroll = Math.Max(0, totalHeight - viewportHeight);
+                    queueScrollViewer.Offset = new Vector(queueScrollViewer.Offset.X, Math.Clamp(targetY, 0, maxScroll));
+                }
+            }
+        }
+        catch { }
+    }
+
+    private static bool IsComicBookDownloading(ComicBookItem item)
+    {
+        if (item == null) return false;
+
+        string status = item.Status ?? string.Empty;
+        if (status.Contains("Downloading", StringComparison.OrdinalIgnoreCase) ||
+            status.Contains("Đang tải", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Nếu là truyện cha đã tách chương và đang thu gọn: kiểm tra xem có task con nào đang tải không
+        if (item.IsParallelSplitParent && item.IsParallelSplitCollapsed && item.ParallelSplitChildren != null)
+        {
+            if (item.ParallelSplitChildren.Any(c => IsComicBookDownloading(c)))
+            {
+                return true;
             }
         }
 
-        if (lowestIndex >= 0)
+        // Kiểm tra StatusMessage và DetailProgressText khi đang trong tiến trình tải
+        string msg = item.StatusMessage ?? string.Empty;
+        string detail = item.DetailProgressText ?? string.Empty;
+        bool hasActiveProgress = msg.Contains("Đang tải", StringComparison.OrdinalIgnoreCase) ||
+                                 msg.Contains("Downloading", StringComparison.OrdinalIgnoreCase) ||
+                                 msg.Contains("Đang trích xuất", StringComparison.OrdinalIgnoreCase) ||
+                                 detail.Contains("Đang tải", StringComparison.OrdinalIgnoreCase);
+
+        bool isTerminated = status.Equals("Completed", StringComparison.OrdinalIgnoreCase) ||
+                            status.Equals("Hoàn tất", StringComparison.OrdinalIgnoreCase) ||
+                            status.Equals("Stopped", StringComparison.OrdinalIgnoreCase) ||
+                            status.Equals("Đã dừng", StringComparison.OrdinalIgnoreCase) ||
+                            status.Equals("Paused", StringComparison.OrdinalIgnoreCase) ||
+                            status.Equals("Tạm dừng", StringComparison.OrdinalIgnoreCase) ||
+                            status.Equals("Error", StringComparison.OrdinalIgnoreCase) ||
+                            status.Equals("Lỗi", StringComparison.OrdinalIgnoreCase) ||
+                            status.Equals("Waiting", StringComparison.OrdinalIgnoreCase) ||
+                            status.Equals("Chờ tải", StringComparison.OrdinalIgnoreCase);
+
+        if (hasActiveProgress && !isTerminated)
         {
-            double totalHeight = queueScrollViewer.Extent.Height;
-            if (totalHeight <= 0) return;
-
-            double ratio = (double)lowestIndex / Math.Max(1, vm.ComicBooks.Count);
-            double targetY = Math.Max(0, (totalHeight * ratio) - 40);
-
-            queueScrollViewer.Offset = new Vector(queueScrollViewer.Offset.X, targetY);
+            return true;
         }
+
+        return false;
     }
 
     private void OnQueueItemPointerPressed(object? sender, PointerPressedEventArgs e)

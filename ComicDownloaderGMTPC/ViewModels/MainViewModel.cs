@@ -221,6 +221,16 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isAutoScrollToActive = false;
 
+    public event Action? AutoScrollRequested;
+
+    partial void OnIsAutoScrollToActiveChanged(bool value)
+    {
+        if (value)
+        {
+            AutoScrollRequested?.Invoke();
+        }
+    }
+
     // AUTO DELETE COMPLETED COMICS (TỰ ĐỘNG XÓA TRUYỆN ĐÃ TẢI XONG)
     [ObservableProperty]
     private bool _isAutoDeleteCompleted = false;
@@ -1528,6 +1538,14 @@ public partial class MainViewModel : ViewModelBase
         }
 
         AddLog("INFO", $"Bắt đầu tải {ComicBooks.Count(b => b.IsChecked)} truyện...");
+        if (IsAutoScrollToActive)
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(400);
+                AutoScrollRequested?.Invoke();
+            });
+        }
         await _downloadEngine.StartDownloadAsync(ComicBooks, ModeSelection);
         UpdateStats();
     }
@@ -1549,6 +1567,14 @@ public partial class MainViewModel : ViewModelBase
         }
 
         AddLog("INFO", $"Tiếp tục nạp thêm {newItems.Count} truyện vào hàng đợi tải...");
+        if (IsAutoScrollToActive)
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(400);
+                AutoScrollRequested?.Invoke();
+            });
+        }
         await _downloadEngine.DownloadNewAsync(newItems, ModeSelection);
         UpdateStats();
     }
