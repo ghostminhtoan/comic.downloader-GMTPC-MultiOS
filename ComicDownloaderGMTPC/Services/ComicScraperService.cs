@@ -285,7 +285,7 @@ public class ComicScraperService
         string lowerUrl = url.ToLowerInvariant();
         string lowerDomain = (domain ?? string.Empty).ToLowerInvariant();
 
-        // Mẫu chung nhận diện URL danh mục / thể loại / tag / artist / author
+        // Mẫu chung nhận diện URL danh mục / thể loại / tag / artist / author / nhóm dịch
         if (lowerUrl.Contains("/the-loai/") ||
             lowerUrl.Contains("/the-loai") ||
             lowerUrl.Contains("/tim-truyen") ||
@@ -297,6 +297,12 @@ public class ComicScraperService
             lowerUrl.Contains("/categories/") ||
             lowerUrl.Contains("/artist/") ||
             lowerUrl.Contains("/author/") ||
+            lowerUrl.Contains("/tac-gia/") ||
+            lowerUrl.Contains("/tac-gia") ||
+            lowerUrl.Contains("/nhom-dich/") ||
+            lowerUrl.Contains("/nhom-dich") ||
+            lowerUrl.Contains("/dich-gia/") ||
+            lowerUrl.Contains("/dich-gia") ||
             lowerUrl.Contains("/group/") ||
             lowerUrl.Contains("/type/") ||
             lowerUrl.Contains("?tag=") ||
@@ -308,7 +314,10 @@ public class ComicScraperService
 
         // Nhận diện riêng biệt theo từng domain cụ thể
         if (lowerDomain.Contains("truyenqq") || lowerUrl.Contains("truyenqq"))
-            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/tim-truyen");
+            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/the-loai") ||
+                   lowerUrl.Contains("/tim-truyen") ||
+                   lowerUrl.Contains("/tac-gia/") || lowerUrl.Contains("/tac-gia") ||
+                   lowerUrl.Contains("/nhom-dich/") || lowerUrl.Contains("/nhom-dich");
         if (lowerDomain.Contains("nettruyen") || lowerUrl.Contains("nettruyen"))
             return lowerUrl.Contains("/tim-truyen") || lowerUrl.Contains("/the-loai");
         if (lowerDomain.Contains("mangadex") || lowerUrl.Contains("mangadex"))
@@ -2556,23 +2565,40 @@ public class ComicScraperService
 
             int maxPage = 1;
 
-            // 1. Phân tích các liên kết phân trang pagination
-            var pageMatches = Regex.Matches(html, @"(?:page[=/_-]|trang[=/_-]|\/page\/|\/trang-)(\d+)", RegexOptions.IgnoreCase);
+            // 1. Phân tích vùng phân trang đặc thù (page_redirect, pagination, paging)
+            var paginationBlockMatch = Regex.Match(html, @"<(?:div|ul|nav)[^>]*class=[""'][^""']*(?:page_redirect|pagination|paging|page-navigation)[^""']*[""'][^>]*>([\s\S]*?)<\/(?:div|ul|nav)>", RegexOptions.IgnoreCase);
+            string targetPaginationHtml = paginationBlockMatch.Success ? paginationBlockMatch.Value : html;
+
+            // 2. Phân tích các liên kết phân trang pagination (href="/trang-X", href="/page-X", etc.)
+            var pageMatches = Regex.Matches(targetPaginationHtml, @"(?:page[=/_-]|trang[=/_-]|\/page\/|\/trang-)(\d+)", RegexOptions.IgnoreCase);
             foreach (Match m in pageMatches)
             {
-                if (int.TryParse(m.Groups[1].Value, out int p) && p > maxPage && p < 10000)
+                if (int.TryParse(m.Groups[1].Value, out int p) && p > maxPage && p < 100000)
                 {
                     maxPage = p;
                 }
             }
 
-            // 2. Phân tích text trong các nút phân trang
-            var numMatches = Regex.Matches(html, @"<(?:a|span|li)[^>]*class=[""'][^""']*(?:page|pagination|paging)[^""']*[""'][^>]*>(\d+)</(?:a|span|li)>", RegexOptions.IgnoreCase);
+            // 3. Phân tích text trong các thẻ trang (thẻ a, span, li, p chứa số trang)
+            var numMatches = Regex.Matches(targetPaginationHtml, @"<(?:a|span|li|p)[^>]*>(\d+)</(?:a|span|li|p)>", RegexOptions.IgnoreCase);
             foreach (Match m in numMatches)
             {
-                if (int.TryParse(m.Groups[1].Value, out int p) && p > maxPage && p < 10000)
+                if (int.TryParse(m.Groups[1].Value, out int p) && p > maxPage && p < 100000)
                 {
                     maxPage = p;
+                }
+            }
+
+            // 4. Fallback quét toàn bộ HTML nếu chưa tìm được trang trong pagination container
+            if (maxPage <= 1 && paginationBlockMatch.Success)
+            {
+                var fallbackMatches = Regex.Matches(html, @"(?:page[=/_-]|trang[=/_-]|\/page\/|\/trang-)(\d+)", RegexOptions.IgnoreCase);
+                foreach (Match m in fallbackMatches)
+                {
+                    if (int.TryParse(m.Groups[1].Value, out int p) && p > maxPage && p < 100000)
+                    {
+                        maxPage = p;
+                    }
                 }
             }
 
@@ -2653,7 +2679,12 @@ public class ComicScraperService
 
         if (domain.Contains("truyenqq"))
         {
-            return $"{baseUrl.TrimEnd('/')}/trang-{page}.html";
+            string clean = Regex.Replace(baseUrl.TrimEnd('/'), @"/(?:page|trang)-\d+(?:\.html)?$", "", RegexOptions.IgnoreCase);
+            if (clean.Contains("/tac-gia"))
+            {
+                return $"{clean}/page-{page}";
+            }
+            return $"{clean}/trang-{page}";
         }
 
         if (domain.Contains("thuviensach") || domain.Contains("dilib"))

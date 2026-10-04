@@ -157,8 +157,8 @@
                                                 <!-- Panel Analyze & Cào hàng loạt theo dải trang -->
                                                 <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
                                                     <StackPanel Spacing="6">
-                                                        <TextBlock Text="🔍 Phân Tích Tag / Thể Loại / Tác Giả (Lấy Truyện Hàng Loạt):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
-                                                        <TextBox Text="{Binding DomainTruyenqqTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại / tag / artist TruyenQQ (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <TextBlock Text="🔍 Phân Tích Tag / Thể Loại / Tác Giả / Nhóm Dịch (Lấy Truyện Hàng Loạt):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainTruyenqqTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại / tag / tác giả / nhóm dịch TruyenQQ (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
                                                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                             <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="truyenqq" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4" ToolTip.Tip="Phân tích kiểm tra số trang hoặc phân tích hàng loạt URL">
                                                                 <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
