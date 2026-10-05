@@ -27,6 +27,7 @@ Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file
     - Linux: `Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC`
     - Android: `Comic Downloader GMTPC AVALONIA\publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
 - Luôn đánh giá, cập nhật `workflow.md`.
+- Chuẩn Icon App: Dùng mẫu Concept 06 (Comic Cloud Rocket) đồng bộ trên toàn bộ nền tảng: Avalonia Desktop (`app-icon.ico` & Window Icon), Android (`Icon.png`), Linux (`comic-downloader.desktop` `Icon=Icon`) và WPF (`Comic-GMTPC.ico`).
 - Đánh giá prompt, gợi ý tính năng/file thiết kế mới; cập nhật workflow.md/prompt.md khi cần.
 
 ## 2. Snapshot kiến trúc hiện tại
