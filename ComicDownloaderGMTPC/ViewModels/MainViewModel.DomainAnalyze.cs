@@ -38,7 +38,7 @@ public partial class MainViewModel
     private string _domainVihentaiTagUrl = "https://vi-hentai.pro/the-loai/khong-che";
 
     [ObservableProperty]
-    private string _domainDamconuongTagUrl = "https://damconuong.shop/the-loai/elf";
+    private string _domainDamconuongTagUrl = "https://damconuong.pet/the-loai/manhwa-18";
 
     [ObservableProperty]
     private string _domainDamconuongRedirectDomain = string.Empty;
@@ -59,16 +59,16 @@ public partial class MainViewModel
     private string _domainSayhentaiTagUrl = "https://sayhentai.cx/genre/romance";
 
     [ObservableProperty]
-    private string _domainHentai2readTagUrl = "https://hentai2read.com/";
+    private string _domainHentai2readTagUrl = "https://hentai2read.com/genre/comedy/";
 
     [ObservableProperty]
     private string _domainHitomiTagUrl = "https://hitomi.la/type/manga-all.html";
 
     [ObservableProperty]
-    private string _domainHentaiforceTagUrl = "https://hentaiforce.net/";
+    private string _domainHentaiforceTagUrl = "https://hentaiforce.net/search?q=-tomboy+%22uncensored%22+%22dark+skin+female%22+-futanari+catetory%3A%22doujin%22";
 
     [ObservableProperty]
-    private string _domainEhentaiTagUrl = "https://e-hentai.org/";
+    private string _domainEhentaiTagUrl = "https://e-hentai.org/?f_search=female%3A%22dark+skin%24%22+other%3A%22uncensored%24%22+-female%3Afutanari+female%3A%22big+breasts%22";
 
     // ==========================================
     // DOMAIN ANALYZE & BATCH SCRAPING STATE
@@ -101,11 +101,64 @@ public partial class MainViewModel
     private CancellationTokenSource? _domainScrapeCts;
 
     [RelayCommand]
-    public void OpenDomainHome(string domain)
+    public async Task OpenDomainHomeAsync(string domain)
     {
-        string homeUrl = GetDomainHomeUrl(domain);
-        SetDomainTagUrl(domain, homeUrl);
-        AddLog("INFO", $"[Home] Đã mở trang chủ: {homeUrl}");
+        string targetUrl = GetDomainTagUrl(domain);
+        if (string.IsNullOrWhiteSpace(targetUrl))
+        {
+            targetUrl = GetDomainDefaultTagUrl(domain);
+            if (string.IsNullOrWhiteSpace(targetUrl))
+            {
+                targetUrl = GetDomainHomeUrl(domain);
+            }
+        }
+
+        AddLog("INFO", $"[Browser] Đang mở trình duyệt tới liên kết: {targetUrl}");
+        await LaunchWebUrlAsync(targetUrl);
+    }
+
+    public static async Task LaunchWebUrlAsync(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        url = DomainRoutingService.NormalizeUrl(url);
+
+        try
+        {
+            var topLevel = Avalonia.Application.Current?.ApplicationLifetime switch
+            {
+                Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop => desktop.MainWindow,
+                Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView => Avalonia.Controls.TopLevel.GetTopLevel(singleView.MainView),
+                _ => null
+            };
+
+            if (topLevel?.Launcher != null)
+            {
+                bool launched = await topLevel.Launcher.LaunchUriAsync(new Uri(url)).ConfigureAwait(false);
+                if (launched) return;
+            }
+        }
+        catch { }
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            else if (OperatingSystem.IsLinux() && !OperatingSystem.IsAndroid())
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("xdg-open", $"\"{url}\"") { UseShellExecute = true });
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("open", $"\"{url}\"") { UseShellExecute = true });
+            }
+            else if (OperatingSystem.IsAndroid())
+            {
+                BackgroundExecutionService.NativeOpenBrowserRequested?.Invoke(url);
+            }
+        }
+        catch { }
     }
 
     [RelayCommand]
@@ -527,12 +580,12 @@ public partial class MainViewModel
         if (domain.Contains("thuviensach") || domain.Contains("dilib")) return "https://thuviensach.vn/truyen-tranh/shounen/";
         if (domain.Contains("daomeoden")) return "https://daomeoden.net/the-loai/romance.html";
         if (domain.Contains("vi-hentai") || domain.Contains("vihentai")) return "https://vi-hentai.pro/the-loai/khong-che";
-        if (domain.Contains("damconuong")) return "https://damconuong.shop/the-loai/elf";
+        if (domain.Contains("damconuong")) return "https://damconuong.pet/the-loai/manhwa-18";
         if (domain.Contains("sayhentai")) return "https://sayhentai.cx/genre/romance";
-        if (domain.Contains("hentai2read")) return "https://hentai2read.com/";
+        if (domain.Contains("hentai2read")) return "https://hentai2read.com/genre/comedy/";
         if (domain.Contains("hitomi")) return "https://hitomi.la/type/manga-all.html";
-        if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/";
-        if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return "https://e-hentai.org/";
+        if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/search?q=-tomboy+%22uncensored%22+%22dark+skin+female%22+-futanari+catetory%3A%22doujin%22";
+        if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return "https://e-hentai.org/?f_search=female%3A%22dark+skin%24%22+other%3A%22uncensored%24%22+-female%3Afutanari+female%3A%22big+breasts%22";
         return "";
     }
 

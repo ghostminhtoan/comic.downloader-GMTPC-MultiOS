@@ -59,7 +59,11 @@ public class DownloadEngineService
         {
             AutomaticDecompression = System.Net.DecompressionMethods.All,
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-            ConnectTimeout = TimeSpan.FromSeconds(15)
+            ConnectTimeout = TimeSpan.FromSeconds(15),
+            SslOptions = new System.Net.Security.SslClientAuthenticationOptions
+            {
+                RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true
+            }
         };
         _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
@@ -890,6 +894,20 @@ public class DownloadEngineService
                              (refererUrl != null && refererUrl.Contains("hitomi", StringComparison.OrdinalIgnoreCase)))
                     {
                         effectiveReferer = "https://hitomi.la/";
+                    }
+                    else if (targetUrl.Contains("ehgt.org", StringComparison.OrdinalIgnoreCase) ||
+                             targetUrl.Contains("e-hentai.org", StringComparison.OrdinalIgnoreCase) ||
+                             targetUrl.Contains("exhentai.org", StringComparison.OrdinalIgnoreCase) ||
+                             targetUrl.Contains("hath.network", StringComparison.OrdinalIgnoreCase) ||
+                             (refererUrl != null && (refererUrl.Contains("e-hentai") || refererUrl.Contains("exhentai"))))
+                    {
+                        effectiveReferer = "https://e-hentai.org/";
+                        req.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always");
+                    }
+                    else if (targetUrl.Contains("hentaiforce", StringComparison.OrdinalIgnoreCase) ||
+                             (refererUrl != null && refererUrl.Contains("hentaiforce", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        effectiveReferer = "https://hentaiforce.net/";
                     }
 
                     if (!string.IsNullOrEmpty(effectiveReferer))

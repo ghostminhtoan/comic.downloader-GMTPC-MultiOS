@@ -29,7 +29,11 @@ public class ComicScraperService
             CookieContainer = _cookieContainer,
             AutomaticDecompression = DecompressionMethods.All,
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-            ConnectTimeout = TimeSpan.FromSeconds(15)
+            ConnectTimeout = TimeSpan.FromSeconds(15),
+            SslOptions = new System.Net.Security.SslClientAuthenticationOptions
+            {
+                RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true
+            }
         };
 
         _httpClient = new HttpClient(handler)
@@ -37,12 +41,33 @@ public class ComicScraperService
             Timeout = TimeSpan.FromSeconds(30)
         };
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+        _httpClient.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8");
         _httpClient.DefaultRequestHeaders.Add("Accept-Language", "vi,en-US;q=0.9,en;q=0.8");
 
         try
         {
+            EnsureEHentaiCookies();
             LoadDamconuongCookies("https://damconuong.pet");
             LoadDamconuongCookies("https://damconuong.shop");
+        }
+        catch { }
+    }
+
+    public void EnsureEHentaiCookies()
+    {
+        try
+        {
+            var baseUris = new[]
+            {
+                new Uri("https://e-hentai.org/"),
+                new Uri("https://exhentai.org/"),
+                new Uri("https://api.e-hentai.org/")
+            };
+            foreach (var u in baseUris)
+            {
+                _cookieContainer.Add(u, new Cookie("nw", "1") { Path = "/" });
+                _cookieContainer.Add(u, new Cookie("nw", "always") { Path = "/" });
+            }
         }
         catch { }
     }
@@ -3019,8 +3044,10 @@ public class ComicScraperService
 
         try
         {
+            EnsureEHentaiCookies();
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Add("Cookie", "nw=1");
+            req.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always");
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
             using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             if (!res.IsSuccessStatusCode) return string.Empty;
 
@@ -3030,7 +3057,8 @@ public class ComicScraperService
                 string sep = url.Contains('?') ? "&" : "?";
                 string bypassUrl = url + sep + "nw=always";
                 using var bypassReq = new HttpRequestMessage(HttpMethod.Get, bypassUrl);
-                bypassReq.Headers.Add("Cookie", "nw=1; nw=always");
+                bypassReq.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always");
+                bypassReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
                 using var bypassRes = await _httpClient.SendAsync(bypassReq, ct).ConfigureAwait(false);
                 if (bypassRes.IsSuccessStatusCode)
                 {

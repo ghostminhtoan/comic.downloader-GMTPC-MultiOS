@@ -1658,3 +1658,40 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `dotnet build` biên dịch sạch sẽ `0 Error(s), 0 Warning(s)`.
   - Đóng gói single-file executable Desktop.exe sẵn sàng sử dụng.
 
+### 15.36. Tối Ưu Hóa Toàn Diện Mạng & Phân Tích Danh Mục Trên Android, Đổi Nút "Trang Chủ" Thành "Mở Web" & Chuẩn Hóa Link Mặc Định
+- **Bối cảnh & Vấn đề**:
+  1. *Lỗi Analyze & Download trên Android*:
+     - Trên Windows ứng dụng hoạt động bình thường, nhưng trên Android không thể analyze và download truyện (đặc biệt E-Hentai, TruyenQQ, NetTruyen, Damconuong, Hentaiforce...).
+     - *Nguyên nhân 1 - Cleartext Traffic*: Android 9+ mặc định chặn toàn bộ kết nối HTTP không mã hóa (`http://`), trong khi nhiều CDN ảnh của các trang truyện sử dụng HTTP hoặc redirect từ HTTPS sang HTTP. `AndroidManifest.xml` thiếu `android:usesCleartextTraffic="true"` và permission `ACCESS_NETWORK_STATE`.
+     - *Nguyên nhân 2 - SSL/TLS Certificate Validation*: `SocketsHttpHandler` trên Android gặp lỗi xác thực chuỗi chứng chỉ SSL (Let's Encrypt / ZeroSSL / Cloudflare) do Android trust store thiếu CA hoặc chứng chỉ CDN không trùng khớp host, gây ngoại lệ `AuthenticationException`.
+     - *Nguyên nhân 3 - CookieContainer loại bỏ Cookie Header trên Android*: Trong .NET trên Android, khi bật `CookieContainer` trên `SocketsHttpHandler`, handler tự động ghi đè hoặc loại bỏ header `Cookie` mà ứng dụng add thủ công vào `HttpRequestMessage`. Do đó các request tới E-Hentai không có cookie `nw=1; nw=always`, dẫn đến bị chặn bởi Content Warning hoặc Offensive for Everyone.
+     - *Nguyên nhân 4 - Referer CDN khi tải ảnh*: E-Hentai CDN (`ehgt.org`, `hath.network`) và HentaiForce yêu cầu Referer chính xác khi tải ảnh; `DownloadEngineService` chưa gán Referer và cookie cho E-Hentai CDN.
+  2. *Cơ chế nút "Trang chủ (Home)"*:
+     - Trước đây nút "Trang chủ" chỉ gán URL trang chủ tĩnh vào ô text mà không mở trình duyệt web ngoài, khiến người dùng không thể xem trực tiếp danh mục/thể loại trên website.
+     - Link mặc định trong ô analyze của một số web đang để là trang chủ (ví dụ `https://e-hentai.org/`, `https://hentaiforce.net/`) thay vì link tag / category / search ví dụ cụ thể.
+- **Giải pháp xử lý (Multi-Lane Rigor)**:
+  1. **Nâng cấp Cấu hình Android (`AndroidManifest.xml`)**:
+     - Bổ sung `android:usesCleartextTraffic="true"` vào thẻ `<application>`.
+     - Bổ sung quyền `<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />`.
+  2. **Bypass Lỗi Chứng Chỉ SSL & Quản Lý Cookie Chuyên Biệt (`ComicScraperService.cs` & `DownloadEngineService.cs`)**:
+     - Cấu hình `RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true` cho `SocketsHttpHandler.SslOptions` trong cả `ComicScraperService` và `DownloadEngineService`.
+     - Xây dựng `EnsureEHentaiCookies()`: nạp trực tiếp cookie `nw=1` và `nw=always` vào `_cookieContainer` cho các domain `e-hentai.org`, `exhentai.org`, `api.e-hentai.org`.
+     - Bổ sung Referer và cookie cho E-Hentai CDN và HentaiForce trong `DownloadImageWithRetryAsync`.
+  3. **Chuyển Đổi Nút "Trang Chủ" Thành "🌐 Mở Web (Browse)" Đa Nền Tảng (`MainViewModel.DomainAnalyze.cs`, `MainActivity.cs`, `MainView.axaml`)**:
+     - `OpenDomainHomeAsync`: Đọc liên kết đang có trong ô phân tích (`GetDomainTagUrl`), nếu rỗng thì fallback về URL phân tích mặc định (`GetDomainDefaultTagUrl`).
+     - Tích hợp `LaunchWebUrlAsync`: Gọi `TopLevel.Launcher.LaunchUriAsync` (Avalonia), Intent Android `ActionView` (`NativeOpenBrowserRequested`), và `Process.Start` trên Windows/Linux.
+     - Đồng bộ nhãn nút trên toàn bộ 13 tab: `🌐 Mở Web (Browse)`.
+  4. **Chuẩn Hóa Toàn Bộ Link Mặc Định Trong Analyze Thành Link Ví Dụ Cụ Thể**:
+     - E-Hentai: `https://e-hentai.org/?f_search=female%3A%22dark+skin%24%22+other%3A%22uncensored%24%22+-female%3Afutanari+female%3A%22big+breasts%22`
+     - HentaiForce: `https://hentaiforce.net/search?q=-tomboy+%22uncensored%22+%22dark+skin+female%22+-futanari+catetory%3A%22doujin%22`
+     - Hentai2Read: `https://hentai2read.com/genre/comedy/`
+     - Damconuong: `https://damconuong.pet/the-loai/manhwa-18`
+     - TruyenQQ: `https://truyenqqko.com/the-loai/adventure-27`
+     - NetTruyen: `https://nettruyenviet10.com/tim-truyen/adventure`
+     - SayHentai: `https://sayhentai.cx/genre/romance`
+     - LoppyToon: `https://loppytoonn.com/the-loai/lang-man`
+- **Nghiệm Thu**:
+  - `dotnet build` sạch sẽ `0 Error(s), 0 Warning(s)`.
+  - Kiểm tra tương thích biên dịch cho cả Windows Desktop và Android.
+
+

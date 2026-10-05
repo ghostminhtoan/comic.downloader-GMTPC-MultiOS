@@ -141,7 +141,7 @@
                                                 <!-- Toolbar Navigation & Bookmarks -->
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="truyenqq" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="truyenqq" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -207,7 +207,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="nettruyen" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="nettruyen" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -271,7 +271,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="loppy" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="loppy" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -335,7 +335,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="thuviensach" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="thuviensach" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -410,7 +410,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="mangadex" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="mangadex" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -485,7 +485,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="daomeoden" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="daomeoden" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -556,7 +556,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="vihentai" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="vihentai" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -620,7 +620,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="damconuong" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="damconuong" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -687,7 +687,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="sayhentai" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="sayhentai" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -751,7 +751,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="hentai2read" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="hentai2read" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -815,7 +815,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="hitomi" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="hitomi" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -879,7 +879,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="hentaiforce" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="hentaiforce" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />
@@ -943,7 +943,7 @@
                                             <StackPanel Spacing="10" Margin="0,8,0,0">
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Button Command="{Binding OpenDomainHomeCommand}" CommandParameter="ehentai" Background="#1E293B" Foreground="#F43F5E" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
-                                                        <TextBlock Text="🏠 Trang chủ (Home)" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Text="🌐 Mở Web (Browse)" FontSize="10" FontWeight="SemiBold" />
                                                     </Button>
                                                     <Button Command="{Binding RestoreDefaultTagCommand}" CommandParameter="ehentai" Background="#1E293B" Foreground="#94A3B8" Padding="8,4" CornerRadius="4" Margin="0,0,6,4">
                                                         <TextBlock Text="🔄 Khôi phục Tag mặc định" FontSize="10" />

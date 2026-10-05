@@ -107,6 +107,21 @@ public class MainActivity : AvaloniaMainActivity
             });
         };
 
+        Services.BackgroundExecutionService.NativeOpenBrowserRequested = (url) =>
+        {
+            RunOnUiThread(() =>
+            {
+                try
+                {
+                    var uri = global::Android.Net.Uri.Parse(url);
+                    var intent = new Intent(Intent.ActionView, uri);
+                    intent.AddFlags(ActivityFlags.NewTask);
+                    StartActivity(intent);
+                }
+                catch { }
+            });
+        };
+
         Services.DownloadEngineService.OpenStorageSettingsRequested += OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested += OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
