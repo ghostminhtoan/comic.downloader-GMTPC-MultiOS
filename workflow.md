@@ -1595,3 +1595,38 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      - Cập nhật nhãn và placeholder tại Tab TruyenQQ hỗ trợ cả Thể loại, Tag, Tác giả và Nhóm dịch.
 - **Nghiệm thu**:
   - Biên dịch `0 Error(s), 0 Warning(s)`.
+
+### 15.34. Nâng Cấp Phân Tích Danh Mục Hàng Loạt Toàn Diện (NetTruyen, LoppyToon, Damconuong, Hentaiforce) & Cảnh Báo Trạng Thái (Thư Viện Sách, MangaDex)
+- **Bối cảnh & Vấn đề**:
+  1. *NetTruyen*: Phân tích thể loại hoạt động tốt nhưng tác giả (`https://nettruyenviet10.com/nettruyen-web-team`) và nhóm dịch (`https://nettruyenviet10.com/nhom-dich/navy-team`) bị lỗi nhận diện do `IsCategoryOrTagUrl` thiếu tiền tố nhóm dịch, tác giả và slug `web-team`.
+  2. *LoppyToon*: Cần đảm bảo nhận diện đầy đủ nhóm dịch, tác giả và tránh rớt link truyện do dấu gạch chéo cuối (`/`).
+  3. *Damconuong*:
+     - Tên truyện bóc tách bị mất dấu tiếng Việt (rơi vào slug URL tiếng Anh không dấu do thẻ bọc đầu tiên chứa ảnh không có text).
+     - Nhóm dịch (`https://damconuong.pet/nhom-dich/dung-si-diet-cao`) bị nhận diện nhầm thành link bộ truyện đơn lẻ (Direct Comic Book) do thiếu `/nhom-dich/` trong bộ lọc thể loại.
+  4. *Hentaiforce*: Toàn bộ các liên kết tìm kiếm (`/search?q=...`), Parody (`/parody/...`), Character (`/character/...`), Artist (`/artist/...`), Language (`/language/...`), Category (`/category/...`) không analyze được vì regex chỉ hỗ trợ `/tag/` và `/category/`, thiếu bóc tách phân trang dạng `{url}/{page}` và `&page={page}`.
+  5. *Thư Viện Sách (thuviensach.vn)*: Máy chủ phía website bị lỗi trắng trang (HTTP 200 rỗng / timeout), người dùng yêu cầu hiển thị thông báo rõ ràng: `"server đang lỗi, hiện tại chưa tải được"` khi truy cập/thao tác trên tab này.
+  6. *MangaDex*: Không hỗ trợ cào analyze phân tích theo danh mục, yêu cầu hiển thị thông báo: `"website không hỗ trợ analyze"`.
+- **Giải pháp xử lý (Multi-Lane Rigor)**:
+  1. **Nâng cấp Phân loại & Phân trang (`ComicScraperService.cs`)**:
+     - *NetTruyen*: Bổ sung `/nhom-dich/`, `/tac-gia/`, `web-team` vào `IsCategoryOrTagUrl`, bổ sung lọc bỏ link chapter `/chuong-`.
+     - *Damconuong*:
+       + Bổ sung `/nhom-dich/`, `/tac-gia/` vào `IsCategoryOrTagUrl`, lọc bỏ link chapter `/chapter-` và `/chap-`.
+       + Bóc tách tiêu đề tiếng Việt có dấu từ thuộc tính `alt` của thẻ `<img>` và cơ chế ưu tiên cập nhật lại tiêu đề tiếng Việt có dấu khi gặp thẻ `<a>` chứa text tiếng Việt hoàn chỉnh.
+     - *Hentaiforce*:
+       + Mở rộng `IsCategoryOrTagUrl` nhận diện mọi liên kết non-view (`/search`, `/artist/`, `/character/`, `/parody/`, `/language/`, `/category/`, `/tag/` hoặc không chứa `/view/`).
+       + Tối ưu hóa `BuildPagedTagUrl`: Tự động phân nhánh `{cleanQuery}{sep}page={page}` cho URL chứa query string và `{clean}/{page}` cho URL thuần path.
+       + Cải tiến `AnalyzeTagUrlAsync`: Thêm regex nhận diện link phân trang dạng số ở đuôi path `href=".../(\d+)"` trong container pagination.
+       + Bóc tách ảnh bìa từ `data-src` và tiêu đề truyện từ khối gallery name.
+     - *LoppyToon & Hentai2Read*: Thêm `TrimEnd('/')` trước khi tính cấp độ sâu thư mục để không bỏ sót các liên kết có trailing slash.
+     - *Thư Viện Sách*: Trong `ScrapeDilibBookAsync`, nếu response rỗng hoặc không thành công thì thông báo chính xác `"Server đang lỗi, hiện tại chưa tải được"`.
+  2. **Kiểm Soát Trạng Thái Phân Tích Domain (`MainViewModel.DomainAnalyze.cs`)**:
+     - Chặn sớm trong `AnalyzeDomainTagAsync` và `ExecuteDomainBatchScrapeAsync`:
+       * Nếu là `thuviensach` hoặc `dilib`: gán `DomainAnalyzeStatusText = "⚠️ Server đang lỗi, hiện tại chưa tải được"` và ghi log cảnh báo.
+       * Nếu là `mangadex`: gán `DomainAnalyzeStatusText = "⚠️ Website không hỗ trợ analyze"` và ghi log hướng dẫn dán trực tiếp link truyện.
+  3. **Tối Ưu Giao Diện Trực Quan (`MainView.axaml`)**:
+     - *Tab thuviensach.vn*: Bổ sung banner cảnh báo trạng thái nổi bật màu đỏ: `⚠️ Server đang lỗi, hiện tại chưa tải được`.
+     - *Tab mangadex.org*: Bổ sung banner thông tin chuyên dụng: `ℹ️ Website không hỗ trợ analyze. Vui lòng dán trực tiếp link truyện MangaDex bên dưới để tải.`
+     - Cập nhật nhãn và placeholder rõ ràng cho các tab NetTruyen, LoppyToon, Damconuong (hỗ trợ tiếng Việt có dấu) và Hentaiforce (search, parody, artist, character...).
+- **Nghiệm Thu**:
+  - `dotnet build` biên dịch sạch sẽ `0 Error(s), 0 Warning(s)`.
+  - Đóng gói single-file executable Desktop.exe sẵn sàng sử dụng.

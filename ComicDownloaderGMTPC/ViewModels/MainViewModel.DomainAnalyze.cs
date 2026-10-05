@@ -148,6 +148,20 @@ public partial class MainViewModel
     [RelayCommand]
     public async Task AnalyzeDomainTagAsync(string domain)
     {
+        if (domain.Contains("thuviensach") || domain.Contains("dilib"))
+        {
+            DomainAnalyzeStatusText = "⚠️ Server đang lỗi, hiện tại chưa tải được";
+            AddLog("WARN", "[thuviensach.vn] Server đang lỗi, hiện tại chưa tải được");
+            return;
+        }
+
+        if (domain.Contains("mangadex"))
+        {
+            DomainAnalyzeStatusText = "⚠️ Website không hỗ trợ analyze";
+            AddLog("WARN", "[MangaDex] Website không hỗ trợ analyze");
+            return;
+        }
+
         string rawInput = GetDomainTagUrl(domain);
         if (string.IsNullOrWhiteSpace(rawInput))
         {
@@ -303,6 +317,20 @@ public partial class MainViewModel
 
     private async Task ExecuteDomainBatchScrapeAsync(string domain, bool clearExisting)
     {
+        if (domain.Contains("thuviensach") || domain.Contains("dilib"))
+        {
+            DomainAnalyzeStatusText = "⚠️ Server đang lỗi, hiện tại chưa tải được";
+            AddLog("WARN", "[thuviensach.vn] Server đang lỗi, hiện tại chưa tải được");
+            return;
+        }
+
+        if (domain.Contains("mangadex"))
+        {
+            DomainAnalyzeStatusText = "⚠️ Website không hỗ trợ analyze";
+            AddLog("WARN", "[MangaDex] Website không hỗ trợ analyze");
+            return;
+        }
+
         string rawInput = GetDomainTagUrl(domain);
         if (string.IsNullOrWhiteSpace(rawInput))
         {

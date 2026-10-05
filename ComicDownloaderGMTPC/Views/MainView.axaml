@@ -222,8 +222,8 @@
 
                                                 <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
                                                     <StackPanel Spacing="6">
-                                                        <TextBlock Text="🔍 Phân Tích Tag / Thể Loại NetTruyen (Lấy Truyện Hàng Loạt):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
-                                                        <TextBox Text="{Binding DomainNettruyenTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại NetTruyen (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <TextBlock Text="🔍 Phân Tích Tag / Thể Loại / Tác Giả / Nhóm Dịch NetTruyen (Lấy Truyện Hàng Loạt):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainNettruyenTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại / tác giả / nhóm dịch NetTruyen (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
                                                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                             <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="nettruyen" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4" ToolTip.Tip="Phân tích kiểm tra số trang hoặc phân tích hàng loạt URL">
                                                                 <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
@@ -286,8 +286,8 @@
 
                                                 <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
                                                     <StackPanel Spacing="6">
-                                                        <TextBlock Text="🔍 Phân Tích Tag / Thể Loại LoppyToon (Lấy Truyện Hàng Loạt):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
-                                                        <TextBox Text="{Binding DomainLoppyTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại LoppyToon (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <TextBlock Text="🔍 Phân Tích Tag / Thể Loại / Tác Giả / Nhóm Dịch LoppyToon (Lấy Truyện Hàng Loạt):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainLoppyTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại / tác giả / nhóm dịch LoppyToon (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
                                                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                             <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="loppy" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4" ToolTip.Tip="Phân tích kiểm tra số trang hoặc phân tích hàng loạt URL">
                                                                 <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
@@ -347,6 +347,17 @@
                                                         <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
                                                     </Button>
                                                 </WrapPanel>
+
+                                                <!-- Cảnh Báo Server Thu Viện Sách Đang Lỗi -->
+                                                <Border Background="#331818" BorderBrush="#EF4444" BorderThickness="1.5" CornerRadius="6" Padding="12,8" Margin="0,0,0,2">
+                                                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                                        <TextBlock Text="⚠️" FontSize="16" VerticalAlignment="Center" />
+                                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                            <TextBlock Text="Server đang lỗi, hiện tại chưa tải được" Foreground="#F87171" FontWeight="Bold" FontSize="11.5" />
+                                                            <TextBlock Text="Máy chủ thuviensach.vn hiện phản hồi trống hoặc lỗi kết nối. Vui lòng quay lại sau." Foreground="#CBD5E1" FontSize="10" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Border>
 
                                                 <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
                                                     <StackPanel Spacing="6">
@@ -411,6 +422,17 @@
                                                         <TextBlock Text="⭐ Lưu Bookmark" FontSize="10" />
                                                     </Button>
                                                 </WrapPanel>
+
+                                                <!-- Thông Báo MangaDex Không Hỗ Trợ Analyze -->
+                                                <Border Background="#162238" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,2">
+                                                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                                        <TextBlock Text="ℹ️" FontSize="16" VerticalAlignment="Center" />
+                                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                            <TextBlock Text="Website không hỗ trợ analyze" Foreground="#38BDF8" FontWeight="Bold" FontSize="11.5" />
+                                                            <TextBlock Text="MangaDex không hỗ trợ cào phân tích theo danh mục/thẻ tag. Vui lòng dán trực tiếp link truyện MangaDex bên dưới để tải." Foreground="#94A3B8" FontSize="10" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Border>
 
                                                 <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
                                                     <StackPanel Spacing="6">
@@ -616,8 +638,8 @@
                                                         <TextBlock Text="🔄 REDIRECT DOMAIN (Tự động phát hiện hoặc nhập tay domain mới):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" />
                                                         <TextBox Text="{Binding DomainDamconuongRedirectDomain}" PlaceholderText="Ví dụ: https://mbpro.vip (để trống nếu sử dụng https://damconuong.shop gốc)..." Height="32" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" Margin="0,0,0,4" />
 
-                                                        <TextBlock Text="🔍 Phân Tích Thể Loại Dâm Cô Nương:" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
-                                                        <TextBox Text="{Binding DomainDamconuongTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại Dâm Cô Nương (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <TextBlock Text="🔍 Phân Tích Thể Loại / Tác Giả / Nhóm Dịch Dâm Cô Nương (Hỗ Trợ Tiếng Việt Có Dấu):" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainDamconuongTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại / tác giả / nhóm dịch Dâm Cô Nương (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
                                                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                             <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="damconuong" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
                                                                 <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />
@@ -872,8 +894,8 @@
 
                                                 <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
                                                     <StackPanel Spacing="6">
-                                                        <TextBlock Text="🔍 Phân Tích Thể Loại Hentaiforce:" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
-                                                        <TextBox Text="{Binding DomainHentaiforceTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại Hentaiforce (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <TextBlock Text="🔍 Phân Tích Thể Loại / Tìm Kiếm / Parody / Artist / Character Hentaiforce:" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainHentaiforceTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link search / parody / character / artist / category / tag Hentaiforce..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
                                                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                             <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="hentaiforce" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
                                                                 <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />

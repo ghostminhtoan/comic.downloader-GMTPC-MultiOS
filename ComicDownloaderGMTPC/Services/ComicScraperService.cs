@@ -319,11 +319,16 @@ public class ComicScraperService
                    lowerUrl.Contains("/tac-gia/") || lowerUrl.Contains("/tac-gia") ||
                    lowerUrl.Contains("/nhom-dich/") || lowerUrl.Contains("/nhom-dich");
         if (lowerDomain.Contains("nettruyen") || lowerUrl.Contains("nettruyen"))
-            return lowerUrl.Contains("/tim-truyen") || lowerUrl.Contains("/the-loai");
+            return lowerUrl.Contains("/tim-truyen") || lowerUrl.Contains("/the-loai") ||
+                   lowerUrl.Contains("/nhom-dich/") || lowerUrl.Contains("/nhom-dich") ||
+                   lowerUrl.Contains("/tac-gia/") || lowerUrl.Contains("/tac-gia") ||
+                   lowerUrl.Contains("web-team");
         if (lowerDomain.Contains("mangadex") || lowerUrl.Contains("mangadex"))
             return lowerUrl.Contains("/tag/") || lowerUrl.Contains("includedtags") || lowerUrl.Contains("/genre/");
         if (lowerDomain.Contains("damconuong") || lowerUrl.Contains("damconuong"))
-            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/the-loai");
+            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/the-loai") ||
+                   lowerUrl.Contains("/nhom-dich/") || lowerUrl.Contains("/nhom-dich") ||
+                   lowerUrl.Contains("/tac-gia/") || lowerUrl.Contains("/tac-gia");
         if (lowerDomain.Contains("vihentai") || lowerUrl.Contains("vi-hentai") || lowerUrl.Contains("vihentai"))
             return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/tag/") || lowerUrl.Contains("/genre/");
         if (lowerDomain.Contains("sayhentai") || lowerUrl.Contains("sayhentai"))
@@ -333,7 +338,10 @@ public class ComicScraperService
         if (lowerDomain.Contains("hitomi") || lowerUrl.Contains("hitomi"))
             return lowerUrl.Contains("/tag/") || lowerUrl.Contains("/artist/") || lowerUrl.Contains("/series/") || lowerUrl.Contains("/type/");
         if (lowerDomain.Contains("hentaiforce") || lowerUrl.Contains("hentaiforce"))
-            return lowerUrl.Contains("/tag/") || lowerUrl.Contains("/category/");
+            return lowerUrl.Contains("/tag/") || lowerUrl.Contains("/category/") ||
+                   lowerUrl.Contains("/search") || lowerUrl.Contains("/artist/") ||
+                   lowerUrl.Contains("/character/") || lowerUrl.Contains("/parody/") ||
+                   lowerUrl.Contains("/language/") || !lowerUrl.Contains("/view/");
         if (lowerDomain.Contains("e-hentai") || lowerDomain.Contains("ehentai") || lowerUrl.Contains("e-hentai") || lowerUrl.Contains("exhentai"))
             return lowerUrl.Contains("/tag/") || lowerUrl.Contains("?f_search=") || !lowerUrl.Contains("/g/");
         if (lowerDomain.Contains("thuviensach") || lowerUrl.Contains("thuviensach"))
@@ -341,7 +349,8 @@ public class ComicScraperService
         if (lowerDomain.Contains("daomeoden") || lowerUrl.Contains("daomeoden"))
             return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/tag/");
         if (lowerDomain.Contains("loppy") || lowerUrl.Contains("loppy"))
-            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/genre/");
+            return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/genre/") ||
+                   lowerUrl.Contains("/tac-gia/") || lowerUrl.Contains("/nhom-dich/");
 
         return false;
     }
@@ -1148,11 +1157,18 @@ public class ComicScraperService
         {
             item.Title = ExtractFallbackTitleFromUrl(url);
             item.Status = "Error";
-            item.StatusMessage = $"HTTP {(int)res.StatusCode}";
+            item.StatusMessage = "Server đang lỗi, hiện tại chưa tải được";
             return item;
         }
 
         string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            item.Title = ExtractFallbackTitleFromUrl(url);
+            item.Status = "Error";
+            item.StatusMessage = "Server đang lỗi, hiện tại chưa tải được";
+            return item;
+        }
         item.Title = ExtractTitle(html, url);
         item.CoverUrl = ExtractCoverUrl(html, url);
 
@@ -2579,6 +2595,16 @@ public class ComicScraperService
                 }
             }
 
+            // 2.1 Phân tích các liên kết phân trang dạng path số (ví dụ hentaiforce: /category/doujin/2)
+            var slashPageMatches = Regex.Matches(targetPaginationHtml, @"href=[""'][^""']*?/(\d+)(?:[?#/""']|$)", RegexOptions.IgnoreCase);
+            foreach (Match m in slashPageMatches)
+            {
+                if (int.TryParse(m.Groups[1].Value, out int p) && p > maxPage && p < 100000)
+                {
+                    maxPage = p;
+                }
+            }
+
             // 3. Phân tích text trong các thẻ trang (thẻ a, span, li, p chứa số trang)
             var numMatches = Regex.Matches(targetPaginationHtml, @"<(?:a|span|li|p)[^>]*>(\d+)</(?:a|span|li|p)>", RegexOptions.IgnoreCase);
             foreach (Match m in numMatches)
@@ -2702,6 +2728,18 @@ public class ComicScraperService
             return $"{baseUrl.TrimEnd('/')}/page/{page}/";
         }
 
+        if (domain.Contains("hentaiforce"))
+        {
+            if (baseUrl.Contains("?"))
+            {
+                string cleanQuery = Regex.Replace(baseUrl, @"([?&])page=\d+&?", "$1").TrimEnd('?', '&');
+                char sep = cleanQuery.Contains("?") ? '&' : '?';
+                return $"{cleanQuery}{sep}page={page}";
+            }
+            string clean = Regex.Replace(baseUrl.TrimEnd('/'), @"/\d+$", "");
+            return $"{clean}/{page}";
+        }
+
         return $"{baseUrl}?page={page}";
     }
 
@@ -2726,14 +2764,15 @@ public class ComicScraperService
             // Lọc đúng link truyện theo domain
             bool isComicLink = false;
             if (domain.Contains("truyenqq") && link.Contains("/truyen-tranh/") && !link.Contains("-chap-")) isComicLink = true;
-            else if (domain.Contains("nettruyen") && link.Contains("/truyen-tranh/") && !link.Contains("/chap-")) isComicLink = true;
+            else if (domain.Contains("nettruyen") && link.Contains("/truyen-tranh/") && !link.Contains("/chap-") && !link.Contains("/chuong-")) isComicLink = true;
             else if (domain.Contains("thuviensach") && (link.EndsWith(".html") || link.Contains("/truyen-tranh/"))) isComicLink = true;
-            else if (domain.Contains("loppytoonn") && link.Contains("/truyen/") && link.Split('/').Length <= 5) isComicLink = true;
+            else if (domain.Contains("loppytoonn") && link.Contains("/truyen/") && link.TrimEnd('/').Split('/').Length <= 5) isComicLink = true;
             else if (domain.Contains("daomeoden") && link.Contains("/truyen-tranh/")) isComicLink = true;
             else if (domain.Contains("vi-hentai") && link.Contains("/truyen/")) isComicLink = true;
-            else if (domain.Contains("damconuong") && link.Contains("/truyen/")) isComicLink = true;
+            else if (domain.Contains("damconuong") && link.Contains("/truyen/") && !link.Contains("/chapter-") && !link.Contains("/chap-")) isComicLink = true;
             else if (domain.Contains("sayhentai") && (link.Contains("/story/") || link.Contains("/truyen/"))) isComicLink = true;
-            else if (domain.Contains("hentai2read") && link.Contains("hentai2read.com/") && link.Split('/').Length <= 5) isComicLink = true;
+            else if (domain.Contains("hentai2read") && link.Contains("hentai2read.com/") && link.TrimEnd('/').Split('/').Length <= 5) isComicLink = true;
+            else if (domain.Contains("hentaiforce") && link.Contains("/view/")) isComicLink = true;
 
             if (isComicLink)
             {
@@ -2755,6 +2794,16 @@ public class ComicScraperService
                     }
                 }
 
+                // Hỗ trợ bóc tách tên tiếng Việt có dấu từ thẻ img (alt="..." hoặc data-title="...") cho Damconuong và các web dùng thẻ ảnh
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    var altAttr = Regex.Match(inner, @"alt=[""'](?<t>[^""']+)[""']", RegexOptions.IgnoreCase);
+                    if (altAttr.Success && !string.IsNullOrWhiteSpace(altAttr.Groups["t"].Value) && altAttr.Groups["t"].Value.Trim().Length >= 2)
+                    {
+                        title = WebUtility.HtmlDecode(altAttr.Groups["t"].Value.Trim());
+                    }
+                }
+
                 if (string.IsNullOrWhiteSpace(title))
                 {
                     title = ExtractFallbackTitleFromUrl(fullUrl);
@@ -2771,7 +2820,21 @@ public class ComicScraperService
                     }
                 }
 
-                if (title.Length >= 2 && !result.Any(x => x.Url.Equals(fullUrl, StringComparison.OrdinalIgnoreCase)))
+                int existingIdx = result.FindIndex(x => x.Url.Equals(fullUrl, StringComparison.OrdinalIgnoreCase));
+                if (existingIdx >= 0)
+                {
+                    var existing = result[existingIdx];
+                    string newClean = CleanTitle(title);
+                    if (!string.IsNullOrWhiteSpace(newClean) && (string.IsNullOrWhiteSpace(existing.Title) || existing.Title == ExtractFallbackTitleFromUrl(fullUrl) || newClean.Length > existing.Title.Length))
+                    {
+                        result[existingIdx] = (fullUrl, newClean, string.IsNullOrWhiteSpace(existing.Cover) ? coverUrl : existing.Cover);
+                    }
+                    else if (string.IsNullOrWhiteSpace(existing.Cover) && !string.IsNullOrWhiteSpace(coverUrl))
+                    {
+                        result[existingIdx] = (fullUrl, existing.Title, coverUrl);
+                    }
+                }
+                else if (title.Length >= 2)
                 {
                     result.Add((fullUrl, CleanTitle(title), coverUrl));
                 }
