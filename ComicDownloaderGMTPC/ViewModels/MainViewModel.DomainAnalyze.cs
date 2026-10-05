@@ -475,7 +475,7 @@ public partial class MainViewModel
         if (domain.Contains("hentai2read")) return DomainHentai2readTagUrl;
         if (domain.Contains("hitomi")) return DomainHitomiTagUrl;
         if (domain.Contains("hentaiforce")) return DomainHentaiforceTagUrl;
-        if (domain.Contains("e-hentai") || domain.Contains("exhentai")) return DomainEhentaiTagUrl;
+        if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return DomainEhentaiTagUrl;
         return UrlInput;
     }
 
@@ -494,7 +494,7 @@ public partial class MainViewModel
         else if (domain.Contains("hentai2read")) DomainHentai2readTagUrl = value;
         else if (domain.Contains("hitomi")) DomainHitomiTagUrl = value;
         else if (domain.Contains("hentaiforce")) DomainHentaiforceTagUrl = value;
-        else if (domain.Contains("e-hentai") || domain.Contains("exhentai")) DomainEhentaiTagUrl = value;
+        else if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) DomainEhentaiTagUrl = value;
         UrlInput = value;
     }
 
@@ -513,7 +513,7 @@ public partial class MainViewModel
         if (domain.Contains("hentai2read")) return "https://hentai2read.com/";
         if (domain.Contains("hitomi")) return "https://hitomi.la/";
         if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/";
-        if (domain.Contains("e-hentai") || domain.Contains("exhentai")) return "https://e-hentai.org/";
+        if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return "https://e-hentai.org/";
         return "https://google.com";
     }
 
@@ -532,7 +532,7 @@ public partial class MainViewModel
         if (domain.Contains("hentai2read")) return "https://hentai2read.com/";
         if (domain.Contains("hitomi")) return "https://hitomi.la/type/manga-all.html";
         if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/";
-        if (domain.Contains("e-hentai") || domain.Contains("exhentai")) return "https://e-hentai.org/";
+        if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return "https://e-hentai.org/";
         return "";
     }
 

@@ -343,7 +343,7 @@ public class ComicScraperService
                    lowerUrl.Contains("/character/") || lowerUrl.Contains("/parody/") ||
                    lowerUrl.Contains("/language/") || !lowerUrl.Contains("/view/");
         if (lowerDomain.Contains("e-hentai") || lowerDomain.Contains("ehentai") || lowerUrl.Contains("e-hentai") || lowerUrl.Contains("exhentai"))
-            return lowerUrl.Contains("/tag/") || lowerUrl.Contains("?f_search=") || !lowerUrl.Contains("/g/");
+            return lowerUrl.Contains("/tag/") || lowerUrl.Contains("f_search=") || (!lowerUrl.Contains("/g/") && !lowerUrl.Contains("/mpv/"));
         if (lowerDomain.Contains("thuviensach") || lowerUrl.Contains("thuviensach"))
             return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/tac-gia/");
         if (lowerDomain.Contains("daomeoden") || lowerUrl.Contains("daomeoden"))
@@ -2504,8 +2504,7 @@ public class ComicScraperService
     {
         title = WebUtility.HtmlDecode(title);
         title = Regex.Replace(title, @"\s*(?:chương|chap|chapter)\s*(?:mới\s*nhất)?\s*\d+.*$", "", RegexOptions.IgnoreCase).Trim();
-        title = Regex.Replace(title, @"\s*[-|–—]\s*(?:truy[eệ]nqq|nettruyen|mangadex|tuoitre|hako).*$", "", RegexOptions.IgnoreCase).Trim();
-        title = Regex.Replace(title, @"\s*[-|–—].*$", "").Trim();
+        title = Regex.Replace(title, @"\s*[-|–—]\s*(?:truy[eệ]nqq|nettruyen|mangadex|tuoitre|hako|e-hentai(?:\s+galleries)?|exhentai|dâm cô nương|damconuong|loppytoon|hentaiforce|sayhentai|hitomi).*$", "", RegexOptions.IgnoreCase).Trim();
         return title;
     }
 
@@ -2519,6 +2518,15 @@ public class ComicScraperService
             if (lastSlash >= 0) segment = segment.Substring(lastSlash + 1);
             segment = Regex.Replace(segment, @"\.(html|php|aspx|htm)$", "");
             segment = segment.Replace("-", " ").Replace("_", " ");
+            if (string.IsNullOrWhiteSpace(segment) && !string.IsNullOrWhiteSpace(uri.Query))
+            {
+                var matchSearch = Regex.Match(uri.Query, @"[?&]f_search=([^&]+)", RegexOptions.IgnoreCase);
+                if (matchSearch.Success)
+                {
+                    return "Search: " + Uri.UnescapeDataString(matchSearch.Groups[1].Value.Replace('+', ' '));
+                }
+            }
+            if (string.IsNullOrWhiteSpace(segment)) return "E-Hentai Tag";
             return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(segment);
         }
         catch
@@ -2562,24 +2570,62 @@ public class ComicScraperService
 
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-            if (!res.IsSuccessStatusCode)
-            {
-                result.StatusMessage = $"Lỗi máy chủ HTTP {(int)res.StatusCode}";
-                return result;
-            }
+            string html = string.Empty;
+            bool isEHentaiDomain = result.Domain.Contains("e-hentai") || result.Domain.Contains("ehentai") || result.Domain.Contains("exhentai") || url.Contains("e-hentai") || url.Contains("exhentai");
 
-            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (isEHentaiDomain)
+            {
+                html = await FetchEHentaiHtmlAsync(url, ct).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(html))
+                {
+                    result.StatusMessage = "Không thể tải nội dung trang E-Hentai (kiểm tra kết nối hoặc chặn IP)";
+                    return result;
+                }
+            }
+            else
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                if (!res.IsSuccessStatusCode)
+                {
+                    result.StatusMessage = $"Lỗi máy chủ HTTP {(int)res.StatusCode}";
+                    return result;
+                }
+                html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            }
 
             // Trích xuất tiêu đề Tag / Thể loại
             var titleMatch = Regex.Match(html, @"<title[^>]*>(?<title>[^<]+)</title>", RegexOptions.IgnoreCase);
             if (titleMatch.Success)
             {
-                result.TagTitle = CleanTitle(titleMatch.Groups["title"].Value);
+                string rawT = titleMatch.Groups["title"].Value;
+                rawT = Regex.Replace(rawT, @"\s*-\s*E-Hentai Galleries\s*$", "", RegexOptions.IgnoreCase);
+                result.TagTitle = CleanTitle(rawT);
+            }
+            if (string.IsNullOrWhiteSpace(result.TagTitle))
+            {
+                result.TagTitle = ExtractFallbackTitleFromUrl(url);
             }
 
             int maxPage = 1;
+
+            // 0. Phân tích kết quả tìm kiếm/danh mục đặc thù E-Hentai (ví dụ: "Found about 14,578 results", "Found 10,000+ results", "Found 42 results")
+            if (isEHentaiDomain)
+            {
+                var ehCountMatch = Regex.Match(html, @"(?:Found\s+(?:about\s+)?|Showing\s+\d+\s*-\s*\d+\s+of\s+)([\d,]+)(?:\+)?\s+results", RegexOptions.IgnoreCase);
+                if (ehCountMatch.Success)
+                {
+                    string numStr = ehCountMatch.Groups[1].Value.Replace(",", "");
+                    if (int.TryParse(numStr, out int count) && count > 0)
+                    {
+                        maxPage = Math.Max(maxPage, (int)Math.Ceiling(count / 25.0));
+                    }
+                }
+                else if (Regex.IsMatch(html, @"(?:id=[""']dnext[""']|var\s+nexturl\s*=)", RegexOptions.IgnoreCase))
+                {
+                    maxPage = Math.Max(maxPage, 2);
+                }
+            }
 
             // 1. Phân tích vùng phân trang đặc thù (page_redirect, pagination, paging)
             var paginationBlockMatch = Regex.Match(html, @"<(?:div|ul|nav)[^>]*class=[""'][^""']*(?:page_redirect|pagination|paging|page-navigation)[^""']*[""'][^>]*>([\s\S]*?)<\/(?:div|ul|nav)>", RegexOptions.IgnoreCase);
@@ -2649,6 +2695,66 @@ public class ComicScraperService
         pageFrom = Math.Max(1, pageFrom);
         pageTo = Math.Max(pageFrom, pageTo);
 
+        bool isEHentai = domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai") || tagUrl.Contains("e-hentai") || tagUrl.Contains("exhentai");
+
+        if (isEHentai)
+        {
+            string currentUrl = tagUrl;
+            for (int page = 1; page <= pageTo; page++)
+            {
+                if (ct.IsCancellationRequested || string.IsNullOrWhiteSpace(currentUrl)) break;
+
+                try
+                {
+                    string html = await FetchEHentaiHtmlAsync(currentUrl, ct).ConfigureAwait(false);
+                    if (string.IsNullOrWhiteSpace(html)) break;
+
+                    if (page >= pageFrom)
+                    {
+                        var comicLinks = ExtractComicLinksFromTagPage(html, currentUrl, domain);
+                        foreach (var (cUrl, cTitle, cCover) in comicLinks)
+                        {
+                            if (seenUrls.Add(cUrl))
+                            {
+                                list.Add(new ComicBookItem
+                                {
+                                    Index = list.Count + 1,
+                                    Url = cUrl,
+                                    Title = cTitle,
+                                    CoverUrl = cCover,
+                                    Domain = DomainRoutingService.DetectDomain(cUrl),
+                                    Status = "Waiting",
+                                    StatusMessage = "Sẵn sàng tải"
+                                });
+                            }
+                        }
+                    }
+
+                    // Tìm URL trang kế tiếp
+                    var nextMatch = Regex.Match(html, @"(?:id=[""'](?:dnext|unext)[""']\s+href=[""']|var\s+nexturl\s*=\s*[""'])(?<next>[^""']+)[""']", RegexOptions.IgnoreCase);
+                    if (nextMatch.Success && !string.IsNullOrWhiteSpace(nextMatch.Groups["next"].Value))
+                    {
+                        string nextUrl = WebUtility.HtmlDecode(nextMatch.Groups["next"].Value.Trim());
+                        if (string.Equals(nextUrl, currentUrl, StringComparison.OrdinalIgnoreCase))
+                        {
+                            break;
+                        }
+                        currentUrl = MakeAbsoluteUrl(nextUrl, currentUrl);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                catch
+                {
+                    break;
+                }
+            }
+
+            return list;
+        }
+
         for (int page = pageFrom; page <= pageTo; page++)
         {
             if (ct.IsCancellationRequested) break;
@@ -2694,6 +2800,12 @@ public class ComicScraperService
         if (page <= 1) return baseUrl;
 
         domain = domain.ToLowerInvariant();
+        if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai"))
+        {
+            char sep = baseUrl.Contains('?') ? '&' : '?';
+            return $"{baseUrl}{sep}page={page - 1}";
+        }
+
         if (baseUrl.Contains("?") || baseUrl.Contains("page=") || baseUrl.Contains("&page="))
         {
             if (Regex.IsMatch(baseUrl, @"[?&]page=\d+"))
@@ -2748,6 +2860,61 @@ public class ComicScraperService
         var result = new List<(string Url, string Title, string Cover)>();
         domain = domain.ToLowerInvariant();
 
+        // 0. Bóc tách chuyên biệt cho E-Hentai (bảng Compact/Minimal/Extended hàng <tr> hoặc lưới Thumbnail <div class="gl1t">)
+        if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai"))
+        {
+            var rowMatches = Regex.Matches(html, @"(?:<tr[^>]*>[\s\S]*?<\/tr>|<div\s+class=[""']gl1t[""'][^>]*>[\s\S]*?<\/div>\s*<\/div>)", RegexOptions.IgnoreCase);
+            foreach (Match rm in rowMatches)
+            {
+                string block = rm.Value;
+                var gMatch = Regex.Match(block, @"href=[""'](?<link>(?:https?://[^""']+)?/(?:g|mpv)/\d+/[a-zA-Z0-9]+/?)[^""']*[""']", RegexOptions.IgnoreCase);
+                if (!gMatch.Success) continue;
+
+                string gLink = MakeAbsoluteUrl(gMatch.Groups["link"].Value, pageUrl);
+
+                string gTitle = string.Empty;
+                var glinkMatch = Regex.Match(block, @"<div\s+class=[""']glink[""'][^>]*>(?<t>[^<]+)<\/div>", RegexOptions.IgnoreCase);
+                if (glinkMatch.Success)
+                {
+                    gTitle = WebUtility.HtmlDecode(glinkMatch.Groups["t"].Value.Trim());
+                }
+
+                string gCover = string.Empty;
+                var imgMatch = Regex.Match(block, @"<img\s+[^>]*?>", RegexOptions.IgnoreCase);
+                if (imgMatch.Success)
+                {
+                    string? img = ExtractImageUrlFromTag(imgMatch.Value);
+                    if (!string.IsNullOrWhiteSpace(img))
+                    {
+                        gCover = MakeAbsoluteUrl(img, pageUrl);
+                    }
+                    if (string.IsNullOrWhiteSpace(gTitle))
+                    {
+                        var altMatch = Regex.Match(imgMatch.Value, @"alt=[""'](?<t>[^""']+)[""']", RegexOptions.IgnoreCase);
+                        if (altMatch.Success)
+                        {
+                            gTitle = WebUtility.HtmlDecode(altMatch.Groups["t"].Value.Trim());
+                        }
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(gTitle))
+                {
+                    gTitle = ExtractFallbackTitleFromUrl(gLink);
+                }
+
+                if (!result.Any(x => x.Url.Equals(gLink, StringComparison.OrdinalIgnoreCase)))
+                {
+                    result.Add((gLink, CleanTitle(gTitle), gCover));
+                }
+            }
+
+            if (result.Count > 0)
+            {
+                return result;
+            }
+        }
+
         // 1. Regex tìm tất cả các thẻ chứa link truyện và ảnh bìa
         var itemMatches = Regex.Matches(html, @"<a\s+[^>]*?href=[""'](?<link>[^""']+)[""'][^>]*>(?<inner>[\s\S]*?)<\/a>", RegexOptions.IgnoreCase);
 
@@ -2773,6 +2940,7 @@ public class ComicScraperService
             else if (domain.Contains("sayhentai") && (link.Contains("/story/") || link.Contains("/truyen/"))) isComicLink = true;
             else if (domain.Contains("hentai2read") && link.Contains("hentai2read.com/") && link.TrimEnd('/').Split('/').Length <= 5) isComicLink = true;
             else if (domain.Contains("hentaiforce") && link.Contains("/view/")) isComicLink = true;
+            else if ((domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) && (link.Contains("/g/") || link.Contains("/mpv/"))) isComicLink = true;
 
             if (isComicLink)
             {

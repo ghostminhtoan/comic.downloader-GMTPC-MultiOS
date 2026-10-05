@@ -958,8 +958,8 @@
 
                                                 <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
                                                     <StackPanel Spacing="6">
-                                                        <TextBlock Text="🔍 Phân Tích Thể Loại E-Hentai:" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
-                                                        <TextBox Text="{Binding DomainEhentaiTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link thể loại E-Hentai (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
+                                                        <TextBlock Text="🔍 Phân Tích Danh Mục / Tìm Kiếm / Tag / Parody / Artist / Language E-Hentai:" Foreground="#F43F5E" FontWeight="Bold" FontSize="11" />
+                                                        <TextBox Text="{Binding DomainEhentaiTagUrl}" PlaceholderText="Dán 1 hoặc nhiều link Thể loại / Tag / Tìm kiếm / Parody / Artist / Language E-Hentai (mỗi dòng 1 link)..." AcceptsReturn="True" MinHeight="34" MaxHeight="80" TextWrapping="Wrap" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" />
                                                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                             <Button Command="{Binding AnalyzeDomainTagCommand}" CommandParameter="ehentai" IsEnabled="{Binding !IsDomainAnalyzing}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="4" Margin="0,0,8,4">
                                                                 <TextBlock Text="🔍 ANALYZE (KIỂM TRA TRANG)" FontSize="10" />

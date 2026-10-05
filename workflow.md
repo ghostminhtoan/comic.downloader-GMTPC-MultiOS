@@ -1630,3 +1630,31 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 - **Nghiệm Thu**:
   - `dotnet build` biên dịch sạch sẽ `0 Error(s), 0 Warning(s)`.
   - Đóng gói single-file executable Desktop.exe sẵn sàng sử dụng.
+
+### 15.35. Hỗ Trợ Toàn Diện Phân Tích Danh Mục / Tìm Kiếm / Tag / Parody / Artist / Language Cho E-Hentai (e-hentai.org)
+- **Bối cảnh & Vấn đề**:
+  1. *E-Hentai chưa hỗ trợ Analyze*:
+     - Khi bấm nút `ANALYZE` với `CommandParameter="ehentai"`, hệ thống bị fallback về `UrlInput` rỗng do hàm `GetDomainTagUrl`, `SetDomainTagUrl`, `GetDomainHomeUrl`, `GetDomainDefaultTagUrl` trong `MainViewModel.DomainAnalyze.cs` chỉ so khớp `e-hentai` (có dấu gạch ngang) mà không nhận `ehentai`.
+     - Bộ lọc `IsCategoryOrTagUrl` và `ExtractComicLinksFromTagPage` thiếu nhánh nhận diện truyện E-Hentai (`/g/` và `/mpv/`).
+     - E-Hentai chặn truy cập nếu không gửi cookie xác nhận nội dung (`Cookie: nw=1`), khiến yêu cầu cào HTML bị rơi vào trang Content Warning hoặc Offensive for Everyone.
+     - Phân trang E-Hentai không sử dụng số trang trực tiếp trong query param (`page=X`) mà sử dụng cursor động (`next={gid}` hoặc `var nexturl = "..."`), đồng thời tổng số truyện được ghi dạng văn bản (`Found about X results` hoặc `Found X+ results`).
+     - Hàm `CleanTitle` cũ sử dụng regex hung hãn cắt bỏ toàn bộ chuỗi sau dấu gạch ngang `-`, làm cụt tên artist chứa số và dấu gạch nối (ví dụ artist `11-22` bị cắt cụt thành `11`).
+- **Giải pháp xử lý (Multi-Lane Rigor)**:
+  1. **Đồng bộ hóa Domain Identifier (`MainViewModel.DomainAnalyze.cs`)**:
+     - Mở rộng điều kiện kiểm tra domain trong `GetDomainTagUrl`, `SetDomainTagUrl`, `GetDomainHomeUrl`, `GetDomainDefaultTagUrl` để hỗ trợ đồng thời cả `"e-hentai"`, `"ehentai"`, `"exhentai"`.
+  2. **Tối ưu hóa Phân loại URL & Trích xuất Tiêu đề (`ComicScraperService.cs`)**:
+     - Cập nhật `IsCategoryOrTagUrl`: Nhận diện tất cả các link Tag (`/tag/`), Tìm kiếm (`f_search=`), và link không chứa `/g/` hoặc `/mpv/` là URL danh mục/thể loại hợp lệ; đồng thời phân biệt chính xác liên kết bộ truyện đơn lẻ.
+     - Cải tiến `CleanTitle`: Bỏ regex cắt dấu gạch ngang bừa bãi, bảo toàn tên artist (như `11-22`), chỉ strip hậu tố website (`- E-Hentai Galleries`, `dâm cô nương`, `truyenqq`, v.v.).
+     - Nâng cấp `ExtractFallbackTitleFromUrl`: Bóc tách từ khóa tìm kiếm trực tiếp từ tham số query `f_search=` (ví dụ: `Search: female:"dark skin$" other:"uncensored$" ...`).
+  3. **Phân tích Trang Danh mục & Bóc tách Tổng số trang (`ComicScraperService.cs`)**:
+     - Trong `AnalyzeTagUrlAsync`: Tích hợp `FetchEHentaiHtmlAsync` tự động nạp cookie `nw=1; nw=always` bypass Content Warning.
+     - Phân tích số lượng kết quả từ `Found about X results` hoặc `Showing X - Y of Z results` để tính chính xác tổng số trang (`Math.Ceiling(count / 25.0)`).
+  4. **Cào Hàng Loạt Theo Con Trỏ Trang (`ScrapeBatchComicsFromTagPagesAsync` & `ExtractComicLinksFromTagPage`)**:
+     - Xây dựng cơ chế duyệt tuần tự qua con trỏ `nexturl` / `id="dnext"` / `id="unext"` cho E-Hentai, tự động nhảy trang chính xác mà không phụ thuộc số trang URL thông thường.
+     - Bóc tách chuyên biệt cho E-Hentai từ bảng hàng `<tr>` và lưới thumbnail `<div class="gl1t">`: lấy đầy đủ Link `/g/...`, Tiêu đề truyện từ `<div class="glink">`, và Ảnh bìa từ `<img>`.
+  5. **Tối ưu Giao diện Avalonia (`MainView.axaml`)**:
+     - Cập nhật tiêu đề Tab E-Hentai: `🔍 Phân Tích Danh Mục / Tìm Kiếm / Tag / Parody / Artist / Language E-Hentai:` cùng placeholder chi tiết và trực quan.
+- **Nghiệm Thu**:
+  - `dotnet build` biên dịch sạch sẽ `0 Error(s), 0 Warning(s)`.
+  - Đóng gói single-file executable Desktop.exe sẵn sàng sử dụng.
+
