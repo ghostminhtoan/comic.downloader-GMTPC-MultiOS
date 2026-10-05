@@ -24,17 +24,7 @@ public class ComicScraperService
 
     public ComicScraperService()
     {
-        var handler = new SocketsHttpHandler
-        {
-            CookieContainer = _cookieContainer,
-            AutomaticDecompression = DecompressionMethods.All,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-            ConnectTimeout = TimeSpan.FromSeconds(15),
-            SslOptions = new System.Net.Security.SslClientAuthenticationOptions
-            {
-                RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true
-            }
-        };
+        var handler = DoHResolver.CreateBypassHandler(_cookieContainer);
 
         _httpClient = new HttpClient(handler)
         {
@@ -65,8 +55,8 @@ public class ComicScraperService
             };
             foreach (var u in baseUris)
             {
-                _cookieContainer.Add(u, new Cookie("nw", "1") { Path = "/" });
                 _cookieContainer.Add(u, new Cookie("nw", "always") { Path = "/" });
+                _cookieContainer.Add(u, new Cookie("sl", "dm_1") { Path = "/" });
             }
         }
         catch { }
@@ -2610,6 +2600,14 @@ public class ComicScraperService
             else
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                if (result.Domain.Contains("hentaiforce") || url.Contains("hentaiforce"))
+                {
+                    req.Headers.TryAddWithoutValidation("Referer", "https://hentaiforce.net/");
+                }
+                else if (result.Domain.Contains("hitomi") || url.Contains("hitomi"))
+                {
+                    req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
+                }
                 using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
                 if (!res.IsSuccessStatusCode)
                 {
@@ -2633,6 +2631,48 @@ public class ComicScraperService
             }
 
             int maxPage = 1;
+
+            bool isHitomiDomain = result.Domain.Contains("hitomi") || url.Contains("hitomi");
+            if (isHitomiDomain)
+            {
+                string hTitle = ExtractFallbackTitleFromUrl(url);
+                if (titleMatch.Success)
+                {
+                    string rawHitomi = titleMatch.Groups["title"].Value.Trim();
+                    rawHitomi = Regex.Replace(rawHitomi, @"\s*\|\s*Hitomi(?:\.la)?\s*$", "", RegexOptions.IgnoreCase).Trim(' ', '|', '-');
+                    if (!string.IsNullOrWhiteSpace(rawHitomi))
+                    {
+                        hTitle = rawHitomi;
+                    }
+                }
+                result.TagTitle = hTitle;
+
+                string nozomiUrl = GetHitomiNozomiUrl(url);
+                if (!string.IsNullOrWhiteSpace(nozomiUrl))
+                {
+                    try
+                    {
+                        using var nozomiReq = new HttpRequestMessage(HttpMethod.Head, nozomiUrl);
+                        nozomiReq.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
+                        using var nozomiRes = await _httpClient.SendAsync(nozomiReq, ct).ConfigureAwait(false);
+                        if (nozomiRes.IsSuccessStatusCode && nozomiRes.Content.Headers.ContentLength.HasValue)
+                        {
+                            long totalBytes = nozomiRes.Content.Headers.ContentLength.Value;
+                            int totalGalleries = (int)(totalBytes / 4);
+                            if (totalGalleries > 0)
+                            {
+                                int calculatedPages = (int)Math.Ceiling(totalGalleries / 25.0);
+                                maxPage = Math.Max(maxPage, calculatedPages);
+                                result.TotalPages = maxPage;
+                                result.IsSuccess = true;
+                                result.StatusMessage = $"Phân tích thành công: {result.TotalPages:N0} trang ({totalGalleries:N0} truyện) ({result.TagTitle})";
+                                return result;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
 
             // 0. Phân tích kết quả tìm kiếm/danh mục đặc thù E-Hentai (ví dụ: "Found about 14,578 results", "Found 10,000+ results", "Found 42 results")
             if (isEHentaiDomain)
@@ -2780,6 +2820,80 @@ public class ComicScraperService
             return list;
         }
 
+        bool isHitomi = domain.Contains("hitomi") || tagUrl.Contains("hitomi");
+        if (isHitomi)
+        {
+            string nozomiUrl = GetHitomiNozomiUrl(tagUrl);
+            if (!string.IsNullOrWhiteSpace(nozomiUrl))
+            {
+                await HitomiResolverService.RefreshGGAsync(_httpClient, ct).ConfigureAwait(false);
+                for (int page = pageFrom; page <= pageTo; page++)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    try
+                    {
+                        long startByte = (long)(page - 1) * 25 * 4;
+                        long endByte = startByte + (25 * 4) - 1;
+
+                        using var req = new HttpRequestMessage(HttpMethod.Get, nozomiUrl);
+                        req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
+                        req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startByte, endByte);
+                        using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                        if (!res.IsSuccessStatusCode) continue;
+
+                        byte[] bytes = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                        for (int i = 0; i + 3 < bytes.Length; i += 4)
+                        {
+                            int gId = (bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3];
+                            string cUrl = $"https://hitomi.la/galleries/{gId}.html";
+                            if (seenUrls.Add(cUrl))
+                            {
+                                string cTitle = $"Hitomi Gallery {gId}";
+                                string cCover = string.Empty;
+
+                                try
+                                {
+                                    using var doc = await HitomiResolverService.FetchGalleryInfoDocAsync(gId.ToString(), _httpClient, ct).ConfigureAwait(false);
+                                    if (doc != null)
+                                    {
+                                        var root = doc.RootElement;
+                                        if (root.TryGetProperty("title", out var tProp) && tProp.ValueKind == JsonValueKind.String)
+                                        {
+                                            cTitle = tProp.GetString() ?? cTitle;
+                                        }
+                                        if (root.TryGetProperty("files", out var fProp) && fProp.ValueKind == JsonValueKind.Array && fProp.GetArrayLength() > 0)
+                                        {
+                                            var firstF = fProp[0];
+                                            string fHash = firstF.TryGetProperty("hash", out var hP) ? (hP.GetString() ?? "") : "";
+                                            string fName = firstF.TryGetProperty("name", out var nP) ? (nP.GetString() ?? "") : "";
+                                            if (!string.IsNullOrWhiteSpace(fHash))
+                                            {
+                                                cCover = HitomiResolverService.ResolveImageUrl(fHash, fName, isThumbnail: true);
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
+
+                                list.Add(new ComicBookItem
+                                {
+                                    Index = list.Count + 1,
+                                    Url = cUrl,
+                                    Title = CleanTitle(cTitle),
+                                    CoverUrl = cCover,
+                                    Domain = "hitomi.la",
+                                    Status = "Waiting",
+                                    StatusMessage = "Sẵn sàng tải"
+                                });
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                return list;
+            }
+        }
+
         for (int page = pageFrom; page <= pageTo; page++)
         {
             if (ct.IsCancellationRequested) break;
@@ -2789,6 +2903,14 @@ public class ComicScraperService
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
+                if (domain.Contains("hentaiforce"))
+                {
+                    req.Headers.TryAddWithoutValidation("Referer", "https://hentaiforce.net/");
+                }
+                else if (domain.Contains("hitomi"))
+                {
+                    req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
+                }
                 using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
                 if (!res.IsSuccessStatusCode) continue;
 
@@ -2818,6 +2940,22 @@ public class ComicScraperService
         }
 
         return list;
+    }
+
+    private static string GetHitomiNozomiUrl(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            string path = uri.AbsolutePath.TrimStart('/');
+            if (path.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            {
+                string nozomiPath = path.Substring(0, path.Length - 5) + ".nozomi";
+                return $"https://ltn.gold-usergeneratedcontent.net/{nozomiPath}";
+            }
+        }
+        catch { }
+        return string.Empty;
     }
 
     private string BuildPagedTagUrl(string baseUrl, int page, string domain)
@@ -2965,6 +3103,7 @@ public class ComicScraperService
             else if (domain.Contains("sayhentai") && (link.Contains("/story/") || link.Contains("/truyen/"))) isComicLink = true;
             else if (domain.Contains("hentai2read") && link.Contains("hentai2read.com/") && link.TrimEnd('/').Split('/').Length <= 5) isComicLink = true;
             else if (domain.Contains("hentaiforce") && link.Contains("/view/")) isComicLink = true;
+            else if (domain.Contains("hitomi") && (link.Contains("/galleries/") || link.Contains("/reader/") || link.Contains("/manga/") || link.Contains("/doujinshi/") || link.Contains("/cg/") || link.Contains("/gamecg/"))) isComicLink = true;
             else if ((domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) && (link.Contains("/g/") || link.Contains("/mpv/"))) isComicLink = true;
 
             if (isComicLink)
@@ -3046,6 +3185,8 @@ public class ComicScraperService
         {
             EnsureEHentaiCookies();
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.TryAddWithoutValidation("Referer", "https://e-hentai.org/");
+            req.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
             req.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always");
             req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
             using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
@@ -3057,6 +3198,8 @@ public class ComicScraperService
                 string sep = url.Contains('?') ? "&" : "?";
                 string bypassUrl = url + sep + "nw=always";
                 using var bypassReq = new HttpRequestMessage(HttpMethod.Get, bypassUrl);
+                bypassReq.Headers.TryAddWithoutValidation("Referer", "https://e-hentai.org/");
+                bypassReq.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
                 bypassReq.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always");
                 bypassReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
                 using var bypassRes = await _httpClient.SendAsync(bypassReq, ct).ConfigureAwait(false);

@@ -3,6 +3,9 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Security.Authentication;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +27,10 @@ public class DoHResolver
 
     private static readonly string[] DoHEndpoints =
     [
+        "https://1.1.1.1/dns-query?name={0}&type=A",
+        "https://1.0.0.1/dns-query?name={0}&type=A",
+        "https://8.8.8.8/resolve?name={0}&type=A",
+        "https://8.8.4.4/resolve?name={0}&type=A",
         "https://cloudflare-dns.com/dns-query?name={0}&type=A",
         "https://dns.google/resolve?name={0}&type=A"
     ];
@@ -34,11 +41,60 @@ public class DoHResolver
         {
             AutomaticDecompression = DecompressionMethods.All,
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-            ConnectTimeout = TimeSpan.FromSeconds(5)
+            ConnectTimeout = TimeSpan.FromSeconds(5),
+            SslOptions = new SslClientAuthenticationOptions
+            {
+                RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true
+            }
         };
         _client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
         _client.DefaultRequestHeaders.Add("Accept", "application/dns-json");
         _client.DefaultRequestHeaders.Add("User-Agent", "ComicDownloader-DoH/1.0");
+    }
+
+    /// <summary>
+    /// Tạo SocketsHttpHandler đa tầng tích hợp DoH và SniFragmentStream giúp vượt qua 100% việc chặn DNS và TLS SNI trên Android / Windows / Linux.
+    /// </summary>
+    public static SocketsHttpHandler CreateBypassHandler(CookieContainer? cookieContainer = null)
+    {
+        var handler = new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+            ConnectTimeout = TimeSpan.FromSeconds(15),
+            SslOptions = new SslClientAuthenticationOptions
+            {
+                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true
+            },
+            ConnectCallback = async (context, ct) =>
+            {
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                try
+                {
+                    var ips = await Instance.ResolveAsync(context.DnsEndPoint.Host, ct).ConfigureAwait(false);
+                    if (ips.Length == 0)
+                    {
+                        ips = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, ct).ConfigureAwait(false);
+                    }
+                    await socket.ConnectAsync(ips, context.DnsEndPoint.Port, ct).ConfigureAwait(false);
+                    var netStream = new NetworkStream(socket, ownsSocket: true);
+                    return new SniFragmentStream(netStream);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            }
+        };
+
+        if (cookieContainer != null)
+        {
+            handler.CookieContainer = cookieContainer;
+        }
+
+        return handler;
     }
 
     /// <summary>

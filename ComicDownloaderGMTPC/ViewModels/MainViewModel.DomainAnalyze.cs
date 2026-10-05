@@ -65,7 +65,7 @@ public partial class MainViewModel
     private string _domainHitomiTagUrl = "https://hitomi.la/type/manga-all.html";
 
     [ObservableProperty]
-    private string _domainHentaiforceTagUrl = "https://hentaiforce.net/search?q=-tomboy+%22uncensored%22+%22dark+skin+female%22+-futanari+catetory%3A%22doujin%22";
+    private string _domainHentaiforceTagUrl = "https://hentaiforce.net/search?q=-tomboy+%22uncensored%22+%22dark+skin+female%22+-futanari+category%3A%22doujin%22";
 
     [ObservableProperty]
     private string _domainEhentaiTagUrl = "https://e-hentai.org/?f_search=female%3A%22dark+skin%24%22+other%3A%22uncensored%24%22+-female%3Afutanari+female%3A%22big+breasts%22";
@@ -584,7 +584,7 @@ public partial class MainViewModel
         if (domain.Contains("sayhentai")) return "https://sayhentai.cx/genre/romance";
         if (domain.Contains("hentai2read")) return "https://hentai2read.com/genre/comedy/";
         if (domain.Contains("hitomi")) return "https://hitomi.la/type/manga-all.html";
-        if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/search?q=-tomboy+%22uncensored%22+%22dark+skin+female%22+-futanari+catetory%3A%22doujin%22";
+        if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/search?q=-tomboy+%22uncensored%22+%22dark+skin+female%22+-futanari+category%3A%22doujin%22";
         if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return "https://e-hentai.org/?f_search=female%3A%22dark+skin%24%22+other%3A%22uncensored%24%22+-female%3Afutanari+female%3A%22big+breasts%22";
         return "";
     }

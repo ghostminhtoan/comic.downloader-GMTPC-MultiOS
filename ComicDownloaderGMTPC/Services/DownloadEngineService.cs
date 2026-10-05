@@ -55,16 +55,7 @@ public class DownloadEngineService
 
     public DownloadEngineService()
     {
-        var handler = new SocketsHttpHandler
-        {
-            AutomaticDecompression = System.Net.DecompressionMethods.All,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-            ConnectTimeout = TimeSpan.FromSeconds(15),
-            SslOptions = new System.Net.Security.SslClientAuthenticationOptions
-            {
-                RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true
-            }
-        };
+        var handler = DoHResolver.CreateBypassHandler();
         _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
 

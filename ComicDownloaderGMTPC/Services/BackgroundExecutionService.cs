@@ -35,7 +35,6 @@ public class BackgroundExecutionService
     public static Func<bool>? NativeIsBubbleOrPipSupported { get; set; }
     public static Action? NativeMinimizeOrHide { get; set; }
     public static Action? NativeForceExit { get; set; }
-    public static Action<string>? NativeOpenBrowserRequested { get; set; }
 
     public bool IsBubbleMode { get; private set; } = false;
 
