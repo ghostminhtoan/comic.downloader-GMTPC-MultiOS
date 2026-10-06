@@ -50,13 +50,13 @@ public partial class MainView : UserControl
         {
             if (_subscribedVm != null)
             {
-                _subscribedVm.AutoScrollRequested -= OnVmAutoScrollRequested;
+                UnregisterVmEvents(_subscribedVm);
                 _subscribedVm = null;
             }
             if (DataContext is MainViewModel newVm)
             {
                 _subscribedVm = newVm;
-                _subscribedVm.AutoScrollRequested += OnVmAutoScrollRequested;
+                RegisterVmEvents(_subscribedVm);
             }
         };
     }
@@ -64,12 +64,55 @@ public partial class MainView : UserControl
     private MainViewModel? _subscribedVm;
     private bool _isSyncScrollSetup = false;
 
+    private void RegisterVmEvents(MainViewModel vm)
+    {
+        vm.AutoScrollRequested -= OnVmAutoScrollRequested;
+        vm.AutoScrollRequested += OnVmAutoScrollRequested;
+
+        vm.ScrollToTopRequested -= OnVmScrollToTopRequested;
+        vm.ScrollToTopRequested += OnVmScrollToTopRequested;
+
+        vm.ScrollToBottomRequested -= OnVmScrollToBottomRequested;
+        vm.ScrollToBottomRequested += OnVmScrollToBottomRequested;
+    }
+
+    private void UnregisterVmEvents(MainViewModel vm)
+    {
+        vm.AutoScrollRequested -= OnVmAutoScrollRequested;
+        vm.ScrollToTopRequested -= OnVmScrollToTopRequested;
+        vm.ScrollToBottomRequested -= OnVmScrollToBottomRequested;
+    }
+
+    private void OnVmScrollToTopRequested()
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            var scrollViewer = this.FindControl<ScrollViewer>("MainRootScrollViewer");
+            if (scrollViewer != null)
+            {
+                scrollViewer.Offset = new Vector(scrollViewer.Offset.X, 0);
+            }
+        }, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private void OnVmScrollToBottomRequested()
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            var scrollViewer = this.FindControl<ScrollViewer>("MainRootScrollViewer");
+            if (scrollViewer != null)
+            {
+                double maxScroll = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+                scrollViewer.Offset = new Vector(scrollViewer.Offset.X, maxScroll);
+            }
+        }, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
     private void OnMainViewLoaded(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel vm)
         {
-            vm.AutoScrollRequested -= OnVmAutoScrollRequested;
-            vm.AutoScrollRequested += OnVmAutoScrollRequested;
+            RegisterVmEvents(vm);
         }
 
         if (!_isSyncScrollSetup)

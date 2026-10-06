@@ -70,7 +70,13 @@ public partial class MainViewModel : ViewModelBase
     private bool _isAutoRetry = true;
 
     [ObservableProperty]
+    private bool _isDownloading = false;
+
+    [ObservableProperty]
     private bool _isPaused = false;
+
+    public event Action? ScrollToTopRequested;
+    public event Action? ScrollToBottomRequested;
 
     [ObservableProperty]
     private bool _isCompactRow;
@@ -1108,9 +1114,14 @@ public partial class MainViewModel : ViewModelBase
         _langService.LanguageChanged += OnLanguageChanged;
         _downloadEngine.LogEmitted += OnLogEmitted;
         _downloadEngine.ProgressUpdated += OnProgressUpdated;
+        _downloadEngine.DownloadingStateChanged += (downloading) => Avalonia.Threading.Dispatcher.UIThread.Post(() => IsDownloading = downloading);
         _downloadEngine.PauseStateChanged += (paused) => Avalonia.Threading.Dispatcher.UIThread.Post(() => IsPaused = paused);
         DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
         LoadUserPresetsFromDisk();
+
+        // Lắng nghe lệnh từ Android Foreground Notification
+        BackgroundExecutionService.NativeNotificationToggleDownloadRequested = () => Avalonia.Threading.Dispatcher.UIThread.Post(async () => await ToggleDownloadAsync());
+        BackgroundExecutionService.NativeNotificationTogglePauseRequested = () => Avalonia.Threading.Dispatcher.UIThread.Post(TogglePause);
 
         // Lắng nghe sự kiện chạy ngầm & bong bóng
         var bg = BackgroundExecutionService.Instance;
@@ -1580,6 +1591,19 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task ToggleDownloadAsync()
+    {
+        if (IsDownloading)
+        {
+            Stop();
+        }
+        else
+        {
+            await DownloadAllAsync();
+        }
+    }
+
+    [RelayCommand]
     public void PauseDownload()
     {
         _downloadEngine.Pause();
@@ -1595,6 +1619,24 @@ public partial class MainViewModel : ViewModelBase
     public void TogglePauseDownload()
     {
         _downloadEngine.TogglePause();
+    }
+
+    [RelayCommand]
+    public void TogglePause()
+    {
+        TogglePauseDownload();
+    }
+
+    [RelayCommand]
+    public void ScrollToTop()
+    {
+        ScrollToTopRequested?.Invoke();
+    }
+
+    [RelayCommand]
+    public void ScrollToBottom()
+    {
+        ScrollToBottomRequested?.Invoke();
     }
 
     [RelayCommand]

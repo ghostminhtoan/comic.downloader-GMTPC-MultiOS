@@ -69,10 +69,10 @@ public class MainActivity : AvaloniaMainActivity
         };
 
         // Đăng ký bridge chạy ngầm và bong bóng
-        Services.BackgroundExecutionService.NativeStartOrUpdateForegroundNotification = (title, text, progress) =>
+        Services.BackgroundExecutionService.NativeStartOrUpdateForegroundNotification = (title, text, progress, isDownloading, isPaused) =>
         {
             var ctx = ApplicationContext ?? this;
-            ComicBackgroundService.StartOrUpdate(ctx, title, text, progress);
+            ComicBackgroundService.StartOrUpdate(ctx, title, text, progress, isDownloading, isPaused);
         };
         Services.BackgroundExecutionService.NativeStopForegroundNotification = () =>
         {
@@ -82,7 +82,7 @@ public class MainActivity : AvaloniaMainActivity
         Services.BackgroundExecutionService.NativeRequestEnterBubbleMode = () =>
         {
             var ctx = ApplicationContext ?? this;
-            ComicBackgroundService.StartOrUpdate(ctx, "Comic Downloader GMTPC", "Ứng dụng đang chạy ngầm...", 0);
+            ComicBackgroundService.StartOrUpdate(ctx, "Comic Downloader GMTPC", "Ứng dụng đang chạy ngầm...", 0, false, false);
             MoveTaskToBack(true);
         };
         Services.BackgroundExecutionService.NativeRequestExitBubbleMode = null;

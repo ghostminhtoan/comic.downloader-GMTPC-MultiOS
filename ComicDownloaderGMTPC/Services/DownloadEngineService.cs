@@ -35,6 +35,7 @@ public class DownloadEngineService
     public event Action<string, string>? LogEmitted;
     public event Action? ProgressUpdated;
     public event Action<bool>? PauseStateChanged;
+    public event Action<bool>? DownloadingStateChanged;
     public static event Action<string>? AndroidOpenFolderRequested;
     public static event Action? OpenStorageSettingsRequested;
 
@@ -317,6 +318,7 @@ public class DownloadEngineService
         if (_isDownloading) return;
 
         _isDownloading = true;
+        DownloadingStateChanged?.Invoke(true);
         _activeMode = mode;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
         var ct = _cts.Token;
@@ -352,6 +354,7 @@ public class DownloadEngineService
         {
             LogEmitted?.Invoke("WARN", "Không có truyện nào được tích chọn để tải.");
             _isDownloading = false;
+            DownloadingStateChanged?.Invoke(false);
             return;
         }
 
@@ -413,6 +416,7 @@ public class DownloadEngineService
             _pauseTcs = null;
             CurrentSpeedText = "0.0 KB/s";
             BackgroundExecutionService.Instance.CompleteTask("download_queue", "Tải Truyện", "Hoàn tất tải truyện");
+            DownloadingStateChanged?.Invoke(false);
             PauseStateChanged?.Invoke(false);
             ProgressUpdated?.Invoke();
         }

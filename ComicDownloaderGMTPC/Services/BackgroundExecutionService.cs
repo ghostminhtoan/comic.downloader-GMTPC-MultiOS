@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Linq;
 
@@ -22,14 +22,16 @@ public class BackgroundExecutionService
     private readonly ConcurrentDictionary<string, BackgroundTaskInfo> _activeTasks = new();
     private readonly object _lock = new();
 
-    // Sá»± kiá»‡n C# cho ViewModel & UI
+    // Sự kiện C# cho ViewModel & UI
     public event Action<BackgroundTaskInfo>? TaskProgressChanged;
     public event Action<bool>? AnyTaskRunningChanged;
     public event Action<bool>? BubbleModeChanged;
 
-    // Delegate káº¿t ná»‘i vá»›i Native Platform (Android Foreground Service / WakeLock / PiP / Desktop Window)
-    public static Action<string, string, int>? NativeStartOrUpdateForegroundNotification { get; set; }
+    // Delegate kết nối với Native Platform (Android Foreground Service / WakeLock / PiP / Desktop Window)
+    public static Action<string, string, int, bool, bool>? NativeStartOrUpdateForegroundNotification { get; set; }
     public static Action? NativeStopForegroundNotification { get; set; }
+    public static Action? NativeNotificationToggleDownloadRequested { get; set; }
+    public static Action? NativeNotificationTogglePauseRequested { get; set; }
     public static Action? NativeRequestEnterBubbleMode { get; set; }
     public static Action? NativeRequestExitBubbleMode { get; set; }
     public static Func<bool>? NativeIsBubbleOrPipSupported { get; set; }
@@ -93,14 +95,16 @@ public class BackgroundExecutionService
             bool anyRunning = HasActiveTasks;
             AnyTaskRunningChanged?.Invoke(anyRunning);
 
-            // KÃ­ch hoáº¡t Native Foreground Notification khi cÃ³ tÃ¡c vá»¥
+            // Kích hoạt Native Foreground Notification khi có tác vụ
             if (anyRunning)
             {
                 var primary = GetPrimaryTask() ?? task;
                 int percent = (int)Math.Round(primary.ProgressPercentage);
                 string title = $"Comic-GMTPC: {primary.Title}";
                 string notifText = $"{primary.Detail} ({percent}%)";
-                NativeStartOrUpdateForegroundNotification?.Invoke(title, notifText, percent);
+                bool isDownloading = DownloadEngineService.Instance.IsDownloading;
+                bool isPaused = DownloadEngineService.Instance.IsPaused;
+                NativeStartOrUpdateForegroundNotification?.Invoke(title, notifText, percent, isDownloading, isPaused);
             }
             else
             {
@@ -109,11 +113,11 @@ public class BackgroundExecutionService
         }
         catch
         {
-            // Báº£o vá»‡ an toÃ n tuyá»‡t Ä‘á»‘i chá»‘ng sáº­p á»©ng dá»¥ng khi cáº­p nháº­t thÃ´ng bÃ¡o há»‡ Ä‘iá»u hÃ nh
+            // Bảo vệ an toàn tuyệt đối chống sập ứng dụng khi cập nhật thông báo hệ điều hành
         }
     }
 
-    public void CompleteTask(string taskId, string taskTitle = "", string completionMessage = "HoÃ n táº¥t")
+    public void CompleteTask(string taskId, string taskTitle = "", string completionMessage = "Hoàn tất")
     {
         ReportProgress(taskId, taskTitle, completionMessage, 100, false);
     }
@@ -158,4 +162,3 @@ public class BackgroundExecutionService
         }
     }
 }
-
