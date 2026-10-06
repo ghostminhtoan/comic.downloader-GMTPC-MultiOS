@@ -2243,9 +2243,8 @@ public class ComicScraperService
             string feedUrl = $"https://api.mangadex.org/manga/{mangaId}/feed" +
                              $"?offset={offset}&limit={limit}" +
                              $"&translatedLanguage%5B%5D={Uri.EscapeDataString(targetLang)}" +
-                             "&includes%5B%5D=scanlation_group" +
                              "&includeFutureUpdates=0&includeEmptyPages=0&includeExternalUrl=0" +
-                             "&order%5Bvolume%5D=asc&order%5Bchapter%5D=asc&order%5BreadableAt%5D=asc";
+                             "&order%5Bchapter%5D=asc";
 
             string feedJson = await MangaDexNetworkService.Instance.GetJsonAsync(feedUrl, ct).ConfigureAwait(false);
             using var feedDoc = JsonDocument.Parse(feedJson);

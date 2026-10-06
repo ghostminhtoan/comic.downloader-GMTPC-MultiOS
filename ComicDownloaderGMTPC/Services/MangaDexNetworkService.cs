@@ -38,7 +38,7 @@ public class MangaDexNetworkService
     public MangaDexNetworkService()
     {
         var dohHandler = DoHResolver.CreateBypassHandler();
-        _dohClient = new HttpClient(dohHandler) { Timeout = TimeSpan.FromSeconds(15) };
+        _dohClient = new HttpClient(dohHandler) { Timeout = TimeSpan.FromSeconds(25) };
         _dohClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
         _dohClient.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
 
