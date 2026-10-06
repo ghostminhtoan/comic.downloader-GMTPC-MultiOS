@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -2155,6 +2155,8 @@ public class ComicScraperService
             return book;
         }
 
+        string originalLanguage = "zh";
+
         try
         {
             string apiUrl = $"https://api.mangadex.org/manga/{mangaId}?includes[]=cover_art";
@@ -2162,12 +2164,19 @@ public class ComicScraperService
             using var doc = JsonDocument.Parse(json);
             var data = doc.RootElement.GetProperty("data");
 
-            if (data.TryGetProperty("attributes", out var attr) && attr.TryGetProperty("title", out var titleObj))
+            if (data.TryGetProperty("attributes", out var attr))
             {
-                foreach (var prop in titleObj.EnumerateObject())
+                if (attr.TryGetProperty("originalLanguage", out var origProp))
                 {
-                    book.Title = prop.Value.GetString() ?? book.Title;
-                    break;
+                    originalLanguage = origProp.GetString() ?? "zh";
+                }
+                if (attr.TryGetProperty("title", out var titleObj))
+                {
+                    foreach (var prop in titleObj.EnumerateObject())
+                    {
+                        book.Title = prop.Value.GetString() ?? book.Title;
+                        break;
+                    }
                 }
             }
 
@@ -2194,32 +2203,125 @@ public class ComicScraperService
             book.Title = ExtractFallbackTitleFromUrl(url);
         }
 
-        // Bóc tách chapter feed theo ngôn ngữ đã chọn (có phân trang offset và fallback)
+        // Bóc tách chapter: Tầng 1 Siêu tốc qua Aggregate API, Tầng 2 Fallback qua Feed API
+        string primaryLang = string.IsNullOrWhiteSpace(lang) ? "vi" : lang.ToLowerInvariant();
+        book.StatusMessage = $"Đang quét chapters siêu tốc [{primaryLang.ToUpperInvariant()}]...";
+
+        // TẦNG 1: Aggregate API (lấy 100% distinct chapters trong 1-2 giây và tự động lấp đầy ngắt quãng)
         try
         {
-            string primaryLang = string.IsNullOrWhiteSpace(lang) ? "vi" : lang.ToLowerInvariant();
-            await FetchMangaDexFeedChaptersAsync(book, mangaId, primaryLang, ct).ConfigureAwait(false);
+            var primaryMap = await FetchMangaDexAggregateChaptersAsync(mangaId, primaryLang, ct).ConfigureAwait(false);
 
-            if (book.Chapters.Count == 0 && useFallback)
+            Dictionary<string, (string ChapterId, string Vol, double SortNum)>? enMap = null;
+            if (useFallback && !primaryLang.Equals("en", StringComparison.OrdinalIgnoreCase))
             {
-                string fallbackLang = primaryLang == "vi" ? "en" : "vi";
-                await FetchMangaDexFeedChaptersAsync(book, mangaId, fallbackLang, ct).ConfigureAwait(false);
+                enMap = await FetchMangaDexAggregateChaptersAsync(mangaId, "en", ct).ConfigureAwait(false);
+            }
+
+            // Nếu cả primary và English đều thiếu chapter hoặc rỗng: Quét Global / Original Language
+            Dictionary<string, (string ChapterId, string Vol, double SortNum)>? globalMap = null;
+            if (primaryMap.Count == 0 && (enMap == null || enMap.Count == 0))
+            {
+                globalMap = await FetchMangaDexAggregateChaptersAsync(mangaId, null, ct).ConfigureAwait(false);
+            }
+
+            // HỢP NHẤT LIỀN MẠCH (Seamless Fusion): Bù đắp khuyết thiếu, không đứt đoạn
+            var merged = new Dictionary<string, (string ChapterId, string Vol, double SortNum, string LangLabel)>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var kvp in primaryMap)
+            {
+                merged[kvp.Key] = (kvp.Value.ChapterId, kvp.Value.Vol, kvp.Value.SortNum, primaryLang.ToUpperInvariant());
+            }
+
+            if (enMap != null && enMap.Count > 0)
+            {
+                foreach (var kvp in enMap)
+                {
+                    if (!merged.ContainsKey(kvp.Key))
+                    {
+                        merged[kvp.Key] = (kvp.Value.ChapterId, kvp.Value.Vol, kvp.Value.SortNum, "EN");
+                    }
+                }
+            }
+
+            if (globalMap != null && globalMap.Count > 0)
+            {
+                string rawLabel = !string.IsNullOrEmpty(originalLanguage) ? originalLanguage.ToUpperInvariant() : "RAW";
+                foreach (var kvp in globalMap)
+                {
+                    if (!merged.ContainsKey(kvp.Key))
+                    {
+                        merged[kvp.Key] = (kvp.Value.ChapterId, kvp.Value.Vol, kvp.Value.SortNum, rawLabel);
+                    }
+                }
+            }
+
+            if (merged.Count > 0)
+            {
+                var sortedList = merged.OrderBy(c => c.Value.SortNum).ThenBy(c => c.Key).ToList();
+                int count = 1;
+                foreach (var item in sortedList)
+                {
+                    string chapKey = item.Key;
+                    var info = item.Value;
+                    string chapUrl = $"https://mangadex.org/chapter/{info.ChapterId}";
+
+                    string chapTitle = chapKey == "none" ? $"Oneshot [{info.LangLabel}]" : $"Chapter {chapKey} [{info.LangLabel}]";
+                    if (!string.IsNullOrEmpty(info.Vol) && info.Vol != "none")
+                    {
+                        chapTitle = $"Vol. {info.Vol} " + chapTitle;
+                    }
+
+                    book.Chapters.Add(new ChapterItem
+                    {
+                        ChapterNumber = info.SortNum < double.MaxValue ? info.SortNum : count,
+                        Title = chapTitle,
+                        Url = chapUrl,
+                        Status = "Waiting"
+                    });
+                    count++;
+                }
             }
         }
-        catch (Exception ex)
+        catch { }
+
+        // TẦNG 2: Fallback Feed API phân trang (nếu Aggregate API không trả về chapter nào)
+        if (book.Chapters.Count == 0)
         {
-            if (book.Chapters.Count == 0)
+            try
             {
-                book.Status = "Error";
-                book.StatusMessage = ex.Message;
-                return book;
+                await FetchMangaDexFeedChaptersAsync(book, mangaId, primaryLang, ct).ConfigureAwait(false);
+
+                if (book.Chapters.Count == 0 && useFallback && !primaryLang.Equals("en", StringComparison.OrdinalIgnoreCase))
+                {
+                    await FetchMangaDexFeedChaptersAsync(book, mangaId, "en", ct).ConfigureAwait(false);
+                }
+
+                if (book.Chapters.Count == 0 && !string.IsNullOrEmpty(originalLanguage) && !originalLanguage.Equals(primaryLang, StringComparison.OrdinalIgnoreCase))
+                {
+                    await FetchMangaDexFeedChaptersAsync(book, mangaId, originalLanguage, ct).ConfigureAwait(false);
+                }
+
+                if (book.Chapters.Count == 0)
+                {
+                    await FetchMangaDexFeedChaptersAsync(book, mangaId, "", ct).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (book.Chapters.Count == 0)
+                {
+                    book.Status = "Error";
+                    book.StatusMessage = ex.Message;
+                    return book;
+                }
             }
         }
 
         if (book.Chapters.Count == 0)
         {
             book.Status = "Error";
-            book.StatusMessage = $"Không tìm thấy chapter ngôn ngữ [{book.PreferredLanguage.ToUpperInvariant()}]. Vui lòng thử đổi ngôn ngữ.";
+            book.StatusMessage = "Bộ truyện hiện chưa có chapter nào trên MangaDex.";
             return book;
         }
 
@@ -2231,10 +2333,51 @@ public class ComicScraperService
         return book;
     }
 
+    private async Task<Dictionary<string, (string ChapterId, string Vol, double SortNum)>> FetchMangaDexAggregateChaptersAsync(string mangaId, string? lang, CancellationToken ct)
+    {
+        var map = new Dictionary<string, (string ChapterId, string Vol, double SortNum)>(StringComparer.OrdinalIgnoreCase);
+        string url = $"https://api.mangadex.org/manga/{mangaId}/aggregate";
+        if (!string.IsNullOrWhiteSpace(lang))
+        {
+            url += $"?translatedLanguage%5B%5D={Uri.EscapeDataString(lang)}";
+        }
+
+        string json = await MangaDexNetworkService.Instance.GetJsonAsync(url, ct).ConfigureAwait(false);
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("volumes", out var volumes)) return map;
+
+        foreach (var vol in volumes.EnumerateObject())
+        {
+            string volName = vol.Name;
+            if (!vol.Value.TryGetProperty("chapters", out var chaps)) continue;
+
+            foreach (var chap in chaps.EnumerateObject())
+            {
+                string chapKey = chap.Name;
+                var cObj = chap.Value;
+                string cId = cObj.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
+                if (string.IsNullOrEmpty(cId)) continue;
+
+                double sortNum = double.MaxValue;
+                if (double.TryParse(chapKey, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed))
+                {
+                    sortNum = parsed;
+                }
+
+                if (!map.ContainsKey(chapKey))
+                {
+                    map[chapKey] = (cId, volName, sortNum);
+                }
+            }
+        }
+
+        return map;
+    }
+
     private async Task FetchMangaDexFeedChaptersAsync(ComicBookItem book, string mangaId, string targetLang, CancellationToken ct)
     {
         int offset = 0;
-        const int limit = 100;
+        const int limit = 500;
         var rawBatches = new List<JsonElement>();
 
         while (true)
@@ -2242,7 +2385,7 @@ public class ComicScraperService
             ct.ThrowIfCancellationRequested();
             string feedUrl = $"https://api.mangadex.org/manga/{mangaId}/feed" +
                              $"?offset={offset}&limit={limit}" +
-                             $"&translatedLanguage%5B%5D={Uri.EscapeDataString(targetLang)}" +
+                             (!string.IsNullOrWhiteSpace(targetLang) ? $"&translatedLanguage%5B%5D={Uri.EscapeDataString(targetLang)}" : "") +
                              "&includeFutureUpdates=0&includeEmptyPages=0&includeExternalUrl=0" +
                              "&order%5Bchapter%5D=asc";
 
