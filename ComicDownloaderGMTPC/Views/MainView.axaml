@@ -1196,6 +1196,12 @@
                                     <Button Command="{Binding ClearQueueCommand}" Background="#374151" Foreground="#E5E7EB" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3">
                                         <TextBlock Text="🧹 XÓA QUEUE" FontSize="11" />
                                     </Button>
+                                    <Button Command="{Binding BackupQueueCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Sao lưu danh sách hàng chờ và tiến độ hiện tại sang file .md">
+                                        <TextBlock Text="💾 SAO LƯU MD" FontSize="11" />
+                                    </Button>
+                                    <Button Command="{Binding RestoreQueueCommand}" Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Phục hồi danh sách hàng chờ và tiến độ từ file .md">
+                                        <TextBlock Text="📂 PHỤC HỒI MD" FontSize="11" />
+                                    </Button>
                                     <Button Command="{Binding ChangeDownloadFolderCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3">
                                         <TextBlock Text="📁 ĐỔI THƯ MỤC" FontSize="11" />
                                     </Button>

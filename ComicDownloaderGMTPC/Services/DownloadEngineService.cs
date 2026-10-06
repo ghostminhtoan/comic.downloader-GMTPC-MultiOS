@@ -504,12 +504,29 @@ public class DownloadEngineService
         _isPaused = false;
         _pauseTcs?.TrySetCanceled();
         _pauseTcs = null;
+
+        lock (_queueLock)
+        {
+            while (_downloadQueue.TryDequeue(out _)) { }
+            _enqueuedItems.Clear();
+        }
+
         if (_cts != null && !_cts.IsCancellationRequested)
         {
-            _cts.Cancel();
-            LogEmitted?.Invoke("WARN", "Đang yêu cầu dừng tất cả tác vụ tải...");
+            try
+            {
+                _cts.Cancel();
+            }
+            catch { }
+            LogEmitted?.Invoke("WARN", "⏹️ Đã yêu cầu dừng toàn bộ tác vụ tải.");
         }
+
+        _isDownloading = false;
+        DownloadingStateChanged?.Invoke(false);
         PauseStateChanged?.Invoke(false);
+        CurrentSpeedText = "0.0 KB/s";
+        BackgroundExecutionService.Instance.CompleteTask("download_queue", "Tải Truyện", "Đã dừng tải");
+        ProgressUpdated?.Invoke();
     }
 
     public void OpenDirectoryInExplorer(string path)
@@ -733,6 +750,15 @@ public class DownloadEngineService
 
                     await Task.WhenAll(downloadTasks).ConfigureAwait(false);
 
+                    if (ct.IsCancellationRequested)
+                    {
+                        book.Status = "Stopped";
+                        book.StatusMessage = "Đã dừng bởi người dùng";
+                        book.DetailProgressText = "Đã dừng";
+                        ProgressUpdated?.Invoke();
+                        return;
+                    }
+
                     if (downloadedCount == 0)
                     {
                         chapter.Status = "Error";
@@ -747,6 +773,15 @@ public class DownloadEngineService
                 }
                 else
                 {
+                    if (ct.IsCancellationRequested)
+                    {
+                        book.Status = "Stopped";
+                        book.StatusMessage = "Đã dừng bởi người dùng";
+                        book.DetailProgressText = "Đã dừng";
+                        ProgressUpdated?.Invoke();
+                        return;
+                    }
+
                     string txtPath = Path.Combine(chapterDir, "chapter_info.txt");
                     if (!File.Exists(txtPath))
                     {
@@ -758,6 +793,15 @@ public class DownloadEngineService
 
                 SaveManifest(manifestFile, manifest);
                 ProgressUpdated?.Invoke();
+            }
+
+            if (ct.IsCancellationRequested)
+            {
+                book.Status = "Stopped";
+                book.StatusMessage = "Đã dừng bởi người dùng";
+                book.DetailProgressText = "Đã dừng";
+                ProgressUpdated?.Invoke();
+                return;
             }
 
             book.Status = "Completed";

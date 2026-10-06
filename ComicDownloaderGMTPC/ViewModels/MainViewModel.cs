@@ -1643,7 +1643,80 @@ public partial class MainViewModel : ViewModelBase
     public void Stop()
     {
         _downloadEngine.Stop();
-        AddLog("WARN", "Đã yêu cầu dừng tải.");
+        IsDownloading = false;
+        IsPaused = false;
+        foreach (var item in ComicBooks.Where(b => b.Status == "Downloading" || b.Status == "Waiting" || b.Status == "Chờ tải" || b.Status == "Đang tải"))
+        {
+            item.Status = "Stopped";
+            item.StatusMessage = "Đã dừng bởi người dùng";
+            item.DetailProgressText = "Đã dừng";
+            if (item.IsParallelSplitParent && item.ParallelSplitChildren != null)
+            {
+                foreach (var child in item.ParallelSplitChildren)
+                {
+                    if (child.Status == "Downloading" || child.Status == "Waiting")
+                    {
+                        child.Status = "Stopped";
+                        child.StatusMessage = "Đã dừng";
+                        child.DetailProgressText = "Đã dừng";
+                    }
+                }
+            }
+        }
+        UpdateStats();
+        AddLog("WARN", "⏹️ Đã dừng tiến trình tải thành công.");
+        QueueBackupService.Instance.TriggerDebouncedAutoSave(ComicBooks);
+    }
+
+    [RelayCommand]
+    public async Task BackupQueueAsync()
+    {
+        if (ComicBooks.Count == 0)
+        {
+            AddLog("WARN", "⚠️ Hàng chờ đang trống, không có truyện nào để sao lưu.");
+            return;
+        }
+
+        try
+        {
+            string path = await QueueBackupService.Instance.SaveQueueToMarkdownAsync(ComicBooks);
+            AddLog("SUCCESS", $"💾 Đã sao lưu thành công {ComicBooks.Count} truyện ra file Markdown: {path}");
+        }
+        catch (Exception ex)
+        {
+            AddLog("ERROR", $"❌ Lỗi khi sao lưu hàng chờ: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task RestoreQueueAsync()
+    {
+        try
+        {
+            var restoredItems = await QueueBackupService.Instance.LoadQueueFromMarkdownAsync();
+            if (restoredItems.Count == 0)
+            {
+                AddLog("WARN", "⚠️ Không tìm thấy dữ liệu sao lưu trước đó hoặc file sao lưu trống.");
+                return;
+            }
+
+            int addedCount = 0;
+            foreach (var item in restoredItems)
+            {
+                if (!ComicBooks.Any(b => b.Url.Equals(item.Url, StringComparison.OrdinalIgnoreCase)))
+                {
+                    ComicBooks.Add(item);
+                    addedCount++;
+                }
+            }
+
+            UpdateStats();
+            AddLog("SUCCESS", $"📂 Đã phục hồi thành công {addedCount}/{restoredItems.Count} truyện từ file Markdown (.md).");
+        }
+        catch (Exception ex)
+        {
+            AddLog("ERROR", $"❌ Lỗi khi phục hồi hàng chờ: {ex.Message}");
+        }
     }
 
     [RelayCommand]
