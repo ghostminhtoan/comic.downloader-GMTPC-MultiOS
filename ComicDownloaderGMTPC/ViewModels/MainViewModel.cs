@@ -1533,7 +1533,7 @@ public partial class MainViewModel : ViewModelBase
     // DOWNLOAD PIPELINE
     // ==========================================
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task DownloadAllAsync()
     {
         if (ComicBooks.Count == 0)
@@ -1561,7 +1561,7 @@ public partial class MainViewModel : ViewModelBase
         UpdateStats();
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task DownloadNewAsync()
     {
         // Tự động mở rộng các truyện đang thu gọn để hiển thị thanh tiến trình các task con đang tải song song
@@ -1590,7 +1590,7 @@ public partial class MainViewModel : ViewModelBase
         UpdateStats();
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task ToggleDownloadAsync()
     {
         if (IsDownloading)

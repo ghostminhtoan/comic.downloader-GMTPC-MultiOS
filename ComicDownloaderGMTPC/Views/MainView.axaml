@@ -1157,13 +1157,13 @@
                                 <!-- Main Download Action Buttons -->
                                 <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
                                     <!-- Nút Toggle TẢI / DỪNG TẢI (Gộp chung thành 1 Toggle Button) -->
-                                    <Button Command="{Binding ToggleDownloadCommand}" IsVisible="{Binding !IsDownloading}"
+                                    <Button Command="{Binding DownloadAllCommand}" IsVisible="{Binding !IsDownloading}"
                                             Background="#4F46E5" Foreground="#FFFFFF" FontWeight="Bold"
                                             CornerRadius="5" Padding="12,5" Height="30" Margin="0,0,6,3"
                                             ToolTip.Tip="Bắt đầu tải toàn bộ danh sách truyện đã chọn">
                                         <TextBlock Text="⬇️ TẢI" FontSize="11" />
                                     </Button>
-                                    <Button Command="{Binding ToggleDownloadCommand}" IsVisible="{Binding IsDownloading}"
+                                    <Button Command="{Binding StopCommand}" IsVisible="{Binding IsDownloading}"
                                             Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold"
                                             CornerRadius="5" Padding="12,5" Height="30" Margin="0,0,6,3"
                                             ToolTip.Tip="Dừng tiến trình tải truyện đang chạy">
@@ -3309,7 +3309,7 @@
                 BoxShadow="0 8 24 0 #90000000">
             <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
                 <!-- 1. Toggle Button Tải / Dừng tải -->
-                <Button Command="{Binding ToggleDownloadCommand}" IsVisible="{Binding !IsDownloading}"
+                <Button Command="{Binding DownloadAllCommand}" IsVisible="{Binding !IsDownloading}"
                         Background="#4F46E5" Foreground="#FFFFFF" FontWeight="Bold"
                         CornerRadius="12" Padding="8,4" Height="28"
                         ToolTip.Tip="Bắt đầu tải toàn bộ danh sách truyện (Tải)">
@@ -3318,7 +3318,7 @@
                         <TextBlock Text="TẢI" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-                <Button Command="{Binding ToggleDownloadCommand}" IsVisible="{Binding IsDownloading}"
+                <Button Command="{Binding StopCommand}" IsVisible="{Binding IsDownloading}"
                         Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold"
                         CornerRadius="12" Padding="8,4" Height="28"
                         ToolTip.Tip="Dừng tiến trình tải truyện (Dừng)">
