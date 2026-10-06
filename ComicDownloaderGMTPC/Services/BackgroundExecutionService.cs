@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Linq;
 
@@ -22,12 +22,12 @@ public class BackgroundExecutionService
     private readonly ConcurrentDictionary<string, BackgroundTaskInfo> _activeTasks = new();
     private readonly object _lock = new();
 
-    // Sự kiện C# cho ViewModel & UI
+    // Sá»± kiá»‡n C# cho ViewModel & UI
     public event Action<BackgroundTaskInfo>? TaskProgressChanged;
     public event Action<bool>? AnyTaskRunningChanged;
     public event Action<bool>? BubbleModeChanged;
 
-    // Delegate kết nối với Native Platform (Android Foreground Service / WakeLock / PiP / Desktop Window)
+    // Delegate káº¿t ná»‘i vá»›i Native Platform (Android Foreground Service / WakeLock / PiP / Desktop Window)
     public static Action<string, string, int>? NativeStartOrUpdateForegroundNotification { get; set; }
     public static Action? NativeStopForegroundNotification { get; set; }
     public static Action? NativeRequestEnterBubbleMode { get; set; }
@@ -35,6 +35,7 @@ public class BackgroundExecutionService
     public static Func<bool>? NativeIsBubbleOrPipSupported { get; set; }
     public static Action? NativeMinimizeOrHide { get; set; }
     public static Action? NativeForceExit { get; set; }
+    public static Action<string>? NativeOpenBrowserRequested { get; set; }
 
     public bool IsBubbleMode { get; private set; } = false;
 
@@ -92,7 +93,7 @@ public class BackgroundExecutionService
             bool anyRunning = HasActiveTasks;
             AnyTaskRunningChanged?.Invoke(anyRunning);
 
-            // Kích hoạt Native Foreground Notification khi có tác vụ
+            // KÃ­ch hoáº¡t Native Foreground Notification khi cÃ³ tÃ¡c vá»¥
             if (anyRunning)
             {
                 var primary = GetPrimaryTask() ?? task;
@@ -108,11 +109,11 @@ public class BackgroundExecutionService
         }
         catch
         {
-            // Bảo vệ an toàn tuyệt đối chống sập ứng dụng khi cập nhật thông báo hệ điều hành
+            // Báº£o vá»‡ an toÃ n tuyá»‡t Ä‘á»‘i chá»‘ng sáº­p á»©ng dá»¥ng khi cáº­p nháº­t thÃ´ng bÃ¡o há»‡ Ä‘iá»u hÃ nh
         }
     }
 
-    public void CompleteTask(string taskId, string taskTitle = "", string completionMessage = "Hoàn tất")
+    public void CompleteTask(string taskId, string taskTitle = "", string completionMessage = "HoÃ n táº¥t")
     {
         ReportProgress(taskId, taskTitle, completionMessage, 100, false);
     }
@@ -157,3 +158,4 @@ public class BackgroundExecutionService
         }
     }
 }
+

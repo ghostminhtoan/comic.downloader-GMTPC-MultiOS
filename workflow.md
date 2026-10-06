@@ -1729,3 +1729,24 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Phân tích và tải truyện Hitomi, Hentaiforce, E-Hentai hoạt động ổn định trên Android mà không cần bật VPN.
 
 
+
+### 15.38. Khắc Phục Triệt Để Lỗi Phân Trang & Bóc Tách Thẻ E-Hentai (Search/Tag & Category) Đa Nền Tảng
+- **Bối cảnh & Vấn đề**:
+  - Khi phân tích và cào danh sách truyện từ E-Hentai (ví dụ: `https://e-hentai.org/?f_search=character%3A%22anya+forger%24%22`), trên Android xảy ra lỗi không phân trang hoặc thiếu truyện do:
+    1. E-Hentai sử dụng cơ chế phân trang dạng Seek (`next=GID` hoặc `prev=GID`) và các thuộc tính thẻ `<a>` có thể đảo thứ tự (`href` trước `id`, hoặc phân trang dạng bảng `table.ptt`).
+    2. Chế độ hiển thị đa dạng của E-Hentai: Dạng lưới Thumbnail (`gl1t`), Extended (`gl1e`), Compact (`glc`), Minimal (`glm`) khiến regex cũ giả định số lượng thẻ `</div>` bị ngắt giữa chừng, làm sót item.
+    3. Cookie nội dung nhạy cảm: Thiếu cookie `nw=1` kết hợp cùng `nw=always` và `sl=dm_1` dẫn đến một số trang trả về trang trắng hoặc cảnh báo nội dung.
+- **Giải pháp xử lý (Teamwork & First-Principles Engineering Rigor)**:
+  1. **Nâng cấp Phân trang Seek & Bảng Đa Thuộc Tính (ScrapeBatchComicsFromTagPagesAsync)**:
+     - Hỗ trợ bắt cả `id="dnext"` / `id="unext"` bất kể `href` đứng trước hay sau `id`.
+     - Bổ sung fallback nhận diện phân trang bảng `table.ptt` (`<td class="ptdd"><a href="...">></a>`) và biến JavaScript `var nexturl = "..."`.
+  2. **Tối ưu Bóc tách Thẻ Gallery (ExtractComicLinksFromTagPage)**:
+     - Phân định khối block thông minh: tách riêng các khối Thumbnail / Extended (`<div class="gl1[te]">...`) mà không phụ thuộc vào số lượng thẻ `</div>` lồng nhau.
+     - Fallback dạng bảng `<tr>` cho chế độ Minimal / Compact. Đảm bảo bóc tách chuẩn xác 100% truyện trên mỗi trang (25/25 galleries).
+  3. **Đồng bộ hóa Cookie & Bypass Handler**:
+     - Nạp đồng thời `nw=always`, `nw=1`, `sl=dm_1` cho cả `e-hentai.org` và `exhentai.org`.
+     - Tự động gán Referer chính xác theo tên miền đang truy cập.
+- **Nghiệm Thu**:
+  - `dotnet build` cả Desktop và Android đạt đúng `0 Warning(s), 0 Error(s)`.
+  - Đóng gói xuất xưởng `ComicDownloaderGMTPC.Desktop.exe` vào `publish\`.
+

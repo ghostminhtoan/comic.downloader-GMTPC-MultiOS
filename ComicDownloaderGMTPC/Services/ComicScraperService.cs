@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -56,6 +56,7 @@ public class ComicScraperService
             foreach (var u in baseUris)
             {
                 _cookieContainer.Add(u, new Cookie("nw", "always") { Path = "/" });
+                _cookieContainer.Add(u, new Cookie("nw", "1") { Path = "/" });
                 _cookieContainer.Add(u, new Cookie("sl", "dm_1") { Path = "/" });
             }
         }
@@ -2796,14 +2797,37 @@ public class ComicScraperService
                     }
 
                     // Tìm URL trang kế tiếp
-                    var nextMatch = Regex.Match(html, @"(?:id=[""'](?:dnext|unext)[""']\s+href=[""']|var\s+nexturl\s*=\s*[""'])(?<next>[^""']+)[""']", RegexOptions.IgnoreCase);
+                    string? nextUrl = null;
+
+                    // 1. Tìm trong searchnav hoặc pagination buttons (Next button / unext / dnext)
+                    var nextMatch = Regex.Match(html, @"<(?:a|button)[^>]*?(?:id=[""'](?:dnext|unext)[""'][^>]*?href=[""'](?<next>[^""']+)[""']|href=[""'](?<next>[^""']+)[""'][^>]*?id=[""'](?:dnext|unext)[""']|id=[""'](?:dnext|unext)[""']\s+href=[""'](?<next>[^""']+)[""'])", RegexOptions.IgnoreCase);
                     if (nextMatch.Success && !string.IsNullOrWhiteSpace(nextMatch.Groups["next"].Value))
                     {
-                        string nextUrl = WebUtility.HtmlDecode(nextMatch.Groups["next"].Value.Trim());
-                        if (string.Equals(nextUrl, currentUrl, StringComparison.OrdinalIgnoreCase))
+                        nextUrl = WebUtility.HtmlDecode(nextMatch.Groups["next"].Value.Trim());
+                    }
+
+                    // 2. Fallback table pagination (table.ptt) chứa nút ">" (Next)
+                    if (string.IsNullOrWhiteSpace(nextUrl))
+                    {
+                        var pttNextMatch = Regex.Match(html, @"<td[^>]*class=[""']ptdd[""'][^>]*>\s*<a[^>]*href=[""'](?<next>[^""']+)[""'][^>]*>&gt;<\/a>", RegexOptions.IgnoreCase);
+                        if (pttNextMatch.Success)
                         {
-                            break;
+                            nextUrl = WebUtility.HtmlDecode(pttNextMatch.Groups["next"].Value.Trim());
                         }
+                    }
+
+                    // 3. Fallback biến JavaScript nexturl
+                    if (string.IsNullOrWhiteSpace(nextUrl))
+                    {
+                        var jsNextMatch = Regex.Match(html, @"var\s+nexturl\s*=\s*[""'](?<next>[^""']+)[""']", RegexOptions.IgnoreCase);
+                        if (jsNextMatch.Success)
+                        {
+                            nextUrl = WebUtility.HtmlDecode(jsNextMatch.Groups["next"].Value.Trim());
+                        }
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(nextUrl) && !string.Equals(nextUrl, currentUrl, StringComparison.OrdinalIgnoreCase))
+                    {
                         currentUrl = MakeAbsoluteUrl(nextUrl, currentUrl);
                     }
                     else
@@ -3026,17 +3050,30 @@ public class ComicScraperService
         // 0. Bóc tách chuyên biệt cho E-Hentai (bảng Compact/Minimal/Extended hàng <tr> hoặc lưới Thumbnail <div class="gl1t">)
         if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai"))
         {
-            var rowMatches = Regex.Matches(html, @"(?:<tr[^>]*>[\s\S]*?<\/tr>|<div\s+class=[""']gl1t[""'][^>]*>[\s\S]*?<\/div>\s*<\/div>)", RegexOptions.IgnoreCase);
-            foreach (Match rm in rowMatches)
+            var blocks = new List<string>();
+
+            // 0.1 Thử bóc tách theo khối div Thumbnail/Extended (gl1t / gl1e)
+            var divBlocks = Regex.Matches(html, @"<div\s+class=[""']gl1[te][^""']*[""'][\s\S]*?(?=<div\s+class=[""']gl1[te][^""']*[""']|<div\s+class=[""']searchnav[""']|<div\s+id=[""']rangebar[""']|<\/body>|$)", RegexOptions.IgnoreCase);
+            if (divBlocks.Count > 0)
             {
-                string block = rm.Value;
+                foreach (Match db in divBlocks) blocks.Add(db.Value);
+            }
+            else
+            {
+                // 0.2 Fallback bảng Minimal/Compact (các thẻ <tr>)
+                var trBlocks = Regex.Matches(html, @"<tr[^>]*>[\s\S]*?<\/tr>", RegexOptions.IgnoreCase);
+                foreach (Match tb in trBlocks) blocks.Add(tb.Value);
+            }
+
+            foreach (string block in blocks)
+            {
                 var gMatch = Regex.Match(block, @"href=[""'](?<link>(?:https?://[^""']+)?/(?:g|mpv)/\d+/[a-zA-Z0-9]+/?)[^""']*[""']", RegexOptions.IgnoreCase);
                 if (!gMatch.Success) continue;
 
                 string gLink = MakeAbsoluteUrl(gMatch.Groups["link"].Value, pageUrl);
 
                 string gTitle = string.Empty;
-                var glinkMatch = Regex.Match(block, @"<div\s+class=[""']glink[""'][^>]*>(?<t>[^<]+)<\/div>", RegexOptions.IgnoreCase);
+                var glinkMatch = Regex.Match(block, @"<div\s+class=[""'][^""']*glink[^""']*[""'][^>]*>(?<t>[^<]+)<\/div>", RegexOptions.IgnoreCase);
                 if (glinkMatch.Success)
                 {
                     gTitle = WebUtility.HtmlDecode(glinkMatch.Groups["t"].Value.Trim());
@@ -3053,7 +3090,7 @@ public class ComicScraperService
                     }
                     if (string.IsNullOrWhiteSpace(gTitle))
                     {
-                        var altMatch = Regex.Match(imgMatch.Value, @"alt=[""'](?<t>[^""']+)[""']", RegexOptions.IgnoreCase);
+                        var altMatch = Regex.Match(imgMatch.Value, @"(?:alt|title)=[""'](?<t>[^""']+)[""']", RegexOptions.IgnoreCase);
                         if (altMatch.Success)
                         {
                             gTitle = WebUtility.HtmlDecode(altMatch.Groups["t"].Value.Trim());
@@ -3184,10 +3221,14 @@ public class ComicScraperService
         try
         {
             EnsureEHentaiCookies();
+            string referer = url.Contains("exhentai.org", StringComparison.OrdinalIgnoreCase)
+                ? "https://exhentai.org/"
+                : "https://e-hentai.org/";
+
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.TryAddWithoutValidation("Referer", "https://e-hentai.org/");
+            req.Headers.TryAddWithoutValidation("Referer", referer);
             req.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-            req.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always");
+            req.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always; sl=dm_1");
             req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
             using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             if (!res.IsSuccessStatusCode) return string.Empty;
@@ -3198,9 +3239,9 @@ public class ComicScraperService
                 string sep = url.Contains('?') ? "&" : "?";
                 string bypassUrl = url + sep + "nw=always";
                 using var bypassReq = new HttpRequestMessage(HttpMethod.Get, bypassUrl);
-                bypassReq.Headers.TryAddWithoutValidation("Referer", "https://e-hentai.org/");
+                bypassReq.Headers.TryAddWithoutValidation("Referer", referer);
                 bypassReq.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-                bypassReq.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always");
+                bypassReq.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always; sl=dm_1");
                 bypassReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
                 using var bypassRes = await _httpClient.SendAsync(bypassReq, ct).ConfigureAwait(false);
                 if (bypassRes.IsSuccessStatusCode)
