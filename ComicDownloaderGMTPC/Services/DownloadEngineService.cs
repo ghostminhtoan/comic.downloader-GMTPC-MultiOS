@@ -667,16 +667,25 @@ public class DownloadEngineService
                      string.Equals(chapter.Title, "Chapter 1", StringComparison.OrdinalIgnoreCase) ||
                      (book.Domain != null && (book.Domain.Contains("hitomi") || book.Domain.Contains("e-hentai") || book.Domain.Contains("exhentai") || book.Domain.Contains("hentaiforce"))));
 
+                // Luôn cập nhật động theo Subfolder mới nhất của book (đề phòng người dùng đổi Subfolder trong lúc tải)
+                string currentRawSubfolder = string.IsNullOrWhiteSpace(book.Subfolder) ? "[default]" : book.Subfolder.Trim();
+                string currentSubFolder = MakeSafeFilename(currentRawSubfolder, 50);
+                if (string.IsNullOrWhiteSpace(currentSubFolder)) currentSubFolder = "[default]";
+
+                string currentTargetServerDir = Path.Combine(effectiveRoot, serverFolder, currentSubFolder);
+                string currentBookDir = Path.Combine(currentTargetServerDir, safeBookName);
+                book.LocalDirectory = currentBookDir;
+                SafeCreateDirectory(currentBookDir);
+
                 string chapterDir;
                 if (string.Equals(mode, "Multi-comic", StringComparison.OrdinalIgnoreCase))
                 {
-                    chapterDir = Path.Combine(targetServerDir, MakeSafeFilename($"{safeBookName}-{chapterDirName}", 100));
+                    chapterDir = Path.Combine(currentTargetServerDir, MakeSafeFilename($"{safeBookName}-{chapterDirName}", 100));
                 }
                 else
                 {
-                    chapterDir = isSingleGallery ? bookDir : Path.Combine(bookDir, chapterDirName);
+                    chapterDir = isSingleGallery ? currentBookDir : Path.Combine(currentBookDir, chapterDirName);
                 }
-
 
                 chapterDir = SafeCreateDirectory(chapterDir);
 
@@ -813,7 +822,7 @@ public class DownloadEngineService
             book.StatusMessage = $"Đã tải xong toàn bộ {completedChapters}/{totalChapters} chương";
             book.UpdateProgress(completedChapters, totalChapters, 0, 0);
             book.DetailProgressText = $"Hoàn tất {completedChapters}/{totalChapters} chaps • 100%";
-            LogEmitted?.Invoke("SUCCESS", $"Đã hoàn tất truyện: '{book.Title}' ({completedChapters} chaps) -> {bookDir}");
+            LogEmitted?.Invoke("SUCCESS", $"Đã hoàn tất truyện: '{book.Title}' ({completedChapters} chaps) -> {book.LocalDirectory}");
         }
         catch (OperationCanceledException)
         {

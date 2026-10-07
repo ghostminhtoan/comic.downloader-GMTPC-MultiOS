@@ -2491,22 +2491,29 @@ public partial class MainViewModel : ViewModelBase
                 Directory.CreateDirectory(destDir);
             }
 
-            // Di chuyển tất cả file
+            // Di chuyển tất cả file với try-catch trên từng file (đề phòng file đang được worker tải ghi dở)
             foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
             {
-                string relPath = Path.GetRelativePath(sourceDir, file);
-                string targetFilePath = Path.Combine(destDir, relPath);
-                string? targetSubDir = Path.GetDirectoryName(targetFilePath);
-                if (!string.IsNullOrEmpty(targetSubDir) && !Directory.Exists(targetSubDir))
+                try
                 {
-                    Directory.CreateDirectory(targetSubDir);
-                }
+                    string relPath = Path.GetRelativePath(sourceDir, file);
+                    string targetFilePath = Path.Combine(destDir, relPath);
+                    string? targetSubDir = Path.GetDirectoryName(targetFilePath);
+                    if (!string.IsNullOrEmpty(targetSubDir) && !Directory.Exists(targetSubDir))
+                    {
+                        Directory.CreateDirectory(targetSubDir);
+                    }
 
-                if (File.Exists(targetFilePath))
-                {
-                    File.Delete(targetFilePath);
+                    if (File.Exists(targetFilePath))
+                    {
+                        File.Delete(targetFilePath);
+                    }
+                    File.Move(file, targetFilePath);
                 }
-                File.Move(file, targetFilePath);
+                catch
+                {
+                    // Nếu file đang bận ghi, bỏ qua để tiến trình tải hiện tại tiếp tục
+                }
             }
 
             // Xóa thư mục con rỗng trong sourceDir
@@ -2540,15 +2547,7 @@ public partial class MainViewModel : ViewModelBase
         string newTargetDir = GetExpectedBookDirectory(book, rawNew);
         string currentDir = book.LocalDirectory;
 
-        // Nếu thư mục cũ đã tồn tại và khác thư mục mới thì move
-        if (!string.IsNullOrWhiteSpace(currentDir) && Directory.Exists(currentDir) &&
-            !string.Equals(Path.GetFullPath(currentDir).TrimEnd('\\', '/'), Path.GetFullPath(newTargetDir).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
-        {
-            AddLog("INFO", $"📦 Đang chuyển dữ liệu '{book.Title}' sang Subfolder mới: '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...");
-            await Task.Run(() => MoveDirectoryContent(currentDir, newTargetDir)).ConfigureAwait(false);
-            AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục: {newTargetDir}");
-        }
-
+        // Cập nhật Subfolder và LocalDirectory ngay lập tức để worker tải truyện nhận diện ngay
         book.Subfolder = rawNew;
         book.LocalDirectory = newTargetDir;
         book.IsSubfolderLocked = true;
@@ -2561,6 +2560,15 @@ public partial class MainViewModel : ViewModelBase
                 child.LocalDirectory = newTargetDir;
                 child.IsSubfolderLocked = true;
             }
+        }
+
+        // Nếu thư mục cũ đã tồn tại và khác thư mục mới thì move toàn bộ dữ liệu đã tải sang thư mục mới
+        if (!string.IsNullOrWhiteSpace(currentDir) && Directory.Exists(currentDir) &&
+            !string.Equals(Path.GetFullPath(currentDir).TrimEnd('\\', '/'), Path.GetFullPath(newTargetDir).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+        {
+            AddLog("INFO", $"📦 Đang chuyển dữ liệu '{book.Title}' sang Subfolder mới: '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...");
+            await Task.Run(() => MoveDirectoryContent(currentDir, newTargetDir)).ConfigureAwait(false);
+            AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục: {newTargetDir}");
         }
     }
 

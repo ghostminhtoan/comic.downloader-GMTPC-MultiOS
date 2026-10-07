@@ -1800,5 +1800,33 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói thành công 100% cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.47. Khắc Phục Lỗi Tải Tiếp Vào Subfolder Cũ Khi Chuyển Thư Mục (Dynamic Runtime Subfolder Path Engine)
+- **Bối cảnh & Triệu chứng lỗi**:
+  - Khi người dùng đổi Subfolder (ví dụ: từ `naruto 1` sang `naruto 2`) trong lúc đang tải dở hoặc đã tải một số chương (ví dụ chương 1-7), hệ thống đã di chuyển dữ liệu cũ sang `naruto 2`.
+  - Tuy nhiên, khi worker tiếp tục tải các chương tiếp theo (chương 8-71), worker lại tự tạo lại thư mục cũ `\naruto 1\Naruto\` và tải tiếp các chương còn lại vào thư mục cũ thay vì thư mục mới `\naruto 2\Naruto\`.
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  - Trong `DownloadEngineService.cs` (`DownloadComicBookAsync`), các biến đường dẫn `targetServerDir` và `bookDir` được tính toán 1 lần duy nhất ở đầu hàm trước khi bước vào vòng lặp tải từng chapter `for (int chIdx = 0; chIdx < targetChapters.Count; chIdx++)`.
+  - Khi người dùng đổi Subfolder và kích hoạt di chuyển, `book.Subfolder` được thay đổi trên model nhưng biến local bên trong hàm `DownloadComicBookAsync` vẫn giữ giá trị cũ, khiến các chapter kế tiếp vẫn dùng `bookDir` cũ để gọi `SafeCreateDirectory(chapterDir)`.
+- **Kiến trúc & Giải pháp Khắc phục Triệt để**:
+  1. **Tính toán động đường dẫn ở đầu mỗi vòng lặp chapter `DownloadEngineService.cs`**:
+     - Bên trong vòng lặp `for (int chIdx = 0; chIdx < targetChapters.Count; chIdx++)`, ở mỗi chapter mới:
+       ```csharp
+       string currentRawSubfolder = string.IsNullOrWhiteSpace(book.Subfolder) ? "[default]" : book.Subfolder.Trim();
+       string currentSubFolder = MakeSafeFilename(currentRawSubfolder, 50);
+       if (string.IsNullOrWhiteSpace(currentSubFolder)) currentSubFolder = "[default]";
+
+       string currentTargetServerDir = Path.Combine(effectiveRoot, serverFolder, currentSubFolder);
+       string currentBookDir = Path.Combine(currentTargetServerDir, safeBookName);
+       book.LocalDirectory = currentBookDir;
+       SafeCreateDirectory(currentBookDir);
+       ```
+     - Nhờ đó, bất kể người dùng đổi Subfolder vào thời điểm nào (kể cả giữa chừng khi đang tải), chương kế tiếp sẽ lập tức nhận diện và ghi vào đúng Subfolder mới.
+  2. **Cập nhật tức thời và di chuyển an toàn trong `MainViewModel.cs`**:
+     - `ApplyBookSubfolderAndMoveAsync`: Gán `book.Subfolder = rawNew;` và `book.LocalDirectory = newTargetDir;` ngay tức thời trước khi khởi chạy task di chuyển dữ liệu ngầm.
+     - `MoveDirectoryContent`: Bọc `try-catch` trên từng file riêng biệt khi `File.Move`, đề phòng trường hợp có file đang bị worker tải ghi dở; các file đã tải xong sẽ được di chuyển toàn bộ, worker tải chapter kế tiếp sẽ tạo và ghi thẳng vào thư mục mới.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch 0 Error, 0 Warning.
+  - Smoke test Windows EXE khởi chạy ổn định (`Responding: True`).
+
 
 
