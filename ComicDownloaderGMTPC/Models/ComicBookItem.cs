@@ -81,6 +81,14 @@ public partial class ComicBookItem : ObservableObject
 
     public string DisplaySubfolder => string.IsNullOrWhiteSpace(Subfolder) ? "[default]" : Subfolder;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SubfolderLockIcon))]
+    [NotifyPropertyChangedFor(nameof(SubfolderLockTooltip))]
+    private bool _isSubfolderLocked = false;
+
+    public string SubfolderLockIcon => IsSubfolderLocked ? "🔒" : "🔓";
+    public string SubfolderLockTooltip => IsSubfolderLocked ? "Đang khóa Subfolder (Click để mở khóa)" : "Subfolder đang mở (Click để khóa)";
+
     // Phân cấp Tree Folder cho tính năng Tự động tách chương (Auto Split Chapters)
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasParallelSplitChildren))]

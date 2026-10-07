@@ -1776,3 +1776,27 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói thành công 100% cho cả 3 hệ điều hành (Windows EXE, Linux .tar.gz/.deb, Android APK) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.46. Hệ Thống Khóa/Mở Khóa Subfolder Độc Lập & Tự Động Di Chuyển Thư Mục (Subfolder Lock & Safe Move Engine)
+- **Bối cảnh & Yêu cầu**:
+  1. Khi người dùng nạp nhiều bộ truyện thuộc các series khác nhau nhưng muốn gom vào cùng 1 subfolder hoặc tách ra các subfolder riêng:
+     - Khi đã khóa (Lock) Subfolder của một nhóm truyện trước, các truyện mới nạp sau đó nếu không cùng serie sẽ không bị ghi đè nhầm nếu người dùng áp dụng subfolder mới cho các truyện chưa khóa.
+     - Cần có nút toggle Khóa/Mở khóa toàn bộ Subfolder trong Queue (`ToggleLockAllSubfoldersCommand`), cũng như nút Lock/Unlock riêng biệt trên từng hàng truyện (`ToggleLockSubfolderCommand`).
+  2. Nút Áp dụng Subfolder (ở cấp toàn cục `ApplySubfolderToSelectedCommand` hoặc trên từng hàng `ApplySingleBookSubfolderCommand`):
+     - Khi xác nhận áp dụng Subfolder mới: Nếu truyện đó đã tải một phần hoặc hoàn tất ở thư mục con cũ (`oldDir`), hệ thống tự động di chuyển toàn bộ tệp/thư mục sang thư mục mới (`newDir`), cập nhật lại `LocalDirectory`, và tự động khóa (Lock) subfolder của truyện đó lại để bảo vệ.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Dữ liệu `ComicBookItem.cs` & `QueueBackupService.cs`**:
+     - Bổ sung `[ObservableProperty] private bool _isSubfolderLocked = false;`, `SubfolderLockIcon` (`🔒` / `🔓`), `SubfolderLockTooltip`.
+     - `QueueBackupService`: Tự động lưu và khôi phục trạng thái khóa `🔒 {subfolder}` trong file Markdown backup.
+  2. **Động cơ Di Chuyển Thư Mục An Toàn `MainViewModel.cs`**:
+     - `MoveDirectoryContent(sourceDir, destDir)`: Di chuyển đệ quy tất cả file và cấu trúc thư mục con, dọn dẹp thư mục rỗng cũ mà không làm mất mát dữ liệu.
+     - `ApplyBookSubfolderAndMoveAsync(book, newSubfolder)`: Tính toán `oldDir` vs `newDir`, thực hiện di chuyển ngầm trên luồng nền (Task.Run), cập nhật `book.LocalDirectory = newDir`, `book.Subfolder = newSubfolder`, và tự động gán `book.IsSubfolderLocked = true`.
+     - `ApplySubfolderToSelectedAsync`: Nếu không chọn truyện cụ thể, tự động áp dụng cho tất cả truyện chưa khóa (`!b.IsSubfolderLocked`).
+  3. **Giao Diện Trực Quan Responsive `MainView.axaml`**:
+     - Toolbar Queue: Nút `🔒 KHÓA TẤT CẢ SUBFOLDER` / `🔓 MỞ TẤT CẢ SUBFOLDER`.
+     - Toolbar Download: Nút `🔒 ÁP DỤNG & KHÓA`.
+     - Mỗi hàng truyện: Ô Subfolder tích hợp nút Lock/Unlock (`🔒`/`🔓`) và nút Áp dụng tức thì (`✓ ÁP`).
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói thành công 100% cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+

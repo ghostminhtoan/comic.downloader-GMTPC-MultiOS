@@ -58,6 +58,9 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string _subfolderInput = string.Empty;
 
+    [ObservableProperty]
+    private bool _isAllSubfoldersLocked = false;
+
     partial void OnUrlInputChanged(string value)
     {
         CheckAndAutoExtractDamconuongRedirectDomain(value);
@@ -2462,37 +2465,178 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
-    [RelayCommand]
-    public void ApplySubfolderToSelected()
+    private string GetExpectedBookDirectory(ComicBookItem book, string subfolder)
     {
-        var selected = ComicBooks.Where(b => b.IsChecked || b.IsSelectedInGrid).ToList();
-        if (selected.Count == 0 && SelectedComic != null)
+        string effectiveRoot = _downloadEngine.EnsureWritableDownloadRoot(_downloadEngine.DownloadRoot);
+        string serverFolder = DomainRoutingService.GetServerFolderName(book.Domain, book.Url);
+        string rawSub = string.IsNullOrWhiteSpace(subfolder) ? "[default]" : subfolder.Trim();
+        string safeSub = DownloadEngineService.MakeSafeFilename(rawSub, 50);
+        if (string.IsNullOrWhiteSpace(safeSub)) safeSub = "[default]";
+        string safeBookName = DownloadEngineService.MakeSafeFilename(book.Title, 80);
+        return Path.Combine(effectiveRoot, serverFolder, safeSub, safeBookName);
+    }
+
+    private void MoveDirectoryContent(string sourceDir, string destDir)
+    {
+        try
         {
-            selected.Add(SelectedComic);
+            if (!Directory.Exists(sourceDir)) return;
+            if (string.Equals(Path.GetFullPath(sourceDir).TrimEnd('\\', '/'), Path.GetFullPath(destDir).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!Directory.Exists(destDir))
+            {
+                Directory.CreateDirectory(destDir);
+            }
+
+            // Di chuyển tất cả file
+            foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+            {
+                string relPath = Path.GetRelativePath(sourceDir, file);
+                string targetFilePath = Path.Combine(destDir, relPath);
+                string? targetSubDir = Path.GetDirectoryName(targetFilePath);
+                if (!string.IsNullOrEmpty(targetSubDir) && !Directory.Exists(targetSubDir))
+                {
+                    Directory.CreateDirectory(targetSubDir);
+                }
+
+                if (File.Exists(targetFilePath))
+                {
+                    File.Delete(targetFilePath);
+                }
+                File.Move(file, targetFilePath);
+            }
+
+            // Xóa thư mục con rỗng trong sourceDir
+            foreach (var dir in Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories).OrderByDescending(d => d.Length))
+            {
+                try
+                {
+                    if (Directory.Exists(dir) && Directory.GetFileSystemEntries(dir).Length == 0)
+                    {
+                        Directory.Delete(dir, false);
+                    }
+                }
+                catch { }
+            }
+
+            // Xóa sourceDir nếu đã rỗng
+            if (Directory.Exists(sourceDir) && Directory.GetFileSystemEntries(sourceDir).Length == 0)
+            {
+                Directory.Delete(sourceDir, false);
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi khi di chuyển dữ liệu từ '{sourceDir}' sang '{destDir}': {ex.Message}");
+        }
+    }
+
+    public async Task ApplyBookSubfolderAndMoveAsync(ComicBookItem book, string newSubfolder)
+    {
+        string rawNew = string.IsNullOrWhiteSpace(newSubfolder) ? "" : newSubfolder.Trim();
+        string newTargetDir = GetExpectedBookDirectory(book, rawNew);
+        string currentDir = book.LocalDirectory;
+
+        // Nếu thư mục cũ đã tồn tại và khác thư mục mới thì move
+        if (!string.IsNullOrWhiteSpace(currentDir) && Directory.Exists(currentDir) &&
+            !string.Equals(Path.GetFullPath(currentDir).TrimEnd('\\', '/'), Path.GetFullPath(newTargetDir).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+        {
+            AddLog("INFO", $"📦 Đang chuyển dữ liệu '{book.Title}' sang Subfolder mới: '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...");
+            await Task.Run(() => MoveDirectoryContent(currentDir, newTargetDir)).ConfigureAwait(false);
+            AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục: {newTargetDir}");
+        }
+
+        book.Subfolder = rawNew;
+        book.LocalDirectory = newTargetDir;
+        book.IsSubfolderLocked = true;
+
+        if (book.ParallelSplitChildren != null)
+        {
+            foreach (var child in book.ParallelSplitChildren)
+            {
+                child.Subfolder = rawNew;
+                child.LocalDirectory = newTargetDir;
+                child.IsSubfolderLocked = true;
+            }
+        }
+    }
+
+    [RelayCommand]
+    public async Task ApplySubfolderToSelectedAsync()
+    {
+        string targetSubfolder = SubfolderInput?.Trim() ?? string.Empty;
+        var selected = ComicBooks.Where(b => (b.IsChecked || b.IsSelectedInGrid) && !b.IsParallelSplitChild).ToList();
+
+        // Nếu người dùng không tick chọn truyện nào, tự động chọn tất cả truyện chưa bị lock (những truyện thêm vào sau)
+        if (selected.Count == 0)
+        {
+            selected = ComicBooks.Where(b => !b.IsSubfolderLocked && !b.IsParallelSplitChild).ToList();
         }
 
         if (selected.Count == 0)
         {
-            AddLog("WARN", "Vui lòng chọn ít nhất 1 truyện trong danh sách để áp dụng Subfolder!");
+            AddLog("WARN", "Không có truyện nào để áp dụng Subfolder (Tất cả truyện đã bị khóa hoặc chưa chọn truyện nào).");
             return;
         }
 
-        string targetSubfolder = SubfolderInput?.Trim() ?? string.Empty;
+        int count = 0;
         foreach (var b in selected)
         {
-            b.Subfolder = targetSubfolder;
-            if (b.ParallelSplitChildren != null)
-            {
-                foreach (var child in b.ParallelSplitChildren)
-                {
-                    child.Subfolder = targetSubfolder;
-                }
-            }
+            await ApplyBookSubfolderAndMoveAsync(b, targetSubfolder);
+            count++;
         }
 
         string display = string.IsNullOrWhiteSpace(targetSubfolder) ? "[default]" : targetSubfolder;
-        AddLog("SUCCESS", $"Đã cập nhật Subfolder '{display}' cho {selected.Count} truyện.");
+        AddLog("SUCCESS", $"🔒 Đã áp dụng Subfolder '{display}', tự động chuyển thư mục & khóa cố định cho {count} truyện.");
     }
+
+    [RelayCommand]
+    public async Task ApplySingleBookSubfolderAsync(ComicBookItem? item)
+    {
+        if (item == null) return;
+        await ApplyBookSubfolderAndMoveAsync(item, item.Subfolder);
+        string display = string.IsNullOrWhiteSpace(item.Subfolder) ? "[default]" : item.Subfolder;
+        AddLog("SUCCESS", $"🔒 Đã áp dụng Subfolder '{display}' và khóa cố định cho '{item.Title}'.");
+    }
+
+    [RelayCommand]
+    public void ToggleLockSubfolder(ComicBookItem? item)
+    {
+        if (item == null) return;
+        item.IsSubfolderLocked = !item.IsSubfolderLocked;
+        if (item.ParallelSplitChildren != null)
+        {
+            foreach (var child in item.ParallelSplitChildren)
+            {
+                child.IsSubfolderLocked = item.IsSubfolderLocked;
+            }
+        }
+        AddLog("INFO", item.IsSubfolderLocked 
+            ? $"🔒 Đã khóa Subfolder '{item.DisplaySubfolder}' cho '{item.Title}'." 
+            : $"🔓 Đã mở khóa Subfolder cho '{item.Title}'.");
+    }
+
+    [RelayCommand]
+    public void ToggleLockAllSubfolders()
+    {
+        IsAllSubfoldersLocked = !IsAllSubfoldersLocked;
+        foreach (var book in ComicBooks)
+        {
+            book.IsSubfolderLocked = IsAllSubfoldersLocked;
+            if (book.ParallelSplitChildren != null)
+            {
+                foreach (var child in book.ParallelSplitChildren)
+                {
+                    child.IsSubfolderLocked = IsAllSubfoldersLocked;
+                }
+            }
+        }
+        AddLog("INFO", IsAllSubfoldersLocked ? "🔒 Đã KHÓA toàn bộ Subfolder trong hàng đợi." : "🔓 Đã MỞ KHÓA toàn bộ Subfolder trong hàng đợi.");
+    }
+
 
 
     private void UpdateStats()

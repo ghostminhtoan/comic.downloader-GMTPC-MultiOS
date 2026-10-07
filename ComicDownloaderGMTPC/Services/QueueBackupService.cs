@@ -111,7 +111,9 @@ public class QueueBackupService
             string currentChapter = EscapeMarkdown(!string.IsNullOrWhiteSpace(item.StatusMessage) ? item.StatusMessage : "-");
             string currentPage = EscapeMarkdown(!string.IsNullOrWhiteSpace(item.DetailProgressText) ? item.DetailProgressText : "-");
             string chapterSelect = EscapeMarkdown(item.ChapterSelectionText ?? "");
-            string subfolder = EscapeMarkdown(item.Subfolder ?? "");
+            string rawSub = item.Subfolder ?? "";
+            string subfolderText = item.IsSubfolderLocked ? $"🔒 {rawSub}".Trim() : rawSub;
+            string subfolder = EscapeMarkdown(subfolderText);
             string localDir = EscapeMarkdown(item.LocalDirectory ?? "");
 
             sb.AppendLine($"| {index} | {safeTitle} | {safeUrl} | {status} | {progress} | {currentChapter} | {currentPage} | {chapterSelect} | {subfolder} | {localDir} |");
@@ -163,12 +165,25 @@ public class QueueBackupService
                 string currentChapter = UnescapeMarkdown(match10.Groups[6].Value.Trim());
                 string currentPage = UnescapeMarkdown(match10.Groups[7].Value.Trim());
                 string chapterSelect = UnescapeMarkdown(match10.Groups[8].Value.Trim());
-                string subfolder = UnescapeMarkdown(match10.Groups[9].Value.Trim());
+                string subfolderRaw = UnescapeMarkdown(match10.Groups[9].Value.Trim());
                 string localDir = UnescapeMarkdown(match10.Groups[10].Value.Trim());
 
                 if (string.IsNullOrWhiteSpace(url)) continue;
 
                 double.TryParse(progressStr, out double progressVal);
+
+                bool isLocked = false;
+                string cleanSubfolder = subfolderRaw;
+                if (cleanSubfolder.StartsWith("🔒"))
+                {
+                    isLocked = true;
+                    cleanSubfolder = cleanSubfolder.Substring("🔒".Length).Trim();
+                }
+                else if (cleanSubfolder.StartsWith("[locked]", StringComparison.OrdinalIgnoreCase))
+                {
+                    isLocked = true;
+                    cleanSubfolder = cleanSubfolder.Substring("[locked]".Length).Trim();
+                }
 
                 var item = new ComicBookItem
                 {
@@ -181,7 +196,8 @@ public class QueueBackupService
                     DetailProgressText = currentPage != "-" ? currentPage : "0%",
                     ProgressPercentage = progressVal,
                     ChapterSelectionText = chapterSelect,
-                    Subfolder = subfolder,
+                    Subfolder = cleanSubfolder,
+                    IsSubfolderLocked = isLocked,
                     LocalDirectory = localDir,
                     IsChecked = status != "Completed"
                 };
@@ -189,6 +205,7 @@ public class QueueBackupService
                 result.Add(item);
                 continue;
             }
+
 
             var match9 = tableRowRegex9.Match(trimmed);
             if (match9.Success)
