@@ -1847,6 +1847,32 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói thành công 100% cả 3 nền tảng (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.49. Thanh Tiến Trình & Con Số Phần Trăm Trực Quan Khi Di Chuyển Subfolder (Visual Subfolder Move Progress Engine)
+- **Bối cảnh & Yêu cầu**:
+  - Khi thực hiện đổi Subfolder và di chuyển dữ liệu (chuyển hàng trăm hoặc hàng nghìn tệp ảnh giữa các thư mục):
+  - Trước đây tiến trình chạy ngầm không hiển thị tiến độ chi tiết, khiến người dùng cảm giác ứng dụng bị đơ hoặc treo.
+  - Yêu cầu: Cần hiển thị thanh Progress Bar cùng con số phần trăm (`%`), số lượng tệp đã chuyển (`X/Y file`) và tên tệp đang di chuyển theo thời gian thực.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Động cơ Báo Cáo Tiến Trình Di Chuyển `MainViewModel.cs`**:
+     - `MoveDirectoryContent(sourceDir, destDir, Action<int, int, string>? progress)`: Quét trước toàn bộ danh sách tệp `Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories)`, sau mỗi tệp được di chuyển sẽ gọi callback `progress(movedCount, totalFiles, fileName)`.
+     - Bổ sung các trường ObservableProperty toàn cục:
+       + `IsSubfolderMoving`: Bật/tắt thanh trạng thái di chuyển toàn cục.
+       + `SubfolderMoveProgress`: Giá trị phần trăm `[0..100]`.
+       + `SubfolderMoveProgressText`: Text hiển thị `%` và số tệp `(X/Y)`.
+       + `SubfolderMoveStatusText`: Tên truyện và tên file đang dời.
+     - Cập nhật song song trực tiếp lên từng `ComicBookItem`:
+       + `book.Status = "Moving"`.
+       + `book.ProgressPercentage = pct`.
+       + `book.DetailProgressText = $"📦 Dời {current}/{total} file • {pct:F0}%"`.
+       + `book.StatusMessage = $"Đang chuyển '{fileName}' ({current}/{total})"`.
+     - Báo cáo tiến trình qua `BackgroundExecutionService.Instance.ReportProgress` để hiển thị trên Bong bóng / Native Notification.
+  2. **Giao Diện Trực Quan Responsive `MainView.axaml`**:
+     - Thêm thanh tiến trình chuyên dụng `Border IsVisible="{Binding IsSubfolderMoving}"` ngay trong khung Thư mục lưu hiện tại (Tab Download Toolbar).
+     - Hiển thị đầy đủ: Tên tệp đang dời, con số phần trăm màu xanh neon `#34D399`, thanh ProgressBar bo góc mượt mà màu cam hổ phách `#F59E0B`.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch 0 Error, 0 Warning.
+  - Smoke test Windows EXE khởi chạy ổn định (`Responding: True`).
+
 
 
 

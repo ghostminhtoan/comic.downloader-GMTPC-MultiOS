@@ -1240,6 +1240,17 @@
                                             </StackPanel>
                                         </WrapPanel>
                                         <TextBox Text="{Binding DownloadPathText}" IsReadOnly="True" Background="#0B0F19" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Height="28" CornerRadius="3" BorderBrush="#1E293B" BorderThickness="1" VerticalContentAlignment="Center" Padding="6,2" />
+
+                                        <!-- Thanh Báo Hiệu Tiến Trình Di Chuyển Subfolder Rõ Ràng & Trực Quan -->
+                                        <Border IsVisible="{Binding IsSubfolderMoving}" Background="#1E293B" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,2,0,0">
+                                            <Grid RowDefinitions="Auto, Auto">
+                                                <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,3">
+                                                    <TextBlock Grid.Column="0" Text="{Binding SubfolderMoveStatusText}" Foreground="#FDE047" FontSize="10" FontWeight="Bold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding SubfolderMoveProgressText}" Foreground="#34D399" FontSize="10" FontWeight="ExtraBold" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                                </Grid>
+                                                <ProgressBar Grid.Row="1" Value="{Binding SubfolderMoveProgress}" Maximum="100" Height="8" CornerRadius="3" Foreground="#F59E0B" Background="#0F172A" />
+                                            </Grid>
+                                        </Border>
                                     </StackPanel>
                                 </Border>
 

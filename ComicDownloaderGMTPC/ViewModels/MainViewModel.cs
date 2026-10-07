@@ -2465,6 +2465,18 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    [ObservableProperty]
+    private bool _isSubfolderMoving = false;
+
+    [ObservableProperty]
+    private double _subfolderMoveProgress = 0.0;
+
+    [ObservableProperty]
+    private string _subfolderMoveProgressText = "0%";
+
+    [ObservableProperty]
+    private string _subfolderMoveStatusText = string.Empty;
+
     private string GetExpectedBookDirectory(ComicBookItem book, string subfolder)
     {
         string effectiveRoot = _downloadEngine.EnsureWritableDownloadRoot(_downloadEngine.DownloadRoot);
@@ -2476,7 +2488,7 @@ public partial class MainViewModel : ViewModelBase
         return Path.Combine(effectiveRoot, serverFolder, safeSub, safeBookName);
     }
 
-    private void MoveDirectoryContent(string sourceDir, string destDir)
+    private void MoveDirectoryContent(string sourceDir, string destDir, Action<int, int, string>? progress = null)
     {
         try
         {
@@ -2491,8 +2503,17 @@ public partial class MainViewModel : ViewModelBase
                 Directory.CreateDirectory(destDir);
             }
 
+            var allFiles = Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories);
+            int totalFiles = allFiles.Length;
+            int movedCount = 0;
+
+            if (totalFiles == 0)
+            {
+                progress?.Invoke(0, 0, "Không có tệp");
+            }
+
             // Di chuyển tất cả file với try-catch trên từng file (đề phòng file đang được worker tải ghi dở)
-            foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+            foreach (var file in allFiles)
             {
                 try
                 {
@@ -2514,6 +2535,9 @@ public partial class MainViewModel : ViewModelBase
                 {
                     // Nếu file đang bận ghi, bỏ qua để tiến trình tải hiện tại tiếp tục
                 }
+
+                movedCount++;
+                progress?.Invoke(movedCount, totalFiles, Path.GetFileName(file));
             }
 
             // Xóa thư mục con rỗng trong sourceDir
@@ -2573,14 +2597,55 @@ public partial class MainViewModel : ViewModelBase
                 await Task.Delay(500).ConfigureAwait(false);
             }
 
+            string prevStatus = book.Status;
+
+            IsSubfolderMoving = true;
+            SubfolderMoveProgress = 0;
+            SubfolderMoveProgressText = "0%";
+            SubfolderMoveStatusText = $"Đang dời '{book.Title}' sang '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...";
+
+            book.Status = "Moving";
+            book.StatusMessage = $"Đang chuyển sang '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...";
+            book.DetailProgressText = "Đang dời file... 0%";
+            book.ProgressPercentage = 0;
+
             try
             {
                 AddLog("INFO", $"📦 Đang chuyển dữ liệu '{book.Title}' sang Subfolder mới: '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...");
-                await Task.Run(() => MoveDirectoryContent(currentDir, newTargetDir)).ConfigureAwait(false);
+
+                await Task.Run(() =>
+                {
+                    MoveDirectoryContent(currentDir, newTargetDir, (current, total, fileName) =>
+                    {
+                        double pct = total > 0 ? (double)current / total * 100.0 : 100.0;
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            SubfolderMoveProgress = pct;
+                            SubfolderMoveProgressText = $"{pct:F0}% ({current}/{total})";
+                            SubfolderMoveStatusText = $"[{book.Title}] Đang dời '{fileName}' ({current}/{total})";
+
+                            book.ProgressPercentage = Math.Round(pct, 1);
+                            book.DetailProgressText = $"📦 Dời {current}/{total} file • {pct:F0}%";
+                            book.StatusMessage = $"Đang chuyển '{fileName}' ({current}/{total})";
+                        });
+
+                        BackgroundExecutionService.Instance.ReportProgress("move_folder", "Chuyển Thư Mục", $"[{book.Title}] {current}/{total} ({pct:F0}%)", pct, true);
+                    });
+                }).ConfigureAwait(false);
+
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    book.ProgressPercentage = 100.0;
+                    book.DetailProgressText = "✅ Đã chuyển xong 100%";
+                    book.Status = (prevStatus == "Downloading" || prevStatus == "Moving") ? "Waiting" : prevStatus;
+                });
+
                 AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục: {newTargetDir}");
             }
             finally
             {
+                IsSubfolderMoving = false;
+                BackgroundExecutionService.Instance.CompleteTask("move_folder", "Chuyển Thư Mục", "Đã dời xong thư mục");
                 if (wasDownloading)
                 {
                     _downloadEngine.Resume();
@@ -2622,11 +2687,19 @@ public partial class MainViewModel : ViewModelBase
             await Task.Delay(500).ConfigureAwait(false);
         }
 
+        IsSubfolderMoving = true;
+        SubfolderMoveProgress = 0;
+        SubfolderMoveProgressText = "0%";
+        SubfolderMoveStatusText = $"Bắt đầu dời toàn bộ danh sách sang Subfolder '{(!string.IsNullOrWhiteSpace(targetSubfolder) ? targetSubfolder : "[default]")}'...";
+
         try
         {
             int count = 0;
-            foreach (var b in allBooks)
+            int totalBooks = allBooks.Count;
+
+            for (int bIdx = 0; bIdx < totalBooks; bIdx++)
             {
+                var b = allBooks[bIdx];
                 string rawNew = targetSubfolder;
                 string newTargetDir = GetExpectedBookDirectory(b, rawNew);
                 string currentDir = b.LocalDirectory;
@@ -2648,9 +2721,44 @@ public partial class MainViewModel : ViewModelBase
                 if (!string.IsNullOrWhiteSpace(currentDir) && Directory.Exists(currentDir) &&
                     !string.Equals(Path.GetFullPath(currentDir).TrimEnd('\\', '/'), Path.GetFullPath(newTargetDir).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
                 {
-                    AddLog("INFO", $"📦 Đang chuyển dữ liệu '{b.Title}' sang Subfolder mới: '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...");
-                    await Task.Run(() => MoveDirectoryContent(currentDir, newTargetDir)).ConfigureAwait(false);
-                    AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục: {newTargetDir}");
+                    string prevStatus = b.Status;
+                    b.Status = "Moving";
+                    b.StatusMessage = $"Đang dời sang '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...";
+                    b.DetailProgressText = "Đang dời file... 0%";
+                    b.ProgressPercentage = 0;
+
+                    AddLog("INFO", $"📦 Đang chuyển dữ liệu ({bIdx + 1}/{totalBooks}) '{b.Title}' sang Subfolder mới: '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...");
+
+                    await Task.Run(() =>
+                    {
+                        MoveDirectoryContent(currentDir, newTargetDir, (current, total, fileName) =>
+                        {
+                            double filePct = total > 0 ? (double)current / total * 100.0 : 100.0;
+                            double bookOverallPct = ((double)bIdx + (filePct / 100.0)) / totalBooks * 100.0;
+
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                SubfolderMoveProgress = bookOverallPct;
+                                SubfolderMoveProgressText = $"{bookOverallPct:F0}% ({bIdx + 1}/{totalBooks})";
+                                SubfolderMoveStatusText = $"[{b.Title}] Đang dời '{fileName}' ({current}/{total})";
+
+                                b.ProgressPercentage = Math.Round(filePct, 1);
+                                b.DetailProgressText = $"📦 Dời {current}/{total} file • {filePct:F0}%";
+                                b.StatusMessage = $"Đang chuyển '{fileName}' ({current}/{total})";
+                            });
+
+                            BackgroundExecutionService.Instance.ReportProgress("move_folder", "Chuyển Thư Mục", $"[{bIdx + 1}/{totalBooks}] {b.Title} ({bookOverallPct:F0}%)", bookOverallPct, true);
+                        });
+                    }).ConfigureAwait(false);
+
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        b.ProgressPercentage = 100.0;
+                        b.DetailProgressText = "✅ Đã chuyển xong 100%";
+                        b.Status = (prevStatus == "Downloading" || prevStatus == "Moving") ? "Waiting" : prevStatus;
+                    });
+
+                    AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục ({bIdx + 1}/{totalBooks}): {newTargetDir}");
                 }
                 count++;
             }
@@ -2661,6 +2769,8 @@ public partial class MainViewModel : ViewModelBase
         }
         finally
         {
+            IsSubfolderMoving = false;
+            BackgroundExecutionService.Instance.CompleteTask("move_folder", "Chuyển Thư Mục", "Đã dời xong thư mục");
             if (wasDownloading)
             {
                 _downloadEngine.Resume();
