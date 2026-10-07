@@ -2562,43 +2562,45 @@ public partial class MainViewModel : ViewModelBase
             }
         }
 
-        // Nếu thư mục cũ đã tồn tại và khác thư mục mới thì move toàn bộ dữ liệu đã tải sang thư mục mới
+        // Nếu thư mục cũ đã tồn tại và khác thư mục mới thì tạm dừng tải, move toàn bộ dữ liệu đã tải sang thư mục mới, sau đó tiếp tục tải
         if (!string.IsNullOrWhiteSpace(currentDir) && Directory.Exists(currentDir) &&
             !string.Equals(Path.GetFullPath(currentDir).TrimEnd('\\', '/'), Path.GetFullPath(newTargetDir).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
         {
-            AddLog("INFO", $"📦 Đang chuyển dữ liệu '{book.Title}' sang Subfolder mới: '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...");
-            await Task.Run(() => MoveDirectoryContent(currentDir, newTargetDir)).ConfigureAwait(false);
-            AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục: {newTargetDir}");
+            bool wasDownloading = _downloadEngine.IsDownloading && !_downloadEngine.IsPaused;
+            if (wasDownloading)
+            {
+                _downloadEngine.Pause();
+                await Task.Delay(500).ConfigureAwait(false);
+            }
+
+            try
+            {
+                AddLog("INFO", $"📦 Đang chuyển dữ liệu '{book.Title}' sang Subfolder mới: '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...");
+                await Task.Run(() => MoveDirectoryContent(currentDir, newTargetDir)).ConfigureAwait(false);
+                AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục: {newTargetDir}");
+            }
+            finally
+            {
+                if (wasDownloading)
+                {
+                    _downloadEngine.Resume();
+                }
+            }
         }
     }
 
     [RelayCommand]
-    public async Task ApplySubfolderToSelectedAsync()
+    public void ApplySubfolderToNew()
     {
         string targetSubfolder = SubfolderInput?.Trim() ?? string.Empty;
-        var selected = ComicBooks.Where(b => (b.IsChecked || b.IsSelectedInGrid) && !b.IsParallelSplitChild).ToList();
-
-        // Nếu người dùng không tick chọn truyện nào, tự động chọn tất cả truyện chưa bị lock (những truyện thêm vào sau)
-        if (selected.Count == 0)
-        {
-            selected = ComicBooks.Where(b => !b.IsSubfolderLocked && !b.IsParallelSplitChild).ToList();
-        }
-
-        if (selected.Count == 0)
-        {
-            AddLog("WARN", "Không có truyện nào để áp dụng Subfolder (Tất cả truyện đã bị khóa hoặc chưa chọn truyện nào).");
-            return;
-        }
-
-        int count = 0;
-        foreach (var b in selected)
-        {
-            await ApplyBookSubfolderAndMoveAsync(b, targetSubfolder);
-            count++;
-        }
-
         string display = string.IsNullOrWhiteSpace(targetSubfolder) ? "[default]" : targetSubfolder;
-        AddLog("SUCCESS", $"🔒 Đã áp dụng Subfolder '{display}', tự động chuyển thư mục & khóa cố định cho {count} truyện.");
+        AddLog("INFO", $"📁 Đã thiết lập Subfolder mặc định cho các truyện mới thêm vào sau: '{display}' (Các truyện hiện có trong hàng đợi không bị thay đổi).");
+    }
+
+    [RelayCommand]
+    public void ApplySubfolderToSelected()
+    {
+        ApplySubfolderToNew();
     }
 
     [RelayCommand]
@@ -2613,16 +2615,57 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        int count = 0;
-        foreach (var b in allBooks)
+        bool wasDownloading = _downloadEngine.IsDownloading && !_downloadEngine.IsPaused;
+        if (wasDownloading)
         {
-            await ApplyBookSubfolderAndMoveAsync(b, targetSubfolder);
-            count++;
+            _downloadEngine.Pause();
+            await Task.Delay(500).ConfigureAwait(false);
         }
 
-        IsAllSubfoldersLocked = true;
-        string display = string.IsNullOrWhiteSpace(targetSubfolder) ? "[default]" : targetSubfolder;
-        AddLog("SUCCESS", $"🔒 Đã áp dụng Subfolder '{display}', tự động chuyển thư mục & KHÓA TẤT CẢ {count} truyện trong hàng đợi.");
+        try
+        {
+            int count = 0;
+            foreach (var b in allBooks)
+            {
+                string rawNew = targetSubfolder;
+                string newTargetDir = GetExpectedBookDirectory(b, rawNew);
+                string currentDir = b.LocalDirectory;
+
+                b.Subfolder = rawNew;
+                b.LocalDirectory = newTargetDir;
+                b.IsSubfolderLocked = true;
+
+                if (b.ParallelSplitChildren != null)
+                {
+                    foreach (var child in b.ParallelSplitChildren)
+                    {
+                        child.Subfolder = rawNew;
+                        child.LocalDirectory = newTargetDir;
+                        child.IsSubfolderLocked = true;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(currentDir) && Directory.Exists(currentDir) &&
+                    !string.Equals(Path.GetFullPath(currentDir).TrimEnd('\\', '/'), Path.GetFullPath(newTargetDir).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                {
+                    AddLog("INFO", $"📦 Đang chuyển dữ liệu '{b.Title}' sang Subfolder mới: '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...");
+                    await Task.Run(() => MoveDirectoryContent(currentDir, newTargetDir)).ConfigureAwait(false);
+                    AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục: {newTargetDir}");
+                }
+                count++;
+            }
+
+            IsAllSubfoldersLocked = true;
+            string display = string.IsNullOrWhiteSpace(targetSubfolder) ? "[default]" : targetSubfolder;
+            AddLog("SUCCESS", $"🔒 Đã áp dụng Subfolder '{display}', tự động chuyển thư mục & KHÓA TẤT CẢ {count} truyện trong hàng đợi.");
+        }
+        finally
+        {
+            if (wasDownloading)
+            {
+                _downloadEngine.Resume();
+            }
+        }
     }
 
     [RelayCommand]

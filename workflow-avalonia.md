@@ -1828,5 +1828,25 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch 0 Error, 0 Warning.
   - Smoke test Windows EXE khởi chạy ổn định (`Responding: True`).
 
+### 15.48. Tách Biệt Nút Áp Dụng Truyện Mới & Tự Động Tạm Dừng Tải Khi Di Chuyển Subfolder
+- **Bối cảnh & Yêu cầu**:
+  1. **Quy trình Di chuyển Thư mục An toàn (Pause-Before-Move Engine)**:
+     - Khi đổi Subfolder (ở cấp toàn cục `ApplySubfolderToAllAsync` hoặc trên từng hàng `ApplySingleBookSubfolderAsync`):
+     - Nếu hệ thống đang tải (`_downloadEngine.IsDownloading && !_downloadEngine.IsPaused`), cần tự động tạm dừng tải (`Pause()`), chờ các luồng tải dở giải phóng tệp, thực hiện di chuyển toàn bộ tệp/thư mục cũ sang mới (`MoveDirectoryContent`), chờ hoàn tất 100% rồi mới tiếp tục tải (`Resume()`).
+  2. **Tách Biệt Hành Vi 2 Nút Subfolder Toolbar**:
+     - Nút `📁 ÁP DỤNG TRUYỆN MỚI` (`ApplySubfolderToNewCommand`): Chỉ lưu giá trị `SubfolderInput` để làm mặc định cho các truyện mới thêm vào Queue sau này; các truyện ĐANG CÓ trong Queue sẽ không bị đổi Subfolder.
+     - Nút `🔒 ÁP DỤNG TẤT CẢ & KHÓA` (`ApplySubfolderToAllCommand`): Mới áp dụng Subfolder cho TOÀN BỘ truyện trong Queue, tự động tạm dừng tải -> di chuyển thư mục -> khóa Subfolder -> tiếp tục tải.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Nâng cấp `MainViewModel.cs`**:
+     - `ApplyBookSubfolderAndMoveAsync`: Kiểm tra `wasDownloading`, gọi `_downloadEngine.Pause()`, delay an toàn 500ms, chạy `MoveDirectoryContent` hoàn tất trong `try-finally`, sau đó `_downloadEngine.Resume()`.
+     - `ApplySubfolderToNew`: Chỉ cập nhật cấu hình mặc định và ghi log thông báo.
+     - `ApplySubfolderToAllAsync`: Tạm dừng tải toàn cục, di chuyển toàn bộ danh sách truyện, khóa toàn bộ và resume tải.
+  2. **Giao Diện Trực Quan Responsive `MainView.axaml`**:
+     - Cập nhật nút `📁 ÁP DỤNG TRUYỆN MỚI` (Command: `ApplySubfolderToNewCommand`) và nút `🔒 ÁP DỤNG TẤT CẢ & KHÓA` (Command: `ApplySubfolderToAllCommand`) với tooltip hướng dẫn cụ thể.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói thành công 100% cả 3 nền tảng (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+
 
 
