@@ -2594,6 +2594,30 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task ApplySubfolderToAllAsync()
+    {
+        string targetSubfolder = SubfolderInput?.Trim() ?? string.Empty;
+        var allBooks = ComicBooks.Where(b => !b.IsParallelSplitChild).ToList();
+
+        if (allBooks.Count == 0)
+        {
+            AddLog("WARN", "Danh sách hàng đợi trống, không có truyện nào để áp dụng.");
+            return;
+        }
+
+        int count = 0;
+        foreach (var b in allBooks)
+        {
+            await ApplyBookSubfolderAndMoveAsync(b, targetSubfolder);
+            count++;
+        }
+
+        IsAllSubfoldersLocked = true;
+        string display = string.IsNullOrWhiteSpace(targetSubfolder) ? "[default]" : targetSubfolder;
+        AddLog("SUCCESS", $"🔒 Đã áp dụng Subfolder '{display}', tự động chuyển thư mục & KHÓA TẤT CẢ {count} truyện trong hàng đợi.");
+    }
+
+    [RelayCommand]
     public async Task ApplySingleBookSubfolderAsync(ComicBookItem? item)
     {
         if (item == null) return;

@@ -1230,9 +1230,12 @@
                                             </Button>
                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,0">
                                                 <TextBlock Text="📁 Subfolder:" FontSize="10" Foreground="#F59E0B" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                                <TextBox Text="{Binding SubfolderInput}" PlaceholderText="[default]" Width="110" Height="24" CornerRadius="3" Background="#0B0F19" BorderBrush="#334155" Foreground="#FDE047" FontSize="10" VerticalContentAlignment="Center" Padding="4,1" ToolTip.Tip="Tên Subfolder lưu truyện (Mặc định: [default]). Nhập tên mới rồi ấn 'ÁP DỤNG &amp; KHÓA' để tự động chuyển thư mục &amp; khóa cố định" />
-                                                <Button Command="{Binding ApplySubfolderToSelectedCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" BorderBrush="#38BDF8" BorderThickness="1" Padding="8,2" FontSize="9" CornerRadius="3" ToolTip.Tip="Gán tên Subfolder này cho tất cả các truyện đang chọn (hoặc tất cả truyện chưa khóa), tự động chuyển thư mục sang subfolder mới và khóa cố định">
-                                                    <TextBlock Text="🔒 ÁP DỤNG &amp; KHÓA" />
+                                                <TextBox Text="{Binding SubfolderInput}" PlaceholderText="[default]" Width="105" Height="24" CornerRadius="3" Background="#0B0F19" BorderBrush="#334155" Foreground="#FDE047" FontSize="10" VerticalContentAlignment="Center" Padding="4,1" ToolTip.Tip="Tên Subfolder lưu truyện (Mặc định: [default])." />
+                                                <Button Command="{Binding ApplySubfolderToSelectedCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" BorderBrush="#38BDF8" BorderThickness="1" Padding="7,2" FontSize="9" CornerRadius="3" Margin="0,0,3,0" ToolTip.Tip="Gán tên Subfolder này cho tất cả các truyện đang chọn (hoặc tất cả truyện chưa khóa), tự động chuyển thư mục sang subfolder mới và khóa cố định">
+                                                    <TextBlock Text="🔒 ÁP DỤNG CHỌN" />
+                                                </Button>
+                                                <Button Command="{Binding ApplySubfolderToAllCommand}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" BorderBrush="#10B981" BorderThickness="1" Padding="7,2" FontSize="9" CornerRadius="3" ToolTip.Tip="Gán tên Subfolder này cho TOÀN BỘ tất cả các truyện trong hàng đợi, tự động chuyển thư mục cũ sang mới và khóa cố định">
+                                                    <TextBlock Text="🔒 ÁP DỤNG TẤT CẢ &amp; KHÓA" />
                                                 </Button>
                                             </StackPanel>
                                         </WrapPanel>

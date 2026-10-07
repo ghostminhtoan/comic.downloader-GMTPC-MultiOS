@@ -1791,12 +1791,14 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      - `MoveDirectoryContent(sourceDir, destDir)`: Di chuyển đệ quy tất cả file và cấu trúc thư mục con, dọn dẹp thư mục rỗng cũ mà không làm mất mát dữ liệu.
      - `ApplyBookSubfolderAndMoveAsync(book, newSubfolder)`: Tính toán `oldDir` vs `newDir`, thực hiện di chuyển ngầm trên luồng nền (Task.Run), cập nhật `book.LocalDirectory = newDir`, `book.Subfolder = newSubfolder`, và tự động gán `book.IsSubfolderLocked = true`.
      - `ApplySubfolderToSelectedAsync`: Nếu không chọn truyện cụ thể, tự động áp dụng cho tất cả truyện chưa khóa (`!b.IsSubfolderLocked`).
+     - `ApplySubfolderToAllAsync`: Nút `🔒 ÁP DỤNG TẤT CẢ & KHÓA` cho phép áp dụng Subfolder mới cho TOÀN BỘ tất cả các truyện trong hàng đợi, tự động di chuyển thư mục cũ sang mới và khóa cố định toàn bộ danh sách.
   3. **Giao Diện Trực Quan Responsive `MainView.axaml`**:
      - Toolbar Queue: Nút `🔒 KHÓA TẤT CẢ SUBFOLDER` / `🔓 MỞ TẤT CẢ SUBFOLDER`.
-     - Toolbar Download: Nút `🔒 ÁP DỤNG & KHÓA`.
+     - Toolbar Download: Cụm nút `🔒 ÁP DỤNG CHỌN` và `🔒 ÁP DỤNG TẤT CẢ & KHÓA`.
      - Mỗi hàng truyện: Ô Subfolder tích hợp nút Lock/Unlock (`🔒`/`🔓`) và nút Áp dụng tức thì (`✓ ÁP`).
 - **Nghiệm Thu**:
   - `build-avalonia.bat` biên dịch và đóng gói thành công 100% cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
+
 
 
