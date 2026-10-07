@@ -41,5 +41,40 @@
                 </ItemsPanelTemplate>
             </Setter>
         </Style>
+
+        <!-- Style ScrollBar to bản, dễ drag / nắm kéo chuột và cảm ứng trên mọi nền tảng -->
+        <Style Selector="ScrollBar:vertical">
+            <Setter Property="MinWidth" Value="14" />
+            <Setter Property="Width" Value="14" />
+        </Style>
+        <Style Selector="ScrollBar:vertical /template/ Thumb">
+            <Setter Property="MinWidth" Value="12" />
+            <Setter Property="Width" Value="12" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="#475569" />
+        </Style>
+        <Style Selector="ScrollBar:vertical /template/ Thumb:pointerover">
+            <Setter Property="Background" Value="#38BDF8" />
+        </Style>
+        <Style Selector="ScrollBar:vertical /template/ Thumb:pressed">
+            <Setter Property="Background" Value="#0284C7" />
+        </Style>
+
+        <Style Selector="ScrollBar:horizontal">
+            <Setter Property="MinHeight" Value="14" />
+            <Setter Property="Height" Value="14" />
+        </Style>
+        <Style Selector="ScrollBar:horizontal /template/ Thumb">
+            <Setter Property="MinHeight" Value="12" />
+            <Setter Property="Height" Value="12" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="#475569" />
+        </Style>
+        <Style Selector="ScrollBar:horizontal /template/ Thumb:pointerover">
+            <Setter Property="Background" Value="#38BDF8" />
+        </Style>
+        <Style Selector="ScrollBar:horizontal /template/ Thumb:pressed">
+            <Setter Property="Background" Value="#0284C7" />
+        </Style>
     </Application.Styles>
 </Application>

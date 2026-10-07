@@ -1119,7 +1119,48 @@ public partial class MainViewModel : ViewModelBase
         DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
         LoadUserPresetsFromDisk();
 
-        // Lắng nghe lệnh từ Android Foreground Notification
+        // Lắng nghe lệnh từ Android Foreground Notification & Chat Head
+        BackgroundExecutionService.NativeNotificationContextualAction1Requested = () =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+            {
+                var primary = BackgroundExecutionService.Instance.GetPrimaryTask();
+                string taskId = primary?.Id ?? "download_queue";
+                switch (taskId)
+                {
+                    case "image_enhancer":
+                        StopEnhance();
+                        break;
+                    case "file_packer":
+                        StopPacking();
+                        break;
+                    case "image_splitter":
+                        StopManualSplit();
+                        break;
+                    case "folder_tools":
+                        StopFolderTool();
+                        break;
+                    case "download_queue":
+                    default:
+                        await ToggleDownloadAsync();
+                        break;
+                }
+            });
+        };
+
+        BackgroundExecutionService.NativeNotificationContextualAction2Requested = () =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                var primary = BackgroundExecutionService.Instance.GetPrimaryTask();
+                string taskId = primary?.Id ?? "download_queue";
+                if (taskId == "download_queue")
+                {
+                    TogglePause();
+                }
+            });
+        };
+
         BackgroundExecutionService.NativeNotificationToggleDownloadRequested = () => Avalonia.Threading.Dispatcher.UIThread.Post(async () => await ToggleDownloadAsync());
         BackgroundExecutionService.NativeNotificationTogglePauseRequested = () => Avalonia.Threading.Dispatcher.UIThread.Post(TogglePause);
 

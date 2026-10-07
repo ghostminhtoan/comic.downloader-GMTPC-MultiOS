@@ -117,63 +117,98 @@ public class ImageEnhancerService
 
         using var colorFilter = SKColorFilter.CreateColorMatrix(colorMatrix);
 
-        // 2. Xây dựng ImageFilter chain: Noise reduction -> Sharpening
-        SKImageFilter? imageFilter = null;
+        // 2. Xây dựng ImageFilter chain: Noise reduction -> Sharpening (Quản lý chặt chẽ giải phóng bộ nhớ unmanaged)
+        SKImageFilter? blurFilter = null;
+        SKImageFilter? sharpenFilter = null;
+        SKImageFilter? finalImageFilter = null;
 
-        if (options.NoiseReduce > 0)
+        try
         {
-            float sigma = options.NoiseReduce * 0.4f;
-            imageFilter = SKImageFilter.CreateBlur(sigma, sigma);
-        }
-
-        if (options.Sharpness > 0)
-        {
-            float k = options.Sharpness * 0.35f;
-            float center = 1.0f + 4.0f * k;
-            float edge = -k;
-
-            float[] sharpenKernel = new float[]
+            if (options.NoiseReduce > 0)
             {
-                 0,    edge,   0,
-                edge, center, edge,
-                 0,    edge,   0
-            };
+                float sigma = options.NoiseReduce * 0.4f;
+                blurFilter = SKImageFilter.CreateBlur(sigma, sigma);
+            }
 
-            var sharpenFilter = SKImageFilter.CreateMatrixConvolution(
-                new SKSizeI(3, 3),
-                sharpenKernel,
-                1.0f,
-                0.0f,
-                new SKPointI(1, 1),
-                SKShaderTileMode.Clamp,
-                false);
-
-            imageFilter = imageFilter != null
-                ? SKImageFilter.CreateCompose(imageFilter, sharpenFilter)
-                : sharpenFilter;
-        }
-
-        // 3. Render bitmap mới với Paint phối hợp bộ lọc màu + bộ lọc ảnh trên không gian RGBA8888
-        var dst = new SKBitmap(new SKImageInfo(workingSrc.Width, workingSrc.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
-        using (var canvas = new SKCanvas(dst))
-        {
-            using var paint = new SKPaint
+            if (options.Sharpness > 0)
             {
-                ColorFilter = colorFilter,
-                ImageFilter = imageFilter,
-                IsAntialias = true
-            };
+                float k = options.Sharpness * 0.35f;
+                float center = 1.0f + 4.0f * k;
+                float edge = -k;
 
-            canvas.DrawBitmap(workingSrc, 0, 0, paint);
+                float[] sharpenKernel = new float[]
+                {
+                     0,    edge,   0,
+                    edge, center, edge,
+                     0,    edge,   0
+                };
+
+                sharpenFilter = SKImageFilter.CreateMatrixConvolution(
+                    new SKSizeI(3, 3),
+                    sharpenKernel,
+                    1.0f,
+                    0.0f,
+                    new SKPointI(1, 1),
+                    SKShaderTileMode.Clamp,
+                    false);
+            }
+
+            if (blurFilter != null && sharpenFilter != null)
+            {
+                finalImageFilter = SKImageFilter.CreateCompose(blurFilter, sharpenFilter);
+            }
+            else
+            {
+                finalImageFilter = blurFilter ?? sharpenFilter;
+            }
+
+            // 3. Render bitmap mới với Paint phối hợp bộ lọc màu + bộ lọc ảnh trên không gian RGBA8888
+            var dst = new SKBitmap(new SKImageInfo(workingSrc.Width, workingSrc.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
+            try
+            {
+                using var canvas = new SKCanvas(dst);
+                using var paint = new SKPaint
+                {
+                    ColorFilter = colorFilter,
+                    ImageFilter = finalImageFilter,
+                    IsAntialias = true
+                };
+
+                canvas.DrawBitmap(workingSrc, 0, 0, paint);
+                return dst;
+            }
+            catch
+            {
+                // Fallback an toàn: Vẽ trực tiếp chỉ với ColorFilter nếu ImageFilter ma trận phức tạp bị lỗi trên ảnh dị biệt
+                using var canvasFallback = new SKCanvas(dst);
+                using var paintFallback = new SKPaint
+                {
+                    ColorFilter = colorFilter,
+                    IsAntialias = true
+                };
+                canvasFallback.DrawBitmap(workingSrc, 0, 0, paintFallback);
+                return dst;
+            }
         }
-
-        imageFilter?.Dispose();
-        if (isTempSrc)
+        finally
         {
-            workingSrc.Dispose();
-        }
+            // Giải phóng toàn bộ unmanaged Skia image filters để triệt tiêu 100% rò rỉ bộ nhớ native
+            if (blurFilter != null && sharpenFilter != null)
+            {
+                finalImageFilter?.Dispose();
+                blurFilter.Dispose();
+                sharpenFilter.Dispose();
+            }
+            else
+            {
+                finalImageFilter?.Dispose();
+            }
 
-        return dst;
+            if (isTempSrc)
+            {
+                workingSrc.Dispose();
+            }
+        }
     }
 
     /// <summary>
@@ -570,10 +605,10 @@ public class ImageEnhancerService
                 double percent = (double)current / total * 100.0;
                 ProgressUpdated?.Invoke(percent, targetRelPath);
 
-                // Dọn dẹp bộ nhớ định kỳ trên Android để đảm bảo chạy mượt khi tắt màn hình/chuyển ứng dụng
-                if (OperatingSystem.IsAndroid() && current % 20 == 0)
+                // Dọn dẹp bộ nhớ định kỳ mỗi 15 ảnh trên cả Windows, Linux và Android để chống phân mảnh RAM và tràn unmanaged memory
+                if (current % 15 == 0)
                 {
-                    GC.Collect(2, GCCollectionMode.Optimized);
+                    GC.Collect(1, GCCollectionMode.Optimized);
                 }
             }
 

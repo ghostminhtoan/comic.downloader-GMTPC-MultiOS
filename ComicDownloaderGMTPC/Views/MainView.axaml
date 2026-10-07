@@ -1233,11 +1233,11 @@
                                         </StackPanel>
                                     </Border>
 
-                                    <!-- Số luồng tải ảnh -->
+                                    <!-- Connection tải ảnh -->
                                     <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <TextBlock Text="🧵 Số luồng tải ảnh:" Foreground="#10B981" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <NumericUpDown Value="{Binding ImageDownloadThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" Width="120" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số luồng tải ảnh song song (Tự động nhận diện theo CPU máy)" />
+                                            <TextBlock Text="🌐 Connection tải ảnh:" Foreground="#10B981" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <NumericUpDown Value="{Binding ImageDownloadThreads}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="110" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số connection tải ảnh đồng thời (Tùy chọn từ 1 đến 16)" />
                                         </StackPanel>
                                     </Border>
 
@@ -1406,8 +1406,8 @@
                                         <WrapPanel Orientation="Horizontal">
                                             <Button Command="{Binding StartScanMissingCommand}" Content="▶ Quét ngay" Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="8,3" CornerRadius="3" Margin="0,0,8,2" />
                                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,8,2">
-                                                <TextBlock Text="Song song:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
-                                                <NumericUpDown Value="{Binding ParallelCheckCount}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" Width="110" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số tác vụ scan song song (Tự động nhận diện theo CPU máy)" />
+                                                <TextBlock Text="Số connection:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
+                                                <NumericUpDown Value="{Binding ParallelCheckCount}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="110" Height="28" FontSize="11" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số connection scan song song (Tùy chọn từ 1 đến 16)" />
                                             </StackPanel>
                                             <TextBlock Text="{Binding ScanResults.Count, StringFormat='{}Đã quét: {0}'}" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
                                         </WrapPanel>
@@ -1511,7 +1511,7 @@
 
                                                         <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
                                                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                                <TextBlock Text="Song song:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                <TextBlock Text="Số CPU:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
                                                                 <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder di chuyển cùng lúc (Mặc định: 20 folder, tối đa theo CPU máy)" />
                                                                 <TextBlock Text="folder" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
                                                             </StackPanel>
@@ -1562,7 +1562,7 @@
 
                                                         <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
                                                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                                <TextBlock Text="Song song:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                <TextBlock Text="Số CPU:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
                                                                 <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder di chuyển cùng lúc (Mặc định: 20 folder, tối đa theo CPU máy)" />
                                                                 <TextBlock Text="folder" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
                                                             </StackPanel>
@@ -1634,7 +1634,7 @@
                                                         <!-- NumericUpDown Song song -->
                                                         <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,4" Margin="0,0,8,4" VerticalAlignment="Center">
                                                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                                <TextBlock Text="Song song:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                <TextBlock Text="Số CPU:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
                                                                 <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder đổi tên cùng lúc (Mặc định: 20 folder)" />
                                                                 <TextBlock Text="folder" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
                                                             </StackPanel>
@@ -1726,8 +1726,8 @@
 
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,0,8,6" VerticalAlignment="Center">
                                                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                        <TextBlock Text="Số luồng CPU:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
-                                                        <NumericUpDown Value="{Binding ManualSplitThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" Width="120" Height="28" FontSize="11" Foreground="#F59E0B" Background="#0B0F19" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số luồng CPU cắt ảnh song song (Tự động nhận diện theo CPU máy)" />
+                                                        <TextBlock Text="Số CPU:" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                        <NumericUpDown Value="{Binding ManualSplitThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" Width="120" Height="28" FontSize="11" Foreground="#F59E0B" Background="#0B0F19" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số CPU cắt ảnh song song (Tự động nhận diện theo CPU máy)" />
                                                     </StackPanel>
                                                 </Border>
 
@@ -2047,15 +2047,15 @@
                                                     </Grid>
                                                 </Border>
 
-                                                <!-- 7. Số luồng (Threads) -->
+                                                <!-- 7. Số CPU (Threads) -->
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="2,1">
                                                     <Grid ColumnDefinitions="74, *, 22, 52" VerticalAlignment="Center">
-                                                        <TextBlock Grid.Column="0" Text="Số luồng:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="0" Text="Số CPU:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
                                                         <Slider Grid.Column="1" Value="{Binding EnhanceThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" SmallChange="1" LargeChange="2" />
-                                                        <Button Grid.Column="2" Command="{Binding ResetThreadsCommand}" Background="#EA580C" Foreground="#FFFFFF" Padding="0" Width="18" Height="18" CornerRadius="4" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="Đặt lại Số luồng CPU về mặc định" Margin="2,0,2,0">
+                                                        <Button Grid.Column="2" Command="{Binding ResetThreadsCommand}" Background="#EA580C" Foreground="#FFFFFF" Padding="0" Width="18" Height="18" CornerRadius="4" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="Đặt lại Số CPU về mặc định" Margin="2,0,2,0">
                                                             <TextBlock Text="↺" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
                                                         </Button>
-                                                        <NumericUpDown Grid.Column="3" Value="{Binding EnhanceThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" ParsingNumberStyle="Integer" ToolTip.Tip="Luồng xử lý CPU (Tự động nhận diện theo CPU máy)" />
+                                                        <NumericUpDown Grid.Column="3" Value="{Binding EnhanceThreads}" Minimum="1" Maximum="{Binding MaxSystemThreads}" Increment="1" FormatString="0" ParsingNumberStyle="Integer" ToolTip.Tip="Số CPU xử lý ảnh song song (Tự động nhận diện theo CPU máy)" />
                                                     </Grid>
                                                 </Border>
 
@@ -3301,28 +3301,28 @@
             </Grid>
         </Border>
 
-        <!-- FLOATING QUICK CONTROL BAR (LUÔN HIỂN THỊ TRÊN CẢ ANDROID, WINDOWS VÀ LINUX: TOGGLE TẢI/DỪNG, PAUSE/RESUME, SCROLL TOP/BOT) -->
+        <!-- FLOATING QUICK CONTROL BAR (DỌC, BÊN PHẢI, CÁCH LỀ PHẢI ĐỂ KHÔNG CHE VERTICAL SCROLLBAR) -->
         <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                Margin="0,0,12,34" CornerRadius="16"
+                Margin="0,0,26,45" CornerRadius="16"
                 Background="#E60B0F19" BorderBrush="#38BDF8" BorderThickness="1.2"
-                Padding="5,3" ZIndex="600"
+                Padding="4,6" ZIndex="600"
                 BoxShadow="0 8 24 0 #90000000">
-            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+            <StackPanel Orientation="Vertical" Spacing="5" HorizontalAlignment="Center">
                 <!-- 1. Toggle Button Tải / Dừng tải -->
                 <Button Command="{Binding DownloadAllCommand}" IsVisible="{Binding !IsDownloading}"
                         Background="#4F46E5" Foreground="#FFFFFF" FontWeight="Bold"
-                        CornerRadius="12" Padding="8,4" Height="28"
+                        CornerRadius="12" Padding="6,4" Width="74" Height="28"
                         ToolTip.Tip="Bắt đầu tải toàn bộ danh sách truyện (Tải)">
-                    <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="⬇️" FontSize="11" VerticalAlignment="Center" />
                         <TextBlock Text="TẢI" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
                 <Button Command="{Binding StopCommand}" IsVisible="{Binding IsDownloading}"
                         Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold"
-                        CornerRadius="12" Padding="8,4" Height="28"
+                        CornerRadius="12" Padding="6,4" Width="74" Height="28"
                         ToolTip.Tip="Dừng tiến trình tải truyện (Dừng)">
-                    <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="⏹️" FontSize="11" VerticalAlignment="Center" />
                         <TextBlock Text="DỪNG" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
@@ -3331,32 +3331,32 @@
                 <!-- 2. Toggle Button Pause / Resume -->
                 <Button Command="{Binding TogglePauseCommand}" IsVisible="{Binding !IsPaused}"
                         Background="#D97706" Foreground="#FFFFFF" FontWeight="SemiBold"
-                        CornerRadius="12" Padding="8,4" Height="28"
+                        CornerRadius="12" Padding="4,4" Width="74" Height="28"
                         ToolTip.Tip="Tạm dừng tiến trình tải truyện">
-                    <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                        <TextBlock Text="⏸️" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock Text="TẠM DỪNG" FontSize="10" VerticalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="⏸️" FontSize="10" VerticalAlignment="Center" />
+                        <TextBlock Text="T.DỪNG" FontSize="9.5" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
                 <Button Command="{Binding TogglePauseCommand}" IsVisible="{Binding IsPaused}"
                         Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
-                        CornerRadius="12" Padding="8,4" Height="28"
+                        CornerRadius="12" Padding="4,4" Width="74" Height="28"
                         ToolTip.Tip="Tiếp tục tiến trình tải truyện">
-                    <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                        <TextBlock Text="▶️" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock Text="TIẾP TỤC" FontSize="10" VerticalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="▶️" FontSize="10" VerticalAlignment="Center" />
+                        <TextBlock Text="TIẾP TỤC" FontSize="9.5" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
-                <Border Width="1" Height="16" Background="#334155" VerticalAlignment="Center" Margin="1,0" />
+                <Border Height="1" Width="50" Background="#334155" HorizontalAlignment="Center" Margin="0,1" />
 
                 <!-- 3. Nút Cuộn Lên Đầu Trang (Top) -->
                 <Button Command="{Binding ScrollToTopCommand}"
                         Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
                         Foreground="#38BDF8" FontWeight="Bold"
-                        CornerRadius="12" Padding="7,4" Height="28"
+                        CornerRadius="12" Padding="6,4" Width="74" Height="28"
                         ToolTip.Tip="Cuộn lên đầu trang (Top)">
-                    <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="⬆️" FontSize="11" VerticalAlignment="Center" />
                         <TextBlock Text="TOP" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
@@ -3366,9 +3366,9 @@
                 <Button Command="{Binding ScrollToBottomCommand}"
                         Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
                         Foreground="#38BDF8" FontWeight="Bold"
-                        CornerRadius="12" Padding="7,4" Height="28"
+                        CornerRadius="12" Padding="6,4" Width="74" Height="28"
                         ToolTip.Tip="Cuộn xuống cuối trang (Bot)">
-                    <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="⬇️" FontSize="11" VerticalAlignment="Center" />
                         <TextBlock Text="BOT" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>

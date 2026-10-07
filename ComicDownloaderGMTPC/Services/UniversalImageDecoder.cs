@@ -332,10 +332,54 @@ public static class UniversalImageDecoder
 
     /// <summary>
     /// Giải mã bất kỳ file ảnh nào thành SKBitmap an toàn đa nền tảng (hỗ trợ đầy đủ WebP, PNG, JPG, BMP...).
+    /// Tối ưu hóa đọc trực tiếp từ FileStream để tránh cấp phát byte[] lớn vào LOH gây tràn RAM hoặc crash native Skia.
     /// </summary>
     public static SKBitmap? DecodeToSkBitmap(string filePath)
     {
-        if (!File.Exists(filePath)) return null;
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return null;
+        try
+        {
+            // 1. Thử giải mã trực tiếp từ FileStream với SKCodec (Cực nhanh, 0 byte LOH)
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536);
+            if (fs.Length == 0) return null;
+
+            using var skData = SKData.Create(fs);
+            if (skData != null && skData.Size > 0)
+            {
+                using var codec = SKCodec.Create(skData);
+                if (codec != null && codec.Info.Width > 0 && codec.Info.Height > 0)
+                {
+                    var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+                    var bitmap = new SKBitmap(info);
+                    var result = codec.GetPixels(info, bitmap.GetPixels());
+                    if (result == SKCodecResult.Success || result == SKCodecResult.IncompleteInput)
+                    {
+                        return bitmap;
+                    }
+                    bitmap.Dispose();
+                }
+
+                // Fallback SkiaSharp Decode từ skData
+                var bmp = SKBitmap.Decode(skData);
+                if (bmp != null)
+                {
+                    if (bmp.ColorType != SKColorType.Rgba8888)
+                    {
+                        var rgba = new SKBitmap(new SKImageInfo(bmp.Width, bmp.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
+                        using (var canvas = new SKCanvas(rgba))
+                        {
+                            canvas.DrawBitmap(bmp, 0, 0);
+                        }
+                        bmp.Dispose();
+                        return rgba;
+                    }
+                    return bmp;
+                }
+            }
+        }
+        catch { }
+
+        // 2. Fallback sang nạp byte[] nếu đọc Stream thất bại
         try
         {
             byte[] bytes = File.ReadAllBytes(filePath);
@@ -359,7 +403,7 @@ public static class UniversalImageDecoder
         {
             using var data = SKData.CreateCopy(rawBytes);
             using var codec = SKCodec.Create(data);
-            if (codec != null)
+            if (codec != null && codec.Info.Width > 0 && codec.Info.Height > 0)
             {
                 var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
                 var bitmap = new SKBitmap(info);

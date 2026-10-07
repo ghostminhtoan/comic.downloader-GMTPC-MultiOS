@@ -28,10 +28,12 @@ public class BackgroundExecutionService
     public event Action<bool>? BubbleModeChanged;
 
     // Delegate kết nối với Native Platform (Android Foreground Service / WakeLock / PiP / Desktop Window)
-    public static Action<string, string, int, bool, bool>? NativeStartOrUpdateForegroundNotification { get; set; }
+    public static Action<string, string, string, int, bool, bool, string, string>? NativeStartOrUpdateForegroundNotification { get; set; }
     public static Action? NativeStopForegroundNotification { get; set; }
     public static Action? NativeNotificationToggleDownloadRequested { get; set; }
     public static Action? NativeNotificationTogglePauseRequested { get; set; }
+    public static Action? NativeNotificationContextualAction1Requested { get; set; }
+    public static Action? NativeNotificationContextualAction2Requested { get; set; }
     public static Action? NativeRequestEnterBubbleMode { get; set; }
     public static Action? NativeRequestExitBubbleMode { get; set; }
     public static Func<bool>? NativeIsBubbleOrPipSupported { get; set; }
@@ -104,7 +106,39 @@ public class BackgroundExecutionService
                 string notifText = $"{primary.Detail} ({percent}%)";
                 bool isDownloading = DownloadEngineService.Instance.IsDownloading;
                 bool isPaused = DownloadEngineService.Instance.IsPaused;
-                NativeStartOrUpdateForegroundNotification?.Invoke(title, notifText, percent, isDownloading, isPaused);
+
+                string action1Text;
+                string action2Text;
+
+                switch (primary.Id)
+                {
+                    case "download_queue":
+                        action1Text = isDownloading ? "⏹️ Dừng tải" : "⬇️ Tải";
+                        action2Text = isPaused ? "▶️ Tiếp tục" : "⏸️ Tạm dừng";
+                        break;
+                    case "image_enhancer":
+                        action1Text = "⏹️ Dừng xử lý ảnh";
+                        action2Text = "📱 Mở ứng dụng";
+                        break;
+                    case "file_packer":
+                        action1Text = "⏹️ Dừng đóng gói";
+                        action2Text = "📱 Mở ứng dụng";
+                        break;
+                    case "image_splitter":
+                        action1Text = "⏹️ Dừng cắt ảnh";
+                        action2Text = "📱 Mở ứng dụng";
+                        break;
+                    case "folder_tools":
+                        action1Text = "⏹️ Dừng tác vụ";
+                        action2Text = "📱 Mở ứng dụng";
+                        break;
+                    default:
+                        action1Text = "⏹️ Dừng";
+                        action2Text = "📱 Mở ứng dụng";
+                        break;
+                }
+
+                NativeStartOrUpdateForegroundNotification?.Invoke(primary.Id, title, notifText, percent, isDownloading, isPaused, action1Text, action2Text);
             }
             else
             {

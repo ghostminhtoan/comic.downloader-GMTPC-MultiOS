@@ -17,11 +17,16 @@ public class ComicBackgroundService : Service
     public const string ActionStop = "ACTION_STOP";
     public const string ActionToggleDownload = "ACTION_TOGGLE_DOWNLOAD";
     public const string ActionTogglePause = "ACTION_TOGGLE_PAUSE";
+    public const string ActionContextual1 = "ACTION_CONTEXTUAL_1";
+    public const string ActionContextual2 = "ACTION_CONTEXTUAL_2";
+    public const string ExtraTaskId = "EXTRA_TASK_ID";
     public const string ExtraTitle = "EXTRA_TITLE";
     public const string ExtraText = "EXTRA_TEXT";
     public const string ExtraProgress = "EXTRA_PROGRESS";
     public const string ExtraIsDownloading = "EXTRA_IS_DOWNLOADING";
     public const string ExtraIsPaused = "EXTRA_IS_PAUSED";
+    public const string ExtraAction1Text = "EXTRA_ACTION_1_TEXT";
+    public const string ExtraAction2Text = "EXTRA_ACTION_2_TEXT";
 
     private PowerManager.WakeLock? _wakeLock;
 
@@ -62,39 +67,44 @@ public class ComicBackgroundService : Service
             return StartCommandResult.NotSticky;
         }
 
-        if (action == ActionToggleDownload)
+        if (action == ActionToggleDownload || action == ActionContextual1)
         {
             try
             {
+                BackgroundExecutionService.NativeNotificationContextualAction1Requested?.Invoke();
                 BackgroundExecutionService.NativeNotificationToggleDownloadRequested?.Invoke();
             }
             catch (Exception ex)
             {
-                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi kích hoạt ToggleDownload từ Notification: {ex.Message}");
+                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi kích hoạt Action 1 từ Notification: {ex.Message}");
             }
             return StartCommandResult.Sticky;
         }
 
-        if (action == ActionTogglePause)
+        if (action == ActionTogglePause || action == ActionContextual2)
         {
             try
             {
+                BackgroundExecutionService.NativeNotificationContextualAction2Requested?.Invoke();
                 BackgroundExecutionService.NativeNotificationTogglePauseRequested?.Invoke();
             }
             catch (Exception ex)
             {
-                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi kích hoạt TogglePause từ Notification: {ex.Message}");
+                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi kích hoạt Action 2 từ Notification: {ex.Message}");
             }
             return StartCommandResult.Sticky;
         }
 
+        string taskId = intent.GetStringExtra(ExtraTaskId) ?? "download_queue";
         string title = intent.GetStringExtra(ExtraTitle) ?? "Comic-GMTPC";
         string text = intent.GetStringExtra(ExtraText) ?? "Đang xử lý tác vụ nền...";
         int progress = intent.GetIntExtra(ExtraProgress, 0);
         bool isDownloading = intent.GetBooleanExtra(ExtraIsDownloading, true);
         bool isPaused = intent.GetBooleanExtra(ExtraIsPaused, false);
+        string action1Text = intent.GetStringExtra(ExtraAction1Text) ?? (isDownloading ? "⏹️ Dừng tải" : "⬇️ Tải");
+        string action2Text = intent.GetStringExtra(ExtraAction2Text) ?? (isPaused ? "▶️ Tiếp tục" : "⏸️ Tạm dừng");
 
-        var notification = BuildNotification(this, title, text, progress, isDownloading, isPaused);
+        var notification = BuildNotification(this, taskId, title, text, progress, isDownloading, isPaused, action1Text, action2Text);
 
         try
         {
@@ -182,7 +192,16 @@ public class ComicBackgroundService : Service
         }
     }
 
-    public static Notification BuildNotification(Context context, string title, string text, int progress, bool isDownloading = true, bool isPaused = false)
+    public static Notification BuildNotification(
+        Context context,
+        string taskId,
+        string title,
+        string text,
+        int progress,
+        bool isDownloading = true,
+        bool isPaused = false,
+        string? action1Text = null,
+        string? action2Text = null)
     {
         var openIntent = new Intent(context, typeof(MainActivity));
         openIntent.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
@@ -214,40 +233,60 @@ public class ComicBackgroundService : Service
             builder.SetProgress(0, 0, true);
         }
 
-        // Action 1: Tải / Dừng tải
-        var toggleDownloadIntent = new Intent(context, typeof(ComicBackgroundService));
-        toggleDownloadIntent.SetAction(ActionToggleDownload);
-        var toggleDownloadPending = PendingIntent.GetService(
+        // Action 1: Dựa theo ngữ cảnh (Tải/Dừng, Dừng xử lý ảnh, Dừng đóng gói, Dừng cắt ảnh...)
+        var act1Intent = new Intent(context, typeof(ComicBackgroundService));
+        act1Intent.SetAction(ActionContextual1);
+        var act1Pending = PendingIntent.GetService(
             context,
             1,
-            toggleDownloadIntent,
+            act1Intent,
             PendingIntentFlags.UpdateCurrent | (OperatingSystem.IsAndroidVersionAtLeast(23) ? PendingIntentFlags.Immutable : 0));
 
-        if (toggleDownloadPending != null)
+        if (act1Pending != null)
         {
-            string downloadBtnText = isDownloading ? "⏹️ Dừng tải" : "⬇️ Tải";
-            builder.AddAction(Resource.Drawable.Icon, downloadBtnText, toggleDownloadPending);
+            string btnText1 = !string.IsNullOrEmpty(action1Text)
+                ? action1Text
+                : (isDownloading ? "⏹️ Dừng tải" : "⬇️ Tải");
+            builder.AddAction(Resource.Drawable.Icon, btnText1, act1Pending);
         }
 
-        // Action 2: Tạm dừng / Tiếp tục
-        var togglePauseIntent = new Intent(context, typeof(ComicBackgroundService));
-        togglePauseIntent.SetAction(ActionTogglePause);
-        var togglePausePending = PendingIntent.GetService(
-            context,
-            2,
-            togglePauseIntent,
-            PendingIntentFlags.UpdateCurrent | (OperatingSystem.IsAndroidVersionAtLeast(23) ? PendingIntentFlags.Immutable : 0));
-
-        if (togglePausePending != null)
+        // Action 2: Dựa theo ngữ cảnh (Tạm dừng/Tiếp tục hoặc Mở ứng dụng)
+        if (taskId == "download_queue" || string.IsNullOrEmpty(action2Text) || action2Text.Contains("tạm dừng", StringComparison.OrdinalIgnoreCase) || action2Text.Contains("tiếp tục", StringComparison.OrdinalIgnoreCase))
         {
-            string pauseBtnText = isPaused ? "▶️ Tiếp tục" : "⏸️ Tạm dừng";
-            builder.AddAction(Resource.Drawable.Icon, pauseBtnText, togglePausePending);
+            var act2Intent = new Intent(context, typeof(ComicBackgroundService));
+            act2Intent.SetAction(ActionContextual2);
+            var act2Pending = PendingIntent.GetService(
+                context,
+                2,
+                act2Intent,
+                PendingIntentFlags.UpdateCurrent | (OperatingSystem.IsAndroidVersionAtLeast(23) ? PendingIntentFlags.Immutable : 0));
+
+            if (act2Pending != null)
+            {
+                string btnText2 = !string.IsNullOrEmpty(action2Text)
+                    ? action2Text
+                    : (isPaused ? "▶️ Tiếp tục" : "⏸️ Tạm dừng");
+                builder.AddAction(Resource.Drawable.Icon, btnText2, act2Pending);
+            }
+        }
+        else if (pendingIntent != null)
+        {
+            builder.AddAction(Resource.Drawable.Icon, action2Text ?? "📱 Mở ứng dụng", pendingIntent);
         }
 
         return builder.Build()!;
     }
 
-    public static void StartOrUpdate(Context context, string title, string text, int progress, bool isDownloading = true, bool isPaused = false)
+    public static void StartOrUpdate(
+        Context context,
+        string taskId,
+        string title,
+        string text,
+        int progress,
+        bool isDownloading = true,
+        bool isPaused = false,
+        string? action1Text = null,
+        string? action2Text = null)
     {
         try
         {
@@ -258,7 +297,7 @@ public class ComicBackgroundService : Service
             {
                 try
                 {
-                    var notification = BuildNotification(appContext, title, text, progress, isDownloading, isPaused);
+                    var notification = BuildNotification(appContext, taskId, title, text, progress, isDownloading, isPaused, action1Text, action2Text);
                     var nm = NotificationManagerCompat.From(appContext);
                     nm?.Notify(NotificationId, notification);
                 }
@@ -274,18 +313,21 @@ public class ComicBackgroundService : Service
             {
                 if (IsRunning)
                 {
-                    var notification = BuildNotification(appContext, title, text, progress, isDownloading, isPaused);
+                    var notification = BuildNotification(appContext, taskId, title, text, progress, isDownloading, isPaused, action1Text, action2Text);
                     NotificationManagerCompat.From(appContext)?.Notify(NotificationId, notification);
                     return;
                 }
 
                 var intent = new Intent(appContext, typeof(ComicBackgroundService));
                 intent.SetAction(ActionStartOrUpdate);
+                intent.PutExtra(ExtraTaskId, taskId);
                 intent.PutExtra(ExtraTitle, title);
                 intent.PutExtra(ExtraText, text);
                 intent.PutExtra(ExtraProgress, progress);
                 intent.PutExtra(ExtraIsDownloading, isDownloading);
                 intent.PutExtra(ExtraIsPaused, isPaused);
+                intent.PutExtra(ExtraAction1Text, action1Text);
+                intent.PutExtra(ExtraAction2Text, action2Text);
 
                 if (OperatingSystem.IsAndroidVersionAtLeast(26))
                 {
