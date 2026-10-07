@@ -55,6 +55,9 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string _urlInput = string.Empty;
 
+    [ObservableProperty]
+    private string _subfolderInput = string.Empty;
+
     partial void OnUrlInputChanged(string value)
     {
         CheckAndAutoExtractDamconuongRedirectDomain(value);
@@ -430,6 +433,7 @@ public partial class MainViewModel : ViewModelBase
                                 Status = "Waiting",
                                 DetailProgressText = $"Chờ tải (Chương {range})",
                                 IsChecked = true,
+                                Subfolder = book.Subfolder,
                                 LocalDirectory = book.LocalDirectory,
                                 IsParallelSplitChild = true,
                                 IsParallelSplitParent = false,
@@ -1491,6 +1495,10 @@ public partial class MainViewModel : ViewModelBase
             {
                 book.CoverUrl = sr.CoverUrl;
             }
+            if (!string.IsNullOrWhiteSpace(SubfolderInput))
+            {
+                book.Subfolder = SubfolderInput.Trim();
+            }
             ComicBooks.Add(book);
             AddLog("INFO", $"[{idx}] Đã nạp từ nguồn: {book.Title} ({book.TotalChapters} chaps) [{book.Domain}]");
         }
@@ -2429,8 +2437,12 @@ public partial class MainViewModel : ViewModelBase
             int currentIndex = startIndex + i;
 
             var book = await _scraperService.ScrapeBookAsync(url, currentIndex, mangadexLang, mangadexFallback);
+            if (!string.IsNullOrWhiteSpace(SubfolderInput))
+            {
+                book.Subfolder = SubfolderInput.Trim();
+            }
             ComicBooks.Add(book);
-            AddLog("INFO", $"[{currentIndex}] Đã nạp: {book.Title} ({book.TotalChapters} chaps) - Domain: {book.Domain}");
+            AddLog("INFO", $"[{currentIndex}] Đã nạp: {book.Title} ({book.TotalChapters} chaps) - Domain: {book.Domain}{(string.IsNullOrWhiteSpace(book.Subfolder) ? "" : $" [Subfolder: {book.Subfolder}]")}");
         }
 
         UpdateStats();
@@ -2449,6 +2461,39 @@ public partial class MainViewModel : ViewModelBase
             }
         }
     }
+
+    [RelayCommand]
+    public void ApplySubfolderToSelected()
+    {
+        var selected = ComicBooks.Where(b => b.IsChecked || b.IsSelectedInGrid).ToList();
+        if (selected.Count == 0 && SelectedComic != null)
+        {
+            selected.Add(SelectedComic);
+        }
+
+        if (selected.Count == 0)
+        {
+            AddLog("WARN", "Vui lòng chọn ít nhất 1 truyện trong danh sách để áp dụng Subfolder!");
+            return;
+        }
+
+        string targetSubfolder = SubfolderInput?.Trim() ?? string.Empty;
+        foreach (var b in selected)
+        {
+            b.Subfolder = targetSubfolder;
+            if (b.ParallelSplitChildren != null)
+            {
+                foreach (var child in b.ParallelSplitChildren)
+                {
+                    child.Subfolder = targetSubfolder;
+                }
+            }
+        }
+
+        string display = string.IsNullOrWhiteSpace(targetSubfolder) ? "[default]" : targetSubfolder;
+        AddLog("SUCCESS", $"Đã cập nhật Subfolder '{display}' cho {selected.Count} truyện.");
+    }
+
 
     private void UpdateStats()
     {

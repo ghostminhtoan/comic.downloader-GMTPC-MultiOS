@@ -575,9 +575,13 @@ public class DownloadEngineService
 
         string effectiveRoot = EnsureWritableDownloadRoot(DownloadRoot);
         string serverFolder = DomainRoutingService.GetServerFolderName(book.Domain, book.Url);
-        string serverDir = Path.Combine(effectiveRoot, serverFolder);
+        string rawSubfolder = string.IsNullOrWhiteSpace(book.Subfolder) ? "[default]" : book.Subfolder.Trim();
+        string subFolder = MakeSafeFilename(rawSubfolder, 50);
+        if (string.IsNullOrWhiteSpace(subFolder)) subFolder = "[default]";
+
+        string targetServerDir = Path.Combine(effectiveRoot, serverFolder, subFolder);
         string safeBookName = MakeSafeFilename(book.Title, 80);
-        string bookDir = Path.Combine(serverDir, safeBookName);
+        string bookDir = Path.Combine(targetServerDir, safeBookName);
         book.LocalDirectory = bookDir;
 
         try
@@ -666,12 +670,13 @@ public class DownloadEngineService
                 string chapterDir;
                 if (string.Equals(mode, "Multi-comic", StringComparison.OrdinalIgnoreCase))
                 {
-                    chapterDir = Path.Combine(serverDir, MakeSafeFilename($"{safeBookName}-{chapterDirName}", 100));
+                    chapterDir = Path.Combine(targetServerDir, MakeSafeFilename($"{safeBookName}-{chapterDirName}", 100));
                 }
                 else
                 {
                     chapterDir = isSingleGallery ? bookDir : Path.Combine(bookDir, chapterDirName);
                 }
+
 
                 chapterDir = SafeCreateDirectory(chapterDir);
 

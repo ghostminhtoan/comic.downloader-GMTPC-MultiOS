@@ -113,6 +113,16 @@
                                 ToolTip.Tip="Dán trực tiếp liên kết từ bộ nhớ tạm (Clipboard) và nạp vào danh sách">
                             <TextBlock Text="📋 DÁN LINK" FontSize="11" />
                         </Button>
+                        <!-- Ô nhập Subfolder cho mọi domain (mặc định [default]) -->
+                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                            <TextBlock Text="📁 Subfolder:" Foreground="#F59E0B" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBox Text="{Binding SubfolderInput}"
+                                     PlaceholderText="[default]"
+                                     Width="110" Height="30" CornerRadius="5"
+                                     Background="#0F172A" BorderBrush="#334155" Foreground="#FDE047" FontSize="11"
+                                     VerticalContentAlignment="Center" Padding="6,2"
+                                     ToolTip.Tip="Tên thư mục con (Subfolder) để tải về (Ví dụ: chizuru, isekai, action...). Để trống sẽ tự động tải vào '[default]'" />
+                        </StackPanel>
                         <CheckBox IsChecked="{Binding IsAutoPasteClipboard}"
                                   VerticalAlignment="Center" Margin="0,0,0,4"
                                   ToolTip.Tip="Tự động theo dõi Clipboard: mỗi khi copy link truyện sẽ tự động nạp">
@@ -1210,14 +1220,21 @@
                                     </Button>
                                 </WrapPanel>
 
-                                <!-- Thư mục lưu hiện tại (Bố cục 2 tầng xem Full Path trên Android) -->
+                                <!-- Thư mục lưu hiện tại & Subfolder (Bố cục 2 tầng xem Full Path trên Android) -->
                                 <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,6" Margin="0,0,0,6">
-                                    <StackPanel Spacing="3">
+                                    <StackPanel Spacing="4">
                                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="📁 Thư mục lưu truyện hiện tại:" FontSize="10" Foreground="#94A3B8" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                            <Button Command="{Binding CopyDownloadPathCommand}" Background="#1E293B" Foreground="#38BDF8" Padding="6,2" FontSize="9" CornerRadius="3" Margin="0,0,6,0">
+                                            <TextBlock Text="📁 Thư mục lưu truyện hiện tại:" FontSize="10" Foreground="#94A3B8" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                            <Button Command="{Binding CopyDownloadPathCommand}" Background="#1E293B" Foreground="#38BDF8" Padding="6,2" FontSize="9" CornerRadius="3" Margin="0,0,10,0">
                                                 <TextBlock Text="📋 Chép đường dẫn" />
                                             </Button>
+                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,6,0">
+                                                <TextBlock Text="📁 Subfolder:" FontSize="10" Foreground="#F59E0B" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                <TextBox Text="{Binding SubfolderInput}" PlaceholderText="[default]" Width="110" Height="24" CornerRadius="3" Background="#0B0F19" BorderBrush="#334155" Foreground="#FDE047" FontSize="10" VerticalContentAlignment="Center" Padding="4,1" ToolTip.Tip="Tên Subfolder lưu truyện (Mặc định: [default]). Nhập tên mới rồi ấn 'Áp dụng chọn' để gán cho các truyện đã chọn" />
+                                                <Button Command="{Binding ApplySubfolderToSelectedCommand}" Background="#1E293B" Foreground="#FDE047" BorderBrush="#475569" BorderThickness="1" Padding="6,2" FontSize="9" CornerRadius="3" ToolTip.Tip="Gán tên Subfolder này cho tất cả các truyện đang được tích chọn">
+                                                    <TextBlock Text="Áp dụng chọn" />
+                                                </Button>
+                                            </StackPanel>
                                         </WrapPanel>
                                         <TextBox Text="{Binding DownloadPathText}" IsReadOnly="True" Background="#0B0F19" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Height="28" CornerRadius="3" BorderBrush="#1E293B" BorderThickness="1" VerticalContentAlignment="Center" Padding="6,2" />
                                     </StackPanel>
@@ -1342,16 +1359,25 @@
                                                                         <Border Background="#1E293B" CornerRadius="2" Padding="4,1" Margin="0,0,6,2">
                                                                             <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="SemiBold" />
                                                                         </Border>
+                                                                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="2" Padding="4,1" Margin="0,0,6,2" ToolTip.Tip="Subfolder lưu truyện">
+                                                                            <TextBlock Text="{Binding DisplaySubfolder, StringFormat='{}📁 {0}'}" FontSize="8" Foreground="#FDE047" FontWeight="SemiBold" />
+                                                                        </Border>
                                                                         <TextBlock Text="{Binding TotalChapters, StringFormat='{}{0} chaps'}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,2" />
                                                                         <TextBlock Text="{Binding Status}" Foreground="#FCD34D" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
                                                                         <!-- Chuỗi chi tiết tiến trình: Chương X/Y (Trang A/B) • Z.Z% -->
                                                                         <TextBlock Text="{Binding DetailProgressText}" Foreground="#34D399" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
                                                                     </WrapPanel>
 
-                                                                    <!-- Ô chọn Chapter (hỗ trợ chữ, số nguyên, số thập phân: vd 1-10, 15.5, oneshot) -->
-                                                                    <Grid ColumnDefinitions="Auto, *">
-                                                                        <TextBlock Grid.Column="0" Text="📑 Chọn chap:" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                                                        <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="VD: 1-10, 15.5, oneshot (để trống = tải hết)" FontSize="9" Height="22" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="4,1" />
+                                                                    <!-- Ô chọn Chapter & Subfolder (hỗ trợ chữ, số nguyên, số thập phân: vd 1-10, 15.5, oneshot) -->
+                                                                    <Grid ColumnDefinitions="*, *" Margin="0,2,0,0">
+                                                                        <Grid Grid.Column="0" ColumnDefinitions="Auto, *" Margin="0,0,4,0">
+                                                                            <TextBlock Grid.Column="0" Text="📑 Chọn chap:" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                                            <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="VD: 1-10, 15.5 (để trống = tải hết)" FontSize="9" Height="22" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="4,1" />
+                                                                        </Grid>
+                                                                        <Grid Grid.Column="1" ColumnDefinitions="Auto, *" Margin="4,0,0,0">
+                                                                            <TextBlock Grid.Column="0" Text="📁 Subfolder:" Foreground="#F59E0B" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                                            <TextBox Grid.Column="1" Text="{Binding Subfolder}" PlaceholderText="[default]" FontSize="9" Height="22" Background="#0B0F19" Foreground="#FDE047" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="4,1" ToolTip.Tip="Tên thư mục con tải về của truyện này (Ví dụ: chizuru). Để trống sẽ tự động vào '[default]'" />
+                                                                        </Grid>
                                                                     </Grid>
                                                                 </StackPanel>
 

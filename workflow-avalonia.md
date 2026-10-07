@@ -1750,3 +1750,29 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `dotnet build` cả Desktop và Android đạt đúng `0 Warning(s), 0 Error(s)`.
   - Đóng gói xuất xưởng `ComicDownloaderGMTPC.Desktop.exe` vào `publish\`.
 
+### 15.45. Tùy Chọn Subfolder Cho Mọi Website (Đường Dẫn Động & Lưu/Phục Hồi Markdown)
+- **Bối cảnh & Yêu cầu**:
+  - Khi tải truyện từ bất kỳ website nào (E-Hentai, MangaDex, TruyenQQ, NetTruyen, Damconuong, Daomeoden, SayHentai, Hentaiforce, Hitomi, Docln...), người dùng cần tùy biến phân loại thư mục lưu thông qua thư mục con (Subfolder):
+    + Khi để trống (empty / mặc định): Hệ thống tự động tải vào subfolder `[default]`. Ví dụ: `{DownloadRoot}\e-hentai\[default]\{Tên truyện}\`.
+    + Khi nhập tên subfolder (ví dụ: `chizuru`, `isekai`, `action`): Hệ thống tự động tải vào subfolder đã chọn: `{DownloadRoot}\e-hentai\chizuru\{Tên truyện}\`.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Nâng cấp `ComicBookItem.cs` & `MainViewModel.cs`**:
+     - Bổ sung trường `[ObservableProperty] private string _subfolder = string.Empty;` và thuộc tính dẫn xuất `DisplaySubfolder => string.IsNullOrWhiteSpace(Subfolder) ? "[default]" : Subfolder;`.
+     - Thêm thuộc tính `SubfolderInput` ở cấp ViewModel toàn cục. Khi người dùng nạp URL mới (Dán link, Lấy link, Auto Paste, Source Search), giá trị `SubfolderInput` tự động được gán cho từng truyện.
+     - Cung cấp RelayCommand `ApplySubfolderToSelectedCommand` cho phép áp dụng hàng loạt Subfolder mới cho các truyện được chọn.
+  2. **Tối ưu hóa Đường Dẫn Tải `DownloadEngineService.cs`**:
+     - Cấu trúc thư mục tải chuẩn: `string subFolder = string.IsNullOrWhiteSpace(book.Subfolder) ? "[default]" : MakeSafeFilename(book.Subfolder.Trim(), 50);`.
+     - `targetServerDir = Path.Combine(effectiveRoot, serverFolder, subFolder);`
+     - `bookDir = Path.Combine(targetServerDir, safeBookName);`
+     - Chế độ Multi-comic: `chapterDir = Path.Combine(targetServerDir, MakeSafeFilename($"{safeBookName}-{chapterDirName}", 100));`
+  3. **Lưu & Phục Hồi Toàn Vẹn `QueueBackupService.cs`**:
+     - Nâng cấp bảng Markdown Backup Queue sang 10 cột, bổ sung cột `Subfolder`.
+     - Tự động tương thích ngược (Backward Compatibility) với file backup 9 cột trước đây.
+  4. **Giao Diện Trực Quan Responsive `MainView.axaml`**:
+     - Quick Direct Link Bar (Row 1): Bổ sung ô nhập `📁 Subfolder` (placeholder: `[default]`).
+     - Tab Download Toolbar: Hiển thị ô Subfolder và nút `Áp dụng chọn` cạnh ô Thư mục lưu hiện tại.
+     - Queue List Item: Hiển thị Badge `📁 {DisplaySubfolder}` và ô chỉnh sửa Subfolder trực tiếp trên từng hàng truyện.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói thành công 100% cho cả 3 hệ điều hành (Windows EXE, Linux .tar.gz/.deb, Android APK) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+

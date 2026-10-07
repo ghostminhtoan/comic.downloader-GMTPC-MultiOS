@@ -75,6 +75,12 @@ public partial class ComicBookItem : ObservableObject
     [ObservableProperty]
     private string _localDirectory = string.Empty;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplaySubfolder))]
+    private string _subfolder = string.Empty;
+
+    public string DisplaySubfolder => string.IsNullOrWhiteSpace(Subfolder) ? "[default]" : Subfolder;
+
     // Phân cấp Tree Folder cho tính năng Tự động tách chương (Auto Split Chapters)
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasParallelSplitChildren))]
