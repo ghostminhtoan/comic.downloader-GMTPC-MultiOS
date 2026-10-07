@@ -1,6 +1,6 @@
-# Workflow hiện tại - Comic Downloader GMTPC
+# Workflow hiện tại - Comic Downloader GMTPC Avalonia Multi-OS
 
-Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file, build sạch, không phá lane khác.
+Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ, ít file, build sạch, không phá lane khác.
 
 ## 1. Quy tắc nền
 - Trả lời tiếng Việt.
@@ -8,7 +8,7 @@ Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file
 - Dùng skill `ponyman` khi code, kể cả không tag skill.
 - Sửa tối thiểu, không thêm abstraction thừa.
 - Chuẩn UTF-8, cấm lỗi mobijake.
-- WPF/UI qua `Dispatcher` từ luồng nền.
+- Avalonia UI qua `Dispatcher.UIThread` từ luồng nền.
 - Giữ `async/await`, tôn trọng `CancellationToken`.
 - Lỗi lẻ download/scan không sập app; log crash `.tmp\crash`, đánh dấu lỗi, tiếp tục batch an toàn.
 - Build sạch `0 error, 0 warning`.
@@ -17,18 +17,18 @@ Chuẩn làm việc repo hiện tại. Mục tiêu: sửa đúng chỗ, ít file
 - Không revert thay đổi của user nếu không yêu cầu.
 - Xong việc: đánh giá, gợi ý file cần sửa/kiểm tra, rà soát EN/VI.
 - Luôn luôn test build 2 bước: bước 1 là tự tải khởi tạo thư viện, bước 2 là app mở lên, có UI hoàn tất thì mới xem như là build thành công.
-- **Quy tắc thư mục Publish**: Khi build / publish file cho toàn bộ các hệ điều hành (Windows, Linux, Android), toàn bộ file `.deb`, `.exe`, `.tar.gz`, binary Linux và `.apk` **bắt buộc luôn luôn ở chung một folder duy nhất `\Comic Downloader GMTPC AVALONIA\publish\`**, tuyệt đối **không được cho vào các subfolder như `windows`, `linux`, `android`**.
+- **Quy tắc Build & Thư mục Publish**:
+  - Script build chính thức: `build-avalonia.bat`.
+  - Khi build / publish file cho toàn bộ các hệ điều hành (Windows, Linux, Android), toàn bộ file standalone `.exe`, binary Linux, `.tar.gz`, `.deb` và `.apk` **bắt buộc luôn luôn ở chung một folder duy nhất `\Comic Downloader GMTPC AVALONIA\publish\`**, tuyệt đối **không được cho vào các subfolder như `windows`, `linux`, `android`**.
 - Luôn xuất khối trạng thái chuẩn ở cuối câu trả lời:
   - `commit local: <mã hash>`
-  - `commit github: "thành công"`
-  - `link release: https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/releases`
-  - `path publish file chạy windows, linux, android:`
-    - Windows: `Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC.Desktop.exe`
-    - Linux: `Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC`
-    - Android: `Comic Downloader GMTPC AVALONIA\publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
-- Luôn đánh giá, cập nhật `workflow.md`.
-- Chuẩn Icon App: Dùng mẫu Concept 06 (Comic Cloud Rocket) đồng bộ trên toàn bộ nền tảng: Avalonia Desktop (`app-icon.ico` & Window Icon), Android (`Icon.png`), Linux (`comic-downloader.desktop` `Icon=Icon`) và WPF (`Comic-GMTPC.ico`).
-- Đánh giá prompt, gợi ý tính năng/file thiết kế mới; cập nhật workflow.md/prompt.md khi cần.
+  - `commit github: "không"`
+  - `path exe: Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC.Desktop.exe`
+  - `path linux: Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC`
+  - `path android apk: Comic Downloader GMTPC AVALONIA\publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
+- Luôn đánh giá, cập nhật `workflow-avalonia.md`.
+- Chuẩn Icon App: Dùng mẫu Concept 06 (Comic Cloud Rocket) đồng bộ trên toàn bộ nền tảng: Avalonia Desktop (`app-icon.ico` & Window Icon), Android (`Icon.png`), Linux (`comic-downloader.desktop` `Icon=Icon`).
+- Đánh giá prompt, gợi ý tính năng/file thiết kế mới; cập nhật `workflow-avalonia.md` khi cần.
 
 ## 2. Snapshot kiến trúc hiện tại
 
