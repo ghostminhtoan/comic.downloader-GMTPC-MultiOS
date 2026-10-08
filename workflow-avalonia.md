@@ -1884,9 +1884,22 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   3. **Giao Diện Trực Quan Hai Tầng (Dual Visual Progress Engine)**:
      - **Toàn cục**: Kích hoạt thanh tiến trình Toolbar Subfolder (`IsSubfolderMoving`, `SubfolderMoveProgress`, `SubfolderMoveProgressText`, `SubfolderMoveStatusText`).
      - **Hàng truyện**: Thêm `ProgressBarBrush` tự động đổi sang màu cam hổ phách `#F59E0B` khi `Status == "Moving"` kết hợp cập nhật `%` thời gian thực trên thanh tiến trình và con số phần trăm của card truyện.
+### 15.51. Khắc Phục Triệt Để Lỗi Floating Mini Badge Che Khuất Hàng Truyện & Tối Ưu Footer Status Bar
+- **Bối cảnh & Vấn đề**:
+  - Khi ứng dụng tải truyện hoặc chạy tác vụ ngầm, một Floating Mini Badge (viền tím, chữ trắng/xám, progress bar tím) xuất hiện ở góc dưới bên trái (`Margin="12,0,0,34"`).
+  - Vị trí này nằm đè trực tiếp lên hàng truyện cuối cùng của Queue, che mất ô nhập Subfolder, nút Lock, nút Áp dụng và thanh tiến trình của thẻ truyện.
+- **Kiến trúc & Giải pháp Khắc phục Triệt để**:
+  1. **Tích Hợp Background Task Indicator Trực Tiếp Vào Footer Status Bar**:
+     - Thay vì để Floating Mini Badge nổi lơ lửng trên vùng danh sách truyện, chuyển toàn bộ thông tin tiến độ tác vụ ngầm (`BubbleStatusTitle`, `BubbleStatusDetail`, `BubbleProgress`, `BubbleProgressText`) vào bên phải của Footer Status Bar (`Grid.Row="3"`).
+     - Giao diện Footer Bar được thiết kế dạng 2 cột co giãn linh hoạt: Cột trái hiển thị tổng quan (`Tổng`, `Đang tải`, `Hoàn tất`, `Lỗi`, `Tốc độ`), cột phải hiển thị viên thuốc trạng thái tác vụ nền gọn gàng và thẩm mỹ khi `IsBackgroundWorking = true`.
+     - Xóa bỏ hoàn toàn phần tử Border floating nổi góc trái.
+  2. **Tăng Khoảng Trống Cuộn Đáy (`Padding="0,0,0,70"`) Cho Toàn Bộ ScrollViewer**:
+     - Bổ sung `Padding="0,0,0,70"` cho `QueueScrollViewer`, `ScanScrollViewer` và `LogsScrollViewer`.
+     - Đảm bảo khi người dùng cuộn danh sách xuống cuối trang, thẻ truyện cuối cùng luôn nằm cao hơn các nút Floating Quick Controls (DỪNG, T.DỪNG, TOP, BOT) ở góc phải, tuyệt đối không bị che khuất bất kỳ nút bấm hay nội dung nào.
 - **Nghiệm Thu**:
-  - `build-avalonia.bat` biên dịch 0 Error, 0 Warning cho cả Windows, Linux và Android.
-  - Smoke test Windows EXE đạt `Responding: True`.
+  - `build-avalonia.bat` biên dịch và đóng gói thành công 100% cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
 
 
 
