@@ -1919,6 +1919,29 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch 0 Error, 0 Warning cho cả Windows, Linux và Android.
   - Smoke test Windows EXE đạt `Responding: True`.
 
+### 15.53. Tính Năng Tìm Kiếm Truyện Hàng Loạt (Tab Search) & Nút Kính Lúp Chuyển Tên Truyện Từ Queue
+- **Bối cảnh & Yêu cầu**:
+  - Tích hợp tính năng Tìm kiếm truyện hàng loạt từ WPF sang Avalonia.
+  - Tạo Main Tab `🔍 TAB SEARCH (TÌM TRUYỆN)` nằm giữa `TAB SOURCE` và `TAB DOWNLOAD`.
+  - Trên mỗi hàng của danh sách Chờ Tải (Queue) bổ sung nút có icon kính lúp `🔍` để chuyển tên truyện sang Tab Search và tự động chuyển Tab để tra cứu ngay.
+  - Danh sách chọn Domain nguồn trong Tab Search phải có các đường kẻ phân cách (Grid giữa các rows).
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Động Cơ Tìm Kiếm Đa Domain & Đa Search Engine (`MainViewModel.cs`)**:
+     - Model `SearchDomainItem`: Quản lý danh sách 17 domain nguồn (truyenqq, nettruyen, nettruyen.tech, thuviensach, doctruyen.us, loppytoonn, mangadex, daomeoden, damconuong, hentaivn, sayhentai, hentaiforce, nhentai, hentai2read, hentaiera, hako...).
+     - Phân loại bộ lọc danh mục: `Tất cả`, `Manga`, `Hentai`, `Novel`, `Bỏ chọn`.
+     - Hỗ trợ các Search Engine: `Google`, `Bing`, `DuckDuckGo`, `Yahoo`, `Yandex`.
+     - Tùy chọn `Open in new window` hỗ trợ mở trình duyệt độc lập hoặc mặc định trên Windows / Linux / macOS / Android.
+     - Hàm `SendTitleToSearch(ComicBookItem)`: Tự động trích xuất tên truyện, nạp vào ô danh sách tìm kiếm (tránh trùng lặp) và chuyển ngay `SelectedRootTabIndex = 1` (Tab Search).
+  2. **Giao Diện Trực Quan Responsive `MainView.axaml`**:
+     - Bố cục 2 cột chuyên nghiệp:
+       + Cột trái: TextBox nhập nhiều dòng tên truyện (`AcceptsReturn="True"`), bộ đếm số lượng truyện thời gian thực (`X truyện`), nút dán Clipboard và nút xóa trắng.
+       + Cột phải: Khung chọn Domain dạng bảng có đường line phân cách rõ nét (Grid giữa các row `BorderThickness="0,0,0,1"`), combo chọn Search Engine, checkbox mở cửa sổ mới và nút `SEARCH` màu xanh nổi bật.
+     - Thêm nút kính lúp `🔍` màu vàng cam trên từng hàng của Queue list (cạnh nút Mở thư mục 📂 và Lên/Xuống/Xóa).
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+
 
 
 

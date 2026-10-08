@@ -1157,7 +1157,130 @@
                 </TabItem>
 
                 <!-- ========================================================================= -->
-                <!-- [TAB 2 LỚN] TAB DOWNLOAD: DOWNLOAD MANGA, SCAN, LOGS -->
+                <!-- [TAB 2 LỚN] TAB SEARCH: TÌM TRUYỆN HÀNG LOẠT (BATCH COMIC SEARCH) -->
+                <!-- ========================================================================= -->
+                <TabItem Header="🔍 TAB SEARCH (TÌM TRUYỆN)" FontSize="13" FontWeight="Bold">
+                    <Border Background="#0F172A" Padding="14,12">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,0,70">
+                            <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="16">
+                                <Grid RowDefinitions="Auto, *, Auto">
+                                    <!-- Tiêu đề lớn -->
+                                    <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,14">
+                                        <TextBlock Text="TÌM TRUYỆN HÀNG LOẠT" Foreground="#38BDF8" FontSize="16" FontWeight="ExtraBold" />
+                                        <TextBlock Text="Nhập danh sách tên truyện, chọn các website nguồn cần tìm và bấm TÌM KIẾM để tra cứu hàng loạt qua Search Engine." Foreground="#94A3B8" FontSize="11" />
+                                    </StackPanel>
+
+                                    <!-- Bố cục 2 Cột chính: Cột Trái = Danh sách tên truyện, Cột Phải = Domain & Engine -->
+                                    <Grid Grid.Row="1" ColumnDefinitions="*, 16, 360" MinHeight="320">
+                                        <!-- CỘT TRÁI: DANH SÁCH TÊN TRUYỆN -->
+                                        <Border Grid.Column="0" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12">
+                                            <Grid RowDefinitions="Auto, *, Auto">
+                                                <Grid Grid.Row="0" ColumnDefinitions="*, Auto" VerticalAlignment="Center" Margin="0,0,0,8">
+                                                    <TextBlock Grid.Column="0" Text="DANH SÁCH TÊN TRUYỆN (MỖI TRUYỆN 1 DÒNG)" Foreground="#38BDF8" FontWeight="Bold" FontSize="11.5" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding SearchBookCountText}" Foreground="#FDE047" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                                </Grid>
+
+                                                <TextBox Grid.Row="1" Text="{Binding SearchBookNamesInput}"
+                                                         AcceptsReturn="True" TextWrapping="Wrap"
+                                                         PlaceholderText="Nhập hoặc dán danh sách tên truyện cần tìm (mỗi truyện một dòng)...&#x0a;Ví dụ:&#x0a;Yêu thần ký&#x0a;Võ luyện đỉnh phong&#x0a;Chainsaw Man"
+                                                         Background="#070A12" Foreground="#F8FAFC" BorderBrush="#334155" BorderThickness="1"
+                                                         CornerRadius="4" FontSize="11.5" FontFamily="Consolas, Monospace"
+                                                         Padding="10,8" VerticalContentAlignment="Top" MinHeight="220" />
+
+                                                <WrapPanel Grid.Row="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,8,0,0">
+                                                    <Button Command="{Binding PasteToSearchInputCommand}"
+                                                            Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1" Foreground="#38BDF8" FontWeight="SemiBold"
+                                                            FontSize="10.5" Padding="10,4" CornerRadius="4" Margin="0,0,8,0">
+                                                        <TextBlock Text="📋 Dán Clipboard" />
+                                                    </Button>
+                                                    <Button Command="{Binding ClearSearchInputCommand}"
+                                                            Background="#1E293B" Foreground="#EF4444" FontWeight="SemiBold"
+                                                            FontSize="10.5" Padding="10,4" CornerRadius="4" Margin="0,0,8,0">
+                                                        <TextBlock Text="🧹 Xóa trắng" />
+                                                    </Button>
+                                                </WrapPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- CỘT PHẢI: CHỌN DOMAIN & SEARCH ENGINE (CÓ GRID GIỮA CÁC ROW) -->
+                                        <Border Grid.Column="2" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12">
+                                            <StackPanel Spacing="10">
+                                                <!-- Header Select Domain -->
+                                                <Grid ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                                                    <TextBlock Grid.Column="0" Text="SELECT DOMAIN" Foreground="#F59E0B" FontWeight="Bold" FontSize="11.5" VerticalAlignment="Center" />
+                                                    <WrapPanel Grid.Column="1" Orientation="Horizontal">
+                                                        <Button Command="{Binding SelectAllSearchDomainsCommand}" Content="✓ Tất cả" Background="#1E293B" Foreground="#38BDF8" FontSize="9.5" Padding="6,2" CornerRadius="3" Margin="0,0,4,0" />
+                                                        <Button Command="{Binding UnselectAllSearchDomainsCommand}" Content="✗ Bỏ chọn" Background="#1E293B" Foreground="#94A3B8" FontSize="9.5" Padding="6,2" CornerRadius="3" />
+                                                    </WrapPanel>
+                                                </Grid>
+
+                                                <!-- Filter buttons category -->
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <Button Command="{Binding SelectCategorySearchDomainsCommand}" CommandParameter="Manga" Content="Manga" Background="#1E293B" Foreground="#38BDF8" FontSize="9.5" Padding="6,2" CornerRadius="3" Margin="0,0,4,4" />
+                                                    <Button Command="{Binding SelectCategorySearchDomainsCommand}" CommandParameter="Hentai" Content="Hentai" Background="#1E293B" Foreground="#EC4899" FontSize="9.5" Padding="6,2" CornerRadius="3" Margin="0,0,4,4" />
+                                                    <Button Command="{Binding SelectCategorySearchDomainsCommand}" CommandParameter="Novel" Content="Novel" Background="#1E293B" Foreground="#10B981" FontSize="9.5" Padding="6,2" CornerRadius="3" Margin="0,0,0,4" />
+                                                </WrapPanel>
+
+                                                <!-- DANH SÁCH DOMAIN VỚI GRID PHÂN CÁCH TỪNG DÒNG (GRID GIỮA CÁC ROW) -->
+                                                <Border Background="#070A12" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Height="170">
+                                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                        <ItemsControl ItemsSource="{Binding SearchDomains}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <!-- Row với đường line phân cách (Grid giữa các rows) -->
+                                                                    <Border Background="Transparent" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="8,4">
+                                                                        <Grid ColumnDefinitions="Auto, *, Auto" VerticalAlignment="Center">
+                                                                            <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                                                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}" Foreground="#F8FAFC" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                                            <Border Grid.Column="2" Background="#1E293B" CornerRadius="3" Padding="4,1" VerticalAlignment="Center">
+                                                                                <TextBlock Text="{Binding Category}" FontSize="9" Foreground="#94A3B8" FontWeight="SemiBold" />
+                                                                            </Border>
+                                                                        </Grid>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </ScrollViewer>
+                                                </Border>
+
+                                                <!-- SEARCH ENGINE -->
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="SEARCH ENGINE" Foreground="#94A3B8" FontWeight="Bold" FontSize="11" />
+                                                    <ComboBox ItemsSource="{Binding SearchEngines}" SelectedItem="{Binding SelectedSearchEngine}"
+                                                              Height="30" CornerRadius="4" Background="#161F30" Foreground="#F8FAFC" BorderBrush="#334155" FontSize="11"
+                                                              HorizontalAlignment="Stretch" />
+                                                </StackPanel>
+
+                                                <!-- CheckBox Open in new window -->
+                                                <CheckBox IsChecked="{Binding IsSearchOpenNewWindow}" VerticalAlignment="Center">
+                                                    <TextBlock Text="Open in new window (Mở cửa sổ mới)" FontSize="10.5" Foreground="#E2E8F0" FontWeight="SemiBold" />
+                                                </CheckBox>
+
+                                                <!-- Button SEARCH -->
+                                                <Button Command="{Binding ExecuteBatchSearchCommand}"
+                                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="12"
+                                                        Height="36" CornerRadius="6" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                        <TextBlock Text="🔍" FontSize="13" VerticalAlignment="Center" />
+                                                        <TextBlock Text="SEARCH (TÌM KIẾM)" FontSize="11.5" FontWeight="Bold" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+
+                                    <!-- Status Message -->
+                                    <Border Grid.Row="2" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="10,6">
+                                        <TextBlock Text="{Binding SearchStatusMessage}" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
+
+                <!-- ========================================================================= -->
+                <!-- [TAB 3 LỚN] TAB DOWNLOAD: DOWNLOAD MANGA, SCAN, LOGS -->
                 <!-- ========================================================================= -->
                 <TabItem Header="📥 TAB DOWNLOAD (TẢI VỀ &amp; QUẢN LÝ)" FontSize="13" FontWeight="Bold">
                     <Grid RowDefinitions="Auto, *">
@@ -1418,6 +1541,11 @@
 
                                                                 <!-- Nút thao tác hàng -->
                                                                 <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                                                                    <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SendTitleToSearchCommand}"
+                                                                            CommandParameter="{Binding .}" ToolTip.Tip="Chuyển tên truyện này sang Tab Search (Tìm truyện)"
+                                                                            Background="#1E293B" Foreground="#F59E0B" Padding="4,2" FontSize="9" CornerRadius="3">
+                                                                        <TextBlock Text="🔍" />
+                                                                    </Button>
                                                                     <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenBookFolderCommand}"
                                                                             CommandParameter="{Binding .}" ToolTip.Tip="Mở thư mục"
                                                                             Background="#1E293B" Foreground="#38BDF8" Padding="4,2" FontSize="9" CornerRadius="3">

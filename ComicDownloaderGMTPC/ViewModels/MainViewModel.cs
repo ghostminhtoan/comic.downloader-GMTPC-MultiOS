@@ -1115,6 +1115,44 @@ public partial class MainViewModel : ViewModelBase
     public ObservableCollection<LogMessageItem> Logs { get; } = new();
     public ObservableCollection<SourceSearchResultItem> SearchResults { get; } = new();
 
+    // ==========================================
+    // BATCH COMIC SEARCH ENGINE (TÌM TRUYỆN HÀNG LOẠT)
+    // ==========================================
+    [ObservableProperty]
+    private string _searchBookNamesInput = string.Empty;
+
+    [ObservableProperty]
+    private string _selectedSearchEngine = "Google";
+
+    public List<string> SearchEngines { get; } = new() { "Google", "Bing", "DuckDuckGo", "Yahoo", "Yandex" };
+
+    [ObservableProperty]
+    private bool _isSearchOpenNewWindow = true;
+
+    [ObservableProperty]
+    private string _searchStatusMessage = "Nhập danh sách tên truyện, chọn domain và bấm 'TÌM KIẾM' để mở kết quả.";
+
+    public ObservableCollection<SearchDomainItem> SearchDomains { get; } = new();
+
+    public int SearchBookCount
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchBookNamesInput)) return 0;
+            return SearchBookNamesInput.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Count(s => !string.IsNullOrWhiteSpace(s));
+        }
+    }
+
+    public string SearchBookCountText => $"Số lượng: {SearchBookCount} truyện";
+
+    partial void OnSearchBookNamesInputChanged(string value)
+    {
+        OnPropertyChanged(nameof(SearchBookCount));
+        OnPropertyChanged(nameof(SearchBookCountText));
+    }
+
     public MainViewModel()
     {
         _downloadPathText = _downloadEngine.DownloadRoot;
@@ -1125,6 +1163,7 @@ public partial class MainViewModel : ViewModelBase
         _downloadEngine.PauseStateChanged += (paused) => Avalonia.Threading.Dispatcher.UIThread.Post(() => IsPaused = paused);
         DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
         LoadUserPresetsFromDisk();
+        InitializeSearchDomains();
 
         // Lắng nghe lệnh từ Android Foreground Notification & Chat Head
         BackgroundExecutionService.NativeNotificationContextualAction1Requested = () =>
@@ -1508,7 +1547,7 @@ public partial class MainViewModel : ViewModelBase
 
         UpdateStats();
         StartScanMissing();
-        SelectedRootTabIndex = 1; // Tự động chuyển sang tab Download
+        SelectedRootTabIndex = 2; // Tự động chuyển sang tab Download
     }
 
     [RelayCommand]
@@ -1526,7 +1565,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         await GetLinkAsync();
-        SelectedRootTabIndex = 1; // Chuyển sang Tab Download để theo dõi tiến độ
+        SelectedRootTabIndex = 2; // Chuyển sang Tab Download để theo dõi tiến độ
     }
 
     // ==========================================
@@ -1566,7 +1605,7 @@ public partial class MainViewModel : ViewModelBase
 
             AddLog("INFO", "📋 Đang trích xuất liên kết từ Clipboard...");
             await ExtractUrlsFromTextAsync(text, clearExisting: false);
-            SelectedRootTabIndex = 1; // Chuyển sang Tab Download để theo dõi tiến độ
+            SelectedRootTabIndex = 2; // Chuyển sang Tab Download để theo dõi tiến độ
         }
         catch (Exception ex)
         {
@@ -2875,6 +2914,282 @@ public partial class MainViewModel : ViewModelBase
         await ApplyBookSubfolderAndMoveAsync(item, item.Subfolder);
         string display = string.IsNullOrWhiteSpace(item.Subfolder) ? "[default]" : item.Subfolder;
         AddLog("SUCCESS", $"🔒 Đã áp dụng Subfolder '{display}' và khóa cố định cho '{item.Title}'.");
+    }
+
+    // ==========================================
+    // TAB SEARCH METHODS & COMMANDS
+    // ==========================================
+
+    private void InitializeSearchDomains()
+    {
+        SearchDomains.Clear();
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "truyenqq", Tag = "truyenqq", Host = "truyenqqko.com", IsChecked = true, Category = "Manga" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "nettruyen", Tag = "nettruyen", Host = "nettruyenviet10.com", IsChecked = false, Category = "Manga" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "nettruyen.tech", Tag = "nettruyen.tech", Host = "nettruyen.tech", IsChecked = false, Category = "Manga" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "thuviensach.vn", Tag = "thuviensach.vn", Host = "thuviensach.vn", IsChecked = false, Category = "Novel" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "doctruyen.us", Tag = "doctruyen.us", Host = "doctruyen.us", IsChecked = false, Category = "Novel" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "loppytoonn.com", Tag = "loppytoonn.com", Host = "loppytoonn.com", IsChecked = false, Category = "Manga" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "mangadex", Tag = "mangadex", Host = "mangadex.org", IsChecked = false, Category = "Manga" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "daomeoden", Tag = "daomeoden", Host = "daomeoden.net", IsChecked = false, Category = "Manga" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "damconuong.shop", Tag = "damconuong.shop", Host = "damconuong.shop", IsChecked = false, Category = "Hentai" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "hentaivn", Tag = "hentaivn", Host = "vi-hentai.pro", IsChecked = false, Category = "Hentai" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "sayhentai", Tag = "sayhentai", Host = "sayhentai.cx", IsChecked = false, Category = "Hentai" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "hentaiforce", Tag = "hentaiforce", Host = "hentaiforce.net", IsChecked = false, Category = "Hentai" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "nhentai.net", Tag = "nhentai.net", Host = "nhentai.net", IsChecked = false, Category = "Hentai" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "nhentai", Tag = "nhentai", Host = "nhentai.net", IsChecked = false, Category = "Hentai" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "hentai2read", Tag = "hentai2read", Host = "hentai2read.com", IsChecked = false, Category = "Hentai" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "hentaiera", Tag = "hentaiera", Host = "hentaiera.com", IsChecked = false, Category = "Hentai" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "hako", Tag = "hako", Host = "ln.hako.vn", IsChecked = false, Category = "Novel" });
+    }
+
+    [RelayCommand]
+    public void ClearSearchInput()
+    {
+        SearchBookNamesInput = string.Empty;
+        SearchStatusMessage = "Đã xóa trắng danh sách tên truyện.";
+    }
+
+    [RelayCommand]
+    public async Task PasteToSearchInputAsync()
+    {
+        try
+        {
+            var clipboard = GetClipboard();
+            if (clipboard == null) return;
+            string? text = await clipboard.TryGetTextAsync();
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                if (string.IsNullOrWhiteSpace(SearchBookNamesInput))
+                {
+                    SearchBookNamesInput = text.Trim();
+                }
+                else
+                {
+                    SearchBookNamesInput = SearchBookNamesInput.TrimEnd() + Environment.NewLine + text.Trim();
+                }
+                SearchStatusMessage = $"📋 Đã dán tên truyện từ Clipboard ({SearchBookCount} truyện).";
+            }
+        }
+        catch { }
+    }
+
+    [RelayCommand]
+    public void SelectAllSearchDomains()
+    {
+        foreach (var d in SearchDomains) d.IsChecked = true;
+    }
+
+    [RelayCommand]
+    public void UnselectAllSearchDomains()
+    {
+        foreach (var d in SearchDomains) d.IsChecked = false;
+    }
+
+    [RelayCommand]
+    public void SelectCategorySearchDomains(string? category)
+    {
+        if (string.IsNullOrWhiteSpace(category)) return;
+        foreach (var d in SearchDomains)
+        {
+            d.IsChecked = string.Equals(d.Category, category, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [RelayCommand]
+    public void SendTitleToSearch(ComicBookItem? item)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(item.Title)) return;
+        string title = item.Title.Trim();
+
+        if (string.IsNullOrWhiteSpace(SearchBookNamesInput))
+        {
+            SearchBookNamesInput = title;
+        }
+        else
+        {
+            var existing = SearchBookNamesInput.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .ToList();
+            if (!existing.Contains(title, StringComparer.OrdinalIgnoreCase))
+            {
+                SearchBookNamesInput = SearchBookNamesInput.TrimEnd() + Environment.NewLine + title;
+            }
+        }
+
+        SelectedRootTabIndex = 1; // Chuyển ngay sang Tab Search
+        SearchStatusMessage = $"🔍 Đã chuyển tên truyện '{title}' sang Tab Search.";
+        AddLog("INFO", $"🔍 Đã chuyển tên truyện '{title}' sang Tab Search.");
+    }
+
+    [RelayCommand]
+    public async Task ExecuteBatchSearchAsync()
+    {
+        string rawInput = SearchBookNamesInput?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(rawInput))
+        {
+            SearchStatusMessage = "⚠️ Vui lòng nhập ít nhất 1 tên truyện vào danh sách.";
+            return;
+        }
+
+        var bookNames = rawInput.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(name => name.Trim())
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (bookNames.Count == 0)
+        {
+            SearchStatusMessage = "⚠️ Vui lòng nhập ít nhất 1 tên truyện vào danh sách.";
+            return;
+        }
+
+        var selectedDomains = SearchDomains.Where(d => d.IsChecked).ToList();
+        if (selectedDomains.Count == 0)
+        {
+            SearchStatusMessage = "⚠️ Vui lòng tick chọn ít nhất một domain nguồn để tìm kiếm.";
+            return;
+        }
+
+        string engine = SelectedSearchEngine ?? "Google";
+        bool openNewWindow = IsSearchOpenNewWindow;
+        int openedCount = 0;
+        bool isFirst = true;
+        string? browserExe = null;
+        string newWindowArg = "--new-window";
+
+        if (openNewWindow && OperatingSystem.IsWindows())
+        {
+            browserExe = GetWindowsBrowserPath(out newWindowArg);
+        }
+
+        try
+        {
+            SearchStatusMessage = $"⏳ Đang mở tìm kiếm cho {bookNames.Count} truyện trên {selectedDomains.Count} domain...";
+
+            foreach (string book in bookNames)
+            {
+                foreach (var domain in selectedDomains)
+                {
+                    string targetDomain = domain.Host;
+                    string query = System.Net.WebUtility.UrlEncode($"site:{targetDomain} {book}");
+                    string searchUrl = engine switch
+                    {
+                        "Bing" => $"https://www.bing.com/search?q={query}",
+                        "DuckDuckGo" => $"https://duckduckgo.com/?q={query}",
+                        "Yahoo" => $"https://search.yahoo.com/search?p={query}",
+                        "Yandex" => $"https://yandex.com/search/?text={query}",
+                        _ => $"https://www.google.com/search?q={query}"
+                    };
+
+                    if (openNewWindow && !string.IsNullOrEmpty(browserExe) && OperatingSystem.IsWindows())
+                    {
+                        try
+                        {
+                            if (isFirst)
+                            {
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = browserExe,
+                                    Arguments = $"{newWindowArg} \"{searchUrl}\"",
+                                    UseShellExecute = false
+                                });
+                                isFirst = false;
+                            }
+                            else
+                            {
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = browserExe,
+                                    Arguments = $"\"{searchUrl}\"",
+                                    UseShellExecute = false
+                                });
+                            }
+                        }
+                        catch
+                        {
+                            OpenUrlCrossPlatform(searchUrl);
+                        }
+                    }
+                    else
+                    {
+                        OpenUrlCrossPlatform(searchUrl);
+                    }
+
+                    openedCount++;
+                    await Task.Delay(250).ConfigureAwait(false);
+                }
+            }
+
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                SearchStatusMessage = $"✅ Đã mở {engine} Search cho {openedCount} lượt tìm kiếm ({bookNames.Count} truyện × {selectedDomains.Count} domain).";
+                AddLog("SUCCESS", SearchStatusMessage);
+            });
+        }
+        catch (Exception ex)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                SearchStatusMessage = $"❌ Lỗi khi mở tìm kiếm: {ex.Message}";
+                AddLog("WARN", SearchStatusMessage);
+            });
+        }
+    }
+
+    private static void OpenUrlCrossPlatform(string url)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                System.Diagnostics.Process.Start("xdg-open", url);
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                System.Diagnostics.Process.Start("open", url);
+            }
+            else
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            }
+        }
+        catch { }
+    }
+
+    private string? GetWindowsBrowserPath(out string newWindowArg)
+    {
+        newWindowArg = "--new-window";
+        try
+        {
+            if (!OperatingSystem.IsWindows()) return null;
+
+            string[] candidates = {
+                @"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                @"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                @"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                @"C:\Program Files\Mozilla Firefox\firefox.exe",
+                @"C:\Program Files (x86)\Mozilla Firefox\firefox.exe"
+            };
+
+            foreach (var path in candidates)
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    if (path.Contains("firefox", StringComparison.OrdinalIgnoreCase))
+                    {
+                        newWindowArg = "-new-window";
+                    }
+                    return path;
+                }
+            }
+        }
+        catch { }
+        return null;
     }
 
     [RelayCommand]
