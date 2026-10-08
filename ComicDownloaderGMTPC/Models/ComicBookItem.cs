@@ -157,4 +157,26 @@ public partial class ComicBookItem : ObservableObject
             DetailProgressText = $"Chương {currentChapter}/{TotalChapters} • {ProgressPercentage:0.0}%";
         }
     }
+
+    public void RestoreDownloadProgress()
+    {
+        if (TotalChapters > 0)
+        {
+            double chPercent = (double)DownloadedChapters / TotalChapters * 100.0;
+            ProgressPercentage = Math.Round(Math.Clamp(chPercent, 0, 100), 1);
+            if (TotalPages > 0)
+            {
+                DetailProgressText = $"Chương {DownloadedChapters}/{TotalChapters} (Trang {DownloadedPages}/{TotalPages}) • {ProgressPercentage:0.0}%";
+            }
+            else
+            {
+                DetailProgressText = DownloadedChapters > 0 ? $"Chương {DownloadedChapters}/{TotalChapters} • {ProgressPercentage:0.0}%" : "Sẵn sàng";
+            }
+        }
+        else
+        {
+            ProgressPercentage = 0;
+            DetailProgressText = "Sẵn sàng";
+        }
+    }
 }

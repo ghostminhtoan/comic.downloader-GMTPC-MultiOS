@@ -1884,6 +1884,7 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   3. **Giao Diện Trực Quan Hai Tầng (Dual Visual Progress Engine)**:
      - **Toàn cục**: Kích hoạt thanh tiến trình Toolbar Subfolder (`IsSubfolderMoving`, `SubfolderMoveProgress`, `SubfolderMoveProgressText`, `SubfolderMoveStatusText`).
      - **Hàng truyện**: Thêm `ProgressBarBrush` tự động đổi sang màu cam hổ phách `#F59E0B` khi `Status == "Moving"` kết hợp cập nhật `%` thời gian thực trên thanh tiến trình và con số phần trăm của card truyện.
+
 ### 15.51. Khắc Phục Triệt Để Lỗi Floating Mini Badge Che Khuất Hàng Truyện & Tối Ưu Footer Status Bar
 - **Bối cảnh & Vấn đề**:
   - Khi ứng dụng tải truyện hoặc chạy tác vụ ngầm, một Floating Mini Badge (viền tím, chữ trắng/xám, progress bar tím) xuất hiện ở góc dưới bên trái (`Margin="12,0,0,34"`).
@@ -1899,6 +1900,25 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 - **Nghiệm Thu**:
   - `build-avalonia.bat` biên dịch và đóng gói thành công 100% cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+### 15.52. Khắc Phục Lỗi Treo Delay Progress Bar 100% Sau Khi Di Chuyển Subfolder (Instant Progress Restoration Engine)
+- **Bối cảnh & Vấn đề**:
+  - Khi người dùng đổi Subfolder và hệ thống hoàn tất việc di chuyển file (100%), thanh tiến trình trên card truyện bị giữ nguyên ở mức 100% (`book.ProgressPercentage = 100.0` và `DetailProgressText = "✅ Đã chuyển xong 100%"`).
+  - Khi worker tiếp tục tải các chương tiếp theo, người dùng thấy card truyện bị "delay" treo ở 100% một khoảng thời gian dài trước khi chương kế tiếp cập nhật lại tiến độ thật.
+- **Kiến trúc & Giải pháp Khắc phục Triệt để**:
+  1. **Bổ sung Phương thức Khôi Phục Tiến Độ Tải (`ComicBookItem.RestoreDownloadProgress`)**:
+     - Tính toán lại tức thời tiến độ tải thật dựa trên `DownloadedChapters / TotalChapters` và `DownloadedPages / TotalPages`.
+     - Cập nhật đồng bộ `ProgressPercentage`, `ProgressPercentageText` và `DetailProgressText` về đúng trạng thái tải thực tế (`Chương X/Y (Trang M/N) • Z%`).
+  2. **Lưu & Phục Hồi Tiến Độ Tức Thời Trong `ApplyBookSubfolderAndMoveAsync` & `ApplySubfolderToAllAsync`**:
+     - Trước khi bắt đầu di chuyển file, lưu trữ lại `prevProgress`, `prevDetail`, `prevStatusMsg`.
+     - Sau khi `MoveDirectoryContent` hoàn tất:
+       + Nếu truyện đã hoàn tất từ trước (`Completed` / `Hoàn tất` hoặc `DownloadedChapters >= TotalChapters`), giữ nguyên `100%` và trạng thái `Completed`.
+       + Nếu truyện đang tải dở hoặc chờ tải, gọi ngay `book.RestoreDownloadProgress()`, khôi phục chính xác tiến độ chương cũ (ví dụ `34.2%`) và chuyển `Status` về `Downloading` hoặc `Waiting`.
+     - Nhờ đó, người dùng thấy thanh progress bar lập tức trở về tiến độ tải thật của truyện mà không bị bất kỳ độ trễ hiển thị nào.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch 0 Error, 0 Warning cho cả Windows, Linux và Android.
+  - Smoke test Windows EXE đạt `Responding: True`.
+
 
 
 

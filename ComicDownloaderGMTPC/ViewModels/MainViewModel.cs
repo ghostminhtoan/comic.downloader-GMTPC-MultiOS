@@ -2647,6 +2647,9 @@ public partial class MainViewModel : ViewModelBase
             }
 
             string prevStatus = book.Status;
+            double prevProgress = book.ProgressPercentage;
+            string prevDetail = book.DetailProgressText;
+            string prevStatusMsg = book.StatusMessage;
 
             IsSubfolderMoving = true;
             SubfolderMoveProgress = 0;
@@ -2684,10 +2687,24 @@ public partial class MainViewModel : ViewModelBase
 
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    book.ProgressPercentage = 100.0;
-                    book.DetailProgressText = "✅ Đã chuyển xong 100%";
                     book.LocalDirectory = newTargetDir;
-                    book.Status = (prevStatus == "Downloading" || prevStatus == "Moving") ? (wasDownloading ? "Downloading" : "Waiting") : prevStatus;
+                    if (prevStatus == "Completed" || prevStatus == "Hoàn tất" || (book.TotalChapters > 0 && book.DownloadedChapters >= book.TotalChapters))
+                    {
+                        book.ProgressPercentage = 100.0;
+                        book.DetailProgressText = "Hoàn tất";
+                        book.Status = "Completed";
+                    }
+                    else
+                    {
+                        book.RestoreDownloadProgress();
+                        if (book.ProgressPercentage == 0 && prevProgress > 0)
+                        {
+                            book.ProgressPercentage = prevProgress;
+                            book.DetailProgressText = prevDetail;
+                        }
+                        book.StatusMessage = prevStatusMsg;
+                        book.Status = (prevStatus == "Downloading" || prevStatus == "Moving") ? (wasDownloading ? "Downloading" : "Waiting") : prevStatus;
+                    }
                 });
 
                 AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục: {newTargetDir}");
@@ -2776,6 +2793,10 @@ public partial class MainViewModel : ViewModelBase
                     !string.Equals(Path.GetFullPath(currentDir).TrimEnd('\\', '/'), Path.GetFullPath(newTargetDir).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
                 {
                     string prevStatus = b.Status;
+                    double prevProgress = b.ProgressPercentage;
+                    string prevDetail = b.DetailProgressText;
+                    string prevStatusMsg = b.StatusMessage;
+
                     b.Status = "Moving";
                     b.StatusMessage = $"Đang dời sang '{(!string.IsNullOrWhiteSpace(rawNew) ? rawNew : "[default]")}'...";
                     b.DetailProgressText = "Đang dời file... 0%";
@@ -2807,10 +2828,24 @@ public partial class MainViewModel : ViewModelBase
 
                     Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
-                        b.ProgressPercentage = 100.0;
-                        b.DetailProgressText = "✅ Đã chuyển xong 100%";
                         b.LocalDirectory = newTargetDir;
-                        b.Status = (prevStatus == "Downloading" || prevStatus == "Moving") ? (wasDownloading ? "Downloading" : "Waiting") : prevStatus;
+                        if (prevStatus == "Completed" || prevStatus == "Hoàn tất" || (b.TotalChapters > 0 && b.DownloadedChapters >= b.TotalChapters))
+                        {
+                            b.ProgressPercentage = 100.0;
+                            b.DetailProgressText = "Hoàn tất";
+                            b.Status = "Completed";
+                        }
+                        else
+                        {
+                            b.RestoreDownloadProgress();
+                            if (b.ProgressPercentage == 0 && prevProgress > 0)
+                            {
+                                b.ProgressPercentage = prevProgress;
+                                b.DetailProgressText = prevDetail;
+                            }
+                            b.StatusMessage = prevStatusMsg;
+                            b.Status = (prevStatus == "Downloading" || prevStatus == "Moving") ? (wasDownloading ? "Downloading" : "Waiting") : prevStatus;
+                        }
                     });
 
                     AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục ({bIdx + 1}/{totalBooks}): {newTargetDir}");
