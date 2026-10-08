@@ -37,7 +37,19 @@ public partial class ComicBookItem : ObservableObject
     private int _downloadedPages;
 
     [ObservableProperty]
-    private string _status = "Waiting"; // Waiting, Downloading, Completed, Error, Stopped, Paused
+    [NotifyPropertyChangedFor(nameof(ProgressBarBrush))]
+    private string _status = "Waiting"; // Waiting, Downloading, Completed, Error, Stopped, Paused, Moving
+
+    public string ProgressBarBrush => Status switch
+    {
+        "Moving" => "#F59E0B",
+        "Completed" => "#10B981",
+        "Hoàn tất" => "#10B981",
+        "Error" => "#EF4444",
+        "Stopped" => "#6B7280",
+        "Paused" => "#EAB308",
+        _ => "#0284C7"
+    };
 
     [ObservableProperty]
     private string _statusMessage = string.Empty;

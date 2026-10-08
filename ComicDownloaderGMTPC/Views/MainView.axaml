@@ -1444,7 +1444,7 @@
                                                             <!-- Hàng 1: THANH PROGRESS BAR SÁT MÉP GÓC ĐÁY CARD 100% VỚI SỐ % OVERLAP NỔI BẬT KHÁC MÀU -->
                                                             <Grid Grid.Row="1" Height="14" HorizontalAlignment="Stretch" Margin="0,2,0,0">
                                                                 <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100" Height="14"
-                                                                             CornerRadius="0" Foreground="#0284C7" Background="#0B132B"
+                                                                             CornerRadius="0" Foreground="{Binding ProgressBarBrush}" Background="#0B132B"
                                                                              HorizontalAlignment="Stretch" VerticalAlignment="Stretch" BorderThickness="0" Margin="0" />
                                                                 <!-- Con số % overlap nổi bật với màu vàng dạ quang sắc nét -->
                                                                 <TextBlock Text="{Binding ProgressPercentageText}"

@@ -2488,6 +2488,55 @@ public partial class MainViewModel : ViewModelBase
         return Path.Combine(effectiveRoot, serverFolder, safeSub, safeBookName);
     }
 
+    private string FindExistingBookDirectory(ComicBookItem book)
+    {
+        // 1. Kiểm tra LocalDirectory hiện tại nếu có và thư mục thực sự tồn tại
+        if (!string.IsNullOrWhiteSpace(book.LocalDirectory) && Directory.Exists(book.LocalDirectory))
+        {
+            return book.LocalDirectory;
+        }
+
+        string effectiveRoot = _downloadEngine.EnsureWritableDownloadRoot(_downloadEngine.DownloadRoot);
+        string serverFolder = DomainRoutingService.GetServerFolderName(book.Domain, book.Url);
+        string serverDirPath = Path.Combine(effectiveRoot, serverFolder);
+        string safeBookName = DownloadEngineService.MakeSafeFilename(book.Title, 80);
+
+        if (!Directory.Exists(serverDirPath))
+        {
+            return string.Empty;
+        }
+
+        // 2. Kiểm tra thư mục dự kiến với Subfolder hiện tại
+        string currentExpected = GetExpectedBookDirectory(book, book.Subfolder);
+        if (Directory.Exists(currentExpected))
+        {
+            return currentExpected;
+        }
+
+        // 3. Kiểm tra trong thư mục [default]
+        string defaultBookDir = Path.Combine(serverDirPath, "[default]", safeBookName);
+        if (Directory.Exists(defaultBookDir))
+        {
+            return defaultBookDir;
+        }
+
+        // 4. Quét tất cả các subfolder con trong serverDirPath xem có subfolder nào chứa safeBookName
+        try
+        {
+            foreach (var subDir in Directory.GetDirectories(serverDirPath))
+            {
+                string candidate = Path.Combine(subDir, safeBookName);
+                if (Directory.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+        catch { }
+
+        return string.Empty;
+    }
+
     private void MoveDirectoryContent(string sourceDir, string destDir, Action<int, int, string>? progress = null)
     {
         try
@@ -2569,7 +2618,7 @@ public partial class MainViewModel : ViewModelBase
     {
         string rawNew = string.IsNullOrWhiteSpace(newSubfolder) ? "" : newSubfolder.Trim();
         string newTargetDir = GetExpectedBookDirectory(book, rawNew);
-        string currentDir = book.LocalDirectory;
+        string currentDir = FindExistingBookDirectory(book);
 
         // Cập nhật Subfolder và LocalDirectory ngay lập tức để worker tải truyện nhận diện ngay
         book.Subfolder = rawNew;
@@ -2637,7 +2686,8 @@ public partial class MainViewModel : ViewModelBase
                 {
                     book.ProgressPercentage = 100.0;
                     book.DetailProgressText = "✅ Đã chuyển xong 100%";
-                    book.Status = (prevStatus == "Downloading" || prevStatus == "Moving") ? "Waiting" : prevStatus;
+                    book.LocalDirectory = newTargetDir;
+                    book.Status = (prevStatus == "Downloading" || prevStatus == "Moving") ? (wasDownloading ? "Downloading" : "Waiting") : prevStatus;
                 });
 
                 AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục: {newTargetDir}");
@@ -2651,6 +2701,10 @@ public partial class MainViewModel : ViewModelBase
                     _downloadEngine.Resume();
                 }
             }
+        }
+        else
+        {
+            book.DetailProgressText = $"🔒 Đã khóa Subfolder '{book.DisplaySubfolder}'";
         }
     }
 
@@ -2702,7 +2756,7 @@ public partial class MainViewModel : ViewModelBase
                 var b = allBooks[bIdx];
                 string rawNew = targetSubfolder;
                 string newTargetDir = GetExpectedBookDirectory(b, rawNew);
-                string currentDir = b.LocalDirectory;
+                string currentDir = FindExistingBookDirectory(b);
 
                 b.Subfolder = rawNew;
                 b.LocalDirectory = newTargetDir;
@@ -2755,7 +2809,8 @@ public partial class MainViewModel : ViewModelBase
                     {
                         b.ProgressPercentage = 100.0;
                         b.DetailProgressText = "✅ Đã chuyển xong 100%";
-                        b.Status = (prevStatus == "Downloading" || prevStatus == "Moving") ? "Waiting" : prevStatus;
+                        b.LocalDirectory = newTargetDir;
+                        b.Status = (prevStatus == "Downloading" || prevStatus == "Moving") ? (wasDownloading ? "Downloading" : "Waiting") : prevStatus;
                     });
 
                     AddLog("SUCCESS", $"✅ Đã chuyển xong thư mục ({bIdx + 1}/{totalBooks}): {newTargetDir}");

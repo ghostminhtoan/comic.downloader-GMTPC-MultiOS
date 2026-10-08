@@ -1844,9 +1844,6 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   2. **Giao Diện Trực Quan Responsive `MainView.axaml`**:
      - Cập nhật nút `📁 ÁP DỤNG TRUYỆN MỚI` (Command: `ApplySubfolderToNewCommand`) và nút `🔒 ÁP DỤNG TẤT CẢ & KHÓA` (Command: `ApplySubfolderToAllCommand`) với tooltip hướng dẫn cụ thể.
 - **Nghiệm Thu**:
-  - `build-avalonia.bat` biên dịch và đóng gói thành công 100% cả 3 nền tảng (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
-  - Khởi chạy Desktop EXE đạt `Responding: True`.
-
 ### 15.49. Thanh Tiến Trình & Con Số Phần Trăm Trực Quan Khi Di Chuyển Subfolder (Visual Subfolder Move Progress Engine)
 - **Bối cảnh & Yêu cầu**:
   - Khi thực hiện đổi Subfolder và di chuyển dữ liệu (chuyển hàng trăm hoặc hàng nghìn tệp ảnh giữa các thư mục):
@@ -1872,6 +1869,26 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 - **Nghiệm Thu**:
   - `build-avalonia.bat` biên dịch 0 Error, 0 Warning.
   - Smoke test Windows EXE khởi chạy ổn định (`Responding: True`).
+
+### 15.50. Đồng Bộ Hoàn Hảo Thanh Tiến Trình & Tự Động Quét Thư Mục Khi Đổi Subfolder Riêng Lẻ Trong Queue
+- **Bối cảnh & Vấn đề**:
+  - Khi người dùng đổi Subfolder riêng lẻ cho từng bộ truyện trong Queue bằng ô `📁 Subfolder:` và bấm nút `✓ ÁP`:
+  - Trước đây, do TwoWay binding cập nhật `book.Subfolder` ngay khi gõ nên nếu `book.LocalDirectory` chưa được gán hoặc bị đổi, hệ thống không tìm thấy thư mục cũ trên đĩa dẫn đến bỏ qua việc di chuyển file và không kích hoạt thanh tiến trình (ProgressBar / %).
+- **Kiến trúc & Giải pháp Khắc phục Triệt để**:
+  1. **Động cơ Quét Thư Mục Thực Tế Thông Minh (`FindExistingBookDirectory`)**:
+     - Quét đa tầng: Kiểm tra `book.LocalDirectory` -> Kiểm tra Subfolder hiện tại -> Kiểm tra thư mục `[default]` -> Quét toàn bộ các Subfolder con trong Server directory xem có thư mục nào mang tên truyện (`safeBookName`).
+     - Luôn tìm ra 100% đường dẫn thư mục gốc cũ đã tải trước đó.
+  2. **Tự Động Tạm Dừng & Di Chuyển An Toàn (Pause -> Move -> Resume)**:
+     - Nếu truyện đang tải, tự động gọi `Pause()`, đợi các luồng giải phóng tệp, thực hiện dời toàn bộ tệp sang Subfolder mới với báo cáo tiến độ thời gian thực.
+     - Sau khi dời xong 100%, cập nhật `book.LocalDirectory = newTargetDir` và tự động tiếp tục (`Resume()`) tải vào thư mục mới.
+  3. **Giao Diện Trực Quan Hai Tầng (Dual Visual Progress Engine)**:
+     - **Toàn cục**: Kích hoạt thanh tiến trình Toolbar Subfolder (`IsSubfolderMoving`, `SubfolderMoveProgress`, `SubfolderMoveProgressText`, `SubfolderMoveStatusText`).
+     - **Hàng truyện**: Thêm `ProgressBarBrush` tự động đổi sang màu cam hổ phách `#F59E0B` khi `Status == "Moving"` kết hợp cập nhật `%` thời gian thực trên thanh tiến trình và con số phần trăm của card truyện.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch 0 Error, 0 Warning cho cả Windows, Linux và Android.
+  - Smoke test Windows EXE đạt `Responding: True`.
+
+
 
 
 
