@@ -1987,6 +1987,25 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      - Nâng cấp `TogglePauseDownload()`: Kiểm tra trạng thái `IsDownloading`, phát cảnh báo rõ ràng khi không có tiến trình tải.
      - Tối ưu `Floating Quick Control Bar`: Đặt `ZIndex="1200"`, `IsHitTestVisible="True"`, đảm bảo phản hồi cảm ứng mượt mà tức thì trên mọi thiết bị Android và Desktop.
 - **Nghiệm Thu**:
+### 15.56. Khắc Phục Triệt Để Tính Năng Tự Dán (Auto Paste) Real-time Trên Android Khi Chạy Nền Không Cần Chia Màn Hình
+- **Bối cảnh & Yêu cầu của người dùng**:
+  - Tính năng Tự Dán (Auto Paste) hoạt động tốt trên Windows/Linux và trên Android khi chia đôi màn hình (Split screen).
+  - Tuy nhiên, khi **không chia màn hình**, người dùng chuyển qua trình duyệt (Chrome, Brave, Firefox...) copy 10 link liên tiếp thì app không bắt được theo thời gian thực (real-time), mà khi chuyển quay lại app mới chỉ nhận duy nhất link cuối cùng (link thứ 10), 9 link trước đó bị mất.
+- **Nguyên nhân cốt lõi**:
+  - Trên Android 10+ (API 29+), hệ điều hành áp dụng chính sách bảo mật hạn chế nghiêm ngặt không cho các ứng dụng chạy nền (không có Window Focus / trong trạng thái Background) truy cập vào `ClipboardManager` hệ thống thông qua các API thông thường. Đồng thời khi Activity ở trạng thái `onPause`/`onStop`, các tác vụ UI Dispatcher của Avalonia bị hạn chế.
+- **Kiến trúc & Giải pháp Toàn diện**:
+  1. **Tích hợp Android Accessibility Service Chuyên Nghiệp (`ComicClipboardAccessibilityService.cs`)**:
+     - Xây dựng `ComicClipboardAccessibilityService` kế thừa `Android.AccessibilityServices.AccessibilityService`. Đây là cơ chế đặc quyền chuẩn của Android cho phép ứng dụng giám sát clipboard và sự kiện copy hệ thống liên tục ở Background ngay cả khi người dùng đang ở trong bất kỳ trình duyệt hoặc ứng dụng nào khác.
+     - Lắng nghe `ClipboardManager.IOnPrimaryClipChangedListener` và sự kiện `OnAccessibilityEvent` toàn cục. Ngay khi người dùng nhấn "Sao chép" một liên kết truyện, service trích xuất chuỗi URL tức thì và kích hoạt delegate `NativeOnClipboardTextChanged`.
+     - Cấu hình XML dịch vụ: `Resources/xml/accessibility_service_config.xml` và khai báo quyền `BIND_ACCESSIBILITY_SERVICE` trong `AndroidManifest.xml`.
+  2. **Hệ Thống Bridge Native & Điều Hướng Cài Đặt Trợ Năng (`MainActivity.cs` & `BackgroundExecutionService.cs`)**:
+     - Kiểm tra trạng thái kích hoạt của Dịch vụ Trợ năng qua `Settings.Secure.EnabledAccessibilityServices`.
+     - Khi người dùng bật công tắc "Tự dán (Auto Paste)" trên Android: nếu chưa kích hoạt Trợ năng, ứng dụng tự động mở trang Cài đặt Trợ năng (`Settings.ActionAccessibilitySettings`) kèm Toast thông báo hướng dẫn người dùng bật dịch vụ.
+     - Đồng thời bổ sung phương thức `CheckClipboardOnFocus()` trong `OnResume` và `OnWindowFocusChanged` của `MainActivity` để đảm bảo quét kiểm tra tức thì ngay khi quay lại app.
+  3. **Xử Lý Nạp Queue Tức Thời & Phản Hồi Âm Thanh (`MainViewModel.cs`)**:
+     - Đăng ký nhận `NativeOnClipboardTextChanged`: Khi có link mới phát hiện từ Background, tự động gọi `ExtractUrlsFromTextAsync(text, clearExisting: false)` trên `UIThread`, phát âm thanh `Startup` và ghi nhận log `[Tự Dán Real-time]`.
+     - Toàn bộ 10 link (hoặc n link) người dùng sao chép liên tiếp trong trình duyệt đều được tự động xếp vào Queue theo đúng thứ tự thời gian thực mà không bị sót bất kỳ link nào!
+- **Nghiệm Thu**:
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 

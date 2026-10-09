@@ -139,10 +139,25 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnIsAutoPasteClipboardChanged(bool value)
     {
+        BackgroundExecutionService.IsAutoPasteEnabled = value;
         if (value)
         {
             StartAutoPasteClipboardMonitoring();
             AddLog("SUCCESS", "📋 Đã BẬT tính năng Tự dán (Auto Paste) - Mọi link sao chép sẽ tự động thêm vào Queue.");
+
+            if (OperatingSystem.IsAndroid())
+            {
+                bool isAccessEnabled = BackgroundExecutionService.NativeIsAccessibilityServiceEnabled?.Invoke() ?? false;
+                if (!isAccessEnabled)
+                {
+                    AddLog("WARN", "👉 [Android] Để tự động bắt link real-time khi bạn đang lướt trình duyệt, hãy BẬT quyền Trợ năng (Accessibility) cho ứng dụng trong Cài đặt!");
+                    BackgroundExecutionService.NativeCheckAndPromptAccessibilityService?.Invoke();
+                }
+                else
+                {
+                    AddLog("INFO", "🚀 [Android] Dịch vụ Trợ năng (Accessibility) đang hoạt động - Sẵn sàng bắt link real-time từ mọi trình duyệt.");
+                }
+            }
         }
         else
         {
@@ -1258,6 +1273,23 @@ public partial class MainViewModel : ViewModelBase
 
         BackgroundExecutionService.NativeNotificationToggleDownloadRequested = () => Avalonia.Threading.Dispatcher.UIThread.Post(async () => await ToggleDownloadAsync());
         BackgroundExecutionService.NativeNotificationTogglePauseRequested = () => Avalonia.Threading.Dispatcher.UIThread.Post(TogglePause);
+
+        // Lắng nghe link copy real-time từ Android Accessibility Service hoặc Native Clipboard
+        BackgroundExecutionService.NativeOnClipboardTextChanged = (text) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+            {
+                if (!IsAutoPasteClipboard) return;
+                if (string.IsNullOrWhiteSpace(text) || text == _lastAutoPasteText) return;
+                _lastAutoPasteText = text;
+                if (text.Contains("http://", StringComparison.OrdinalIgnoreCase) || text.Contains("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddLog("SUCCESS", $"📋 [Tự Dán Real-time] Phát hiện link mới từ Clipboard:\n{text}");
+                    await ExtractUrlsFromTextAsync(text, clearExisting: false);
+                    SoundNotificationService.Instance.PlaySound(SoundNotificationType.Startup);
+                }
+            });
+        };
 
         // Lắng nghe sự kiện chạy ngầm & bong bóng
         var bg = BackgroundExecutionService.Instance;

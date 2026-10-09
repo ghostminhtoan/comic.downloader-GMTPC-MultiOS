@@ -122,6 +122,18 @@ public class MainActivity : AvaloniaMainActivity
             });
         };
 
+        Services.BackgroundExecutionService.NativeCheckAndPromptAccessibilityService = () =>
+        {
+            RunOnUiThread(() =>
+            {
+                if (!IsAccessibilityServiceEnabled(this))
+                {
+                    RequestEnableAccessibilityService(this);
+                }
+            });
+        };
+        Services.BackgroundExecutionService.NativeIsAccessibilityServiceEnabled = () => IsAccessibilityServiceEnabled(this);
+
         Services.DownloadEngineService.OpenStorageSettingsRequested += OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested += OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
@@ -171,6 +183,7 @@ public class MainActivity : AvaloniaMainActivity
     protected override void OnResume()
     {
         base.OnResume();
+        CheckClipboardOnFocus();
     }
 
     protected override void OnPause()
@@ -202,11 +215,89 @@ public class MainActivity : AvaloniaMainActivity
         try
         {
             base.OnWindowFocusChanged(hasFocus);
+            if (hasFocus)
+            {
+                CheckClipboardOnFocus();
+            }
         }
         catch (Exception ex)
         {
             global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi OnWindowFocusChanged: {ex.Message}");
         }
+    }
+
+    private void CheckClipboardOnFocus()
+    {
+        try
+        {
+            if (Services.BackgroundExecutionService.IsAutoPasteEnabled)
+            {
+                ComicClipboardAccessibilityService.Instance?.CheckClipboardAndNotify();
+
+                var cm = (ClipboardManager?)GetSystemService(ClipboardService);
+                if (cm != null && cm.HasPrimaryClip)
+                {
+                    var clip = cm.PrimaryClip;
+                    if (clip != null && clip.ItemCount > 0)
+                    {
+                        var text = clip.GetItemAt(0)?.CoerceToText(this)?.ToString();
+                        if (!string.IsNullOrWhiteSpace(text) &&
+                            (text.Contains("http://", StringComparison.OrdinalIgnoreCase) || text.Contains("https://", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            Services.BackgroundExecutionService.NativeOnClipboardTextChanged?.Invoke(text);
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
+    public static bool IsAccessibilityServiceEnabled(Context context)
+    {
+        try
+        {
+            int accessibilityEnabled = 0;
+            string serviceName = context.PackageName + "/" + typeof(ComicClipboardAccessibilityService).FullName;
+            accessibilityEnabled = global::Android.Provider.Settings.Secure.GetInt(
+                context.ContentResolver,
+                global::Android.Provider.Settings.Secure.AccessibilityEnabled);
+
+            if (accessibilityEnabled == 1)
+            {
+                string settingValue = global::Android.Provider.Settings.Secure.GetString(
+                    context.ContentResolver,
+                    global::Android.Provider.Settings.Secure.EnabledAccessibilityServices) ?? "";
+
+                if (!string.IsNullOrEmpty(settingValue))
+                {
+                    var splitter = settingValue.Split(':');
+                    foreach (var s in splitter)
+                    {
+                        if (s.Contains(context.PackageName, StringComparison.OrdinalIgnoreCase) &&
+                            s.Contains("ComicClipboardAccessibilityService", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    public static void RequestEnableAccessibilityService(Activity? activity)
+    {
+        if (activity == null) return;
+        try
+        {
+            var intent = new Intent(global::Android.Provider.Settings.ActionAccessibilitySettings);
+            intent.AddFlags(ActivityFlags.NewTask);
+            activity.StartActivity(intent);
+            Toast.MakeText(activity, "👉 Hãy BẬT [Comic Downloader GMTPC - Tự Động Dán Link] trong danh sách để tự dán link từ trình duyệt!", ToastLength.Long)?.Show();
+        }
+        catch { }
     }
 
     protected override void OnDestroy()
@@ -218,6 +309,8 @@ public class MainActivity : AvaloniaMainActivity
         Services.BackgroundExecutionService.NativeRequestExitBubbleMode = null;
         Services.BackgroundExecutionService.NativeMinimizeOrHide = null;
         Services.BackgroundExecutionService.NativeForceExit = null;
+        Services.BackgroundExecutionService.NativeCheckAndPromptAccessibilityService = null;
+        Services.BackgroundExecutionService.NativeIsAccessibilityServiceEnabled = null;
 
         Services.DownloadEngineService.OpenStorageSettingsRequested -= OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested -= OnOpenFolderRequested;
