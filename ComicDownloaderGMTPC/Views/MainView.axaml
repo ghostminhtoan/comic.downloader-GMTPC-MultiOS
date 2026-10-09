@@ -1613,82 +1613,41 @@
                                                                 </MenuItem>
                                                             </ContextMenu>
                                                         </Border.ContextMenu>
-                                                        <Grid RowDefinitions="Auto, Auto">
-                                                            <!-- Hàng 0: Toàn bộ thông tin truyện & Nút thao tác -->
-                                                            <Grid Grid.Row="0" ColumnDefinitions="Auto, Auto, Auto, *, Auto" VerticalAlignment="Center" Margin="8,6,8,4">
+                                                        <Grid RowDefinitions="Auto, Auto, Auto, Auto">
+                                                            <!-- Hàng 0: Header (↳, Checkbox, Index, Tiêu đề + Badges, Nút tác vụ góc trên bên phải) -->
+                                                            <Grid Grid.Row="0" ColumnDefinitions="Auto, Auto, Auto, *, Auto" VerticalAlignment="Center" Margin="8,6,8,2">
                                                                 <TextBlock Grid.Column="0" Text="↳ " IsVisible="{Binding IsParallelSplitChild}"
                                                                            Foreground="#F472B6" FontWeight="ExtraBold" FontSize="14"
                                                                            VerticalAlignment="Center" Margin="14,0,2,0" ToolTip.Tip="Nhánh con tách chương" />
                                                                 <CheckBox Grid.Column="1" IsChecked="{Binding IsChecked}" Margin="0,0,6,0" VerticalAlignment="Center" />
                                                                 <TextBlock Grid.Column="2" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" Width="24" VerticalAlignment="Center" />
 
-                                                                <!-- Thông tin truyện & Tiến trình -->
-                                                                <StackPanel Grid.Column="3" Margin="4,0,8,0" VerticalAlignment="Center" Spacing="3">
-                                                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="11" TextTrimming="CharacterEllipsis" />
-                                                                        <Border IsVisible="{Binding IsDuplicate}" Background="#78350F" CornerRadius="2" Padding="3,1" VerticalAlignment="Center">
-                                                                            <TextBlock Text="TRÙNG" FontSize="8" FontWeight="Bold" Foreground="#FDE047" />
-                                                                        </Border>
-                                                                        <!-- Badge Thư mục gốc cho truyện cha đã tách -->
-                                                                        <Border IsVisible="{Binding IsParallelSplitParent}" Background="#064E3B" BorderBrush="#059669" BorderThickness="1" CornerRadius="2" Padding="4,1" VerticalAlignment="Center">
-                                                                            <TextBlock Text="📁 THƯ MỤC GỐC" FontSize="8" FontWeight="Bold" Foreground="#34D399" />
-                                                                        </Border>
-                                                                        <!-- Nút Thu gọn / Mở rộng cây thư mục con -->
-                                                                        <Button IsVisible="{Binding HasParallelSplitChildren}"
-                                                                                Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleSplitCollapseCommand}"
-                                                                                CommandParameter="{Binding .}"
-                                                                                Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
-                                                                                Padding="6,1" Height="20" CornerRadius="3"
-                                                                                ToolTip.Tip="Thu gọn hoặc mở rộng danh sách các nhánh con đã tách để theo dõi">
-                                                                            <TextBlock Text="{Binding ParallelSplitToggleText}" FontSize="8" FontWeight="ExtraBold" VerticalAlignment="Center" />
-                                                                        </Button>
-                                                                        <!-- Badge Nhánh con cho task con -->
-                                                                        <Border IsVisible="{Binding IsParallelSplitChild}" Background="#831843" BorderBrush="#DB2777" BorderThickness="1" CornerRadius="2" Padding="4,1" VerticalAlignment="Center">
-                                                                            <TextBlock Text="{Binding ChapterSelectionText, StringFormat='{}↳ NHÁNH: {0}'}" FontSize="8" FontWeight="Bold" Foreground="#F472B6" />
-                                                                        </Border>
-                                                                    </StackPanel>
+                                                                <!-- Tiêu đề truyện & Badges -->
+                                                                <WrapPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0,6,0">
+                                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                                    <Border IsVisible="{Binding IsDuplicate}" Background="#78350F" CornerRadius="2" Padding="3,1" VerticalAlignment="Center" Margin="0,0,4,0">
+                                                                        <TextBlock Text="TRÙNG" FontSize="8" FontWeight="Bold" Foreground="#FDE047" />
+                                                                    </Border>
+                                                                    <!-- Badge Thư mục gốc cho truyện cha đã tách -->
+                                                                    <Border IsVisible="{Binding IsParallelSplitParent}" Background="#064E3B" BorderBrush="#059669" BorderThickness="1" CornerRadius="2" Padding="4,1" VerticalAlignment="Center" Margin="0,0,4,0">
+                                                                        <TextBlock Text="📁 THƯ MỤC GỐC" FontSize="8" FontWeight="Bold" Foreground="#34D399" />
+                                                                    </Border>
+                                                                    <!-- Nút Thu gọn / Mở rộng cây thư mục con -->
+                                                                    <Button IsVisible="{Binding HasParallelSplitChildren}"
+                                                                            Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleSplitCollapseCommand}"
+                                                                            CommandParameter="{Binding .}"
+                                                                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
+                                                                            Padding="6,1" Height="20" CornerRadius="3" VerticalAlignment="Center" Margin="0,0,4,0"
+                                                                            ToolTip.Tip="Thu gọn hoặc mở rộng danh sách các nhánh con đã tách để theo dõi">
+                                                                        <TextBlock Text="{Binding ParallelSplitToggleText}" FontSize="8" FontWeight="ExtraBold" VerticalAlignment="Center" />
+                                                                    </Button>
+                                                                    <!-- Badge Nhánh con cho task con -->
+                                                                    <Border IsVisible="{Binding IsParallelSplitChild}" Background="#831843" BorderBrush="#DB2777" BorderThickness="1" CornerRadius="2" Padding="4,1" VerticalAlignment="Center" Margin="0,0,4,0">
+                                                                        <TextBlock Text="{Binding ChapterSelectionText, StringFormat='{}↳ NHÁNH: {0}'}" FontSize="8" FontWeight="Bold" Foreground="#F472B6" />
+                                                                    </Border>
+                                                                </WrapPanel>
 
-                                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                        <Border Background="#1E293B" CornerRadius="2" Padding="4,1" Margin="0,0,6,2">
-                                                                            <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="SemiBold" />
-                                                                        </Border>
-                                                                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="2" Padding="4,1" Margin="0,0,6,2" ToolTip.Tip="Subfolder lưu truyện">
-                                                                            <TextBlock Text="{Binding DisplaySubfolder, StringFormat='{}📁 {0}'}" FontSize="8" Foreground="#FDE047" FontWeight="SemiBold" />
-                                                                        </Border>
-                                                                        <TextBlock Text="{Binding TotalChapters, StringFormat='{}{0} chaps'}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,2" />
-                                                                        <TextBlock Text="{Binding Status}" Foreground="#FCD34D" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
-                                                                        <!-- Chuỗi chi tiết tiến trình: Chương X/Y (Trang A/B) • Z.Z% -->
-                                                                        <TextBlock Text="{Binding DetailProgressText}" Foreground="#34D399" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
-                                                                    </WrapPanel>
-
-                                                                    <!-- Ô chọn Chapter & Subfolder (hỗ trợ chữ, số nguyên, số thập phân: vd 1-10, 15.5, oneshot) -->
-                                                                    <Grid ColumnDefinitions="*, *" Margin="0,2,0,0">
-                                                                        <Grid Grid.Column="0" ColumnDefinitions="Auto, *" Margin="0,0,4,0">
-                                                                            <TextBlock Grid.Column="0" Text="📑 Chọn chap:" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                                                            <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="VD: 1-10, 15.5 (để trống = tải hết)" FontSize="9" Height="22" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="4,1" />
-                                                                        </Grid>
-                                                                        <Grid Grid.Column="1" ColumnDefinitions="Auto, *, Auto, Auto" Margin="4,0,0,0">
-                                                                            <TextBlock Grid.Column="0" Text="📁 Subfolder:" Foreground="#F59E0B" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                                                            <TextBox Grid.Column="1" Text="{Binding Subfolder}" PlaceholderText="[default]" FontSize="9" Height="22" Background="#0B0F19" Foreground="#FDE047" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="4,1" ToolTip.Tip="Tên thư mục con tải về của truyện này (Ví dụ: chizuru). Để trống sẽ tự động vào '[default]'" />
-                                                                            <Button Grid.Column="2" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleLockSubfolderCommand}"
-                                                                                    CommandParameter="{Binding .}"
-                                                                                    Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
-                                                                                    Padding="4,1" Height="22" CornerRadius="3" Margin="2,0,0,0"
-                                                                                    ToolTip.Tip="{Binding SubfolderLockTooltip}">
-                                                                                <TextBlock Text="{Binding SubfolderLockIcon}" FontSize="10" VerticalAlignment="Center" />
-                                                                            </Button>
-                                                                            <Button Grid.Column="3" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ApplySingleBookSubfolderCommand}"
-                                                                                    CommandParameter="{Binding .}"
-                                                                                    Background="#065F46" BorderBrush="#10B981" BorderThickness="1" Foreground="#34D399"
-                                                                                    Padding="4,1" Height="22" CornerRadius="3" Margin="2,0,0,0"
-                                                                                    ToolTip.Tip="Áp dụng tên Subfolder này, tự động chuyển toàn bộ file đã tải sang thư mục mới và khóa cố định">
-                                                                                <TextBlock Text="✓ ÁP" FontSize="8" FontWeight="Bold" VerticalAlignment="Center" />
-                                                                            </Button>
-                                                                        </Grid>
-                                                                    </Grid>
-                                                                </StackPanel>
-
-                                                                <!-- Nút thao tác hàng -->
+                                                                <!-- Nút thao tác hàng (Góc trên bên phải) -->
                                                                 <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                                                                     <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SendTitleToSearchCommand}"
                                                                             CommandParameter="{Binding .}" ToolTip.Tip="Chuyển tên truyện này sang Tab Search (Tìm truyện)"
@@ -1718,8 +1677,51 @@
                                                                 </StackPanel>
                                                             </Grid>
 
-                                                            <!-- Hàng 1: THANH PROGRESS BAR SÁT MÉP GÓC ĐÁY CARD 100% VỚI SỐ % OVERLAP NỔI BẬT KHÁC MÀU -->
-                                                            <Grid Grid.Row="1" Height="14" HorizontalAlignment="Stretch" Margin="0,2,0,0">
+                                                            <!-- Hàng 1: Sub-info & Status (Domain, Subfolder hiện tại, Tổng chaps, Trạng thái, Tiến trình chi tiết) -->
+                                                            <WrapPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="38,0,8,3">
+                                                                <Border Background="#1E293B" CornerRadius="2" Padding="4,1" Margin="0,0,6,2">
+                                                                    <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="SemiBold" />
+                                                                </Border>
+                                                                <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="2" Padding="4,1" Margin="0,0,6,2" ToolTip.Tip="Subfolder lưu truyện">
+                                                                    <TextBlock Text="{Binding DisplaySubfolder, StringFormat='{}📁 {0}'}" FontSize="8" Foreground="#FDE047" FontWeight="SemiBold" />
+                                                                </Border>
+                                                                <TextBlock Text="{Binding TotalChapters, StringFormat='{}{0} chaps'}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                <TextBlock Text="{Binding Status}" Foreground="#FCD34D" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                <!-- Chuỗi chi tiết tiến trình: Chương X/Y (Trang A/B) • Z.Z% -->
+                                                                <TextBlock Text="{Binding DetailProgressText}" Foreground="#34D399" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                            </WrapPanel>
+
+                                                            <!-- Hàng 2: Nhập liệu (2 dòng riêng biệt, co giãn 100% không gian card, không bị chèn ép) -->
+                                                            <StackPanel Grid.Row="2" Margin="38,0,8,4" Spacing="3">
+                                                                <!-- Dòng 2A: Chọn chap -->
+                                                                <Grid ColumnDefinitions="Auto, *">
+                                                                    <TextBlock Grid.Column="0" Text="📑 Chọn chap:" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Width="68" />
+                                                                    <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="VD: 1-10, 15.5 (để trống = tải hết)" FontSize="9" Height="24" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" />
+                                                                </Grid>
+
+                                                                <!-- Dòng 2B: Subfolder + Nút Khóa + Nút Áp dụng -->
+                                                                <Grid ColumnDefinitions="Auto, *, Auto, Auto">
+                                                                    <TextBlock Grid.Column="0" Text="📁 Subfolder:" Foreground="#F59E0B" FontSize="9" VerticalAlignment="Center" Width="68" />
+                                                                    <TextBox Grid.Column="1" Text="{Binding Subfolder}" PlaceholderText="[default]" FontSize="9" Height="24" Background="#0B0F19" Foreground="#FDE047" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" ToolTip.Tip="Tên thư mục con tải về của truyện này (Ví dụ: chizuru). Để trống sẽ tự động vào '[default]'" />
+                                                                    <Button Grid.Column="2" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleLockSubfolderCommand}"
+                                                                            CommandParameter="{Binding .}"
+                                                                            Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
+                                                                            Padding="6,1" Height="24" CornerRadius="3" Margin="4,0,0,0"
+                                                                            ToolTip.Tip="{Binding SubfolderLockTooltip}">
+                                                                        <TextBlock Text="{Binding SubfolderLockIcon}" FontSize="10" VerticalAlignment="Center" />
+                                                                    </Button>
+                                                                    <Button Grid.Column="3" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ApplySingleBookSubfolderCommand}"
+                                                                            CommandParameter="{Binding .}"
+                                                                            Background="#065F46" BorderBrush="#10B981" BorderThickness="1" Foreground="#34D399"
+                                                                            Padding="6,1" Height="24" CornerRadius="3" Margin="4,0,0,0"
+                                                                            ToolTip.Tip="Áp dụng tên Subfolder này, tự động chuyển toàn bộ file đã tải sang thư mục mới và khóa cố định">
+                                                                        <TextBlock Text="✓ ÁP" FontSize="8.5" FontWeight="Bold" VerticalAlignment="Center" />
+                                                                    </Button>
+                                                                </Grid>
+                                                            </StackPanel>
+
+                                                            <!-- Hàng 3: THANH PROGRESS BAR SÁT MÉP GÓC ĐÁY CARD 100% VỚI SỐ % OVERLAP NỔI BẬT KHÁC MÀU -->
+                                                            <Grid Grid.Row="3" Height="14" HorizontalAlignment="Stretch" Margin="0,2,0,0">
                                                                 <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100" Height="14"
                                                                              CornerRadius="0" Foreground="{Binding ProgressBarBrush}" Background="#0B132B"
                                                                              HorizontalAlignment="Stretch" VerticalAlignment="Stretch" BorderThickness="0" Margin="0" />
@@ -3641,9 +3643,9 @@
 
         <!-- FLOATING QUICK CONTROL BAR (DỌC, BÊN PHẢI, CÁCH LỀ PHẢI ĐỂ KHÔNG CHE VERTICAL SCROLLBAR) -->
         <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                Margin="0,0,26,45" CornerRadius="16"
+                Margin="0,0,24,45" CornerRadius="16"
                 Background="#E60B0F19" BorderBrush="#38BDF8" BorderThickness="1.2"
-                Padding="4,6" ZIndex="600"
+                Padding="4,6" ZIndex="1200" IsHitTestVisible="True"
                 BoxShadow="0 8 24 0 #90000000">
             <StackPanel Orientation="Vertical" Spacing="5" HorizontalAlignment="Center">
                 <!-- 1. Toggle Button Tải / Dừng tải -->

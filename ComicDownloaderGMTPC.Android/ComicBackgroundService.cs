@@ -71,8 +71,14 @@ public class ComicBackgroundService : Service
         {
             try
             {
-                BackgroundExecutionService.NativeNotificationContextualAction1Requested?.Invoke();
-                BackgroundExecutionService.NativeNotificationToggleDownloadRequested?.Invoke();
+                if (action == ActionToggleDownload)
+                {
+                    BackgroundExecutionService.NativeNotificationToggleDownloadRequested?.Invoke();
+                }
+                else
+                {
+                    BackgroundExecutionService.NativeNotificationContextualAction1Requested?.Invoke();
+                }
             }
             catch (Exception ex)
             {
@@ -85,8 +91,14 @@ public class ComicBackgroundService : Service
         {
             try
             {
-                BackgroundExecutionService.NativeNotificationContextualAction2Requested?.Invoke();
-                BackgroundExecutionService.NativeNotificationTogglePauseRequested?.Invoke();
+                if (action == ActionTogglePause)
+                {
+                    BackgroundExecutionService.NativeNotificationTogglePauseRequested?.Invoke();
+                }
+                else
+                {
+                    BackgroundExecutionService.NativeNotificationContextualAction2Requested?.Invoke();
+                }
             }
             catch (Exception ex)
             {

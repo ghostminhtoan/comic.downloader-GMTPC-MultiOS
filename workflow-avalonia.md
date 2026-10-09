@@ -1967,6 +1967,27 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      - `❌ Xóa khỏi hàng đợi (Delete Item)`.
 - **Nghiệm Thu Toàn Diện**:
   - `build-avalonia.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows Desktop `.exe`, Linux executable/deb/tar.gz, Android signed standalone `.apk`) với `0 Warning(s), 0 Error(s)`.
+### 15.55. Tái Cấu Trúc Queue Card Responsive Đa Nền Tảng & Khắc Phục Triệt Để ChatHead/Notification Tải/Dừng và Pause/Resume trên Android
+- **Bối cảnh & Yêu cầu của người dùng**:
+  1. **Queue bị lệch, vỡ bố cục trên Android**:
+     - Do ô "Chọn chap" và "Subfolder" bị chia đôi 50/50 theo chiều ngang cùng hàng và dải nút tác vụ chiếm diện tích bên phải khiến chiều rộng còn lại quá hẹp (~180px trên màn hình dọc 360px). Hậu quả là text bị đè lấn, cắt cụt placeholder, các nút Khóa 🔒 và ✓ ÁP bị dính chùm xô lệch.
+  2. **ChatHead / Notification Tải/Dừng và Pause/Resume không hoạt động trên Android**:
+     - Nút Tải/Dừng và Tạm dừng/Tiếp tục trên Android Foreground Service Notification và Floating Control Bar gặp lỗi delegate kép (gọi 2 lần liên tiếp dẫn đến Start/Stop hoặc Pause/Resume triệt tiêu lẫn nhau) và ZIndex/HitTest chưa tối ưu cho màn hình cảm ứng Android.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Tái cấu trúc Queue Card Layout Responsive 4 Hàng (`MainView.axaml`)**:
+     - **Hàng 0 (Header)**: Cột trái chứa biểu tượng nhánh tách `↳`, `CheckBox`, số thứ tự `#Index` cùng `WrapPanel` Tiêu đề truyện và các Badge (`TRÙNG`, `📁 THƯ MỤC GỐC`, `Nút Thu gọn/Mở rộng`, `↳ NHÁNH...`); Cột phải chứa cụm 5 nút hành động `[🔍] [📂] [▲] [▼] [✕]` đặt gọn gàng ở góc trên bên phải.
+     - **Hàng 1 (Sub-info & Status)**: `WrapPanel` chứa Domain, Subfolder badge, Tổng số chap, Status và Chuỗi chi tiết tiến trình (Chương X/Y • Z%).
+     - **Hàng 2 (Nhập liệu 2 dòng độc lập 100% Width)**:
+       + Dòng 2A: `📑 Chọn chap:` kèm `TextBox` co giãn trọn vẹn bề ngang card, hiển thị trọn vẹn placeholder `VD: 1-10, 15.5 (để trống = tải hết)`.
+       + Dòng 2B: `📁 Subfolder:` kèm `TextBox` co giãn trọn vẹn bề ngang + Nút `🔒` (Khóa) + Nút `✓ ÁP` (Áp dụng và di chuyển thư mục) với khoảng cách bấm cảm ứng thoải mái.
+     - **Hàng 3 (Thanh tiến trình đáy card)**: `ProgressBar` cao 14px phủ trọn 100% góc đáy card kèm số `%` vàng dạ quang sắc nét ở chính giữa.
+  2. **Khắc phục Triệt Để Xung Đột Delegate & Điều Khiển Tải/Dừng/Pause/Resume trên Android (`ComicBackgroundService.cs` & `MainViewModel.cs`)**:
+     - Sửa lỗi trong `ComicBackgroundService.cs`: Tách rẽ nhánh độc lập cho `ActionToggleDownload` và `ActionContextual1` (không gọi trùng lặp cả hai delegate); tương tự tách biệt `ActionTogglePause` và `ActionContextual2`.
+     - Nâng cấp `DownloadAllAsync()`: Khi bắt đầu tải, nếu đang ở trạng thái Pause thì tự động Resume, đánh thức toàn bộ các truyện đang ở trạng thái `Stopped` / `Waiting`.
+     - Nâng cấp `TogglePauseDownload()`: Kiểm tra trạng thái `IsDownloading`, phát cảnh báo rõ ràng khi không có tiến trình tải.
+     - Tối ưu `Floating Quick Control Bar`: Đặt `ZIndex="1200"`, `IsHitTestVisible="True"`, đảm bảo phản hồi cảm ứng mượt mà tức thì trên mọi thiết bị Android và Desktop.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
 

@@ -1682,6 +1682,11 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
+        if (IsPaused)
+        {
+            ResumeDownload();
+        }
+
         // Tự động mở rộng các truyện đang thu gọn để hiển thị thanh tiến trình các task con đang tải song song
         foreach (var book in ComicBooks.Where(b => b.IsParallelSplitParent && b.IsParallelSplitCollapsed).ToList())
         {
@@ -1746,6 +1751,11 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void PauseDownload()
     {
+        if (!_downloadEngine.IsDownloading)
+        {
+            AddLog("WARN", "Hiện tại không có tiến trình tải nào đang chạy để tạm dừng.");
+            return;
+        }
         _downloadEngine.Pause();
     }
 
@@ -1758,6 +1768,11 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void TogglePauseDownload()
     {
+        if (!_downloadEngine.IsDownloading)
+        {
+            AddLog("WARN", "Hiện tại không có tiến trình tải nào đang chạy để tạm dừng.");
+            return;
+        }
         _downloadEngine.TogglePause();
     }
 
