@@ -676,25 +676,98 @@ public partial class MainView : UserControl
         return false;
     }
 
+    private System.Threading.CancellationTokenSource? _queueTouchHoldCts;
+    private Point _queueTouchStartPos;
+
     private void OnQueueItemPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is Control ctrl && ctrl.DataContext is ComicDownloaderGMTPC.Models.ComicBookItem item && item.IsParallelSplitParent)
+        if (sender is not Control ctrl || ctrl.DataContext is not ComicDownloaderGMTPC.Models.ComicBookItem item)
         {
-            var src = e.Source as Control;
-            while (src != null && src != ctrl)
-            {
-                if (src is Button || src is CheckBox || src is TextBox || src is NumericUpDown)
-                {
-                    return;
-                }
-                src = src.Parent as Control;
-            }
+            return;
+        }
 
-            if (DataContext is MainViewModel vm)
+        // Bỏ qua nếu người dùng tương tác trực tiếp vào các nút con (Button, CheckBox, TextBox, ...)
+        var src = e.Source as Control;
+        while (src != null && src != ctrl)
+        {
+            if (src is Button || src is CheckBox || src is TextBox || src is NumericUpDown || src is MenuItem)
             {
-                vm.ToggleSplitCollapse(item);
+                return;
+            }
+            src = src.Parent as Control;
+        }
+
+        var point = e.GetCurrentPoint(ctrl);
+
+        // Click chuột phải trên Desktop (Windows / Linux / macOS)
+        if (point.Properties.IsRightButtonPressed)
+        {
+            if (ctrl.ContextMenu != null)
+            {
+                ctrl.ContextMenu.Open(ctrl);
+                e.Handled = true;
+            }
+            return;
+        }
+
+        // Chạm cảm ứng trên Android / Màn hình Touch: Nhấn và giữ > 450ms để mở Context Menu
+        if (point.Pointer.Type == PointerType.Touch)
+        {
+            _queueTouchHoldCts?.Cancel();
+            _queueTouchHoldCts = new System.Threading.CancellationTokenSource();
+            var token = _queueTouchHoldCts.Token;
+            _queueTouchStartPos = point.Position;
+
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    await System.Threading.Tasks.Task.Delay(450, token);
+                    if (!token.IsCancellationRequested)
+                    {
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            if (ctrl.ContextMenu != null)
+                            {
+                                ctrl.ContextMenu.Open(ctrl);
+                            }
+                        });
+                    }
+                }
+                catch (System.OperationCanceledException) { }
+            }, token);
+            return;
+        }
+
+        // Chuột trái trên Desktop: Thu gọn / Mở rộng nhóm truyện nếu là truyện cha đã tách chương
+        if (item.IsParallelSplitParent && DataContext is MainViewModel vm)
+        {
+            vm.ToggleSplitCollapse(item);
+        }
+    }
+
+    private void OnQueueItemPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_queueTouchHoldCts != null && sender is Visual visual)
+        {
+            var point = e.GetCurrentPoint(visual);
+            double dx = point.Position.X - _queueTouchStartPos.X;
+            double dy = point.Position.Y - _queueTouchStartPos.Y;
+            if (Math.Sqrt(dx * dx + dy * dy) > 15) // Người dùng đang cuộn danh sách (swipe/scroll)
+            {
+                _queueTouchHoldCts.Cancel();
             }
         }
+    }
+
+    private void OnQueueItemPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _queueTouchHoldCts?.Cancel();
+    }
+
+    private void OnQueueItemPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        _queueTouchHoldCts?.Cancel();
     }
 
     private void OnRenameDragOver(object? sender, DragEventArgs e)

@@ -1941,6 +1941,35 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.54. Thông Báo Trung Tâm Khi Đưa Tên Truyện Vào Search & Context Menu Toàn Diện Trong Queue (Windows/Linux/Android)
+- **Bối cảnh & Yêu cầu của người dùng**:
+  1. Khi người dùng bấm nút kính lúp `🔍` hoặc chọn đưa tên truyện vào Tab Search, **không tự động chuyển Tab** (tránh việc người dùng phải mất thời gian bấm quay lại Tab Download khi đang thao tác nhiều truyện). Thay vào đó, hiển thị thông báo nổi bật ở **chính giữa màn hình (Center Toast / Notification Overlay)** để người dùng biết truyện đã được đưa vào tìm kiếm, sau khi chọn xong thì chủ động chuyển sang Tab Search để tìm.
+  2. Bổ sung **Context Menu đầy đủ trong Queue (danh sách chờ tải)** tương đương bản WPF:
+     - Trên **Windows và Linux**: Mở Context Menu khi click chuột phải vào hàng truyện.
+     - Trên **Android**: Mở Context Menu khi chạm và nhấn giữ (Touch & Long-press > 450ms) vào hàng truyện.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Hệ Thống Thông Báo Trung Tâm Màn Hình (Center Toast Notification Overlay)**:
+     - Bổ sung các thuộc tính Observable trong `MainViewModel`: `IsCenterToastVisible`, `CenterToastTitle`, `CenterToastMessage`, `CenterToastIcon`, `CenterToastBadge`.
+     - Phương thức `ShowCenterToast(title, message, icon, badge, durationMs)`: Hiển thị modal pop-up tuyệt đẹp với viền neon Cyan `#00F0FF`, tự động tắt sau khoảng thời gian đặt trước hoặc có thể đóng tức thì qua nút `✕` / `✓ ĐÃ HIỂU` (`DismissCenterToastCommand`).
+     - Trong `SendTitleToSearch`: Giữ nguyên `SelectedRootTabIndex` ở tab hiện tại, nạp tên truyện vào danh sách `SearchBookNamesInput`, sau đó gọi `ShowCenterToast` thông báo rõ ràng cho người dùng.
+  2. **Xử Lý Cử Chỉ Chuột Phải & Touch Long-Press Đa Nền Tảng (`MainView.axaml.cs`)**:
+     - Windows / Linux: Nhận diện `point.Properties.IsRightButtonPressed` để mở `ctrl.ContextMenu.Open(ctrl)`.
+     - Android / Touch: Nhận diện `point.Pointer.Type == PointerType.Touch`, kích hoạt bộ đếm thời gian 450ms. Nếu người dùng vuốt cuộn màn hình (di chuyển > 15px), cử chỉ giữ được tự động hủy; nếu giữ nguyên ngón tay > 450ms, Context Menu lập tức bật lên mượt mà.
+  3. **Bộ Menu Chuột Phải / Nhấn Giữ Đầy Đủ Trong Queue (`MainView.axaml` & `MainViewModel.cs`)**:
+     - `Tích chọn truyện này (Check)` / `Bỏ chọn truyện này (Uncheck)` / `Đảo chọn truyện này (Toggle)`.
+     - `Chọn tất cả truyện (Check All)` / `Bỏ chọn tất cả (Uncheck All)` / `Đảo chọn tất cả (Invert All)`.
+     - `Đưa lên đầu hàng đợi (Move to Top)` / `Đưa xuống cuối hàng đợi (Move to Bottom)`.
+     - `🔍 Đưa tên truyện vào Tab Search (Tìm truyện)`.
+     - `🌐 Mở link trong trình duyệt (Browser)` / `📁 Mở thư mục truyện (Open Folder)`.
+     - `📋 Sao chép link truyện` / `📋 Sao chép Tên + Link` / `📋 Sao chép link các Chapter` / `📋 Sao chép toàn bộ link đã tick`.
+     - `🔒/🔓 Khóa / Mở khóa Subfolder`.
+     - `🧩 Tách chương song song (Parallel Split)`: 50, 100, 200, 300, 400 chapters / nhánh.
+     - `❌ Xóa khỏi hàng đợi (Delete Item)`.
+- **Nghiệm Thu Toàn Diện**:
+  - `build-avalonia.bat` biên dịch thành công tuyệt đối cả 3 OS (Windows Desktop `.exe`, Linux executable/deb/tar.gz, Android signed standalone `.apk`) với `0 Warning(s), 0 Error(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+
 
 
 

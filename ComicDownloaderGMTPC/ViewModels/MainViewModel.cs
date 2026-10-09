@@ -1147,6 +1147,55 @@ public partial class MainViewModel : ViewModelBase
 
     public string SearchBookCountText => $"Số lượng: {SearchBookCount} truyện";
 
+    // ==========================================
+    // CENTER TOAST NOTIFICATION OVERLAY
+    // ==========================================
+    [ObservableProperty] private bool _isCenterToastVisible;
+    [ObservableProperty] private string _centerToastTitle = string.Empty;
+    [ObservableProperty] private string _centerToastMessage = string.Empty;
+    [ObservableProperty] private string _centerToastIcon = "✨";
+    [ObservableProperty] private string _centerToastBadge = "THÔNG BÁO";
+    private CancellationTokenSource? _toastCts;
+
+    public void ShowCenterToast(string title, string message, string icon = "✨", string badge = "THÔNG BÁO", int durationMs = 3200)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _toastCts?.Cancel();
+            _toastCts = new CancellationTokenSource();
+            var token = _toastCts.Token;
+
+            CenterToastTitle = title;
+            CenterToastMessage = message;
+            CenterToastIcon = icon;
+            CenterToastBadge = badge;
+            IsCenterToastVisible = true;
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(durationMs, token);
+                    if (!token.IsCancellationRequested)
+                    {
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            IsCenterToastVisible = false;
+                        });
+                    }
+                }
+                catch (OperationCanceledException) { }
+            }, token);
+        });
+    }
+
+    [RelayCommand]
+    public void DismissCenterToast()
+    {
+        _toastCts?.Cancel();
+        IsCenterToastVisible = false;
+    }
+
     partial void OnSearchBookNamesInputChanged(string value)
     {
         OnPropertyChanged(nameof(SearchBookCount));
@@ -1911,6 +1960,27 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void CheckSingleBook(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target != null) target.IsChecked = true;
+    }
+
+    [RelayCommand]
+    public void UncheckSingleBook(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target != null) target.IsChecked = false;
+    }
+
+    [RelayCommand]
+    public void ToggleCheckSingleBook(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target != null) target.IsChecked = !target.IsChecked;
+    }
+
+    [RelayCommand]
     public void CheckSelectedRows()
     {
         if (SelectedComic != null) SelectedComic.IsChecked = true;
@@ -1944,6 +2014,268 @@ public partial class MainViewModel : ViewModelBase
         foreach (var item in grouped) item.IsDuplicate = true;
 
         AddLog("INFO", $"Kiểm tra trùng: Phát hiện {grouped.Count} truyện trùng tên trong danh sách.");
+    }
+
+    [RelayCommand]
+    public void MoveToTop(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target == null) return;
+
+        int index = ComicBooks.IndexOf(target);
+        if (index > 0)
+        {
+            ComicBooks.Move(index, 0);
+            ReindexComicBooks();
+            UpdateStats();
+            ShowCenterToast("ĐƯA LÊN ĐẦU", $"Đã đưa \"{target.Title}\" lên đầu hàng đợi.", "▲", "HÀNG ĐỢI", 1800);
+        }
+    }
+
+    [RelayCommand]
+    public void MoveToBottom(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target == null) return;
+
+        int index = ComicBooks.IndexOf(target);
+        if (index >= 0 && index < ComicBooks.Count - 1)
+        {
+            ComicBooks.Move(index, ComicBooks.Count - 1);
+            ReindexComicBooks();
+            UpdateStats();
+            ShowCenterToast("ĐƯA XUỐNG CUỐI", $"Đã đưa \"{target.Title}\" xuống cuối hàng đợi.", "▼", "HÀNG ĐỢI", 1800);
+        }
+    }
+
+    [RelayCommand]
+    public void OpenInBrowser(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target == null || string.IsNullOrWhiteSpace(target.Url)) return;
+        OpenUrlCrossPlatform(target.Url);
+    }
+
+    [RelayCommand]
+    public async Task CopyBookLinkAsync(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target == null || string.IsNullOrWhiteSpace(target.Url)) return;
+        try
+        {
+            var cb = GetClipboard();
+            if (cb != null)
+            {
+                await cb.SetTextAsync(target.Url);
+                ShowCenterToast("ĐÃ SAO CHÉP LINK", $"Đã sao chép link truyện vào Clipboard:\n{target.Url}", "🔗", "CLIPBOARD", 2200);
+                AddLog("INFO", $"Đã sao chép link: {target.Url}");
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi sao chép: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task CopyNameAndLinkAsync(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target == null) return;
+        try
+        {
+            var cb = GetClipboard();
+            if (cb != null)
+            {
+                string text = $"{target.Title}\t{target.Url}";
+                await cb.SetTextAsync(text);
+                ShowCenterToast("ĐÃ SAO CHÉP TÊN & LINK", $"Đã sao chép Tên + Link truyện vào Clipboard:\n{target.Title} - {target.Url}", "📑", "CLIPBOARD", 2200);
+                AddLog("INFO", $"Đã sao chép Tên & Link: {target.Title} - {target.Url}");
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi sao chép: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task CopyChaptersLinkAsync(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        if (target == null) return;
+        try
+        {
+            var cb = GetClipboard();
+            if (cb != null)
+            {
+                var links = target.Chapters?.Select(c => c.Url).Where(u => !string.IsNullOrWhiteSpace(u)).ToList() ?? new List<string>();
+                if (links.Count > 0)
+                {
+                    string text = string.Join(Environment.NewLine, links);
+                    await cb.SetTextAsync(text);
+                    ShowCenterToast("ĐÃ SAO CHÉP LINK CHAPTERS", $"Đã sao chép {links.Count} link chapter của \"{target.Title}\" vào Clipboard.", "📚", "CLIPBOARD", 2200);
+                    AddLog("INFO", $"Đã sao chép {links.Count} link chapter của '{target.Title}'.");
+                }
+                else
+                {
+                    string text = target.Url ?? string.Empty;
+                    await cb.SetTextAsync(text);
+                    ShowCenterToast("ĐÃ SAO CHÉP LINK", $"Chưa tải danh sách chap, đã sao chép link truyện vào Clipboard:\n{text}", "🔗", "CLIPBOARD", 2200);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi sao chép: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task CopySelectedLinksAsync()
+    {
+        var checkedItems = ComicBooks.Where(b => b.IsChecked && !string.IsNullOrWhiteSpace(b.Url)).ToList();
+        if (checkedItems.Count == 0)
+        {
+            ShowCenterToast("CHƯA CHỌN TRUYỆN", "Vui lòng tích chọn ít nhất 1 truyện để sao chép link.", "⚠️", "THÔNG BÁO", 2000);
+            return;
+        }
+        try
+        {
+            var cb = GetClipboard();
+            if (cb != null)
+            {
+                string text = string.Join(Environment.NewLine, checkedItems.Select(b => b.Url));
+                await cb.SetTextAsync(text);
+                ShowCenterToast("ĐÃ SAO CHÉP TẤT CẢ LINK", $"Đã sao chép {checkedItems.Count} link truyện đã chọn vào Clipboard.", "📋", "CLIPBOARD", 2200);
+                AddLog("INFO", $"Đã sao chép {checkedItems.Count} link truyện đã chọn vào Clipboard.");
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi sao chép: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public void SplitChapters50(ComicBookItem? item) => SplitBookParallelChapters(item, 50);
+
+    [RelayCommand]
+    public void SplitChapters100(ComicBookItem? item) => SplitBookParallelChapters(item, 100);
+
+    [RelayCommand]
+    public void SplitChapters200(ComicBookItem? item) => SplitBookParallelChapters(item, 200);
+
+    [RelayCommand]
+    public void SplitChapters300(ComicBookItem? item) => SplitBookParallelChapters(item, 300);
+
+    [RelayCommand]
+    public void SplitChapters400(ComicBookItem? item) => SplitBookParallelChapters(item, 400);
+
+    public void SplitBookParallelChapters(ComicBookItem? item, int bucketSize)
+    {
+        var book = item ?? SelectedComic;
+        if (book == null) return;
+        if (book.IsParallelSplitChild)
+        {
+            ShowCenterToast("KHÔNG THỂ TÁCH", "Đây là nhánh con đã được tách, không thể tiếp tục tách nhỏ.", "⚠️", "THÔNG BÁO", 2500);
+            return;
+        }
+
+        int totalChaps = book.TotalChapters;
+        if (totalChaps <= 0 && book.Chapters != null && book.Chapters.Count > 0)
+        {
+            totalChaps = book.Chapters.Count;
+        }
+
+        if (totalChaps <= 0)
+        {
+            ShowCenterToast("CHƯA CÓ CHAPTER", $"Truyện \"{book.Title}\" chưa có thông tin chapter để tách.", "⚠️", "THÔNG BÁO", 2500);
+            return;
+        }
+
+        if (totalChaps <= bucketSize)
+        {
+            ShowCenterToast("SỐ CHAPTER NHỎ", $"Truyện có {totalChaps} chapter, không cần tách ({bucketSize} chap/nhánh).", "ℹ️", "THÔNG BÁO", 2500);
+            return;
+        }
+
+        var ranges = BuildAutoSplitRanges(book.Chapters ?? new(), bucketSize);
+        if (ranges.Count <= 1)
+        {
+            ShowCenterToast("SỐ CHAPTER NHỎ", $"Không thể chia nhỏ hơn nữa với kích thước {bucketSize}.", "ℹ️", "THÔNG BÁO", 2500);
+            return;
+        }
+
+        int insertIndex = ComicBooks.IndexOf(book);
+        if (insertIndex < 0) return;
+
+        book.IsParallelSplitParent = true;
+        book.IsParallelSplitCollapsed = false;
+        book.IsChecked = false; // Bỏ tick truyện cha
+
+        // Dọn nhánh cũ nếu có
+        if (book.ParallelSplitChildren != null)
+        {
+            foreach (var oldChild in book.ParallelSplitChildren.ToList())
+            {
+                ComicBooks.Remove(oldChild);
+            }
+            book.ParallelSplitChildren.Clear();
+        }
+
+        var children = new List<ComicBookItem>();
+        int addedCount = 0;
+
+        foreach (var range in ranges)
+        {
+            var clone = new ComicBookItem
+            {
+                Title = book.Title,
+                Url = book.Url,
+                Domain = book.Domain,
+                CoverUrl = book.CoverUrl,
+                Subfolder = book.Subfolder,
+                IsSubfolderLocked = book.IsSubfolderLocked,
+                Status = "Waiting",
+                DetailProgressText = $"Chờ tải chap {range}",
+                ChapterSelectionText = range,
+                IsChecked = true,
+                LocalDirectory = book.LocalDirectory,
+                IsParallelSplitChild = true,
+                IsParallelSplitParent = false,
+                ParallelSplitParentUrl = book.Url
+            };
+
+            var filter = ChapterRangeParser.Parse(range);
+            if (filter != null && book.Chapters != null && book.Chapters.Count > 0)
+            {
+                clone.Chapters = book.Chapters.Where(c => filter.IsMatch(c.Title, c.ChapterNumber)).ToList();
+                clone.TotalChapters = clone.Chapters.Count > 0 ? clone.Chapters.Count : bucketSize;
+            }
+            else
+            {
+                clone.Chapters = book.Chapters != null ? new List<ChapterItem>(book.Chapters) : new();
+                clone.TotalChapters = bucketSize;
+            }
+
+            children.Add(clone);
+            addedCount++;
+            ComicBooks.Insert(insertIndex + addedCount, clone);
+        }
+
+        book.ParallelSplitChildren = children;
+        book.NotifySplitHierarchyChanged();
+        ReindexComicBooks();
+        UpdateStats();
+
+        ShowCenterToast(
+            "TÁCH CHƯƠNG THÀNH CÔNG!",
+            $"Đã tách truyện \"{book.Title}\" ({totalChaps} chaps) thành {ranges.Count} nhánh song song ({bucketSize} chap/nhánh).",
+            "🧩",
+            "TÁCH CHƯƠNG",
+            3200);
+        AddLog("SUCCESS", $"Đã tách truyện '{book.Title}' ({totalChaps} chaps) thành {ranges.Count} nhánh ({bucketSize} chap/nhánh).");
     }
 
     [RelayCommand]
@@ -3016,9 +3348,16 @@ public partial class MainViewModel : ViewModelBase
             }
         }
 
-        SelectedRootTabIndex = 1; // Chuyển ngay sang Tab Search
-        SearchStatusMessage = $"🔍 Đã chuyển tên truyện '{title}' sang Tab Search.";
-        AddLog("INFO", $"🔍 Đã chuyển tên truyện '{title}' sang Tab Search.");
+        SearchStatusMessage = $"🔍 Đã thêm '{title}' vào Tab Tìm Kiếm.";
+        AddLog("INFO", $"🔍 [Tab Search] Đã đưa tên truyện vào tìm kiếm: '{title}'");
+
+        // Giữ nguyên tab hiện tại và hiển thị thông báo trung tâm màn hình
+        ShowCenterToast(
+            "ĐÃ THÊM VÀO TÌM TRUYỆN!",
+            $"Đã đưa \"{title}\" vào Tab Search.\nSau khi thêm các truyện mong muốn xong, hãy chuyển sang TAB SEARCH để bắt đầu tìm truyện.",
+            "🔍",
+            "TÌM TRUYỆN",
+            3500);
     }
 
     [RelayCommand]
