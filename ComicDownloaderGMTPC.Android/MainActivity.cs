@@ -134,6 +134,36 @@ public class MainActivity : AvaloniaMainActivity
         };
         Services.BackgroundExecutionService.NativeIsAccessibilityServiceEnabled = () => IsAccessibilityServiceEnabled(this);
 
+        Services.BackgroundExecutionService.NativeStartFloatingChatHead = () =>
+        {
+            RunOnUiThread(() =>
+            {
+                if (CanDrawOverlays(this))
+                {
+                    ComicFloatingChatHeadService.Start(this);
+                }
+                else
+                {
+                    RequestOverlayPermission(this);
+                }
+            });
+        };
+        Services.BackgroundExecutionService.NativeStopFloatingChatHead = () =>
+        {
+            RunOnUiThread(() =>
+            {
+                ComicFloatingChatHeadService.Stop(this);
+            });
+        };
+        Services.BackgroundExecutionService.NativeIsOverlayPermissionGranted = () => CanDrawOverlays(this);
+        Services.BackgroundExecutionService.NativeRequestOverlayPermission = () =>
+        {
+            RunOnUiThread(() =>
+            {
+                RequestOverlayPermission(this);
+            });
+        };
+
         Services.DownloadEngineService.OpenStorageSettingsRequested += OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested += OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
@@ -271,10 +301,11 @@ public class MainActivity : AvaloniaMainActivity
 
                 if (!string.IsNullOrEmpty(settingValue))
                 {
+                    string pkg = context.PackageName ?? "";
                     var splitter = settingValue.Split(':');
                     foreach (var s in splitter)
                     {
-                        if (s.Contains(context.PackageName, StringComparison.OrdinalIgnoreCase) &&
+                        if (!string.IsNullOrEmpty(pkg) && s.Contains(pkg, StringComparison.OrdinalIgnoreCase) &&
                             s.Contains("ComicClipboardAccessibilityService", StringComparison.OrdinalIgnoreCase))
                         {
                             return true;
@@ -300,6 +331,37 @@ public class MainActivity : AvaloniaMainActivity
         catch { }
     }
 
+    public static bool CanDrawOverlays(Context context)
+    {
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(23))
+            {
+                return global::Android.Provider.Settings.CanDrawOverlays(context);
+            }
+            return true;
+        }
+        catch { }
+        return false;
+    }
+
+    public static void RequestOverlayPermission(Activity? activity)
+    {
+        if (activity == null) return;
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(23))
+            {
+                var uri = global::Android.Net.Uri.Parse("package:" + activity.PackageName);
+                var intent = new Intent(global::Android.Provider.Settings.ActionManageOverlayPermission, uri);
+                intent.AddFlags(ActivityFlags.NewTask);
+                activity.StartActivity(intent);
+                Toast.MakeText(activity, "👉 Hãy CẤP QUYỀN [Hiển thị trên các ứng dụng khác] để sử dụng Bong bóng dán link nổi!", ToastLength.Long)?.Show();
+            }
+        }
+        catch { }
+    }
+
     protected override void OnDestroy()
     {
         Services.SoundNotificationService.AndroidPlaySoundHandler = null;
@@ -311,6 +373,10 @@ public class MainActivity : AvaloniaMainActivity
         Services.BackgroundExecutionService.NativeForceExit = null;
         Services.BackgroundExecutionService.NativeCheckAndPromptAccessibilityService = null;
         Services.BackgroundExecutionService.NativeIsAccessibilityServiceEnabled = null;
+        Services.BackgroundExecutionService.NativeStartFloatingChatHead = null;
+        Services.BackgroundExecutionService.NativeStopFloatingChatHead = null;
+        Services.BackgroundExecutionService.NativeIsOverlayPermissionGranted = null;
+        Services.BackgroundExecutionService.NativeRequestOverlayPermission = null;
 
         Services.DownloadEngineService.OpenStorageSettingsRequested -= OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested -= OnOpenFolderRequested;

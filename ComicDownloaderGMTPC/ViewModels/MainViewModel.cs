@@ -147,21 +147,22 @@ public partial class MainViewModel : ViewModelBase
 
             if (OperatingSystem.IsAndroid())
             {
-                bool isAccessEnabled = BackgroundExecutionService.NativeIsAccessibilityServiceEnabled?.Invoke() ?? false;
-                if (!isAccessEnabled)
-                {
-                    AddLog("WARN", "👉 [Android] Để tự động bắt link real-time khi bạn đang lướt trình duyệt, hãy BẬT quyền Trợ năng (Accessibility) cho ứng dụng trong Cài đặt!");
-                    BackgroundExecutionService.NativeCheckAndPromptAccessibilityService?.Invoke();
-                }
-                else
-                {
-                    AddLog("INFO", "🚀 [Android] Dịch vụ Trợ năng (Accessibility) đang hoạt động - Sẵn sàng bắt link real-time từ mọi trình duyệt.");
-                }
+                // 1. Tự động khởi động Bong bóng nổi ChatHead Dán Nhanh (Không cần Trợ năng!)
+                BackgroundExecutionService.NativeStartFloatingChatHead?.Invoke();
+
+                AddLog("SUCCESS", "🚀 [Android] Đã kích hoạt Bong bóng nổi Dán Nhanh (Floating ChatHead)!\n" +
+                                  "• Cách 1: Khi ở Chrome copy link -> chạm nhẹ vào Bong bóng nổi '📥 DÁN' để nạp ngay vào Queue!\n" +
+                                  "• Cách 2: Trong Chrome bấm menu 'Chia sẻ' (Share) -> chọn 'Thêm vào Comic Downloader GMTPC'.\n" +
+                                  "• Cách 3: Vuốt thanh thông báo xuống -> bấm '📋 Dán Link'.");
             }
         }
         else
         {
             StopAutoPasteClipboardMonitoring();
+            if (OperatingSystem.IsAndroid())
+            {
+                BackgroundExecutionService.NativeStopFloatingChatHead?.Invoke();
+            }
             AddLog("INFO", "📋 Đã TẮT tính năng Tự dán (Auto Paste).");
         }
     }

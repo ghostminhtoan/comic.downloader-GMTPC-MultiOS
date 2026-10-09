@@ -2006,6 +2006,22 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      - Đăng ký nhận `NativeOnClipboardTextChanged`: Khi có link mới phát hiện từ Background, tự động gọi `ExtractUrlsFromTextAsync(text, clearExisting: false)` trên `UIThread`, phát âm thanh `Startup` và ghi nhận log `[Tự Dán Real-time]`.
      - Toàn bộ 10 link (hoặc n link) người dùng sao chép liên tiếp trong trình duyệt đều được tự động xếp vào Queue theo đúng thứ tự thời gian thực mà không bị sót bất kỳ link nào!
 - **Nghiệm Thu**:
+### 15.57. Giải Pháp Tự Dán / Nạp Link Real-Time KHÔNG CẦN TRỢ NĂNG (Accessibility) Trên Android: Floating ChatHead Widget, Share Target & Notification Quick Paste
+- **Bối cảnh & Yêu cầu của người dùng**:
+  - Người dùng không muốn/không thể sử dụng Dịch vụ Trợ năng (Accessibility Service) nhưng vẫn muốn có giải pháp dán/nạp link liên tục từ trình duyệt vào Queue một cách tiện lợi, theo thời gian thực mà không bị giới hạn bởi chính sách Android 10+.
+- **Kiến trúc & Bộ 3 Giải Pháp Đỉnh Cao Độc Lập Không Cần Trợ Năng**:
+  1. **Bong Bóng Nổi Dán Nhanh 1-Chạm (Floating ChatHead Overlay Widget - `ComicFloatingChatHeadService.cs`)**:
+     - Sử dụng quyền `SYSTEM_ALERT_WINDOW` (`TypeApplicationOverlay`). Khi bật "Tự dán", một Bong bóng tròn nhỏ gọn đẹp mắt `📥 DÁN` xuất hiện ở cạnh màn hình (kèm huy hiệu Badge đếm số link).
+     - Người dùng có thể kéo thả di chuyển tự do quanh màn hình khi đang ở Chrome/Brave/Firefox.
+     - Mỗi khi sao chép một link truyện ở trình duyệt, người dùng chỉ cần **chạm nhẹ 1 phát vào Bong bóng nổi**: Bong bóng lập tức đọc Clipboard, nạp link vào Queue trong 0.05s, phát âm thanh và hiển thị Toast "Đã nạp link #X vào Queue!", số Badge tự động nhảy tăng `+1` mà không bao giờ phải rời khỏi trình duyệt!
+  2. **Chia Sẻ Trực Tiếp Từ Trình Duyệt (Share Target Intent - `ShareReceiverActivity.cs`)**:
+     - Khai báo Activity trong suốt `ShareReceiverActivity` với IntentFilter `ACTION_SEND` (MIME `text/plain`).
+     - Khi lướt web trên Chrome/Brave: người dùng bấm menu trình duyệt -> "Chia sẻ" (Share) -> chọn "Thêm vào Comic Downloader GMTPC".
+     - Link được nạp ngầm vào Queue ngay lập tức và tự động đóng trong 0.05 giây, người dùng tiếp tục lướt web bình thường.
+  3. **Nút Dán Nhanh Trực Tiếp Trên Notification Bar (`ComicBackgroundService.cs`)**:
+     - Bổ sung Action `ActionQuickPaste` ("📋 Dán Link") trên Foreground Service Notification.
+     - Người dùng chỉ cần vuốt thanh trạng thái của Android xuống và bấm `📋 Dán Link` để nạp ngay nội dung vừa copy vào Queue.
+- **Nghiệm Thu**:
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 

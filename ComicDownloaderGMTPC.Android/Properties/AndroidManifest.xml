@@ -24,6 +24,21 @@
 			android:exported="false" 
 			android:foregroundServiceType="dataSync" />
 		<service
+			android:name=".ComicFloatingChatHeadService"
+			android:exported="false" />
+		<activity
+			android:name=".ShareReceiverActivity"
+			android:label="Thêm vào Comic Downloader GMTPC"
+			android:icon="@drawable/Icon"
+			android:theme="@android:style/Theme.Translucent.NoTitleBar"
+			android:exported="true">
+			<intent-filter>
+				<action android:name="android.intent.action.SEND" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<data android:mimeType="text/plain" />
+			</intent-filter>
+		</activity>
+		<service
 			android:name=".ComicClipboardAccessibilityService"
 			android:label="Comic Downloader GMTPC - Tự Động Dán Link"
 			android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"

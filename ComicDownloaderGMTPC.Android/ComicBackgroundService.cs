@@ -19,6 +19,7 @@ public class ComicBackgroundService : Service
     public const string ActionTogglePause = "ACTION_TOGGLE_PAUSE";
     public const string ActionContextual1 = "ACTION_CONTEXTUAL_1";
     public const string ActionContextual2 = "ACTION_CONTEXTUAL_2";
+    public const string ActionQuickPaste = "ACTION_QUICK_PASTE";
     public const string ExtraTaskId = "EXTRA_TASK_ID";
     public const string ExtraTitle = "EXTRA_TITLE";
     public const string ExtraText = "EXTRA_TEXT";
@@ -103,6 +104,37 @@ public class ComicBackgroundService : Service
             catch (Exception ex)
             {
                 global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi kích hoạt Action 2 từ Notification: {ex.Message}");
+            }
+            return StartCommandResult.Sticky;
+        }
+
+        if (action == ActionQuickPaste)
+        {
+            try
+            {
+                var cm = (ClipboardManager?)GetSystemService(ClipboardService);
+                if (cm != null && cm.HasPrimaryClip)
+                {
+                    var clip = cm.PrimaryClip;
+                    if (clip != null && clip.ItemCount > 0)
+                    {
+                        var clipText = clip.GetItemAt(0)?.CoerceToText(this)?.ToString();
+                        if (!string.IsNullOrWhiteSpace(clipText) &&
+                            (clipText.Contains("http://", StringComparison.OrdinalIgnoreCase) || clipText.Contains("https://", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            BackgroundExecutionService.NativeOnClipboardTextChanged?.Invoke(clipText);
+                            global::Android.Widget.Toast.MakeText(this, "📥 [Tự dán] Đã nạp link từ Clipboard vào Queue!", global::Android.Widget.ToastLength.Short)?.Show();
+                        }
+                        else
+                        {
+                            global::Android.Widget.Toast.MakeText(this, "⚠️ Clipboard không chứa liên kết http/https.", global::Android.Widget.ToastLength.Short)?.Show();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi QuickPaste từ Notification: {ex.Message}");
             }
             return StartCommandResult.Sticky;
         }
@@ -284,6 +316,19 @@ public class ComicBackgroundService : Service
         else if (pendingIntent != null)
         {
             builder.AddAction(Resource.Drawable.Icon, action2Text ?? "📱 Mở ứng dụng", pendingIntent);
+        }
+
+        // Action 3: Nút Dán nhanh từ Clipboard vào Queue
+        var act3Intent = new Intent(context, typeof(ComicBackgroundService));
+        act3Intent.SetAction(ActionQuickPaste);
+        var act3Pending = PendingIntent.GetService(
+            context,
+            3,
+            act3Intent,
+            PendingIntentFlags.UpdateCurrent | (OperatingSystem.IsAndroidVersionAtLeast(23) ? PendingIntentFlags.Immutable : 0));
+        if (act3Pending != null)
+        {
+            builder.AddAction(Resource.Drawable.Icon, "📋 Dán Link", act3Pending);
         }
 
         return builder.Build()!;
