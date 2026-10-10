@@ -3332,21 +3332,27 @@ public class ComicScraperService
                 }
 
                 string gCover = string.Empty;
-                var imgMatch = Regex.Match(block, @"<img\s+[^>]*?>", RegexOptions.IgnoreCase);
-                if (imgMatch.Success)
+                foreach (Match imgMatch in Regex.Matches(block, @"<img\s+[^>]*?>", RegexOptions.IgnoreCase))
                 {
-                    string? img = ExtractImageUrlFromTag(imgMatch.Value);
-                    if (!string.IsNullOrWhiteSpace(img))
-                    {
-                        gCover = MakeAbsoluteUrl(img, pageUrl);
-                    }
                     if (string.IsNullOrWhiteSpace(gTitle))
                     {
                         var altMatch = Regex.Match(imgMatch.Value, @"(?:alt|title)=[""'](?<t>[^""']+)[""']", RegexOptions.IgnoreCase);
-                        if (altMatch.Success)
+                        if (altMatch.Success && !string.IsNullOrWhiteSpace(altMatch.Groups["t"].Value))
                         {
                             gTitle = WebUtility.HtmlDecode(altMatch.Groups["t"].Value.Trim());
                         }
+                    }
+
+                    string? img = ExtractImageUrlFromTag(imgMatch.Value);
+                    if (!string.IsNullOrWhiteSpace(img) &&
+                        !IsIgnoredImage(img) &&
+                        !img.Contains("blank.gif", StringComparison.OrdinalIgnoreCase) &&
+                        !img.Contains("mr.gif", StringComparison.OrdinalIgnoreCase) &&
+                        !img.Contains("/g/t.png", StringComparison.OrdinalIgnoreCase) &&
+                        !img.Contains("/g/d.png", StringComparison.OrdinalIgnoreCase))
+                    {
+                        gCover = MakeAbsoluteUrl(img, pageUrl);
+                        break;
                     }
                 }
 
@@ -3431,13 +3437,16 @@ public class ComicScraperService
                 }
 
                 string coverUrl = string.Empty;
-                var imgMatch = Regex.Match(inner, @"<img\s+[^>]*?>", RegexOptions.IgnoreCase);
-                if (imgMatch.Success)
+                foreach (Match imgMatch in Regex.Matches(inner, @"<img\s+[^>]*?>", RegexOptions.IgnoreCase))
                 {
                     string? img = ExtractImageUrlFromTag(imgMatch.Value);
-                    if (!string.IsNullOrWhiteSpace(img))
+                    if (!string.IsNullOrWhiteSpace(img) &&
+                        !IsIgnoredImage(img) &&
+                        !img.Contains("blank.gif", StringComparison.OrdinalIgnoreCase) &&
+                        !img.Contains("mr.gif", StringComparison.OrdinalIgnoreCase))
                     {
                         coverUrl = MakeAbsoluteUrl(img, pageUrl);
+                        break;
                     }
                 }
 

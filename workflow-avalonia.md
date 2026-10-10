@@ -2104,3 +2104,34 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 - **Nghiệm Thu**:
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+### 15.62. Tối Ưu Giao Diện Hàng Đợi Android, Giữ Thanh Thống Kê Khi Tải, Nút Đóng Popup Preview, Khôi Phục Quét Thumbnail & Gộp Duy Nhất 1 Thanh Subfolder (`MainView.axaml`, `MainView.axaml.cs`, `MainViewModel.cs`, `ThumbnailPreviewService.cs`, `ComicScraperService.cs`)
+- **Bối cảnh & 5 Yêu cầu thực tế của người dùng trên Android & Desktop**:
+  1. **Ảnh 1 (Hiển thị tên truyện đầy đủ hơn)**: Cho các nút thao tác hàng (`🔍`, `📂`, `▲`, `▼`, `✕`) xuống hàng riêng bên dưới tên truyện để tên truyện hiển thị được nhiều chữ hơn.
+  2. **Ảnh 1 (Mất dòng thống kê khi đang tải)**: Khi đang tải truyện trên màn hình dọc Android, thanh thống kê bên dưới (`Tổng`, `Đang tải`, `Hoàn tất`, `Lỗi`, `Tốc độ`) bị biến mất do khung `Background Task Status Indicator` (`IsBackgroundWorking`) nằm cùng hàng `ColumnDefinitions="*, Auto"` chiếm hết chiều ngang.
+  3. **Ảnh 2 (Popup Preview không tắt được trên Android)**: Bổ sung nút tắt (`✕ ĐÓNG`) trực tiếp trên cửa sổ Popup Preview (`HoverPreviewPopupBorder`) để người dùng luôn đóng được dễ dàng trên màn hình cảm ứng.
+  4. **Lâu lâu bị mất thumbnail, kể cả quét lại thumbnail cũng lỗi**: Khắc phục triệt để việc mất ảnh bìa khi danh sách > 35 truyện, lỗi xóa mất cache khi quét lại, và lỗi trích xuất nhầm ảnh rỗng `blank.gif` / `mr.gif` hoặc bị chặn ISP trên E-Hentai/ExHentai.
+  5. **Xoá thanh Subfolder phía trên**: Hiện có 2 thanh Subfolder (1 thanh ở Quick Direct Link Bar trên cùng và 1 thanh trong Tab Download), xoá thanh Subfolder phía trên và chỉ giữ lại thanh Subfolder bên dưới trong `📥 TAB DOWNLOAD`.
+- **Giải pháp Thực hiện (First-Principles Engineering Rigor)**:
+  1. **Tách Hàng Nút Tác Vụ Xuống Dưới Tên Truyện Trong Queue (`MainView.axaml`)**:
+     - Chuyển bố cục nội dung card trong `QueueItemsControl.ItemTemplate` thành 5 hàng (`RowDefinitions="Auto, Auto, Auto, Auto, Auto"`).
+     - `Grid.Row="0"` chỉ chứa `↳`, `CheckBox`, `#Index` và `Title` (`TextWrapping="Wrap"`, `MaxLines="2"`, `TextTrimming="CharacterEllipsis"`), giải phóng 100% chiều ngang cho tên truyện.
+     - `Grid.Row="1"` chứa nhóm 5 nút thao tác (`🔍`, `📂`, `▲`, `▼`, `✕`) cùng các badge trạng thái (`TRÙNG`, `📁 THƯ MỤC GỐC`, `↳ NHÁNH`) nằm gọn ngay dưới tên truyện.
+  2. **Tách Dòng Độc Lập Cho Thanh Footer Status Bar (`MainView.axaml`)**:
+     - Đổi `4. FOOTER STATUS BAR` từ `<Grid ColumnDefinitions="*, Auto">` sang `<Grid RowDefinitions="Auto, Auto">`.
+     - `Grid.Row="0"` luôn hiển thị cố định đầy đủ thống kê `Tổng: ... Đang tải: ... Hoàn tất: ... Lỗi: ... Tốc độ: ...` trên toàn bộ bề ngang màn hình; `Grid.Row="1"` hiển thị thanh tiến trình tác vụ nền bên dưới khi `IsBackgroundWorking == true`.
+  3. **Tích Hợp Nút `✕ ĐÓNG` Trực Tiếp Trên Popup Preview (`MainView.axaml`, `MainView.axaml.cs`, `MainViewModel.cs`)**:
+     - Bật `IsHitTestVisible="True"` và `ZIndex="2500"` trên `HoverPreviewPopupBorder`.
+     - Thêm thanh tiêu đề trên đầu Popup Preview với nút đỏ `✕ ĐÓNG` (`Command="{Binding CloseHoverPreviewCommand}" Click="OnClosePreviewOverlayClicked"`), hỗ trợ thêm phím `Back`/`Escape` trên Android/Desktop và tự động căn giữa trong khung nhìn cảm ứng.
+  4. **Cơ Chế Bảo Toàn & Tự Phục Hồi Thumbnail Đa Tầng (`ThumbnailPreviewService.cs`, `ComicScraperService.cs`, `MainViewModel.cs`)**:
+     - Chuyển `HttpClient` của `ThumbnailPreviewService` sang dùng `DoHResolver.CreateBypassHandler(_cookieContainer)` kèm bộ cookie vượt cảnh báo nội dung E-Hentai (`nw=1`, `nw=always`, `sl=dm_1`).
+     - Bổ sung bộ lọc `IsPlaceholderImageUrl` loại bỏ hoàn toàn các ảnh spacer/icon (`blank.gif`, `mr.gif`, `no_image`, `/g/t.png`, `/g/d.png`) trong cả `ComicScraperService.ExtractComicLinksFromTagPage` lẫn `ThumbnailPreviewService`.
+     - Tích hợp truy vấn trực tiếp Official E-Hentai API (`https://api.e-hentai.org/api.php` - `method: "gdata"`) để luôn lấy chuẩn xác ảnh bìa `thumb` và `tags` cho mọi link `/g/{gid}/{token}/`.
+     - Gỡ bỏ cơ chế thu hồi `evicted.ThumbnailBitmap = null` ở mốc 35 truyện và gỡ bỏ giới hạn `.Take(maxPrefetch)` để danh sách lớn không bao giờ bị mất ảnh khi cuộn, kết hợp sự kiện `AttachedToVisualTree="OnThumbnailElementAttached"` tự động nạp lại nếu thiếu.
+     - Nâng cấp `RescanItemAsync` tải vào tệp tạm `cover.rescan.jpg` trước khi ghi đè `cover.jpg` (không bao giờ xóa trắng ảnh cũ nếu mạng lỗi) và chạy song song qua `Task.WhenAll` trong `RescanThumbnailsAsync`.
+  5. **Loại Bỏ Thanh Subfolder Trùng Lặp Ở Trên Cùng (`MainView.axaml`)**:
+     - Xoá hàng `Subfolder` tại `2. QUICK DIRECT LINK BAR`, giữ duy nhất thanh `Subfolder` bên trong `📥 TAB DOWNLOAD`.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+

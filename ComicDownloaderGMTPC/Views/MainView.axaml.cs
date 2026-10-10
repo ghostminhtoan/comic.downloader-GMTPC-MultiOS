@@ -33,12 +33,18 @@ public partial class MainView : UserControl
             }
         };
 
-        // Bắt phím Escape hoặc phím Back (trên Android) để thoát toàn màn hình đối chiếu
+        // Bắt phím Escape hoặc phím Back (trên Android) để thoát toàn màn hình đối chiếu hoặc đóng Popup Preview
         AddHandler(KeyDownEvent, (s, e) =>
         {
-            if (DataContext is MainViewModel vm && vm.IsEnhanceFullscreenVisible)
+            if (DataContext is MainViewModel vm)
             {
-                if (e.Key == Key.Escape || e.Key == Key.Back)
+                if (vm.IsHoverPreviewVisible && (e.Key == Key.Escape || e.Key == Key.Back))
+                {
+                    vm.HideHoverPreview();
+                    e.Handled = true;
+                    return;
+                }
+                if (vm.IsEnhanceFullscreenVisible && (e.Key == Key.Escape || e.Key == Key.Back))
                 {
                     vm.IsEnhanceFullscreenVisible = false;
                     e.Handled = true;
@@ -757,6 +763,11 @@ public partial class MainView : UserControl
         {
             border.BorderBrush = Avalonia.Media.Brush.Parse("#1E293B");
         }
+        var popup = this.FindControl<Border>("HoverPreviewPopupBorder");
+        if (popup != null && popup.IsPointerOver)
+        {
+            return;
+        }
         if (DataContext is MainViewModel vm)
         {
             vm.HideHoverPreview();
@@ -838,6 +849,38 @@ public partial class MainView : UserControl
         catch { }
     }
 
+    private void OnThumbnailElementAttached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        if (sender is Control control && control.DataContext is ComicBookItem item && DataContext is MainViewModel vm)
+        {
+            if (vm.IsThumbnailMode || vm.IsThumbnailColumnVisible)
+            {
+                if (item.ThumbnailBitmap == null && !item.IsThumbnailLoading)
+                {
+                    _ = ComicDownloaderGMTPC.Services.ThumbnailPreviewService.Instance.EnsureThumbnailCacheAsync(item);
+                }
+            }
+        }
+    }
+
+    private void OnQueueThumbnailPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Control control && control.DataContext is ComicBookItem item && DataContext is MainViewModel vm)
+        {
+            var point = e.GetCurrentPoint(control);
+            if (point.Properties.IsRightButtonPressed)
+            {
+                return;
+            }
+            if (vm.IsPopupPreview)
+            {
+                vm.ShowHoverPreview(item);
+                UpdateHoverPreviewPosition(e);
+                e.Handled = true;
+            }
+        }
+    }
+
     private void OnThumbnailItemPointerEntered(object? sender, PointerEventArgs e)
     {
         if (e.Pointer.Type == PointerType.Touch) return;
@@ -880,6 +923,20 @@ public partial class MainView : UserControl
             border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");
             border.BorderThickness = new Thickness(1);
         }
+        var popup = this.FindControl<Border>("HoverPreviewPopupBorder");
+        if (popup != null && popup.IsPointerOver)
+        {
+            return;
+        }
+        if (DataContext is MainViewModel vm)
+        {
+            vm.HideHoverPreview();
+        }
+    }
+
+    private void OnPopupPreviewPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch) return;
         if (DataContext is MainViewModel vm)
         {
             vm.HideHoverPreview();
@@ -929,12 +986,23 @@ public partial class MainView : UserControl
             return;
         }
 
-        var pos = e.GetPosition(this);
         double viewW = this.Bounds.Width > 0 ? this.Bounds.Width : 1200;
         double viewH = this.Bounds.Height > 0 ? this.Bounds.Height : 850;
-        double popupW = popup.Bounds.Width > 0 ? popup.Bounds.Width : 340;
+        double popupW = Math.Min(340, Math.Max(260, viewW - 24));
+        popup.Width = popupW;
         double popupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 480;
 
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
+        {
+            // Trên Android / Touch: căn giữa ngang màn hình và đặt ở vùng nhìn thấy rõ để nút ✕ ĐÓNG luôn dễ bấm
+            double touchLeft = Math.Max(12, (viewW - popupW) / 2.0);
+            var touchPos = e.GetPosition(this);
+            double touchTop = Math.Clamp(touchPos.Y - 120, 16, Math.Max(16, viewH - popupH - 24));
+            popup.Margin = new Thickness(touchLeft, touchTop, 0, 0);
+            return;
+        }
+
+        var pos = e.GetPosition(this);
         double left = pos.X + 24;
         if (left + popupW + 16 > viewW)
         {

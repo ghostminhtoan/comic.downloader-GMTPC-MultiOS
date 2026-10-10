@@ -24,25 +24,33 @@ public sealed class ThumbnailPreviewService
     public static ThumbnailPreviewService Instance => _lazy.Value;
 
     private readonly HttpClient _httpClient;
-    private readonly SemaphoreSlim _generalSemaphore = new(OperatingSystem.IsAndroid() ? 2 : 4, OperatingSystem.IsAndroid() ? 2 : 4);
+    private readonly CookieContainer _cookieContainer = new();
+    private readonly SemaphoreSlim _generalSemaphore = new(OperatingSystem.IsAndroid() ? 3 : 4, OperatingSystem.IsAndroid() ? 3 : 4);
     private readonly SemaphoreSlim _rateSensitiveSemaphore = new(OperatingSystem.IsAndroid() ? 1 : 2, OperatingSystem.IsAndroid() ? 1 : 2);
     private readonly ConcurrentDictionary<string, string> _candidateUrlCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> _failedUrlCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _cacheRoot;
     private static readonly Random _jitter = new();
     private static readonly object _bitmapMemoryLock = new();
-    private static readonly Queue<ComicBookItem> _loadedThumbnailItems = new();
     private static ComicBookItem? _activeHighResItem;
 
     private ThumbnailPreviewService()
     {
-        var handler = new HttpClientHandler
+        try
         {
-            AutomaticDecompression = DecompressionMethods.All,
-            ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
-            AllowAutoRedirect = true,
-            MaxConnectionsPerServer = 8
-        };
+            var ehUri = new Uri("https://e-hentai.org");
+            _cookieContainer.Add(ehUri, new Cookie("nw", "1", "/", ".e-hentai.org"));
+            _cookieContainer.Add(ehUri, new Cookie("nw", "always", "/", ".e-hentai.org"));
+            _cookieContainer.Add(ehUri, new Cookie("sl", "dm_1", "/", ".e-hentai.org"));
+
+            var exUri = new Uri("https://exhentai.org");
+            _cookieContainer.Add(exUri, new Cookie("nw", "1", "/", ".exhentai.org"));
+            _cookieContainer.Add(exUri, new Cookie("nw", "always", "/", ".exhentai.org"));
+            _cookieContainer.Add(exUri, new Cookie("sl", "dm_1", "/", ".exhentai.org"));
+        }
+        catch { }
+
+        var handler = DoHResolver.CreateBypassHandler(_cookieContainer);
 
         _httpClient = new HttpClient(handler)
         {
@@ -110,6 +118,20 @@ public sealed class ThumbnailPreviewService
                combined.Contains("damconuong") ||
                combined.Contains("daomeoden") ||
                combined.Contains("vi-hentai");
+    }
+
+    private static bool IsPlaceholderImageUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return true;
+        string lower = url.Trim().ToLowerInvariant();
+        return lower.StartsWith("data:") ||
+               lower.Contains("blank.gif") ||
+               lower.Contains("mr.gif") ||
+               lower.Contains("no_image") ||
+               lower.Contains("no-image") ||
+               lower.Contains("/g/t.png") ||
+               lower.Contains("/g/d.png") ||
+               lower.Contains("spacer.gif");
     }
 
     private static async Task RunOnUiAsync(Action action)
@@ -251,20 +273,24 @@ public sealed class ThumbnailPreviewService
         // Kiểm tra xem đã có sẵn file cache trên ổ đĩa chưa
         if (File.Exists(thumbFile) && new FileInfo(thumbFile).Length > 0)
         {
-            await LoadThumbnailBitmapToItemAsync(item, thumbFile, File.Exists(originalFile) ? originalFile : thumbFile);
-            return;
+            await LoadThumbnailBitmapToItemAsync(item, thumbFile, File.Exists(originalFile) ? originalFile : thumbFile).ConfigureAwait(false);
+            if (item.ThumbnailBitmap != null) return;
         }
 
         if (File.Exists(originalFile) && new FileInfo(originalFile).Length > 0)
         {
             GenerateThumbImageFromOriginal(originalFile, thumbFile);
             string fileToLoad = File.Exists(thumbFile) ? thumbFile : originalFile;
-            await LoadThumbnailBitmapToItemAsync(item, fileToLoad, originalFile);
-            return;
+            await LoadThumbnailBitmapToItemAsync(item, fileToLoad, originalFile).ConfigureAwait(false);
+            if (item.ThumbnailBitmap != null) return;
         }
 
         // Cần tải từ mạng
-        List<string> candidateUrls = await ResolveCandidateUrlsAsync(item, ct).ConfigureAwait(false);
+        List<string> candidateUrls = await ResolveCandidateUrlsAsync(item, ct, forceFreshResolve: false).ConfigureAwait(false);
+        if (candidateUrls.Count == 0)
+        {
+            candidateUrls = await ResolveCandidateUrlsAsync(item, ct, forceFreshResolve: true).ConfigureAwait(false);
+        }
         if (candidateUrls.Count == 0) return;
 
         bool isRateSensitive = IsRateSensitive(item.Url);
@@ -282,22 +308,14 @@ public sealed class ThumbnailPreviewService
         {
             await RunOnUiAsync(() => item.IsThumbnailLoading = true);
 
-            foreach (string candidateUrl in candidateUrls)
+            bool success = await TryDownloadCandidateListAsync(item, candidateUrls, originalFile, thumbFile, ct).ConfigureAwait(false);
+            if (!success && !ct.IsCancellationRequested)
             {
-                if (ct.IsCancellationRequested) break;
-                if (string.IsNullOrWhiteSpace(candidateUrl) || _failedUrlCache.ContainsKey(candidateUrl)) continue;
-
-                bool downloaded = await DownloadImageFileAsync(candidateUrl, originalFile, item.Url, ct).ConfigureAwait(false);
-                if (downloaded && File.Exists(originalFile) && new FileInfo(originalFile).Length > 0)
+                // Fallback: nếu URL ứng viên ban đầu lỗi, ép phân tích lại từ trang gốc / API
+                var freshUrls = await ResolveCandidateUrlsAsync(item, ct, forceFreshResolve: true).ConfigureAwait(false);
+                if (freshUrls.Count > 0)
                 {
-                    GenerateThumbImageFromOriginal(originalFile, thumbFile);
-                    string targetThumb = File.Exists(thumbFile) ? thumbFile : originalFile;
-                    await LoadThumbnailBitmapToItemAsync(item, targetThumb, originalFile);
-                    break;
-                }
-                else
-                {
-                    _failedUrlCache.TryAdd(candidateUrl, 1);
+                    await TryDownloadCandidateListAsync(item, freshUrls, originalFile, thumbFile, ct).ConfigureAwait(false);
                 }
             }
         }
@@ -310,15 +328,39 @@ public sealed class ThumbnailPreviewService
         }
     }
 
+    private async Task<bool> TryDownloadCandidateListAsync(ComicBookItem item, List<string> candidateUrls, string originalFile, string thumbFile, CancellationToken ct)
+    {
+        foreach (string candidateUrl in candidateUrls)
+        {
+            if (ct.IsCancellationRequested) break;
+            if (string.IsNullOrWhiteSpace(candidateUrl) || IsPlaceholderImageUrl(candidateUrl) || _failedUrlCache.ContainsKey(candidateUrl)) continue;
+
+            bool downloaded = await DownloadImageFileAsync(candidateUrl, originalFile, item.Url, ct).ConfigureAwait(false);
+            if (downloaded && File.Exists(originalFile) && new FileInfo(originalFile).Length > 0)
+            {
+                GenerateThumbImageFromOriginal(originalFile, thumbFile);
+                string targetThumb = File.Exists(thumbFile) ? thumbFile : originalFile;
+                await LoadThumbnailBitmapToItemAsync(item, targetThumb, originalFile).ConfigureAwait(false);
+                if (item.ThumbnailBitmap != null)
+                {
+                    return true;
+                }
+            }
+
+            _failedUrlCache.TryAdd(candidateUrl, 1);
+        }
+
+        return false;
+    }
+
     public async Task PrefetchBatchAsync(IEnumerable<ComicBookItem> items, CancellationToken ct = default)
     {
         if (items == null) return;
         var validItems = items.Where(SupportsPreview).Distinct().ToList();
         if (validItems.Count == 0) return;
 
-        // Trên Android, giới hạn prefetch tối đa 30 item gần nhất để tránh tràn RAM và nóng máy
-        int maxPrefetch = OperatingSystem.IsAndroid() ? 30 : 120;
-        var sorted = validItems.OrderBy(x => x.HasThumbnailFile ? 1 : 0).Take(maxPrefetch).ToList();
+        // Ưu tiên nạp trước các truyện chưa có ThumbnailBitmap trên giao diện; không cắt bỏ danh sách ở mốc 30 truyện
+        var sorted = validItems.OrderBy(x => x.ThumbnailBitmap != null ? 1 : 0).ToList();
 
         var tasks = new List<Task>();
         foreach (var item in sorted)
@@ -334,34 +376,84 @@ public sealed class ThumbnailPreviewService
     {
         if (item == null) return;
 
-        try
-        {
-            string cacheDir = GetItemCacheDirectory(item);
-            if (Directory.Exists(cacheDir))
-            {
-                Directory.Delete(cacheDir, recursive: true);
-            }
-        }
-        catch { }
-
         if (!string.IsNullOrWhiteSpace(item.CoverUrl))
         {
             _failedUrlCache.TryRemove(item.CoverUrl, out _);
         }
         if (!string.IsNullOrWhiteSpace(item.Url))
         {
-            _candidateUrlCache.TryRemove(item.Url, out _);
+            if (_candidateUrlCache.TryRemove(item.Url, out string? oldCached) && !string.IsNullOrWhiteSpace(oldCached))
+            {
+                _failedUrlCache.TryRemove(oldCached, out _);
+            }
         }
 
-        await RunOnUiAsync(() =>
-        {
-            item.ThumbnailBitmap = null;
-            item.HighResPreviewBitmap = null;
-            item.ThumbnailLocalPath = null;
-            item.OriginalCoverLocalPath = null;
-        });
+        string cacheDir = GetItemCacheDirectory(item);
+        string originalFile = Path.Combine(cacheDir, "cover.jpg");
+        string thumbFile = Path.Combine(cacheDir, "cover.thumb.jpg");
+        string tempOriginalFile = Path.Combine(cacheDir, "cover.rescan.jpg");
 
-        await EnsureThumbnailCacheAsync(item, ct);
+        await RunOnUiAsync(() => item.IsThumbnailLoading = true);
+        try
+        {
+            // 1. Luôn tìm kiếm bộ URL ứng viên mới nhất (bao gồm cả CoverUrl sẵn có và quét lại từ API/HTML)
+            var candidateUrls = await ResolveCandidateUrlsAsync(item, ct, forceFreshResolve: true).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(item.CoverUrl) && !IsPlaceholderImageUrl(item.CoverUrl) && !candidateUrls.Contains(item.CoverUrl, StringComparer.OrdinalIgnoreCase))
+            {
+                candidateUrls.Insert(0, item.CoverUrl);
+            }
+
+            bool downloadedFresh = false;
+            foreach (string candidateUrl in candidateUrls)
+            {
+                if (ct.IsCancellationRequested) break;
+                if (string.IsNullOrWhiteSpace(candidateUrl) || IsPlaceholderImageUrl(candidateUrl)) continue;
+
+                _failedUrlCache.TryRemove(candidateUrl, out _);
+                if (await DownloadImageFileAsync(candidateUrl, tempOriginalFile, item.Url, ct).ConfigureAwait(false))
+                {
+                    if (File.Exists(tempOriginalFile) && new FileInfo(tempOriginalFile).Length > 0)
+                    {
+                        try
+                        {
+                            File.Copy(tempOriginalFile, originalFile, overwrite: true);
+                            File.Delete(tempOriginalFile);
+                        }
+                        catch { }
+
+                        GenerateThumbImageFromOriginal(originalFile, thumbFile);
+                        string targetThumb = File.Exists(thumbFile) ? thumbFile : originalFile;
+                        await LoadThumbnailBitmapToItemAsync(item, targetThumb, originalFile).ConfigureAwait(false);
+                        if (item.ThumbnailBitmap != null)
+                        {
+                            downloadedFresh = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 2. Nếu mạng lỗi tạm thời nhưng trên đĩa đã có sẵn file cache hợp lệ thì khôi phục lại từ đĩa (tránh mất ảnh cũ)
+            if (!downloadedFresh)
+            {
+                if (File.Exists(thumbFile) && new FileInfo(thumbFile).Length > 0)
+                {
+                    await LoadThumbnailBitmapToItemAsync(item, thumbFile, File.Exists(originalFile) ? originalFile : thumbFile).ConfigureAwait(false);
+                }
+                else if (File.Exists(originalFile) && new FileInfo(originalFile).Length > 0)
+                {
+                    GenerateThumbImageFromOriginal(originalFile, thumbFile);
+                    string targetThumb = File.Exists(thumbFile) ? thumbFile : originalFile;
+                    await LoadThumbnailBitmapToItemAsync(item, targetThumb, originalFile).ConfigureAwait(false);
+                }
+            }
+        }
+        catch { }
+        finally
+        {
+            try { if (File.Exists(tempOriginalFile)) File.Delete(tempOriginalFile); } catch { }
+            await RunOnUiAsync(() => item.IsThumbnailLoading = false);
+        }
     }
 
     private static async Task LoadThumbnailBitmapToItemAsync(ComicBookItem item, string filePath, string? originalPath = null)
@@ -383,24 +475,8 @@ public sealed class ThumbnailPreviewService
                     }
                     if (Avalonia.Application.Current != null)
                     {
-                        int maxInMemory = OperatingSystem.IsAndroid() ? 35 : 150;
-                        lock (_bitmapMemoryLock)
-                        {
-                            if (!_loadedThumbnailItems.Contains(item))
-                            {
-                                _loadedThumbnailItems.Enqueue(item);
-                            }
-                            while (_loadedThumbnailItems.Count > maxInMemory)
-                            {
-                                var evicted = _loadedThumbnailItems.Dequeue();
-                                if (!ReferenceEquals(evicted, item) && !ReferenceEquals(evicted, _activeHighResItem))
-                                {
-                                    evicted.ThumbnailBitmap = null;
-                                    evicted.HighResPreviewBitmap = null;
-                                }
-                            }
-                        }
-
+                        // Không thu hồi (evict) ThumbnailBitmap của các truyện trong hàng đợi vì ảnh đã được thu nhỏ 140px (~100KB/ảnh),
+                        // giúp tránh hiện tượng tự nhiên mất thumbnail khi danh sách có > 35 truyện hoặc khi quét lại thumbnail.
                         using var ms = new MemoryStream(bytes);
                         try
                         {
@@ -461,15 +537,22 @@ public sealed class ThumbnailPreviewService
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, imageUrl);
-            if (!string.IsNullOrWhiteSpace(refererUrl))
+            if (imageUrl.Contains("ehgt.org", StringComparison.OrdinalIgnoreCase) ||
+                imageUrl.Contains("e-hentai.org", StringComparison.OrdinalIgnoreCase) ||
+                imageUrl.Contains("exhentai.org", StringComparison.OrdinalIgnoreCase))
             {
-                request.Headers.Referrer = new Uri(refererUrl);
+                request.Headers.Referrer = new Uri("https://e-hentai.org/");
+                request.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always; sl=dm_1");
             }
-            else if (imageUrl.Contains("thuviensach.vn"))
+            else if (!string.IsNullOrWhiteSpace(refererUrl) && Uri.TryCreate(refererUrl, UriKind.Absolute, out var refUri))
+            {
+                request.Headers.Referrer = refUri;
+            }
+            else if (imageUrl.Contains("thuviensach.vn", StringComparison.OrdinalIgnoreCase))
             {
                 request.Headers.Referrer = new Uri("https://thuviensach.vn/");
             }
-            else if (imageUrl.Contains("gold-usergeneratedcontent.net") || imageUrl.Contains("hitomi.la"))
+            else if (imageUrl.Contains("gold-usergeneratedcontent.net", StringComparison.OrdinalIgnoreCase) || imageUrl.Contains("hitomi.la", StringComparison.OrdinalIgnoreCase))
             {
                 request.Headers.Referrer = new Uri("https://hitomi.la/");
             }
@@ -500,7 +583,7 @@ public sealed class ThumbnailPreviewService
         }
     }
 
-    private async Task<List<string>> ResolveCandidateUrlsAsync(ComicBookItem item, CancellationToken ct)
+    private async Task<List<string>> ResolveCandidateUrlsAsync(ComicBookItem item, CancellationToken ct, bool forceFreshResolve = false)
     {
         var urls = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -509,9 +592,9 @@ public sealed class ThumbnailPreviewService
         {
             if (string.IsNullOrWhiteSpace(u)) return;
             string clean = WebUtility.HtmlDecode(u).Trim();
-            if (string.IsNullOrWhiteSpace(clean) || clean.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return;
+            if (IsPlaceholderImageUrl(clean)) return;
             string abs = MakeAbsoluteUrl(clean, basePage);
-            if (!string.IsNullOrWhiteSpace(abs) && seen.Add(abs))
+            if (!string.IsNullOrWhiteSpace(abs) && !IsPlaceholderImageUrl(abs) && seen.Add(abs))
             {
                 urls.Add(abs);
             }
@@ -520,20 +603,20 @@ public sealed class ThumbnailPreviewService
         string link = item.Url?.Trim() ?? string.Empty;
 
         // 1. Nếu item đã có CoverUrl sẵn từ scraper (và chưa từng lỗi)
-        if (!string.IsNullOrWhiteSpace(item.CoverUrl) && !_failedUrlCache.ContainsKey(item.CoverUrl))
+        if (!forceFreshResolve && !string.IsNullOrWhiteSpace(item.CoverUrl) && !IsPlaceholderImageUrl(item.CoverUrl) && !_failedUrlCache.ContainsKey(item.CoverUrl))
         {
             AddCandidate(item.CoverUrl, link);
         }
 
         if (string.IsNullOrWhiteSpace(link)) return urls;
 
-        if (_candidateUrlCache.TryGetValue(link, out string? cached) && !string.IsNullOrWhiteSpace(cached) && !_failedUrlCache.ContainsKey(cached))
+        if (!forceFreshResolve && _candidateUrlCache.TryGetValue(link, out string? cached) && !string.IsNullOrWhiteSpace(cached) && !_failedUrlCache.ContainsKey(cached))
         {
             AddCandidate(cached, link);
         }
 
-        // Nếu đã có CoverUrl và đã có PreviewTagsText thì dùng luôn trước, trừ khi CoverUrl nằm trong failed cache
-        if (urls.Count > 0 && !string.IsNullOrWhiteSpace(item.PreviewTagsText))
+        // Nếu không ép quét mới và đã có ứng viên từ CoverUrl/Cache thì thử tải ngay trước
+        if (!forceFreshResolve && urls.Count > 0)
         {
             return urls;
         }
@@ -554,7 +637,7 @@ public sealed class ThumbnailPreviewService
                     foreach (Match m in Regex.Matches(scope, @"(?:src|data-original|data-src|data-fb)=[""'](?<url>[^""']+?\.(?:jpe?g|png|gif|webp|bmp)(?:\?[^""']*)?)[""']", RegexOptions.IgnoreCase))
                     {
                         string raw = m.Groups["url"].Value;
-                        if (!raw.Contains("no_image", StringComparison.OrdinalIgnoreCase))
+                        if (!IsPlaceholderImageUrl(raw))
                         {
                             AddCandidate(raw, link);
                         }
@@ -588,21 +671,85 @@ public sealed class ThumbnailPreviewService
                     if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
                 }
             }
-            // E-Hentai / ExHentai
+            // E-Hentai / ExHentai: Ưu tiên gọi Official GData API để lấy chính xác ảnh bìa thumb và tags mà không bị chặn HTML
             else if (link.Contains("e-hentai.org/g/", StringComparison.OrdinalIgnoreCase) || link.Contains("exhentai.org/g/", StringComparison.OrdinalIgnoreCase))
             {
-                string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(html))
+                var gidMatch = Regex.Match(link, @"/g/(?<gid>\d+)/(?<token>[a-zA-Z0-9]+)", RegexOptions.IgnoreCase);
+                if (gidMatch.Success && long.TryParse(gidMatch.Groups["gid"].Value, out long gid))
                 {
-                    CacheExtractedTagsIfNeeded(item, html, link);
-                    string eCover = ExtractRegexGroup(html, @"<div[^>]*id=[""'](?:gcover|gd1)[""'][^>]*>[\s\S]*?(?:src=[""'](?<url>https?://[^""']+)[""']|url\((['""]?)(?<url>https?://[^'"")]+)\1\))");
-                    if (string.IsNullOrWhiteSpace(eCover))
+                    string token = gidMatch.Groups["token"].Value;
+                    try
                     {
-                        eCover = ExtractRegexGroup(html, @"init~(?<url>https?://[^~""]+?\.(?:jpe?g|png|webp))");
+                        var apiPayload = new
+                        {
+                            method = "gdata",
+                            gidlist = new object[] { new object[] { gid, token } },
+                            @namespace = 1
+                        };
+                        using var apiReq = new HttpRequestMessage(HttpMethod.Post, "https://api.e-hentai.org/api.php")
+                        {
+                            Content = new StringContent(JsonSerializer.Serialize(apiPayload), Encoding.UTF8, "application/json")
+                        };
+                        using var apiRes = await _httpClient.SendAsync(apiReq, ct).ConfigureAwait(false);
+                        if (apiRes.IsSuccessStatusCode)
+                        {
+                            string json = await apiRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                            using var doc = JsonDocument.Parse(json);
+                            if (doc.RootElement.TryGetProperty("gmetadata", out var gmeta) && gmeta.GetArrayLength() > 0)
+                            {
+                                var first = gmeta[0];
+                                if (first.TryGetProperty("thumb", out var thumbProp))
+                                {
+                                    string apiThumb = thumbProp.GetString() ?? string.Empty;
+                                    if (!string.IsNullOrWhiteSpace(apiThumb))
+                                    {
+                                        AddCandidate(apiThumb, link);
+                                        await RunOnUiAsync(() => item.CoverUrl = apiThumb);
+                                    }
+                                }
+                                if (first.TryGetProperty("tags", out var tagsProp) && tagsProp.ValueKind == JsonValueKind.Array)
+                                {
+                                    var tagList = new List<string>();
+                                    foreach (var t in tagsProp.EnumerateArray())
+                                    {
+                                        string? tv = t.GetString();
+                                        if (!string.IsNullOrWhiteSpace(tv)) tagList.Add(tv);
+                                        if (tagList.Count >= 18) break;
+                                    }
+                                    if (tagList.Count > 0)
+                                    {
+                                        string formattedTags = "Tags: " + string.Join(", ", tagList);
+                                        try
+                                        {
+                                            string cacheDir = GetItemCacheDirectory(item);
+                                            File.WriteAllText(Path.Combine(cacheDir, "cover.tags.txt"), formattedTags);
+                                        }
+                                        catch { }
+                                        await RunOnUiAsync(() => item.PreviewTagsText = formattedTags);
+                                    }
+                                }
+                            }
+                        }
                     }
-                    AddCandidate(eCover, link);
-                    if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
+                    catch { }
                 }
+
+                if (urls.Count == 0)
+                {
+                    string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(html))
+                    {
+                        CacheExtractedTagsIfNeeded(item, html, link);
+                        string eCover = ExtractRegexGroup(html, @"<div[^>]*id=[""'](?:gcover|gd1)[""'][^>]*>[\s\S]*?(?:src=[""'](?<url>https?://[^""']+)[""']|url\((['""]?)(?<url>https?://[^'"")]+)\1\))");
+                        if (string.IsNullOrWhiteSpace(eCover))
+                        {
+                            eCover = ExtractRegexGroup(html, @"init~(?<url>https?://[^~""]+?\.(?:jpe?g|png|webp))");
+                        }
+                        AddCandidate(eCover, link);
+                    }
+                }
+
+                if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
             }
             // Hentaiforce
             else if (link.Contains("hentaiforce.net/view/", StringComparison.OrdinalIgnoreCase))
@@ -709,6 +856,20 @@ public sealed class ThumbnailPreviewService
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (url.Contains("e-hentai.org", StringComparison.OrdinalIgnoreCase) || url.Contains("exhentai.org", StringComparison.OrdinalIgnoreCase))
+            {
+                request.Headers.TryAddWithoutValidation("Referer", "https://e-hentai.org/");
+                request.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always; sl=dm_1");
+            }
+            else if (url.Contains("hentaiforce.net", StringComparison.OrdinalIgnoreCase))
+            {
+                request.Headers.TryAddWithoutValidation("Referer", "https://hentaiforce.net/");
+            }
+            else if (url.Contains("hitomi.la", StringComparison.OrdinalIgnoreCase) || url.Contains("gold-usergeneratedcontent.net", StringComparison.OrdinalIgnoreCase))
+            {
+                request.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
+            }
+
             using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
             if (response.IsSuccessStatusCode)
             {

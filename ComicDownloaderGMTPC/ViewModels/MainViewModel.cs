@@ -1109,15 +1109,39 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private async Task RescanThumbnailsAsync()
     {
-        var targetItems = ComicBooks.Where(b => b.IsChecked || b.IsSelectedInGrid).ToList();
-        if (targetItems.Count == 0)
+        if (ComicBooks.Count == 0)
+        {
+            return;
+        }
+
+        var checkedItems = ComicBooks.Where(b => b.IsChecked || b.IsSelectedInGrid).ToList();
+        var missingItems = ComicBooks.Where(b => b.ThumbnailBitmap == null || !b.HasThumbnailFile).ToList();
+
+        List<ComicBookItem> targetItems;
+        if (missingItems.Count > 0 && checkedItems.Count == ComicBooks.Count)
+        {
+            // Ưu tiên quét lại các mục đang bị mất thumbnail trước, sau đó quét tiếp các mục còn lại
+            targetItems = missingItems.Concat(ComicBooks.Except(missingItems)).ToList();
+        }
+        else if (checkedItems.Count > 0)
+        {
+            targetItems = checkedItems;
+        }
+        else
         {
             targetItems = ComicBooks.ToList();
         }
-        foreach (var item in targetItems)
-        {
-            await ThumbnailPreviewService.Instance.RescanItemAsync(item);
-        }
+
+        AddLog("INFO", $"🔄 Đang quét lại thumbnail cho {targetItems.Count} truyện...");
+        var tasks = targetItems.Select(item => ThumbnailPreviewService.Instance.RescanItemAsync(item));
+        await Task.WhenAll(tasks);
+        AddLog("SUCCESS", $"✅ Đã hoàn tất quét lại thumbnail ({targetItems.Count} truyện).");
+    }
+
+    [RelayCommand]
+    private void CloseHoverPreview()
+    {
+        HideHoverPreview();
     }
 
     public void ShowHoverPreview(ComicBookItem? item)
