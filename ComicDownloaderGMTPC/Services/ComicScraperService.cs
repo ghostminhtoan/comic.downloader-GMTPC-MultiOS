@@ -465,6 +465,7 @@ public class ComicScraperService
 
             item.Title = ExtractTitle(html, url);
             item.CoverUrl = ExtractCoverUrl(html, url);
+            item.PreviewTagsText = ExtractPreviewTags(html, url);
             item.Chapters = ExtractChapters(html, url, domain);
             item.TotalChapters = item.Chapters.Count;
             item.LatestChapter = item.Chapters.Count > 0 ? item.Chapters[^1].Title : "N/A";
@@ -647,6 +648,7 @@ public class ComicScraperService
         string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         item.Title = ExtractTitle(html, url);
         item.CoverUrl = ExtractCoverUrl(html, url);
+        item.PreviewTagsText = ExtractPreviewTags(html, url);
 
         var uri = new Uri(url);
         string activeDomain = $"{uri.Scheme}://{uri.Host}";
@@ -793,6 +795,7 @@ public class ComicScraperService
         string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         item.Title = ExtractTitle(html, url);
         item.CoverUrl = ExtractCoverUrl(html, url);
+        item.PreviewTagsText = ExtractPreviewTags(html, url);
 
         var uri = new Uri(url);
         string mangaSlug = Path.GetFileName(uri.AbsolutePath.TrimEnd('/'));
@@ -858,6 +861,7 @@ public class ComicScraperService
         string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         item.Title = ExtractTitle(html, url);
         item.CoverUrl = ExtractCoverUrl(html, url);
+        item.PreviewTagsText = ExtractPreviewTags(html, url);
 
         // Bóc tách thẻ <a> có link đọc truyện tranh và text hiển thị
         var anchorMatches = Regex.Matches(
@@ -984,6 +988,7 @@ public class ComicScraperService
         string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         item.Title = ExtractTitle(html, url);
         item.CoverUrl = ExtractCoverUrl(html, url);
+        item.PreviewTagsText = ExtractPreviewTags(html, url);
 
         var uri = new Uri(url);
         string[] segs = uri.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
@@ -1051,6 +1056,7 @@ public class ComicScraperService
         rawTitle = Regex.Replace(rawTitle, @"\s*[\-\|]\s*(?:Việt Hentai|Viet Hentai|Hentai Vietsub HD|Kuro Neko|Mèo đen|sayhentai\.cx|SayHentai\.Vip|SayHentai).*$", string.Empty, RegexOptions.IgnoreCase).Trim();
         item.Title = string.IsNullOrWhiteSpace(rawTitle) ? ExtractFallbackTitleFromUrl(url) : rawTitle;
         item.CoverUrl = ExtractCoverUrl(html, url);
+        item.PreviewTagsText = ExtractPreviewTags(html, url);
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -1187,6 +1193,7 @@ public class ComicScraperService
         }
         item.Title = ExtractTitle(html, url);
         item.CoverUrl = ExtractCoverUrl(html, url);
+        item.PreviewTagsText = ExtractPreviewTags(html, url);
 
         var matches = Regex.Matches(html, @"<a\s+[^>]*href=[""'](?<link>[^""']*-chap-(?<num>\d+(?:\.\d+)?)[^""']*)[""'][^>]*>(?<text>.*?)</a>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1249,6 +1256,7 @@ public class ComicScraperService
         string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         item.Title = ExtractTitle(html, url);
         item.CoverUrl = ExtractCoverUrl(html, url);
+        item.PreviewTagsText = ExtractPreviewTags(html, url);
 
         var uri = new Uri(url);
         string slug = uri.AbsolutePath.Trim('/').Split('/')[0];
@@ -2522,21 +2530,123 @@ public class ComicScraperService
         return ExtractFallbackTitleFromUrl(url);
     }
 
-    private string ExtractCoverUrl(string html, string baseUrl)
+    public string ExtractCoverUrl(string html, string baseUrl)
     {
+        if (string.IsNullOrWhiteSpace(html)) return string.Empty;
+
+        // 1. Ưu tiên vùng ảnh bìa đặc thù của từng site (tránh og:image bị lỗi proxy hoặc ảnh banner chung)
+        var avatarBlock = Regex.Match(html, @"<(?:div|figure)[^>]*class=[""'][^""']*\b(?:book_avatar|col-image|detail-info|book-info|cover)\b[^""']*[""'][^>]*>(?<content>[\s\S]*?)</(?:div|figure)>", RegexOptions.IgnoreCase);
+        if (avatarBlock.Success)
+        {
+            var attrMatches = Regex.Matches(avatarBlock.Groups["content"].Value, @"(?:data-original|data-src|src|data-fb)=[""'](?<url>[^""']+)[""']", RegexOptions.IgnoreCase);
+            foreach (Match m in attrMatches)
+            {
+                string raw = WebUtility.HtmlDecode(m.Groups["url"].Value.Trim());
+                if (!string.IsNullOrWhiteSpace(raw) && !raw.Contains("no_image", StringComparison.OrdinalIgnoreCase) && !raw.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                {
+                    return MakeAbsoluteUrl(raw, baseUrl);
+                }
+            }
+        }
+
+        // 2. Fallback tìm trực tiếp img trong khối book_avatar / col-image / detail-info
+        var imgMatch = Regex.Match(html, @"<(?:div|figure)[^>]*(?:book_avatar|col-image|detail-info|book-info)[^>]*>[\s\S]*?<img[^>]+(?:data-original|data-src|src)=[""'](?<url>[^""']+)[""']", RegexOptions.IgnoreCase);
+        if (imgMatch.Success && !string.IsNullOrWhiteSpace(imgMatch.Groups["url"].Value))
+        {
+            string raw = WebUtility.HtmlDecode(imgMatch.Groups["url"].Value.Trim());
+            if (!raw.Contains("no_image", StringComparison.OrdinalIgnoreCase))
+            {
+                return MakeAbsoluteUrl(raw, baseUrl);
+            }
+        }
+
+        // 3. Fallback og:image
         var ogImage = Regex.Match(html, @"<meta[^>]*property=[""']og:image[""'][^>]*content=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
         if (ogImage.Success && !string.IsNullOrWhiteSpace(ogImage.Groups[1].Value))
         {
-            return MakeAbsoluteUrl(ogImage.Groups[1].Value, baseUrl);
-        }
-
-        var imgMatch = Regex.Match(html, @"<(?:div|figure)[^>]*(?:book_avatar|col-image|detail-info)[^>]*>.*?<img[^>]*src=[""']([^""']+)[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        if (imgMatch.Success && !string.IsNullOrWhiteSpace(imgMatch.Groups[1].Value))
-        {
-            return MakeAbsoluteUrl(imgMatch.Groups[1].Value, baseUrl);
+            return MakeAbsoluteUrl(WebUtility.HtmlDecode(ogImage.Groups[1].Value.Trim()), baseUrl);
         }
 
         return string.Empty;
+    }
+
+    public static string ExtractPreviewTags(string html, string url)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return string.Empty;
+        var tags = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddTag(string rawText)
+        {
+            string clean = WebUtility.HtmlDecode(Regex.Replace(rawText ?? string.Empty, @"<[^>]+>", " ")).Trim();
+            clean = Regex.Replace(clean, @"\s+", " ").Trim(' ', ',', '-', '|', '•');
+            if (!string.IsNullOrWhiteSpace(clean) && clean.Length <= 45 && seen.Add(clean))
+            {
+                tags.Add(clean);
+            }
+        }
+
+        string lowerUrl = (url ?? string.Empty).ToLowerInvariant();
+
+        // 1. TruyenQQ: <ul class="list01">...<a href="/the-loai/...">Tag</a>
+        var list01Match = Regex.Match(html, @"<ul[^>]*class=[""'][^""']*\blist01\b[^""']*[""'][^>]*>(?<content>[\s\S]*?)</ul>", RegexOptions.IgnoreCase);
+        if (list01Match.Success)
+        {
+            foreach (Match m in Regex.Matches(list01Match.Groups["content"].Value, @"<a\b[^>]*>(?<text>[\s\S]*?)</a>", RegexOptions.IgnoreCase))
+            {
+                AddTag(m.Groups["text"].Value);
+            }
+        }
+
+        // 2. NetTruyen: <li class="kind...">...<a href="...">Tag</a>
+        if (tags.Count == 0 && lowerUrl.Contains("nettruyen"))
+        {
+            var kindMatch = Regex.Match(html, @"<li[^>]*class=[""'][^""']*\bkind\b[^""']*[""'][^>]*>(?<content>[\s\S]*?)</li>", RegexOptions.IgnoreCase);
+            string scope = kindMatch.Success ? kindMatch.Groups["content"].Value : html;
+            foreach (Match m in Regex.Matches(scope, @"<a\b[^>]*href=[""'][^""']*?/(?:tim-truyen|the-loai)/[^""']+[""'][^>]*>(?<text>[\s\S]*?)</a>", RegexOptions.IgnoreCase))
+            {
+                AddTag(m.Groups["text"].Value);
+            }
+        }
+
+        // 3. Thuviensach / Dilib: <div id="pdf">...<a class="button2">Tag</a>
+        if (tags.Count == 0 && (lowerUrl.Contains("thuviensach") || lowerUrl.Contains("dilib")))
+        {
+            var pdfMatch = Regex.Match(html, @"<div[^>]*id=[""']pdf[""'][^>]*>(?<content>[\s\S]*?)</div>", RegexOptions.IgnoreCase);
+            string scope = pdfMatch.Success ? pdfMatch.Groups["content"].Value : html;
+            foreach (Match m in Regex.Matches(scope, @"<a\b[^>]*class=[""'][^""']*\bbutton2\b[^""']*[""'][^>]*>(?<text>[\s\S]*?)</a>", RegexOptions.IgnoreCase))
+            {
+                AddTag(m.Groups["text"].Value);
+            }
+        }
+
+        // 4. E-Hentai / ExHentai: <div id="taglist">...<a id="ta_...">Tag</a>
+        if (tags.Count == 0 && (lowerUrl.Contains("e-hentai") || lowerUrl.Contains("exhentai")))
+        {
+            var taglistMatch = Regex.Match(html, @"<div[^>]*id=[""']taglist[""'][^>]*>(?<content>[\s\S]*?)</div>", RegexOptions.IgnoreCase);
+            string scope = taglistMatch.Success ? taglistMatch.Groups["content"].Value : html;
+            foreach (Match m in Regex.Matches(scope, @"<a\b[^>]*id=[""']ta_[^""']+[""'][^>]*>(?<text>[\s\S]*?)</a>", RegexOptions.IgnoreCase))
+            {
+                AddTag(m.Groups["text"].Value);
+                if (tags.Count >= 18) break;
+            }
+        }
+
+        // 5. Hentaiforce / Vi-Hentai / Damconuong / SayHentai / Daomeoden / General fallback
+        if (tags.Count == 0)
+        {
+            var infoBlock = Regex.Match(html, @"<(?:div|ul)[^>]*class=[""'][^""']*\b(?:list01|kind|genres-content|post-content_item|tag-links|tags|book-info|detail-info|gallery-tags)\b[^""']*[""'][^>]*>(?<content>[\s\S]*?)</(?:div|ul)>", RegexOptions.IgnoreCase);
+            if (infoBlock.Success)
+            {
+                foreach (Match m in Regex.Matches(infoBlock.Groups["content"].Value, @"<a\b[^>]*href=[""'][^""']*?/(?:the-loai|tag|tags|genre|genres|category)/[^""']+[""'][^>]*>(?<text>[\s\S]*?)</a>", RegexOptions.IgnoreCase))
+                {
+                    AddTag(m.Groups["text"].Value);
+                    if (tags.Count >= 15) break;
+                }
+            }
+        }
+
+        return tags.Count > 0 ? "Tags: " + string.Join(", ", tags) : string.Empty;
     }
 
     private List<ChapterItem> ExtractChapters(string html, string baseUrl, string domain)

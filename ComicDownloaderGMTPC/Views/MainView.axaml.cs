@@ -746,6 +746,34 @@ public partial class MainView : UserControl
         }
     }
 
+    private void OnQueueItemPointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (sender is Border border)
+        {
+            border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");
+        }
+        if (sender is Control control && control.DataContext is ComicBookItem item)
+        {
+            if (DataContext is MainViewModel vm)
+            {
+                vm.ShowHoverPreview(item);
+                UpdateHoverPreviewPosition(e);
+            }
+        }
+    }
+
+    private void OnQueueItemPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (sender is Border border)
+        {
+            border.BorderBrush = Avalonia.Media.Brush.Parse("#1E293B");
+        }
+        if (DataContext is MainViewModel vm)
+        {
+            vm.HideHoverPreview();
+        }
+    }
+
     private void OnQueueItemPointerMoved(object? sender, PointerEventArgs e)
     {
         if (_queueTouchHoldCts != null && sender is Visual visual)
@@ -756,6 +784,18 @@ public partial class MainView : UserControl
             if (Math.Sqrt(dx * dx + dy * dy) > 15) // Người dùng đang cuộn danh sách (swipe/scroll)
             {
                 _queueTouchHoldCts.Cancel();
+            }
+        }
+
+        if (sender is Control control && control.DataContext is ComicBookItem item && DataContext is MainViewModel vm)
+        {
+            if (vm.IsPopupPreview)
+            {
+                if (vm.ActiveHoverItem != item || !vm.IsHoverPreviewVisible)
+                {
+                    vm.ShowHoverPreview(item);
+                }
+                UpdateHoverPreviewPosition(e);
             }
         }
     }
@@ -809,17 +849,43 @@ public partial class MainView : UserControl
 
     private void OnThumbnailItemPointerEntered(object? sender, PointerEventArgs e)
     {
+        if (sender is Border border)
+        {
+            border.BorderBrush = Avalonia.Media.Brush.Parse("#FF2A85");
+            border.BorderThickness = new Thickness(1.5);
+        }
         if (sender is Control control && control.DataContext is ComicBookItem item)
         {
             if (DataContext is MainViewModel vm)
             {
                 vm.ShowHoverPreview(item);
+                UpdateHoverPreviewPosition(e);
+            }
+        }
+    }
+
+    private void OnThumbnailItemPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (sender is Control control && control.DataContext is ComicBookItem item && DataContext is MainViewModel vm)
+        {
+            if (vm.IsPopupPreview)
+            {
+                if (vm.ActiveHoverItem != item || !vm.IsHoverPreviewVisible)
+                {
+                    vm.ShowHoverPreview(item);
+                }
+                UpdateHoverPreviewPosition(e);
             }
         }
     }
 
     private void OnThumbnailItemPointerExited(object? sender, PointerEventArgs e)
     {
+        if (sender is Border border)
+        {
+            border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");
+            border.BorderThickness = new Thickness(1);
+        }
         if (DataContext is MainViewModel vm)
         {
             vm.HideHoverPreview();
@@ -838,6 +904,16 @@ public partial class MainView : UserControl
                 return;
             }
 
+            var src = e.Source as Control;
+            while (src != null && src != control)
+            {
+                if (src is CheckBox || src is Button)
+                {
+                    return;
+                }
+                src = src.Parent as Control;
+            }
+
             if (DataContext is MainViewModel vm)
             {
                 // Nếu click vào thẻ, chọn truyện này
@@ -845,9 +921,43 @@ public partial class MainView : UserControl
                 if (vm.IsPopupPreview)
                 {
                     vm.ShowHoverPreview(item);
+                    UpdateHoverPreviewPosition(e);
                 }
             }
         }
+    }
+
+    private void UpdateHoverPreviewPosition(PointerEventArgs e)
+    {
+        var popup = this.FindControl<Border>("HoverPreviewPopupBorder");
+        if (popup == null)
+        {
+            return;
+        }
+
+        var pos = e.GetPosition(this);
+        double viewW = this.Bounds.Width > 0 ? this.Bounds.Width : 1200;
+        double viewH = this.Bounds.Height > 0 ? this.Bounds.Height : 850;
+        double popupW = popup.Bounds.Width > 0 ? popup.Bounds.Width : 340;
+        double popupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 480;
+
+        double left = pos.X + 24;
+        if (left + popupW + 16 > viewW)
+        {
+            left = Math.Max(12, pos.X - popupW - 24);
+        }
+
+        double top = pos.Y - 40;
+        if (top + popupH + 16 > viewH)
+        {
+            top = Math.Max(12, viewH - popupH - 16);
+        }
+        if (top < 12)
+        {
+            top = 12;
+        }
+
+        popup.Margin = new Thickness(left, top, 0, 0);
     }
 
     private void OnClosePreviewOverlayClicked(object? sender, RoutedEventArgs e)

@@ -431,6 +431,13 @@ public partial class MainViewModel : ViewModelBase
                                 Url = book.Url,
                                 Domain = book.Domain,
                                 CoverUrl = book.CoverUrl,
+                                ThumbnailLocalPath = book.ThumbnailLocalPath,
+                                OriginalCoverLocalPath = book.OriginalCoverLocalPath,
+                                ThumbnailBitmap = book.ThumbnailBitmap,
+                                HighResPreviewBitmap = book.HighResPreviewBitmap,
+                                PreviewTagsText = book.PreviewTagsText,
+                                LatestChapter = book.LatestChapter,
+                                MissingChapters = book.MissingChapters,
                                 PreferredLanguage = book.PreferredLanguage,
                                 ChapterSelectionText = range,
                                 Status = "Waiting",
@@ -1002,6 +1009,49 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isThumbnailMode;
 
+    public List<string> QueueViewModes { get; } = new()
+    {
+        "List view",
+        "Thumbnail view",
+        "List + thumbnail column"
+    };
+
+    [ObservableProperty]
+    private string _selectedQueueViewMode = "List view";
+
+    public bool IsListViewMode => !IsThumbnailMode;
+
+    public bool IsThumbnailColumnVisible => SelectedQueueViewMode == "List + thumbnail column";
+
+    partial void OnSelectedQueueViewModeChanged(string value)
+    {
+        bool thumbMode = value == "Thumbnail view";
+        if (IsThumbnailMode != thumbMode)
+        {
+            IsThumbnailMode = thumbMode;
+        }
+        OnPropertyChanged(nameof(IsListViewMode));
+        OnPropertyChanged(nameof(IsThumbnailColumnVisible));
+        if (thumbMode || value == "List + thumbnail column")
+        {
+            _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+        }
+    }
+
+    partial void OnIsThumbnailModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsListViewMode));
+        OnPropertyChanged(nameof(IsThumbnailColumnVisible));
+        if (value && SelectedQueueViewMode != "Thumbnail view")
+        {
+            SelectedQueueViewMode = "Thumbnail view";
+        }
+        else if (!value && SelectedQueueViewMode == "Thumbnail view")
+        {
+            SelectedQueueViewMode = "List view";
+        }
+    }
+
     [ObservableProperty]
     private ComicBookItem? _activeHoverItem;
 
@@ -1011,11 +1061,12 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private void ToggleThumbnailMode()
     {
-        IsThumbnailMode = !IsThumbnailMode;
-        if (IsThumbnailMode)
+        SelectedQueueViewMode = SelectedQueueViewMode switch
         {
-            _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
-        }
+            "List view" => "Thumbnail view",
+            "Thumbnail view" => "List + thumbnail column",
+            _ => "List view"
+        };
     }
 
     [RelayCommand]
@@ -1052,6 +1103,7 @@ public partial class MainViewModel : ViewModelBase
         ActiveHoverItem = item;
         IsHoverPreviewVisible = true;
         _ = ThumbnailPreviewService.Instance.EnsureThumbnailCacheAsync(item);
+        _ = ThumbnailPreviewService.Instance.EnsureHighResPreviewAsync(item);
     }
 
     public void HideHoverPreview()
@@ -1654,6 +1706,7 @@ public partial class MainViewModel : ViewModelBase
 
         UpdateStats();
         StartScanMissing();
+        _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
         SelectedRootTabIndex = 2; // Tự động chuyển sang tab Download
     }
 
@@ -1924,6 +1977,8 @@ public partial class MainViewModel : ViewModelBase
             }
 
             UpdateStats();
+            StartScanMissing();
+            _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
             AddLog("SUCCESS", $"📂 Đã phục hồi thành công {addedCount}/{restoredItems.Count} truyện từ file Markdown (.md).");
         }
         catch (Exception ex)
@@ -2308,6 +2363,13 @@ public partial class MainViewModel : ViewModelBase
                 Url = book.Url,
                 Domain = book.Domain,
                 CoverUrl = book.CoverUrl,
+                ThumbnailLocalPath = book.ThumbnailLocalPath,
+                OriginalCoverLocalPath = book.OriginalCoverLocalPath,
+                ThumbnailBitmap = book.ThumbnailBitmap,
+                HighResPreviewBitmap = book.HighResPreviewBitmap,
+                PreviewTagsText = book.PreviewTagsText,
+                LatestChapter = book.LatestChapter,
+                MissingChapters = book.MissingChapters,
                 Subfolder = book.Subfolder,
                 IsSubfolderLocked = book.IsSubfolderLocked,
                 Status = "Waiting",
@@ -2894,6 +2956,7 @@ public partial class MainViewModel : ViewModelBase
 
         UpdateStats();
         StartScanMissing();
+        _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
 
         if (IsAutoDownload)
         {

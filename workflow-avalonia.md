@@ -2029,3 +2029,28 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 - **Nghiệm Thu**:
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+### 15.58. Đồng Bộ Giao Diện 3 Chế Độ View Mode (`List view`, `Thumbnail view`, `List + thumbnail column`), Popup Preview Chuẩn WPF & Tách Hàng Riêng Cho Subfolder
+- **Bối cảnh & Yêu cầu của người dùng**:
+  1. Đổi tên thương hiệu bản WPF thành `Comic Downloader GMTPC WPF`.
+  2. Đưa cụm điều khiển `📁 Subfolder:`, ô nhập `SubfolderInput`, nút `📁 ÁP DỤNG TRUYỆN MỚI` và nút `🔒 ÁP DỤNG TẤT CẢ & KHÓA` xuống một hàng riêng biệt.
+  3. Đồng bộ giao diện và luồng xử lý Thumbnail & Popup Preview trên bản Avalonia giống hệt bản WPF và kiểm thử thực tế với 3 link TruyenQQ (`gijoe-2024-25044`, `ca-vang-shibuya-25047`, `hinowa-chinh-phat-25046`).
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Tách Hàng Riêng Cho Cụm Subfolder (`MainView.axaml`)**:
+     - Bố trí `📁 Subfolder:`, `SubfolderInput`, `📁 ÁP DỤNG TRUYỆN MỚI`, và `🔒 ÁP DỤNG TẤT CẢ & KHÓA` nằm trên một hàng (`WrapPanel`) riêng biệt tại cả thanh dán link nhanh (`Quick Direct Link Bar`) và khung cấu hình thư mục trong Tab Download.
+  2. **Đồng Bộ 3 Chế Độ Hiển Thị (`QueueViewModes` trong `MainViewModel.cs` & `MainView.axaml`)**:
+     - Bổ sung `ComboBox` `VIEW MODE` trên thanh công cụ Hàng đợi với đúng 3 chế độ chuẩn WPF:
+       * `List view`: Hiển thị danh sách hàng chuẩn, di chuột vào bất kỳ hàng nào đều hiển thị Popup Preview.
+       * `Thumbnail view`: Hiển thị lưới thẻ dọc (`Width="195" Height="280"`, nền `#091018`, viền `#00E5FF` chuyển sang `#FF2A85` khi hover) gồm Checkbox góc trái, ảnh bìa dọc ở giữa, biểu tượng `☰` góc phải, tiêu đề vàng đậm (`#FDE047`), `Missing chapter: ...`, `Status: ...`, `Process: ...` và thanh `ProgressBar` kèm `%` ở đáy thẻ.
+       * `List + thumbnail column`: Hiển thị danh sách hàng kèm cột ảnh bìa thu nhỏ (`60x80`) ở bên trái mỗi hàng và hỗ trợ Popup Preview khi di chuột.
+  3. **Popup Preview Độ Phân Giải Cao & Bóc Tách Tags (`ComicScraperService.cs`, `ThumbnailPreviewService.cs`, `ComicBookItem.cs`)**:
+     - Ưu tiên lấy ảnh bìa chính xác từ `div.book_avatar` (`src`, `data-original`, `data-src`, `data-fb`) trước `og:image`, loại bỏ `no_image.jpg`, và kiểm tra tính hợp lệ của ảnh tải về bằng `SKCodec.Create`.
+     - Tự động trích xuất thể loại (`ExtractPreviewTags`, ví dụ `Tags: Action, Shounen, Psychological`) và lưu cache tại `cover.tags.txt`.
+     - Khi di chuột (`ShowHoverPreview`), Popup Preview hiển thị ngay cạnh con trỏ chuột (`IsHitTestVisible="False"`, tự động chống tràn viền màn hình) với ảnh bìa gốc sắc nét (`EffectivePopupBitmap` từ `cover.jpg`), tiêu đề vàng đậm, `latest chapter:`, `missing chapter:`, `Status:` và `Tags:`.
+- **Nghiệm Thu Thực Tế Với 3 Link TruyenQQ**:
+  - `gijoe-2024-25044`: `G.i.joe (2024)` | `Chương 2` | `đủ chapter` | `Chờ tải` | `Tags: Action, Comic`.
+  - `ca-vang-shibuya-25047`: `Cá Vàng Shibuya` | `Chương 46.5` | `đủ chapter` | `Chờ tải` | `Tags: Action, Shounen, Psychological`.
+  - `hinowa-chinh-phat-25046`: `Hinowa Chinh Phạt!` | `Chương 53` | `đủ chapter` | `Chờ tải` | `Tags: Action, Adventure, Fantasy`.
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+

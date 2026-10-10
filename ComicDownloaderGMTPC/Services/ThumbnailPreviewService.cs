@@ -90,21 +90,129 @@ public sealed class ThumbnailPreviewService
                combined.Contains("vi-hentai");
     }
 
+    private static async Task RunOnUiAsync(Action action)
+    {
+        try
+        {
+            if (Avalonia.Application.Current == null || Dispatcher.UIThread.CheckAccess())
+            {
+                action();
+            }
+            else
+            {
+                await Dispatcher.UIThread.InvokeAsync(action);
+            }
+        }
+        catch
+        {
+            try { action(); } catch { }
+        }
+    }
+
+    public async Task EnsureHighResPreviewAsync(ComicBookItem? item, CancellationToken ct = default)
+    {
+        if (item == null || ct.IsCancellationRequested) return;
+        if (item.HighResPreviewBitmap != null && !string.IsNullOrWhiteSpace(item.PreviewTagsText)) return;
+
+        await EnsureThumbnailCacheAsync(item, ct).ConfigureAwait(false);
+
+        string cacheDir = GetItemCacheDirectory(item);
+        string originalFile = Path.Combine(cacheDir, "cover.jpg");
+        string tagsFile = Path.Combine(cacheDir, "cover.tags.txt");
+
+        if (item.HighResPreviewBitmap == null && File.Exists(originalFile) && new FileInfo(originalFile).Length > 0)
+        {
+            try
+            {
+                byte[] bytes = await File.ReadAllBytesAsync(originalFile, ct).ConfigureAwait(false);
+                if (bytes.Length > 0)
+                {
+                    await RunOnUiAsync(() =>
+                    {
+                        try
+                        {
+                            item.OriginalCoverLocalPath = originalFile;
+                            if (Avalonia.Application.Current != null)
+                            {
+                                using var ms = new MemoryStream(bytes);
+                                item.HighResPreviewBitmap = new Bitmap(ms);
+                            }
+                        }
+                        catch { }
+                    });
+                }
+            }
+            catch { }
+        }
+
+        if (string.IsNullOrWhiteSpace(item.PreviewTagsText))
+        {
+            if (File.Exists(tagsFile))
+            {
+                try
+                {
+                    string cachedTags = (await File.ReadAllTextAsync(tagsFile, ct).ConfigureAwait(false)).Trim();
+                    if (!string.IsNullOrWhiteSpace(cachedTags))
+                    {
+                        await RunOnUiAsync(() => item.PreviewTagsText = cachedTags);
+                        return;
+                    }
+                }
+                catch { }
+            }
+
+            string link = item.Url?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(link) && !link.Contains("hitomi.la") && !link.Contains("mangadex.org"))
+            {
+                try
+                {
+                    string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
+                    string extractedTags = ComicScraperService.ExtractPreviewTags(html, link);
+                    if (!string.IsNullOrWhiteSpace(extractedTags))
+                    {
+                        try { await File.WriteAllTextAsync(tagsFile, extractedTags, ct).ConfigureAwait(false); } catch { }
+                        await RunOnUiAsync(() => item.PreviewTagsText = extractedTags);
+                    }
+                }
+                catch { }
+            }
+        }
+    }
+
     public async Task EnsureThumbnailCacheAsync(ComicBookItem item, CancellationToken ct = default)
     {
         if (item == null || ct.IsCancellationRequested) return;
 
-        // Nếu đã có Bitmap nạp vào UI thì bỏ qua
-        if (item.ThumbnailBitmap != null && item.HasThumbnailFile) return;
-
         string cacheDir = GetItemCacheDirectory(item);
         string originalFile = Path.Combine(cacheDir, "cover.jpg");
         string thumbFile = Path.Combine(cacheDir, "cover.thumb.jpg");
+        string tagsFile = Path.Combine(cacheDir, "cover.tags.txt");
+
+        // Đồng bộ tags vào/từ file cache nếu có
+        if (!string.IsNullOrWhiteSpace(item.PreviewTagsText) && !File.Exists(tagsFile))
+        {
+            try { await File.WriteAllTextAsync(tagsFile, item.PreviewTagsText, ct).ConfigureAwait(false); } catch { }
+        }
+        else if (string.IsNullOrWhiteSpace(item.PreviewTagsText) && File.Exists(tagsFile))
+        {
+            try
+            {
+                string cachedTags = (await File.ReadAllTextAsync(tagsFile, ct).ConfigureAwait(false)).Trim();
+                if (!string.IsNullOrWhiteSpace(cachedTags))
+                {
+                    await RunOnUiAsync(() => item.PreviewTagsText = cachedTags);
+                }
+            }
+            catch { }
+        }
+
+        // Nếu đã có Bitmap nạp vào UI thì bỏ qua
+        if (item.ThumbnailBitmap != null && item.HasThumbnailFile) return;
 
         // Kiểm tra xem đã có sẵn file cache trên ổ đĩa chưa
         if (File.Exists(thumbFile) && new FileInfo(thumbFile).Length > 0)
         {
-            await LoadThumbnailBitmapToItemAsync(item, thumbFile);
+            await LoadThumbnailBitmapToItemAsync(item, thumbFile, File.Exists(originalFile) ? originalFile : thumbFile);
             return;
         }
 
@@ -112,7 +220,7 @@ public sealed class ThumbnailPreviewService
         {
             GenerateThumbImageFromOriginal(originalFile, thumbFile);
             string fileToLoad = File.Exists(thumbFile) ? thumbFile : originalFile;
-            await LoadThumbnailBitmapToItemAsync(item, fileToLoad);
+            await LoadThumbnailBitmapToItemAsync(item, fileToLoad, originalFile);
             return;
         }
 
@@ -126,14 +234,14 @@ public sealed class ThumbnailPreviewService
         if (isRateSensitive)
         {
             int jitterMs;
-            lock (_jitter) { jitterMs = _jitter.Next(200, 600); }
+            lock (_jitter) { jitterMs = _jitter.Next(120, 350); }
             await Task.Delay(jitterMs, ct).ConfigureAwait(false);
         }
 
         await semaphore.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            await Dispatcher.UIThread.InvokeAsync(() => item.IsThumbnailLoading = true);
+            await RunOnUiAsync(() => item.IsThumbnailLoading = true);
 
             foreach (string candidateUrl in candidateUrls)
             {
@@ -145,7 +253,7 @@ public sealed class ThumbnailPreviewService
                 {
                     GenerateThumbImageFromOriginal(originalFile, thumbFile);
                     string targetThumb = File.Exists(thumbFile) ? thumbFile : originalFile;
-                    await LoadThumbnailBitmapToItemAsync(item, targetThumb);
+                    await LoadThumbnailBitmapToItemAsync(item, targetThumb, originalFile);
                     break;
                 }
                 else
@@ -158,7 +266,7 @@ public sealed class ThumbnailPreviewService
         catch (Exception) { }
         finally
         {
-            await Dispatcher.UIThread.InvokeAsync(() => item.IsThumbnailLoading = false);
+            await RunOnUiAsync(() => item.IsThumbnailLoading = false);
             semaphore.Release();
         }
     }
@@ -196,16 +304,27 @@ public sealed class ThumbnailPreviewService
         }
         catch { }
 
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        if (!string.IsNullOrWhiteSpace(item.CoverUrl))
+        {
+            _failedUrlCache.TryRemove(item.CoverUrl, out _);
+        }
+        if (!string.IsNullOrWhiteSpace(item.Url))
+        {
+            _candidateUrlCache.TryRemove(item.Url, out _);
+        }
+
+        await RunOnUiAsync(() =>
         {
             item.ThumbnailBitmap = null;
+            item.HighResPreviewBitmap = null;
             item.ThumbnailLocalPath = null;
+            item.OriginalCoverLocalPath = null;
         });
 
         await EnsureThumbnailCacheAsync(item, ct);
     }
 
-    private static async Task LoadThumbnailBitmapToItemAsync(ComicBookItem item, string filePath)
+    private static async Task LoadThumbnailBitmapToItemAsync(ComicBookItem item, string filePath, string? originalPath = null)
     {
         try
         {
@@ -213,14 +332,38 @@ public sealed class ThumbnailPreviewService
             byte[] bytes = await File.ReadAllBytesAsync(filePath).ConfigureAwait(false);
             if (bytes.Length == 0) return;
 
-            await Dispatcher.UIThread.InvokeAsync(() =>
+            byte[]? origBytes = null;
+            if (!string.IsNullOrWhiteSpace(originalPath) && File.Exists(originalPath))
+            {
+                if (string.Equals(filePath, originalPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    origBytes = bytes;
+                }
+                else
+                {
+                    try { origBytes = await File.ReadAllBytesAsync(originalPath).ConfigureAwait(false); } catch { }
+                }
+            }
+
+            await RunOnUiAsync(() =>
             {
                 try
                 {
-                    using var ms = new MemoryStream(bytes);
-                    var bmp = new Bitmap(ms);
-                    item.ThumbnailBitmap = bmp;
                     item.ThumbnailLocalPath = filePath;
+                    if (!string.IsNullOrWhiteSpace(originalPath))
+                    {
+                        item.OriginalCoverLocalPath = originalPath;
+                    }
+                    if (Avalonia.Application.Current != null)
+                    {
+                        using var ms = new MemoryStream(bytes);
+                        item.ThumbnailBitmap = new Bitmap(ms);
+                        if (origBytes != null && origBytes.Length > 0)
+                        {
+                            using var origMs = new MemoryStream(origBytes);
+                            item.HighResPreviewBitmap = new Bitmap(origMs);
+                        }
+                    }
                 }
                 catch { }
             });
@@ -257,7 +400,7 @@ public sealed class ThumbnailPreviewService
             if (resizedBitmap == null) return;
 
             using var image = SKImage.FromBitmap(resizedBitmap);
-            using var data = image.Encode(SKEncodedImageFormat.Jpeg, 82);
+            using var data = image.Encode(SKEncodedImageFormat.Jpeg, 85);
 
             using var fs = new FileStream(thumbFile, FileMode.Create, FileAccess.Write, FileShare.Read);
             data.SaveTo(fs);
@@ -286,16 +429,21 @@ public sealed class ThumbnailPreviewService
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode) return false;
 
+            byte[] bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            if (bytes == null || bytes.Length < 64) return false;
+
+            // Xác thực dữ liệu tải về thực sự là ảnh hợp lệ (tránh trang HTML Cloudflare / 404 giả 200)
+            using var verifyStream = new MemoryStream(bytes);
+            using var codec = SKCodec.Create(verifyStream);
+            if (codec == null) return false;
+
             string? dir = Path.GetDirectoryName(destinationPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
                 Directory.CreateDirectory(dir);
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            await using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.Read);
-            await stream.CopyToAsync(fileStream, 81920, ct).ConfigureAwait(false);
-
+            await File.WriteAllBytesAsync(destinationPath, bytes, ct).ConfigureAwait(false);
             return true;
         }
         catch
@@ -307,99 +455,137 @@ public sealed class ThumbnailPreviewService
     private async Task<List<string>> ResolveCandidateUrlsAsync(ComicBookItem item, CancellationToken ct)
     {
         var urls = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. Nếu item đã có CoverUrl sẵn từ scraper
-        if (!string.IsNullOrWhiteSpace(item.CoverUrl))
+        void AddCandidate(string? u, string basePage)
         {
-            urls.Add(item.CoverUrl);
-            return urls;
+            if (string.IsNullOrWhiteSpace(u)) return;
+            string clean = WebUtility.HtmlDecode(u).Trim();
+            if (string.IsNullOrWhiteSpace(clean) || clean.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return;
+            string abs = MakeAbsoluteUrl(clean, basePage);
+            if (!string.IsNullOrWhiteSpace(abs) && seen.Add(abs))
+            {
+                urls.Add(abs);
+            }
         }
 
         string link = item.Url?.Trim() ?? string.Empty;
+
+        // 1. Nếu item đã có CoverUrl sẵn từ scraper (và chưa từng lỗi)
+        if (!string.IsNullOrWhiteSpace(item.CoverUrl) && !_failedUrlCache.ContainsKey(item.CoverUrl))
+        {
+            AddCandidate(item.CoverUrl, link);
+        }
+
         if (string.IsNullOrWhiteSpace(link)) return urls;
 
-        if (_candidateUrlCache.TryGetValue(link, out string? cached) && !string.IsNullOrWhiteSpace(cached))
+        if (_candidateUrlCache.TryGetValue(link, out string? cached) && !string.IsNullOrWhiteSpace(cached) && !_failedUrlCache.ContainsKey(cached))
         {
-            urls.Add(cached);
+            AddCandidate(cached, link);
+        }
+
+        // Nếu đã có CoverUrl và đã có PreviewTagsText thì dùng luôn trước, trừ khi CoverUrl nằm trong failed cache
+        if (urls.Count > 0 && !string.IsNullOrWhiteSpace(item.PreviewTagsText))
+        {
             return urls;
         }
 
         try
         {
-            // TruyenQQ
-            if (link.Contains("truyenqq"))
+            // TruyenQQ: Thu thập tất cả ứng viên từ book_avatar + og:image và bóc tách Tags
+            if (link.Contains("truyenqq", StringComparison.OrdinalIgnoreCase))
             {
                 string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
-                string truyenqqCover = ExtractRegexGroup(html, @"<div[^>]*class=[""'][^""']*\bbook_avatar\b[^""']*[""'][^>]*>\s*<img[^>]*src=[""'](?<url>[^""']+)[""']");
-                if (!string.IsNullOrWhiteSpace(truyenqqCover))
+                if (!string.IsNullOrWhiteSpace(html))
                 {
-                    string abs = MakeAbsoluteUrl(truyenqqCover, link);
-                    urls.Add(abs);
-                    _candidateUrlCache[link] = abs;
-                    return urls;
+                    CacheExtractedTagsIfNeeded(item, html, link);
+
+                    var avatarBlock = Regex.Match(html, @"<div[^>]*class=[""'][^""']*\bbook_avatar\b[^""']*[""'][^>]*>(?<content>[\s\S]*?)</div>", RegexOptions.IgnoreCase);
+                    string scope = avatarBlock.Success ? avatarBlock.Groups["content"].Value : html;
+
+                    foreach (Match m in Regex.Matches(scope, @"(?:src|data-original|data-src|data-fb)=[""'](?<url>[^""']+?\.(?:jpe?g|png|gif|webp|bmp)(?:\?[^""']*)?)[""']", RegexOptions.IgnoreCase))
+                    {
+                        string raw = m.Groups["url"].Value;
+                        if (!raw.Contains("no_image", StringComparison.OrdinalIgnoreCase))
+                        {
+                            AddCandidate(raw, link);
+                        }
+                    }
+
+                    string og = ExtractRegexGroup(html, @"<meta[^>]*property=[""']og:image[""'][^>]*content=[""'](?<url>[^""']+)[""']");
+                    if (!string.IsNullOrWhiteSpace(og))
+                    {
+                        AddCandidate(og, link);
+                    }
+
+                    foreach (Match m in Regex.Matches(scope, @"data-ni=[""'](?<url>[^""']+)[""']", RegexOptions.IgnoreCase))
+                    {
+                        AddCandidate(m.Groups["url"].Value, link);
+                    }
+
+                    if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
                 }
             }
             // NetTruyen
-            else if (link.Contains("nettruyen"))
+            else if (link.Contains("nettruyen", StringComparison.OrdinalIgnoreCase))
             {
                 string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
-                string nettruyenCover = ExtractRegexGroup(html, @"<div[^>]*class=[""'][^""']*\bcol-image\b[^""']*[""'][^>]*>\s*<img[^>]*src=[""'](?<url>[^""']+)[""']");
-                if (string.IsNullOrWhiteSpace(nettruyenCover))
+                if (!string.IsNullOrWhiteSpace(html))
                 {
-                    nettruyenCover = ExtractRegexGroup(html, @"<div[^>]*class=[""'][^""']*\bcol-image\b[^""']*[""'][^>]*>\s*<img[^>]*data-src=[""'](?<url>[^""']+)[""']");
-                }
-                if (!string.IsNullOrWhiteSpace(nettruyenCover))
-                {
-                    string abs = MakeAbsoluteUrl(nettruyenCover, link);
-                    urls.Add(abs);
-                    _candidateUrlCache[link] = abs;
-                    return urls;
+                    CacheExtractedTagsIfNeeded(item, html, link);
+                    string nettruyenCover = ExtractRegexGroup(html, @"<div[^>]*class=[""'][^""']*\bcol-image\b[^""']*[""'][^>]*>[\s\S]*?<img[^>]+(?:data-original|data-src|src)=[""'](?<url>[^""']+)[""']");
+                    AddCandidate(nettruyenCover, link);
+                    string og = ExtractRegexGroup(html, @"<meta[^>]*property=[""']og:image[""'][^>]*content=[""'](?<url>[^""']+)[""']");
+                    AddCandidate(og, link);
+                    if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
                 }
             }
             // E-Hentai / ExHentai
-            else if (link.Contains("e-hentai.org/g/") || link.Contains("exhentai.org/g/"))
+            else if (link.Contains("e-hentai.org/g/", StringComparison.OrdinalIgnoreCase) || link.Contains("exhentai.org/g/", StringComparison.OrdinalIgnoreCase))
             {
                 string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
-                string eCover = ExtractRegexGroup(html, @"<div[^>]*id=[""']gcover[""'][^>]*>[\s\S]*?<img[^>]*src=[""'](?<url>[^""']+)[""']");
-                if (string.IsNullOrWhiteSpace(eCover))
+                if (!string.IsNullOrWhiteSpace(html))
                 {
-                    eCover = ExtractRegexGroup(html, @"init~(?<url>https?://[^~""]+?\.(?:jpe?g|png|webp))");
-                }
-                if (!string.IsNullOrWhiteSpace(eCover))
-                {
-                    urls.Add(eCover);
-                    _candidateUrlCache[link] = eCover;
-                    return urls;
+                    CacheExtractedTagsIfNeeded(item, html, link);
+                    string eCover = ExtractRegexGroup(html, @"<div[^>]*id=[""'](?:gcover|gd1)[""'][^>]*>[\s\S]*?(?:src=[""'](?<url>https?://[^""']+)[""']|url\((['""]?)(?<url>https?://[^'"")]+)\1\))");
+                    if (string.IsNullOrWhiteSpace(eCover))
+                    {
+                        eCover = ExtractRegexGroup(html, @"init~(?<url>https?://[^~""]+?\.(?:jpe?g|png|webp))");
+                    }
+                    AddCandidate(eCover, link);
+                    if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
                 }
             }
             // Hentaiforce
-            else if (link.Contains("hentaiforce.net/view/"))
+            else if (link.Contains("hentaiforce.net/view/", StringComparison.OrdinalIgnoreCase))
             {
                 string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
-                string hfCover = ExtractRegexGroup(html, @"<div[^>]*class=[""'][^""']*\bcover\b[^""']*[""'][^>]*>\s*<img[^>]*src=[""'](?<url>[^""']+)[""']");
-                if (!string.IsNullOrWhiteSpace(hfCover))
+                if (!string.IsNullOrWhiteSpace(html))
                 {
-                    string abs = MakeAbsoluteUrl(hfCover, link);
-                    urls.Add(abs);
-                    _candidateUrlCache[link] = abs;
-                    return urls;
+                    CacheExtractedTagsIfNeeded(item, html, link);
+                    string hfCover = ExtractRegexGroup(html, @"<div[^>]*id=[""']gallery-main-cover[""'][^>]*>[\s\S]*?<img[^>]+(?:src|data-src)=[""'](?<url>[^""']+)[""']");
+                    if (string.IsNullOrWhiteSpace(hfCover))
+                    {
+                        hfCover = ExtractRegexGroup(html, @"<div[^>]*class=[""'][^""']*\bcover\b[^""']*[""'][^>]*>[\s\S]*?<img[^>]*src=[""'](?<url>[^""']+)[""']");
+                    }
+                    AddCandidate(hfCover, link);
+                    if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
                 }
             }
             // Dilib / Thuviensach
-            else if (link.Contains("dilib.vn") || link.Contains("thuviensach.vn"))
+            else if (link.Contains("dilib.vn", StringComparison.OrdinalIgnoreCase) || link.Contains("thuviensach.vn", StringComparison.OrdinalIgnoreCase))
             {
                 string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
-                string dilibCover = ExtractRegexGroup(html, @"<div[^>]*class=[""'][^""']*\bbook-info\b[^""']*[""'][\s\S]*?<img[^>]*src=[""'](?<url>[^""']+)[""']");
-                if (!string.IsNullOrWhiteSpace(dilibCover))
+                if (!string.IsNullOrWhiteSpace(html))
                 {
-                    string abs = MakeAbsoluteUrl(dilibCover, link);
-                    urls.Add(abs);
-                    _candidateUrlCache[link] = abs;
-                    return urls;
+                    CacheExtractedTagsIfNeeded(item, html, link);
+                    string dilibCover = ExtractRegexGroup(html, @"<div[^>]*class=[""'][^""']*\bbook-info\b[^""']*[""'][\s\S]*?<img[^>]*src=[""'](?<url>[^""']+)[""']");
+                    AddCandidate(dilibCover, link);
+                    if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
                 }
             }
             // Hitomi.la
-            else if (link.Contains("hitomi.la"))
+            else if (link.Contains("hitomi.la", StringComparison.OrdinalIgnoreCase))
             {
                 string galleryId = HitomiResolverService.ExtractGalleryId(link);
                 if (!string.IsNullOrEmpty(galleryId))
@@ -420,19 +606,54 @@ public sealed class ThumbnailPreviewService
                                 string thumbUrl = HitomiResolverService.ResolveImageUrl(hash, name, isThumbnail: true);
                                 if (!string.IsNullOrEmpty(thumbUrl))
                                 {
-                                    urls.Add(thumbUrl);
+                                    AddCandidate(thumbUrl, link);
                                     _candidateUrlCache[link] = thumbUrl;
-                                    return urls;
                                 }
                             }
                         }
                     }
                 }
             }
+            // Các domain khác (SayHentai, Damconuong, Daomeoden, Vi-Hentai, Loppytoon)
+            else
+            {
+                string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(html))
+                {
+                    CacheExtractedTagsIfNeeded(item, html, link);
+                    string og = ExtractRegexGroup(html, @"<meta[^>]*property=[""']og:image[""'][^>]*content=[""'](?<url>[^""']+)[""']");
+                    AddCandidate(og, link);
+                    if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
+                }
+            }
         }
         catch { }
 
         return urls;
+    }
+
+    private void CacheExtractedTagsIfNeeded(ComicBookItem item, string html, string link)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return;
+        string extractedTags = ComicScraperService.ExtractPreviewTags(html, link);
+        if (!string.IsNullOrWhiteSpace(extractedTags))
+        {
+            try
+            {
+                string cacheDir = GetItemCacheDirectory(item);
+                string tagsFile = Path.Combine(cacheDir, "cover.tags.txt");
+                File.WriteAllText(tagsFile, extractedTags);
+            }
+            catch { }
+
+            _ = RunOnUiAsync(() =>
+            {
+                if (string.IsNullOrWhiteSpace(item.PreviewTagsText))
+                {
+                    item.PreviewTagsText = extractedTags;
+                }
+            });
+        }
     }
 
     private async Task<string> FetchStringAsync(string url, CancellationToken ct)

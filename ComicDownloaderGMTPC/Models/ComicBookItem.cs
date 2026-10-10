@@ -38,7 +38,23 @@ public partial class ComicBookItem : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ProgressBarBrush))]
+    [NotifyPropertyChangedFor(nameof(DisplayStatusVi))]
     private string _status = "Waiting"; // Waiting, Downloading, Completed, Error, Stopped, Paused, Moving
+
+    public string DisplayStatusVi => Status switch
+    {
+        "Waiting" => "Chờ tải",
+        "Ready" => "Chờ tải",
+        "Extracting..." => "Đang trích xuất...",
+        "Downloading" => "Đang tải",
+        "Completed" => "Hoàn tất",
+        "Hoàn tất" => "Hoàn tất",
+        "Error" => "Lỗi",
+        "Stopped" => "Đã dừng",
+        "Paused" => "Tạm dừng",
+        "Moving" => "Đang di chuyển",
+        _ => string.IsNullOrWhiteSpace(Status) ? "Chờ tải" : Status
+    };
 
     public string ProgressBarBrush => Status switch
     {
@@ -58,10 +74,16 @@ public partial class ComicBookItem : ObservableObject
     private double _progressPercentage;
 
     [ObservableProperty]
-    private string _progressPercentageText = "0.0%";
+    private string _progressPercentageText = "0%";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ThumbnailProcessDisplay))]
     private string _detailProgressText = "Sẵn sàng";
+
+    public string ThumbnailProcessDisplay =>
+        string.IsNullOrWhiteSpace(DetailProgressText) || DetailProgressText == "Sẵn sàng"
+            ? "-"
+            : DetailProgressText;
 
     [ObservableProperty]
     private string _chapterSelectionText = string.Empty; // Cú pháp chọn chapter: ví dụ 1-10; 12.5; Oneshot
@@ -76,19 +98,65 @@ public partial class ComicBookItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasThumbnailFile))]
     private string? _thumbnailLocalPath;
 
+    [ObservableProperty]
+    private string? _originalCoverLocalPath;
+
     public bool HasThumbnailFile => !string.IsNullOrWhiteSpace(ThumbnailLocalPath) && System.IO.File.Exists(ThumbnailLocalPath);
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EffectivePopupBitmap))]
     private Avalonia.Media.Imaging.Bitmap? _thumbnailBitmap;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EffectivePopupBitmap))]
+    private Avalonia.Media.Imaging.Bitmap? _highResPreviewBitmap;
+
+    public Avalonia.Media.Imaging.Bitmap? EffectivePopupBitmap => HighResPreviewBitmap ?? ThumbnailBitmap;
 
     [ObservableProperty]
     private bool _isThumbnailLoading;
 
     [ObservableProperty]
-    private string _missingChapters = string.Empty;
+    [NotifyPropertyChangedFor(nameof(HasPreviewTags))]
+    private string _previewTagsText = string.Empty;
+
+    public bool HasPreviewTags => !string.IsNullOrWhiteSpace(PreviewTagsText);
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MissingChapterDisplay))]
+    [NotifyPropertyChangedFor(nameof(HasMissingChapterIssue))]
+    [NotifyPropertyChangedFor(nameof(MissingChapterBrush))]
+    private string _missingChapters = string.Empty;
+
+    public bool HasMissingChapterIssue =>
+        !string.IsNullOrWhiteSpace(MissingChapters) &&
+        !MissingChapters.Contains("Đủ", StringComparison.OrdinalIgnoreCase) &&
+        !MissingChapters.Contains("Không thiếu", StringComparison.OrdinalIgnoreCase) &&
+        !MissingChapters.Equals("Complete", StringComparison.OrdinalIgnoreCase);
+
+    public string MissingChapterDisplay =>
+        HasMissingChapterIssue ? MissingChapters : "đủ chapter";
+
+    public string MissingChapterBrush =>
+        HasMissingChapterIssue ? "#FF2A85" : "#00E5FF";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LatestChapterDisplay))]
     private string _latestChapter = string.Empty;
+
+    public string LatestChapterDisplay
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(LatestChapter) && !LatestChapter.Equals("N/A", StringComparison.OrdinalIgnoreCase))
+                return LatestChapter;
+            if (Chapters != null && Chapters.Count > 0 && !string.IsNullOrWhiteSpace(Chapters[^1].Title))
+                return Chapters[^1].Title;
+            if (TotalChapters > 0)
+                return $"Chương {TotalChapters}";
+            return "N/A";
+        }
+    }
 
     [ObservableProperty]
     private string _preferredLanguage = "vi";
