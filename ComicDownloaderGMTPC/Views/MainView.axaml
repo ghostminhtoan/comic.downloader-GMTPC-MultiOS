@@ -1508,10 +1508,21 @@
 
 
                                     <!-- Danh sách các hàng truyện (List view & List + thumbnail column) -->
-                                    <ScrollViewer x:Name="QueueScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="0,0,0,70" IsVisible="{Binding !IsThumbnailMode}">
-                                        <ItemsControl x:Name="QueueItemsControl" ItemsSource="{Binding ComicBooks}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
+                                    <ItemsControl x:Name="QueueItemsControl" Grid.Row="1" ItemsSource="{Binding ComicBooks}" MinHeight="260" Padding="0,0,0,70" IsVisible="{Binding !IsThumbnailMode}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.Template>
+                                            <ControlTemplate>
+                                                <ScrollViewer x:Name="QueueScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{TemplateBinding Padding}">
+                                                    <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                                                </ScrollViewer>
+                                            </ControlTemplate>
+                                        </ItemsControl.Template>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
                                                     <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Margin="0,0,0,2" CornerRadius="4" ClipToBounds="True"
                                                             PointerEntered="OnQueueItemPointerEntered"
                                                             PointerExited="OnQueueItemPointerExited"
@@ -1803,12 +1814,11 @@
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </ScrollViewer>
+                                    </ItemsControl>
 
                                     <!-- LƯỚI THẺ ẢNH THUMBNAIL (THUMBNAIL VIEW MODE - CHUẨN GIAO DIỆN WPF) -->
                                     <ScrollViewer x:Name="ThumbnailScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="8,8,8,70" IsVisible="{Binding IsThumbnailMode}">
-                                        <ItemsControl x:Name="ThumbnailItemsControl" ItemsSource="{Binding ComicBooks}">
+                                        <ItemsControl x:Name="ThumbnailItemsControl" ItemsSource="{Binding ActiveThumbnailItemsSource}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
                                                     <WrapPanel Orientation="Horizontal" />
@@ -1891,29 +1901,39 @@
                                         </WrapPanel>
                                     </Border>
 
-                                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="0,0,0,70">
-                                        <ItemsControl ItemsSource="{Binding ScanResults}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="8,5">
-                                                        <Grid ColumnDefinitions="25, 75, *, Auto" VerticalAlignment="Center">
-                                                            <TextBlock Grid.Column="0" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" VerticalAlignment="Center" />
-                                                            <Border Grid.Column="1" Background="#1E293B" CornerRadius="3" Padding="4,1" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                                <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="SemiBold" />
-                                                            </Border>
-                                                            <StackPanel Grid.Column="2" Margin="4,0" VerticalAlignment="Center">
-                                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="11" TextTrimming="CharacterEllipsis" />
-                                                                <TextBlock Text="{Binding MissingIntegerChapters, StringFormat='{}Thiếu: {0}'}" Foreground="#FDE047" FontSize="10" TextTrimming="CharacterEllipsis" />
-                                                            </StackPanel>
-                                                            <Border Grid.Column="3" Background="#1E293B" CornerRadius="3" Padding="5,2" VerticalAlignment="Center">
-                                                                <TextBlock Text="{Binding Status}" FontSize="9" Foreground="#10B981" FontWeight="SemiBold" />
-                                                            </Border>
-                                                        </Grid>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </ScrollViewer>
+                                    <ItemsControl Grid.Row="1" ItemsSource="{Binding ScanResults}" MinHeight="260" Padding="0,0,0,70">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.Template>
+                                            <ControlTemplate>
+                                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{TemplateBinding Padding}">
+                                                    <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                                                </ScrollViewer>
+                                            </ControlTemplate>
+                                        </ItemsControl.Template>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="8,5">
+                                                    <Grid ColumnDefinitions="25, 75, *, Auto" VerticalAlignment="Center">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" VerticalAlignment="Center" />
+                                                        <Border Grid.Column="1" Background="#1E293B" CornerRadius="3" Padding="4,1" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="SemiBold" />
+                                                        </Border>
+                                                        <StackPanel Grid.Column="2" Margin="4,0" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding MissingIntegerChapters, StringFormat='{}Thiếu: {0}'}" Foreground="#FDE047" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                        <Border Grid.Column="3" Background="#1E293B" CornerRadius="3" Padding="5,2" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Status}" FontSize="9" Foreground="#10B981" FontWeight="SemiBold" />
+                                                        </Border>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </Grid>
                             </TabItem>
 
@@ -1928,21 +1948,31 @@
                                     </Border>
 
                                     <Border Grid.Row="1" Background="#0A0E17" Padding="6" MinHeight="260">
-                                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,0,70">
-                                            <ItemsControl ItemsSource="{Binding Logs}">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Grid ColumnDefinitions="50, 55, *" Margin="0,1">
-                                                            <TextBlock Grid.Column="0" Text="{Binding TimeText}" Foreground="#64748B" FontSize="9" FontFamily="Consolas, Monospace" VerticalAlignment="Center" />
-                                                            <Border Grid.Column="1" CornerRadius="2" Padding="2,1" HorizontalAlignment="Left" Background="#1E293B" VerticalAlignment="Center">
-                                                                <TextBlock Text="{Binding Level}" FontSize="8" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Center" />
-                                                            </Border>
-                                                            <TextBlock Grid.Column="2" Text="{Binding Message}" Foreground="#E2E8F0" FontSize="9" FontFamily="Consolas, Monospace" TextWrapping="Wrap" VerticalAlignment="Center" Margin="3,0,0,0" />
-                                                        </Grid>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </ScrollViewer>
+                                        <ItemsControl ItemsSource="{Binding Logs}" Padding="0,0,0,70">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <VirtualizingStackPanel />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.Template>
+                                                <ControlTemplate>
+                                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{TemplateBinding Padding}">
+                                                        <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                                                    </ScrollViewer>
+                                                </ControlTemplate>
+                                            </ItemsControl.Template>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid ColumnDefinitions="50, 55, *" Margin="0,1">
+                                                        <TextBlock Grid.Column="0" Text="{Binding TimeText}" Foreground="#64748B" FontSize="9" FontFamily="Consolas, Monospace" VerticalAlignment="Center" />
+                                                        <Border Grid.Column="1" CornerRadius="2" Padding="2,1" HorizontalAlignment="Left" Background="#1E293B" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Level}" FontSize="8" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Center" />
+                                                        </Border>
+                                                        <TextBlock Grid.Column="2" Text="{Binding Message}" Foreground="#E2E8F0" FontSize="9" FontFamily="Consolas, Monospace" TextWrapping="Wrap" VerticalAlignment="Center" Margin="3,0,0,0" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
                                     </Border>
                                 </Grid>
                             </TabItem>

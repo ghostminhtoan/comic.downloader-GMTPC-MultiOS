@@ -52,6 +52,11 @@ public class BackgroundExecutionService
         return _activeTasks.Values.Where(t => t.IsRunning).OrderByDescending(t => t.StartTime).FirstOrDefault();
     }
 
+    private long _lastNotificationUpdateTick;
+    private string _lastNotifiedTaskId = string.Empty;
+    private bool _lastNotifiedDownloading;
+    private bool _lastNotifiedPaused;
+
     public void ReportProgress(string taskId, string taskTitle, string detail, double progressPercentage, bool isRunning)
     {
         if (string.IsNullOrWhiteSpace(taskId)) return;
@@ -93,6 +98,26 @@ public class BackgroundExecutionService
 
         try
         {
+            bool isDownloading = DownloadEngineService.Instance.IsDownloading;
+            bool isPaused = DownloadEngineService.Instance.IsPaused;
+            long now = Environment.TickCount64;
+            long minIntervalMs = OperatingSystem.IsAndroid() ? 1000 : 300;
+
+            bool stateChanged = !isRunning
+                                || !string.Equals(_lastNotifiedTaskId, taskId, StringComparison.Ordinal)
+                                || _lastNotifiedDownloading != isDownloading
+                                || _lastNotifiedPaused != isPaused;
+
+            if (!stateChanged && now - _lastNotificationUpdateTick < minIntervalMs)
+            {
+                return;
+            }
+
+            _lastNotificationUpdateTick = now;
+            _lastNotifiedTaskId = taskId;
+            _lastNotifiedDownloading = isDownloading;
+            _lastNotifiedPaused = isPaused;
+
             TaskProgressChanged?.Invoke(task);
             bool anyRunning = HasActiveTasks;
             AnyTaskRunningChanged?.Invoke(anyRunning);
@@ -104,8 +129,6 @@ public class BackgroundExecutionService
                 int percent = (int)Math.Round(primary.ProgressPercentage);
                 string title = $"Comic-GMTPC: {primary.Title}";
                 string notifText = $"{primary.Detail} ({percent}%)";
-                bool isDownloading = DownloadEngineService.Instance.IsDownloading;
-                bool isPaused = DownloadEngineService.Instance.IsPaused;
 
                 string action1Text;
                 string action2Text;
@@ -142,6 +165,7 @@ public class BackgroundExecutionService
             }
             else
             {
+                _lastNotifiedTaskId = string.Empty;
                 NativeStopForegroundNotification?.Invoke();
             }
         }

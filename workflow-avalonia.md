@@ -2075,3 +2075,32 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.61. Khắc Phục Triệt Để Tình Trạng Nóng Máy Khi Tải & Crash Khi Hàng Đợi > 30 Truyện Trên Android (`ThumbnailPreviewService.cs`, `BackgroundExecutionService.cs`, `ComicBackgroundService.cs`, `ComicBookItem.cs`, `DownloadEngineService.cs`, `MainView.axaml`, `MainView.axaml.cs`, `MainViewModel.cs`)
+- **Nguyên nhân cốt lõi**:
+  1. *Lỗi đường dẫn Read-Only Root (`/`) & Tràn bộ nhớ Bitmap (`OutOfMemoryError`) trong `ThumbnailPreviewService`*:
+     - Trên Android, `AppContext.BaseDirectory` trả về `/` (read-only root filesystem), khiến `Directory.CreateDirectory(_cacheRoot)` trong constructor hoặc `GetItemCacheDirectory` ném `UnauthorizedAccessException` / `IOException` làm sập tiến trình bất đồng bộ.
+     - Khi nạp > 30 truyện, `PrefetchBatchAsync` tải và decode đồng thời cả `ThumbnailBitmap` lẫn `HighResPreviewBitmap` (full-resolution `new Bitmap(ms)` lên tới 8–16 MB/ảnh) cho toàn bộ danh sách, gây tràn bộ nhớ native Skia/Android và crash ngay ở mốc ~30 truyện.
+  2. *Không ảo hóa giao diện (`UI Virtualization`) & Nhân đôi cây Visual Tree trên `MainView.axaml`*:
+     - `QueueItemsControl`, `ScanResults` và `Logs` đặt trực tiếp trong `ScrollViewer` ngoài khiến `ItemsControl` khởi tạo toàn bộ hàng trăm control cùng lúc (mỗi hàng gồm hàng chục `Border`, `Button`, `ProgressBar`).
+     - `ThumbnailItemsControl` vẫn bind `ItemsSource="{Binding ComicBooks}"` ngay cả khi đang ở `List view` (`IsVisible="False"`), nhân đôi số lượng item control trong bộ nhớ.
+  3. *Bão cập nhật UI (`Dispatcher.UIThread`) & Spam Android Binder IPC (`NotificationManager`) gây nóng máy*:
+     - Khi tải đa luồng, mỗi trang truyện tải xong đều gọi trực tiếp setter của `ComicBookItem` (`Progress`, `ProgressText`, `DownloadedImages`, `Status`) từ luồng nền (không qua Dispatcher và không throttle) đồng thời bắn `ProgressUpdated` liên tục (30–80 lần/giây).
+     - Mỗi lần `UpdateStats()` chạy đều gọi `BackgroundExecutionService.ReportProgress` -> `ComicBackgroundService.UpdateNotification` với kênh `NotificationImportance.High` / `PriorityHigh`, bắt Android SystemUI dựng lại notification liên tục qua Binder IPC gây quá nhiệt CPU/GPU và giật lag/ANR.
+- **Giải pháp Thực hiện (First-Principles Engineering Rigor)**:
+  1. **Chuẩn hóa Lưu trữ & Quản trị Bộ nhớ Bitmap trên Android (`ThumbnailPreviewService.cs`)**:
+     - Trên Android, chuyển `_cacheRoot` sang `Environment.SpecialFolder.LocalApplicationData` kèm fallback an toàn về `Path.GetTempPath()`.
+     - Không bao giờ decode sẵn `HighResPreviewBitmap` trong quá trình nạp/prefetch; chỉ decode khi người dùng thực sự mở Popup Preview (`DecodeToWidth(ms, 340)` trên Android) và chỉ giữ tối đa 1 `_activeHighResItem` trong RAM.
+     - Giải mã `ThumbnailBitmap` bằng `Bitmap.DecodeToWidth(ms, 140)` trên Android kèm cơ chế thu hồi bộ nhớ LRU (`_loadedThumbnailItems`, giới hạn tối đa 35 thumbnail trong RAM trên Android).
+     - Chỉ kích hoạt `TriggerThumbnailPrefetchIfNeeded()` trên Android khi người dùng đang bật chế độ xem có hiển thị ảnh bìa (`Thumbnail view` hoặc `List + thumbnail column`).
+  2. **Ảo hóa Danh sách (`VirtualizingStackPanel`) & Tắt Hover Cảm ứng (`MainView.axaml`, `MainView.axaml.cs`, `MainViewModel.cs`)**:
+     - Bật `VirtualizingStackPanel` với `ScrollViewer` nội bộ trong `ItemsControl.Template` cho `QueueItemsControl`, `ScanResults` và `Logs`.
+     - Bind `ThumbnailItemsControl.ItemsSource` vào `ActiveThumbnailItemsSource` (`IsThumbnailMode ? ComicBooks : null`) để không sinh cây giao diện ẩn khi ở `List view`.
+     - Bỏ qua các sự kiện `PointerEntered` / `PointerMoved` / `PointerExited` khi `e.Pointer.Type == PointerType.Touch` trên Android.
+  3. **Throttle Đa Tầng Cho UI Thread, Notification IPC & Disk Probe (`ComicBookItem.cs`, `DownloadEngineService.cs`, `BackgroundExecutionService.cs`, `ComicBackgroundService.cs`)**:
+     - Bổ sung `ComicBookItem.UpdateProgressThrottled` (giới hạn cập nhật UI 450ms/lần trên Android, 180ms/lần trên Desktop, luôn ép cập nhật ngay khi hoàn tất chương/truyện) và đóng gói qua `Dispatcher.UIThread.Post`.
+     - Coalesce `MainViewModel.OnProgressUpdated` bằng `Interlocked.CompareExchange` để chống dồn ứ hàng đợi UI Dispatcher.
+     - Giải phóng ngay `chapter.ImageUrls.Clear()` và `chapter.ReaderUrls.Clear()` sau khi tải xong từng chương, đồng thời cache `_lastVerifiedWritableRoot` để không ghi/xóa file nháp `.probe_xxx.tmp` lặp lại cho mỗi bộ truyện.
+     - Throttle `BackgroundExecutionService.ReportProgress` (tối đa 1 lần/giây trên Android) và hạ kênh thông báo Android Foreground Service xuống `NotificationImportance.Low` / `PriorityLow` (`SetSilent(true)`), tái sử dụng `PendingIntent` đã cache.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.

@@ -273,6 +273,8 @@ public class DownloadEngineService
         }
     }
 
+    private string? _lastVerifiedWritableRoot;
+
     public string EnsureWritableDownloadRoot(string candidateRoot)
     {
         if (!OperatingSystem.IsAndroid())
@@ -281,15 +283,23 @@ public class DownloadEngineService
         }
 
         candidateRoot = NormalizeStoragePath(candidateRoot);
+        if (!string.IsNullOrWhiteSpace(_lastVerifiedWritableRoot) &&
+            string.Equals(_lastVerifiedWritableRoot, candidateRoot, StringComparison.OrdinalIgnoreCase) &&
+            Directory.Exists(_lastVerifiedWritableRoot))
+        {
+            return _lastVerifiedWritableRoot;
+        }
 
         if (CanWriteToDirectory(candidateRoot))
         {
+            _lastVerifiedWritableRoot = candidateRoot;
             return candidateRoot;
         }
 
         string pubDownload = "/storage/emulated/0/Download/ComicDownloads";
         if (CanWriteToDirectory(pubDownload))
         {
+            _lastVerifiedWritableRoot = pubDownload;
             SetDownloadRoot(pubDownload);
             return pubDownload;
         }
@@ -297,6 +307,7 @@ public class DownloadEngineService
         string appStorage = GetAppSpecificExternalPath();
         if (CanWriteToDirectory(appStorage))
         {
+            _lastVerifiedWritableRoot = appStorage;
             SetDownloadRoot(appStorage);
             LogEmitted?.Invoke("WARN", $"[Bộ nhớ Android] Thư mục ngoài bị chặn Access Denied. Đã tự động kích hoạt thư mục an toàn:\n{appStorage}\nToàn bộ ảnh sẽ được tải đầy đủ vào đây!");
             return appStorage;
@@ -304,9 +315,12 @@ public class DownloadEngineService
 
         string docs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ComicDownloads");
         try { if (!Directory.Exists(docs)) Directory.CreateDirectory(docs); } catch {}
+        _lastVerifiedWritableRoot = docs;
         SetDownloadRoot(docs);
         return docs;
     }
+
+    private long _lastEngineProgressTick;
 
     public void NotifyConcurrencyChanged()
     {
@@ -742,7 +756,13 @@ public class DownloadEngineService
                                 {
                                     int currentDone = Interlocked.Increment(ref downloadedCount);
                                     chapter.DownloadedPages = currentDone;
-                                    book.UpdateProgress(completedChapters, totalChapters, currentDone, imageUrls.Count);
+                                    book.UpdateProgressThrottled(
+                                        completedChapters,
+                                        totalChapters,
+                                        currentDone,
+                                        imageUrls.Count,
+                                        $"Đang tải {chapter.Title}: {currentDone}/{imageUrls.Count} trang",
+                                        force: currentDone == imageUrls.Count);
                                     return;
                                 }
                                 else
@@ -757,21 +777,34 @@ public class DownloadEngineService
 
                             string? pageReaderUrl = (chapter.ReaderUrls != null && pIdx < chapter.ReaderUrls.Count) ? chapter.ReaderUrls[pIdx] : null;
                             bool downloaded = await DownloadImageWithRetryAsync(pageUrl, pageFilePath, chapter.Url, pageReaderUrl, ct).ConfigureAwait(false);
+                            int doneNow = downloaded ? Interlocked.Increment(ref downloadedCount) : downloadedCount;
                             if (downloaded)
                             {
                                 lock (manifest)
                                 {
                                     manifest[pageFileName] = pageUrl;
                                 }
-                                int currentDone = Interlocked.Increment(ref downloadedCount);
-                                chapter.DownloadedPages = currentDone;
-                                book.UpdateProgress(completedChapters, totalChapters, currentDone, imageUrls.Count);
+                                chapter.DownloadedPages = doneNow;
                             }
 
-                            book.StatusMessage = $"Đang tải {chapter.Title}: {downloadedCount}/{imageUrls.Count} trang";
+                            book.UpdateProgressThrottled(
+                                completedChapters,
+                                totalChapters,
+                                doneNow,
+                                imageUrls.Count,
+                                $"Đang tải {chapter.Title}: {doneNow}/{imageUrls.Count} trang",
+                                force: doneNow == imageUrls.Count);
+
                             CalculateSpeed();
-                            BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", $"{book.Title} • {chapter.Title} ({downloadedCount}/{imageUrls.Count})", book.ProgressPercentage, true);
-                            ProgressUpdated?.Invoke();
+                            BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", $"{book.Title} • {chapter.Title} ({doneNow}/{imageUrls.Count})", book.ProgressPercentage, true);
+
+                            long nowTick = Environment.TickCount64;
+                            long minEngineInterval = OperatingSystem.IsAndroid() ? 450 : 200;
+                            if (doneNow == imageUrls.Count || nowTick - Interlocked.Read(ref _lastEngineProgressTick) >= minEngineInterval)
+                            {
+                                Interlocked.Exchange(ref _lastEngineProgressTick, nowTick);
+                                ProgressUpdated?.Invoke();
+                            }
                         }
                         finally
                         {
@@ -823,6 +856,9 @@ public class DownloadEngineService
                 }
 
                 SaveManifest(manifestFile, manifest);
+                // Giải phóng danh sách URL trang ảnh của chapter vừa tải xong để chống tích tụ RAM khi tải > 30 truyện
+                chapter.ImageUrls.Clear();
+                chapter.ReaderUrls.Clear();
                 ProgressUpdated?.Invoke();
             }
 

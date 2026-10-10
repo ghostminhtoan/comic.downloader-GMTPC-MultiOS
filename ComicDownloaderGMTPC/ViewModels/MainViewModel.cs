@@ -1040,6 +1040,8 @@ public partial class MainViewModel : ViewModelBase
 
     public bool IsThumbnailColumnVisible => SelectedQueueViewMode == "List + thumbnail column";
 
+    public IEnumerable<ComicBookItem>? ActiveThumbnailItemsSource => IsThumbnailMode ? ComicBooks : null;
+
     partial void OnSelectedQueueViewModeChanged(string value)
     {
         bool thumbMode = value == "Thumbnail view";
@@ -1049,6 +1051,7 @@ public partial class MainViewModel : ViewModelBase
         }
         OnPropertyChanged(nameof(IsListViewMode));
         OnPropertyChanged(nameof(IsThumbnailColumnVisible));
+        OnPropertyChanged(nameof(ActiveThumbnailItemsSource));
         if (thumbMode || value == "List + thumbnail column")
         {
             _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
@@ -1059,6 +1062,7 @@ public partial class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(IsListViewMode));
         OnPropertyChanged(nameof(IsThumbnailColumnVisible));
+        OnPropertyChanged(nameof(ActiveThumbnailItemsSource));
         if (value && SelectedQueueViewMode != "Thumbnail view")
         {
             SelectedQueueViewMode = "Thumbnail view";
@@ -1066,6 +1070,16 @@ public partial class MainViewModel : ViewModelBase
         else if (!value && SelectedQueueViewMode == "Thumbnail view")
         {
             SelectedQueueViewMode = "List view";
+        }
+    }
+
+    public void TriggerThumbnailPrefetchIfNeeded()
+    {
+        // Trên Android, chỉ prefetch ảnh bìa khi người dùng đang bật chế độ xem có hiển thị thumbnail
+        // để tránh tải và decode hàng chục Bitmap ngầm gây nóng máy và tràn RAM ở chế độ List view.
+        if (IsThumbnailMode || IsThumbnailColumnVisible || !OperatingSystem.IsAndroid())
+        {
+            _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
         }
     }
 
@@ -1122,6 +1136,10 @@ public partial class MainViewModel : ViewModelBase
     public void HideHoverPreview()
     {
         IsHoverPreviewVisible = false;
+        if (ActiveHoverItem != null)
+        {
+            ActiveHoverItem.HighResPreviewBitmap = null;
+        }
         ActiveHoverItem = null;
     }
 
@@ -1576,15 +1594,29 @@ public partial class MainViewModel : ViewModelBase
             : "Comic-GMTPC Avalonia v1.0 - English";
     }
 
+    private int _isProgressUiUpdatePending;
+
     private void OnProgressUpdated()
     {
+        if (System.Threading.Interlocked.CompareExchange(ref _isProgressUiUpdatePending, 1, 0) != 0)
+        {
+            return;
+        }
+
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            DownloadSpeedText = _downloadEngine.CurrentSpeedText;
-            UpdateStats();
-            if (IsAutoDeleteCompleted)
+            try
             {
-                CheckAndAutoDeleteCompleted();
+                DownloadSpeedText = _downloadEngine.CurrentSpeedText;
+                UpdateStats();
+                if (IsAutoDeleteCompleted)
+                {
+                    CheckAndAutoDeleteCompleted();
+                }
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _isProgressUiUpdatePending, 0);
             }
         });
     }
@@ -1719,7 +1751,7 @@ public partial class MainViewModel : ViewModelBase
 
         UpdateStats();
         StartScanMissing();
-        _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+        TriggerThumbnailPrefetchIfNeeded();
         SelectedRootTabIndex = 2; // Tự động chuyển sang tab Download
     }
 
@@ -1999,7 +2031,7 @@ public partial class MainViewModel : ViewModelBase
 
             UpdateStats();
             StartScanMissing();
-            _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+            TriggerThumbnailPrefetchIfNeeded();
             AddLog("SUCCESS", $"📂 Đã phục hồi thành công {addedCount}/{restoredItems.Count} truyện từ file Markdown (.md).");
         }
         catch (Exception ex)
@@ -2977,7 +3009,7 @@ public partial class MainViewModel : ViewModelBase
 
         UpdateStats();
         StartScanMissing();
-        _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+        TriggerThumbnailPrefetchIfNeeded();
 
         if (IsAutoDownload)
         {

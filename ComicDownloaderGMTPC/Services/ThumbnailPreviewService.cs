@@ -24,12 +24,15 @@ public sealed class ThumbnailPreviewService
     public static ThumbnailPreviewService Instance => _lazy.Value;
 
     private readonly HttpClient _httpClient;
-    private readonly SemaphoreSlim _generalSemaphore = new(4, 4);
-    private readonly SemaphoreSlim _rateSensitiveSemaphore = new(2, 2);
+    private readonly SemaphoreSlim _generalSemaphore = new(OperatingSystem.IsAndroid() ? 2 : 4, OperatingSystem.IsAndroid() ? 2 : 4);
+    private readonly SemaphoreSlim _rateSensitiveSemaphore = new(OperatingSystem.IsAndroid() ? 1 : 2, OperatingSystem.IsAndroid() ? 1 : 2);
     private readonly ConcurrentDictionary<string, string> _candidateUrlCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> _failedUrlCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _cacheRoot;
     private static readonly Random _jitter = new();
+    private static readonly object _bitmapMemoryLock = new();
+    private static readonly Queue<ComicBookItem> _loadedThumbnailItems = new();
+    private static ComicBookItem? _activeHighResItem;
 
     private ThumbnailPreviewService()
     {
@@ -47,7 +50,15 @@ public sealed class ThumbnailPreviewService
         };
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
 
-        _cacheRoot = Path.Combine(AppContext.BaseDirectory, ".tmp", "preview-cache");
+        string baseDir = OperatingSystem.IsAndroid()
+            ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+            : AppContext.BaseDirectory;
+        if (string.IsNullOrWhiteSpace(baseDir))
+        {
+            baseDir = Path.GetTempPath();
+        }
+
+        _cacheRoot = Path.Combine(baseDir, ".tmp", "preview-cache");
         try
         {
             if (!Directory.Exists(_cacheRoot))
@@ -55,7 +66,18 @@ public sealed class ThumbnailPreviewService
                 Directory.CreateDirectory(_cacheRoot);
             }
         }
-        catch { }
+        catch
+        {
+            try
+            {
+                _cacheRoot = Path.Combine(Path.GetTempPath(), "comic-preview-cache");
+                if (!Directory.Exists(_cacheRoot))
+                {
+                    Directory.CreateDirectory(_cacheRoot);
+                }
+            }
+            catch { }
+        }
     }
 
     public bool SupportsPreview(ComicBookItem? item)
@@ -134,8 +156,25 @@ public sealed class ThumbnailPreviewService
                             item.OriginalCoverLocalPath = originalFile;
                             if (Avalonia.Application.Current != null)
                             {
+                                lock (_bitmapMemoryLock)
+                                {
+                                    if (_activeHighResItem != null && !ReferenceEquals(_activeHighResItem, item))
+                                    {
+                                        _activeHighResItem.HighResPreviewBitmap = null;
+                                    }
+                                    _activeHighResItem = item;
+                                }
+
                                 using var ms = new MemoryStream(bytes);
-                                item.HighResPreviewBitmap = new Bitmap(ms);
+                                try
+                                {
+                                    item.HighResPreviewBitmap = Bitmap.DecodeToWidth(ms, 340);
+                                }
+                                catch
+                                {
+                                    ms.Position = 0;
+                                    item.HighResPreviewBitmap = new Bitmap(ms);
+                                }
                             }
                         }
                         catch { }
@@ -277,8 +316,9 @@ public sealed class ThumbnailPreviewService
         var validItems = items.Where(SupportsPreview).Distinct().ToList();
         if (validItems.Count == 0) return;
 
-        // Ưu tiên các item chưa có ThumbnailFile tải trước
-        var sorted = validItems.OrderBy(x => x.HasThumbnailFile ? 1 : 0).ToList();
+        // Trên Android, giới hạn prefetch tối đa 30 item gần nhất để tránh tràn RAM và nóng máy
+        int maxPrefetch = OperatingSystem.IsAndroid() ? 30 : 120;
+        var sorted = validItems.OrderBy(x => x.HasThumbnailFile ? 1 : 0).Take(maxPrefetch).ToList();
 
         var tasks = new List<Task>();
         foreach (var item in sorted)
@@ -332,19 +372,6 @@ public sealed class ThumbnailPreviewService
             byte[] bytes = await File.ReadAllBytesAsync(filePath).ConfigureAwait(false);
             if (bytes.Length == 0) return;
 
-            byte[]? origBytes = null;
-            if (!string.IsNullOrWhiteSpace(originalPath) && File.Exists(originalPath))
-            {
-                if (string.Equals(filePath, originalPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    origBytes = bytes;
-                }
-                else
-                {
-                    try { origBytes = await File.ReadAllBytesAsync(originalPath).ConfigureAwait(false); } catch { }
-                }
-            }
-
             await RunOnUiAsync(() =>
             {
                 try
@@ -356,12 +383,33 @@ public sealed class ThumbnailPreviewService
                     }
                     if (Avalonia.Application.Current != null)
                     {
-                        using var ms = new MemoryStream(bytes);
-                        item.ThumbnailBitmap = new Bitmap(ms);
-                        if (origBytes != null && origBytes.Length > 0)
+                        int maxInMemory = OperatingSystem.IsAndroid() ? 35 : 150;
+                        lock (_bitmapMemoryLock)
                         {
-                            using var origMs = new MemoryStream(origBytes);
-                            item.HighResPreviewBitmap = new Bitmap(origMs);
+                            if (!_loadedThumbnailItems.Contains(item))
+                            {
+                                _loadedThumbnailItems.Enqueue(item);
+                            }
+                            while (_loadedThumbnailItems.Count > maxInMemory)
+                            {
+                                var evicted = _loadedThumbnailItems.Dequeue();
+                                if (!ReferenceEquals(evicted, item) && !ReferenceEquals(evicted, _activeHighResItem))
+                                {
+                                    evicted.ThumbnailBitmap = null;
+                                    evicted.HighResPreviewBitmap = null;
+                                }
+                            }
+                        }
+
+                        using var ms = new MemoryStream(bytes);
+                        try
+                        {
+                            item.ThumbnailBitmap = Bitmap.DecodeToWidth(ms, 140);
+                        }
+                        catch
+                        {
+                            ms.Position = 0;
+                            item.ThumbnailBitmap = new Bitmap(ms);
                         }
                     }
                 }
@@ -685,9 +733,24 @@ public sealed class ThumbnailPreviewService
 
         string safeDomain = SanitizeFileName(domain);
         string folder = Path.Combine(_cacheRoot, safeDomain, hash);
-        if (!Directory.Exists(folder))
+        try
         {
-            Directory.CreateDirectory(folder);
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+        }
+        catch
+        {
+            try
+            {
+                folder = Path.Combine(Path.GetTempPath(), "comic-preview-cache", safeDomain, hash);
+                if (!Directory.Exists(folder))
+                {
+                    Directory.CreateDirectory(folder);
+                }
+            }
+            catch { }
         }
         return folder;
     }

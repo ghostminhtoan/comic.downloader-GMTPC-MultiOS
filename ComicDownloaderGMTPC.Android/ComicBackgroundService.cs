@@ -11,7 +11,7 @@ namespace ComicDownloaderGMTPC.Android;
 [Service(ForegroundServiceType = ForegroundService.TypeDataSync, Exported = false)]
 public class ComicBackgroundService : Service
 {
-    public const string ChannelId = "comic_gmtpc_bg_channel";
+    public const string ChannelId = "comic_gmtpc_bg_progress_channel";
     public const int NotificationId = 1002;
     public const string ActionStartOrUpdate = "ACTION_START_OR_UPDATE";
     public const string ActionStop = "ACTION_STOP";
@@ -185,6 +185,10 @@ public class ComicBackgroundService : Service
         }
     }
 
+    private static PendingIntent? _cachedOpenPendingIntent;
+    private static PendingIntent? _cachedAct1PendingIntent;
+    private static PendingIntent? _cachedAct2PendingIntent;
+
     private void CreateNotificationChannel()
     {
         if (OperatingSystem.IsAndroidVersionAtLeast(26))
@@ -192,12 +196,14 @@ public class ComicBackgroundService : Service
             var channel = new NotificationChannel(
                 ChannelId,
                 "Comic GMTPC Tiến Trình Chạy Ngầm",
-                NotificationImportance.High)
+                NotificationImportance.Low)
             {
                 Description = "Thông báo tiến trình tải truyện, xử lý ảnh và đóng gói file chạy ngầm liên tục",
                 LockscreenVisibility = NotificationVisibility.Public
             };
             channel.SetShowBadge(false);
+            channel.EnableVibration(false);
+            channel.SetSound(null, null);
 
             var nm = (NotificationManager?)GetSystemService(NotificationService);
             nm?.CreateNotificationChannel(channel);
@@ -215,13 +221,14 @@ public class ComicBackgroundService : Service
         string? action1Text = null,
         string? action2Text = null)
     {
-        var openIntent = new Intent(context, typeof(MainActivity));
-        openIntent.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
-        var pendingIntent = PendingIntent.GetActivity(
-            context,
-            0,
-            openIntent,
-            PendingIntentFlags.UpdateCurrent | (OperatingSystem.IsAndroidVersionAtLeast(23) ? PendingIntentFlags.Immutable : 0));
+        var flags = PendingIntentFlags.UpdateCurrent | (OperatingSystem.IsAndroidVersionAtLeast(23) ? PendingIntentFlags.Immutable : 0);
+
+        if (_cachedOpenPendingIntent == null)
+        {
+            var openIntent = new Intent(context, typeof(MainActivity));
+            openIntent.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
+            _cachedOpenPendingIntent = PendingIntent.GetActivity(context, 0, openIntent, flags);
+        }
 
         var builder = new NotificationCompat.Builder(context, ChannelId);
         builder.SetContentTitle(title);
@@ -229,11 +236,12 @@ public class ComicBackgroundService : Service
         builder.SetSmallIcon(Resource.Drawable.Icon);
         builder.SetOngoing(true);
         builder.SetOnlyAlertOnce(true);
-        builder.SetPriority(NotificationCompat.PriorityHigh);
+        builder.SetSilent(true);
+        builder.SetPriority(NotificationCompat.PriorityLow);
         builder.SetCategory(NotificationCompat.CategoryProgress);
-        if (pendingIntent != null)
+        if (_cachedOpenPendingIntent != null)
         {
-            builder.SetContentIntent(pendingIntent);
+            builder.SetContentIntent(_cachedOpenPendingIntent);
         }
 
         if (progress >= 0 && progress <= 100)
@@ -246,44 +254,42 @@ public class ComicBackgroundService : Service
         }
 
         // Action 1: Dựa theo ngữ cảnh (Tải/Dừng, Dừng xử lý ảnh, Dừng đóng gói, Dừng cắt ảnh...)
-        var act1Intent = new Intent(context, typeof(ComicBackgroundService));
-        act1Intent.SetAction(ActionContextual1);
-        var act1Pending = PendingIntent.GetService(
-            context,
-            1,
-            act1Intent,
-            PendingIntentFlags.UpdateCurrent | (OperatingSystem.IsAndroidVersionAtLeast(23) ? PendingIntentFlags.Immutable : 0));
+        if (_cachedAct1PendingIntent == null)
+        {
+            var act1Intent = new Intent(context, typeof(ComicBackgroundService));
+            act1Intent.SetAction(ActionContextual1);
+            _cachedAct1PendingIntent = PendingIntent.GetService(context, 1, act1Intent, flags);
+        }
 
-        if (act1Pending != null)
+        if (_cachedAct1PendingIntent != null)
         {
             string btnText1 = !string.IsNullOrEmpty(action1Text)
                 ? action1Text
                 : (isDownloading ? "⏹️ Dừng tải" : "⬇️ Tải");
-            builder.AddAction(Resource.Drawable.Icon, btnText1, act1Pending);
+            builder.AddAction(Resource.Drawable.Icon, btnText1, _cachedAct1PendingIntent);
         }
 
         // Action 2: Dựa theo ngữ cảnh (Tạm dừng/Tiếp tục hoặc Mở ứng dụng)
         if (taskId == "download_queue" || string.IsNullOrEmpty(action2Text) || action2Text.Contains("tạm dừng", StringComparison.OrdinalIgnoreCase) || action2Text.Contains("tiếp tục", StringComparison.OrdinalIgnoreCase))
         {
-            var act2Intent = new Intent(context, typeof(ComicBackgroundService));
-            act2Intent.SetAction(ActionContextual2);
-            var act2Pending = PendingIntent.GetService(
-                context,
-                2,
-                act2Intent,
-                PendingIntentFlags.UpdateCurrent | (OperatingSystem.IsAndroidVersionAtLeast(23) ? PendingIntentFlags.Immutable : 0));
+            if (_cachedAct2PendingIntent == null)
+            {
+                var act2Intent = new Intent(context, typeof(ComicBackgroundService));
+                act2Intent.SetAction(ActionContextual2);
+                _cachedAct2PendingIntent = PendingIntent.GetService(context, 2, act2Intent, flags);
+            }
 
-            if (act2Pending != null)
+            if (_cachedAct2PendingIntent != null)
             {
                 string btnText2 = !string.IsNullOrEmpty(action2Text)
                     ? action2Text
                     : (isPaused ? "▶️ Tiếp tục" : "⏸️ Tạm dừng");
-                builder.AddAction(Resource.Drawable.Icon, btnText2, act2Pending);
+                builder.AddAction(Resource.Drawable.Icon, btnText2, _cachedAct2PendingIntent);
             }
         }
-        else if (pendingIntent != null)
+        else if (_cachedOpenPendingIntent != null)
         {
-            builder.AddAction(Resource.Drawable.Icon, action2Text ?? "📱 Mở ứng dụng", pendingIntent);
+            builder.AddAction(Resource.Drawable.Icon, action2Text ?? "📱 Mở ứng dụng", _cachedOpenPendingIntent);
         }
 
         return builder.Build()!;

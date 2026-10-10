@@ -218,23 +218,58 @@ public partial class ComicBookItem : ObservableObject
         ProgressPercentageText = $"{Math.Max(0, Math.Min(100, value)):0.0}%";
     }
 
+    private long _lastUiProgressTick;
+
     public void UpdateProgress(int currentChapter, int totalChapters, int currentPage, int totalPages)
     {
-        DownloadedChapters = currentChapter;
-        TotalChapters = Math.Max(1, totalChapters);
-        DownloadedPages = currentPage;
-        TotalPages = totalPages;
+        UpdateProgressThrottled(currentChapter, totalChapters, currentPage, totalPages, null, force: true);
+    }
 
-        double chPercent = (double)currentChapter / TotalChapters * 100.0;
-        ProgressPercentage = Math.Round(chPercent, 1);
+    public void UpdateProgressThrottled(int currentChapter, int totalChapters, int currentPage, int totalPages, string? statusMsg = null, bool force = false)
+    {
+        int safeTotalChapters = Math.Max(1, totalChapters);
+        double chPercent = (double)currentChapter / safeTotalChapters * 100.0;
+        double roundedPercent = Math.Round(chPercent, 1);
 
-        if (totalPages > 0)
+        long now = Environment.TickCount64;
+        long minIntervalMs = OperatingSystem.IsAndroid() ? 450 : 180;
+        if (!force && now - _lastUiProgressTick < minIntervalMs)
         {
-            DetailProgressText = $"Chương {currentChapter}/{TotalChapters} (Trang {currentPage}/{totalPages}) • {ProgressPercentage:0.0}%";
+            return;
+        }
+
+        _lastUiProgressTick = now;
+
+        void ApplyOnUi()
+        {
+            DownloadedChapters = currentChapter;
+            TotalChapters = safeTotalChapters;
+            DownloadedPages = currentPage;
+            TotalPages = totalPages;
+            ProgressPercentage = roundedPercent;
+
+            if (totalPages > 0)
+            {
+                DetailProgressText = $"Chương {currentChapter}/{safeTotalChapters} (Trang {currentPage}/{totalPages}) • {roundedPercent:0.0}%";
+            }
+            else
+            {
+                DetailProgressText = $"Chương {currentChapter}/{safeTotalChapters} • {roundedPercent:0.0}%";
+            }
+
+            if (statusMsg != null)
+            {
+                StatusMessage = statusMsg;
+            }
+        }
+
+        if (Avalonia.Application.Current == null || Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            ApplyOnUi();
         }
         else
         {
-            DetailProgressText = $"Chương {currentChapter}/{TotalChapters} • {ProgressPercentage:0.0}%";
+            Avalonia.Threading.Dispatcher.UIThread.Post(ApplyOnUi);
         }
     }
 

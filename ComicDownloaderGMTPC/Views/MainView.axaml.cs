@@ -550,10 +550,9 @@ public partial class MainView : UserControl
         {
             if (DataContext is not MainViewModel vm || vm.ComicBooks == null || vm.ComicBooks.Count == 0) return;
 
-            var queueScrollViewer = this.FindControl<ScrollViewer>("QueueScrollViewer");
-            if (queueScrollViewer == null) return;
-
             var queueItemsControl = this.FindControl<ItemsControl>("QueueItemsControl");
+            var queueScrollViewer = this.FindControl<ScrollViewer>("QueueScrollViewer")
+                                 ?? queueItemsControl?.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
 
             ComicBookItem? lowestItem = null;
             int lowestIndex = -1;
@@ -580,7 +579,7 @@ public partial class MainView : UserControl
                              ?? queueItemsControl.ContainerFromItem(lowestItem) as Control;
             }
 
-            if (targetControl != null)
+            if (targetControl != null && queueScrollViewer != null)
             {
                 var transform = targetControl.TransformToVisual(queueScrollViewer);
                 if (transform.HasValue)
@@ -603,27 +602,15 @@ public partial class MainView : UserControl
                         double targetY = Math.Max(0, queueScrollViewer.Offset.Y + pt.Y - 14);
                         queueScrollViewer.Offset = new Vector(queueScrollViewer.Offset.X, targetY);
                     }
-                    // Nếu item đã nằm trọn vẹn trong Viewport (0 <= pt.Y && pt.Y + itemHeight <= viewportHeight)
-                    // -> Giữ nguyên trạng thái cuộn, không làm rung giật màn hình giống chuẩn WPF ScrollIntoView!
                 }
                 else
                 {
                     targetControl.BringIntoView();
                 }
             }
-            else
+            else if (queueItemsControl != null)
             {
-                // Fallback khi Container chưa kịp layout: ước tính vị trí theo tỷ lệ chiều cao danh sách
-                double totalHeight = queueScrollViewer.Extent.Height;
-                double viewportHeight = queueScrollViewer.Viewport.Height;
-                if (totalHeight > viewportHeight && vm.ComicBooks.Count > 0)
-                {
-                    double avgHeight = totalHeight / vm.ComicBooks.Count;
-                    double itemTop = lowestIndex * avgHeight;
-                    double targetY = itemTop - (viewportHeight - avgHeight) / 2;
-                    double maxScroll = Math.Max(0, totalHeight - viewportHeight);
-                    queueScrollViewer.Offset = new Vector(queueScrollViewer.Offset.X, Math.Clamp(targetY, 0, maxScroll));
-                }
+                queueItemsControl.ScrollIntoView(lowestIndex);
             }
         }
         catch { }
@@ -748,6 +735,7 @@ public partial class MainView : UserControl
 
     private void OnQueueItemPointerEntered(object? sender, PointerEventArgs e)
     {
+        if (e.Pointer.Type == PointerType.Touch) return;
         if (sender is Border border)
         {
             border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");
@@ -764,6 +752,7 @@ public partial class MainView : UserControl
 
     private void OnQueueItemPointerExited(object? sender, PointerEventArgs e)
     {
+        if (e.Pointer.Type == PointerType.Touch) return;
         if (sender is Border border)
         {
             border.BorderBrush = Avalonia.Media.Brush.Parse("#1E293B");
@@ -786,6 +775,8 @@ public partial class MainView : UserControl
                 _queueTouchHoldCts.Cancel();
             }
         }
+
+        if (e.Pointer.Type == PointerType.Touch) return;
 
         if (sender is Control control && control.DataContext is ComicBookItem item && DataContext is MainViewModel vm)
         {
@@ -849,6 +840,7 @@ public partial class MainView : UserControl
 
     private void OnThumbnailItemPointerEntered(object? sender, PointerEventArgs e)
     {
+        if (e.Pointer.Type == PointerType.Touch) return;
         if (sender is Border border)
         {
             border.BorderBrush = Avalonia.Media.Brush.Parse("#FF2A85");
@@ -866,6 +858,7 @@ public partial class MainView : UserControl
 
     private void OnThumbnailItemPointerMoved(object? sender, PointerEventArgs e)
     {
+        if (e.Pointer.Type == PointerType.Touch) return;
         if (sender is Control control && control.DataContext is ComicBookItem item && DataContext is MainViewModel vm)
         {
             if (vm.IsPopupPreview)
@@ -881,6 +874,7 @@ public partial class MainView : UserControl
 
     private void OnThumbnailItemPointerExited(object? sender, PointerEventArgs e)
     {
+        if (e.Pointer.Type == PointerType.Touch) return;
         if (sender is Border border)
         {
             border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");

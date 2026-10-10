@@ -260,7 +260,7 @@ public partial class MainViewModel
                             UpdateStats();
                         }
                         StartScanMissing();
-                        _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+                        TriggerThumbnailPrefetchIfNeeded();
                         DomainAnalyzeStatusText = $"✅ Đã phân tích & nạp truyện: {book.Title} ({book.TotalChapters} chaps)";
                         AddLog("SUCCESS", $"[Analyze] Đã nạp thành công bộ truyện vào Queue: {book.Title} ({book.TotalChapters} chaps)");
                         if (!DomainHistoryList.Contains(singleUrl)) DomainHistoryList.Insert(0, singleUrl);
@@ -350,7 +350,7 @@ public partial class MainViewModel
                     if (directBookAdded > 0)
                     {
                         StartScanMissing();
-                        _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+                        TriggerThumbnailPrefetchIfNeeded();
                         SelectedRootTabIndex = 2;
                     }
                 }
@@ -497,7 +497,7 @@ public partial class MainViewModel
                 }
 
                 StartScanMissing();
-                _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+                TriggerThumbnailPrefetchIfNeeded();
                 AddLog("SUCCESS", $"[Cào hàng loạt] Hoàn tất cào tổng cộng {totalScraped} truyện ({totalAdded} truyện mới đã được thêm vào Queue).");
                 
                 // Chuyển sang Tab Download Queue (Index 2) để người dùng xem ngay, không tự mở Tab Search (Index 1)
