@@ -2054,3 +2054,11 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.59. Khắc Phục Xung Đột Double-Toggle Trên Nút `POPUP PREVIEW` (`MainView.axaml`, `MainViewModel.cs`)
+- **Nguyên nhân cốt lõi**:
+  - Trên Avalonia, `ToggleButton` có `IsChecked="{Binding IsPopupPreview}"` (mặc định `TwoWay`) đồng thời gắn `Command="{Binding TogglePopupPreviewCommand}"` (bên trong lại thực hiện `IsPopupPreview = !IsPopupPreview`). Khi nhấn chuột, `ToggleButton` tự đảo `IsPopupPreview` sang `false` rồi gọi `Command` đảo ngược lại thành `true`, khiến nút luôn giữ trạng thái bật.
+- **Giải pháp Thực hiện**:
+  - Chuyển sang `Button` gắn `Command="{Binding TogglePopupPreviewCommand}"` kết hợp `partial void OnIsPopupPreviewChanged(bool value)` và bộ thuộc tính hiển thị trạng thái trực quan (`PopupPreviewButtonText`: `👁️ POPUP PREVIEW: BẬT` / `👁️ POPUP PREVIEW: TẮT`, tự động đổi màu nền `#064E3B` / `#1E293B` và viền `#10B981` / `#475569`, đồng thời ẩn ngay Popup khi tắt).
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.

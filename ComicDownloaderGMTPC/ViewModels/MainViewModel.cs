@@ -1006,6 +1006,23 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isPopupPreview = true;
 
+    public string PopupPreviewButtonText => IsPopupPreview ? "👁️ POPUP PREVIEW: BẬT" : "👁️ POPUP PREVIEW: TẮT";
+    public string PopupPreviewButtonBackground => IsPopupPreview ? "#064E3B" : "#1E293B";
+    public string PopupPreviewButtonBorder => IsPopupPreview ? "#10B981" : "#475569";
+    public string PopupPreviewButtonForeground => IsPopupPreview ? "#FDE047" : "#94A3B8";
+
+    partial void OnIsPopupPreviewChanged(bool value)
+    {
+        if (!value)
+        {
+            HideHoverPreview();
+        }
+        OnPropertyChanged(nameof(PopupPreviewButtonText));
+        OnPropertyChanged(nameof(PopupPreviewButtonBackground));
+        OnPropertyChanged(nameof(PopupPreviewButtonBorder));
+        OnPropertyChanged(nameof(PopupPreviewButtonForeground));
+    }
+
     [ObservableProperty]
     private bool _isThumbnailMode;
 
@@ -1073,10 +1090,6 @@ public partial class MainViewModel : ViewModelBase
     private void TogglePopupPreview()
     {
         IsPopupPreview = !IsPopupPreview;
-        if (!IsPopupPreview)
-        {
-            HideHoverPreview();
-        }
     }
 
     [RelayCommand]

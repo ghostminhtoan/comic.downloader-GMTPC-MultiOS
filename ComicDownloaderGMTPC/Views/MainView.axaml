@@ -1481,16 +1481,16 @@
                                                           ToolTip.Tip="Chuyển đổi giữa 3 chế độ hiển thị: List view, Thumbnail view, List + thumbnail column" />
                                             </StackPanel>
 
-                                            <!-- NÚT POPUP PREVIEW -->
-                                            <ToggleButton IsChecked="{Binding IsPopupPreview}" Command="{Binding TogglePopupPreviewCommand}"
-                                                          Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
-                                                          Foreground="#FDE047" FontSize="10" Padding="6,2" CornerRadius="3" Margin="0,0,4,2"
-                                                          ToolTip.Tip="Bật / Tắt cửa sổ Popup xem trước ảnh bìa và chi tiết khi di chuột hoặc chọn truyện">
-                                                <StackPanel Orientation="Horizontal" Spacing="3">
-                                                    <TextBlock Text="👁️" FontSize="10" />
-                                                    <TextBlock Text="POPUP PREVIEW" FontWeight="Bold" FontSize="10" />
-                                                </StackPanel>
-                                            </ToggleButton>
+                                            <!-- NÚT POPUP PREVIEW (BẬT / TẮT) -->
+                                            <Button Command="{Binding TogglePopupPreviewCommand}"
+                                                    Background="{Binding PopupPreviewButtonBackground}"
+                                                    BorderBrush="{Binding PopupPreviewButtonBorder}"
+                                                    BorderThickness="1"
+                                                    Foreground="{Binding PopupPreviewButtonForeground}"
+                                                    FontSize="10" Padding="6,2" CornerRadius="3" Margin="0,0,4,2"
+                                                    ToolTip.Tip="Bật / Tắt cửa sổ Popup xem trước ảnh bìa và chi tiết khi di chuột hoặc chọn truyện">
+                                                <TextBlock Text="{Binding PopupPreviewButtonText}" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
+                                            </Button>
 
                                             <!-- NÚT QUÉT LẠI THUMBNAIL -->
                                             <Button Command="{Binding RescanThumbnailsCommand}"
