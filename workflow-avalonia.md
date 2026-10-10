@@ -2062,3 +2062,16 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 - **Nghiệm Thu**:
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+### 15.60. Khắc Phục Lỗi Tự Mở Tab Search Khi Chạy `Crawl`, `Crawl More`, `Analyze` Hoặc Bấm `Lấy Link` (`MainViewModel.DomainAnalyze.cs`, `MainViewModel.cs`)
+- **Nguyên nhân cốt lõi**:
+  - `TabControl` gốc trên `MainView.axaml` gồm 3 tab: Index `0` = `🌐 TAB SOURCE (NGUỒN TRUYỆN)`, Index `1` = `🔍 TAB SEARCH (TÌM TRUYỆN)`, Index `2` = `📥 TAB DOWNLOAD (TẢI VỀ & QUẢN LÝ)`.
+  - Trong `MainViewModel.DomainAnalyze.cs`, sau khi thực hiện `AnalyzeDomainTagAsync` (truyện trực tiếp / batch) hoặc `ExecuteDomainBatchScrapeAsync` (`📥 CÀO MỚI (CRAWL)` và `➕ CÀO THÊM (CRAWL MORE)`), code cũ vẫn gán `SelectedRootTabIndex = 1` (vốn là `🔍 TAB SEARCH` sau khi thêm tab Search ở giữa), dẫn đến việc tự động nhảy sang Tab Search.
+- **Giải pháp Thực hiện**:
+  1. Cập nhật toàn bộ `SelectedRootTabIndex = 1` trong `MainViewModel.DomainAnalyze.cs` thành `SelectedRootTabIndex = 2` (chuyển thẳng sang `📥 TAB DOWNLOAD`), đồng thời tự động gọi `StartScanMissing()` và `ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks)` ngay sau khi nạp truyện.
+  2. Hỗ trợ xử lý trực tiếp link bộ truyện lẻ trong `ExecuteDomainBatchScrapeAsync` khi người dùng bấm `Crawl` hoặc `Crawl More`.
+  3. Cập nhật `GetLinkAsync()` và `GetMoreAsync()` trong `MainViewModel.cs` để luôn điều hướng về `SelectedRootTabIndex = 2` (`📥 TAB DOWNLOAD`) khi có truyện trong hàng đợi, tuyệt đối không mở `🔍 TAB SEARCH`.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+

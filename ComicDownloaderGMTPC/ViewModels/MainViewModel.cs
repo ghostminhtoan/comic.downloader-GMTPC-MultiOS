@@ -1749,12 +1749,20 @@ public partial class MainViewModel : ViewModelBase
     public async Task GetLinkAsync()
     {
         await ExtractUrlsFromTextAsync(UrlInput, clearExisting: true);
+        if (ComicBooks.Count > 0)
+        {
+            SelectedRootTabIndex = 2; // Chuyển sang Tab Download (Index 2), tuyệt đối không mở Tab Search (Index 1)
+        }
     }
 
     [RelayCommand]
     public async Task GetMoreAsync()
     {
         await ExtractUrlsFromTextAsync(UrlInput, clearExisting: false);
+        if (ComicBooks.Count > 0)
+        {
+            SelectedRootTabIndex = 2; // Chuyển sang Tab Download (Index 2), tuyệt đối không mở Tab Search (Index 1)
+        }
     }
 
     [RelayCommand]

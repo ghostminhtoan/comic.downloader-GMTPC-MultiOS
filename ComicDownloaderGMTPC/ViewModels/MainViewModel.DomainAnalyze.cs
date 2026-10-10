@@ -246,224 +246,262 @@ public partial class MainViewModel
                 AddLog("INFO", $"[Analyze] Bắt đầu phân tích URL: {singleUrl}");
 
                 // Kiểm tra nếu là link bộ truyện trực tiếp (Direct Comic Book)
-                if (!ComicScraperService.IsCategoryOrTagUrl(singleUrl, domain))
-                {
-                    AddLog("INFO", $"[Analyze] Phát hiện link bộ truyện trực tiếp, đang trích xuất dữ liệu: {singleUrl}");
-                    var book = await _scraperService.ScrapeBookAsync(singleUrl, ComicBooks.Count + 1);
-                    if (!ComicBooks.Any(b => b.Url.Equals(book.Url, StringComparison.OrdinalIgnoreCase)))
+                    if (!ComicScraperService.IsCategoryOrTagUrl(singleUrl, domain))
                     {
-                        ComicBooks.Add(book);
-                        UpdateStats();
+                        AddLog("INFO", $"[Analyze] Phát hiện link bộ truyện trực tiếp, đang trích xuất dữ liệu: {singleUrl}");
+                        var book = await _scraperService.ScrapeBookAsync(singleUrl, ComicBooks.Count + 1);
+                        if (!string.IsNullOrWhiteSpace(SubfolderInput))
+                        {
+                            book.Subfolder = SubfolderInput.Trim();
+                        }
+                        if (!ComicBooks.Any(b => b.Url.Equals(book.Url, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            ComicBooks.Add(book);
+                            UpdateStats();
+                        }
+                        StartScanMissing();
+                        _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+                        DomainAnalyzeStatusText = $"✅ Đã phân tích & nạp truyện: {book.Title} ({book.TotalChapters} chaps)";
+                        AddLog("SUCCESS", $"[Analyze] Đã nạp thành công bộ truyện vào Queue: {book.Title} ({book.TotalChapters} chaps)");
+                        if (!DomainHistoryList.Contains(singleUrl)) DomainHistoryList.Insert(0, singleUrl);
+                        SelectedRootTabIndex = 2;
+                        return;
                     }
-                    DomainAnalyzeStatusText = $"✅ Đã phân tích & nạp truyện: {book.Title} ({book.TotalChapters} chaps)";
-                    AddLog("SUCCESS", $"[Analyze] Đã nạp thành công bộ truyện vào Queue: {book.Title} ({book.TotalChapters} chaps)");
-                    if (!DomainHistoryList.Contains(singleUrl)) DomainHistoryList.Insert(0, singleUrl);
-                    SelectedRootTabIndex = 1;
-                    return;
-                }
 
-                // Nếu là link Tag / Category / Thể loại
-                var result = await _scraperService.AnalyzeTagUrlAsync(singleUrl);
-                if (result.IsSuccess)
-                {
-                    DomainTotalPages = result.TotalPages;
-                    DomainPageFrom = 1;
-                    DomainPageTo = Math.Min(5, result.TotalPages);
-                    DomainAnalyzeStatusText = $"✅ Phân tích xong: {result.TotalPages} trang ({result.TagTitle})";
-                    AddLog("SUCCESS", $"[Analyze] Phân tích thành công {domain}: {result.TotalPages} trang ({result.TagTitle})");
+                    // Nếu là link Tag / Category / Thể loại
+                    var result = await _scraperService.AnalyzeTagUrlAsync(singleUrl);
+                    if (result.IsSuccess)
+                    {
+                        DomainTotalPages = result.TotalPages;
+                        DomainPageFrom = 1;
+                        DomainPageTo = Math.Min(5, result.TotalPages);
+                        DomainAnalyzeStatusText = $"✅ Phân tích xong: {result.TotalPages} trang ({result.TagTitle})";
+                        AddLog("SUCCESS", $"[Analyze] Phân tích thành công {domain}: {result.TotalPages} trang ({result.TagTitle})");
 
-                    if (!DomainHistoryList.Contains(singleUrl)) DomainHistoryList.Insert(0, singleUrl);
+                        if (!DomainHistoryList.Contains(singleUrl)) DomainHistoryList.Insert(0, singleUrl);
+                    }
+                    else
+                    {
+                        DomainAnalyzeStatusText = "⚠️ " + result.StatusMessage;
+                        AddLog("WARN", $"[Analyze] {result.StatusMessage}");
+                    }
                 }
+                // Trường hợp 2: BATCH ANALYZE HÀNG LOẠT TOÀN BỘ DOMAIN (nhiều URL cùng lúc)
                 else
                 {
-                    DomainAnalyzeStatusText = "⚠️ " + result.StatusMessage;
-                    AddLog("WARN", $"[Analyze] {result.StatusMessage}");
+                    int totalUrls = candidateUrls.Count;
+                    DomainAnalyzeStatusText = $"Đang Batch Analyze {totalUrls} liên kết...";
+                    AddLog("INFO", $"[Batch Analyze] Bắt đầu phân tích hàng loạt {totalUrls} liên kết cho toàn bộ domain...");
+
+                    int directBookAdded = 0;
+                    int tagsAnalyzed = 0;
+                    int maxPagesFound = 1;
+
+                    for (int i = 0; i < totalUrls; i++)
+                    {
+                        string targetUrl = candidateUrls[i];
+                        string detectedDomain = DomainRoutingService.DetectDomain(targetUrl);
+                        DomainAnalyzeStatusText = $"[{i + 1}/{totalUrls}] Đang phân tích ({detectedDomain}): {targetUrl}";
+                        AddLog("INFO", $"[Batch Analyze] [{i + 1}/{totalUrls}] ({detectedDomain}) {targetUrl}");
+
+                        try
+                        {
+                            if (!ComicScraperService.IsCategoryOrTagUrl(targetUrl, detectedDomain))
+                            {
+                                var book = await _scraperService.ScrapeBookAsync(targetUrl, ComicBooks.Count + 1);
+                                if (!string.IsNullOrWhiteSpace(SubfolderInput))
+                                {
+                                    book.Subfolder = SubfolderInput.Trim();
+                                }
+                                if (!ComicBooks.Any(b => b.Url.Equals(book.Url, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    ComicBooks.Add(book);
+                                    directBookAdded++;
+                                }
+                                AddLog("SUCCESS", $"[Batch Analyze] Đã nạp truyện [{directBookAdded}]: {book.Title} ({book.TotalChapters} chaps)");
+                            }
+                            else
+                            {
+                                var tagRes = await _scraperService.AnalyzeTagUrlAsync(targetUrl);
+                                if (tagRes.IsSuccess)
+                                {
+                                    tagsAnalyzed++;
+                                    if (tagRes.TotalPages > maxPagesFound) maxPagesFound = tagRes.TotalPages;
+                                    AddLog("SUCCESS", $"[Batch Analyze] Phân tích danh mục: {tagRes.TagTitle} - {tagRes.TotalPages} trang");
+                                }
+                            }
+
+                            if (!DomainHistoryList.Contains(targetUrl)) DomainHistoryList.Insert(0, targetUrl);
+                        }
+                        catch (Exception exItem)
+                        {
+                            AddLog("ERROR", $"[Batch Analyze Error] Link {targetUrl}: {exItem.Message}");
+                        }
+                    }
+
+                    DomainTotalPages = maxPagesFound;
+                    DomainPageFrom = 1;
+                    DomainPageTo = Math.Min(5, maxPagesFound);
+                    UpdateStats();
+
+                    DomainAnalyzeStatusText = $"✅ Hoàn tất Batch Analyze: {directBookAdded} truyện nạp queue, {tagsAnalyzed} danh mục ({maxPagesFound} trang).";
+                    AddLog("SUCCESS", $"[Batch Analyze] Hoàn tất phân tích hàng loạt {totalUrls} liên kết! (Đã nạp {directBookAdded} truyện, {tagsAnalyzed} danh mục).");
+
+                    if (directBookAdded > 0)
+                    {
+                        StartScanMissing();
+                        _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+                        SelectedRootTabIndex = 2;
+                    }
                 }
             }
-            // Trường hợp 2: BATCH ANALYZE HÀNG LOẠT TOÀN BỘ DOMAIN (nhiều URL cùng lúc)
+            catch (Exception ex)
+            {
+                DomainAnalyzeStatusText = "Lỗi: " + ex.Message;
+                AddLog("ERROR", $"[Analyze Error] {ex.Message}");
+            }
+            finally
+            {
+                IsDomainAnalyzing = false;
+            }
+        }
+
+        [RelayCommand]
+        public async Task ScrapeDomainBatchPagesAsync(string domain)
+        {
+            // CÀO MỚI (CRAWL): Xóa queue cũ, cào mới từ đầu
+            await ExecuteDomainBatchScrapeAsync(domain, clearExisting: true);
+        }
+
+        [RelayCommand]
+        public async Task CrawlMoreDomainBatchPagesAsync(string domain)
+        {
+            // CÀO THÊM (CRAWL MORE): Giữ nguyên queue hiện có, cào thêm tiếp vào danh sách
+            await ExecuteDomainBatchScrapeAsync(domain, clearExisting: false);
+        }
+
+        private async Task ExecuteDomainBatchScrapeAsync(string domain, bool clearExisting)
+        {
+            if (domain.Contains("thuviensach") || domain.Contains("dilib"))
+            {
+                DomainAnalyzeStatusText = "⚠️ Server đang lỗi, hiện tại chưa tải được";
+                AddLog("WARN", "[thuviensach.vn] Server đang lỗi, hiện tại chưa tải được");
+                return;
+            }
+
+            if (domain.Contains("mangadex"))
+            {
+                DomainAnalyzeStatusText = "⚠️ Website không hỗ trợ analyze";
+                AddLog("WARN", "[MangaDex] Website không hỗ trợ analyze");
+                return;
+            }
+
+            string rawInput = GetDomainTagUrl(domain);
+            if (string.IsNullOrWhiteSpace(rawInput))
+            {
+                AddLog("WARN", "[Cào hàng loạt] Vui lòng nhập URL tag/thể loại hợp lệ!");
+                return;
+            }
+
+            var tagUrls = ExtractCandidateUrls(rawInput);
+            if (tagUrls.Count == 0)
+            {
+                AddLog("WARN", "[Cào hàng loạt] Không tìm thấy URL hợp lệ để cào!");
+                return;
+            }
+
+            if (DomainPageFrom < 1 || DomainPageTo < DomainPageFrom)
+            {
+                AddLog("WARN", "[Cào hàng loạt] Dải trang không hợp lệ (Từ trang <= Đến trang)!");
+                return;
+            }
+
+            IsDomainBatchScraping = true;
+            _domainScrapeCts = new CancellationTokenSource();
+
+            if (clearExisting)
+            {
+                ComicBooks.Clear();
+                ScanResults.Clear();
+                UpdateStats();
+                AddLog("INFO", "[Cào mới (Crawl)] Đã xóa sạch danh sách truyện cũ trong Queue để cào mới từ đầu.");
+            }
             else
             {
-                int totalUrls = candidateUrls.Count;
-                DomainAnalyzeStatusText = $"Đang Batch Analyze {totalUrls} liên kết...";
-                AddLog("INFO", $"[Batch Analyze] Bắt đầu phân tích hàng loạt {totalUrls} liên kết cho toàn bộ domain...");
-
-                int directBookAdded = 0;
-                int tagsAnalyzed = 0;
-                int maxPagesFound = 1;
-
-                for (int i = 0; i < totalUrls; i++)
-                {
-                    string targetUrl = candidateUrls[i];
-                    string detectedDomain = DomainRoutingService.DetectDomain(targetUrl);
-                    DomainAnalyzeStatusText = $"[{i + 1}/{totalUrls}] Đang phân tích ({detectedDomain}): {targetUrl}";
-                    AddLog("INFO", $"[Batch Analyze] [{i + 1}/{totalUrls}] ({detectedDomain}) {targetUrl}");
-
-                    try
-                    {
-                        if (!ComicScraperService.IsCategoryOrTagUrl(targetUrl, detectedDomain))
-                        {
-                            var book = await _scraperService.ScrapeBookAsync(targetUrl, ComicBooks.Count + 1);
-                            if (!ComicBooks.Any(b => b.Url.Equals(book.Url, StringComparison.OrdinalIgnoreCase)))
-                            {
-                                ComicBooks.Add(book);
-                                directBookAdded++;
-                            }
-                            AddLog("SUCCESS", $"[Batch Analyze] Đã nạp truyện [{directBookAdded}]: {book.Title} ({book.TotalChapters} chaps)");
-                        }
-                        else
-                        {
-                            var tagRes = await _scraperService.AnalyzeTagUrlAsync(targetUrl);
-                            if (tagRes.IsSuccess)
-                            {
-                                tagsAnalyzed++;
-                                if (tagRes.TotalPages > maxPagesFound) maxPagesFound = tagRes.TotalPages;
-                                AddLog("SUCCESS", $"[Batch Analyze] Phân tích danh mục: {tagRes.TagTitle} - {tagRes.TotalPages} trang");
-                            }
-                        }
-
-                        if (!DomainHistoryList.Contains(targetUrl)) DomainHistoryList.Insert(0, targetUrl);
-                    }
-                    catch (Exception exItem)
-                    {
-                        AddLog("ERROR", $"[Batch Analyze Error] Link {targetUrl}: {exItem.Message}");
-                    }
-                }
-
-                DomainTotalPages = maxPagesFound;
-                DomainPageFrom = 1;
-                DomainPageTo = Math.Min(5, maxPagesFound);
-                UpdateStats();
-
-                DomainAnalyzeStatusText = $"✅ Hoàn tất Batch Analyze: {directBookAdded} truyện nạp queue, {tagsAnalyzed} danh mục ({maxPagesFound} trang).";
-                AddLog("SUCCESS", $"[Batch Analyze] Hoàn tất phân tích hàng loạt {totalUrls} liên kết! (Đã nạp {directBookAdded} truyện, {tagsAnalyzed} danh mục).");
-
-                if (directBookAdded > 0)
-                {
-                    SelectedRootTabIndex = 1;
-                }
+                AddLog("INFO", $"[Cào thêm (Crawl More)] Giữ nguyên {ComicBooks.Count} truyện hiện tại, cào nối tiếp vào Queue.");
             }
-        }
-        catch (Exception ex)
-        {
-            DomainAnalyzeStatusText = "Lỗi: " + ex.Message;
-            AddLog("ERROR", $"[Analyze Error] {ex.Message}");
-        }
-        finally
-        {
-            IsDomainAnalyzing = false;
-        }
-    }
 
-    [RelayCommand]
-    public async Task ScrapeDomainBatchPagesAsync(string domain)
-    {
-        // CÀO MỚI (CRAWL): Xóa queue cũ, cào mới từ đầu
-        await ExecuteDomainBatchScrapeAsync(domain, clearExisting: true);
-    }
+            AddLog("INFO", $"[Cào hàng loạt] Bắt đầu cào từ trang {DomainPageFrom} đến {DomainPageTo} ({tagUrls.Count} danh mục của {domain})...");
 
-    [RelayCommand]
-    public async Task CrawlMoreDomainBatchPagesAsync(string domain)
-    {
-        // CÀO THÊM (CRAWL MORE): Giữ nguyên queue hiện có, cào thêm tiếp vào danh sách
-        await ExecuteDomainBatchScrapeAsync(domain, clearExisting: false);
-    }
-
-    private async Task ExecuteDomainBatchScrapeAsync(string domain, bool clearExisting)
-    {
-        if (domain.Contains("thuviensach") || domain.Contains("dilib"))
-        {
-            DomainAnalyzeStatusText = "⚠️ Server đang lỗi, hiện tại chưa tải được";
-            AddLog("WARN", "[thuviensach.vn] Server đang lỗi, hiện tại chưa tải được");
-            return;
-        }
-
-        if (domain.Contains("mangadex"))
-        {
-            DomainAnalyzeStatusText = "⚠️ Website không hỗ trợ analyze";
-            AddLog("WARN", "[MangaDex] Website không hỗ trợ analyze");
-            return;
-        }
-
-        string rawInput = GetDomainTagUrl(domain);
-        if (string.IsNullOrWhiteSpace(rawInput))
-        {
-            AddLog("WARN", "[Cào hàng loạt] Vui lòng nhập URL tag/thể loại hợp lệ!");
-            return;
-        }
-
-        var tagUrls = ExtractCandidateUrls(rawInput);
-        if (tagUrls.Count == 0)
-        {
-            AddLog("WARN", "[Cào hàng loạt] Không tìm thấy URL hợp lệ để cào!");
-            return;
-        }
-
-        if (DomainPageFrom < 1 || DomainPageTo < DomainPageFrom)
-        {
-            AddLog("WARN", "[Cào hàng loạt] Dải trang không hợp lệ (Từ trang <= Đến trang)!");
-            return;
-        }
-
-        IsDomainBatchScraping = true;
-        _domainScrapeCts = new CancellationTokenSource();
-
-        if (clearExisting)
-        {
-            ComicBooks.Clear();
-            ScanResults.Clear();
-            UpdateStats();
-            AddLog("INFO", "[Cào mới (Crawl)] Đã xóa sạch danh sách truyện cũ trong Queue để cào mới từ đầu.");
-        }
-        else
-        {
-            AddLog("INFO", $"[Cào thêm (Crawl More)] Giữ nguyên {ComicBooks.Count} truyện hiện tại, cào nối tiếp vào Queue.");
-        }
-
-        AddLog("INFO", $"[Cào hàng loạt] Bắt đầu cào từ trang {DomainPageFrom} đến {DomainPageTo} ({tagUrls.Count} danh mục của {domain})...");
-
-        try
-        {
-            int totalAdded = 0;
-            int totalScraped = 0;
-
-            for (int tagIdx = 0; tagIdx < tagUrls.Count; tagIdx++)
+            try
             {
-                if (_domainScrapeCts.Token.IsCancellationRequested) break;
-                string currentTagUrl = tagUrls[tagIdx];
-                string targetDomain = DomainRoutingService.DetectDomain(currentTagUrl);
-                if (string.IsNullOrWhiteSpace(targetDomain)) targetDomain = domain;
+                int totalAdded = 0;
+                int totalScraped = 0;
 
-                AddLog("INFO", $"[Cào hàng loạt] [{tagIdx + 1}/{tagUrls.Count}] Đang cào ({targetDomain}): {currentTagUrl} (Trang {DomainPageFrom} - {DomainPageTo})...");
-
-                var scrapedItems = await _scraperService.ScrapeBatchComicsFromTagPagesAsync(
-                    currentTagUrl,
-                    DomainPageFrom,
-                    DomainPageTo,
-                    targetDomain,
-                    _domainScrapeCts.Token);
-
-                totalScraped += scrapedItems.Count;
-                int addedThisTag = 0;
-
-                foreach (var item in scrapedItems)
+                for (int tagIdx = 0; tagIdx < tagUrls.Count; tagIdx++)
                 {
-                    if (!ComicBooks.Any(b => b.Url.Equals(item.Url, StringComparison.OrdinalIgnoreCase)))
+                    if (_domainScrapeCts.Token.IsCancellationRequested) break;
+                    string currentTagUrl = tagUrls[tagIdx];
+                    string targetDomain = DomainRoutingService.DetectDomain(currentTagUrl);
+                    if (string.IsNullOrWhiteSpace(targetDomain)) targetDomain = domain;
+
+                    if (!ComicScraperService.IsCategoryOrTagUrl(currentTagUrl, targetDomain))
                     {
-                        item.Index = ComicBooks.Count + 1;
-                        ComicBooks.Add(item);
-                        addedThisTag++;
-                        totalAdded++;
+                        AddLog("INFO", $"[Cào hàng loạt] [{tagIdx + 1}/{tagUrls.Count}] Phát hiện link bộ truyện trực tiếp ({targetDomain}): {currentTagUrl}...");
+                        var book = await _scraperService.ScrapeBookAsync(currentTagUrl, ComicBooks.Count + 1);
+                        if (!string.IsNullOrWhiteSpace(SubfolderInput))
+                        {
+                            book.Subfolder = SubfolderInput.Trim();
+                        }
+                        totalScraped++;
+                        if (!ComicBooks.Any(b => b.Url.Equals(book.Url, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            book.Index = ComicBooks.Count + 1;
+                            ComicBooks.Add(book);
+                            totalAdded++;
+                        }
+                        UpdateStats();
+                        AddLog("SUCCESS", $"[Cào hàng loạt] [{tagIdx + 1}/{tagUrls.Count}]: Đã cào truyện {book.Title} ({book.TotalChapters} chaps).");
+                        continue;
                     }
+
+                    AddLog("INFO", $"[Cào hàng loạt] [{tagIdx + 1}/{tagUrls.Count}] Đang cào ({targetDomain}): {currentTagUrl} (Trang {DomainPageFrom} - {DomainPageTo})...");
+
+                    var scrapedItems = await _scraperService.ScrapeBatchComicsFromTagPagesAsync(
+                        currentTagUrl,
+                        DomainPageFrom,
+                        DomainPageTo,
+                        targetDomain,
+                        _domainScrapeCts.Token);
+
+                    totalScraped += scrapedItems.Count;
+                    int addedThisTag = 0;
+
+                    foreach (var item in scrapedItems)
+                    {
+                        if (!ComicBooks.Any(b => b.Url.Equals(item.Url, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            if (!string.IsNullOrWhiteSpace(SubfolderInput))
+                            {
+                                item.Subfolder = SubfolderInput.Trim();
+                            }
+                            item.Index = ComicBooks.Count + 1;
+                            ComicBooks.Add(item);
+                            addedThisTag++;
+                            totalAdded++;
+                        }
+                    }
+
+                    UpdateStats();
+                    AddLog("SUCCESS", $"[Cào hàng loạt] Tag [{tagIdx + 1}/{tagUrls.Count}]: Cào được {scrapedItems.Count} truyện (+{addedThisTag} truyện mới vào Queue).");
                 }
 
-                UpdateStats();
-                AddLog("SUCCESS", $"[Cào hàng loạt] Tag [{tagIdx + 1}/{tagUrls.Count}]: Cào được {scrapedItems.Count} truyện (+{addedThisTag} truyện mới vào Queue).");
-            }
-
-            AddLog("SUCCESS", $"[Cào hàng loạt] Hoàn tất cào tổng cộng {totalScraped} truyện ({totalAdded} truyện mới đã được thêm vào Queue).");
-            
-            // Chuyển sang Tab Download Queue để người dùng xem ngay
-            SelectedRootTabIndex = 1;
+                StartScanMissing();
+                _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+                AddLog("SUCCESS", $"[Cào hàng loạt] Hoàn tất cào tổng cộng {totalScraped} truyện ({totalAdded} truyện mới đã được thêm vào Queue).");
+                
+                // Chuyển sang Tab Download Queue (Index 2) để người dùng xem ngay, không tự mở Tab Search (Index 1)
+                SelectedRootTabIndex = 2;
         }
         catch (OperationCanceledException)
         {
