@@ -1987,40 +1987,27 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      - Nâng cấp `TogglePauseDownload()`: Kiểm tra trạng thái `IsDownloading`, phát cảnh báo rõ ràng khi không có tiến trình tải.
      - Tối ưu `Floating Quick Control Bar`: Đặt `ZIndex="1200"`, `IsHitTestVisible="True"`, đảm bảo phản hồi cảm ứng mượt mà tức thì trên mọi thiết bị Android và Desktop.
 - **Nghiệm Thu**:
-### 15.56. Khắc Phục Triệt Để Tính Năng Tự Dán (Auto Paste) Real-time Trên Android Khi Chạy Nền Không Cần Chia Màn Hình
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+### 15.56. Khắc Phục Triệt Để Lỗi Placeholder 15 Bytes Trên E-Hentai & Xác Thực Ảnh Đa Tầng Thông Minh
 - **Bối cảnh & Yêu cầu của người dùng**:
-  - Tính năng Tự Dán (Auto Paste) hoạt động tốt trên Windows/Linux và trên Android khi chia đôi màn hình (Split screen).
-  - Tuy nhiên, khi **không chia màn hình**, người dùng chuyển qua trình duyệt (Chrome, Brave, Firefox...) copy 10 link liên tiếp thì app không bắt được theo thời gian thực (real-time), mà khi chuyển quay lại app mới chỉ nhận duy nhất link cuối cùng (link thứ 10), 9 link trước đó bị mất.
-- **Nguyên nhân cốt lõi**:
-  - Trên Android 10+ (API 29+), hệ điều hành áp dụng chính sách bảo mật hạn chế nghiêm ngặt không cho các ứng dụng chạy nền (không có Window Focus / trong trạng thái Background) truy cập vào `ClipboardManager` hệ thống thông qua các API thông thường. Đồng thời khi Activity ở trạng thái `onPause`/`onStop`, các tác vụ UI Dispatcher của Avalonia bị hạn chế.
-- **Kiến trúc & Giải pháp Toàn diện**:
-  1. **Tích hợp Android Accessibility Service Chuyên Nghiệp (`ComicClipboardAccessibilityService.cs`)**:
-     - Xây dựng `ComicClipboardAccessibilityService` kế thừa `Android.AccessibilityServices.AccessibilityService`. Đây là cơ chế đặc quyền chuẩn của Android cho phép ứng dụng giám sát clipboard và sự kiện copy hệ thống liên tục ở Background ngay cả khi người dùng đang ở trong bất kỳ trình duyệt hoặc ứng dụng nào khác.
-     - Lắng nghe `ClipboardManager.IOnPrimaryClipChangedListener` và sự kiện `OnAccessibilityEvent` toàn cục. Ngay khi người dùng nhấn "Sao chép" một liên kết truyện, service trích xuất chuỗi URL tức thì và kích hoạt delegate `NativeOnClipboardTextChanged`.
-     - Cấu hình XML dịch vụ: `Resources/xml/accessibility_service_config.xml` và khai báo quyền `BIND_ACCESSIBILITY_SERVICE` trong `AndroidManifest.xml`.
-  2. **Hệ Thống Bridge Native & Điều Hướng Cài Đặt Trợ Năng (`MainActivity.cs` & `BackgroundExecutionService.cs`)**:
-     - Kiểm tra trạng thái kích hoạt của Dịch vụ Trợ năng qua `Settings.Secure.EnabledAccessibilityServices`.
-     - Khi người dùng bật công tắc "Tự dán (Auto Paste)" trên Android: nếu chưa kích hoạt Trợ năng, ứng dụng tự động mở trang Cài đặt Trợ năng (`Settings.ActionAccessibilitySettings`) kèm Toast thông báo hướng dẫn người dùng bật dịch vụ.
-     - Đồng thời bổ sung phương thức `CheckClipboardOnFocus()` trong `OnResume` và `OnWindowFocusChanged` của `MainActivity` để đảm bảo quét kiểm tra tức thì ngay khi quay lại app.
-  3. **Xử Lý Nạp Queue Tức Thời & Phản Hồi Âm Thanh (`MainViewModel.cs`)**:
-     - Đăng ký nhận `NativeOnClipboardTextChanged`: Khi có link mới phát hiện từ Background, tự động gọi `ExtractUrlsFromTextAsync(text, clearExisting: false)` trên `UIThread`, phát âm thanh `Startup` và ghi nhận log `[Tự Dán Real-time]`.
-     - Toàn bộ 10 link (hoặc n link) người dùng sao chép liên tiếp trong trình duyệt đều được tự động xếp vào Queue theo đúng thứ tự thời gian thực mà không bị sót bất kỳ link nào!
-- **Nghiệm Thu**:
-### 15.57. Giải Pháp Tự Dán / Nạp Link Real-Time KHÔNG CẦN TRỢ NĂNG (Accessibility) Trên Android: Floating ChatHead Widget, Share Target & Notification Quick Paste
-- **Bối cảnh & Yêu cầu của người dùng**:
-  - Người dùng không muốn/không thể sử dụng Dịch vụ Trợ năng (Accessibility Service) nhưng vẫn muốn có giải pháp dán/nạp link liên tục từ trình duyệt vào Queue một cách tiện lợi, theo thời gian thực mà không bị giới hạn bởi chính sách Android 10+.
-- **Kiến trúc & Bộ 3 Giải Pháp Đỉnh Cao Độc Lập Không Cần Trợ Năng**:
-  1. **Bong Bóng Nổi Dán Nhanh 1-Chạm (Floating ChatHead Overlay Widget - `ComicFloatingChatHeadService.cs`)**:
-     - Sử dụng quyền `SYSTEM_ALERT_WINDOW` (`TypeApplicationOverlay`). Khi bật "Tự dán", một Bong bóng tròn nhỏ gọn đẹp mắt `📥 DÁN` xuất hiện ở cạnh màn hình (kèm huy hiệu Badge đếm số link).
-     - Người dùng có thể kéo thả di chuyển tự do quanh màn hình khi đang ở Chrome/Brave/Firefox.
-     - Mỗi khi sao chép một link truyện ở trình duyệt, người dùng chỉ cần **chạm nhẹ 1 phát vào Bong bóng nổi**: Bong bóng lập tức đọc Clipboard, nạp link vào Queue trong 0.05s, phát âm thanh và hiển thị Toast "Đã nạp link #X vào Queue!", số Badge tự động nhảy tăng `+1` mà không bao giờ phải rời khỏi trình duyệt!
-  2. **Chia Sẻ Trực Tiếp Từ Trình Duyệt (Share Target Intent - `ShareReceiverActivity.cs`)**:
-     - Khai báo Activity trong suốt `ShareReceiverActivity` với IntentFilter `ACTION_SEND` (MIME `text/plain`).
-     - Khi lướt web trên Chrome/Brave: người dùng bấm menu trình duyệt -> "Chia sẻ" (Share) -> chọn "Thêm vào Comic Downloader GMTPC".
-     - Link được nạp ngầm vào Queue ngay lập tức và tự động đóng trong 0.05 giây, người dùng tiếp tục lướt web bình thường.
-  3. **Nút Dán Nhanh Trực Tiếp Trên Notification Bar (`ComicBackgroundService.cs`)**:
-     - Bổ sung Action `ActionQuickPaste` ("📋 Dán Link") trên Foreground Service Notification.
-     - Người dùng chỉ cần vuốt thanh trạng thái của Android xuống và bấm `📋 Dán Link` để nạp ngay nội dung vừa copy vào Queue.
+  - Khi tải truyện từ E-Hentai / ExHentai, đôi khi một số trang ảnh bị lỗi lưu thành file placeholder 15 bytes (ví dụ `472.webp`, `482.webp` trong ảnh đính kèm), không xem được ảnh.
+  - **Nguyên nhân cốt lõi**:
+    1. E-Hentai sử dụng mạng phân tán Hentai@Home (H@H). Khi một node H@H bị offline/timeout/nghẽn mạng, nó trả về HTTP response với nội dung là text ngắn `404 Not Found` (13-15 bytes) hoặc `Key expired` (11-15 bytes) hoặc ảnh gif/png placeholder lỗi 15 bytes.
+    2. Trước đây engine tải chỉ kiểm tra `data.Length > 0`, do đó file rác 15 bytes vẫn được ghi xuống ổ đĩa và coi là đã tải thành công, không kích hoạt cơ chế retry hay chuyển server.
+    3. Khi tải lại, cơ chế skip file cũ chỉ kiểm tra `File.Exists` mà không phát hiện file rác 15 bytes để xóa và tải lại.
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Hệ Thống Xác Thực Tính Hợp Lệ Dữ Liệu Ảnh (`IsValidImageData`)**:
+     - Kiểm tra nghiêm ngặt dung lượng tối thiểu `data.Length >= 512` bytes (không có ảnh truyện tranh thực tế nào < 512b).
+     - Xác thực Magic Bytes định dạng ảnh chuẩn: JPEG (`FF D8 FF`), PNG (`89 50 4E 47`), WebP (`RIFF...WEBP`), GIF (`GIF87a/89a`), BMP (`42 4D`), AVIF/HEIC (`ftyp`), TIFF (`49 49 2A 00` / `4D 4D 00 2A`).
+     - Tuyệt đối không bao giờ ghi file xuống đĩa nếu không thỏa mãn `IsValidImageData`.
+  2. **Cơ Chế Smart Node Failover Thông Qua E-Hentai `nl` Parameter (`ResolveFreshEHentaiImageUrlAsync`)**:
+     - Lưu danh sách `ReaderUrls` đồng bộ với từng trang ảnh trong `ChapterItem`.
+     - Khi một direct image URL từ node Hath bị lỗi hoặc trả về placeholder 15 bytes, app tự động gửi request đến trang reader E-Hentai với tham số `nl=xxx` để server E-Hentai cấp phát ngay một node H@H MỚI hoạt động tốt.
+     - Tải ảnh từ node mới này tức thì mà không cần người dùng can thiệp thủ công.
+  3. **Tự Động Dọn Dẹp / Thay Thế File Hỏng Cũ Khi Resume / Tải Lại**:
+     - Trong `DownloadComicBookAsync`, khi kiểm tra file đã tồn tại: nếu file `<= 512` bytes (file placeholder 15 bytes cũ bị lỗi), app tự động xóa bỏ file rác và xóa khỏi `.manifest.json` để tải lại ảnh gốc chất lượng cao 100%.
 - **Nghiệm Thu**:
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.

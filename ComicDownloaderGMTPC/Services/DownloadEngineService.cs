@@ -694,19 +694,21 @@ public class DownloadEngineService
                 ProgressUpdated?.Invoke();
 
                 await WaitIfPausedAsync(ct).ConfigureAwait(false);
-                var imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain ?? string.Empty, ct).ConfigureAwait(false);
+                var readerUrls = new List<string>();
+                var imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain ?? string.Empty, ct, readerUrls).ConfigureAwait(false);
                 if (imageUrls.Count == 0)
                 {
                     for (int retryExtract = 1; retryExtract <= 2; retryExtract++)
                     {
                         if (ct.IsCancellationRequested) break;
                         await Task.Delay(800 * retryExtract, ct).ConfigureAwait(false);
-                        imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain ?? string.Empty, ct).ConfigureAwait(false);
+                        imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain ?? string.Empty, ct, readerUrls).ConfigureAwait(false);
                         if (imageUrls.Count > 0) break;
                     }
                 }
 
                 chapter.ImageUrls = imageUrls;
+                chapter.ReaderUrls = readerUrls;
                 chapter.TotalPages = imageUrls.Count;
 
                 string manifestFile = Path.Combine(chapterDir, ".manifest.json");
@@ -731,15 +733,30 @@ public class DownloadEngineService
                             string pageFileName = $"{(pIdx + 1):D3}{pageExt}";
                             string pageFilePath = Path.Combine(chapterDir, pageFileName);
 
-                            if (File.Exists(pageFilePath) && new FileInfo(pageFilePath).Length > 1024 && manifest.ContainsKey(pageFileName))
+                            // Kiểm tra file tồn tại: Chỉ chấp nhận nếu file > 512 bytes và có trong manifest.
+                            // Nếu file <= 512 bytes (file rác / placeholder 15 bytes cũ bị lỗi), tự động xóa để tải lại ảnh thật.
+                            if (File.Exists(pageFilePath))
                             {
-                                int currentDone = Interlocked.Increment(ref downloadedCount);
-                                chapter.DownloadedPages = currentDone;
-                                book.UpdateProgress(completedChapters, totalChapters, currentDone, imageUrls.Count);
-                                return;
+                                var fi = new FileInfo(pageFilePath);
+                                if (fi.Length > 512 && manifest.ContainsKey(pageFileName))
+                                {
+                                    int currentDone = Interlocked.Increment(ref downloadedCount);
+                                    chapter.DownloadedPages = currentDone;
+                                    book.UpdateProgress(completedChapters, totalChapters, currentDone, imageUrls.Count);
+                                    return;
+                                }
+                                else
+                                {
+                                    try { File.Delete(pageFilePath); } catch {}
+                                    lock (manifest)
+                                    {
+                                        manifest.Remove(pageFileName);
+                                    }
+                                }
                             }
 
-                            bool downloaded = await DownloadImageWithRetryAsync(pageUrl, pageFilePath, chapter.Url, ct).ConfigureAwait(false);
+                            string? pageReaderUrl = (chapter.ReaderUrls != null && pIdx < chapter.ReaderUrls.Count) ? chapter.ReaderUrls[pIdx] : null;
+                            bool downloaded = await DownloadImageWithRetryAsync(pageUrl, pageFilePath, chapter.Url, pageReaderUrl, ct).ConfigureAwait(false);
                             if (downloaded)
                             {
                                 lock (manifest)
@@ -844,7 +861,46 @@ public class DownloadEngineService
         }
     }
 
-    private async Task<bool> DownloadImageWithRetryAsync(string imageUrl, string destinationPath, string refererUrl, CancellationToken ct)
+    public static bool IsValidImageData(byte[]? data)
+    {
+        if (data == null || data.Length < 512) return false;
+
+        // 1. JPEG: FF D8 FF
+        if (data.Length >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
+            return true;
+
+        // 2. PNG: 89 50 4E 47 0D 0A 1A 0A
+        if (data.Length >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 &&
+            data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A)
+            return true;
+
+        // 3. WebP: RIFF (bytes 0-3) + WEBP (bytes 8-11)
+        if (data.Length >= 12 &&
+            data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+            data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50)
+            return true;
+
+        // 4. GIF: GIF87a / GIF89a
+        if (data.Length >= 6 && data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38)
+            return true;
+
+        // 5. BMP: BM (42 4D)
+        if (data.Length >= 2 && data[0] == 0x42 && data[1] == 0x4D)
+            return true;
+
+        // 6. AVIF / HEIC: ftyp at offset 4
+        if (data.Length >= 12 && data[4] == 0x66 && data[5] == 0x74 && data[6] == 0x79 && data[7] == 0x70)
+            return true;
+
+        // 7. TIFF
+        if (data.Length >= 4 && ((data[0] == 0x49 && data[1] == 0x49 && data[2] == 0x2A && data[3] == 0x00) ||
+                                (data[0] == 0x4D && data[1] == 0x4D && data[2] == 0x00 && data[3] == 0x2A)))
+            return true;
+
+        return false;
+    }
+
+    private async Task<bool> DownloadImageWithRetryAsync(string imageUrl, string destinationPath, string refererUrl, string? readerUrl, CancellationToken ct)
     {
         bool isMangaDex = imageUrl.Contains("mangadex.network", StringComparison.OrdinalIgnoreCase) ||
                           imageUrl.Contains("mangadex.org", StringComparison.OrdinalIgnoreCase);
@@ -853,7 +909,29 @@ public class DownloadEngineService
                            imageUrl.Contains("/nettruyen/", StringComparison.OrdinalIgnoreCase) ||
                            (refererUrl != null && refererUrl.Contains("nettruyen", StringComparison.OrdinalIgnoreCase));
 
+        bool isEHentai = imageUrl.Contains("hath.network", StringComparison.OrdinalIgnoreCase) ||
+                         imageUrl.Contains("ehgt.org", StringComparison.OrdinalIgnoreCase) ||
+                         imageUrl.Contains("e-hentai.org", StringComparison.OrdinalIgnoreCase) ||
+                         imageUrl.Contains("exhentai.org", StringComparison.OrdinalIgnoreCase) ||
+                         (refererUrl != null && (refererUrl.Contains("e-hentai") || refererUrl.Contains("exhentai")));
+
         var candidateUrls = new List<string> { imageUrl };
+
+        // Nếu link là trang reader E-Hentai (/s/...), resolve ra direct image URL trước
+        if (isEHentai && (imageUrl.Contains("/s/") || !imageUrl.Contains("/h/")))
+        {
+            try
+            {
+                string rUrl = !string.IsNullOrEmpty(readerUrl) ? readerUrl : imageUrl;
+                string? resolvedUrl = await _scraperService.ResolveFreshEHentaiImageUrlAsync(rUrl, null, ct).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(resolvedUrl))
+                {
+                    candidateUrls.Insert(0, resolvedUrl);
+                }
+            }
+            catch {}
+        }
+
         if (isMangaDex)
         {
             var mdMatch = System.Text.RegularExpressions.Regex.Match(imageUrl, @"/(?<type>data|data-saver)/(?<hash>[a-f0-9]+)/(?<file>[^?#]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -902,14 +980,15 @@ public class DownloadEngineService
             }
         }
 
-        for (int attempt = 1; attempt <= 3; attempt++)
+        for (int attempt = 1; attempt <= 4; attempt++)
         {
             if (ct.IsCancellationRequested) return false;
 
             byte[]? data = null;
 
-            foreach (string targetUrl in candidateUrls)
+            for (int cIdx = 0; cIdx < candidateUrls.Count; cIdx++)
             {
+                string targetUrl = candidateUrls[cIdx];
                 if (ct.IsCancellationRequested) return false;
 
                 try
@@ -971,9 +1050,12 @@ public class DownloadEngineService
                     using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
                     if (res.IsSuccessStatusCode)
                     {
-                        data = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-                        if (data.Length > 0)
+                        byte[] rawBytes = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                        
+                        // Kiểm tra tính hợp lệ dữ liệu ảnh (Chống hoàn toàn lỗi placeholder 15 bytes hoặc HTML lỗi)
+                        if (IsValidImageData(rawBytes))
                         {
+                            data = rawBytes;
                             if (isNettruyen)
                             {
                                 var m = System.Text.RegularExpressions.Regex.Match(targetUrl, @"https?://(?<srv>image\d*)\.", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -984,6 +1066,36 @@ public class DownloadEngineService
                             }
                             break;
                         }
+                        else
+                        {
+                            // Phát hiện file 15 bytes rác hoặc response lỗi -> Kích hoạt failover sang Node khác cho E-Hentai
+                            if (isEHentai && !string.IsNullOrEmpty(readerUrl))
+                            {
+                                try
+                                {
+                                    string? freshUrl = await _scraperService.ResolveFreshEHentaiImageUrlAsync(readerUrl, targetUrl, ct).ConfigureAwait(false);
+                                    if (!string.IsNullOrWhiteSpace(freshUrl) && !candidateUrls.Contains(freshUrl, StringComparer.OrdinalIgnoreCase))
+                                    {
+                                        candidateUrls.Add(freshUrl);
+                                        LogEmitted?.Invoke("INFO", $"[E-Hentai Failover] Node Hath '{targetUrl}' trả về file hỏng ({rawBytes?.Length ?? 0}b). Đã tự động chuyển sang Node mới: {freshUrl}");
+                                    }
+                                }
+                                catch {}
+                            }
+                        }
+                    }
+                    else if (isEHentai && !string.IsNullOrEmpty(readerUrl))
+                    {
+                        // HTTP status lỗi (404/503 Hath node offline) -> Đổi Node ngay
+                        try
+                        {
+                            string? freshUrl = await _scraperService.ResolveFreshEHentaiImageUrlAsync(readerUrl, targetUrl, ct).ConfigureAwait(false);
+                            if (!string.IsNullOrWhiteSpace(freshUrl) && !candidateUrls.Contains(freshUrl, StringComparer.OrdinalIgnoreCase))
+                            {
+                                candidateUrls.Add(freshUrl);
+                            }
+                        }
+                        catch {}
                     }
                 }
                 catch (OperationCanceledException)
@@ -1001,16 +1113,17 @@ public class DownloadEngineService
             }
 
             // Tầng 4 dự phòng cho MangaDex qua DoH + SniFragmentStream + Proxy
-            if ((data == null || data.Length == 0) && isMangaDex)
+            if ((data == null || !IsValidImageData(data)) && isMangaDex)
             {
                 foreach (string targetUrl in candidateUrls)
                 {
                     if (ct.IsCancellationRequested) return false;
                     try
                     {
-                        data = await MangaDexNetworkService.Instance.DownloadBytesAsync(targetUrl, "https://mangadex.org/", ct).ConfigureAwait(false);
-                        if (data != null && data.Length > 0)
+                        byte[]? mdData = await MangaDexNetworkService.Instance.DownloadBytesAsync(targetUrl, "https://mangadex.org/", ct).ConfigureAwait(false);
+                        if (IsValidImageData(mdData))
                         {
+                            data = mdData;
                             break;
                         }
                     }
@@ -1018,12 +1131,27 @@ public class DownloadEngineService
                 }
             }
 
-            if (data != null && data.Length > 0)
+            // Tầng 5 dự phòng cho E-Hentai: Nếu tất cả candidate cũ đều hỏng, reload fresh reader HTML lấy node mới tinh
+            if ((data == null || !IsValidImageData(data)) && isEHentai && !string.IsNullOrEmpty(readerUrl))
             {
                 try
                 {
-                    await File.WriteAllBytesAsync(destinationPath, data, ct).ConfigureAwait(false);
-                    Interlocked.Add(ref _totalBytesDownloadedInWindow, data.Length);
+                    string? freshUrl = await _scraperService.ResolveFreshEHentaiImageUrlAsync(readerUrl, null, ct).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(freshUrl) && !candidateUrls.Contains(freshUrl, StringComparer.OrdinalIgnoreCase))
+                    {
+                        candidateUrls.Add(freshUrl);
+                    }
+                }
+                catch {}
+            }
+
+            // Chỉ lưu khi dữ liệu là ảnh THỰC SỰ hợp lệ (Dung lượng >= 512b và đúng Magic Bytes)
+            if (IsValidImageData(data))
+            {
+                try
+                {
+                    await File.WriteAllBytesAsync(destinationPath, data!, ct).ConfigureAwait(false);
+                    Interlocked.Add(ref _totalBytesDownloadedInWindow, data!.Length);
 
                     if (AutoSplitLongImages && File.Exists(destinationPath))
                     {
@@ -1052,8 +1180,8 @@ public class DownloadEngineService
                             string safeFallbackPath = destinationPath.Replace("/storage/emulated/0/Download/ComicDownloads", safeAppStorage, StringComparison.OrdinalIgnoreCase);
                             string fallbackDir = Path.GetDirectoryName(safeFallbackPath)!;
                             if (!Directory.Exists(fallbackDir)) Directory.CreateDirectory(fallbackDir);
-                            File.WriteAllBytes(safeFallbackPath, data);
-                            Interlocked.Add(ref _totalBytesDownloadedInWindow, data.Length);
+                            File.WriteAllBytes(safeFallbackPath, data!);
+                            Interlocked.Add(ref _totalBytesDownloadedInWindow, data!.Length);
                             LogEmitted?.Invoke("SUCCESS", $"[Lưu an toàn] Đã chuyển hướng lưu ảnh vào thư mục riêng của app: {Path.GetFileName(safeFallbackPath)}");
                             return true;
                         }
@@ -1065,12 +1193,22 @@ public class DownloadEngineService
                 catch { }
             }
 
-            if (attempt == 3)
+            if (attempt == 4)
             {
-                LogEmitted?.Invoke("WARN", $"Tải ảnh thất bại sau 3 lần '{imageUrl}'");
+                LogEmitted?.Invoke("WARN", $"Tải ảnh thất bại sau {attempt} lần '{imageUrl}'");
             }
-            await Task.Delay(400 * attempt, ct).ConfigureAwait(false);
+            await Task.Delay(350 * attempt, ct).ConfigureAwait(false);
         }
+
+        // Dọn dẹp an toàn: Nếu file tạo ra bị lỗi hoặc < 512 bytes thì xóa bỏ ngay
+        try
+        {
+            if (File.Exists(destinationPath) && new FileInfo(destinationPath).Length < 512)
+            {
+                File.Delete(destinationPath);
+            }
+        }
+        catch {}
 
         return false;
     }

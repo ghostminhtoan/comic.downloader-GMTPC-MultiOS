@@ -41,18 +41,6 @@ public class BackgroundExecutionService
     public static Action? NativeForceExit { get; set; }
     public static Action<string>? NativeOpenBrowserRequested { get; set; }
 
-    // AutoPaste Clipboard Real-time Bridge (Android Accessibility Service & Desktop)
-    public static bool IsAutoPasteEnabled { get; set; } = false;
-    public static Action<string>? NativeOnClipboardTextChanged { get; set; }
-    public static Action? NativeCheckAndPromptAccessibilityService { get; set; }
-    public static Func<bool>? NativeIsAccessibilityServiceEnabled { get; set; }
-
-    // Floating ChatHead Overlay Bridge (Bong bóng dán link tự động không cần trợ năng)
-    public static Action? NativeStartFloatingChatHead { get; set; }
-    public static Action? NativeStopFloatingChatHead { get; set; }
-    public static Func<bool>? NativeIsOverlayPermissionGranted { get; set; }
-    public static Action? NativeRequestOverlayPermission { get; set; }
-
     public bool IsBubbleMode { get; private set; } = false;
 
     public bool HasActiveTasks => _activeTasks.Values.Any(t => t.IsRunning);

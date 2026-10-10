@@ -139,30 +139,14 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnIsAutoPasteClipboardChanged(bool value)
     {
-        BackgroundExecutionService.IsAutoPasteEnabled = value;
         if (value)
         {
             StartAutoPasteClipboardMonitoring();
             AddLog("SUCCESS", "📋 Đã BẬT tính năng Tự dán (Auto Paste) - Mọi link sao chép sẽ tự động thêm vào Queue.");
-
-            if (OperatingSystem.IsAndroid())
-            {
-                // 1. Tự động khởi động Bong bóng nổi ChatHead Dán Nhanh (Không cần Trợ năng!)
-                BackgroundExecutionService.NativeStartFloatingChatHead?.Invoke();
-
-                AddLog("SUCCESS", "🚀 [Android] Đã kích hoạt Bong bóng nổi Dán Nhanh (Floating ChatHead)!\n" +
-                                  "• Cách 1: Khi ở Chrome copy link -> chạm nhẹ vào Bong bóng nổi '📥 DÁN' để nạp ngay vào Queue!\n" +
-                                  "• Cách 2: Trong Chrome bấm menu 'Chia sẻ' (Share) -> chọn 'Thêm vào Comic Downloader GMTPC'.\n" +
-                                  "• Cách 3: Vuốt thanh thông báo xuống -> bấm '📋 Dán Link'.");
-            }
         }
         else
         {
             StopAutoPasteClipboardMonitoring();
-            if (OperatingSystem.IsAndroid())
-            {
-                BackgroundExecutionService.NativeStopFloatingChatHead?.Invoke();
-            }
             AddLog("INFO", "📋 Đã TẮT tính năng Tự dán (Auto Paste).");
         }
     }
@@ -1274,23 +1258,6 @@ public partial class MainViewModel : ViewModelBase
 
         BackgroundExecutionService.NativeNotificationToggleDownloadRequested = () => Avalonia.Threading.Dispatcher.UIThread.Post(async () => await ToggleDownloadAsync());
         BackgroundExecutionService.NativeNotificationTogglePauseRequested = () => Avalonia.Threading.Dispatcher.UIThread.Post(TogglePause);
-
-        // Lắng nghe link copy real-time từ Android Accessibility Service hoặc Native Clipboard
-        BackgroundExecutionService.NativeOnClipboardTextChanged = (text) =>
-        {
-            Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
-            {
-                if (!IsAutoPasteClipboard) return;
-                if (string.IsNullOrWhiteSpace(text) || text == _lastAutoPasteText) return;
-                _lastAutoPasteText = text;
-                if (text.Contains("http://", StringComparison.OrdinalIgnoreCase) || text.Contains("https://", StringComparison.OrdinalIgnoreCase))
-                {
-                    AddLog("SUCCESS", $"📋 [Tự Dán Real-time] Phát hiện link mới từ Clipboard:\n{text}");
-                    await ExtractUrlsFromTextAsync(text, clearExisting: false);
-                    SoundNotificationService.Instance.PlaySound(SoundNotificationType.Startup);
-                }
-            });
-        };
 
         // Lắng nghe sự kiện chạy ngầm & bong bóng
         var bg = BackgroundExecutionService.Instance;

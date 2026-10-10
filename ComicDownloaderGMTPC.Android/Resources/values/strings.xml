@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">ComicDownloaderGMTPC</string>
-    <string name="accessibility_service_description">Dịch vụ trợ năng cho phép Comic Downloader GMTPC tự động nhận diện và dán liên kết truyện bạn sao chép từ trình duyệt vào hàng đợi tải theo thời gian thực (real-time) mà không cần chuyển đổi qua lại giữa các ứng dụng.</string>
-</resources>
-

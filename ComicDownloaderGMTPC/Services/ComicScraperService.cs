@@ -487,7 +487,7 @@ public class ComicScraperService
         return item;
     }
 
-    public async Task<List<string>> ExtractChapterImageUrlsAsync(string chapterUrl, string domain, CancellationToken ct = default)
+    public async Task<List<string>> ExtractChapterImageUrlsAsync(string chapterUrl, string domain, CancellationToken ct = default, List<string>? outReaderUrls = null)
     {
         var images = new List<string>();
         if (string.IsNullOrWhiteSpace(chapterUrl)) return images;
@@ -503,7 +503,7 @@ public class ComicScraperService
 
             if (domain.Contains("e-hentai") || domain.Contains("exhentai"))
             {
-                return await ExtractEHentaiChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
+                return await ExtractEHentaiChapterImagesAsync(chapterUrl, ct, outReaderUrls).ConfigureAwait(false);
             }
 
             if (domain.Contains("hentaiforce"))
@@ -3523,7 +3523,7 @@ public class ComicScraperService
         return item;
     }
 
-    private async Task<List<string>> ExtractEHentaiChapterImagesAsync(string galleryUrl, CancellationToken ct)
+    private async Task<List<string>> ExtractEHentaiChapterImagesAsync(string galleryUrl, CancellationToken ct, List<string>? outReaderUrls = null)
     {
         var imageUrls = new List<string>();
         galleryUrl = DomainRoutingService.NormalizeUrl(galleryUrl);
@@ -3681,16 +3681,72 @@ public class ComicScraperService
 
         await Task.WhenAll(resolveTasks).ConfigureAwait(false);
 
-        // Gom ảnh theo đúng thứ tự 1..N
+        // Gom ảnh theo đúng thứ tự 1..N và lưu danh sách ReaderUrls đồng bộ
         for (int p = 1; p <= finalTotalPages; p++)
         {
             if (directImageByPage.TryGetValue(p, out string? imgUrl) && !string.IsNullOrWhiteSpace(imgUrl))
             {
                 imageUrls.Add(imgUrl);
+                if (outReaderUrls != null && readerUrlByPage.TryGetValue(p, out string? rUrl))
+                {
+                    outReaderUrls.Add(rUrl);
+                }
+            }
+            else if (readerUrlByPage.TryGetValue(p, out string? fallbackReaderUrl))
+            {
+                // Dự phòng: nếu lúc resolve ban đầu bị miss, lưu link reader để lúc tải tự động resolve lại
+                imageUrls.Add(fallbackReaderUrl);
+                if (outReaderUrls != null)
+                {
+                    outReaderUrls.Add(fallbackReaderUrl);
+                }
             }
         }
 
         return imageUrls;
+    }
+
+    /// <summary>
+    /// Bóc tách URL ảnh mới tinh từ trang reader E-Hentai thông qua tham số nl (failover sang Node H@H khác khi node cũ trả về 15 bytes placeholder hoặc chết)
+    /// </summary>
+    public async Task<string?> ResolveFreshEHentaiImageUrlAsync(string readerUrl, string? failedDirectUrl = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(readerUrl)) return null;
+
+        try
+        {
+            readerUrl = DomainRoutingService.NormalizeUrl(readerUrl);
+            string readerHtml = await FetchEHentaiHtmlAsync(readerUrl, ct).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(readerHtml)) return null;
+
+            string? currentImgUrl = ExtractEHentaiDirectImageUrl(readerHtml);
+            string? nlParam = ExtractEHentaiNlParam(readerHtml);
+
+            // Nếu currentImgUrl khác failedDirectUrl và hợp lệ -> Trả về ngay
+            if (!string.IsNullOrWhiteSpace(currentImgUrl) && (failedDirectUrl == null || !string.Equals(currentImgUrl, failedDirectUrl, StringComparison.OrdinalIgnoreCase)))
+            {
+                return WebUtility.HtmlDecode(currentImgUrl);
+            }
+
+            // Nếu URL bị trùng hoặc có mã nl -> Gửi request với ?nl=xxx để server E-Hentai cấp Node Hath mới
+            if (!string.IsNullOrWhiteSpace(nlParam))
+            {
+                string sepChar = readerUrl.Contains('?') ? "&" : "?";
+                string fallbackUrl = $"{readerUrl}{sepChar}nl={Uri.EscapeDataString(nlParam)}";
+                string fbHtml = await FetchEHentaiHtmlAsync(fallbackUrl, ct).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(fbHtml))
+                {
+                    string? freshImgUrl = ExtractEHentaiDirectImageUrl(fbHtml);
+                    if (!string.IsNullOrWhiteSpace(freshImgUrl))
+                    {
+                        return WebUtility.HtmlDecode(freshImgUrl);
+                    }
+                }
+            }
+        }
+        catch {}
+
+        return null;
     }
 
     private static string? ExtractEHentaiDirectImageUrl(string readerHtml)

@@ -9,4 +9,5 @@ public class ChapterItem
     public int TotalPages { get; set; }
     public int DownloadedPages { get; set; }
     public System.Collections.Generic.List<string> ImageUrls { get; set; } = new();
+    public System.Collections.Generic.List<string> ReaderUrls { get; set; } = new();
 }

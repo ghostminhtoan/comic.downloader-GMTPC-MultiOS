@@ -122,48 +122,6 @@ public class MainActivity : AvaloniaMainActivity
             });
         };
 
-        Services.BackgroundExecutionService.NativeCheckAndPromptAccessibilityService = () =>
-        {
-            RunOnUiThread(() =>
-            {
-                if (!IsAccessibilityServiceEnabled(this))
-                {
-                    RequestEnableAccessibilityService(this);
-                }
-            });
-        };
-        Services.BackgroundExecutionService.NativeIsAccessibilityServiceEnabled = () => IsAccessibilityServiceEnabled(this);
-
-        Services.BackgroundExecutionService.NativeStartFloatingChatHead = () =>
-        {
-            RunOnUiThread(() =>
-            {
-                if (CanDrawOverlays(this))
-                {
-                    ComicFloatingChatHeadService.Start(this);
-                }
-                else
-                {
-                    RequestOverlayPermission(this);
-                }
-            });
-        };
-        Services.BackgroundExecutionService.NativeStopFloatingChatHead = () =>
-        {
-            RunOnUiThread(() =>
-            {
-                ComicFloatingChatHeadService.Stop(this);
-            });
-        };
-        Services.BackgroundExecutionService.NativeIsOverlayPermissionGranted = () => CanDrawOverlays(this);
-        Services.BackgroundExecutionService.NativeRequestOverlayPermission = () =>
-        {
-            RunOnUiThread(() =>
-            {
-                RequestOverlayPermission(this);
-            });
-        };
-
         Services.DownloadEngineService.OpenStorageSettingsRequested += OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested += OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
@@ -213,7 +171,6 @@ public class MainActivity : AvaloniaMainActivity
     protected override void OnResume()
     {
         base.OnResume();
-        CheckClipboardOnFocus();
     }
 
     protected override void OnPause()
@@ -245,121 +202,11 @@ public class MainActivity : AvaloniaMainActivity
         try
         {
             base.OnWindowFocusChanged(hasFocus);
-            if (hasFocus)
-            {
-                CheckClipboardOnFocus();
-            }
         }
         catch (Exception ex)
         {
             global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi OnWindowFocusChanged: {ex.Message}");
         }
-    }
-
-    private void CheckClipboardOnFocus()
-    {
-        try
-        {
-            if (Services.BackgroundExecutionService.IsAutoPasteEnabled)
-            {
-                ComicClipboardAccessibilityService.Instance?.CheckClipboardAndNotify();
-
-                var cm = (ClipboardManager?)GetSystemService(ClipboardService);
-                if (cm != null && cm.HasPrimaryClip)
-                {
-                    var clip = cm.PrimaryClip;
-                    if (clip != null && clip.ItemCount > 0)
-                    {
-                        var text = clip.GetItemAt(0)?.CoerceToText(this)?.ToString();
-                        if (!string.IsNullOrWhiteSpace(text) &&
-                            (text.Contains("http://", StringComparison.OrdinalIgnoreCase) || text.Contains("https://", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            Services.BackgroundExecutionService.NativeOnClipboardTextChanged?.Invoke(text);
-                        }
-                    }
-                }
-            }
-        }
-        catch { }
-    }
-
-    public static bool IsAccessibilityServiceEnabled(Context context)
-    {
-        try
-        {
-            int accessibilityEnabled = 0;
-            string serviceName = context.PackageName + "/" + typeof(ComicClipboardAccessibilityService).FullName;
-            accessibilityEnabled = global::Android.Provider.Settings.Secure.GetInt(
-                context.ContentResolver,
-                global::Android.Provider.Settings.Secure.AccessibilityEnabled);
-
-            if (accessibilityEnabled == 1)
-            {
-                string settingValue = global::Android.Provider.Settings.Secure.GetString(
-                    context.ContentResolver,
-                    global::Android.Provider.Settings.Secure.EnabledAccessibilityServices) ?? "";
-
-                if (!string.IsNullOrEmpty(settingValue))
-                {
-                    string pkg = context.PackageName ?? "";
-                    var splitter = settingValue.Split(':');
-                    foreach (var s in splitter)
-                    {
-                        if (!string.IsNullOrEmpty(pkg) && s.Contains(pkg, StringComparison.OrdinalIgnoreCase) &&
-                            s.Contains("ComicClipboardAccessibilityService", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        catch { }
-        return false;
-    }
-
-    public static void RequestEnableAccessibilityService(Activity? activity)
-    {
-        if (activity == null) return;
-        try
-        {
-            var intent = new Intent(global::Android.Provider.Settings.ActionAccessibilitySettings);
-            intent.AddFlags(ActivityFlags.NewTask);
-            activity.StartActivity(intent);
-            Toast.MakeText(activity, "👉 Hãy BẬT [Comic Downloader GMTPC - Tự Động Dán Link] trong danh sách để tự dán link từ trình duyệt!", ToastLength.Long)?.Show();
-        }
-        catch { }
-    }
-
-    public static bool CanDrawOverlays(Context context)
-    {
-        try
-        {
-            if (OperatingSystem.IsAndroidVersionAtLeast(23))
-            {
-                return global::Android.Provider.Settings.CanDrawOverlays(context);
-            }
-            return true;
-        }
-        catch { }
-        return false;
-    }
-
-    public static void RequestOverlayPermission(Activity? activity)
-    {
-        if (activity == null) return;
-        try
-        {
-            if (OperatingSystem.IsAndroidVersionAtLeast(23))
-            {
-                var uri = global::Android.Net.Uri.Parse("package:" + activity.PackageName);
-                var intent = new Intent(global::Android.Provider.Settings.ActionManageOverlayPermission, uri);
-                intent.AddFlags(ActivityFlags.NewTask);
-                activity.StartActivity(intent);
-                Toast.MakeText(activity, "👉 Hãy CẤP QUYỀN [Hiển thị trên các ứng dụng khác] để sử dụng Bong bóng dán link nổi!", ToastLength.Long)?.Show();
-            }
-        }
-        catch { }
     }
 
     protected override void OnDestroy()
@@ -371,12 +218,6 @@ public class MainActivity : AvaloniaMainActivity
         Services.BackgroundExecutionService.NativeRequestExitBubbleMode = null;
         Services.BackgroundExecutionService.NativeMinimizeOrHide = null;
         Services.BackgroundExecutionService.NativeForceExit = null;
-        Services.BackgroundExecutionService.NativeCheckAndPromptAccessibilityService = null;
-        Services.BackgroundExecutionService.NativeIsAccessibilityServiceEnabled = null;
-        Services.BackgroundExecutionService.NativeStartFloatingChatHead = null;
-        Services.BackgroundExecutionService.NativeStopFloatingChatHead = null;
-        Services.BackgroundExecutionService.NativeIsOverlayPermissionGranted = null;
-        Services.BackgroundExecutionService.NativeRequestOverlayPermission = null;
 
         Services.DownloadEngineService.OpenStorageSettingsRequested -= OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested -= OnOpenFolderRequested;
