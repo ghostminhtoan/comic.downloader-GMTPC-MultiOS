@@ -1373,17 +1373,39 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(SearchBookCountText));
     }
 
+    private bool _isAutoSaveSuspended = true;
+    private long _lastProgressAutoSaveTick;
+
     public MainViewModel()
     {
         _downloadPathText = _downloadEngine.DownloadRoot;
+        _downloadEngine.BindLiveQueueSource(ComicBooks);
         _langService.LanguageChanged += OnLanguageChanged;
         _downloadEngine.LogEmitted += OnLogEmitted;
         _downloadEngine.ProgressUpdated += OnProgressUpdated;
-        _downloadEngine.DownloadingStateChanged += (downloading) => Avalonia.Threading.Dispatcher.UIThread.Post(() => IsDownloading = downloading);
-        _downloadEngine.PauseStateChanged += (paused) => Avalonia.Threading.Dispatcher.UIThread.Post(() => IsPaused = paused);
+        _downloadEngine.DownloadingStateChanged += (downloading) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                IsDownloading = downloading;
+                if (!downloading)
+                {
+                    RequestQueueAutoSave(200);
+                }
+            });
+        };
+        _downloadEngine.PauseStateChanged += (paused) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                IsPaused = paused;
+                RequestQueueAutoSave(200);
+            });
+        };
         DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
         LoadUserPresetsFromDisk();
         InitializeSearchDomains();
+        InitializeQueueAutoBackupAndRestore();
 
         // Lắng nghe lệnh từ Android Foreground Notification & Chat Head
         BackgroundExecutionService.NativeNotificationContextualAction1Requested = () =>
@@ -1566,17 +1588,178 @@ public partial class MainViewModel : ViewModelBase
         BackgroundExecutionService.Instance.MinimizeOrHide();
     }
 
+    private void InitializeQueueAutoBackupAndRestore()
+    {
+        ComicBooks.CollectionChanged += OnComicBooksCollectionChanged;
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => FlushAutoSaveImmediately();
+        AppDomain.CurrentDomain.UnhandledException += (_, _) => FlushAutoSaveImmediately();
+        _ = RestoreAutoSavedQueueOnStartupAsync();
+    }
+
+    private async Task RestoreAutoSavedQueueOnStartupAsync()
+    {
+        _isAutoSaveSuspended = true;
+        try
+        {
+            var (restoredItems, loadedPath) = await QueueBackupService.Instance.LoadAutoSaveQueueWithSourceAsync().ConfigureAwait(false);
+            if (restoredItems.Count > 0)
+            {
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    foreach (var item in restoredItems)
+                    {
+                        if (!ComicBooks.Any(b => b.Url.Equals(item.Url, StringComparison.OrdinalIgnoreCase) &&
+                                                 string.Equals(b.ChapterSelectionText, item.ChapterSelectionText, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            SubscribeComicBookItemAutosave(item);
+                            ComicBooks.Add(item);
+                        }
+                    }
+
+                    ReindexComicBooks();
+                    UpdateStats();
+                    StartScanMissing();
+                    TriggerThumbnailPrefetchIfNeeded();
+                    string fileName = !string.IsNullOrWhiteSpace(loadedPath) ? Path.GetFileName(loadedPath) : QueueBackupService.AutoSaveFileName;
+                    AddLog("SUCCESS", $"🔄 [Auto Backup] Đã tự động khôi phục {ComicBooks.Count} truyện và tiến độ tải từ '{fileName}'.");
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                AddLog("WARN", $"[Auto Backup] Không thể đọc file autosave khi khởi động: {ex.Message}");
+            });
+        }
+        finally
+        {
+            _isAutoSaveSuspended = false;
+        }
+    }
+
+    private void OnComicBooksCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems != null)
+        {
+            foreach (var oldItem in e.OldItems.OfType<ComicBookItem>())
+            {
+                UnsubscribeComicBookItemAutosave(oldItem);
+            }
+        }
+
+        if (e.NewItems != null)
+        {
+            foreach (var newItem in e.NewItems.OfType<ComicBookItem>())
+            {
+                SubscribeComicBookItemAutosave(newItem);
+                _downloadEngine.NotifyQueueOrderChanged(newItem);
+            }
+        }
+
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Move)
+        {
+            _downloadEngine.NotifyQueueOrderChanged();
+        }
+
+        if (!_isAutoSaveSuspended)
+        {
+            RequestQueueAutoSave(400);
+        }
+    }
+
+    private void SubscribeComicBookItemAutosave(ComicBookItem? item)
+    {
+        if (item == null) return;
+        item.PropertyChanged -= OnComicBookItemPropertyChanged;
+        item.PropertyChanged += OnComicBookItemPropertyChanged;
+
+        if (item.ParallelSplitChildren != null)
+        {
+            foreach (var child in item.ParallelSplitChildren)
+            {
+                if (child == null) continue;
+                child.PropertyChanged -= OnComicBookItemPropertyChanged;
+                child.PropertyChanged += OnComicBookItemPropertyChanged;
+            }
+        }
+    }
+
+    private void UnsubscribeComicBookItemAutosave(ComicBookItem? item)
+    {
+        if (item == null) return;
+        item.PropertyChanged -= OnComicBookItemPropertyChanged;
+
+        if (item.ParallelSplitChildren != null)
+        {
+            foreach (var child in item.ParallelSplitChildren)
+            {
+                if (child == null) continue;
+                child.PropertyChanged -= OnComicBookItemPropertyChanged;
+            }
+        }
+    }
+
+    private void OnComicBookItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (sender is not ComicBookItem item || string.IsNullOrWhiteSpace(e.PropertyName))
+            return;
+
+        if (string.Equals(e.PropertyName, nameof(ComicBookItem.IsChecked), StringComparison.Ordinal))
+        {
+            _downloadEngine.NotifyQueueOrderChanged(item);
+            RequestQueueAutoSave(300);
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(ComicBookItem.Status), StringComparison.Ordinal) ||
+            string.Equals(e.PropertyName, nameof(ComicBookItem.DownloadedChapters), StringComparison.Ordinal) ||
+            string.Equals(e.PropertyName, nameof(ComicBookItem.Subfolder), StringComparison.Ordinal) ||
+            string.Equals(e.PropertyName, nameof(ComicBookItem.IsSubfolderLocked), StringComparison.Ordinal) ||
+            string.Equals(e.PropertyName, nameof(ComicBookItem.ChapterSelectionText), StringComparison.Ordinal) ||
+            string.Equals(e.PropertyName, nameof(ComicBookItem.LocalDirectory), StringComparison.Ordinal))
+        {
+            RequestQueueAutoSave(400);
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(ComicBookItem.ProgressPercentage), StringComparison.Ordinal) ||
+            string.Equals(e.PropertyName, nameof(ComicBookItem.DownloadedPages), StringComparison.Ordinal))
+        {
+            long now = Environment.TickCount64;
+            if (now - _lastProgressAutoSaveTick >= 1800)
+            {
+                _lastProgressAutoSaveTick = now;
+                RequestQueueAutoSave(500);
+            }
+        }
+    }
+
+    public void RequestQueueAutoSave(int delayMs = 500)
+    {
+        if (_isAutoSaveSuspended) return;
+        QueueBackupService.Instance.TriggerDebouncedAutoSave(ComicBooks, delayMs);
+    }
+
+    public void FlushAutoSaveImmediately()
+    {
+        if (_isAutoSaveSuspended) return;
+        QueueBackupService.Instance.FlushAutoSaveImmediately(ComicBooks);
+    }
+
     [RelayCommand]
     public void ForceExitApp()
     {
         IsExitConfirmOpen = false;
         try
         {
+            FlushAutoSaveImmediately();
             Stop();
             StopManualSplit();
             StopEnhance();
             StopPacking();
             StopFolderTool();
+            FlushAutoSaveImmediately();
         }
         catch {}
 
@@ -1642,6 +1825,13 @@ public partial class MainViewModel : ViewModelBase
                 if (IsAutoDeleteCompleted)
                 {
                     CheckAndAutoDeleteCompleted();
+                }
+
+                long now = Environment.TickCount64;
+                if (now - _lastProgressAutoSaveTick >= 2000)
+                {
+                    _lastProgressAutoSaveTick = now;
+                    RequestQueueAutoSave(500);
                 }
             }
             finally
@@ -1998,7 +2188,10 @@ public partial class MainViewModel : ViewModelBase
         {
             item.Status = "Stopped";
             item.StatusMessage = "Đã dừng bởi người dùng";
-            item.DetailProgressText = "Đã dừng";
+            if (item.ProgressPercentage <= 0 && item.DownloadedChapters <= 0 && item.DownloadedPages <= 0)
+            {
+                item.DetailProgressText = "Đã dừng";
+            }
             if (item.IsParallelSplitParent && item.ParallelSplitChildren != null)
             {
                 foreach (var child in item.ParallelSplitChildren)
@@ -2007,14 +2200,17 @@ public partial class MainViewModel : ViewModelBase
                     {
                         child.Status = "Stopped";
                         child.StatusMessage = "Đã dừng";
-                        child.DetailProgressText = "Đã dừng";
+                        if (child.ProgressPercentage <= 0 && child.DownloadedChapters <= 0 && child.DownloadedPages <= 0)
+                        {
+                            child.DetailProgressText = "Đã dừng";
+                        }
                     }
                 }
             }
         }
         UpdateStats();
         AddLog("WARN", "⏹️ Đã dừng tiến trình tải thành công.");
-        QueueBackupService.Instance.TriggerDebouncedAutoSave(ComicBooks);
+        FlushAutoSaveImmediately();
     }
 
     [RelayCommand]
@@ -2023,12 +2219,71 @@ public partial class MainViewModel : ViewModelBase
         if (ComicBooks.Count == 0)
         {
             AddLog("WARN", "⚠️ Hàng chờ đang trống, không có truyện nào để sao lưu.");
+            ShowCenterToast("HÀNG ĐỢI TRỐNG", "Không có truyện nào trong hàng đợi để sao lưu (.md).", "⚠️", "SAO LƯU MD", 2200);
             return;
         }
 
         try
         {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanSave)
+            {
+                IStorageFolder? suggestedFolder = null;
+                try
+                {
+                    string autoDir = QueueBackupService.GetAutoSaveDirectory();
+                    if (Directory.Exists(autoDir))
+                    {
+                        suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(autoDir);
+                    }
+                }
+                catch { }
+
+                var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+                {
+                    Title = "Chọn nơi lưu file sao lưu hàng đợi (.md)",
+                    SuggestedFileName = "saved_queue.md",
+                    DefaultExtension = "md",
+                    ShowOverwritePrompt = true,
+                    SuggestedStartLocation = suggestedFolder,
+                    FileTypeChoices = new List<FilePickerFileType>
+                    {
+                        new("Markdown Queue Backup (*.md)") { Patterns = new[] { "*.md" } },
+                        new("All Files (*.*)") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (file == null)
+                {
+                    AddLog("INFO", "Đã hủy chọn nơi lưu file sao lưu Markdown (.md).");
+                    return;
+                }
+
+                string? localPath = file.TryGetLocalPath();
+                if (!string.IsNullOrWhiteSpace(localPath))
+                {
+                    string savedPath = await QueueBackupService.Instance.SaveQueueToMarkdownAsync(ComicBooks, localPath);
+                    AddLog("SUCCESS", $"💾 Đã sao lưu thành công {ComicBooks.Count} truyện (kèm tiến độ) ra file Markdown: {savedPath}");
+                    ShowCenterToast("SAO LƯU MD THÀNH CÔNG", $"Đã lưu {ComicBooks.Count} truyện vào:\n{savedPath}", "💾", "SAO LƯU MD", 2800);
+                }
+                else
+                {
+                    string content = QueueBackupService.Instance.BuildQueueMarkdownContent(ComicBooks);
+                    await using var stream = await file.OpenWriteAsync();
+                    stream.SetLength(0);
+                    await using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8);
+                    await writer.WriteAsync(content);
+                    await writer.FlushAsync();
+                    AddLog("SUCCESS", $"💾 Đã sao lưu thành công {ComicBooks.Count} truyện (kèm tiến độ) ra file Markdown: {file.Name}");
+                    ShowCenterToast("SAO LƯU MD THÀNH CÔNG", $"Đã lưu {ComicBooks.Count} truyện vào file:\n{file.Name}", "💾", "SAO LƯU MD", 2800);
+                }
+
+                _ = QueueBackupService.Instance.SaveAutoBackupSnapshotAsync(ComicBooks);
+                return;
+            }
+
             string path = await QueueBackupService.Instance.SaveQueueToMarkdownAsync(ComicBooks);
+            _ = QueueBackupService.Instance.SaveAutoBackupSnapshotAsync(ComicBooks);
             AddLog("SUCCESS", $"💾 Đã sao lưu thành công {ComicBooks.Count} truyện ra file Markdown: {path}");
         }
         catch (Exception ex)
@@ -2042,27 +2297,121 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            var restoredItems = await QueueBackupService.Instance.LoadQueueFromMarkdownAsync();
+            List<ComicBookItem> restoredItems = new();
+            string sourceName = QueueBackupService.AutoSaveFileName;
+
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanOpen)
+            {
+                IStorageFolder? suggestedFolder = null;
+                try
+                {
+                    string autoDir = QueueBackupService.GetAutoSaveDirectory();
+                    if (Directory.Exists(autoDir))
+                    {
+                        suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(autoDir);
+                    }
+                }
+                catch { }
+
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = "Chọn file Markdown (.md) để phục hồi hàng đợi & tiến độ",
+                    AllowMultiple = false,
+                    SuggestedStartLocation = suggestedFolder,
+                    FileTypeFilter = new List<FilePickerFileType>
+                    {
+                        new("Markdown Queue Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
+                        new("All Files (*.*)") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (files == null || files.Count == 0)
+                {
+                    AddLog("INFO", "Đã hủy chọn file phục hồi Markdown (.md).");
+                    return;
+                }
+
+                var selectedFile = files[0];
+                string? localPath = selectedFile.TryGetLocalPath();
+                if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
+                {
+                    restoredItems = await QueueBackupService.Instance.LoadQueueFromMarkdownAsync(localPath);
+                    sourceName = localPath;
+                }
+                else
+                {
+                    await using var stream = await selectedFile.OpenReadAsync();
+                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
+                    string content = await reader.ReadToEndAsync();
+                    restoredItems = QueueBackupService.Instance.ParseQueueFromMarkdownContent(content);
+                    sourceName = selectedFile.Name;
+                }
+            }
+            else
+            {
+                var (autoItems, autoPath) = await QueueBackupService.Instance.LoadAutoSaveQueueWithSourceAsync();
+                restoredItems = autoItems;
+                if (!string.IsNullOrWhiteSpace(autoPath)) sourceName = autoPath;
+            }
+
             if (restoredItems.Count == 0)
             {
-                AddLog("WARN", "⚠️ Không tìm thấy dữ liệu sao lưu trước đó hoặc file sao lưu trống.");
+                AddLog("WARN", "⚠️ File sao lưu không chứa truyện nào hoặc không đúng định dạng Markdown.");
+                ShowCenterToast("KHÔNG CÓ DỮ LIỆU", "File Markdown đã chọn trống hoặc không chứa dữ liệu hàng đợi.", "⚠️", "PHỤC HỒI MD", 2400);
                 return;
             }
 
             int addedCount = 0;
-            foreach (var item in restoredItems)
+            int updatedCount = 0;
+            _isAutoSaveSuspended = true;
+            try
             {
-                if (!ComicBooks.Any(b => b.Url.Equals(item.Url, StringComparison.OrdinalIgnoreCase)))
+                foreach (var item in restoredItems)
                 {
-                    ComicBooks.Add(item);
-                    addedCount++;
+                    var existing = ComicBooks.FirstOrDefault(b =>
+                        b.Url.Equals(item.Url, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(b.ChapterSelectionText, item.ChapterSelectionText, StringComparison.OrdinalIgnoreCase));
+
+                    if (existing == null)
+                    {
+                        SubscribeComicBookItemAutosave(item);
+                        ComicBooks.Add(item);
+                        addedCount++;
+                    }
+                    else
+                    {
+                        existing.Status = item.Status;
+                        existing.StatusMessage = item.StatusMessage;
+                        existing.DetailProgressText = item.DetailProgressText;
+                        existing.ProgressPercentage = item.ProgressPercentage;
+                        existing.DownloadedChapters = item.DownloadedChapters;
+                        existing.TotalChapters = item.TotalChapters > 0 ? item.TotalChapters : existing.TotalChapters;
+                        existing.DownloadedPages = item.DownloadedPages;
+                        existing.TotalPages = item.TotalPages;
+                        existing.Subfolder = item.Subfolder;
+                        existing.IsSubfolderLocked = item.IsSubfolderLocked;
+                        existing.LocalDirectory = !string.IsNullOrWhiteSpace(item.LocalDirectory) ? item.LocalDirectory : existing.LocalDirectory;
+                        if (item.Chapters != null && item.Chapters.Count > 0)
+                        {
+                            existing.Chapters = item.Chapters;
+                        }
+                        updatedCount++;
+                    }
                 }
             }
+            finally
+            {
+                _isAutoSaveSuspended = false;
+            }
 
+            ReindexComicBooks();
             UpdateStats();
             StartScanMissing();
             TriggerThumbnailPrefetchIfNeeded();
-            AddLog("SUCCESS", $"📂 Đã phục hồi thành công {addedCount}/{restoredItems.Count} truyện từ file Markdown (.md).");
+            RequestQueueAutoSave(200);
+            AddLog("SUCCESS", $"📂 Đã phục hồi thành công {addedCount} truyện mới (cập nhật tiến độ {updatedCount} truyện) từ: {sourceName}");
+            ShowCenterToast("PHỤC HỒI MD THÀNH CÔNG", $"Đã nạp {addedCount} truyện mới, cập nhật tiến độ {updatedCount} truyện từ:\n{Path.GetFileName(sourceName)}", "📂", "PHỤC HỒI MD", 2800);
         }
         catch (Exception ex)
         {
@@ -2098,6 +2447,7 @@ public partial class MainViewModel : ViewModelBase
         ComicBooks.Clear();
         ScanResults.Clear();
         UpdateStats();
+        FlushAutoSaveImmediately();
         AddLog("INFO", "Đã xóa sạch hàng chờ tải.");
     }
 
@@ -2123,6 +2473,7 @@ public partial class MainViewModel : ViewModelBase
 
         ReindexComicBooks();
         UpdateStats();
+        RequestQueueAutoSave(200);
         AddLog("SUCCESS", $"Đã tự động dọn dẹp {completedItems.Count} mục đã tải xong khỏi danh sách.");
     }
 
@@ -2145,6 +2496,7 @@ public partial class MainViewModel : ViewModelBase
 
         ReindexComicBooks();
         UpdateStats();
+        RequestQueueAutoSave(200);
         AddLog("SUCCESS", $"[Tự Xóa] Đã tự động dọn dẹp {completedItems.Count} mục đã hoàn tất khỏi hàng đợi.");
     }
 
@@ -2237,9 +2589,28 @@ public partial class MainViewModel : ViewModelBase
         if (index > 0)
         {
             ComicBooks.Move(index, 0);
+            if (target.IsParallelSplitParent && !target.IsParallelSplitCollapsed && target.ParallelSplitChildren != null)
+            {
+                int insertPos = 1;
+                foreach (var child in target.ParallelSplitChildren)
+                {
+                    int childIdx = ComicBooks.IndexOf(child);
+                    if (childIdx >= 0 && childIdx != insertPos)
+                    {
+                        ComicBooks.Move(childIdx, Math.Min(insertPos, ComicBooks.Count - 1));
+                    }
+                    insertPos++;
+                }
+            }
             ReindexComicBooks();
             UpdateStats();
-            ShowCenterToast("ĐƯA LÊN ĐẦU", $"Đã đưa \"{target.Title}\" lên đầu hàng đợi.", "▲", "HÀNG ĐỢI", 1800);
+            _downloadEngine.NotifyQueueOrderChanged(target);
+            RequestQueueAutoSave(200);
+            ShowCenterToast("ĐƯA LÊN ĐẦU", $"Đã đưa \"{target.Title}\" lên đầu hàng đợi (ưu tiên tải trước).", "▲", "HÀNG ĐỢI", 1800);
+        }
+        else if (index == 0)
+        {
+            _downloadEngine.NotifyQueueOrderChanged(target);
         }
     }
 
@@ -2253,8 +2624,21 @@ public partial class MainViewModel : ViewModelBase
         if (index >= 0 && index < ComicBooks.Count - 1)
         {
             ComicBooks.Move(index, ComicBooks.Count - 1);
+            if (target.IsParallelSplitParent && !target.IsParallelSplitCollapsed && target.ParallelSplitChildren != null)
+            {
+                foreach (var child in target.ParallelSplitChildren)
+                {
+                    int childIdx = ComicBooks.IndexOf(child);
+                    if (childIdx >= 0)
+                    {
+                        ComicBooks.Move(childIdx, ComicBooks.Count - 1);
+                    }
+                }
+            }
             ReindexComicBooks();
             UpdateStats();
+            _downloadEngine.NotifyQueueOrderChanged(target);
+            RequestQueueAutoSave(200);
             ShowCenterToast("ĐƯA XUỐNG CUỐI", $"Đã đưa \"{target.Title}\" xuống cuối hàng đợi.", "▼", "HÀNG ĐỢI", 1800);
         }
     }
@@ -2486,6 +2870,8 @@ public partial class MainViewModel : ViewModelBase
         book.NotifySplitHierarchyChanged();
         ReindexComicBooks();
         UpdateStats();
+        _downloadEngine.NotifyQueueOrderChanged();
+        RequestQueueAutoSave(200);
 
         ShowCenterToast(
             "TÁCH CHƯƠNG THÀNH CÔNG!",
@@ -2507,6 +2893,8 @@ public partial class MainViewModel : ViewModelBase
         {
             ComicBooks.Move(index, index - 1);
             ReindexComicBooks();
+            _downloadEngine.NotifyQueueOrderChanged(target);
+            RequestQueueAutoSave(200);
         }
     }
 
@@ -2521,6 +2909,8 @@ public partial class MainViewModel : ViewModelBase
         {
             ComicBooks.Move(index, index + 1);
             ReindexComicBooks();
+            _downloadEngine.NotifyQueueOrderChanged(target);
+            RequestQueueAutoSave(200);
         }
     }
 
@@ -2577,6 +2967,7 @@ public partial class MainViewModel : ViewModelBase
 
         ReindexComicBooks();
         UpdateStats();
+        RequestQueueAutoSave(150);
         AddLog("INFO", $"Đã xóa {allToRemove.Count} mục khỏi danh sách.");
     }
 
@@ -2656,6 +3047,7 @@ public partial class MainViewModel : ViewModelBase
 
         ReindexComicBooks();
         UpdateStats();
+        RequestQueueAutoSave(150);
     }
 
     [RelayCommand]

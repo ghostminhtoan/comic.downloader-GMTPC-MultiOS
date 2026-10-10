@@ -47,10 +47,19 @@ public class DownloadEngineService
     public int ConcurrentComicDownloads { get; set; } = 2; // 1 đến 8 (mặc định 2)
     public int ImageDownloadThreads { get; set; } = 3; // 1 đến 16 (mặc định 3)
 
-    private readonly System.Collections.Concurrent.ConcurrentQueue<ComicBookItem> _downloadQueue = new();
-    private readonly HashSet<ComicBookItem> _enqueuedItems = new();
+    private IList<ComicBookItem>? _liveQueueSource;
+    private readonly HashSet<ComicBookItem> _activeItems = new();
+    private readonly HashSet<ComicBookItem> _attemptedInSession = new();
     private readonly object _queueLock = new();
     private string _activeMode = "Single comic";
+
+    public void BindLiveQueueSource(IList<ComicBookItem> liveSource)
+    {
+        lock (_queueLock)
+        {
+            _liveQueueSource = liveSource;
+        }
+    }
 
     public void RequestOpenStorageSettings() => OpenStorageSettingsRequested?.Invoke();
 
@@ -327,6 +336,114 @@ public class DownloadEngineService
         ProgressUpdated?.Invoke();
     }
 
+    private static bool IsCompletedStatus(string? status) =>
+        string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "Hoàn tất", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsWaitingOrReadyStatus(string? status) =>
+        string.IsNullOrWhiteSpace(status) ||
+        string.Equals(status, "Waiting", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "Ready", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "Chờ tải", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Thông báo khi người dùng thêm truyện mới hoặc đổi vị trí truyện (MoveUp / MoveToTop / MoveDown / MoveToBottom)
+    /// để tiến trình tải luôn ưu tiên lấy đúng thứ tự từ trên xuống dưới theo danh sách hiển thị hiện tại.
+    /// </summary>
+    public void NotifyQueueOrderChanged(ComicBookItem? prioritizedItem = null)
+    {
+        lock (_queueLock)
+        {
+            if (prioritizedItem != null)
+            {
+                MakeItemEligibleUnderLock(prioritizedItem);
+                if (prioritizedItem.IsParallelSplitParent && prioritizedItem.ParallelSplitChildren != null)
+                {
+                    foreach (var child in prioritizedItem.ParallelSplitChildren)
+                    {
+                        if (child != null) MakeItemEligibleUnderLock(child);
+                    }
+                }
+            }
+        }
+        ProgressUpdated?.Invoke();
+    }
+
+    private void MakeItemEligibleUnderLock(ComicBookItem item)
+    {
+        if (_activeItems.Contains(item) || IsCompletedStatus(item.Status))
+            return;
+
+        _attemptedInSession.Remove(item);
+        if (_isDownloading && item.IsChecked && !item.IsParallelSplitParent)
+        {
+            if (!string.Equals(item.Status, "Downloading", StringComparison.OrdinalIgnoreCase) &&
+                !IsWaitingOrReadyStatus(item.Status))
+            {
+                item.Status = "Waiting";
+                item.StatusMessage = "Đang chờ đến lượt tải...";
+            }
+        }
+    }
+
+    private ComicBookItem? TryDequeueNextTopToBottomItem()
+    {
+        lock (_queueLock)
+        {
+            if (_liveQueueSource == null || _liveQueueSource.Count == 0)
+                return null;
+
+            for (int i = 0; i < _liveQueueSource.Count; i++)
+            {
+                var candidate = _liveQueueSource[i];
+                if (candidate == null || !candidate.IsChecked || candidate.IsParallelSplitParent)
+                    continue;
+
+                if (_activeItems.Contains(candidate))
+                    continue;
+
+                if (IsCompletedStatus(candidate.Status))
+                    continue;
+
+                if (_attemptedInSession.Contains(candidate))
+                    continue;
+
+                if (IsWaitingOrReadyStatus(candidate.Status))
+                {
+                    _activeItems.Add(candidate);
+                    _attemptedInSession.Add(candidate);
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+    }
+
+    private bool HasPendingEligibleItems()
+    {
+        lock (_queueLock)
+        {
+            if (_liveQueueSource == null || _liveQueueSource.Count == 0)
+                return false;
+
+            for (int i = 0; i < _liveQueueSource.Count; i++)
+            {
+                var candidate = _liveQueueSource[i];
+                if (candidate == null || !candidate.IsChecked || candidate.IsParallelSplitParent)
+                    continue;
+
+                if (_activeItems.Contains(candidate) || IsCompletedStatus(candidate.Status) || _attemptedInSession.Contains(candidate))
+                    continue;
+
+                if (IsWaitingOrReadyStatus(candidate.Status))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
     public async Task StartDownloadAsync(IEnumerable<ComicBookItem> items, string mode, CancellationToken externalCt = default)
     {
         if (_isDownloading) return;
@@ -342,29 +459,41 @@ public class DownloadEngineService
         int concurrentComics = Math.Clamp(ConcurrentComicDownloads, 1, 16);
         int imageThreads = Math.Max(1, ImageDownloadThreads);
 
+        int eligibleCount = 0;
         lock (_queueLock)
         {
-            while (_downloadQueue.TryDequeue(out _)) { }
-            _enqueuedItems.Clear();
+            if (_liveQueueSource == null && items is IList<ComicBookItem> liveList)
+            {
+                _liveQueueSource = liveList;
+            }
 
-            var validItems = items.Where(item => item.IsChecked && item.Status != "Completed").ToList();
+            _activeItems.Clear();
+            _attemptedInSession.Clear();
+
+            var validItems = items.Where(item => item != null && item.IsChecked && !item.IsParallelSplitParent && !IsCompletedStatus(item.Status)).ToList();
             if (validItems.Count == 0)
             {
-                validItems = items.Where(item => item.IsChecked).ToList();
+                validItems = items.Where(item => item != null && item.IsChecked && !item.IsParallelSplitParent).ToList();
             }
 
             foreach (var item in validItems)
             {
-                if (_enqueuedItems.Add(item))
+                item.Status = "Waiting";
+                if (item.DownloadedChapters <= 0 && item.ProgressPercentage <= 0)
                 {
-                    item.Status = "Waiting";
                     item.StatusMessage = "Đang chờ đến lượt tải...";
-                    _downloadQueue.Enqueue(item);
                 }
+                eligibleCount++;
+            }
+
+            // Nếu truyền vào một tập con (ví dụ RetryAsync), chỉ cho phép các mục ngoài tập con nhưng đang ở trạng thái Waiting cùng tham gia
+            if (_liveQueueSource == null)
+            {
+                _liveQueueSource = validItems;
             }
         }
 
-        if (_enqueuedItems.Count == 0)
+        if (eligibleCount == 0)
         {
             LogEmitted?.Invoke("WARN", "Không có truyện nào được tích chọn để tải.");
             _isDownloading = false;
@@ -372,30 +501,29 @@ public class DownloadEngineService
             return;
         }
 
-        LogEmitted?.Invoke("INFO", $"Bắt đầu tải danh sách truyện (Song song: {concurrentComics} truyện, {imageThreads} luồng ảnh | Thư mục: {mode}) tới: {DownloadRoot}");
+        LogEmitted?.Invoke("INFO", $"Bắt đầu tải danh sách truyện theo thứ tự từ trên xuống dưới (Song song: {concurrentComics} truyện, {imageThreads} luồng ảnh | Thư mục: {mode}) tới: {DownloadRoot}");
 
         try
         {
             BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", "Bắt đầu tải danh sách truyện...", 0, true);
 
-            var workerTasks = Enumerable.Range(0, concurrentComics).Select(async _ =>
+            while (!ct.IsCancellationRequested && HasPendingEligibleItems())
             {
-                while (!ct.IsCancellationRequested)
+                int currentConcurrency = Math.Clamp(ConcurrentComicDownloads, 1, 16);
+                var workerTasks = Enumerable.Range(0, currentConcurrency).Select(async _ =>
                 {
-                    ComicBookItem? item = null;
-                    lock (_queueLock)
+                    while (!ct.IsCancellationRequested)
                     {
-                        if (!_downloadQueue.TryDequeue(out item))
+                        var item = TryDequeueNextTopToBottomItem();
+                        if (item == null)
                         {
                             break;
                         }
-                    }
 
-                    if (item != null)
-                    {
                         try
                         {
-                            await DownloadComicBookAsync(item, _activeMode, imageThreads, ct).ConfigureAwait(false);
+                            int currentImageThreads = Math.Max(1, ImageDownloadThreads);
+                            await DownloadComicBookAsync(item, _activeMode, currentImageThreads, ct).ConfigureAwait(false);
                         }
                         catch (OperationCanceledException)
                         {
@@ -405,11 +533,19 @@ public class DownloadEngineService
                         {
                             LogEmitted?.Invoke("ERROR", $"Lỗi tải truyện '{item.Title}': {ex.Message}");
                         }
+                        finally
+                        {
+                            lock (_queueLock)
+                            {
+                                _activeItems.Remove(item);
+                            }
+                        }
                     }
-                }
-            }).ToList();
+                }).ToList();
 
-            await Task.WhenAll(workerTasks).ConfigureAwait(false);
+                await Task.WhenAll(workerTasks).ConfigureAwait(false);
+            }
+
             LogEmitted?.Invoke("SUCCESS", "Hoàn tất toàn bộ tác vụ tải trong hàng chờ.");
             SoundNotificationService.Instance.PlaySound(SoundNotificationType.DownloadFinish);
         }
@@ -424,6 +560,10 @@ public class DownloadEngineService
         }
         finally
         {
+            lock (_queueLock)
+            {
+                _activeItems.Clear();
+            }
             _isDownloading = false;
             _isPaused = false;
             _pauseTcs?.TrySetResult(true);
@@ -438,7 +578,7 @@ public class DownloadEngineService
 
     public async Task DownloadNewAsync(IEnumerable<ComicBookItem> items, string mode, CancellationToken externalCt = default)
     {
-        var pendingItems = items.Where(item => item.IsChecked && item.Status != "Completed").ToList();
+        var pendingItems = items.Where(item => item != null && item.IsChecked && !item.IsParallelSplitParent && !IsCompletedStatus(item.Status)).ToList();
         if (pendingItems.Count == 0)
         {
             LogEmitted?.Invoke("WARN", "Không có truyện mới nào được tích chọn để tải tiếp.");
@@ -452,21 +592,21 @@ public class DownloadEngineService
             {
                 foreach (var item in pendingItems)
                 {
-                    if (_enqueuedItems.Add(item))
+                    if (!_activeItems.Contains(item))
                     {
+                        _attemptedInSession.Remove(item);
                         item.Status = "Waiting";
-                        item.StatusMessage = "Đã xếp vào hàng chờ tải tiếp...";
-                        _downloadQueue.Enqueue(item);
+                        item.StatusMessage = "Đã xếp vào hàng chờ tải tiếp (theo thứ tự từ trên xuống)...";
                         enqueuedCount++;
                     }
                 }
             }
-            LogEmitted?.Invoke("INFO", $"Đã nạp thêm {enqueuedCount} truyện mới vào tiến trình tải đang chạy.");
+            LogEmitted?.Invoke("INFO", $"Đã nạp thêm {enqueuedCount} truyện mới vào tiến trình tải đang chạy (tự động ưu tiên theo vị trí từ trên xuống dưới).");
             ProgressUpdated?.Invoke();
         }
         else
         {
-            await StartDownloadAsync(pendingItems, mode, externalCt).ConfigureAwait(false);
+            await StartDownloadAsync( _liveQueueSource ?? pendingItems, mode, externalCt).ConfigureAwait(false);
         }
     }
 
@@ -521,8 +661,8 @@ public class DownloadEngineService
 
         lock (_queueLock)
         {
-            while (_downloadQueue.TryDequeue(out _)) { }
-            _enqueuedItems.Clear();
+            _activeItems.Clear();
+            _attemptedInSession.Clear();
         }
 
         if (_cts != null && !_cts.IsCancellationRequested)
@@ -663,7 +803,10 @@ public class DownloadEngineService
                 {
                     book.Status = "Stopped";
                     book.StatusMessage = "Đã dừng bởi người dùng";
-                    book.DetailProgressText = "Đã dừng";
+                    if (book.ProgressPercentage <= 0 && book.DownloadedChapters <= 0 && book.DownloadedPages <= 0)
+                    {
+                        book.DetailProgressText = "Đã dừng";
+                    }
                     ProgressUpdated?.Invoke();
                     return;
                 }
@@ -703,8 +846,26 @@ public class DownloadEngineService
 
                 chapterDir = SafeCreateDirectory(chapterDir);
 
+                string manifestFile = Path.Combine(chapterDir, ".manifest.json");
+                var manifest = LoadManifest(manifestFile);
+
+                if (manifest.Count > 0 &&
+                    (string.Equals(chapter.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                     (chapter.TotalPages > 0 && manifest.Count >= chapter.TotalPages)) &&
+                    AreAllManifestFilesValid(chapterDir, manifest))
+                {
+                    completedChapters++;
+                    chapter.Status = "Completed";
+                    chapter.TotalPages = Math.Max(chapter.TotalPages, manifest.Count);
+                    chapter.DownloadedPages = chapter.TotalPages;
+                    book.StatusMessage = $"Bỏ qua chương đã tải đủ: {chapter.Title}";
+                    book.UpdateProgress(completedChapters, totalChapters, chapter.DownloadedPages, chapter.TotalPages);
+                    ProgressUpdated?.Invoke();
+                    continue;
+                }
+
                 book.StatusMessage = $"Đang trích xuất ảnh {chapter.Title}...";
-                book.UpdateProgress(completedChapters, totalChapters, 0, 0);
+                book.UpdateProgress(Math.Max(completedChapters, Math.Min(book.DownloadedChapters, chIdx)), totalChapters, 0, 0);
                 ProgressUpdated?.Invoke();
 
                 await WaitIfPausedAsync(ct).ConfigureAwait(false);
@@ -724,9 +885,6 @@ public class DownloadEngineService
                 chapter.ImageUrls = imageUrls;
                 chapter.ReaderUrls = readerUrls;
                 chapter.TotalPages = imageUrls.Count;
-
-                string manifestFile = Path.Combine(chapterDir, ".manifest.json");
-                var manifest = LoadManifest(manifestFile);
 
                 if (imageUrls.Count > 0)
                 {
@@ -816,9 +974,15 @@ public class DownloadEngineService
 
                     if (ct.IsCancellationRequested)
                     {
+                        SaveManifest(manifestFile, manifest);
+                        chapter.ImageUrls.Clear();
+                        chapter.ReaderUrls.Clear();
                         book.Status = "Stopped";
                         book.StatusMessage = "Đã dừng bởi người dùng";
-                        book.DetailProgressText = "Đã dừng";
+                        if (book.ProgressPercentage <= 0 && book.DownloadedChapters <= 0 && book.DownloadedPages <= 0)
+                        {
+                            book.DetailProgressText = "Đã dừng";
+                        }
                         ProgressUpdated?.Invoke();
                         return;
                     }
@@ -841,7 +1005,10 @@ public class DownloadEngineService
                     {
                         book.Status = "Stopped";
                         book.StatusMessage = "Đã dừng bởi người dùng";
-                        book.DetailProgressText = "Đã dừng";
+                        if (book.ProgressPercentage <= 0 && book.DownloadedChapters <= 0 && book.DownloadedPages <= 0)
+                        {
+                            book.DetailProgressText = "Đã dừng";
+                        }
                         ProgressUpdated?.Invoke();
                         return;
                     }
@@ -1281,6 +1448,31 @@ public class DownloadEngineService
         }
         catch {}
         return new Dictionary<string, string>();
+    }
+
+    private static bool AreAllManifestFilesValid(string chapterDir, Dictionary<string, string> manifest)
+    {
+        if (manifest == null || manifest.Count == 0 || !Directory.Exists(chapterDir))
+            return false;
+
+        try
+        {
+            foreach (var fileName in manifest.Keys)
+            {
+                if (string.IsNullOrWhiteSpace(fileName)) return false;
+                string fullPath = Path.Combine(chapterDir, fileName);
+                var fi = new FileInfo(fullPath);
+                if (!fi.Exists || fi.Length <= 512)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void SaveManifest(string path, Dictionary<string, string> manifest)

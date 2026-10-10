@@ -62,8 +62,23 @@ public partial class MainWindow : Window
         });
     }
 
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        try
+        {
+            App.SharedMainViewModel.FlushAutoSaveImmediately();
+        }
+        catch { }
+        base.OnClosing(e);
+    }
+
     protected override void OnClosed(System.EventArgs e)
     {
+        try
+        {
+            App.SharedMainViewModel.FlushAutoSaveImmediately();
+        }
+        catch { }
         BackgroundExecutionService.Instance.BubbleModeChanged -= OnBubbleModeChanged;
         base.OnClosed(e);
     }

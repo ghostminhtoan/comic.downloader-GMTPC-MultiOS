@@ -22,6 +22,14 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            desktop.ShutdownRequested += (_, _) =>
+            {
+                try { SharedMainViewModel.FlushAutoSaveImmediately(); } catch { }
+            };
+            desktop.Exit += (_, _) =>
+            {
+                try { SharedMainViewModel.FlushAutoSaveImmediately(); } catch { }
+            };
             desktop.MainWindow = new MainWindow
             {
                 DataContext = SharedMainViewModel
