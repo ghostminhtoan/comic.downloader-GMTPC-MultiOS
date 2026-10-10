@@ -806,4 +806,55 @@ public partial class MainView : UserControl
         }
         catch { }
     }
+
+    private void OnThumbnailItemPointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (sender is Control control && control.DataContext is ComicBookItem item)
+        {
+            if (DataContext is MainViewModel vm)
+            {
+                vm.ShowHoverPreview(item);
+            }
+        }
+    }
+
+    private void OnThumbnailItemPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+        {
+            vm.HideHoverPreview();
+        }
+    }
+
+    private void OnThumbnailItemPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Control control && control.DataContext is ComicBookItem item)
+        {
+            // Toggle selection hoặc hiển thị popup khi click
+            var point = e.GetCurrentPoint(control);
+            if (point.Properties.IsRightButtonPressed)
+            {
+                // Chuột phải: mở ContextMenu tự nhiên
+                return;
+            }
+
+            if (DataContext is MainViewModel vm)
+            {
+                // Nếu click vào thẻ, chọn truyện này
+                item.IsChecked = !item.IsChecked;
+                if (vm.IsPopupPreview)
+                {
+                    vm.ShowHoverPreview(item);
+                }
+            }
+        }
+    }
+
+    private void OnClosePreviewOverlayClicked(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+        {
+            vm.HideHoverPreview();
+        }
+    }
 }

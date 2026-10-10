@@ -2012,12 +2012,20 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
-
-
-
-
-
-
-
-
-
+### 15.57. Hệ Thống Xem Trước Lưới Ảnh Thumbnail & Popup Preview Đa Nền Tảng (`ThumbnailPreviewService.cs`, `MainView.axaml`)
+- **Bối cảnh & Yêu cầu của người dùng**:
+  - Tích hợp toàn diện tính năng **Thumbnail Grid Mode** và **Popup Preview** từ ứng dụng WPF sang nền tảng Avalonia đa hệ điều hành (Windows, Linux, Android).
+- **Kiến trúc & Giải pháp Thực hiện**:
+  1. **Mở rộng Model (`ComicBookItem.cs`)**:
+     - Bổ sung các thuộc tính reactive: `ThumbnailLocalPath`, `HasThumbnailFile`, `ThumbnailBitmap` (`Avalonia.Media.Imaging.Bitmap?`) và `IsThumbnailLoading`.
+  2. **Dịch vụ Quản lý & Cache Ảnh Bìa Đa Miền (`ThumbnailPreviewService.cs`)**:
+     - Hỗ trợ tự động bóc tách và tải ảnh bìa cho toàn bộ 8+ domain chính (`truyenqq`, `nettruyen`, `hentaiforce`, `e-hentai`, `dilib/thuviensach`, `mangadex`, `hitomi.la`, `nhentai`, `sayhentai`, `damconuong`, `daomeoden`, `vi-hentai`).
+     - Cơ chế lưu trữ đĩa thông minh tại `.tmp/preview-cache/{domain}/{md5_hash}/`: lưu ảnh gốc `cover.jpg` và tự động nén/resize ảnh thu nhỏ `cover.thumb.jpg` (bề rộng chuẩn 220px bằng SkiaSharp thuần túy) giúp tiết kiệm tối đa bộ nhớ RAM.
+     - Điều phối luồng tải bất đồng bộ an toàn qua `SemaphoreSlim(4, 4)` và rate-limiter `SemaphoreSlim(2, 2)` kèm jitter tự nhiên cho các domain nhạy cảm (`nhentai`, `truyenqq`).
+  3. **Giao diện Lưới Thẻ Ảnh & Popup Preview (`MainView.axaml` & `MainView.axaml.cs`)**:
+     - Trên thanh công cụ Hàng đợi: Bổ sung nút bật/tắt `🖼️ THUMBNAIL`, `👁️ POPUP PREVIEW` và nút `🔄 QUÉT LẠI THUMBNAIL`.
+     - Chế độ `Thumbnail Grid Mode`: Hiển thị lưới thẻ truyện đứng (`WrapPanel`) với ảnh bìa bo góc, hiệu ứng loading, checkbox góc trái, badge domain góc phải, tiêu đề 2 dòng và thanh tiến trình sát đáy thẻ.
+     - Lớp phủ `Popup Preview Overlay`: Hiển thị khung xem trước phóng to ở góc phải dưới màn hình khi di chuột (`PointerEntered` trên Desktop) hoặc chạm chọn (`PointerPressed` trên Android/Mobile) kèm thông tin chi tiết (Tổng số chương, Chapter mới nhất, Chap thiếu, Tiến trình tải) và nút đóng nhanh `✕`.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.

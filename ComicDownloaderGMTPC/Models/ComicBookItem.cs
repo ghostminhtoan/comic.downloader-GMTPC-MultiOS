@@ -73,6 +73,18 @@ public partial class ComicBookItem : ObservableObject
     private string _coverUrl = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasThumbnailFile))]
+    private string? _thumbnailLocalPath;
+
+    public bool HasThumbnailFile => !string.IsNullOrWhiteSpace(ThumbnailLocalPath) && System.IO.File.Exists(ThumbnailLocalPath);
+
+    [ObservableProperty]
+    private Avalonia.Media.Imaging.Bitmap? _thumbnailBitmap;
+
+    [ObservableProperty]
+    private bool _isThumbnailLoading;
+
+    [ObservableProperty]
     private string _missingChapters = string.Empty;
 
     [ObservableProperty]

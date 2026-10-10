@@ -1454,12 +1454,45 @@
                                             </Button>
                                             <Button Command="{Binding ClearCompletedCommand}" Content="🧹 Xóa đã xong" Background="#1E293B" Foreground="#10B981" FontWeight="Bold" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" ToolTip.Tip="Tự động dọn dẹp tất cả các bộ truyện và dải chương đã tải xong (Completed / Hoàn tất) khỏi hàng đợi" />
                                             <Button Command="{Binding DeleteSelectedCommand}" Content="🗑️ Xóa" Background="#1E293B" Foreground="#EF4444" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,0,2" />
+                                            <!-- NÚT CHẾ ĐỘ THUMBNAIL GRID -->
+                                            <ToggleButton IsChecked="{Binding IsThumbnailMode}" Command="{Binding ToggleThumbnailModeCommand}"
+                                                          Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
+                                                          Foreground="#38BDF8" FontSize="10" Padding="6,2" CornerRadius="3" Margin="0,0,4,2"
+                                                          ToolTip.Tip="Chuyển đổi giữa chế độ Danh sách chi tiết và Lưới ảnh Thumbnail">
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="🖼️" FontSize="10" />
+                                                    <TextBlock Text="THUMBNAIL" FontWeight="Bold" FontSize="10" />
+                                                </StackPanel>
+                                            </ToggleButton>
+
+                                            <!-- NÚT POPUP PREVIEW -->
+                                            <ToggleButton IsChecked="{Binding IsPopupPreview}" Command="{Binding TogglePopupPreviewCommand}"
+                                                          Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
+                                                          Foreground="#FDE047" FontSize="10" Padding="6,2" CornerRadius="3" Margin="0,0,4,2"
+                                                          ToolTip.Tip="Bật / Tắt cửa sổ Popup xem trước ảnh bìa và chi tiết khi di chuột hoặc chọn truyện">
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="👁️" FontSize="10" />
+                                                    <TextBlock Text="POPUP PREVIEW" FontWeight="Bold" FontSize="10" />
+                                                </StackPanel>
+                                            </ToggleButton>
+
+                                            <!-- NÚT QUÉT LẠI THUMBNAIL -->
+                                            <Button Command="{Binding RescanThumbnailsCommand}"
+                                                    Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
+                                                    Foreground="#34D399" FontSize="10" Padding="6,2" CornerRadius="3" Margin="0,0,4,2"
+                                                    ToolTip.Tip="Tải lại toàn bộ ảnh thumbnail cho các truyện đã chọn hoặc tất cả truyện">
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="🔄" FontSize="10" />
+                                                    <TextBlock Text="QUÉT LẠI THUMBNAIL" FontWeight="Bold" FontSize="10" />
+                                                </StackPanel>
+                                            </Button>
+
                                         </WrapPanel>
                                     </Border>
 
 
                                     <!-- Danh sách các hàng truyện -->
-                                    <ScrollViewer x:Name="QueueScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="0,0,0,70">
+                                    <ScrollViewer x:Name="QueueScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="0,0,0,70" IsVisible="{Binding !IsThumbnailMode}">
                                         <ItemsControl x:Name="QueueItemsControl" ItemsSource="{Binding ComicBooks}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
@@ -1736,6 +1769,77 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
                                     </ScrollViewer>
+                                                                    <!-- LƯỚI THẺ ẢNH THUMBNAIL (THUMBNAIL GRID MODE) -->
+                                    <ScrollViewer x:Name="ThumbnailScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="8,8,8,70" IsVisible="{Binding IsThumbnailMode}">
+                                        <ItemsControl x:Name="ThumbnailItemsControl" ItemsSource="{Binding ComicBooks}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Width="162" Height="265" Margin="5" Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" ClipToBounds="True"
+                                                            PointerEntered="OnThumbnailItemPointerEntered"
+                                                            PointerExited="OnThumbnailItemPointerExited"
+                                                            PointerPressed="OnThumbnailItemPointerPressed">
+                                                        <Grid RowDefinitions="180, *, Auto">
+                                                            <!-- Vùng Ảnh Bìa Thumbnail -->
+                                                            <Grid Grid.Row="0" Background="#0B0F19">
+                                                                <!-- Placeholder icon khi chưa có ảnh -->
+                                                                <TextBlock Text="🖼️" FontSize="28" Foreground="#334155" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                           IsVisible="{Binding ThumbnailBitmap, Converter={x:Static ObjectConverters.IsNull}}" />
+
+                                                                <!-- Ảnh Bìa -->
+                                                                <Image Source="{Binding ThumbnailBitmap}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                                                <!-- Loading indicator -->
+                                                                <Border Background="#80000000" IsVisible="{Binding IsThumbnailLoading}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                                                    <TextBlock Text="⏳ Đang tải..." FontSize="10" Foreground="#38BDF8" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                </Border>
+
+                                                                <!-- Checkbox góc trên bên trái -->
+                                                                <Border Background="#B30B0F19" CornerRadius="4" Padding="2" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4">
+                                                                    <CheckBox IsChecked="{Binding IsChecked}" Margin="0" MinWidth="18" MinHeight="18" />
+                                                                </Border>
+
+                                                                <!-- Badge Domain góc trên bên phải -->
+                                                                <Border Background="#D91E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="3" Padding="4,1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="4">
+                                                                    <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="Bold" />
+                                                                </Border>
+
+                                                                <!-- Badge Trùng Lặp góc dưới ảnh -->
+                                                                <Border IsVisible="{Binding IsDuplicate}" Background="#B378350F" CornerRadius="2" Padding="3,1" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4">
+                                                                    <TextBlock Text="TRÙNG" FontSize="8" FontWeight="Bold" Foreground="#FDE047" />
+                                                                </Border>
+                                                            </Grid>
+
+                                                            <!-- Vùng Tiêu Đề & Thông Tin -->
+                                                            <StackPanel Grid.Row="1" Margin="6,4,6,2" Spacing="2">
+                                                                <TextBlock Text="{Binding Title}" FontSize="10" FontWeight="SemiBold" Foreground="#F1F5F9"
+                                                                           MaxHeight="28" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                                                                <WrapPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="{Binding DisplaySubfolder, StringFormat='{}📁 {0}'}" FontSize="8" Foreground="#FDE047" Margin="0,0,4,0" />
+                                                                    <TextBlock Text="{Binding TotalChapters, StringFormat='{}• {0} ch'}" FontSize="8" Foreground="#94A3B8" />
+                                                                </WrapPanel>
+                                                            </StackPanel>
+
+                                                            <!-- Thanh Progress Bar Sát Đáy Thẻ -->
+                                                            <Grid Grid.Row="2" Height="14">
+                                                                <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100" Height="14"
+                                                                             CornerRadius="0" Foreground="{Binding ProgressBarBrush}" Background="#0B132B"
+                                                                             HorizontalAlignment="Stretch" VerticalAlignment="Stretch" BorderThickness="0" Margin="0" />
+                                                                <TextBlock Text="{Binding ProgressPercentageText}"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                           Foreground="#FDE047" FontWeight="ExtraBold" FontSize="8.5" />
+                                                            </Grid>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+
                                 </Grid>
                             </TabItem>
 
@@ -3823,5 +3927,80 @@
                 </StackPanel>
             </Border>
         </Border>
+    
+        <!-- POPUP PREVIEW OVERLAY NỔI BẬT ĐA NỀN TẢNG (DESKTOP HOVER & MOBILE TAP) -->
+        <Border IsVisible="{Binding IsHoverPreviewVisible}"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Margin="0,0,24,30" MaxWidth="360" MaxHeight="520"
+                Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1.5"
+                CornerRadius="10" BoxShadow="0 10 25 5 #90000000" ClipToBounds="True">
+            <Grid RowDefinitions="Auto, *, Auto">
+                <!-- Header Popup: Tiêu đề + Nút Đóng -->
+                <Border Grid.Row="0" Background="#1E293B" Padding="10,6" BorderBrush="#334155" BorderThickness="0,0,0,1">
+                    <Grid ColumnDefinitions="*, Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <TextBlock Text="👁️" FontSize="12" />
+                            <TextBlock Text="XEM TRƯỚC TRUYỆN" FontWeight="Bold" FontSize="11" Foreground="#38BDF8" />
+                            <Border Background="#0284C7" CornerRadius="3" Padding="4,1" Margin="4,0,0,0">
+                                <TextBlock Text="{Binding ActiveHoverItem.Domain}" FontSize="8" FontWeight="Bold" Foreground="#FFFFFF" />
+                            </Border>
+                        </StackPanel>
+                        <Button Grid.Column="1" Click="OnClosePreviewOverlayClicked"
+                                Background="#334155" Foreground="#94A3B8" Padding="5,1" CornerRadius="3" FontSize="10">
+                            <TextBlock Text="✕" FontWeight="Bold" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- Nội dung chính: Ảnh Bìa To Rõ + Thông Tin Chi Tiết -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="12">
+                    <StackPanel Spacing="8">
+                        <!-- Khung Ảnh Bìa Lớn -->
+                        <Border Background="#0B0F19" CornerRadius="6" Height="280" ClipToBounds="True" BorderBrush="#1E293B" BorderThickness="1">
+                            <Grid>
+                                <TextBlock Text="🖼️" FontSize="36" Foreground="#334155" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           IsVisible="{Binding ActiveHoverItem.ThumbnailBitmap, Converter={x:Static ObjectConverters.IsNull}}" />
+                                <Image Source="{Binding ActiveHoverItem.ThumbnailBitmap}" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <Border Background="#80000000" IsVisible="{Binding ActiveHoverItem.IsThumbnailLoading}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                    <TextBlock Text="⏳ Đang tải ảnh bìa..." FontSize="11" Foreground="#38BDF8" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- Tên truyện đầy đủ -->
+                        <TextBlock Text="{Binding ActiveHoverItem.Title}" FontWeight="Bold" FontSize="12" Foreground="#F8FAFC" TextWrapping="Wrap" />
+
+                        <!-- Subfolder & Link -->
+                        <Grid ColumnDefinitions="Auto, *">
+                            <TextBlock Grid.Column="0" Text="📁 Thư mục: " Foreground="#94A3B8" FontSize="10" />
+                            <TextBlock Grid.Column="1" Text="{Binding ActiveHoverItem.DisplaySubfolder}" Foreground="#FDE047" FontWeight="SemiBold" FontSize="10" TextTrimming="CharacterEllipsis" />
+                        </Grid>
+
+                        <!-- Trạng thái Chapter mới nhất & Thiếu chap -->
+                        <Border Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="8,5">
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="{Binding ActiveHoverItem.TotalChapters, StringFormat='{}📚 Tổng số chương: {0} chaps'}" FontSize="10" Foreground="#38BDF8" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding ActiveHoverItem.LatestChapter, StringFormat='{}⚡ Chapter mới nhất: {0}'}" FontSize="10" Foreground="#34D399" IsVisible="{Binding ActiveHoverItem.LatestChapter, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Text="{Binding ActiveHoverItem.MissingChapters, StringFormat='{}⚠️ Chap thiếu: {0}'}" FontSize="10" Foreground="#F87171" TextWrapping="Wrap" IsVisible="{Binding ActiveHoverItem.MissingChapters, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Text="{Binding ActiveHoverItem.Status, StringFormat='{}Trạng thái tải: {0}'}" FontSize="10" Foreground="#FCD34D" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Footer Thanh Tiến Trình -->
+                <Border Grid.Row="2" Background="#161F30" Padding="8,4" BorderBrush="#1E293B" BorderThickness="0,1,0,0">
+                    <Grid Height="14">
+                        <ProgressBar Value="{Binding ActiveHoverItem.ProgressPercentage}" Maximum="100" Height="14"
+                                     CornerRadius="0" Foreground="{Binding ActiveHoverItem.ProgressBarBrush}" Background="#0B132B"
+                                     HorizontalAlignment="Stretch" VerticalAlignment="Stretch" BorderThickness="0" Margin="0" />
+                        <TextBlock Text="{Binding ActiveHoverItem.ProgressPercentageText}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="#FDE047" FontWeight="ExtraBold" FontSize="9" />
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+
     </Grid>
 </UserControl>

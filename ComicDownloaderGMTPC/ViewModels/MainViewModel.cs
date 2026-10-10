@@ -1003,6 +1003,64 @@ public partial class MainViewModel : ViewModelBase
     private bool _isThumbnailMode;
 
     [ObservableProperty]
+    private ComicBookItem? _activeHoverItem;
+
+    [ObservableProperty]
+    private bool _isHoverPreviewVisible;
+
+    [RelayCommand]
+    private void ToggleThumbnailMode()
+    {
+        IsThumbnailMode = !IsThumbnailMode;
+        if (IsThumbnailMode)
+        {
+            _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
+        }
+    }
+
+    [RelayCommand]
+    private void TogglePopupPreview()
+    {
+        IsPopupPreview = !IsPopupPreview;
+        if (!IsPopupPreview)
+        {
+            HideHoverPreview();
+        }
+    }
+
+    [RelayCommand]
+    private async Task RescanThumbnailsAsync()
+    {
+        var targetItems = ComicBooks.Where(b => b.IsChecked || b.IsSelectedInGrid).ToList();
+        if (targetItems.Count == 0)
+        {
+            targetItems = ComicBooks.ToList();
+        }
+        foreach (var item in targetItems)
+        {
+            await ThumbnailPreviewService.Instance.RescanItemAsync(item);
+        }
+    }
+
+    public void ShowHoverPreview(ComicBookItem? item)
+    {
+        if (!IsPopupPreview || item == null)
+        {
+            HideHoverPreview();
+            return;
+        }
+        ActiveHoverItem = item;
+        IsHoverPreviewVisible = true;
+        _ = ThumbnailPreviewService.Instance.EnsureThumbnailCacheAsync(item);
+    }
+
+    public void HideHoverPreview()
+    {
+        IsHoverPreviewVisible = false;
+        ActiveHoverItem = null;
+    }
+
+    [ObservableProperty]
     private int _parallelCheckCount = 8;
 
     [ObservableProperty]
