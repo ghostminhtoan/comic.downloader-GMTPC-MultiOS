@@ -25,10 +25,13 @@ public sealed class ThumbnailPreviewService
 
     private readonly HttpClient _httpClient;
     private readonly CookieContainer _cookieContainer = new();
-    private readonly SemaphoreSlim _generalSemaphore = new(OperatingSystem.IsAndroid() ? 3 : 4, OperatingSystem.IsAndroid() ? 3 : 4);
+    private readonly SemaphoreSlim _generalSemaphore = new(OperatingSystem.IsAndroid() ? 2 : 4, OperatingSystem.IsAndroid() ? 2 : 4);
     private readonly SemaphoreSlim _rateSensitiveSemaphore = new(OperatingSystem.IsAndroid() ? 1 : 2, OperatingSystem.IsAndroid() ? 1 : 2);
+    private readonly SemaphoreSlim _priorityScrollSemaphore = new(3, 3);
     private readonly ConcurrentDictionary<string, string> _candidateUrlCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> _failedUrlCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Task> _inFlightItemTasks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, long> _lastScrollRetryTick = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _cacheRoot;
     private static readonly Random _jitter = new();
     private static readonly object _bitmapMemoryLock = new();
@@ -153,12 +156,54 @@ public sealed class ThumbnailPreviewService
         }
     }
 
+    public async Task EnsureVisibleItemThumbnailAsync(ComicBookItem? item, CancellationToken ct = default)
+    {
+        if (item == null || ct.IsCancellationRequested) return;
+        if (item.ThumbnailBitmap != null && item.HasThumbnailFile) return;
+
+        string itemKey = !string.IsNullOrWhiteSpace(item.Url) ? item.Url.Trim() : item.Title?.Trim() ?? string.Empty;
+        if (!string.IsNullOrEmpty(itemKey))
+        {
+            long now = Environment.TickCount64;
+            if (_lastScrollRetryTick.TryGetValue(itemKey, out long lastTick) && now - lastTick < 2500 && item.IsThumbnailLoading)
+            {
+                return;
+            }
+            _lastScrollRetryTick[itemKey] = now;
+        }
+
+        // Xóa trạng thái lỗi tạm thời trước đó để đảm bảo khi người dùng cuộn tới mục thiếu thumbnail thì luôn tự động tải lại được
+        if (!string.IsNullOrWhiteSpace(item.CoverUrl))
+        {
+            _failedUrlCache.TryRemove(item.CoverUrl, out _);
+        }
+        if (!string.IsNullOrWhiteSpace(item.Url))
+        {
+            if (_candidateUrlCache.TryGetValue(item.Url, out string? cachedUrl) && !string.IsNullOrWhiteSpace(cachedUrl))
+            {
+                _failedUrlCache.TryRemove(cachedUrl, out _);
+            }
+        }
+
+        await EnsureThumbnailCacheAsync(item, ct, isPriority: true).ConfigureAwait(false);
+    }
+
     public async Task EnsureHighResPreviewAsync(ComicBookItem? item, CancellationToken ct = default)
     {
         if (item == null || ct.IsCancellationRequested) return;
         if (item.HighResPreviewBitmap != null && !string.IsNullOrWhiteSpace(item.PreviewTagsText)) return;
 
-        await EnsureThumbnailCacheAsync(item, ct).ConfigureAwait(false);
+        // Xóa cache lỗi tạm thời để khi người dùng mở Popup Preview ở bất kỳ chế độ nào (List view, List + thumbnail column, Thumbnail view) cũng nạp được ảnh
+        if (!string.IsNullOrWhiteSpace(item.CoverUrl))
+        {
+            _failedUrlCache.TryRemove(item.CoverUrl, out _);
+        }
+        if (!string.IsNullOrWhiteSpace(item.Url) && _candidateUrlCache.TryGetValue(item.Url, out string? cachedUrl) && !string.IsNullOrWhiteSpace(cachedUrl))
+        {
+            _failedUrlCache.TryRemove(cachedUrl, out _);
+        }
+
+        await EnsureThumbnailCacheAsync(item, ct, isPriority: true).ConfigureAwait(false);
 
         string cacheDir = GetItemCacheDirectory(item);
         string originalFile = Path.Combine(cacheDir, "cover.jpg");
@@ -240,7 +285,7 @@ public sealed class ThumbnailPreviewService
         }
     }
 
-    public async Task EnsureThumbnailCacheAsync(ComicBookItem item, CancellationToken ct = default)
+    public async Task EnsureThumbnailCacheAsync(ComicBookItem item, CancellationToken ct = default, bool isPriority = false)
     {
         if (item == null || ct.IsCancellationRequested) return;
 
@@ -270,7 +315,7 @@ public sealed class ThumbnailPreviewService
         // Nếu đã có Bitmap nạp vào UI thì bỏ qua
         if (item.ThumbnailBitmap != null && item.HasThumbnailFile) return;
 
-        // Kiểm tra xem đã có sẵn file cache trên ổ đĩa chưa
+        // Kiểm tra xem đã có sẵn file cache trên ổ đĩa chưa (nạp tức thì không cần chờ Semaphore mạng)
         if (File.Exists(thumbFile) && new FileInfo(thumbFile).Length > 0)
         {
             await LoadThumbnailBitmapToItemAsync(item, thumbFile, File.Exists(originalFile) ? originalFile : thumbFile).ConfigureAwait(false);
@@ -285,21 +330,42 @@ public sealed class ThumbnailPreviewService
             if (item.ThumbnailBitmap != null) return;
         }
 
-        // Cần tải từ mạng
-        List<string> candidateUrls = await ResolveCandidateUrlsAsync(item, ct, forceFreshResolve: false).ConfigureAwait(false);
-        if (candidateUrls.Count == 0)
+        string itemKey = !string.IsNullOrWhiteSpace(item.Url) ? item.Url.Trim() : $"{item.Index}_{item.Title}";
+        if (_inFlightItemTasks.TryGetValue(itemKey, out var existingTask))
         {
-            candidateUrls = await ResolveCandidateUrlsAsync(item, ct, forceFreshResolve: true).ConfigureAwait(false);
+            try { await existingTask.ConfigureAwait(false); } catch { }
+            return;
         }
-        if (candidateUrls.Count == 0) return;
 
+        var downloadTask = DownloadAndCacheItemThumbnailCoreAsync(item, originalFile, thumbFile, isPriority, ct);
+        if (_inFlightItemTasks.TryAdd(itemKey, downloadTask))
+        {
+            try
+            {
+                await downloadTask.ConfigureAwait(false);
+            }
+            finally
+            {
+                _inFlightItemTasks.TryRemove(itemKey, out _);
+            }
+        }
+        else if (_inFlightItemTasks.TryGetValue(itemKey, out var racedTask))
+        {
+            try { await racedTask.ConfigureAwait(false); } catch { }
+        }
+    }
+
+    private async Task DownloadAndCacheItemThumbnailCoreAsync(ComicBookItem item, string originalFile, string thumbFile, bool isPriority, CancellationToken ct)
+    {
         bool isRateSensitive = IsRateSensitive(item.Url);
-        SemaphoreSlim semaphore = isRateSensitive ? _rateSensitiveSemaphore : _generalSemaphore;
+        SemaphoreSlim semaphore = isPriority
+            ? _priorityScrollSemaphore
+            : (isRateSensitive ? _rateSensitiveSemaphore : _generalSemaphore);
 
-        if (isRateSensitive)
+        if (isRateSensitive && !isPriority)
         {
             int jitterMs;
-            lock (_jitter) { jitterMs = _jitter.Next(120, 350); }
+            lock (_jitter) { jitterMs = _jitter.Next(120, 320); }
             await Task.Delay(jitterMs, ct).ConfigureAwait(false);
         }
 
@@ -307,6 +373,13 @@ public sealed class ThumbnailPreviewService
         try
         {
             await RunOnUiAsync(() => item.IsThumbnailLoading = true);
+
+            List<string> candidateUrls = await ResolveCandidateUrlsAsync(item, ct, forceFreshResolve: false).ConfigureAwait(false);
+            if (candidateUrls.Count == 0)
+            {
+                candidateUrls = await ResolveCandidateUrlsAsync(item, ct, forceFreshResolve: true).ConfigureAwait(false);
+            }
+            if (candidateUrls.Count == 0) return;
 
             bool success = await TryDownloadCandidateListAsync(item, candidateUrls, originalFile, thumbFile, ct).ConfigureAwait(false);
             if (!success && !ct.IsCancellationRequested)
@@ -359,17 +432,24 @@ public sealed class ThumbnailPreviewService
         var validItems = items.Where(SupportsPreview).Distinct().ToList();
         if (validItems.Count == 0) return;
 
-        // Ưu tiên nạp trước các truyện chưa có ThumbnailBitmap trên giao diện; không cắt bỏ danh sách ở mốc 30 truyện
-        var sorted = validItems.OrderBy(x => x.ThumbnailBitmap != null ? 1 : 0).ToList();
+        // Ưu tiên nạp trước các truyện chưa có ThumbnailBitmap trên giao diện; chạy tuần tự theo nhóm nhỏ để nhường băng thông cho thao tác cuộn (Scroll) và Popup Preview
+        var queue = new ConcurrentQueue<ComicBookItem>(validItems.OrderBy(x => x.ThumbnailBitmap != null ? 1 : 0));
+        int workerCount = OperatingSystem.IsAndroid() ? 2 : 3;
+        var workers = new List<Task>(workerCount);
 
-        var tasks = new List<Task>();
-        foreach (var item in sorted)
+        for (int w = 0; w < workerCount; w++)
         {
-            if (ct.IsCancellationRequested) break;
-            tasks.Add(EnsureThumbnailCacheAsync(item, ct));
+            workers.Add(Task.Run(async () =>
+            {
+                while (!ct.IsCancellationRequested && queue.TryDequeue(out var nextItem))
+                {
+                    if (nextItem.ThumbnailBitmap != null && nextItem.HasThumbnailFile) continue;
+                    await EnsureThumbnailCacheAsync(nextItem, ct, isPriority: false).ConfigureAwait(false);
+                }
+            }, ct));
         }
 
-        await Task.WhenAll(tasks).ConfigureAwait(false);
+        await Task.WhenAll(workers).ConfigureAwait(false);
     }
 
     public async Task RescanItemAsync(ComicBookItem item, CancellationToken ct = default)

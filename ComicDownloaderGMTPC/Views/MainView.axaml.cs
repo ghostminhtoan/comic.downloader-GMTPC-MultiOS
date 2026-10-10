@@ -80,6 +80,9 @@ public partial class MainView : UserControl
 
         vm.ScrollToBottomRequested -= OnVmScrollToBottomRequested;
         vm.ScrollToBottomRequested += OnVmScrollToBottomRequested;
+
+        vm.VisibleThumbnailScanRequested -= OnVmVisibleThumbnailScanRequested;
+        vm.VisibleThumbnailScanRequested += OnVmVisibleThumbnailScanRequested;
     }
 
     private void UnregisterVmEvents(MainViewModel vm)
@@ -87,6 +90,12 @@ public partial class MainView : UserControl
         vm.AutoScrollRequested -= OnVmAutoScrollRequested;
         vm.ScrollToTopRequested -= OnVmScrollToTopRequested;
         vm.ScrollToBottomRequested -= OnVmScrollToBottomRequested;
+        vm.VisibleThumbnailScanRequested -= OnVmVisibleThumbnailScanRequested;
+    }
+
+    private void OnVmVisibleThumbnailScanRequested()
+    {
+        ScheduleVisibleThumbnailScan(delayMs: 60);
     }
 
     private void OnVmScrollToTopRequested()
@@ -128,7 +137,13 @@ public partial class MainView : UserControl
             // Dual View (Song song Before / After): Pan & ComicScreen Zoom locked-step 100%
             SetupComicScreenPanAndZoom(this.FindControl<ScrollViewer>("LiveBeforeScrollViewer"), this.FindControl<ScrollViewer>("LiveAfterScrollViewer"));
             SetupComicScreenPanAndZoom(this.FindControl<ScrollViewer>("ModalBeforeScrollViewer"), this.FindControl<ScrollViewer>("ModalAfterScrollViewer"));
+
+            // Tự động nhận diện thao tác cuộn (Scroll) trên mọi danh sách (QueueScrollViewer, ThumbnailScrollViewer, MainRootScrollViewer)
+            // để nạp ngay thumbnail cho các truyện đang hiển thị trên màn hình mà chưa có ảnh bìa
+            AddHandler(ScrollViewer.ScrollChangedEvent, OnAnyScrollViewerScrollChanged, RoutingStrategies.Bubble);
         }
+
+        ScheduleVisibleThumbnailScan(delayMs: 120);
 
         // Khi bất kỳ ô nhập liệu nào (TextBox, NumericUpDown, ComboBox) nhận focus trên Android / Desktop:
         // Tự động cuộn khung nhìn để không bao giờ bị bàn phím ảo che khuất ô cần nhập
@@ -671,6 +686,178 @@ public partial class MainView : UserControl
 
     private System.Threading.CancellationTokenSource? _queueTouchHoldCts;
     private Point _queueTouchStartPos;
+    private bool _queueTouchMoved;
+    private bool _queueTouchLongPressTriggered;
+    private int _isThumbnailScanScheduled;
+
+    private static bool IsInteractiveChildControl(object? source, Control container)
+    {
+        var src = source as Control;
+        while (src != null && src != container)
+        {
+            if (src is Button || src is CheckBox || src is TextBox || src is NumericUpDown || src is MenuItem)
+            {
+                return true;
+            }
+            src = src.Parent as Control;
+        }
+        return false;
+    }
+
+    private bool ShouldKeepHoverPreviewAlive(Control? sourceControl, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
+        {
+            return true;
+        }
+
+        if (sourceControl != null && sourceControl.Bounds.Width > 0 && sourceControl.Bounds.Height > 0)
+        {
+            var pt = e.GetPosition(sourceControl);
+            if (pt.X >= 0 && pt.Y >= 0 && pt.X <= sourceControl.Bounds.Width && pt.Y <= sourceControl.Bounds.Height)
+            {
+                return true;
+            }
+        }
+
+        var popup = this.FindControl<Border>("HoverPreviewPopupBorder");
+        if (popup != null && popup.IsVisible)
+        {
+            if (popup.IsPointerOver)
+            {
+                return true;
+            }
+            if (popup.Bounds.Width > 0 && popup.Bounds.Height > 0)
+            {
+                var popPt = e.GetPosition(popup);
+                if (popPt.X >= -12 && popPt.Y >= -12 && popPt.X <= popup.Bounds.Width + 12 && popPt.Y <= popup.Bounds.Height + 12)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private void OnAnyScrollViewerScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        if (sender is ScrollViewer sv)
+        {
+            string? name = sv.Name;
+            if (name == "LiveBeforeScrollViewer" || name == "LiveAfterScrollViewer" ||
+                name == "ModalBeforeScrollViewer" || name == "ModalAfterScrollViewer")
+            {
+                return;
+            }
+        }
+
+        ScheduleVisibleThumbnailScan(delayMs: 100);
+    }
+
+    private void ScheduleVisibleThumbnailScan(int delayMs = 100)
+    {
+        if (System.Threading.Interlocked.CompareExchange(ref _isThumbnailScanScheduled, 1, 0) != 0)
+        {
+            return;
+        }
+
+        System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                if (delayMs > 0)
+                {
+                    await System.Threading.Tasks.Task.Delay(delayMs).ConfigureAwait(false);
+                }
+            }
+            catch { }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _isThumbnailScanScheduled, 0);
+            }
+
+            Avalonia.Threading.Dispatcher.UIThread.Post(ScanAndLoadVisibleThumbnails, Avalonia.Threading.DispatcherPriority.Background);
+        });
+    }
+
+    private void ScanAndLoadVisibleThumbnails()
+    {
+        if (DataContext is not MainViewModel vm)
+        {
+            return;
+        }
+
+        if (!vm.IsThumbnailMode && !vm.IsThumbnailColumnVisible && !vm.IsPopupPreview)
+        {
+            return;
+        }
+
+        Control? activeItemsControl = vm.IsThumbnailMode
+            ? this.FindControl<ItemsControl>("ThumbnailItemsControl")
+            : this.FindControl<ItemsControl>("QueueItemsControl");
+
+        if (activeItemsControl == null || !activeItemsControl.IsVisible)
+        {
+            return;
+        }
+
+        double viewH = this.Bounds.Height > 0 ? this.Bounds.Height : 900;
+        var seenItems = new HashSet<ComicBookItem>();
+        var missingVisibleItems = new List<ComicBookItem>();
+
+        foreach (var visual in activeItemsControl.GetVisualDescendants())
+        {
+            if (visual is Control ctrl && ctrl.IsVisible && ctrl.DataContext is ComicBookItem item)
+            {
+                if (!seenItems.Add(item))
+                {
+                    continue;
+                }
+
+                if (item.ThumbnailBitmap != null && item.HasThumbnailFile)
+                {
+                    continue;
+                }
+
+                if (item.IsThumbnailLoading)
+                {
+                    continue;
+                }
+
+                var pos = ctrl.TranslatePoint(new Point(0, 0), this);
+                if (pos.HasValue)
+                {
+                    double y = pos.Value.Y;
+                    double h = ctrl.Bounds.Height > 0 ? ctrl.Bounds.Height : 100;
+                    // Kiểm tra phần tử nằm trong vùng hiển thị của màn hình (mở rộng biên 300px trên/dưới để tự động nạp khi cuộn tới)
+                    if (y + h >= -300 && y <= viewH + 350)
+                    {
+                        missingVisibleItems.Add(item);
+                    }
+                }
+            }
+        }
+
+        foreach (var item in missingVisibleItems)
+        {
+            _ = ComicDownloaderGMTPC.Services.ThumbnailPreviewService.Instance.EnsureVisibleItemThumbnailAsync(item);
+        }
+    }
+
+    private void CheckAndLoadSingleControlThumbnail(Control? control)
+    {
+        if (control?.DataContext is ComicBookItem item && DataContext is MainViewModel vm)
+        {
+            if (vm.IsThumbnailMode || vm.IsThumbnailColumnVisible || vm.IsPopupPreview)
+            {
+                if (item.ThumbnailBitmap == null && !item.IsThumbnailLoading)
+                {
+                    _ = ComicDownloaderGMTPC.Services.ThumbnailPreviewService.Instance.EnsureVisibleItemThumbnailAsync(item);
+                }
+            }
+        }
+    }
 
     private void OnQueueItemPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -680,14 +867,9 @@ public partial class MainView : UserControl
         }
 
         // Bỏ qua nếu người dùng tương tác trực tiếp vào các nút con (Button, CheckBox, TextBox, ...)
-        var src = e.Source as Control;
-        while (src != null && src != ctrl)
+        if (IsInteractiveChildControl(e.Source, ctrl))
         {
-            if (src is Button || src is CheckBox || src is TextBox || src is NumericUpDown || src is MenuItem)
-            {
-                return;
-            }
-            src = src.Parent as Control;
+            return;
         }
 
         var point = e.GetCurrentPoint(ctrl);
@@ -703,23 +885,32 @@ public partial class MainView : UserControl
             return;
         }
 
-        // Chạm cảm ứng trên Android / Màn hình Touch: Nhấn và giữ > 450ms để mở Context Menu
+        // Chạm cảm ứng trên Android / Màn hình Touch:
+        // - Nhấn giữ > 450ms để mở Context Menu
+        // - Chạm nhanh (Tap < 450ms) để mở Popup Preview (hoạt động cho cả List view và List + thumbnail column)
         if (point.Pointer.Type == PointerType.Touch)
         {
             _queueTouchHoldCts?.Cancel();
             _queueTouchHoldCts = new System.Threading.CancellationTokenSource();
             var token = _queueTouchHoldCts.Token;
             _queueTouchStartPos = point.Position;
+            _queueTouchMoved = false;
+            _queueTouchLongPressTriggered = false;
 
             System.Threading.Tasks.Task.Run(async () =>
             {
                 try
                 {
                     await System.Threading.Tasks.Task.Delay(450, token);
-                    if (!token.IsCancellationRequested)
+                    if (!token.IsCancellationRequested && !_queueTouchMoved)
                     {
+                        _queueTouchLongPressTriggered = true;
                         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                         {
+                            if (DataContext is MainViewModel touchVm)
+                            {
+                                touchVm.HideHoverPreview();
+                            }
                             if (ctrl.ContextMenu != null)
                             {
                                 ctrl.ContextMenu.Open(ctrl);
@@ -732,10 +923,18 @@ public partial class MainView : UserControl
             return;
         }
 
-        // Chuột trái trên Desktop: Thu gọn / Mở rộng nhóm truyện nếu là truyện cha đã tách chương
-        if (item.IsParallelSplitParent && DataContext is MainViewModel vm)
+        // Chuột trái trên Desktop (hoặc thiết bị gửi PointerType.Mouse):
+        if (DataContext is MainViewModel vm)
         {
-            vm.ToggleSplitCollapse(item);
+            if (vm.IsPopupPreview)
+            {
+                vm.ShowHoverPreview(item);
+                UpdateHoverPreviewPosition(e);
+            }
+            if (item.IsParallelSplitParent)
+            {
+                vm.ToggleSplitCollapse(item);
+            }
         }
     }
 
@@ -748,7 +947,7 @@ public partial class MainView : UserControl
         }
         if (sender is Control control && control.DataContext is ComicBookItem item)
         {
-            if (DataContext is MainViewModel vm)
+            if (DataContext is MainViewModel vm && vm.IsPopupPreview)
             {
                 vm.ShowHoverPreview(item);
                 UpdateHoverPreviewPosition(e);
@@ -758,13 +957,12 @@ public partial class MainView : UserControl
 
     private void OnQueueItemPointerExited(object? sender, PointerEventArgs e)
     {
-        if (e.Pointer.Type == PointerType.Touch) return;
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
         if (sender is Border border)
         {
             border.BorderBrush = Avalonia.Media.Brush.Parse("#1E293B");
         }
-        var popup = this.FindControl<Border>("HoverPreviewPopupBorder");
-        if (popup != null && popup.IsPointerOver)
+        if (ShouldKeepHoverPreviewAlive(sender as Control, e))
         {
             return;
         }
@@ -783,6 +981,7 @@ public partial class MainView : UserControl
             double dy = point.Position.Y - _queueTouchStartPos.Y;
             if (Math.Sqrt(dx * dx + dy * dy) > 15) // Người dùng đang cuộn danh sách (swipe/scroll)
             {
+                _queueTouchMoved = true;
                 _queueTouchHoldCts.Cancel();
             }
         }
@@ -805,6 +1004,25 @@ public partial class MainView : UserControl
     private void OnQueueItemPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         _queueTouchHoldCts?.Cancel();
+
+        if (e.Pointer.Type == PointerType.Touch && !_queueTouchMoved && !_queueTouchLongPressTriggered)
+        {
+            if (sender is Control ctrl && ctrl.DataContext is ComicBookItem item && !IsInteractiveChildControl(e.Source, ctrl))
+            {
+                if (DataContext is MainViewModel vm)
+                {
+                    if (vm.IsPopupPreview)
+                    {
+                        vm.ShowHoverPreview(item);
+                        UpdateHoverPreviewPosition(e);
+                    }
+                    else if (item.IsParallelSplitParent)
+                    {
+                        vm.ToggleSplitCollapse(item);
+                    }
+                }
+            }
+        }
     }
 
     private void OnQueueItemPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
@@ -851,16 +1069,14 @@ public partial class MainView : UserControl
 
     private void OnThumbnailElementAttached(object? sender, VisualTreeAttachmentEventArgs e)
     {
-        if (sender is Control control && control.DataContext is ComicBookItem item && DataContext is MainViewModel vm)
-        {
-            if (vm.IsThumbnailMode || vm.IsThumbnailColumnVisible)
-            {
-                if (item.ThumbnailBitmap == null && !item.IsThumbnailLoading)
-                {
-                    _ = ComicDownloaderGMTPC.Services.ThumbnailPreviewService.Instance.EnsureThumbnailCacheAsync(item);
-                }
-            }
-        }
+        CheckAndLoadSingleControlThumbnail(sender as Control);
+        ScheduleVisibleThumbnailScan(delayMs: 80);
+    }
+
+    private void OnThumbnailElementDataContextChanged(object? sender, EventArgs e)
+    {
+        CheckAndLoadSingleControlThumbnail(sender as Control);
+        ScheduleVisibleThumbnailScan(delayMs: 80);
     }
 
     private void OnQueueThumbnailPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -891,7 +1107,7 @@ public partial class MainView : UserControl
         }
         if (sender is Control control && control.DataContext is ComicBookItem item)
         {
-            if (DataContext is MainViewModel vm)
+            if (DataContext is MainViewModel vm && vm.IsPopupPreview)
             {
                 vm.ShowHoverPreview(item);
                 UpdateHoverPreviewPosition(e);
@@ -917,14 +1133,13 @@ public partial class MainView : UserControl
 
     private void OnThumbnailItemPointerExited(object? sender, PointerEventArgs e)
     {
-        if (e.Pointer.Type == PointerType.Touch) return;
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
         if (sender is Border border)
         {
             border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");
             border.BorderThickness = new Thickness(1);
         }
-        var popup = this.FindControl<Border>("HoverPreviewPopupBorder");
-        if (popup != null && popup.IsPointerOver)
+        if (ShouldKeepHoverPreviewAlive(sender as Control, e))
         {
             return;
         }
@@ -936,7 +1151,7 @@ public partial class MainView : UserControl
 
     private void OnPopupPreviewPointerExited(object? sender, PointerEventArgs e)
     {
-        if (e.Pointer.Type == PointerType.Touch) return;
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
         if (DataContext is MainViewModel vm)
         {
             vm.HideHoverPreview();
@@ -955,14 +1170,9 @@ public partial class MainView : UserControl
                 return;
             }
 
-            var src = e.Source as Control;
-            while (src != null && src != control)
+            if (IsInteractiveChildControl(e.Source, control))
             {
-                if (src is CheckBox || src is Button)
-                {
-                    return;
-                }
-                src = src.Parent as Control;
+                return;
             }
 
             if (DataContext is MainViewModel vm)

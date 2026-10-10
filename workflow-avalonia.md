@@ -2135,3 +2135,24 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.63. Tự Động Nhận Biết & Tải Thumbnail Tức Thì Khi Cuộn (Viewport Scroll Detection) & Đồng Bộ Popup Preview Cho Cả 3 Chế Độ Xem (`List view`, `List + thumbnail column`, `Thumbnail view`) (`MainView.axaml`, `MainView.axaml.cs`, `MainViewModel.cs`, `ThumbnailPreviewService.cs`)
+- **Bối cảnh & Yêu cầu thực tế của người dùng**:
+  1. **Tự động nhận biết và tải thumbnail khi người dùng cuộn (scroll)**: Khi người dùng cuộn đến những vị trí chưa có thumbnail (trong chế độ `Thumbnail view` hoặc `List + thumbnail column`), ứng dụng phải tự động nhận diện các item đang nằm trong vùng nhìn thấy (viewport) bị thiếu ảnh bìa và lập tức ưu tiên tải/hiển thị thumbnail mà không bị nghẽn bởi hàng đợi quét nền.
+  2. **Popup Preview hoạt động đầy đủ trên cả `List view` và `List + thumbnail column`**: Tính năng Popup Preview (`🔍 Popup Preview: BẬT`) phải hoạt động đồng bộ khi chạm (trên Android) hoặc rê chuột / click (trên Desktop) vào bất kỳ dòng truyện nào trong `List view` và `List + thumbnail column`, tương tự như `Thumbnail view`.
+- **Giải pháp Thực hiện (First-Principles Engineering Rigor)**:
+  1. **Hệ Thống Nhận Diện Viewport Khi Cuộn & Tái Sử Dụng Container (`MainView.axaml`, `MainView.axaml.cs`, `MainViewModel.cs`)**:
+     - Đăng ký lắng nghe sự kiện cuộn toàn cục `AddHandler(ScrollViewer.ScrollChangedEvent, OnAnyScrollViewerScrollChanged, RoutingStrategies.Bubble)` trên `MainView` để bắt mọi thao tác cuộn từ `MainRootScrollViewer`, `QueueScrollViewer`, và `ThumbnailScrollViewer`.
+     - Gắn đồng thời `AttachedToVisualTree="OnThumbnailElementAttached"` và `DataContextChanged="OnThumbnailElementDataContextChanged"` trên cả `Border` dòng truyện lẫn `Border` khung ảnh trong `QueueItemsControl.ItemTemplate` và `ThumbnailItemsControl.ItemTemplate` để bắt chính xác thời điểm `VirtualizingStackPanel` tái sử dụng (recycle) container khi cuộn danh sách dài.
+     - Xây dựng bộ quét khung nhìn `ScheduleVisibleThumbnailScan()` & `ScanAndLoadVisibleThumbnails()`: Kiểm tra tọa độ thực tế của từng item (`ctrl.TranslatePoint(new Point(0, 0), this)`) trong vùng nhìn thấy `[-300px, viewH + 350px]`, nếu `item.ThumbnailBitmap == null` và `!item.IsLoadingThumbnail` thì kích hoạt tải ưu tiên ngay lập tức.
+  2. **Luồng Tải Ưu Tiên Dành Riêng Cho Cuộn & Popup Preview (`ThumbnailPreviewService.cs`)**:
+     - Bổ sung `_priorityScrollSemaphore = new(3, 3)` tách biệt hoàn toàn với `_downloadSemaphore` của tiến trình quét nền, giúp các item người dùng đang nhìn thấy hoặc đang mở Popup Preview được tải ngay lập tức mà không phải xếp hàng chờ sau hàng chục item prefetch.
+     - Bổ sung `_inFlightItemTasks` (`ConcurrentDictionary<string, Task>`) để gộp các yêu cầu tải trùng lặp của cùng một truyện, chống xung đột ghi file `cover.jpg` / `cover.thumb.jpg`.
+     - Bổ sung `EnsureVisibleItemThumbnailAsync(ComicBookItem? item)` tự động xóa cache lỗi tạm thời (`_failedUrlCache` với cooldown 2.5s/item) để tự phục hồi ảnh bìa ngay khi người dùng cuộn tới.
+     - Đưa `ResolveCandidateUrlsAsync` vào bên trong vùng điều tiết của Semaphore và chuyển `PrefetchBatchAsync` sang mô hình hàng đợi `ConcurrentQueue` giới hạn worker (`2` trên Android, `3` trên Desktop), giữ băng thông mạng luôn thông thoáng cho thao tác cuộn của người dùng.
+  3. **Hỗ Trợ Toàn Diện Popup Preview Cho `List view` & `List + thumbnail column` (`MainView.axaml.cs`)**:
+     - **Trên Android / Màn hình cảm ứng (`PointerType.Touch`)**: Chạm nhanh (Quick Tap trong `OnQueueItemPointerReleased` khi `!_queueTouchMoved && !_queueTouchLongPressTriggered`) vào bất kỳ dòng truyện nào trong `List view` hoặc `List + thumbnail column` (trừ vùng nút bấm/checkbox/textbox) sẽ lập tức mở Popup Preview (`vm.ShowHoverPreview(item)`) và căn giữa cửa sổ preview trên màn hình; nhấn giữ > 450ms vẫn mở `ContextMenu` như bình thường.
+     - **Trên Desktop (Chuột)**: Rê chuột (`OnQueueItemPointerEntered` / `OnQueueItemPointerMoved`) hoặc click chuột trái (`OnQueueItemPointerPressed`) vào dòng truyện trong `List view` và `List + thumbnail column` sẽ hiển thị và cập nhật vị trí Popup Preview mượt mà.
+     - **Chống nhấp nháy / tự tắt Popup Preview (`ShouldKeepHoverPreviewAlive`)**: Kiểm tra an toàn vị trí con trỏ đối với cả dòng truyện lẫn `HoverPreviewPopupBorder` trong `OnQueueItemPointerExited` và `OnThumbnailItemPointerExited`, đảm bảo Popup Preview không bao giờ bị tự đóng khi hiện đè lên dòng truyện rộng trong `List view` hoặc khi thao tác trên cảm ứng.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.

@@ -1042,6 +1042,8 @@ public partial class MainViewModel : ViewModelBase
 
     public IEnumerable<ComicBookItem>? ActiveThumbnailItemsSource => IsThumbnailMode ? ComicBooks : null;
 
+    public event Action? VisibleThumbnailScanRequested;
+
     partial void OnSelectedQueueViewModeChanged(string value)
     {
         bool thumbMode = value == "Thumbnail view";
@@ -1052,7 +1054,8 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsListViewMode));
         OnPropertyChanged(nameof(IsThumbnailColumnVisible));
         OnPropertyChanged(nameof(ActiveThumbnailItemsSource));
-        if (thumbMode || value == "List + thumbnail column")
+        VisibleThumbnailScanRequested?.Invoke();
+        if (thumbMode || value == "List + thumbnail column" || IsPopupPreview)
         {
             _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
         }
@@ -1071,13 +1074,13 @@ public partial class MainViewModel : ViewModelBase
         {
             SelectedQueueViewMode = "List view";
         }
+        VisibleThumbnailScanRequested?.Invoke();
     }
 
     public void TriggerThumbnailPrefetchIfNeeded()
     {
-        // Trên Android, chỉ prefetch ảnh bìa khi người dùng đang bật chế độ xem có hiển thị thumbnail
-        // để tránh tải và decode hàng chục Bitmap ngầm gây nóng máy và tràn RAM ở chế độ List view.
-        if (IsThumbnailMode || IsThumbnailColumnVisible || !OperatingSystem.IsAndroid())
+        VisibleThumbnailScanRequested?.Invoke();
+        if (IsThumbnailMode || IsThumbnailColumnVisible || IsPopupPreview || !OperatingSystem.IsAndroid())
         {
             _ = ThumbnailPreviewService.Instance.PrefetchBatchAsync(ComicBooks);
         }
@@ -1104,6 +1107,10 @@ public partial class MainViewModel : ViewModelBase
     private void TogglePopupPreview()
     {
         IsPopupPreview = !IsPopupPreview;
+        if (IsPopupPreview)
+        {
+            VisibleThumbnailScanRequested?.Invoke();
+        }
     }
 
     [RelayCommand]
@@ -1153,7 +1160,6 @@ public partial class MainViewModel : ViewModelBase
         }
         ActiveHoverItem = item;
         IsHoverPreviewVisible = true;
-        _ = ThumbnailPreviewService.Instance.EnsureThumbnailCacheAsync(item);
         _ = ThumbnailPreviewService.Instance.EnsureHighResPreviewAsync(item);
     }
 
