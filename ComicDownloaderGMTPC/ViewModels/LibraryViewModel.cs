@@ -244,13 +244,13 @@ public partial class LibraryViewModel : ViewModelBase
 
             var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "Chọn File Truyện CBZ / ZIP Để Đọc Ngay",
+                Title = "Chọn File Truyện CBZ / ZIP / PDF Để Đọc Ngay",
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("Comic Archive (*.cbz, *.zip)")
+                    new FilePickerFileType("Comic Archive & PDF (*.cbz, *.zip, *.pdf)")
                     {
-                        Patterns = new[] { "*.cbz", "*.zip" }
+                        Patterns = new[] { "*.cbz", "*.zip", "*.pdf" }
                     }
                 }
             });
@@ -272,7 +272,7 @@ public partial class LibraryViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            StatusMessage = $"❌ Lỗi mở file CBZ: {ex.Message}";
+            StatusMessage = $"❌ Lỗi mở file truyện: {ex.Message}";
         }
     }
 

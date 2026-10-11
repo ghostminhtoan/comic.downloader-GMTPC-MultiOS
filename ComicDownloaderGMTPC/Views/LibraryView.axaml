@@ -24,7 +24,7 @@
                                    VerticalAlignment="Center" Margin="0,0,8,0" />
 
                         <TextBox Grid.Column="1" Text="{Binding LibraryRootPath}"
-                                 PlaceholderText="Đường dẫn thư mục chứa truyện đã tải (Folder hoặc file .cbz/.zip)..."
+                                 PlaceholderText="Đường dẫn thư mục chứa truyện đã tải (Folder hoặc file .cbz/.zip/.pdf)..."
                                  Height="32" CornerRadius="5" VerticalContentAlignment="Center"
                                  Background="#0B0F19" BorderBrush="#334155" Foreground="#F8FAFC" FontSize="11"
                                  Margin="0,0,6,0" />
@@ -48,8 +48,8 @@
                         <Button Grid.Column="4" Command="{Binding OpenCbzFileDirectCommand}"
                                 Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold"
                                 Padding="10,5" Height="32" CornerRadius="5"
-                                ToolTip.Tip="Mở nhanh 1 file .cbz hoặc .zip bất kỳ để đọc ngay">
-                            <TextBlock Text="📦 Mở File CBZ/ZIP" FontSize="11" VerticalAlignment="Center" />
+                                ToolTip.Tip="Mở nhanh 1 file .cbz, .zip hoặc .pdf bất kỳ để đọc ngay (tự động lưu và đọc tiếp trang đang dở)">
+                            <TextBlock Text="📦 Mở File CBZ/ZIP/PDF" FontSize="11" VerticalAlignment="Center" />
                         </Button>
                     </Grid>
 
@@ -282,7 +282,21 @@
                             <Button Grid.Column="0" Command="{Binding CloseReaderCommand}" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="5">
                                 <TextBlock Text="← Đóng" FontSize="11" />
                             </Button>
-                            <TextBlock Grid.Column="1" Text="{Binding ChapterTitle}" Foreground="#FDE047" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="8,0" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8,0">
+                                <TextBlock Text="{Binding ChapterTitle}" Foreground="#FDE047" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" MaxWidth="200" TextTrimming="CharacterEllipsis" />
+                                <ComboBox ItemsSource="{Binding PdfBookmarks}"
+                                          SelectedItem="{Binding SelectedPdfBookmark}"
+                                          IsVisible="{Binding HasPdfBookmarks}"
+                                          MinWidth="140" MaxWidth="220" Height="28"
+                                          Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#E11D48"
+                                          FontSize="10.5">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="models:PdfBookmarkItem">
+                                            <TextBlock Text="{Binding DisplayText}" FontWeight="SemiBold" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
                                 <Button Command="{Binding PrevChapterCommand}" IsEnabled="{Binding CanGoPrevChapter}" Background="#1E293B" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4">
                                     <TextBlock Text="⏮" FontSize="11" />

@@ -764,6 +764,8 @@
 | Scan Library | Quét Thư Viện |
 | Choose Folder | Chọn Thư Mục |
 | Open CBZ / ZIP | Mở File CBZ / ZIP |
+| Open CBZ / ZIP / PDF | Mở File CBZ/ZIP/PDF |
+| PDF Outline | Mục lục PDF |
 | All Comics | Tất Cả |
 | Reading In Progress | Đang Đọc |
 | Unread | Chưa Đọc |
@@ -779,3 +781,4 @@
 | Fullscreen | Toàn màn hình |
 | Windowed | Cửa sổ |
 | Exit Reader | Thoát |
+

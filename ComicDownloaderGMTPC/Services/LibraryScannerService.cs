@@ -41,6 +41,11 @@ public sealed class LibraryScannerService
         return !string.IsNullOrEmpty(ext) && ValidArchiveExtensions.Contains(ext);
     }
 
+    public static bool IsPdfFile(string path)
+    {
+        return string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase);
+    }
+
     public Task<List<LibraryComicItem>> ScanLibraryRootAsync(string rootPath, CancellationToken ct = default)
     {
         return Task.Run(() =>
@@ -95,6 +100,7 @@ public sealed class LibraryScannerService
         }
 
         var archiveFiles = files.Where(IsArchiveFile).NaturalSort();
+        var pdfFiles = files.Where(IsPdfFile).NaturalSort();
         var directImages = files.Where(IsImageFile).NaturalSort();
 
         // Kiểm tra xem các thư mục con có phải là thư mục chương chứa ảnh không
@@ -118,10 +124,10 @@ public sealed class LibraryScannerService
             }
         }
 
-        // Nếu thư mục hiện tại có các chương con hoặc có các file .cbz/.zip -> Đây là 1 Bộ Truyện
-        if (chapterDirs.Count > 0 || archiveFiles.Count > 0)
+        // Nếu thư mục hiện tại có các chương con hoặc có các file .cbz/.zip/.pdf -> Đây là 1 Bộ Truyện
+        if (chapterDirs.Count > 0 || archiveFiles.Count > 0 || pdfFiles.Count > 0)
         {
-            var comic = BuildComicItem(currentDir, rootDir, chapterDirs, archiveFiles);
+            var comic = BuildComicItem(currentDir, rootDir, chapterDirs, archiveFiles, pdfFiles);
             if (comic.Chapters.Count > 0)
             {
                 results.Add(comic);
@@ -143,7 +149,7 @@ public sealed class LibraryScannerService
             {
                 (currentDir, directImages)
             };
-            var comic = BuildComicItem(currentDir, rootDir, singleChapterList, new List<string>());
+            var comic = BuildComicItem(currentDir, rootDir, singleChapterList, new List<string>(), new List<string>());
             if (comic.Chapters.Count > 0)
             {
                 results.Add(comic);
@@ -163,7 +169,8 @@ public sealed class LibraryScannerService
         string comicDir,
         string rootDir,
         List<(string DirPath, List<string> ImageFiles)> chapterDirs,
-        List<string> archiveFiles)
+        List<string> archiveFiles,
+        List<string> pdfFiles)
     {
         string cleanComicDir = comicDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         string title = Path.GetFileName(cleanComicDir);
@@ -204,6 +211,7 @@ public sealed class LibraryScannerService
                 Title = chTitle,
                 LocalPath = dirPath,
                 IsCbz = false,
+                IsPdf = false,
                 TotalPages = imgFiles.Count,
                 LastReadPage = lastRead,
                 LastModified = lastMod
@@ -232,6 +240,7 @@ public sealed class LibraryScannerService
                 Title = chTitle,
                 LocalPath = archivePath,
                 IsCbz = true,
+                IsPdf = false,
                 TotalPages = pageCount,
                 LastReadPage = lastRead,
                 LastModified = lastMod
@@ -244,6 +253,38 @@ public sealed class LibraryScannerService
             }
         }
 
+        // 3. Nạp các file .pdf (mỗi file .pdf là 1 mục liền mạch + kèm danh sách mục lục chương nếu có)
+        foreach (string pdfPath in pdfFiles)
+        {
+            string chTitle = Path.GetFileNameWithoutExtension(pdfPath);
+            int lastRead = ReadProgressStore.Instance.GetLastReadPage(pdfPath);
+            DateTime lastMod = DateTime.MinValue;
+            try { lastMod = File.GetLastWriteTime(pdfPath); } catch { }
+
+            var pdfMeta = PdfComicParser.Instance.InspectPdf(pdfPath);
+            if (pdfMeta.Pages.Count <= 0) continue;
+
+            comic.Chapters.Add(new LibraryChapterItem
+            {
+                Index = idx++,
+                Title = chTitle,
+                LocalPath = pdfPath,
+                IsCbz = false,
+                IsPdf = true,
+                PdfBookmarks = pdfMeta.Bookmarks,
+                TotalPages = pdfMeta.Pages.Count,
+                LastReadPage = lastRead,
+                LastModified = lastMod
+            });
+
+            if (string.IsNullOrEmpty(comic.CoverFilePath) &&
+                string.IsNullOrEmpty(comic.CoverArchivePath) &&
+                string.IsNullOrEmpty(comic.CoverPdfPath))
+            {
+                comic.CoverPdfPath = pdfPath;
+            }
+        }
+
         comic.RefreshReadStatus();
         return comic;
     }
@@ -252,16 +293,33 @@ public sealed class LibraryScannerService
     {
         if (string.IsNullOrWhiteSpace(targetPath)) return null;
 
-        if (File.Exists(targetPath) && IsArchiveFile(targetPath))
+        if (File.Exists(targetPath))
         {
-            string dir = Path.GetDirectoryName(targetPath) ?? string.Empty;
-            var comic = BuildComicItem(
-                string.IsNullOrEmpty(dir) ? targetPath : dir,
-                dir,
-                new List<(string, List<string>)>(),
-                new List<string> { targetPath });
-            comic.Title = Path.GetFileNameWithoutExtension(targetPath);
-            return comic;
+            if (IsArchiveFile(targetPath))
+            {
+                string dir = Path.GetDirectoryName(targetPath) ?? string.Empty;
+                var comic = BuildComicItem(
+                    string.IsNullOrEmpty(dir) ? targetPath : dir,
+                    dir,
+                    new List<(string, List<string>)>(),
+                    new List<string> { targetPath },
+                    new List<string>());
+                comic.Title = Path.GetFileNameWithoutExtension(targetPath);
+                return comic;
+            }
+
+            if (IsPdfFile(targetPath))
+            {
+                string dir = Path.GetDirectoryName(targetPath) ?? string.Empty;
+                var comic = BuildComicItem(
+                    string.IsNullOrEmpty(dir) ? targetPath : dir,
+                    dir,
+                    new List<(string, List<string>)>(),
+                    new List<string>(),
+                    new List<string> { targetPath });
+                comic.Title = Path.GetFileNameWithoutExtension(targetPath);
+                return comic;
+            }
         }
 
         if (Directory.Exists(targetPath))
@@ -273,6 +331,7 @@ public sealed class LibraryScannerService
                     targetPath,
                     targetPath,
                     new List<(string, List<string>)> { (targetPath, directImgs) },
+                    new List<string>(),
                     new List<string>());
             }
         }
@@ -344,6 +403,12 @@ public sealed class LibraryScannerService
     {
         try
         {
+            if (!string.IsNullOrEmpty(comic.CoverPdfPath) && File.Exists(comic.CoverPdfPath) &&
+                string.IsNullOrEmpty(comic.CoverFilePath) && string.IsNullOrEmpty(comic.CoverArchivePath))
+            {
+                return PdfComicParser.Instance.DecodeCoverThumbnail(comic.CoverPdfPath, 220);
+            }
+
             byte[]? rawBytes = null;
             if (!string.IsNullOrEmpty(comic.CoverFilePath) && File.Exists(comic.CoverFilePath))
             {

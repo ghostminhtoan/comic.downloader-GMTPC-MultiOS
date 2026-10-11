@@ -206,10 +206,28 @@
                                 IsEnabled="{Binding CanGoNextChapter}"
                                 Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
                                 Foreground="#E2E8F0" FontWeight="SemiBold"
-                                Padding="10,6" CornerRadius="6" Margin="0,2,0,2"
+                                Padding="10,6" CornerRadius="6" Margin="0,2,8,2"
                                 ToolTip.Tip="Chương tiếp theo (Ctrl + →)">
                             <TextBlock Text="Chap sau ⏭" FontSize="11" />
                         </Button>
+
+                        <!-- Mục lục PDF (chỉ hiển thị khi đọc file .pdf có chứa Bookmarks / Outlines) -->
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                                    IsVisible="{Binding HasPdfBookmarks}" Margin="4,2,0,2">
+                            <TextBlock Text="📑 Mục lục PDF:" Foreground="#FB7185" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
+                            <ComboBox ItemsSource="{Binding PdfBookmarks}"
+                                      SelectedItem="{Binding SelectedPdfBookmark}"
+                                      MinWidth="180" MaxWidth="270" Height="32"
+                                      Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#E11D48"
+                                      FontSize="11.5"
+                                      ToolTip.Tip="Nhảy nhanh tới chương nằm bên trong file PDF">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:PdfBookmarkItem">
+                                        <TextBlock Text="{Binding DisplayText}" FontWeight="SemiBold" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </StackPanel>
                     </WrapPanel>
 
                     <!-- Cột 2: Nút Toàn màn hình -->

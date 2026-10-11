@@ -30,7 +30,33 @@ public sealed class ComicReaderService
 
             try
             {
-                if (chapter.IsCbz || LibraryScannerService.IsArchiveFile(chapter.LocalPath))
+                if (chapter.IsPdf || LibraryScannerService.IsPdfFile(chapter.LocalPath))
+                {
+                    if (!File.Exists(chapter.LocalPath)) return pages;
+
+                    var pdfMeta = PdfComicParser.Instance.InspectPdf(chapter.LocalPath);
+                    if (pdfMeta.Bookmarks.Count > 0 && chapter.PdfBookmarks.Count == 0)
+                    {
+                        chapter.PdfBookmarks = pdfMeta.Bookmarks;
+                    }
+
+                    for (int i = 0; i < pdfMeta.Pages.Count; i++)
+                    {
+                        if (ct.IsCancellationRequested) break;
+                        var pInfo = pdfMeta.Pages[i];
+                        pages.Add(new ReaderPageItem
+                        {
+                            Index = i,
+                            Title = $"Trang {i + 1}",
+                            SourcePath = chapter.LocalPath,
+                            ArchiveEntryFullName = string.Empty,
+                            IsPdfEntry = true,
+                            PdfPageIndex = i,
+                            FileSizeBytes = pInfo.StreamLength
+                        });
+                    }
+                }
+                else if (chapter.IsCbz || LibraryScannerService.IsArchiveFile(chapter.LocalPath))
                 {
                     if (!File.Exists(chapter.LocalPath)) return pages;
 
@@ -184,6 +210,12 @@ public sealed class ComicReaderService
     {
         try
         {
+            if (page.IsPdfEntry)
+            {
+                if (!File.Exists(page.SourcePath)) return null;
+                return PdfComicParser.Instance.DecodePageBitmap(page.SourcePath, page.PdfPageIndex);
+            }
+
             byte[]? rawBytes = null;
 
             if (page.IsArchiveEntry)

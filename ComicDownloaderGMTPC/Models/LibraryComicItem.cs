@@ -20,6 +20,8 @@ public partial class LibraryComicItem : ObservableObject
 
     public string? CoverArchiveEntry { get; set; }
 
+    public string? CoverPdfPath { get; set; }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasCover))]
     private Bitmap? _cover;

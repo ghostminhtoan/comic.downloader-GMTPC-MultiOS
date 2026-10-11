@@ -69,16 +69,31 @@ public partial class ComicReaderWindow : Window
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
         if (listBox == null) return;
 
+        var targetItem = vm.Pages[pageIndex];
         _isProgrammaticScroll = true;
         try
         {
-            listBox.ScrollIntoView(vm.Pages[pageIndex]);
+            listBox.ScrollIntoView(targetItem);
         }
         catch { }
-        finally
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => _isProgrammaticScroll = false, Avalonia.Threading.DispatcherPriority.Background);
-        }
+            try
+            {
+                if (pageIndex >= 0 && pageIndex < vm.Pages.Count)
+                {
+                    listBox.ScrollIntoView(vm.Pages[pageIndex]);
+                }
+            }
+            catch { }
+            finally
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => _isProgrammaticScroll = false,
+                    Avalonia.Threading.DispatcherPriority.Background);
+            }
+        }, Avalonia.Threading.DispatcherPriority.Loaded);
     }
 
     private void OnVmFullScreenChangedRequested(bool fullScreen)

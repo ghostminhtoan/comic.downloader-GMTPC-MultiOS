@@ -1,8 +1,10 @@
 using System;
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.ViewModels;
 
@@ -13,18 +15,146 @@ public partial class LibraryView : UserControl
     private Point _inlinePressPoint;
     private long _inlinePressTick;
     private bool _hasScannedOnce;
+    private bool _isInlineProgrammaticScroll;
+    private LibraryViewModel? _subscribedLibVm;
+    private ComicReaderViewModel? _subscribedInlineReaderVm;
 
     public LibraryView()
     {
         InitializeComponent();
 
         AttachedToVisualTree += OnLibraryAttachedToVisualTree;
+        DataContextChanged += OnLibraryDataContextChanged;
+
+        AddHandler(ScrollViewer.ScrollChangedEvent, OnInlineReaderScrollChanged, RoutingStrategies.Bubble);
 
         var inlineViewport = this.FindControl<Panel>("InlineReaderViewportPanel");
         if (inlineViewport != null)
         {
             inlineViewport.AddHandler(PointerPressedEvent, OnInlineViewportPressed, RoutingStrategies.Tunnel);
             inlineViewport.AddHandler(PointerReleasedEvent, OnInlineViewportReleased, RoutingStrategies.Tunnel);
+        }
+    }
+
+    private void OnLibraryDataContextChanged(object? sender, EventArgs e)
+    {
+        if (_subscribedLibVm != null)
+        {
+            _subscribedLibVm.PropertyChanged -= OnLibVmPropertyChanged;
+            _subscribedLibVm = null;
+        }
+
+        if (DataContext is LibraryViewModel vm)
+        {
+            _subscribedLibVm = vm;
+            vm.PropertyChanged += OnLibVmPropertyChanged;
+            AttachInlineReaderVm(vm.InlineReaderVm);
+        }
+        else
+        {
+            AttachInlineReaderVm(null);
+        }
+    }
+
+    private void OnLibVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(LibraryViewModel.InlineReaderVm) && DataContext is LibraryViewModel vm)
+        {
+            AttachInlineReaderVm(vm.InlineReaderVm);
+        }
+    }
+
+    private void AttachInlineReaderVm(ComicReaderViewModel? readerVm)
+    {
+        if (_subscribedInlineReaderVm != null)
+        {
+            _subscribedInlineReaderVm.ScrollToPageRequested -= OnInlineVmScrollToPageRequested;
+            _subscribedInlineReaderVm = null;
+        }
+
+        if (readerVm != null)
+        {
+            _subscribedInlineReaderVm = readerVm;
+            readerVm.ScrollToPageRequested += OnInlineVmScrollToPageRequested;
+        }
+    }
+
+    private void OnInlineVmScrollToPageRequested(int pageIndex)
+    {
+        var readerVm = _subscribedInlineReaderVm;
+        if (readerVm == null || pageIndex < 0 || pageIndex >= readerVm.Pages.Count) return;
+
+        var listBox = this.FindControl<ListBox>("InlineReaderPagesListBox");
+        if (listBox == null) return;
+
+        _isInlineProgrammaticScroll = true;
+        try
+        {
+            listBox.ScrollIntoView(readerVm.Pages[pageIndex]);
+        }
+        catch { }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                if (pageIndex >= 0 && pageIndex < readerVm.Pages.Count)
+                {
+                    listBox.ScrollIntoView(readerVm.Pages[pageIndex]);
+                }
+            }
+            catch { }
+            finally
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => _isInlineProgrammaticScroll = false,
+                    Avalonia.Threading.DispatcherPriority.Background);
+            }
+        }, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    private void OnInlineReaderScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        if (_isInlineProgrammaticScroll) return;
+        var readerVm = _subscribedInlineReaderVm;
+        if (readerVm == null || !readerVm.IsScrollMode || readerVm.Pages.Count == 0) return;
+
+        var listBox = this.FindControl<ListBox>("InlineReaderPagesListBox");
+        if (listBox == null) return;
+
+        double viewportCenterY = listBox.Bounds.Height * 0.45;
+        int bestPageIndex = -1;
+        double bestDist = double.MaxValue;
+
+        foreach (var child in listBox.GetVisualDescendants())
+        {
+            if (child is ListBoxItem container && container.DataContext is ReaderPageItem page)
+            {
+                var pos = container.TranslatePoint(new Point(0, 0), listBox);
+                if (pos.HasValue)
+                {
+                    double top = pos.Value.Y;
+                    double bottom = top + container.Bounds.Height;
+                    if (top <= viewportCenterY && bottom >= viewportCenterY)
+                    {
+                        bestPageIndex = page.Index;
+                        break;
+                    }
+
+                    double mid = (top + bottom) * 0.5;
+                    double dist = Math.Abs(mid - viewportCenterY);
+                    if (dist < bestDist)
+                    {
+                        bestDist = dist;
+                        bestPageIndex = page.Index;
+                    }
+                }
+            }
+        }
+
+        if (bestPageIndex >= 0)
+        {
+            readerVm.UpdatePageIndexFromScroll(bestPageIndex);
         }
     }
 

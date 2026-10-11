@@ -1,7 +1,18 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ComicDownloaderGMTPC.Models;
+
+public sealed class PdfBookmarkItem
+{
+    public string Title { get; set; } = string.Empty;
+    public int PageIndex { get; set; }
+    public int DisplayPageNumber => PageIndex + 1;
+    public string DisplayLabel => $"{Title} (Tr.{DisplayPageNumber})";
+    public string DisplayText => DisplayLabel;
+}
 
 public partial class LibraryChapterItem : ObservableObject
 {
@@ -10,11 +21,15 @@ public partial class LibraryChapterItem : ObservableObject
     public string Title { get; set; } = string.Empty;
 
     /// <summary>
-    /// Đường dẫn tới thư mục chương hoặc đường dẫn tới file .cbz/.zip.
+    /// Đường dẫn tới thư mục chương hoặc đường dẫn tới file .cbz/.zip/.pdf.
     /// </summary>
     public string LocalPath { get; set; } = string.Empty;
 
     public bool IsCbz { get; set; }
+
+    public bool IsPdf { get; set; }
+
+    public List<PdfBookmarkItem> PdfBookmarks { get; set; } = new();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ProgressPercent))]
@@ -37,9 +52,9 @@ public partial class LibraryChapterItem : ObservableObject
 
     public DateTime LastModified { get; set; }
 
-    public string TypeBadgeText => IsCbz ? "CBZ" : "FOLDER";
+    public string TypeBadgeText => IsPdf ? "PDF" : (IsCbz ? "CBZ" : "FOLDER");
 
-    public string TypeBadgeBackground => IsCbz ? "#7C3AED" : "#0284C7";
+    public string TypeBadgeBackground => IsPdf ? "#E11D48" : (IsCbz ? "#7C3AED" : "#0284C7");
 
     public bool HasReadProgress => LastReadPage > 0;
 
@@ -56,12 +71,29 @@ public partial class LibraryChapterItem : ObservableObject
         {
             if (LastReadPage <= 0)
             {
+                if (IsPdf && PdfBookmarks.Count > 0)
+                {
+                    return TotalPages > 0
+                        ? $"Chưa đọc ({TotalPages} trang • {PdfBookmarks.Count} mục lục)"
+                        : $"Chưa đọc ({PdfBookmarks.Count} mục lục)";
+                }
                 return TotalPages > 0 ? $"Chưa đọc ({TotalPages} trang)" : "Chưa đọc";
             }
 
             if (TotalPages > 0 && LastReadPage >= TotalPages)
             {
                 return $"✓ Đã đọc xong ({TotalPages}/{TotalPages} trang)";
+            }
+
+            if (IsPdf && PdfBookmarks.Count > 0)
+            {
+                var activeBm = PdfBookmarks.LastOrDefault(b => b.DisplayPageNumber <= LastReadPage);
+                if (activeBm != null && !string.IsNullOrWhiteSpace(activeBm.Title))
+                {
+                    return TotalPages > 0
+                        ? $"Đang đọc: Trang {LastReadPage}/{TotalPages} ({ProgressPercent:0}% • {activeBm.Title})"
+                        : $"Đang đọc: Trang {LastReadPage} ({activeBm.Title})";
+                }
             }
 
             return TotalPages > 0

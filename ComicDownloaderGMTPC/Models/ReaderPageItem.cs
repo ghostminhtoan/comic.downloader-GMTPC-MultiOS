@@ -23,6 +23,10 @@ public partial class ReaderPageItem : ObservableObject
 
     public bool IsArchiveEntry => !string.IsNullOrEmpty(ArchiveEntryFullName);
 
+    public bool IsPdfEntry { get; set; }
+
+    public int PdfPageIndex { get; set; }
+
     public long FileSizeBytes { get; set; }
 
     [ObservableProperty]

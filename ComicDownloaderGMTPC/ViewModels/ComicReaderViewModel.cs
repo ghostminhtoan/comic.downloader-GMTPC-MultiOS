@@ -18,13 +18,21 @@ public partial class ComicReaderViewModel : ViewModelBase
     private CancellationTokenSource? _loadCts;
     private CancellationTokenSource? _prefetchCts;
     private bool _suppressChapterSelectionChanged;
+    private bool _suppressPdfBookmarkSelectionChanged;
     private bool _suppressScrollSync;
 
     public LibraryComicItem? ParentComic { get; private set; }
 
     public ObservableCollection<LibraryChapterItem> ChapterList { get; } = new();
 
+    public ObservableCollection<PdfBookmarkItem> PdfBookmarks { get; } = new();
+
     public ObservableCollection<ReaderPageItem> Pages { get; } = new();
+
+    [ObservableProperty]
+    private PdfBookmarkItem? _selectedPdfBookmark;
+
+    public bool HasPdfBookmarks => PdfBookmarks.Count > 0;
 
     [ObservableProperty]
     private string _comicTitle = string.Empty;
@@ -213,6 +221,17 @@ public partial class ComicReaderViewModel : ViewModelBase
         _ = LoadChapterInternalAsync(value);
     }
 
+    partial void OnSelectedPdfBookmarkChanged(PdfBookmarkItem? value)
+    {
+        if (_suppressPdfBookmarkSelectionChanged || value == null || Pages.Count == 0) return;
+        int targetIndex = Math.Clamp(value.PageIndex, 0, Pages.Count - 1);
+        if (CurrentPageIndex != targetIndex)
+        {
+            CurrentPageIndex = targetIndex;
+            ShowTransientToast($"📑 Đã chuyển tới mục lục PDF: {value.Title} (Trang {targetIndex + 1})");
+        }
+    }
+
     partial void OnCurrentPageIndexChanged(int value)
     {
         if (Pages.Count == 0) return;
@@ -223,12 +242,33 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
 
         UpdateCurrentFlipPages();
+        SyncActivePdfBookmark(clamped);
         RecordReadingProgress(clamped);
         TriggerPrefetch(clamped);
 
         if (IsScrollMode && !_suppressScrollSync)
         {
             ScrollToPageRequested?.Invoke(clamped);
+        }
+    }
+
+    private void SyncActivePdfBookmark(int pageIndex)
+    {
+        if (PdfBookmarks.Count == 0) return;
+        PdfBookmarkItem? active = null;
+        for (int i = 0; i < PdfBookmarks.Count; i++)
+        {
+            if (PdfBookmarks[i].PageIndex <= pageIndex)
+                active = PdfBookmarks[i];
+            else
+                break;
+        }
+
+        if (!ReferenceEquals(SelectedPdfBookmark, active))
+        {
+            _suppressPdfBookmarkSelectionChanged = true;
+            SelectedPdfBookmark = active;
+            _suppressPdfBookmarkSelectionChanged = false;
         }
     }
 
@@ -262,6 +302,12 @@ public partial class ComicReaderViewModel : ViewModelBase
         Pages.Clear();
         TotalPages = 0;
 
+        _suppressPdfBookmarkSelectionChanged = true;
+        PdfBookmarks.Clear();
+        SelectedPdfBookmark = null;
+        _suppressPdfBookmarkSelectionChanged = false;
+        OnPropertyChanged(nameof(HasPdfBookmarks));
+
         try
         {
             var loadedPages = await _readerService.LoadChapterPagesAsync(chapter, ct);
@@ -271,6 +317,17 @@ public partial class ComicReaderViewModel : ViewModelBase
             {
                 Pages.Add(p);
             }
+
+            if (chapter.PdfBookmarks != null && chapter.PdfBookmarks.Count > 0)
+            {
+                _suppressPdfBookmarkSelectionChanged = true;
+                foreach (var bm in chapter.PdfBookmarks)
+                {
+                    PdfBookmarks.Add(bm);
+                }
+                _suppressPdfBookmarkSelectionChanged = false;
+            }
+            OnPropertyChanged(nameof(HasPdfBookmarks));
 
             TotalPages = Pages.Count;
             chapter.TotalPages = TotalPages;
@@ -284,6 +341,7 @@ public partial class ComicReaderViewModel : ViewModelBase
             _suppressScrollSync = false;
 
             UpdateCurrentFlipPages();
+            SyncActivePdfBookmark(startIndex);
             RecordReadingProgress(startIndex);
 
             // Nạp ngay trang mục tiêu trước khi cuộn tới
@@ -300,7 +358,8 @@ public partial class ComicReaderViewModel : ViewModelBase
 
             if (startIndex > 0)
             {
-                ShowTransientToast($"📖 Đã khôi phục vị trí đọc: Trang {startIndex + 1}/{TotalPages}");
+                string bookmarkHint = SelectedPdfBookmark != null ? $" ({SelectedPdfBookmark.Title})" : string.Empty;
+                ShowTransientToast($"📖 Đã khôi phục vị trí đọc: Trang {startIndex + 1}/{TotalPages}{bookmarkHint}");
                 Dispatcher.UIThread.Post(() => ScrollToPageRequested?.Invoke(startIndex), DispatcherPriority.Background);
             }
             else

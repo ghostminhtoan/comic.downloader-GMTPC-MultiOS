@@ -49,6 +49,8 @@ File quy chuẩn bảng ánh xạ ngôn ngữ và giao diện song ngữ Tiếng
 | Library Tab | Tab Thư Viện (Đọc Truyện) | Tab Header |
 | Scan Library | Quét Thư Viện | Library Action |
 | Open CBZ / ZIP | Mở File CBZ / ZIP | Library Action |
+| Open CBZ / ZIP / PDF | Mở File CBZ/ZIP/PDF | Library Action |
+| PDF Outline | Mục lục PDF | Reader Option |
 | Continue Reading | Đọc Tiếp | Reader Action |
 | Vertical Scroll | Cuộn Dọc | Reader Mode |
 | Page Flip | Lật Trang | Reader Mode |

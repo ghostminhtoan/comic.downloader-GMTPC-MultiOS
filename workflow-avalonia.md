@@ -2225,3 +2225,26 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 - **Nghiệm Thu**:
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+### 15.67 Hỗ Trợ Đọc Truyện File PDF (`.pdf`) Liên Mạch + Tự Động Bóc Tách Mục Lục Chương PDF (`📑 Mục lục PDF` / `/Outlines`) & Tự Động Khôi Phục Trang Đang Đọc Dở (`PdfComicParser.cs`, `ComicReaderService.cs`, `ComicReaderViewModel.cs`) (2026-10-11)
+- **Mục Tiêu & Quyết Định Kiến Trúc (Phương Án 2 Đã Chốt)**:
+  1. **Đọc Trực Tiếp File `.pdf` Đa Nền Tảng (Zero-External-Dependency & Zero-RAM-Bloat)**:
+     - Thiết kế bộ phân tích luồng PDF chuyên dụng `Services/PdfComicParser.cs` không cần nạp toàn bộ file PDF vào RAM: Quét cấu trúc đối tượng PDF (`obj ... endobj`), nhảy qua vùng nhị phân (`fs.Seek(length, SeekOrigin.Current)`) để chỉ lập chỉ mục tọa độ byte (`StreamOffset`, `StreamLength`, `Width`, `Height`, `BitsPerComponent`, `ColorSpace`, `Filter`, `Predictor`) của từng ảnh trang truyện (`/Subtype /Image`).
+     - Giải mã theo yêu cầu (On-Demand Stream Seeking) từng trang ảnh đang hiển thị thông qua `FileStream.Seek`: Hỗ trợ đầy đủ cả ảnh nén `/DCTDecode` (JPEG trực tiếp), `/JPXDecode`, lẫn `/FlateDecode` (Zlib/Deflate stream có hoặc không có PNG Predictor `10..15` Sub/Up/Average/Paeth từ `SkiaSharp.SKDocument.CreatePdf`, hỗ trợ đủ hệ màu `/DeviceRGB`, `/DeviceGray`, `/Indexed` bảng màu, `/DeviceCMYK`).
+  2. **Hiển Thị 1 Mục PDF Liên Mạch Kèm Mục Lục Chương Nội Bộ (`📑 Mục lục PDF` / `/Outlines`)**:
+     - Mỗi file `.pdf` hiển thị gọn thành 1 mục mang nhãn đỏ hồng `PDF` (`#E11D48`) để đọc liên mạch xuyên suốt từ đầu đến cuối file.
+     - Tự động giải mã cây `/Outlines` (kể cả chuỗi Unicode tiếng Việt mã hóa UTF-16BE Hex `<FEFF...>` do `FilePackerService.cs` tạo ra cũng như chuỗi literal `(...)` có `/Dest [pageObj 0 R ...]`) thành danh sách `PdfBookmarkItem` (`Title`, `PageIndex`).
+     - Khi mở file PDF có chứa mục lục chương, thanh điều khiển trên cùng (Top Overlay Bar) tự động hiển thị hộp chọn **`📑 Mục lục PDF:`** (`ComboBox`), tự động cập nhật chương hiện tại khi người dùng cuộn/lật trang và cho phép chọn chương bất kỳ để nhảy thẳng tới trang bắt đầu của chương đó.
+  3. **Tự Động Lưu & Khôi Phục Chính Xác Trang Đang Đọc Dở (`Resume LastReadPage`)**:
+     - Mỗi khi cuộn trang hoặc lật trang trên file `.pdf` (cả khi mở từ danh sách Thư viện lẫn khi mở nhanh qua nút **`📦 Mở File CBZ/ZIP/PDF`**), vị trí trang hiện tại được lưu tức thì vào `ReadProgressStore` (`read_progress.json`) theo đường dẫn file `.pdf`.
+     - Ở lần mở đọc tiếp theo, trình đọc tự động khôi phục đúng trang đang đọc dở (`startIndex`), hiển thị thông báo `📖 Đã khôi phục vị trí đọc: Trang X/Y (Tên chương PDF)` và thực hiện `ScrollIntoView` đa pha (`Immediate` + `DispatcherPriority.Loaded`) có khóa `_isProgrammaticScroll` để đảm bảo cuộn chính xác tới trang đích ngay cả với file PDF hàng trăm trang.
+- **Danh Sách File Tạo Mới & Cập Nhật**:
+  - `Services/PdfComicParser.cs` (Tạo mới)
+  - `Models/ReaderPageItem.cs`, `Models/LibraryChapterItem.cs`, `Models/LibraryComicItem.cs`
+  - `Services/LibraryScannerService.cs`, `Services/ComicReaderService.cs`
+  - `ViewModels/ComicReaderViewModel.cs`, `ViewModels/LibraryViewModel.cs`
+  - `Views/ComicReaderWindow.axaml`, `Views/ComicReaderWindow.axaml.cs`, `Views/LibraryView.axaml`, `Views/LibraryView.axaml.cs`
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
