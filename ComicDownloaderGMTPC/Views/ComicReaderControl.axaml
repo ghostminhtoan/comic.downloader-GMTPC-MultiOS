@@ -96,7 +96,7 @@
                             <!-- Ảnh trang truyện -->
                             <Image Source="{Binding Image}"
                                    IsVisible="{Binding HasImage}"
-                                   Stretch="Uniform"
+                                   Stretch="{Binding ImageStretch}"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    RenderOptions.BitmapInterpolationMode="HighQuality" />
@@ -119,14 +119,15 @@
                     <UniformGrid Columns="{Binding FlipGridColumns}" Rows="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <!-- Trang Trái (hoặc Trang Đơn) -->
                         <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}">
-                            <Border Background="#0B1120" Width="560" Height="820" CornerRadius="6"
+                            <Border Background="#0B1120" MinWidth="260" MinHeight="360" CornerRadius="6"
                                     IsVisible="{Binding LeftFlipPage.HasImage, Converter={x:Static BoolConverters.Not}, FallbackValue=True}">
                                 <TextBlock Text="⏳ Đang nạp trang..." Foreground="#4FC3F7" FontSize="14" FontWeight="Bold"
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <Image Source="{Binding LeftFlipPage.Image}"
-                                   Stretch="Uniform"
-                                   MaxHeight="1080"
+                                   Width="{Binding FlipDisplayWidth}"
+                                   Height="{Binding FlipDisplayHeight}"
+                                   Stretch="{Binding FlipImageStretch}"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    RenderOptions.BitmapInterpolationMode="HighQuality" />
@@ -136,8 +137,9 @@
                         <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}"
                                IsVisible="{Binding HasSecondaryPage}">
                             <Image Source="{Binding RightFlipPage.Image}"
-                                   Stretch="Uniform"
-                                   MaxHeight="1080"
+                                   Width="{Binding FlipDisplayWidth}"
+                                   Height="{Binding FlipDisplayHeight}"
+                                   Stretch="{Binding FlipImageStretch}"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    RenderOptions.BitmapInterpolationMode="HighQuality" />
@@ -328,15 +330,17 @@
                                      Columns="5" Rows="1"
                                      IsVisible="{Binding IsToolbarPageTwo}">
 
-                            <!-- BUTTON 6: Pinch Zoom (Làm sau theo yêu cầu người dùng) -->
+                            <!-- BUTTON 6: Pinch Zoom & Smart Zoom & Fit Mode -->
                             <Button Classes="toolbarBtn"
-                                    Command="{Binding PinchZoomPlaceholderCommand}"
-                                    Opacity="0.52"
-                                    ToolTip.Tip="Button 6: Pinch Zoom (Sẽ cập nhật sau)">
-                                <StackPanel Orientation="Horizontal" Spacing="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="🤏" FontSize="18" VerticalAlignment="Center" />
-                                    <TextBlock Text="↔" Foreground="#94A3B8" FontSize="12" FontWeight="Bold" VerticalAlignment="Top" />
-                                </StackPanel>
+                                    Command="{Binding OpenZoomPopupCommand}"
+                                    ToolTip.Tip="Button 6: Zoom &amp; Chế độ Fit khung hình (Fit Width / Fit Height / Stretch Full / Zoom 40%..400%)">
+                                <Grid Width="34" Height="30">
+                                    <TextBlock Text="🔍" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Border Background="#4FC3F7" CornerRadius="3" Padding="2,0"
+                                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-2,-2">
+                                        <TextBlock Text="{Binding FitModeBadgeText}" Foreground="#0F172A" FontSize="8.5" FontWeight="ExtraBold" />
+                                    </Border>
+                                </Grid>
                             </Button>
 
                             <!-- BUTTON 7: Filter (Bộ lọc hình ảnh) -->
@@ -676,6 +680,110 @@
                 </Border>
 
                 <!-- ============================================================= -->
+                <!-- POPUP BUTTON 6: ZOOM & KHUNG HÌNH (SMART ZOOM & FIT PRESETS)  -->
+                <!-- ============================================================= -->
+                <Border IsVisible="{Binding IsZoomPopupOpen}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Width="360"
+                        Background="#F222262E"
+                        BorderBrush="#475569" BorderThickness="1"
+                        CornerRadius="8" Padding="16,14"
+                        BoxShadow="0 10 30 0 #AA000000">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Grid.Column="0" Text="🔍 Thu Phóng &amp; Khung Hình" Foreground="#FFFFFF" FontSize="15" FontWeight="Bold" />
+                            <TextBlock Grid.Column="1" Text="{Binding ZoomPercentText}" Foreground="#4FC3F7" FontSize="14" FontWeight="Bold" />
+                        </Grid>
+
+                        <!-- Thanh kéo Zoom 40% -> 400% -->
+                        <Slider Classes="comicSlider"
+                                Minimum="0.4" Maximum="4.0"
+                                Value="{Binding ZoomLevel}"
+                                SmallChange="0.05" LargeChange="0.2" />
+
+                        <!-- Nút Presets Zoom -->
+                        <Grid ColumnDefinitions="*, *, *, *" ColumnSpacing="6">
+                            <Button Grid.Column="0" Command="{Binding SetZoomPresetCommand}" CommandParameter="1.0"
+                                    Background="#1E293B" Foreground="#E2E8F0" Padding="4,6" CornerRadius="4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                                <TextBlock Text="100%" FontSize="11" FontWeight="Bold" />
+                            </Button>
+                            <Button Grid.Column="1" Command="{Binding SetZoomPresetCommand}" CommandParameter="1.5"
+                                    Background="#1E293B" Foreground="#E2E8F0" Padding="4,6" CornerRadius="4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                                <TextBlock Text="150%" FontSize="11" FontWeight="Bold" />
+                            </Button>
+                            <Button Grid.Column="2" Command="{Binding SetZoomPresetCommand}" CommandParameter="2.0"
+                                    Background="#1E293B" Foreground="#E2E8F0" Padding="4,6" CornerRadius="4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                                <TextBlock Text="200%" FontSize="11" FontWeight="Bold" />
+                            </Button>
+                            <Button Grid.Column="3" Command="{Binding SetZoomPresetCommand}" CommandParameter="3.0"
+                                    Background="#1E293B" Foreground="#E2E8F0" Padding="4,6" CornerRadius="4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                                <TextBlock Text="300%" FontSize="11" FontWeight="Bold" />
+                            </Button>
+                        </Grid>
+
+                        <Border Height="1" Background="#334155" Margin="0,2" />
+
+                        <!-- Chế độ Vừa khung hình (Fit Modes) -->
+                        <TextBlock Text="📐 Chế độ vừa khung màn hình:" Foreground="#94A3B8" FontSize="12" FontWeight="SemiBold" />
+                        <UniformGrid Columns="3" Rows="2">
+                            <!-- Fit Width -->
+                            <Button Command="{Binding SetFitModeCommand}" CommandParameter="FitWidth"
+                                    Background="#1E293B" BorderBrush="#4FC3F7" BorderThickness="1"
+                                    Foreground="#FFFFFF" Padding="4,7" CornerRadius="4" Margin="2" HorizontalAlignment="Stretch">
+                                <TextBlock Text="↔ Fit Width" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Center" />
+                            </Button>
+                            <!-- Fit Height -->
+                            <Button Command="{Binding SetFitModeCommand}" CommandParameter="FitHeight"
+                                    Background="#1E293B" BorderBrush="#4FC3F7" BorderThickness="1"
+                                    Foreground="#FFFFFF" Padding="4,7" CornerRadius="4" Margin="2" HorizontalAlignment="Stretch">
+                                <TextBlock Text="↕ Fit Height" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Center" />
+                            </Button>
+                            <!-- Fit Screen -->
+                            <Button Command="{Binding SetFitModeCommand}" CommandParameter="FitScreen"
+                                    Background="#1E293B" BorderBrush="#4FC3F7" BorderThickness="1"
+                                    Foreground="#FFFFFF" Padding="4,7" CornerRadius="4" Margin="2" HorizontalAlignment="Stretch">
+                                <TextBlock Text="⛶ Fit Screen" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Center" />
+                            </Button>
+                            <!-- Stretch Full -->
+                            <Button Command="{Binding SetFitModeCommand}" CommandParameter="StretchFull"
+                                    Background="#1E293B" BorderBrush="#E91E63" BorderThickness="1"
+                                    Foreground="#FFFFFF" Padding="4,7" CornerRadius="4" Margin="2" HorizontalAlignment="Stretch">
+                                <TextBlock Text="🗖 Stretch Full" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Center" />
+                            </Button>
+                            <!-- Original 1:1 -->
+                            <Button Command="{Binding SetFitModeCommand}" CommandParameter="Original"
+                                    Background="#1E293B" BorderBrush="#64748B" BorderThickness="1"
+                                    Foreground="#FFFFFF" Padding="4,7" CornerRadius="4" Margin="2" HorizontalAlignment="Stretch">
+                                <TextBlock Text="1:1 Gốc" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Center" />
+                            </Button>
+                            <!-- Smart Double-Tap -->
+                            <Button Command="{Binding SmartDoubleTapZoomCommand}"
+                                    Background="#065F46" BorderBrush="#10B981" BorderThickness="1"
+                                    Foreground="#A7F3D0" Padding="4,7" CornerRadius="4" Margin="2" HorizontalAlignment="Stretch">
+                                <TextBlock Text="👆 Đúp Zoom 2x" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" />
+                            </Button>
+                        </UniformGrid>
+
+                        <Border Height="1" Background="#334155" Margin="0,2" />
+
+                        <!-- Tự động cuộn trang (Auto-Scroll Hands-Free) -->
+                        <Grid ColumnDefinitions="Auto, *, Auto" VerticalAlignment="Center">
+                            <Button Grid.Column="0" Command="{Binding ToggleAutoScrollCommand}"
+                                    Background="{Binding AutoScrollButtonBg}" Foreground="#FFFFFF"
+                                    Padding="10,6" CornerRadius="4" FontWeight="Bold">
+                                <TextBlock Text="{Binding AutoScrollButtonText}" FontSize="12" />
+                            </Button>
+                            <Slider Grid.Column="1" Classes="comicSlider"
+                                    Minimum="1" Maximum="10" Margin="10,0"
+                                    Value="{Binding AutoScrollSpeed}"
+                                    VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="{Binding AutoScrollSpeed, StringFormat='Tốc độ: {0:0}'}"
+                                       Foreground="#94A3B8" FontSize="11.5" VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============================================================= -->
                 <!-- POPUP BUTTON 7: FILTER (6 CHECKBOX NHƯ ẢNH CHỤP)              -->
                 <!-- ============================================================= -->
                 <Border IsVisible="{Binding IsFilterPopupOpen}"
@@ -967,6 +1075,21 @@
                                Foreground="#FFFFFF"
                                FontSize="15"
                                FontWeight="Bold" />
+                </Border>
+
+                <!-- Filmstrip Thumbnail Preview nổi khi rê/kéo Slider -->
+                <Border IsVisible="{Binding IsScrubberPreviewVisible}"
+                        Background="#E60F172A" BorderBrush="#4FC3F7" BorderThickness="1.5"
+                        CornerRadius="6" Padding="6" Margin="0,0,0,2"
+                        HorizontalAlignment="Center" BoxShadow="0 4 16 0 #CC000000"
+                        IsHitTestVisible="False">
+                    <StackPanel Spacing="4" HorizontalAlignment="Center">
+                        <Border Width="100" Height="140" Background="#1E293B" CornerRadius="4" ClipToBounds="True">
+                            <Image Source="{Binding ScrubberPreviewPage.Image}" Stretch="Uniform" />
+                        </Border>
+                        <TextBlock Text="{Binding ScrubberPreviewPage.DisplayPageNumber, StringFormat='Trang {0}'}"
+                                   Foreground="#4FC3F7" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Center" />
+                    </StackPanel>
                 </Border>
 
                 <!-- Thanh trượt trang (Seekbar Cyan) -->

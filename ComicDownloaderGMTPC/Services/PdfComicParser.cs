@@ -38,6 +38,7 @@ public sealed class PdfDocumentMetadata
     public DateTime LastWriteTimeUtc { get; set; }
     public List<PdfPageStreamInfo> Pages { get; set; } = new();
     public List<PdfBookmarkItem> Bookmarks { get; set; } = new();
+    public Dictionary<int, long> ObjectOffsets { get; set; } = new();
 }
 
 /// <summary>
@@ -284,35 +285,21 @@ public sealed class PdfComicParser
             TraversePagesNode(pagesRootId);
             if (orderedPageObjIds.Count == 0) return false;
 
+            result.ObjectOffsets = objOffsets;
             var pageObjIdToIndex = new Dictionary<int, int>(orderedPageObjIds.Count);
             for (int i = 0; i < orderedPageObjIds.Count; i++)
             {
                 int pageObjId = orderedPageObjIds[i];
                 pageObjIdToIndex[pageObjId] = i;
 
-                string pageBody = ReadObjectBody(pageObjId, 2048);
-                int imgObjId = ExtractImageObjectIdFromPage(pageBody);
-                long imgObjOffset = (imgObjId > 0 && objOffsets.TryGetValue(imgObjId, out long ioff)) ? ioff : 0;
-
-                int w = 960;
-                int h = 1500;
-                var mbMatch = MediaBoxRegex.Match(pageBody);
-                if (mbMatch.Success)
-                {
-                    if (double.TryParse(mbMatch.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double mw) && mw > 0)
-                        w = (int)Math.Round(mw);
-                    if (double.TryParse(mbMatch.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double mh) && mh > 0)
-                        h = (int)Math.Round(mh);
-                }
-
                 result.Pages.Add(new PdfPageStreamInfo
                 {
                     PageIndex = i,
                     PageObjectId = pageObjId,
-                    ImageObjectId = imgObjId,
-                    ObjectHeaderOffset = imgObjOffset,
-                    Width = w,
-                    Height = h
+                    ImageObjectId = 0,
+                    ObjectHeaderOffset = 0,
+                    Width = 960,
+                    Height = 1500
                 });
             }
 
@@ -697,16 +684,11 @@ public sealed class PdfComicParser
         }
     }
 
-    private static bool EnsureImageStreamResolved(FileStream fs, PdfPageStreamInfo pageInfo)
+    private static bool EnsureImageStreamResolved(FileStream fs, PdfPageStreamInfo pageInfo, PdfDocumentMetadata? meta = null)
     {
         if (pageInfo.StreamOffset > 0 && pageInfo.StreamLength > 0)
         {
             return true;
-        }
-
-        if (pageInfo.ObjectHeaderOffset <= 0 || pageInfo.ObjectHeaderOffset >= fs.Length)
-        {
-            return false;
         }
 
         lock (pageInfo)
@@ -714,6 +696,31 @@ public sealed class PdfComicParser
             if (pageInfo.StreamOffset > 0 && pageInfo.StreamLength > 0)
             {
                 return true;
+            }
+
+            if (pageInfo.ObjectHeaderOffset <= 0 && pageInfo.PageObjectId > 0 && meta != null)
+            {
+                if (meta.ObjectOffsets.TryGetValue(pageInfo.PageObjectId, out long pageOffset) && pageOffset > 0 && pageOffset < fs.Length)
+                {
+                    fs.Seek(pageOffset, SeekOrigin.Begin);
+                    byte[] pageHeaderBuf = new byte[(int)Math.Min(4096, fs.Length - pageOffset)];
+                    int pRead = fs.Read(pageHeaderBuf, 0, pageHeaderBuf.Length);
+                    if (pRead > 0)
+                    {
+                        string pageChunk = Encoding.Latin1.GetString(pageHeaderBuf, 0, pRead);
+                        int imgObjId = ExtractImageObjectIdFromPage(pageChunk);
+                        if (imgObjId > 0 && meta.ObjectOffsets.TryGetValue(imgObjId, out long imgOffset))
+                        {
+                            pageInfo.ImageObjectId = imgObjId;
+                            pageInfo.ObjectHeaderOffset = imgOffset;
+                        }
+                    }
+                }
+            }
+
+            if (pageInfo.ObjectHeaderOffset <= 0 || pageInfo.ObjectHeaderOffset >= fs.Length)
+            {
+                return false;
             }
 
             fs.Seek(pageInfo.ObjectHeaderOffset, SeekOrigin.Begin);
@@ -768,7 +775,7 @@ public sealed class PdfComicParser
 
             using (var fs = new FileStream(pdfPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536))
             {
-                if (!EnsureImageStreamResolved(fs, pageInfo)) return null;
+                if (!EnsureImageStreamResolved(fs, pageInfo, meta)) return null;
                 if (pageInfo.StreamLength <= 0 || pageInfo.StreamLength > 120 * 1024 * 1024) return null;
                 if (pageInfo.StreamOffset + pageInfo.StreamLength > fs.Length) return null;
 
@@ -804,7 +811,7 @@ public sealed class PdfComicParser
 
             using (var fs = new FileStream(pdfPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536))
             {
-                if (!EnsureImageStreamResolved(fs, pageInfo)) return null;
+                if (!EnsureImageStreamResolved(fs, pageInfo, meta)) return null;
                 if (pageInfo.StreamLength <= 0 || pageInfo.StreamLength > 80 * 1024 * 1024) return null;
                 if (pageInfo.StreamOffset + pageInfo.StreamLength > fs.Length) return null;
 

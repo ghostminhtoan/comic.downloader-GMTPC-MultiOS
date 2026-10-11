@@ -1,9 +1,19 @@
 using System;
 using Avalonia;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ComicDownloaderGMTPC.Models;
+
+public enum ImageFitMode
+{
+    FitWidth = 0,    // Khớp chiều ngang (Fit Width)
+    FitHeight = 1,   // Khớp chiều dọc (Fit Height)
+    FitScreen = 2,   // Khớp trọn vẹn màn hình (Fit Screen / Best Fit)
+    StretchFull = 3, // Kéo giãn tràn màn hình (Stretch Full)
+    Original = 4     // Kích thước gốc 1:1 (Original)
+}
 
 public partial class ReaderPageItem : ObservableObject
 {
@@ -38,20 +48,61 @@ public partial class ReaderPageItem : ObservableObject
     public int AspectHeight => _aspectHeight;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayHeight))]
     private double _displayWidth = 900;
+
+    [ObservableProperty]
+    private double _displayHeight = 1350;
+
+    [ObservableProperty]
+    private Stretch _imageStretch = Stretch.Uniform;
 
     [ObservableProperty]
     private Thickness _pageMargin = new(0);
 
-    /// <summary>
-    /// Chiều cao cố định theo đúng tỉ lệ khung hình thực của trang truyện,
-    /// giữ nguyên 100% trước khi tải, sau khi tải và sau khi giải phóng RAM để chống nhảy thanh cuộn.
-    /// </summary>
-    public double DisplayHeight =>
-        _aspectWidth > 0 && _aspectHeight > 0
-            ? Math.Max(180, Math.Round(DisplayWidth * _aspectHeight / _aspectWidth))
-            : Math.Round(DisplayWidth * 1.5);
+    public void RecalculateDimensions(ImageFitMode fitMode, double viewportWidth, double viewportHeight, double zoomLevel)
+    {
+        double effectiveZoom = Math.Max(0.2, zoomLevel);
+        double vw = Math.Max(240, viewportWidth);
+        double vh = Math.Max(240, viewportHeight);
+        int aw = _aspectWidth > 0 ? _aspectWidth : 900;
+        int ah = _aspectHeight > 0 ? _aspectHeight : 1350;
+
+        switch (fitMode)
+        {
+            case ImageFitMode.FitWidth:
+                DisplayWidth = Math.Round(vw * effectiveZoom);
+                DisplayHeight = Math.Max(180, Math.Round(DisplayWidth * ah / aw));
+                ImageStretch = Stretch.Uniform;
+                break;
+
+            case ImageFitMode.FitHeight:
+                DisplayHeight = Math.Round(vh * effectiveZoom);
+                DisplayWidth = Math.Max(120, Math.Round(DisplayHeight * aw / ah));
+                ImageStretch = Stretch.Uniform;
+                break;
+
+            case ImageFitMode.FitScreen:
+                double scaleW = vw / aw;
+                double scaleH = vh / ah;
+                double scale = Math.Min(scaleW, scaleH) * effectiveZoom;
+                DisplayWidth = Math.Round(aw * scale);
+                DisplayHeight = Math.Round(ah * scale);
+                ImageStretch = Stretch.Uniform;
+                break;
+
+            case ImageFitMode.StretchFull:
+                DisplayWidth = Math.Round(vw * effectiveZoom);
+                DisplayHeight = Math.Round(vh * effectiveZoom);
+                ImageStretch = Stretch.Fill;
+                break;
+
+            case ImageFitMode.Original:
+                DisplayWidth = Math.Round(aw * effectiveZoom);
+                DisplayHeight = Math.Round(ah * effectiveZoom);
+                ImageStretch = Stretch.Uniform;
+                break;
+        }
+    }
 
     public void SetKnownDimensions(int width, int height)
     {
@@ -61,7 +112,6 @@ public partial class ReaderPageItem : ObservableObject
         _aspectHeight = height;
         OnPropertyChanged(nameof(AspectWidth));
         OnPropertyChanged(nameof(AspectHeight));
-        OnPropertyChanged(nameof(DisplayHeight));
     }
 
     [ObservableProperty]
@@ -76,5 +126,3 @@ public partial class ReaderPageItem : ObservableObject
 
     public bool HasImage => Image != null;
 }
-
-

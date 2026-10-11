@@ -201,6 +201,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsPageLayoutPopupOpen))]
     [NotifyPropertyChangedFor(nameof(IsMarginEditorOpen))]
     [NotifyPropertyChangedFor(nameof(IsBrightnessPopupOpen))]
+    [NotifyPropertyChangedFor(nameof(IsZoomPopupOpen))]
     [NotifyPropertyChangedFor(nameof(IsFilterPopupOpen))]
     [NotifyPropertyChangedFor(nameof(IsPageSpacingPopupOpen))]
     [NotifyPropertyChangedFor(nameof(IsAddBookmarkPopupOpen))]
@@ -215,6 +216,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     public bool IsPageLayoutPopupOpen => ActivePopup == "PageLayout";
     public bool IsMarginEditorOpen => ActivePopup == "MarginCrop";
     public bool IsBrightnessPopupOpen => ActivePopup == "Brightness";
+    public bool IsZoomPopupOpen => ActivePopup == "ZoomControl";
     public bool IsFilterPopupOpen => ActivePopup == "Filter";
     public bool IsPageSpacingPopupOpen => ActivePopup == "PageSpacing";
     public bool IsAddBookmarkPopupOpen => ActivePopup == "AddBookmark";
@@ -482,9 +484,112 @@ public partial class ComicReaderViewModel : ViewModelBase
         ActivePopup = string.Empty;
     }
 
+    // =========================================================================
+    // CHẾ ĐỘ VỪA KHUNG HÌNH (IMAGE FIT MODE: FIT WIDTH / FIT HEIGHT / STRETCH FULL / FIT SCREEN / ORIGINAL)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FitModeBadgeText))]
+    [NotifyPropertyChangedFor(nameof(FitModeTooltipText))]
+    private ImageFitMode _fitMode = ImageFitMode.FitWidth;
+
+    public string FitModeBadgeText => FitMode switch
+    {
+        ImageFitMode.FitWidth => "FIT W",
+        ImageFitMode.FitHeight => "FIT H",
+        ImageFitMode.FitScreen => "FIT SCR",
+        ImageFitMode.StretchFull => "STRETCH",
+        _ => "1:1"
+    };
+
+    public string FitModeTooltipText => FitMode switch
+    {
+        ImageFitMode.FitWidth => "Khớp chiều ngang màn hình (Fit Width)",
+        ImageFitMode.FitHeight => "Khớp chiều dọc màn hình (Fit Height)",
+        ImageFitMode.FitScreen => "Khớp trọn vẹn màn hình (Fit Screen / Best Fit)",
+        ImageFitMode.StretchFull => "Kéo giãn tràn toàn bộ màn hình (Stretch Full)",
+        _ => "Kích thước gốc 1:1 (Original)"
+    };
+
+    partial void OnFitModeChanged(ImageFitMode value)
+    {
+        ApplyFitModeLayout();
+    }
+
+    [RelayCommand]
+    public void CycleFitMode()
+    {
+        FitMode = FitMode switch
+        {
+            ImageFitMode.FitWidth => ImageFitMode.FitHeight,
+            ImageFitMode.FitHeight => ImageFitMode.FitScreen,
+            ImageFitMode.FitScreen => ImageFitMode.StretchFull,
+            ImageFitMode.StretchFull => ImageFitMode.Original,
+            _ => ImageFitMode.FitWidth
+        };
+        ShowTransientToast($"📐 Chế độ khung hình: {FitModeTooltipText}");
+    }
+
+    [RelayCommand]
+    public void SetFitMode(string? modeStr)
+    {
+        if (Enum.TryParse<ImageFitMode>(modeStr, true, out var parsed))
+        {
+            FitMode = parsed;
+            ShowTransientToast($"📐 Chế độ khung hình: {FitModeTooltipText}");
+        }
+    }
+
+    public double FlipDisplayWidth
+    {
+        get
+        {
+            double vw = Math.Max(240, _viewportWidth);
+            double singlePageVw = (IsDoublePage && SecondaryPage != null) ? Math.Max(120, vw * 0.498) : vw;
+            if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitWidth)
+            {
+                return Math.Round(singlePageVw * ZoomLevel);
+            }
+            return double.NaN;
+        }
+    }
+
+    public double FlipDisplayHeight
+    {
+        get
+        {
+            double vh = Math.Max(240, _viewportHeight);
+            if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitHeight)
+            {
+                return Math.Round(vh * ZoomLevel);
+            }
+            return double.NaN;
+        }
+    }
+
+    public Avalonia.Media.Stretch FlipImageStretch =>
+        FitMode == ImageFitMode.StretchFull ? Avalonia.Media.Stretch.Fill : Avalonia.Media.Stretch.Uniform;
+
+    public void ApplyFitModeLayout()
+    {
+        double vw = Math.Max(240, _viewportWidth);
+        double vh = Math.Max(240, _viewportHeight);
+        double singlePageVw = (IsFlipMode && IsDoublePage) ? Math.Max(120, vw * 0.498) : vw;
+
+        foreach (var page in Pages)
+        {
+            page.RecalculateDimensions(FitMode, singlePageVw, vh, ZoomLevel);
+        }
+
+        OnPropertyChanged(nameof(FlipDisplayWidth));
+        OnPropertyChanged(nameof(FlipDisplayHeight));
+        OnPropertyChanged(nameof(FlipImageStretch));
+    }
+
     public void UpdateViewportDimensions(double width, double height)
     {
         if (width <= 10 || height <= 10) return;
+        bool sizeChanged = Math.Abs(_viewportWidth - width) > 1 || Math.Abs(_viewportHeight - height) > 1;
         _viewportWidth = width;
         _viewportHeight = height;
         OnPropertyChanged(nameof(CropFrameMargin));
@@ -497,6 +602,11 @@ public partial class ComicReaderViewModel : ViewModelBase
                 IsDoublePage = shouldBeDouble;
                 UpdateCurrentFlipPages();
             }
+        }
+
+        if (sizeChanged)
+        {
+            ApplyFitModeLayout();
         }
     }
 
@@ -597,21 +707,34 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void MarginAutoTrim()
     {
-        if (Math.Abs(PendingCropTop - 5.0) < 0.5 && Math.Abs(PendingCropLeft - 4.0) < 0.5)
+        byte[]? rawBytes = _readerService.GetPageRawBytes(CurrentPage);
+        if (rawBytes != null && rawBytes.Length > 0)
         {
-            PendingCropTop = 8.0;
-            PendingCropBottom = 8.0;
-            PendingCropLeft = 6.0;
-            PendingCropRight = 6.0;
+            var (l, t, r, b) = ComicReaderService.DetectSmartMargins(rawBytes);
+            PendingCropLeft = l;
+            PendingCropTop = t;
+            PendingCropRight = r;
+            PendingCropBottom = b;
+            ShowTransientToast($"✨ Smart Auto Margin: Trên {t:0}% • Dưới {b:0}% • Trái {l:0}% • Phải {r:0}%");
         }
         else
         {
-            PendingCropTop = 5.0;
-            PendingCropBottom = 5.0;
-            PendingCropLeft = 4.0;
-            PendingCropRight = 4.0;
+            if (Math.Abs(PendingCropTop - 5.0) < 0.5 && Math.Abs(PendingCropLeft - 4.0) < 0.5)
+            {
+                PendingCropTop = 8.0;
+                PendingCropBottom = 8.0;
+                PendingCropLeft = 6.0;
+                PendingCropRight = 6.0;
+            }
+            else
+            {
+                PendingCropTop = 5.0;
+                PendingCropBottom = 5.0;
+                PendingCropLeft = 4.0;
+                PendingCropRight = 4.0;
+            }
+            ShowTransientToast($"✨ Auto Margin: Dọc {PendingCropTop:0}% • Ngang {PendingCropLeft:0}%");
         }
-        ShowTransientToast($"✨ Auto Margin: Dọc {PendingCropTop:0}% • Ngang {PendingCropLeft:0}%");
     }
 
     [RelayCommand]
@@ -848,14 +971,120 @@ public partial class ComicReaderViewModel : ViewModelBase
     }
 
     // =========================================================================
-    // BUTTON 6: PINCH ZOOM (PLACEHOLDER LÀM SAU THEO YÊU CẦU)
+    // BUTTON 6: PINCH ZOOM & SMART ZOOM CONTROLLER & AUTO-SCROLL HANDS-FREE
     // =========================================================================
 
     [RelayCommand]
-    public void PinchZoomPlaceholder()
+    public void OpenZoomPopup() => TogglePopup("ZoomControl");
+
+    [RelayCommand]
+    public void SmartDoubleTapZoom()
     {
-        ActivePopup = string.Empty;
-        ShowTransientToast("📌 Tính năng Pinch Zoom (Button 6) sẽ được cập nhật sau");
+        if (ZoomLevel > 1.08)
+        {
+            ZoomLevel = 1.0;
+            ShowTransientToast("🔍 Reset Zoom: 100%");
+        }
+        else
+        {
+            ZoomLevel = 2.0;
+            ShowTransientToast("🔍 Double-Tap Smart Zoom: 200%");
+        }
+    }
+
+    [RelayCommand]
+    public void SetZoomPreset(string? zoomStr)
+    {
+        if (double.TryParse(zoomStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double targetZoom))
+        {
+            ZoomLevel = Math.Clamp(targetZoom, 0.4, 4.0);
+            ShowTransientToast($"🔍 Zoom: {ZoomPercentText}");
+        }
+    }
+
+    // --- TỰ ĐỘNG CUỘN TRANG RẢNH TAY (AUTO-SCROLL HANDS-FREE) ---
+
+    private DispatcherTimer? _autoScrollTimer;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutoScrollButtonText))]
+    [NotifyPropertyChangedFor(nameof(AutoScrollButtonBg))]
+    private bool _isAutoScrolling;
+
+    [ObservableProperty]
+    private double _autoScrollSpeed = 3.0;
+
+    public string AutoScrollButtonText => IsAutoScrolling ? "⏸ Dừng Cuộn" : "▶ Tự Cuộn";
+    public string AutoScrollButtonBg => IsAutoScrolling ? "#DC2626" : "#1E293B";
+
+    public event Action<double>? AutoScrollStepRequested;
+
+    [RelayCommand]
+    public void ToggleAutoScroll()
+    {
+        if (IsAutoScrolling)
+        {
+            StopAutoScroll();
+            ShowTransientToast("⏸ Đã dừng tự động cuộn trang");
+        }
+        else
+        {
+            if (!IsScrollMode)
+            {
+                IsScrollMode = true;
+                PageScrollingMode = IsRightToLeft ? 2 : 5;
+                UpdateCurrentFlipPages();
+            }
+            StartAutoScroll();
+            ShowTransientToast("▶ Đã bật tự động cuộn trang rảnh tay (Hands-Free)");
+        }
+    }
+
+    public void StartAutoScroll()
+    {
+        if (_autoScrollTimer == null)
+        {
+            _autoScrollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+            _autoScrollTimer.Tick += (s, e) =>
+            {
+                if (!IsAutoScrolling || !IsScrollMode) return;
+                AutoScrollStepRequested?.Invoke(AutoScrollSpeed);
+            };
+        }
+        IsAutoScrolling = true;
+        _autoScrollTimer.Start();
+    }
+
+    public void StopAutoScroll()
+    {
+        IsAutoScrolling = false;
+        _autoScrollTimer?.Stop();
+    }
+
+    // --- XEM TRƯỚC HÌNH THU NHỎ KHI TRƯỢT SEEKBAR (FILMSTRIP THUMBNAIL SCRUBBER) ---
+
+    [ObservableProperty]
+    private ReaderPageItem? _scrubberPreviewPage;
+
+    [ObservableProperty]
+    private bool _isScrubberPreviewVisible;
+
+    public void UpdateScrubberHover(int pageIndex, bool isVisible)
+    {
+        IsScrubberPreviewVisible = isVisible;
+        if (!isVisible || Pages.Count == 0)
+        {
+            ScrubberPreviewPage = null;
+            return;
+        }
+
+        int clamped = Math.Clamp(pageIndex, 0, Pages.Count - 1);
+        var target = Pages[clamped];
+        ScrubberPreviewPage = target;
+        if (!target.IsLoaded)
+        {
+            _ = _readerService.EnsurePageLoadedAsync(target);
+        }
     }
 
     // =========================================================================
@@ -1208,15 +1437,11 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public string ZoomPercentText => $"{Math.Round(ZoomLevel * 100)}%";
 
-    public double PageDisplayWidth => Math.Round(900 * ZoomLevel);
+    public double PageDisplayWidth => Math.Round(Math.Max(240, _viewportWidth) * ZoomLevel);
 
     partial void OnZoomLevelChanged(double value)
     {
-        double targetWidth = PageDisplayWidth;
-        foreach (var page in Pages)
-        {
-            page.DisplayWidth = targetWidth;
-        }
+        ApplyFitModeLayout();
     }
 
     [ObservableProperty]
@@ -1382,14 +1607,13 @@ public partial class ComicReaderViewModel : ViewModelBase
             var loadedPages = await _readerService.LoadChapterPagesAsync(chapter, ct);
             if (ct.IsCancellationRequested) return;
 
-            double currentDisplayWidth = PageDisplayWidth;
             Thickness currentMargin = CalculateCurrentPageItemMargin();
             foreach (var p in loadedPages)
             {
-                p.DisplayWidth = currentDisplayWidth;
                 p.PageMargin = currentMargin;
                 Pages.Add(p);
             }
+            ApplyFitModeLayout();
 
             if (chapter.PdfBookmarks != null && chapter.PdfBookmarks.Count > 0)
             {
@@ -1768,6 +1992,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     {
         try
         {
+            StopAutoScroll();
             _loadCts?.Cancel();
             _prefetchCts?.Cancel();
             _effectRefreshCts?.Cancel();

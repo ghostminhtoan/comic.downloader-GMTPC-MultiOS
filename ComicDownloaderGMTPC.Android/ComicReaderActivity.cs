@@ -347,7 +347,31 @@ public class ComicReaderActivity : AvaloniaActivity
             CloseReaderTask();
             return true;
         }
+
+        if (e?.Action == KeyEventActions.Down && _subscribedVm != null)
+        {
+            if (keyCode == Keycode.VolumeUp)
+            {
+                RunOnUiThread(() => _subscribedVm.PrevPage());
+                return true;
+            }
+            if (keyCode == Keycode.VolumeDown)
+            {
+                RunOnUiThread(() => _subscribedVm.NextPage());
+                return true;
+            }
+        }
+
         return base.OnKeyDown(keyCode, e);
+    }
+
+    public override bool OnKeyUp(Keycode keyCode, KeyEvent? e)
+    {
+        if (keyCode == Keycode.VolumeUp || keyCode == Keycode.VolumeDown)
+        {
+            return true;
+        }
+        return base.OnKeyUp(keyCode, e);
     }
 
     private void CloseReaderTask()

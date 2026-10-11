@@ -161,24 +161,18 @@ public sealed class ComicReaderService
                     }
                     else
                     {
-                        using var fs = new FileStream(chapter.LocalPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                        using var zip = new ZipArchive(fs, ZipArchiveMode.Read);
-                        var sortedEntries = zip.Entries
-                            .Where(e => !string.IsNullOrEmpty(e.Name) && LibraryScannerService.IsImageFile(e.Name) && e.Length > 0)
-                            .OrderBy(e => e.FullName, NaturalSortComparer.Instance)
-                            .ToList();
-
-                        for (int i = 0; i < sortedEntries.Count; i++)
+                        var imageEntries = ZipArchivePool.Instance.GetImageEntriesInfo(chapter.LocalPath);
+                        for (int i = 0; i < imageEntries.Count; i++)
                         {
                             if (ct.IsCancellationRequested) break;
-                            var entry = sortedEntries[i];
+                            var (fullName, name, length) = imageEntries[i];
                             pages.Add(new ReaderPageItem
                             {
                                 Index = i,
-                                Title = entry.Name,
+                                Title = name,
                                 SourcePath = chapter.LocalPath,
-                                ArchiveEntryFullName = entry.FullName,
-                                FileSizeBytes = entry.Length
+                                ArchiveEntryFullName = fullName,
+                                FileSizeBytes = length
                             });
                         }
                     }
@@ -351,16 +345,7 @@ public sealed class ComicReaderService
             }
             else if (page.IsArchiveEntry)
             {
-                if (!File.Exists(page.SourcePath)) return null;
-                using var fs = new FileStream(page.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using var zip = new ZipArchive(fs, ZipArchiveMode.Read);
-                var entry = zip.GetEntry(page.ArchiveEntryFullName);
-                if (entry == null) return null;
-
-                using var es = entry.Open();
-                using var ms = new MemoryStream();
-                es.CopyTo(ms);
-                rawBytes = ms.ToArray();
+                rawBytes = ZipArchivePool.Instance.ReadEntryBytes(page.SourcePath, page.ArchiveEntryFullName);
             }
             else
             {
@@ -576,5 +561,148 @@ public sealed class ComicReaderService
         }
 
         Marshal.Copy(buffer, 0, ptr, totalBytes);
+    }
+
+    public byte[]? GetPageRawBytes(ReaderPageItem? page)
+    {
+        if (page == null) return null;
+        try
+        {
+            if (page.IsArchiveEntry)
+            {
+                return ZipArchivePool.Instance.ReadEntryBytes(page.SourcePath, page.ArchiveEntryFullName);
+            }
+            if (page.IsPdfEntry)
+            {
+                var bmp = PdfComicParser.Instance.DecodePageBitmap(page.SourcePath, page.PdfPageIndex);
+                if (bmp != null)
+                {
+                    using var ms = new MemoryStream();
+#pragma warning disable CS0618
+                    bmp.Save(ms);
+#pragma warning restore CS0618
+                    bmp.Dispose();
+                    return ms.ToArray();
+                }
+                return null;
+            }
+            if (File.Exists(page.SourcePath))
+            {
+                return File.ReadAllBytes(page.SourcePath);
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public static (double LeftPct, double TopPct, double RightPct, double BottomPct) DetectSmartMargins(byte[] rawBytes)
+    {
+        try
+        {
+            using var skData = SKData.CreateCopy(rawBytes);
+            using var codec = SKCodec.Create(skData);
+            if (codec == null) return (3.0, 3.0, 3.0, 3.0);
+
+            int origW = codec.Info.Width;
+            int origH = codec.Info.Height;
+            if (origW <= 32 || origH <= 32) return (2.0, 2.0, 2.0, 2.0);
+
+            int thumbW = 200;
+            int thumbH = Math.Max(50, (int)Math.Round(200.0 * origH / origW));
+            if (thumbH > 320)
+            {
+                thumbH = 320;
+                thumbW = Math.Max(50, (int)Math.Round(320.0 * origW / origH));
+            }
+
+            var thumbInfo = new SKImageInfo(thumbW, thumbH, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using var bmp = new SKBitmap(thumbInfo);
+            using var canvas = new SKCanvas(bmp);
+            using var srcBmp = SKBitmap.Decode(codec);
+            if (srcBmp == null) return (3.0, 3.0, 3.0, 3.0);
+            canvas.DrawBitmap(srcBmp, new SKRect(0, 0, thumbW, thumbH));
+
+            static bool IsBorderPixel(SKColor c)
+            {
+                int lum = (int)(0.299 * c.Red + 0.587 * c.Green + 0.114 * c.Blue);
+                return lum >= 238 || lum <= 16;
+            }
+
+            int top = 0;
+            int maxTop = (int)(thumbH * 0.20);
+            for (int y = 0; y < maxTop; y++)
+            {
+                int borderCount = 0;
+                for (int x = 0; x < thumbW; x += 4)
+                {
+                    if (IsBorderPixel(bmp.GetPixel(x, y))) borderCount++;
+                }
+                if (borderCount >= (thumbW / 4) * 0.88)
+                    top = y;
+                else
+                    break;
+            }
+
+            int bottom = 0;
+            int maxBottom = (int)(thumbH * 0.20);
+            for (int y = thumbH - 1; y >= thumbH - maxBottom; y--)
+            {
+                int borderCount = 0;
+                for (int x = 0; x < thumbW; x += 4)
+                {
+                    if (IsBorderPixel(bmp.GetPixel(x, y))) borderCount++;
+                }
+                if (borderCount >= (thumbW / 4) * 0.88)
+                    bottom = (thumbH - 1 - y);
+                else
+                    break;
+            }
+
+            int left = 0;
+            int maxLeft = (int)(thumbW * 0.20);
+            for (int x = 0; x < maxLeft; x++)
+            {
+                int borderCount = 0;
+                for (int y = 0; y < thumbH; y += 4)
+                {
+                    if (IsBorderPixel(bmp.GetPixel(x, y))) borderCount++;
+                }
+                if (borderCount >= (thumbH / 4) * 0.88)
+                    left = x;
+                else
+                    break;
+            }
+
+            int right = 0;
+            int maxRight = (int)(thumbW * 0.20);
+            for (int x = thumbW - 1; x >= thumbW - maxRight; x--)
+            {
+                int borderCount = 0;
+                for (int y = 0; y < thumbH; y += 4)
+                {
+                    if (IsBorderPixel(bmp.GetPixel(x, y))) borderCount++;
+                }
+                if (borderCount >= (thumbH / 4) * 0.88)
+                    right = (thumbW - 1 - x);
+                else
+                    break;
+            }
+
+            double topPct = Math.Clamp(Math.Round((double)top / thumbH * 100.0, 1), 0.0, 22.0);
+            double bottomPct = Math.Clamp(Math.Round((double)bottom / thumbH * 100.0, 1), 0.0, 22.0);
+            double leftPct = Math.Clamp(Math.Round((double)left / thumbW * 100.0, 1), 0.0, 22.0);
+            double rightPct = Math.Clamp(Math.Round((double)right / thumbW * 100.0, 1), 0.0, 22.0);
+
+            if (topPct < 1.0 && bottomPct < 1.0 && leftPct < 1.0 && rightPct < 1.0)
+            {
+                return (3.0, 3.0, 3.0, 3.0);
+            }
+
+            return (leftPct, topPct, rightPct, bottomPct);
+        }
+        catch
+        {
+            return (3.0, 3.0, 3.0, 3.0);
+        }
     }
 }

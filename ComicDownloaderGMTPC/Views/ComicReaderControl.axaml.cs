@@ -32,6 +32,10 @@ public partial class ComicReaderControl : UserControl
     private double _cropStartXRatio;
     private double _cropStartYRatio;
 
+    // Trạng thái gõ đúp (Double-Tap Smart Zoom)
+    private Point _lastTapPoint;
+    private long _lastTapTick;
+
     public ComicReaderControl()
     {
         InitializeComponent();
@@ -206,6 +210,10 @@ public partial class ComicReaderControl : UserControl
     private void OnScrubberPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         _isUserDraggingScrubber = true;
+        if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
+        {
+            vm.UpdateScrubberHover((int)Math.Round(slider.Value), true);
+        }
     }
 
     private void OnScrubberPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -215,6 +223,7 @@ public partial class ComicReaderControl : UserControl
         if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
         {
             vm.ScrubToPage((int)Math.Round(slider.Value));
+            vm.UpdateScrubberHover(0, false);
         }
     }
 
@@ -225,6 +234,7 @@ public partial class ComicReaderControl : UserControl
         if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
         {
             vm.ScrubToPage((int)Math.Round(slider.Value));
+            vm.UpdateScrubberHover(0, false);
         }
     }
 
@@ -235,7 +245,9 @@ public partial class ComicReaderControl : UserControl
             sender is Slider slider &&
             DataContext is ComicReaderViewModel vm)
         {
-            vm.ScrubToPage((int)Math.Round(slider.Value));
+            int targetPage = (int)Math.Round(slider.Value);
+            vm.UpdateScrubberHover(targetPage, true);
+            vm.ScrubToPage(targetPage);
         }
     }
 
@@ -244,6 +256,7 @@ public partial class ComicReaderControl : UserControl
         if (_subscribedVm != null)
         {
             _subscribedVm.ScrollToPageRequested -= OnVmScrollToPageRequested;
+            _subscribedVm.AutoScrollStepRequested -= OnVmAutoScrollStepRequested;
             _subscribedVm = null;
         }
 
@@ -251,6 +264,7 @@ public partial class ComicReaderControl : UserControl
         {
             _subscribedVm = vm;
             vm.ScrollToPageRequested += OnVmScrollToPageRequested;
+            vm.AutoScrollStepRequested += OnVmAutoScrollStepRequested;
             if (Bounds.Width > 0 && Bounds.Height > 0)
             {
                 vm.UpdateViewportDimensions(Bounds.Width, Bounds.Height);
@@ -259,6 +273,17 @@ public partial class ComicReaderControl : UserControl
             {
                 OnVmScrollToPageRequested(vm.CurrentPageIndex);
             }
+        }
+    }
+
+    private void OnVmAutoScrollStepRequested(double deltaY)
+    {
+        var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
+        if (listBox == null) return;
+        var scrollViewer = listBox.FindDescendantOfType<ScrollViewer>();
+        if (scrollViewer != null)
+        {
+            scrollViewer.Offset = new Vector(scrollViewer.Offset.X, scrollViewer.Offset.Y + deltaY);
         }
     }
 
@@ -422,6 +447,22 @@ public partial class ComicReaderControl : UserControl
         if (distance > 14.0 || elapsedMs > 450) return;
 
         if (DataContext is not ComicReaderViewModel vm) return;
+
+        long tapNow = Environment.TickCount64;
+        double tapDx = releasePoint.X - _lastTapPoint.X;
+        double tapDy = releasePoint.Y - _lastTapPoint.Y;
+        double tapDist = Math.Sqrt(tapDx * tapDx + tapDy * tapDy);
+
+        if (tapNow - _lastTapTick < 350 && tapDist < 30.0)
+        {
+            // Chạm đúp (Double-Tap) -> Kích hoạt Double-Tap Smart Zoom
+            _lastTapTick = 0;
+            vm.SmartDoubleTapZoom();
+            return;
+        }
+
+        _lastTapTick = tapNow;
+        _lastTapPoint = releasePoint;
 
         double width = Math.Max(1.0, Bounds.Width);
         double xRatio = releasePoint.X / width;
@@ -603,6 +644,36 @@ public partial class ComicReaderControl : UserControl
             case Key.D0:
             case Key.NumPad0:
                 vm.ResetZoom();
+                e.Handled = true;
+                break;
+
+            case Key.W:
+                vm.SetFitMode("FitWidth");
+                e.Handled = true;
+                break;
+
+            case Key.H:
+                vm.SetFitMode("FitHeight");
+                e.Handled = true;
+                break;
+
+            case Key.S:
+                vm.SetFitMode("StretchFull");
+                e.Handled = true;
+                break;
+
+            case Key.B:
+                vm.SetFitMode("FitScreen");
+                e.Handled = true;
+                break;
+
+            case Key.Z:
+                vm.OpenZoomPopup();
+                e.Handled = true;
+                break;
+
+            case Key.V:
+                vm.ToggleAutoScroll();
                 e.Handled = true;
                 break;
         }
