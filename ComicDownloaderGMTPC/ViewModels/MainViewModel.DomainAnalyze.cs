@@ -230,6 +230,8 @@ public partial class MainViewModel
         }
 
         IsDomainAnalyzing = true;
+        int cpuThreads = Math.Clamp(LinkCpuThreads, 1, MaxLinkCpuThreads);
+        _scraperService.MaxCpuThreads = cpuThreads;
 
         if (domain.Contains("damconuong"))
         {
@@ -417,6 +419,7 @@ public partial class MainViewModel
             }
 
             IsDomainBatchScraping = true;
+            _scraperService.MaxCpuThreads = Math.Clamp(LinkCpuThreads, 1, MaxLinkCpuThreads);
             _domainScrapeCts = new CancellationTokenSource();
 
             if (clearExisting)

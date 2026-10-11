@@ -109,25 +109,82 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isBackgroundWorking = false;
 
-    // CONCURRENT COMIC DOWNLOADS & IMAGE THREADS
+    // CONCURRENT COMIC DOWNLOADS, IMAGE THREADS & LINK CPU THREADS
     public int MaxSystemThreads => CpuTopologyHelper.GetMaxLogicalProcessorCount();
+    public int MaxLinkCpuThreads => OperatingSystem.IsAndroid() ? 6 : MaxSystemThreads;
     public int MaxFolderToolThreads => Math.Max(64, MaxSystemThreads);
+
+    [ObservableProperty]
+    private int _linkCpuThreads = OperatingSystem.IsAndroid()
+        ? 3
+        : Math.Min(4, CpuTopologyHelper.GetMaxLogicalProcessorCount());
 
     [ObservableProperty]
     private int _concurrentComicDownloads = 2; // 1 đến 16
 
     [ObservableProperty]
-    private int _imageDownloadThreads = 3;
+    private int _imageDownloadThreads = 3; // 1 đến 16
+
+    partial void OnLinkCpuThreadsChanged(int value)
+    {
+        int clamped = Math.Clamp(value, 1, MaxLinkCpuThreads);
+        if (_linkCpuThreads != clamped)
+        {
+            _linkCpuThreads = clamped;
+            OnPropertyChanged(nameof(LinkCpuThreads));
+        }
+
+        _scraperService.MaxCpuThreads = clamped;
+        ThumbnailPreviewService.Instance.SetMaxCpuThreads(clamped);
+        ParallelCheckCount = clamped;
+        QueueBackupService.Instance.CurrentLinkCpuThreads = clamped;
+        RequestQueueAutoSave(250);
+    }
 
     partial void OnConcurrentComicDownloadsChanged(int value)
     {
-        _downloadEngine.ConcurrentComicDownloads = Math.Clamp(value, 1, 16);
+        int clamped = Math.Clamp(value, 1, 16);
+        if (_concurrentComicDownloads != clamped)
+        {
+            _concurrentComicDownloads = clamped;
+            OnPropertyChanged(nameof(ConcurrentComicDownloads));
+        }
+
+        _downloadEngine.ConcurrentComicDownloads = clamped;
+        QueueBackupService.Instance.CurrentConcurrentComicDownloads = clamped;
         _downloadEngine.NotifyConcurrencyChanged();
+        RequestQueueAutoSave(250);
     }
 
     partial void OnImageDownloadThreadsChanged(int value)
     {
-        _downloadEngine.ImageDownloadThreads = Math.Clamp(value, 1, MaxSystemThreads);
+        int clamped = Math.Clamp(value, 1, 16);
+        if (_imageDownloadThreads != clamped)
+        {
+            _imageDownloadThreads = clamped;
+            OnPropertyChanged(nameof(ImageDownloadThreads));
+        }
+
+        _downloadEngine.ImageDownloadThreads = clamped;
+        QueueBackupService.Instance.CurrentImageDownloadThreads = clamped;
+        RequestQueueAutoSave(250);
+    }
+
+    private void SyncAutoSaveSettingsToService()
+    {
+        int clampedCpu = Math.Clamp(LinkCpuThreads, 1, MaxLinkCpuThreads);
+        int clampedConcurrent = Math.Clamp(ConcurrentComicDownloads, 1, 16);
+        int clampedConnections = Math.Clamp(ImageDownloadThreads, 1, 16);
+
+        _scraperService.MaxCpuThreads = clampedCpu;
+        ThumbnailPreviewService.Instance.SetMaxCpuThreads(clampedCpu);
+        ParallelCheckCount = clampedCpu;
+        _downloadEngine.ConcurrentComicDownloads = clampedConcurrent;
+        _downloadEngine.ImageDownloadThreads = clampedConnections;
+
+        QueueBackupService.Instance.CurrentLinkCpuThreads = clampedCpu;
+        QueueBackupService.Instance.CurrentConcurrentComicDownloads = clampedConcurrent;
+        QueueBackupService.Instance.CurrentImageDownloadThreads = clampedConnections;
     }
 
     // AUTO PASTE CLIPBOARD MONITORING
@@ -1139,8 +1196,21 @@ public partial class MainViewModel : ViewModelBase
             targetItems = ComicBooks.ToList();
         }
 
-        AddLog("INFO", $"🔄 Đang quét lại thumbnail cho {targetItems.Count} truyện...");
-        var tasks = targetItems.Select(item => ThumbnailPreviewService.Instance.RescanItemAsync(item));
+        int cpuThreads = Math.Clamp(LinkCpuThreads, 1, MaxLinkCpuThreads);
+        AddLog("INFO", $"🔄 Đang quét lại thumbnail cho {targetItems.Count} truyện (Số luồng CPU: {cpuThreads})...");
+        using var sem = new SemaphoreSlim(cpuThreads, cpuThreads);
+        var tasks = targetItems.Select(async item =>
+        {
+            await sem.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await ThumbnailPreviewService.Instance.RescanItemAsync(item).ConfigureAwait(false);
+            }
+            finally
+            {
+                sem.Release();
+            }
+        });
         await Task.WhenAll(tasks);
         AddLog("SUCCESS", $"✅ Đã hoàn tất quét lại thumbnail ({targetItems.Count} truyện).");
     }
@@ -1174,7 +1244,9 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [ObservableProperty]
-    private int _parallelCheckCount = 8;
+    private int _parallelCheckCount = OperatingSystem.IsAndroid()
+        ? 3
+        : Math.Min(4, CpuTopologyHelper.GetMaxLogicalProcessorCount());
 
     [ObservableProperty]
     private string _statusSummary = "Sẵn sàng";
@@ -1590,10 +1662,31 @@ public partial class MainViewModel : ViewModelBase
 
     private void InitializeQueueAutoBackupAndRestore()
     {
+        SyncAutoSaveSettingsToService();
         ComicBooks.CollectionChanged += OnComicBooksCollectionChanged;
         AppDomain.CurrentDomain.ProcessExit += (_, _) => FlushAutoSaveImmediately();
         AppDomain.CurrentDomain.UnhandledException += (_, _) => FlushAutoSaveImmediately();
         _ = RestoreAutoSavedQueueOnStartupAsync();
+    }
+
+    private void ApplyRestoredQueueSettings(QueueRestoreResult? restoreResult)
+    {
+        if (restoreResult == null) return;
+
+        if (restoreResult.ConcurrentComicDownloads.HasValue && restoreResult.ConcurrentComicDownloads.Value > 0)
+        {
+            ConcurrentComicDownloads = Math.Clamp(restoreResult.ConcurrentComicDownloads.Value, 1, 16);
+        }
+        if (restoreResult.ImageDownloadThreads.HasValue && restoreResult.ImageDownloadThreads.Value > 0)
+        {
+            ImageDownloadThreads = Math.Clamp(restoreResult.ImageDownloadThreads.Value, 1, 16);
+        }
+        if (restoreResult.LinkCpuThreads.HasValue && restoreResult.LinkCpuThreads.Value > 0)
+        {
+            LinkCpuThreads = Math.Clamp(restoreResult.LinkCpuThreads.Value, 1, MaxLinkCpuThreads);
+        }
+
+        SyncAutoSaveSettingsToService();
     }
 
     private async Task RestoreAutoSavedQueueOnStartupAsync()
@@ -1601,12 +1694,14 @@ public partial class MainViewModel : ViewModelBase
         _isAutoSaveSuspended = true;
         try
         {
-            var (restoredItems, loadedPath) = await QueueBackupService.Instance.LoadAutoSaveQueueWithSourceAsync().ConfigureAwait(false);
-            if (restoredItems.Count > 0)
+            var restoreResult = await QueueBackupService.Instance.LoadAutoSaveQueueResultAsync().ConfigureAwait(false);
+            if (restoreResult.HasValidStructure || restoreResult.Items.Count > 0)
             {
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    foreach (var item in restoredItems)
+                    ApplyRestoredQueueSettings(restoreResult);
+
+                    foreach (var item in restoreResult.Items)
                     {
                         if (!ComicBooks.Any(b => b.Url.Equals(item.Url, StringComparison.OrdinalIgnoreCase) &&
                                                  string.Equals(b.ChapterSelectionText, item.ChapterSelectionText, StringComparison.OrdinalIgnoreCase)))
@@ -1616,12 +1711,22 @@ public partial class MainViewModel : ViewModelBase
                         }
                     }
 
-                    ReindexComicBooks();
-                    UpdateStats();
-                    StartScanMissing();
-                    TriggerThumbnailPrefetchIfNeeded();
-                    string fileName = !string.IsNullOrWhiteSpace(loadedPath) ? Path.GetFileName(loadedPath) : QueueBackupService.AutoSaveFileName;
-                    AddLog("SUCCESS", $"🔄 [Auto Backup] Đã tự động khôi phục {ComicBooks.Count} truyện và tiến độ tải từ '{fileName}'.");
+                    string fileName = !string.IsNullOrWhiteSpace(restoreResult.LoadedFromPath)
+                        ? Path.GetFileName(restoreResult.LoadedFromPath)
+                        : QueueBackupService.AutoSaveFileName;
+
+                    if (ComicBooks.Count > 0)
+                    {
+                        ReindexComicBooks();
+                        UpdateStats();
+                        StartScanMissing();
+                        TriggerThumbnailPrefetchIfNeeded();
+                        AddLog("SUCCESS", $"🔄 [Auto Backup] Đã tự động khôi phục {ComicBooks.Count} truyện, tiến độ tải và cấu hình (Số truyện: {ConcurrentComicDownloads}, Connection: {ImageDownloadThreads}, Luồng CPU: {LinkCpuThreads}) từ '{fileName}'.");
+                    }
+                    else if (restoreResult.ConcurrentComicDownloads.HasValue || restoreResult.ImageDownloadThreads.HasValue || restoreResult.LinkCpuThreads.HasValue)
+                    {
+                        AddLog("INFO", $"🔄 [Auto Backup] Đã khôi phục cấu hình tải (Số truyện: {ConcurrentComicDownloads}, Connection: {ImageDownloadThreads}, Luồng CPU: {LinkCpuThreads}) từ '{fileName}'.");
+                    }
                 });
             }
         }
@@ -1738,12 +1843,14 @@ public partial class MainViewModel : ViewModelBase
     public void RequestQueueAutoSave(int delayMs = 500)
     {
         if (_isAutoSaveSuspended) return;
+        SyncAutoSaveSettingsToService();
         QueueBackupService.Instance.TriggerDebouncedAutoSave(ComicBooks, delayMs);
     }
 
     public void FlushAutoSaveImmediately()
     {
         if (_isAutoSaveSuspended) return;
+        SyncAutoSaveSettingsToService();
         QueueBackupService.Instance.FlushAutoSaveImmediately(ComicBooks);
     }
 
@@ -1952,18 +2059,60 @@ public partial class MainViewModel : ViewModelBase
             mangadexFallback = choice.UseFallback;
         }
 
+        int cpuThreads = Math.Clamp(LinkCpuThreads, 1, MaxLinkCpuThreads);
+        _scraperService.MaxCpuThreads = cpuThreads;
+        var scrapedBooks = new ComicBookItem?[selected.Count];
+
+        if (selected.Count <= 1 || cpuThreads <= 1)
+        {
+            for (int i = 0; i < selected.Count; i++)
+            {
+                var sr = selected[i];
+                int idx = startIndex + i;
+                var book = await Task.Run(() => _scraperService.ScrapeBookAsync(sr.Url, idx, mangadexLang, mangadexFallback)).ConfigureAwait(true);
+                scrapedBooks[i] = book;
+            }
+        }
+        else
+        {
+            using var semaphore = new SemaphoreSlim(cpuThreads, cpuThreads);
+            var tasks = new List<Task>(selected.Count);
+            for (int i = 0; i < selected.Count; i++)
+            {
+                int localIdx = i;
+                var sr = selected[localIdx];
+                int bookIdx = startIndex + localIdx;
+                tasks.Add(Task.Run(async () =>
+                {
+                    await semaphore.WaitAsync().ConfigureAwait(false);
+                    try
+                    {
+                        var book = await _scraperService.ScrapeBookAsync(sr.Url, bookIdx, mangadexLang, mangadexFallback).ConfigureAwait(false);
+                        scrapedBooks[localIdx] = book;
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                }));
+            }
+            await Task.WhenAll(tasks).ConfigureAwait(true);
+        }
+
+        string trimmedSubfolder = SubfolderInput?.Trim() ?? string.Empty;
         for (int i = 0; i < selected.Count; i++)
         {
             var sr = selected[i];
+            var book = scrapedBooks[i];
+            if (book == null) continue;
             int idx = startIndex + i;
-            var book = await _scraperService.ScrapeBookAsync(sr.Url, idx, mangadexLang, mangadexFallback);
             if (!string.IsNullOrEmpty(sr.CoverUrl) && string.IsNullOrEmpty(book.CoverUrl))
             {
                 book.CoverUrl = sr.CoverUrl;
             }
-            if (!string.IsNullOrWhiteSpace(SubfolderInput))
+            if (!string.IsNullOrWhiteSpace(trimmedSubfolder))
             {
-                book.Subfolder = SubfolderInput.Trim();
+                book.Subfolder = trimmedSubfolder;
             }
             ComicBooks.Add(book);
             AddLog("INFO", $"[{idx}] Đã nạp từ nguồn: {book.Title} ({book.TotalChapters} chaps) [{book.Domain}]");
@@ -2225,6 +2374,7 @@ public partial class MainViewModel : ViewModelBase
 
         try
         {
+            SyncAutoSaveSettingsToService();
             var topLevel = GetTopLevel();
             if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanSave)
             {
@@ -2263,7 +2413,7 @@ public partial class MainViewModel : ViewModelBase
                 if (!string.IsNullOrWhiteSpace(localPath))
                 {
                     string savedPath = await QueueBackupService.Instance.SaveQueueToMarkdownAsync(ComicBooks, localPath);
-                    AddLog("SUCCESS", $"💾 Đã sao lưu thành công {ComicBooks.Count} truyện (kèm tiến độ) ra file Markdown: {savedPath}");
+                    AddLog("SUCCESS", $"💾 Đã sao lưu thành công {ComicBooks.Count} truyện (kèm tiến độ & cấu hình tải) ra file Markdown: {savedPath}");
                     ShowCenterToast("SAO LƯU MD THÀNH CÔNG", $"Đã lưu {ComicBooks.Count} truyện vào:\n{savedPath}", "💾", "SAO LƯU MD", 2800);
                 }
                 else
@@ -2274,7 +2424,7 @@ public partial class MainViewModel : ViewModelBase
                     await using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8);
                     await writer.WriteAsync(content);
                     await writer.FlushAsync();
-                    AddLog("SUCCESS", $"💾 Đã sao lưu thành công {ComicBooks.Count} truyện (kèm tiến độ) ra file Markdown: {file.Name}");
+                    AddLog("SUCCESS", $"💾 Đã sao lưu thành công {ComicBooks.Count} truyện (kèm tiến độ & cấu hình tải) ra file Markdown: {file.Name}");
                     ShowCenterToast("SAO LƯU MD THÀNH CÔNG", $"Đã lưu {ComicBooks.Count} truyện vào file:\n{file.Name}", "💾", "SAO LƯU MD", 2800);
                 }
 
@@ -2297,7 +2447,7 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            List<ComicBookItem> restoredItems = new();
+            QueueRestoreResult restoreResult = new();
             string sourceName = QueueBackupService.AutoSaveFileName;
 
             var topLevel = GetTopLevel();
@@ -2336,7 +2486,7 @@ public partial class MainViewModel : ViewModelBase
                 string? localPath = selectedFile.TryGetLocalPath();
                 if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
                 {
-                    restoredItems = await QueueBackupService.Instance.LoadQueueFromMarkdownAsync(localPath);
+                    restoreResult = await QueueBackupService.Instance.LoadQueueResultFromMarkdownAsync(localPath);
                     sourceName = localPath;
                 }
                 else
@@ -2344,19 +2494,32 @@ public partial class MainViewModel : ViewModelBase
                     await using var stream = await selectedFile.OpenReadAsync();
                     using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
                     string content = await reader.ReadToEndAsync();
-                    restoredItems = QueueBackupService.Instance.ParseQueueFromMarkdownContent(content);
+                    restoreResult = QueueBackupService.Instance.ParseQueueWithMetadataFromMarkdownContent(content, selectedFile.Name);
                     sourceName = selectedFile.Name;
                 }
             }
             else
             {
-                var (autoItems, autoPath) = await QueueBackupService.Instance.LoadAutoSaveQueueWithSourceAsync();
-                restoredItems = autoItems;
-                if (!string.IsNullOrWhiteSpace(autoPath)) sourceName = autoPath;
+                restoreResult = await QueueBackupService.Instance.LoadAutoSaveQueueResultAsync();
+                if (!string.IsNullOrWhiteSpace(restoreResult.LoadedFromPath)) sourceName = restoreResult.LoadedFromPath;
             }
 
+            bool hasRestoredSettings = restoreResult.ConcurrentComicDownloads.HasValue
+                || restoreResult.ImageDownloadThreads.HasValue
+                || restoreResult.LinkCpuThreads.HasValue;
+            ApplyRestoredQueueSettings(restoreResult);
+
+            var restoredItems = restoreResult.Items;
             if (restoredItems.Count == 0)
             {
+                if (hasRestoredSettings)
+                {
+                    RequestQueueAutoSave(200);
+                    AddLog("SUCCESS", $"⚙️ Đã phục hồi cấu hình tải (Số truyện: {ConcurrentComicDownloads} | Connection: {ImageDownloadThreads} | Luồng CPU: {LinkCpuThreads}) từ: {sourceName}");
+                    ShowCenterToast("ĐÃ PHỤC HỒI CẤU HÌNH", $"Đã khôi phục thiết lập tải từ:\n{Path.GetFileName(sourceName)}", "⚙️", "PHỤC HỒI MD", 2400);
+                    return;
+                }
+
                 AddLog("WARN", "⚠️ File sao lưu không chứa truyện nào hoặc không đúng định dạng Markdown.");
                 ShowCenterToast("KHÔNG CÓ DỮ LIỆU", "File Markdown đã chọn trống hoặc không chứa dữ liệu hàng đợi.", "⚠️", "PHỤC HỒI MD", 2400);
                 return;
@@ -3394,7 +3557,9 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        AddLog("INFO", $"Đang trích xuất thông tin cho {targetUrls.Count} link truyện mới...");
+        int cpuThreads = Math.Clamp(LinkCpuThreads, 1, MaxLinkCpuThreads);
+        _scraperService.MaxCpuThreads = cpuThreads;
+        AddLog("INFO", $"Đang trích xuất thông tin cho {targetUrls.Count} link truyện mới (Số luồng CPU: {cpuThreads})...");
 
         bool hasMangadex = targetUrls.Any(l => DomainRoutingService.DetectDomain(l).Contains("mangadex"));
         string mangadexLang = "vi";
@@ -3415,15 +3580,53 @@ public partial class MainViewModel : ViewModelBase
         }
 
         int startIndex = ComicBooks.Count + 1;
+        var scrapedBooks = new ComicBookItem?[targetUrls.Count];
+
+        if (targetUrls.Count <= 1 || cpuThreads <= 1)
+        {
+            for (int i = 0; i < targetUrls.Count; i++)
+            {
+                string url = targetUrls[i];
+                int currentIndex = startIndex + i;
+                var book = await Task.Run(() => _scraperService.ScrapeBookAsync(url, currentIndex, mangadexLang, mangadexFallback)).ConfigureAwait(true);
+                scrapedBooks[i] = book;
+            }
+        }
+        else
+        {
+            using var semaphore = new SemaphoreSlim(cpuThreads, cpuThreads);
+            var tasks = new List<Task>(targetUrls.Count);
+            for (int i = 0; i < targetUrls.Count; i++)
+            {
+                int localIdx = i;
+                string url = targetUrls[localIdx];
+                int currentIndex = startIndex + localIdx;
+                tasks.Add(Task.Run(async () =>
+                {
+                    await semaphore.WaitAsync().ConfigureAwait(false);
+                    try
+                    {
+                        var book = await _scraperService.ScrapeBookAsync(url, currentIndex, mangadexLang, mangadexFallback).ConfigureAwait(false);
+                        scrapedBooks[localIdx] = book;
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                }));
+            }
+            await Task.WhenAll(tasks).ConfigureAwait(true);
+        }
+
+        string trimmedSubfolder = SubfolderInput?.Trim() ?? string.Empty;
         for (int i = 0; i < targetUrls.Count; i++)
         {
-            string url = targetUrls[i];
+            var book = scrapedBooks[i];
+            if (book == null) continue;
             int currentIndex = startIndex + i;
-
-            var book = await _scraperService.ScrapeBookAsync(url, currentIndex, mangadexLang, mangadexFallback);
-            if (!string.IsNullOrWhiteSpace(SubfolderInput))
+            if (!string.IsNullOrWhiteSpace(trimmedSubfolder))
             {
-                book.Subfolder = SubfolderInput.Trim();
+                book.Subfolder = trimmedSubfolder;
             }
             ComicBooks.Add(book);
             AddLog("INFO", $"[{currentIndex}] Đã nạp: {book.Title} ({book.TotalChapters} chaps) - Domain: {book.Domain}{(string.IsNullOrWhiteSpace(book.Subfolder) ? "" : $" [Subfolder: {book.Subfolder}]")}");

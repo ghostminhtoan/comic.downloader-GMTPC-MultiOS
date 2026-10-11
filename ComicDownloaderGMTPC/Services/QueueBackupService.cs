@@ -16,7 +16,20 @@ namespace ComicDownloaderGMTPC.Services;
 public class QueueMarkdownPayload
 {
     public string SavedAt { get; set; } = string.Empty;
+    public int? ConcurrentComicDownloads { get; set; }
+    public int? ImageDownloadThreads { get; set; }
+    public int? LinkCpuThreads { get; set; }
     public List<ComicBookItemSnapshot> Items { get; set; } = new();
+}
+
+public class QueueRestoreResult
+{
+    public List<ComicBookItem> Items { get; set; } = new();
+    public string LoadedFromPath { get; set; } = string.Empty;
+    public int? ConcurrentComicDownloads { get; set; }
+    public int? ImageDownloadThreads { get; set; }
+    public int? LinkCpuThreads { get; set; }
+    public bool HasValidStructure { get; set; }
 }
 
 public class ComicBookItemSnapshot
@@ -89,6 +102,12 @@ public class QueueBackupService
     private readonly object _writeLock = new();
     private List<ComicBookItemSnapshot> _pendingSnapshotsToSave = new();
     private bool _hasPendingSnapshot;
+
+    public int CurrentConcurrentComicDownloads { get; set; } = 2;
+    public int CurrentImageDownloadThreads { get; set; } = 3;
+    public int CurrentLinkCpuThreads { get; set; } = OperatingSystem.IsAndroid()
+        ? 3
+        : Math.Min(4, CpuTopologyHelper.GetMaxLogicalProcessorCount());
 
     public static string GetAutoSaveDirectory()
     {
@@ -406,11 +425,17 @@ public class QueueBackupService
         return snap;
     }
 
-    private static string BuildQueueMarkdownFromSnapshots(List<ComicBookItemSnapshot> snapshots)
+    private string BuildQueueMarkdownFromSnapshots(List<ComicBookItemSnapshot> snapshots)
     {
+        int concurrentComics = Math.Clamp(CurrentConcurrentComicDownloads, 1, 16);
+        int imageConnections = Math.Clamp(CurrentImageDownloadThreads, 1, 16);
+        int maxAllowedCpu = OperatingSystem.IsAndroid() ? 6 : CpuTopologyHelper.GetMaxLogicalProcessorCount();
+        int linkCpuThreads = Math.Clamp(CurrentLinkCpuThreads, 1, maxAllowedCpu);
+
         var sb = new StringBuilder();
         sb.AppendLine("# COMIC DOWNLOADER GMTPC - BACKUP QUEUE");
         sb.AppendLine($"> Thời gian sao lưu: {DateTime.Now:yyyy-MM-dd HH:mm:ss} | Hệ điều hành: {Environment.OSVersion.Platform}");
+        sb.AppendLine($"> Cấu hình tải: Số truyện cùng lúc: {concurrentComics} | Connection tải ảnh: {imageConnections} | Số luồng CPU: {linkCpuThreads}");
         sb.AppendLine();
         sb.AppendLine("| STT | Tên Truyện | Nguồn / URL | Trạng Thái | Tiến Độ | Chương Đang Tải | Trang Đang Tải | Chọn Chap | Subfolder | Thư Mục Lưu |");
         sb.AppendLine("| :---: | :--- | :--- | :---: | :---: | :--- | :--- | :--- | :--- | :--- |");
@@ -439,6 +464,9 @@ public class QueueBackupService
         var payload = new QueueMarkdownPayload
         {
             SavedAt = DateTime.Now.ToString("O", CultureInfo.InvariantCulture),
+            ConcurrentComicDownloads = concurrentComics,
+            ImageDownloadThreads = imageConnections,
+            LinkCpuThreads = linkCpuThreads,
             Items = snapshots
         };
 
@@ -474,15 +502,15 @@ public class QueueBackupService
     }
 
     /// <summary>
-    /// Tự động đọc và phục hồi danh sách Queue + Tiến độ từ autosave.md hoặc file dự phòng autosave mirror.md khi mở app / sau khi crash.
+    /// Tự động đọc và phục hồi danh sách Queue + Tiến độ + Cấu hình tải (Số truyện cùng lúc, Số connection, Số luồng CPU) từ autosave.md hoặc autosave mirror.md.
     /// </summary>
-    public async Task<(List<ComicBookItem> Items, string LoadedFromPath)> LoadAutoSaveQueueWithSourceAsync()
+    public async Task<QueueRestoreResult> LoadAutoSaveQueueResultAsync()
     {
         return await Task.Run(() =>
         {
             var candidatePaths = GetAutoSaveCandidatePaths();
 
-            string? bestEmptyPath = null;
+            QueueRestoreResult? bestEmptyResult = null;
             foreach (var path in candidatePaths)
             {
                 if (!File.Exists(path)) continue;
@@ -491,14 +519,22 @@ public class QueueBackupService
                     string content = File.ReadAllText(path, Encoding.UTF8);
                     if (string.IsNullOrWhiteSpace(content)) continue;
 
-                    var parsed = ParseQueueFromMarkdownContent(content, out bool hadValidStructure);
-                    if (parsed.Count > 0)
+                    var parsedResult = ParseQueueWithMetadataFromMarkdownContent(content);
+                    parsedResult.LoadedFromPath = path;
+
+                    if (parsedResult.Items.Count > 0)
                     {
-                        return (parsed, path);
+                        if (bestEmptyResult != null)
+                        {
+                            parsedResult.ConcurrentComicDownloads ??= bestEmptyResult.ConcurrentComicDownloads;
+                            parsedResult.ImageDownloadThreads ??= bestEmptyResult.ImageDownloadThreads;
+                            parsedResult.LinkCpuThreads ??= bestEmptyResult.LinkCpuThreads;
+                        }
+                        return parsedResult;
                     }
-                    if (hadValidStructure && bestEmptyPath == null)
+                    if (parsedResult.HasValidStructure && bestEmptyResult == null)
                     {
-                        bestEmptyPath = path;
+                        bestEmptyResult = parsedResult;
                     }
                 }
                 catch
@@ -507,8 +543,17 @@ public class QueueBackupService
                 }
             }
 
-            return (new List<ComicBookItem>(), bestEmptyPath ?? string.Empty);
+            return bestEmptyResult ?? new QueueRestoreResult();
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Tự động đọc và phục hồi danh sách Queue + Tiến độ từ autosave.md hoặc file dự phòng autosave mirror.md khi mở app / sau khi crash.
+    /// </summary>
+    public async Task<(List<ComicBookItem> Items, string LoadedFromPath)> LoadAutoSaveQueueWithSourceAsync()
+    {
+        var result = await LoadAutoSaveQueueResultAsync().ConfigureAwait(false);
+        return (result.Items, result.LoadedFromPath);
     }
 
     private static List<string> GetAutoSaveCandidatePaths()
@@ -563,19 +608,29 @@ public class QueueBackupService
     }
 
     /// <summary>
+    /// Đọc và phục hồi danh sách Queue kèm cấu hình tải từ file Markdown (.md).
+    /// </summary>
+    public async Task<QueueRestoreResult> LoadQueueResultFromMarkdownAsync(string? customPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(customPath))
+        {
+            return await LoadAutoSaveQueueResultAsync().ConfigureAwait(false);
+        }
+
+        if (!File.Exists(customPath)) return new QueueRestoreResult { LoadedFromPath = customPath };
+        string content = await File.ReadAllTextAsync(customPath, Encoding.UTF8).ConfigureAwait(false);
+        var result = ParseQueueWithMetadataFromMarkdownContent(content);
+        result.LoadedFromPath = customPath;
+        return result;
+    }
+
+    /// <summary>
     /// Đọc và phục hồi danh sách Queue từ file Markdown (.md).
     /// </summary>
     public async Task<List<ComicBookItem>> LoadQueueFromMarkdownAsync(string? customPath = null)
     {
-        if (string.IsNullOrWhiteSpace(customPath))
-        {
-            var (items, _) = await LoadAutoSaveQueueWithSourceAsync().ConfigureAwait(false);
-            return items;
-        }
-
-        if (!File.Exists(customPath)) return new List<ComicBookItem>();
-        string content = await File.ReadAllTextAsync(customPath, Encoding.UTF8).ConfigureAwait(false);
-        return ParseQueueFromMarkdownContent(content, out _);
+        var res = await LoadQueueResultFromMarkdownAsync(customPath).ConfigureAwait(false);
+        return res.Items;
     }
 
     public List<ComicBookItem> ParseQueueFromMarkdownContent(string content)
@@ -585,32 +640,80 @@ public class QueueBackupService
 
     public List<ComicBookItem> ParseQueueFromMarkdownContent(string content, out bool hadValidStructure)
     {
-        hadValidStructure = false;
-        var result = new List<ComicBookItem>();
-        if (string.IsNullOrWhiteSpace(content)) return result;
+        var res = ParseQueueWithMetadataFromMarkdownContent(content);
+        hadValidStructure = res.HasValidStructure;
+        return res.Items;
+    }
+
+    private static readonly Regex _headerConcurrentRegex = new(@"Số\s+truyện\s+cùng\s+lúc\s*:\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex _headerConnectionRegex = new(@"Connection\s+tải\s+ảnh\s*:\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex _headerCpuThreadsRegex = new(@"Số\s+luồng\s+CPU\s*:\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    public QueueRestoreResult ParseQueueWithMetadataFromMarkdownContent(string content, string? loadedFromPath = null)
+    {
+        var restoreResult = new QueueRestoreResult { LoadedFromPath = loadedFromPath ?? string.Empty };
+        if (string.IsNullOrWhiteSpace(content)) return restoreResult;
+
+        // Đọc cấu hình tải từ dòng header Markdown (dự phòng khi thiếu JSON hoặc chỉnh sửa trực tiếp trên Markdown)
+        var mConc = _headerConcurrentRegex.Match(content);
+        if (mConc.Success && int.TryParse(mConc.Groups[1].Value, out int parsedConc))
+        {
+            restoreResult.ConcurrentComicDownloads = parsedConc;
+            restoreResult.HasValidStructure = true;
+        }
+
+        var mConn = _headerConnectionRegex.Match(content);
+        if (mConn.Success && int.TryParse(mConn.Groups[1].Value, out int parsedConn))
+        {
+            restoreResult.ImageDownloadThreads = parsedConn;
+            restoreResult.HasValidStructure = true;
+        }
+
+        var mCpu = _headerCpuThreadsRegex.Match(content);
+        if (mCpu.Success && int.TryParse(mCpu.Groups[1].Value, out int parsedCpu))
+        {
+            restoreResult.LinkCpuThreads = parsedCpu;
+            restoreResult.HasValidStructure = true;
+        }
 
         // 1. Ưu tiên đọc từ khối JSON Full Queue State Snapshot
         var payload = TryParseJsonPayload(content);
-        if (payload != null && payload.Items != null)
+        if (payload != null)
         {
-            hadValidStructure = true;
-            int idx = 1;
-            foreach (var snap in payload.Items)
+            restoreResult.HasValidStructure = true;
+            if (payload.ConcurrentComicDownloads.HasValue && payload.ConcurrentComicDownloads.Value > 0)
             {
-                if (snap == null || string.IsNullOrWhiteSpace(snap.Url)) continue;
-                var item = RestoreItemFromSnapshot(snap, idx++);
-                result.Add(item);
+                restoreResult.ConcurrentComicDownloads = payload.ConcurrentComicDownloads.Value;
+            }
+            if (payload.ImageDownloadThreads.HasValue && payload.ImageDownloadThreads.Value > 0)
+            {
+                restoreResult.ImageDownloadThreads = payload.ImageDownloadThreads.Value;
+            }
+            if (payload.LinkCpuThreads.HasValue && payload.LinkCpuThreads.Value > 0)
+            {
+                restoreResult.LinkCpuThreads = payload.LinkCpuThreads.Value;
+            }
 
-                if (item.HasParallelSplitChildren && !item.IsParallelSplitCollapsed)
+            if (payload.Items != null)
+            {
+                int idx = 1;
+                foreach (var snap in payload.Items)
                 {
-                    foreach (var child in item.ParallelSplitChildren)
+                    if (snap == null || string.IsNullOrWhiteSpace(snap.Url)) continue;
+                    var item = RestoreItemFromSnapshot(snap, idx++);
+                    restoreResult.Items.Add(item);
+
+                    if (item.HasParallelSplitChildren && !item.IsParallelSplitCollapsed)
                     {
-                        child.Index = idx++;
-                        result.Add(child);
+                        foreach (var child in item.ParallelSplitChildren)
+                        {
+                            child.Index = idx++;
+                            restoreResult.Items.Add(child);
+                        }
                     }
                 }
+                return restoreResult;
             }
-            return result;
         }
 
         // 2. Fallback đọc từ bảng Markdown (hỗ trợ cả định dạng 10 cột, 9 cột và bảng WPF 4-5 cột)
@@ -624,7 +727,7 @@ public class QueueBackupService
             string trimmed = line.Trim();
             if (trimmed.StartsWith("# COMIC DOWNLOADER GMTPC", StringComparison.OrdinalIgnoreCase))
             {
-                hadValidStructure = true;
+                restoreResult.HasValidStructure = true;
             }
 
             if (!trimmed.StartsWith("|") || trimmed.Contains("---") || trimmed.StartsWith("| STT", StringComparison.OrdinalIgnoreCase) || trimmed.StartsWith("| No.", StringComparison.OrdinalIgnoreCase))
@@ -635,7 +738,7 @@ public class QueueBackupService
             var match10 = tableRowRegex10.Match(trimmed);
             if (match10.Success)
             {
-                hadValidStructure = true;
+                restoreResult.HasValidStructure = true;
                 string title = UnescapeMarkdown(match10.Groups[2].Value.Trim());
                 string url = match10.Groups[3].Value.Trim().Replace("\\|", "|");
                 string status = match10.Groups[4].Value.Trim();
@@ -652,14 +755,14 @@ public class QueueBackupService
                 ParseSubfolderLock(subfolderRaw, out string cleanSubfolder, out bool isLocked);
 
                 var item = CreateItemFromTableRow(rowIdx++, title, url, status, progressVal, currentChapter, currentPage, chapterSelect, cleanSubfolder, isLocked, localDir);
-                result.Add(item);
+                restoreResult.Items.Add(item);
                 continue;
             }
 
             var match9 = tableRowRegex9.Match(trimmed);
             if (match9.Success)
             {
-                hadValidStructure = true;
+                restoreResult.HasValidStructure = true;
                 string title = UnescapeMarkdown(match9.Groups[2].Value.Trim());
                 string url = match9.Groups[3].Value.Trim().Replace("\\|", "|");
                 string status = match9.Groups[4].Value.Trim();
@@ -673,11 +776,11 @@ public class QueueBackupService
 
                 double.TryParse(progressStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double progressVal);
                 var item = CreateItemFromTableRow(rowIdx++, title, url, status, progressVal, currentChapter, currentPage, chapterSelect, string.Empty, false, localDir);
-                result.Add(item);
+                restoreResult.Items.Add(item);
             }
         }
 
-        return result;
+        return restoreResult;
     }
 
     private static QueueMarkdownPayload? TryParseJsonPayload(string content)

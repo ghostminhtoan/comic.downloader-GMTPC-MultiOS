@@ -113,6 +113,13 @@
                                 ToolTip.Tip="Dán trực tiếp liên kết từ bộ nhớ tạm (Clipboard) và nạp vào danh sách">
                             <TextBlock Text="📋 DÁN LINK" FontSize="11" />
                         </Button>
+                        <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="5" Padding="8,2" Height="30" Margin="0,0,8,4"
+                                ToolTip.Tip="Giới hạn số luồng CPU xử lý link/thumbnail/quét chương (Android mặc định 3, tối đa 6; Windows/Linux mặc định 4, tối đa bằng tổng số luồng CPU)">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+                                <TextBlock Text="Số luồng CPU:" FontSize="11" Foreground="#CBD5E1" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <NumericUpDown Minimum="1" Maximum="{Binding MaxLinkCpuThreads}" Value="{Binding LinkCpuThreads, Mode=TwoWay}" Increment="1" FormatString="0" Width="86" Height="24" FontSize="11" />
+                            </StackPanel>
+                        </Border>
                         <CheckBox IsChecked="{Binding IsAutoPasteClipboard}"
                                   VerticalAlignment="Center" Margin="0,0,0,4"
                                   ToolTip.Tip="Tự động theo dõi Clipboard: mỗi khi copy link truyện sẽ tự động nạp">

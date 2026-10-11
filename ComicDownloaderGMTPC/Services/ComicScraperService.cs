@@ -22,6 +22,10 @@ public class ComicScraperService
     private readonly HttpClient _httpClient;
     private readonly CookieContainer _cookieContainer = new();
 
+    public int MaxCpuThreads { get; set; } = OperatingSystem.IsAndroid()
+        ? 3
+        : Math.Min(4, CpuTopologyHelper.GetMaxLogicalProcessorCount());
+
     public ComicScraperService()
     {
         var handler = DoHResolver.CreateBypassHandler(_cookieContainer);
@@ -3102,6 +3106,8 @@ public class ComicScraperService
             string nozomiUrl = GetHitomiNozomiUrl(tagUrl);
             if (!string.IsNullOrWhiteSpace(nozomiUrl))
             {
+                int hitomiConcurrency = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
+                using var hitomiSem = new SemaphoreSlim(hitomiConcurrency, hitomiConcurrency);
                 await HitomiResolverService.RefreshGGAsync(_httpClient, ct).ConfigureAwait(false);
                 for (int page = pageFrom; page <= pageTo; page++)
                 {
@@ -3118,12 +3124,24 @@ public class ComicScraperService
                         if (!res.IsSuccessStatusCode) continue;
 
                         byte[] bytes = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                        var pageGalleryIds = new List<int>();
                         for (int i = 0; i + 3 < bytes.Length; i += 4)
                         {
                             int gId = (bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3];
                             string cUrl = $"https://hitomi.la/galleries/{gId}.html";
                             if (seenUrls.Add(cUrl))
                             {
+                                pageGalleryIds.Add(gId);
+                            }
+                        }
+
+                        var fetchedItems = new ComicBookItem?[pageGalleryIds.Count];
+                        var galleryTasks = pageGalleryIds.Select(async (gId, idx) =>
+                        {
+                            await hitomiSem.WaitAsync(ct).ConfigureAwait(false);
+                            try
+                            {
+                                string cUrl = $"https://hitomi.la/galleries/{gId}.html";
                                 string cTitle = $"Hitomi Gallery {gId}";
                                 string cCover = string.Empty;
 
@@ -3151,16 +3169,29 @@ public class ComicScraperService
                                 }
                                 catch { }
 
-                                list.Add(new ComicBookItem
+                                fetchedItems[idx] = new ComicBookItem
                                 {
-                                    Index = list.Count + 1,
                                     Url = cUrl,
                                     Title = CleanTitle(cTitle),
                                     CoverUrl = cCover,
                                     Domain = "hitomi.la",
                                     Status = "Waiting",
                                     StatusMessage = "Sẵn sàng tải"
-                                });
+                                };
+                            }
+                            finally
+                            {
+                                hitomiSem.Release();
+                            }
+                        });
+
+                        await Task.WhenAll(galleryTasks).ConfigureAwait(false);
+                        foreach (var item in fetchedItems)
+                        {
+                            if (item != null)
+                            {
+                                item.Index = list.Count + 1;
+                                list.Add(item);
                             }
                         }
                     }
@@ -3170,14 +3201,20 @@ public class ComicScraperService
             }
         }
 
-        for (int page = pageFrom; page <= pageTo; page++)
+        int totalPagesToFetch = pageTo - pageFrom + 1;
+        int pageConcurrency = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
+        var pageResults = new List<(string Url, string Title, string Cover)>?[totalPagesToFetch];
+        using var pageSem = new SemaphoreSlim(pageConcurrency, pageConcurrency);
+
+        var pageTasks = Enumerable.Range(0, totalPagesToFetch).Select(async offset =>
         {
-            if (ct.IsCancellationRequested) break;
+            int page = pageFrom + offset;
+            if (ct.IsCancellationRequested) return;
 
-            string pageUrl = BuildPagedTagUrl(tagUrl, page, domain);
-
+            await pageSem.WaitAsync(ct).ConfigureAwait(false);
             try
             {
+                string pageUrl = BuildPagedTagUrl(tagUrl, page, domain);
                 using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
                 if (domain.Contains("hentaiforce"))
                 {
@@ -3188,31 +3225,41 @@ public class ComicScraperService
                     req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
                 }
                 using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-                if (!res.IsSuccessStatusCode) continue;
+                if (!res.IsSuccessStatusCode) return;
 
                 string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                pageResults[offset] = ExtractComicLinksFromTagPage(html, pageUrl, domain);
+            }
+            catch { }
+            finally
+            {
+                pageSem.Release();
+            }
+        });
 
-                // Trích xuất các liên kết truyện từ trang danh mục
-                var comicLinks = ExtractComicLinksFromTagPage(html, pageUrl, domain);
+        await Task.WhenAll(pageTasks).ConfigureAwait(false);
 
-                foreach (var (cUrl, cTitle, cCover) in comicLinks)
+        for (int offset = 0; offset < totalPagesToFetch; offset++)
+        {
+            var comicLinks = pageResults[offset];
+            if (comicLinks == null) continue;
+
+            foreach (var (cUrl, cTitle, cCover) in comicLinks)
+            {
+                if (seenUrls.Add(cUrl))
                 {
-                    if (seenUrls.Add(cUrl))
+                    list.Add(new ComicBookItem
                     {
-                        list.Add(new ComicBookItem
-                        {
-                            Index = list.Count + 1,
-                            Url = cUrl,
-                            Title = cTitle,
-                            CoverUrl = cCover,
-                            Domain = DomainRoutingService.DetectDomain(cUrl),
-                            Status = "Waiting",
-                            StatusMessage = "Sẵn sàng tải"
-                        });
-                    }
+                        Index = list.Count + 1,
+                        Url = cUrl,
+                        Title = cTitle,
+                        CoverUrl = cCover,
+                        Domain = DomainRoutingService.DetectDomain(cUrl),
+                        Status = "Waiting",
+                        StatusMessage = "Sẵn sàng tải"
+                    });
                 }
             }
-            catch {}
         }
 
         return list;
@@ -4216,7 +4263,8 @@ public class ComicScraperService
             // 3. Fallback Slow Path: Fetch reader pages in parallel
             string cleanGalleryUrl = galleryUrl.TrimEnd('/');
             var pageImageDict = new System.Collections.Concurrent.ConcurrentDictionary<int, string>();
-            using var sem = new SemaphoreSlim(8, 8);
+            int readerConcurrency = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
+            using var sem = new SemaphoreSlim(readerConcurrency, readerConcurrency);
 
             var tasks = Enumerable.Range(1, totalPages).Select(async pageNum =>
             {

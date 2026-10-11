@@ -2183,3 +2183,27 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.65 Điều Khiển "Số Luồng CPU" Cạnh Nút "📋 DÁN LINK" (Chống Lag Android & Đa Luồng Desktop) & Lưu Trữ Cấu Hình Tải Trong Auto-Save Markdown (2026-10-11)
+- **Mục Tiêu**:
+  1. Bổ sung cụm điều khiển `TextBlock` **"Số luồng CPU:"** + `NumericUpDown` ngay bên phải nút **`📋 DÁN LINK`** tại thanh nhập nhanh (`2. QUICK DIRECT LINK BAR`).
+     - **Trên Android (`OperatingSystem.IsAndroid()`)**: Mặc định = `3`, tối đa (`MaxLinkCpuThreads`) = `6` (tối thiểu = `1`) để giảm tải CPU/UI thread và chống giật lag khi bóc tách link, nạp thumbnail hoặc quét chương.
+     - **Trên Windows & Linux**: Mặc định = `4` (kẹp trong giới hạn hệ thống), tối đa (`MaxLinkCpuThreads`) = tổng số luồng xử lý logic của hệ thống lấy qua `CpuTopologyHelper.GetMaxLogicalProcessorCount()` (giống hệt `MaxSystemThreads` của ô `"Số CPU"` trong tab `"🎨 Xử Lý Ảnh"`), đảm bảo người dùng không thể chọn vượt quá tổng số logical processor của máy.
+  2. Nâng cấp **Auto-Save (`autosave.md` & `autosave mirror.md`)** và **Sao lưu/Phục hồi Markdown (`.md`)** để lưu và tự động khôi phục:
+     - **Số lượng truyện tải cùng lúc** (`ConcurrentComicDownloads`)
+     - **Số connection tải ảnh** (`ImageDownloadThreads`)
+     - **Số luồng CPU** (`LinkCpuThreads`)
+- **Giải Pháp Kiến Trúc & Triển Khai**:
+  1. **Thuộc Tính `LinkCpuThreads` & `MaxLinkCpuThreads` (`MainViewModel.cs`, `MainView.axaml`)**:
+     - Khai báo `MaxLinkCpuThreads => OperatingSystem.IsAndroid() ? 6 : MaxSystemThreads` (trong đó `MaxSystemThreads` lấy từ `CpuTopologyHelper.GetMaxLogicalProcessorCount()`).
+     - Khai báo `LinkCpuThreads` với giá trị khởi tạo `OperatingSystem.IsAndroid() ? 3 : Math.Min(4, CpuTopologyHelper.GetMaxLogicalProcessorCount())`.
+     - Khi `LinkCpuThreads` thay đổi (`OnLinkCpuThreadsChanged`), tự động kẹp giá trị hợp lệ `[1..MaxLinkCpuThreads]`, đồng bộ ngay sang `_scraperService.MaxCpuThreads`, `ThumbnailPreviewService.Instance.SetMaxCpuThreads`, `ParallelCheckCount`, và kích hoạt `RequestQueueAutoSave(250)`.
+     - Giới hạn độ song song (`SemaphoreSlim` + `Task.Run`) theo `LinkCpuThreads` cho toàn bộ các luồng: bóc tách nhiều link truyện (`ExtractUrlsFromTextAsync`, `ImportSelectedSearchToQueueAsync`), cào hàng loạt trang danh mục/tag (`ScrapeBatchComicsFromTagPagesAsync`, `ExtractHentaiforceChapterImagesAsync`), nạp/quét lại thumbnail (`ThumbnailPreviewService.PrefetchBatchAsync`, `RescanThumbnailsAsync`).
+  2. **Lưu Trữ & Khôi Phục Số Lượng Truyện Tải + Số Connection Trong `QueueBackupService.cs`**:
+     - Mở rộng `QueueMarkdownPayload` và `QueueRestoreResult` với 3 trường `ConcurrentComicDownloads`, `ImageDownloadThreads`, và `LinkCpuThreads`.
+     - Ghi rõ dòng cấu hình trên phần mở đầu Markdown: `> Cấu hình tải: Số truyện cùng lúc: X | Connection tải ảnh: Y | Số luồng CPU: Z` đồng thời lưu trong khối JSON trạng thái ẩn (`QUEUE_STATE_JSON_START`).
+     - Hỗ trợ khôi phục đầy đủ cả từ khối JSON lẫn fallback Regex trên dòng header Markdown ngay cả khi danh sách hàng đợi đang trống (`0` truyện), và tự động kích hoạt lưu snapshot khi người dùng thay đổi bất kỳ thông số nào trong 3 thông số trên.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+

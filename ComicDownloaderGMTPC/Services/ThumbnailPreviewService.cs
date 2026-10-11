@@ -25,9 +25,9 @@ public sealed class ThumbnailPreviewService
 
     private readonly HttpClient _httpClient;
     private readonly CookieContainer _cookieContainer = new();
-    private readonly SemaphoreSlim _generalSemaphore = new(OperatingSystem.IsAndroid() ? 2 : 4, OperatingSystem.IsAndroid() ? 2 : 4);
-    private readonly SemaphoreSlim _rateSensitiveSemaphore = new(OperatingSystem.IsAndroid() ? 1 : 2, OperatingSystem.IsAndroid() ? 1 : 2);
-    private readonly SemaphoreSlim _priorityScrollSemaphore = new(3, 3);
+    private readonly SemaphoreSlim _generalSemaphore = new(OperatingSystem.IsAndroid() ? 6 : 16, OperatingSystem.IsAndroid() ? 6 : 16);
+    private readonly SemaphoreSlim _rateSensitiveSemaphore = new(OperatingSystem.IsAndroid() ? 2 : 3, OperatingSystem.IsAndroid() ? 2 : 3);
+    private readonly SemaphoreSlim _priorityScrollSemaphore = new(OperatingSystem.IsAndroid() ? 3 : 4, OperatingSystem.IsAndroid() ? 3 : 4);
     private readonly ConcurrentDictionary<string, string> _candidateUrlCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> _failedUrlCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task> _inFlightItemTasks = new(StringComparer.OrdinalIgnoreCase);
@@ -36,6 +36,16 @@ public sealed class ThumbnailPreviewService
     private static readonly Random _jitter = new();
     private static readonly object _bitmapMemoryLock = new();
     private static ComicBookItem? _activeHighResItem;
+
+    public int MaxCpuThreads { get; set; } = OperatingSystem.IsAndroid()
+        ? 3
+        : Math.Min(4, CpuTopologyHelper.GetMaxLogicalProcessorCount());
+
+    public void SetMaxCpuThreads(int threads)
+    {
+        int maxAllowed = OperatingSystem.IsAndroid() ? 6 : CpuTopologyHelper.GetMaxLogicalProcessorCount();
+        MaxCpuThreads = Math.Clamp(threads, 1, maxAllowed);
+    }
 
     private ThumbnailPreviewService()
     {
@@ -434,7 +444,7 @@ public sealed class ThumbnailPreviewService
 
         // Ưu tiên nạp trước các truyện chưa có ThumbnailBitmap trên giao diện; chạy tuần tự theo nhóm nhỏ để nhường băng thông cho thao tác cuộn (Scroll) và Popup Preview
         var queue = new ConcurrentQueue<ComicBookItem>(validItems.OrderBy(x => x.ThumbnailBitmap != null ? 1 : 0));
-        int workerCount = OperatingSystem.IsAndroid() ? 2 : 3;
+        int workerCount = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
         var workers = new List<Task>(workerCount);
 
         for (int w = 0; w < workerCount; w++)
