@@ -3,14 +3,63 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.ViewModels;
+using SkiaSharp;
 
 namespace ComicDownloaderGMTPC.Services;
+
+public sealed class ReaderVisualEffectSettings
+{
+    public double CropLeftPercent { get; set; }
+    public double CropTopPercent { get; set; }
+    public double CropRightPercent { get; set; }
+    public double CropBottomPercent { get; set; }
+
+    public bool IsGrayScale { get; set; }
+    public bool IsAutoContrast { get; set; }
+    public bool IsSharpenFilter { get; set; }
+    public bool IsInvertColor { get; set; }
+    public bool IsSaturationEnabled { get; set; }
+    public double SaturationValue { get; set; } = 100.0;
+
+    public bool HasCrop =>
+        CropLeftPercent > 0.1 ||
+        CropTopPercent > 0.1 ||
+        CropRightPercent > 0.1 ||
+        CropBottomPercent > 0.1;
+
+    public bool HasPixelFilter =>
+        IsGrayScale ||
+        IsAutoContrast ||
+        IsSharpenFilter ||
+        IsInvertColor ||
+        (IsSaturationEnabled && Math.Abs(SaturationValue - 100.0) > 1.0);
+
+    public bool HasAnyEffect => HasCrop || HasPixelFilter;
+
+    public ReaderVisualEffectSettings Clone()
+    {
+        return new ReaderVisualEffectSettings
+        {
+            CropLeftPercent = CropLeftPercent,
+            CropTopPercent = CropTopPercent,
+            CropRightPercent = CropRightPercent,
+            CropBottomPercent = CropBottomPercent,
+            IsGrayScale = IsGrayScale,
+            IsAutoContrast = IsAutoContrast,
+            IsSharpenFilter = IsSharpenFilter,
+            IsInvertColor = IsInvertColor,
+            IsSaturationEnabled = IsSaturationEnabled,
+            SaturationValue = SaturationValue
+        };
+    }
+}
 
 public sealed class ComicReaderService
 {
@@ -23,11 +72,24 @@ public sealed class ComicReaderService
     /// </summary>
     public static Action<ComicReaderViewModel>? AndroidLaunchSeparateReaderTask { get; set; }
 
+    /// <summary>
+    /// Delegate khóa xoay màn hình trên Android (0 = Auto, 1 = Landscape, 2 = Portrait).
+    /// </summary>
+    public static Action<int>? AndroidSetOrientationMode { get; set; }
+
+    /// <summary>
+    /// Delegate điều chỉnh độ sáng hệ thống và giữ sáng màn hình trên Android
+    /// (isAutoBrightness, brightnessPercent 0..100, keepScreenOn).
+    /// </summary>
+    public static Action<bool, double, bool>? AndroidApplyDisplaySettings { get; set; }
+
     public static bool IsAndroidSeparateReaderSupported => AndroidLaunchSeparateReaderTask != null;
 
     public ComicReaderViewModel? ActiveExternalReaderViewModel { get; set; }
 
     public Action? ActiveExternalReaderClosedCallback { get; set; }
+
+    public ReaderVisualEffectSettings ActiveEffectSettings { get; set; } = new();
 
     private readonly SemaphoreSlim _decodeSemaphore = new(3, 3);
 
@@ -178,7 +240,8 @@ public sealed class ComicReaderService
 
             if (page.IsLoaded || ct.IsCancellationRequested) return;
 
-            Bitmap? bmp = await Task.Run(() => DecodePageBitmap(page), ct).ConfigureAwait(false);
+            var effects = ActiveEffectSettings.Clone();
+            Bitmap? bmp = await Task.Run(() => DecodePageBitmap(page, effects), ct).ConfigureAwait(false);
             if (bmp != null && !ct.IsCancellationRequested)
             {
                 int pxW = bmp.PixelSize.Width;
@@ -263,19 +326,30 @@ public sealed class ComicReaderService
         }
     }
 
-    private static Bitmap? DecodePageBitmap(ReaderPageItem page)
+    private static Bitmap? DecodePageBitmap(ReaderPageItem page, ReaderVisualEffectSettings effects)
     {
         try
         {
+            byte[]? rawBytes = null;
+
             if (page.IsPdfEntry)
             {
                 if (!File.Exists(page.SourcePath)) return null;
-                return PdfComicParser.Instance.DecodePageBitmap(page.SourcePath, page.PdfPageIndex);
+                var pdfBmp = PdfComicParser.Instance.DecodePageBitmap(page.SourcePath, page.PdfPageIndex);
+                if (pdfBmp == null) return null;
+                if (!effects.HasAnyEffect)
+                {
+                    return pdfBmp;
+                }
+
+                using var pdfMs = new MemoryStream();
+#pragma warning disable CS0618
+                pdfBmp.Save(pdfMs);
+#pragma warning restore CS0618
+                pdfBmp.Dispose();
+                rawBytes = pdfMs.ToArray();
             }
-
-            byte[]? rawBytes = null;
-
-            if (page.IsArchiveEntry)
+            else if (page.IsArchiveEntry)
             {
                 if (!File.Exists(page.SourcePath)) return null;
                 using var fs = new FileStream(page.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -296,6 +370,15 @@ public sealed class ComicReaderService
 
             if (rawBytes == null || rawBytes.Length == 0) return null;
 
+            if (effects.HasAnyEffect)
+            {
+                var processedBmp = DecodeAndApplyEffectsWithSkia(rawBytes, effects);
+                if (processedBmp != null)
+                {
+                    return processedBmp;
+                }
+            }
+
             try
             {
                 using var ms = new MemoryStream(rawBytes, writable: false);
@@ -314,5 +397,184 @@ public sealed class ComicReaderService
         catch { }
 
         return null;
+    }
+
+    private static Bitmap? DecodeAndApplyEffectsWithSkia(byte[] rawBytes, ReaderVisualEffectSettings effects)
+    {
+        try
+        {
+            using var skData = SKData.CreateCopy(rawBytes);
+            using var codec = SKCodec.Create(skData);
+            if (codec == null) return null;
+
+            var decodeInfo = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using var srcBitmap = SKBitmap.Decode(codec, decodeInfo);
+            if (srcBitmap == null || srcBitmap.Width <= 4 || srcBitmap.Height <= 4) return null;
+
+            int srcW = srcBitmap.Width;
+            int srcH = srcBitmap.Height;
+
+            int leftPx = (int)Math.Round(srcW * Math.Clamp(effects.CropLeftPercent, 0, 35) / 100.0);
+            int rightPx = (int)Math.Round(srcW * Math.Clamp(effects.CropRightPercent, 0, 35) / 100.0);
+            int topPx = (int)Math.Round(srcH * Math.Clamp(effects.CropTopPercent, 0, 35) / 100.0);
+            int bottomPx = (int)Math.Round(srcH * Math.Clamp(effects.CropBottomPercent, 0, 35) / 100.0);
+
+            int cropW = Math.Max(32, srcW - leftPx - rightPx);
+            int cropH = Math.Max(32, srcH - topPx - bottomPx);
+
+            var targetInfo = new SKImageInfo(cropW, cropH, SKColorType.Bgra8888, SKAlphaType.Opaque);
+            using var dstBitmap = new SKBitmap(targetInfo);
+            using (var canvas = new SKCanvas(dstBitmap))
+            {
+                canvas.Clear(SKColors.White);
+                var srcRect = new SKRect(leftPx, topPx, leftPx + cropW, topPx + cropH);
+                var dstRect = new SKRect(0, 0, cropW, cropH);
+
+                if (effects.IsSharpenFilter)
+                {
+                    using var paint = new SKPaint();
+                    float[] kernel =
+                    {
+                        0f, -0.85f, 0f,
+                        -0.85f, 4.4f, -0.85f,
+                        0f, -0.85f, 0f
+                    };
+                    using var conv = SKImageFilter.CreateMatrixConvolution(
+                        new SKSizeI(3, 3),
+                        kernel,
+                        1.0f,
+                        0.0f,
+                        new SKPointI(1, 1),
+                        SKShaderTileMode.Clamp,
+                        false);
+                    paint.ImageFilter = conv;
+                    canvas.DrawBitmap(srcBitmap, srcRect, dstRect, paint);
+                }
+                else
+                {
+                    canvas.DrawBitmap(srcBitmap, srcRect, dstRect);
+                }
+            }
+
+            if (effects.IsAutoContrast ||
+                effects.IsGrayScale ||
+                effects.IsInvertColor ||
+                (effects.IsSaturationEnabled && Math.Abs(effects.SaturationValue - 100.0) > 1.0))
+            {
+                ApplyPixelTransformsInPlace(dstBitmap, effects);
+            }
+
+            using var skImage = SKImage.FromBitmap(dstBitmap);
+            using var encoded = skImage.Encode(SKEncodedImageFormat.Jpeg, 92);
+            if (encoded == null) return null;
+
+            using var outMs = new MemoryStream(encoded.ToArray(), writable: false);
+            return new Bitmap(outMs);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void ApplyPixelTransformsInPlace(SKBitmap bmp, ReaderVisualEffectSettings effects)
+    {
+        IntPtr ptr = bmp.GetPixels();
+        int totalBytes = bmp.ByteCount;
+        if (ptr == IntPtr.Zero || totalBytes < 4) return;
+
+        byte[] buffer = new byte[totalBytes];
+        Marshal.Copy(ptr, buffer, 0, totalBytes);
+
+        int minLum = 0;
+        int maxLum = 255;
+
+        if (effects.IsAutoContrast)
+        {
+            Span<int> hist = stackalloc int[256];
+            int sampleStep = Math.Max(4, (totalBytes / 4 / 25000) * 4);
+            int samples = 0;
+            for (int i = 0; i <= totalBytes - 4; i += sampleStep)
+            {
+                int b = buffer[i];
+                int g = buffer[i + 1];
+                int r = buffer[i + 2];
+                int lum = (r * 77 + g * 150 + b * 29) >> 8;
+                hist[Math.Clamp(lum, 0, 255)]++;
+                samples++;
+            }
+
+            if (samples > 100)
+            {
+                int lowCut = (int)(samples * 0.02);
+                int highCut = (int)(samples * 0.98);
+                int acc = 0;
+                for (int k = 0; k < 256; k++)
+                {
+                    acc += hist[k];
+                    if (acc >= lowCut) { minLum = k; break; }
+                }
+                acc = 0;
+                for (int k = 255; k >= 0; k--)
+                {
+                    acc += hist[k];
+                    if (acc >= (samples - highCut)) { maxLum = k; break; }
+                }
+                if (maxLum - minLum < 40)
+                {
+                    minLum = 0;
+                    maxLum = 255;
+                }
+            }
+        }
+
+        bool doContrast = effects.IsAutoContrast && (minLum > 0 || maxLum < 255);
+        float contrastScale = doContrast ? (255.0f / Math.Max(1, maxLum - minLum)) : 1.0f;
+
+        bool doSat = effects.IsSaturationEnabled && !effects.IsGrayScale && Math.Abs(effects.SaturationValue - 100.0) > 1.0;
+        float satFactor = (float)Math.Clamp(effects.SaturationValue / 100.0, 0.0, 2.5);
+
+        bool doGray = effects.IsGrayScale;
+        bool doInvert = effects.IsInvertColor;
+
+        for (int i = 0; i <= totalBytes - 4; i += 4)
+        {
+            float b = buffer[i];
+            float g = buffer[i + 1];
+            float r = buffer[i + 2];
+
+            if (doContrast)
+            {
+                r = Math.Clamp((r - minLum) * contrastScale, 0f, 255f);
+                g = Math.Clamp((g - minLum) * contrastScale, 0f, 255f);
+                b = Math.Clamp((b - minLum) * contrastScale, 0f, 255f);
+            }
+
+            if (doGray)
+            {
+                float lum = 0.299f * r + 0.587f * g + 0.114f * b;
+                r = g = b = lum;
+            }
+            else if (doSat)
+            {
+                float lum = 0.299f * r + 0.587f * g + 0.114f * b;
+                r = Math.Clamp(lum + (r - lum) * satFactor, 0f, 255f);
+                g = Math.Clamp(lum + (g - lum) * satFactor, 0f, 255f);
+                b = Math.Clamp(lum + (b - lum) * satFactor, 0f, 255f);
+            }
+
+            if (doInvert)
+            {
+                r = 255f - r;
+                g = 255f - g;
+                b = 255f - b;
+            }
+
+            buffer[i] = (byte)b;
+            buffer[i + 1] = (byte)g;
+            buffer[i + 2] = (byte)r;
+        }
+
+        Marshal.Copy(buffer, 0, ptr, totalBytes);
     }
 }

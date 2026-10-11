@@ -21,6 +21,17 @@ public partial class ComicReaderControl : UserControl
     private int _scrollRequestVersion;
     private long _lastUserScrollInputTick;
 
+    // Trạng thái vuốt ngang (Swipe) trên thanh công cụ Button 1-5 ↔ Button 6-10
+    private Point _toolbarSwipeStartPoint;
+    private bool _isToolbarSwipeTracking;
+    private bool _toolbarSwipeTriggered;
+
+    // Trạng thái kéo trực tiếp khung cắt lề Margin Crop (Button 4)
+    private Point _cropDragLastPoint;
+    private bool _isCropDragging;
+    private double _cropStartXRatio;
+    private double _cropStartYRatio;
+
     public ComicReaderControl()
     {
         InitializeComponent();
@@ -39,6 +50,24 @@ public partial class ComicReaderControl : UserControl
             viewport.AddHandler(PointerWheelChangedEvent, OnViewportPointerWheelChanged, RoutingStrategies.Tunnel, handledEventsToo: true);
         }
 
+        // Lắng nghe vuốt ngang (Swipe) trên thanh công cụ 10 nút (Button 1-5 ↔ Button 6-10)
+        var toolbar = this.FindControl<Border>("SwipeableToolbarBorder");
+        if (toolbar != null)
+        {
+            toolbar.AddHandler(PointerPressedEvent, OnToolbarPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+            toolbar.AddHandler(PointerMovedEvent, OnToolbarPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+            toolbar.AddHandler(PointerReleasedEvent, OnToolbarPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        }
+
+        // Lắng nghe kéo trực tiếp trên khung cắt lề Margin Crop (Button 4)
+        var cropPanel = this.FindControl<Panel>("MarginCropInteractivePanel");
+        if (cropPanel != null)
+        {
+            cropPanel.AddHandler(PointerPressedEvent, OnCropPanelPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+            cropPanel.AddHandler(PointerMovedEvent, OnCropPanelPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+            cropPanel.AddHandler(PointerReleasedEvent, OnCropPanelPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        }
+
         // Lắng nghe trực tiếp thao tác kéo thanh trượt trang của người dùng (tránh vòng lặp TwoWay với ScrollViewer)
         var scrubber = this.FindControl<Slider>("PageScrubberSlider");
         if (scrubber != null)
@@ -51,6 +80,128 @@ public partial class ComicReaderControl : UserControl
 
         AddHandler(KeyDownEvent, OnControlKeyDown, RoutingStrategies.Tunnel);
     }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == BoundsProperty && DataContext is ComicReaderViewModel vm)
+        {
+            var b = Bounds;
+            if (b.Width > 0 && b.Height > 0)
+            {
+                vm.UpdateViewportDimensions(b.Width, b.Height);
+            }
+        }
+    }
+
+    // =========================================================================
+    // XỬ LÝ VUỐT NGANG (SWIPE) TRÊN THANH CÔNG CỤ BUTTON 1-5 ↔ BUTTON 6-10
+    // =========================================================================
+
+    private void OnToolbarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _toolbarSwipeStartPoint = e.GetPosition(this);
+        _isToolbarSwipeTracking = true;
+        _toolbarSwipeTriggered = false;
+    }
+
+    private void OnToolbarPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_isToolbarSwipeTracking || _toolbarSwipeTriggered) return;
+
+        Point current = e.GetPosition(this);
+        double dx = current.X - _toolbarSwipeStartPoint.X;
+        double dy = current.Y - _toolbarSwipeStartPoint.Y;
+
+        if (Math.Abs(dx) >= 26.0 && Math.Abs(dx) > Math.Abs(dy) * 1.15)
+        {
+            _toolbarSwipeTriggered = true;
+            if (DataContext is ComicReaderViewModel vm)
+            {
+                if (dx < 0)
+                {
+                    // Vuốt sang trái: sang trang 6-10 (hoặc đảo trang nếu đã ở 6-10)
+                    vm.SetToolbarPage(!vm.IsToolbarPageTwo ? true : false);
+                }
+                else
+                {
+                    // Vuốt sang phải: về trang 1-5 (hoặc đảo trang nếu đã ở 1-5)
+                    vm.SetToolbarPage(vm.IsToolbarPageTwo ? false : true);
+                }
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void OnToolbarPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_isToolbarSwipeTracking) return;
+        _isToolbarSwipeTracking = false;
+
+        if (_toolbarSwipeTriggered)
+        {
+            _toolbarSwipeTriggered = false;
+            e.Handled = true;
+            return;
+        }
+
+        Point release = e.GetPosition(this);
+        double dx = release.X - _toolbarSwipeStartPoint.X;
+        double dy = release.Y - _toolbarSwipeStartPoint.Y;
+
+        if (Math.Abs(dx) >= 24.0 && Math.Abs(dx) > Math.Abs(dy) * 1.15)
+        {
+            if (DataContext is ComicReaderViewModel vm)
+            {
+                vm.ToggleToolbarPage();
+            }
+            e.Handled = true;
+        }
+    }
+
+    // =========================================================================
+    // XỬ LÝ KÉO KHUNG CẮT LỀ MARGIN CROP (BUTTON 4)
+    // =========================================================================
+
+    private void OnCropPanelPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control panel) return;
+        _cropDragLastPoint = e.GetPosition(panel);
+        double w = Math.Max(1.0, panel.Bounds.Width);
+        double h = Math.Max(1.0, panel.Bounds.Height);
+        _cropStartXRatio = _cropDragLastPoint.X / w;
+        _cropStartYRatio = _cropDragLastPoint.Y / h;
+        _isCropDragging = true;
+    }
+
+    private void OnCropPanelPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_isCropDragging || sender is not Control panel || DataContext is not ComicReaderViewModel vm) return;
+
+        Point pt = e.GetPosition(panel);
+        double w = Math.Max(100.0, panel.Bounds.Width);
+        double h = Math.Max(100.0, panel.Bounds.Height);
+
+        double dxPct = (pt.X - _cropDragLastPoint.X) / w * 100.0;
+        double dyPct = (pt.Y - _cropDragLastPoint.Y) / h * 100.0;
+        _cropDragLastPoint = pt;
+
+        double dLeft = _cropStartXRatio < 0.5 ? dxPct : 0;
+        double dRight = _cropStartXRatio >= 0.5 ? -dxPct : 0;
+        double dTop = _cropStartYRatio < 0.5 ? dyPct : 0;
+        double dBottom = _cropStartYRatio >= 0.5 ? -dyPct : 0;
+
+        vm.AdjustPendingCropByDrag(dLeft, dTop, dRight, dBottom);
+    }
+
+    private void OnCropPanelPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _isCropDragging = false;
+    }
+
+    // =========================================================================
+    // XỬ LÝ THANH TRƯỢT TIẾN ĐỘ TRANG (PAGE SCRUBBER SLIDER)
+    // =========================================================================
 
     private void OnScrubberPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -100,6 +251,10 @@ public partial class ComicReaderControl : UserControl
         {
             _subscribedVm = vm;
             vm.ScrollToPageRequested += OnVmScrollToPageRequested;
+            if (Bounds.Width > 0 && Bounds.Height > 0)
+            {
+                vm.UpdateViewportDimensions(Bounds.Width, Bounds.Height);
+            }
             if (vm.Pages.Count > 0 && vm.CurrentPageIndex >= 0)
             {
                 OnVmScrollToPageRequested(vm.CurrentPageIndex);
@@ -127,7 +282,6 @@ public partial class ComicReaderControl : UserControl
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             if (reqVersion != _scrollRequestVersion) return;
-            // Không giật ngược vị trí nếu người dùng vừa mới chủ động lăn chuột / kéo thanh cuộn
             if (!_isUserDraggingScrubber && Environment.TickCount64 - _lastUserScrollInputTick < 220)
             {
                 _isProgrammaticScroll = false;
@@ -245,6 +399,25 @@ public partial class ComicReaderControl : UserControl
         double dy = releasePoint.Y - _pointerPressPoint.Y;
         double distance = Math.Sqrt(dx * dx + dy * dy);
 
+        // Nếu ở chế độ लật trang (Flip Mode) và người dùng vuốt ngang (Swipe) trên trang truyện -> Lật trang!
+        if (DataContext is ComicReaderViewModel swipeVm && swipeVm.IsFlipMode && !swipeVm.IsMarginEditorOpen)
+        {
+            if (Math.Abs(dx) >= 42.0 && Math.Abs(dx) > Math.Abs(dy) * 1.3 && elapsedMs < 650)
+            {
+                if (dx < 0)
+                {
+                    // Vuốt từ phải sang trái
+                    swipeVm.TapRightZone();
+                }
+                else
+                {
+                    // Vuốt từ trái sang phải
+                    swipeVm.TapLeftZone();
+                }
+                return;
+            }
+        }
+
         // Chỉ tính là Tap khi người dùng chạm nhanh và không kéo cuộn trang
         if (distance > 14.0 || elapsedMs > 450) return;
 
@@ -256,14 +429,14 @@ public partial class ComicReaderControl : UserControl
         if (vm.IsScrollMode)
         {
             // Ở chế độ Scroll dọc: chạm vào vùng giữa màn hình để bật/tắt tùy chọn ComicScreen
-            if (xRatio >= 0.15 && xRatio <= 0.85)
+            if (xRatio >= 0.12 && xRatio <= 0.88)
             {
                 vm.ToggleOverlay();
             }
         }
         else
         {
-            // Ở chế độ Lật trang: 1/3 Trái = lật trái, 1/3 Giữa = bật/tắt tùy chọn, 1/3 Phải = lật phải
+            // Ở chế độ Lật trang: 1/3 Trái = lật trái, 1/3 Giữa = bật/tắt tùy chọn ComicScreen, 1/3 Phải = lật phải
             if (xRatio < 0.32)
             {
                 vm.TapLeftZone();
@@ -307,6 +480,22 @@ public partial class ComicReaderControl : UserControl
     {
         if (DataContext is not ComicReaderViewModel vm) return;
 
+        // Nếu đang gõ Memo trong hộp thoại Add Bookmark thì chỉ bắt phím Esc / Enter
+        if (e.Source is TextBox)
+        {
+            if (e.Key == Key.Escape)
+            {
+                vm.CancelAddBookmark();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
+            {
+                vm.ConfirmAddBookmark();
+                e.Handled = true;
+            }
+            return;
+        }
+
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             if (e.Key == Key.Right)
@@ -327,11 +516,12 @@ public partial class ComicReaderControl : UserControl
         {
             case Key.Escape:
             case Key.Back:
-                if (vm.IsOverlayVisible)
+                if (vm.HandleBackNavigation())
                 {
-                    vm.IsOverlayVisible = false;
+                    e.Handled = true;
+                    break;
                 }
-                else if (vm.IsFullScreen)
+                if (vm.IsFullScreen)
                 {
                     vm.ToggleFullScreen();
                 }
@@ -429,6 +619,8 @@ public partial class ComicReaderControl : UserControl
                 current is RepeatButton ||
                 current is Button ||
                 current is Slider ||
+                current is CheckBox ||
+                current is TextBox ||
                 current is ComboBox ||
                 current is ComboBoxItem)
             {
@@ -439,4 +631,3 @@ public partial class ComicReaderControl : UserControl
         return false;
     }
 }
-

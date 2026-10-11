@@ -1,4 +1,5 @@
 using System;
+using Avalonia;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -39,6 +40,9 @@ public partial class ReaderPageItem : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayHeight))]
     private double _displayWidth = 900;
+
+    [ObservableProperty]
+    private Thickness _pageMargin = new(0);
 
     /// <summary>
     /// Chiều cao cố định theo đúng tỉ lệ khung hình thực của trang truyện,

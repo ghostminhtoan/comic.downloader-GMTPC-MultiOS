@@ -2330,4 +2330,30 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.71 Giao Diện Điều Khiển Trình Đọc Truyện Chuẩn ComicScreen Với Thanh 10 Nút Vuốt Ngang (`Button 1-5` ↔ `Button 6-10`) & Hệ Thống Popup Chuyên Sâu (`ComicReaderControl.axaml`, `ComicReaderViewModel.cs`, `ComicReaderService.cs`, `ReadProgressStore.cs`, `ComicReaderActivity.cs`) (2026-10-11)
+- **Bối Cảnh & Yêu Cầu Thực Tế Của Người Dùng**:
+  - Thiết kế giao diện lớp phủ điều khiển trình đọc (khi chạm vào giữa màn hình) chuẩn theo phong cách ứng dụng **ComicScreen** trên Android/Windows:
+    - Thanh công cụ phía trên chia thành 2 trang nút bấm: **Button 1–5** và vuốt ngang (**Swipe**) trên thanh đó (hoặc bấm nút mũi tên `❯`/`❮`) để chuyển sang **Button 6–10**.
+    - Riêng **Button 6 (Pinch Zoom)** giữ vị trí nút chờ để làm sau theo yêu cầu; toàn bộ **Button 1, 2, 3, 4, 5, 7, 8, 9, 10** được triển khai đầy đủ hộp thoại và chức năng thực thi trực tiếp.
+- **Giải Pháp Kiến Trúc & Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Header & Thanh Công Cụ 10 Nút Vuốt Ngang (`SwipeableToolbarBorder` trong `ComicReaderControl.axaml` & `.cs`)**:
+     - Hàng 1 (Top Header): Nút thoát đọc (`←`), nút chọn Chương/Mục lục PDF (`☰`), Tiêu đề 2 dòng (Dòng 1: Tên bộ truyện; Dòng 2: Tên chương & tên file ảnh trang hiện tại), nút tải lại (`↻`), nút menu mở rộng (`⋮`).
+     - Hàng 2 (Swipeable 10-Button Bar): Lắng nghe cử chỉ vuốt ngang (`OnToolbarPointerPressed`/`Moved`/`Released`) để lật mượt giữa cụm **Button 1–5** và **Button 6–10**, kèm nút chỉ báo `1-5 ❯` / `6-10 ❮`.
+     - Thanh đáy (Bottom Seekbar): Hiển thị nhãn số trang nổi căn giữa (`12-13 / 13` khi ghép 2 trang hoặc `12 / 13` khi 1 trang) ngay phía trên thanh trượt tiến độ màu Cyan (`#4FC3F7`).
+  2. **Chi Tiết 10 Nút Chức Năng Chuẩn ComicScreen**:
+     - **Button 1 (`Page scrolling`)**: Mở popup lưới 3×2 gồm 6 chế độ cuộn/lật trang (`Right [→]`, `Left [←]`, `Right + Vertical [R↓]`, `Right Slide [S→]`, `Left Slide [←S]`, `Left + Vertical [↓L]`).
+     - **Button 2 (`Orientation Lock`)**: Chuyển đổi khóa xoay màn hình (`AUTO` ↔ `NGANG / Landscape` ↔ `DỌC / Portrait`) và gọi trực tiếp `ComicReaderActivity.RequestedOrientation` trên Android.
+     - **Button 3 (`Page layout`)**: Mở popup 4 chế độ bố cục trang (`Off`, `Single page`, `Dual pages`, `Auto [A]` tự động ghép 2 trang khi màn hình xoay ngang và 1 trang khi xoay dọc).
+     - **Button 4 (`Margin / Crop`)**: Mở trình cắt lề toàn màn hình với khung cắt màu hồng (`#E91E63`), 4 góc chữ L dày, lưới 3×3 hỗ trợ kéo trực tiếp, và thanh 5 nút đáy (`Auto`, `Vertical`, `Horizontal`, `Reset`, `Apply ✓`) cắt lề thực tế qua `SkiaSharp`.
+     - **Button 5 (`Brightness`)**: Mở popup điều chỉnh `Auto System Brightness` + thanh trượt độ sáng hệ thống Android (`Window.Attributes.ScreenBrightness`), đổi màu nền `Background`, `Keep screen` (`WindowManagerFlags.KeepScreenOn`), `Image Brightness`, `Saturation`, `Blue Light` (lớp phủ bảo vệ mắt) và nút `DEFAULT`.
+     - **Button 6 (`Pinch Zoom`)**: Giữ biểu tượng chờ (làm mờ `Opacity="0.52"`) và hiển thị thông báo sẽ cập nhật sau theo đúng yêu cầu.
+     - **Button 7 (`Filter`)**: Mở popup 6 bộ lọc hình ảnh (`Gray Scale`, `Auto Contrast`, `Upscaling`, `Sharpen Filter`, `Invert Color`, `Blue Light`) xử lý pixel thời gian thực qua `SkiaSharp` trong `ComicReaderService`.
+     - **Button 8 (`Page spacing`)**: Mở popup bật/tắt và thanh trượt điều chỉnh khoảng cách giữa các trang truyện (`-30.0 %` đến `+50.0 %`).
+     - **Button 9 (`Add bookmark`)**: Mở hộp thoại thêm dấu trang với ô nhập ghi chú `Memo`, thông tin đường dẫn/số trang hiện tại và nút `CANCEL` / `OK` lưu bền vững vào `reader_bookmarks.json`.
+     - **Button 10 (`Bookmark list`)**: Mở bảng danh sách dấu trang ở nửa dưới màn hình với nút `CLOSE` màu vàng, hiển thị danh sách dấu trang màu Cyan để chạm nhảy thẳng tới chương/trang đã lưu hoặc xóa dấu trang.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+
 

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
+using ComicDownloaderGMTPC.Models;
 
 namespace ComicDownloaderGMTPC.Services;
 
@@ -20,6 +21,8 @@ public sealed class ReadProgressStore
     private const long EpochOffsetSeconds = 1700000000L;
 
     private readonly ConcurrentDictionary<string, int> _progressMap = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<ReaderBookmarkItem> _bookmarks = new();
+    private readonly object _bookmarkLock = new();
     private readonly object _saveLock = new();
     private readonly Timer _debounceTimer;
     private volatile bool _isDirty;
@@ -28,6 +31,7 @@ public sealed class ReadProgressStore
     {
         _debounceTimer = new Timer(_ => FlushImmediately(), null, Timeout.Infinite, Timeout.Infinite);
         LoadFromDisk();
+        LoadBookmarksFromDisk();
     }
 
     private static string GetStoreFilePath()
@@ -38,6 +42,16 @@ public sealed class ReadProgressStore
             try { Directory.CreateDirectory(dir); } catch { }
         }
         return Path.Combine(dir, "read_progress.json");
+    }
+
+    private static string GetBookmarksFilePath()
+    {
+        string dir = ComicScraperService.GetConfigDirectory();
+        if (!Directory.Exists(dir))
+        {
+            try { Directory.CreateDirectory(dir); } catch { }
+        }
+        return Path.Combine(dir, "reader_bookmarks.json");
     }
 
     private static int GetCurrentOrderStamp()
@@ -368,6 +382,104 @@ public sealed class ReadProgressStore
             .Select(f => f.Path)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>
+    /// Lấy danh sách dấu trang (Bookmark) của bộ truyện hiện tại (hoặc toàn bộ nếu không lọc).
+    /// </summary>
+    public List<ReaderBookmarkItem> GetBookmarks(string? comicRootOrTitle = null)
+    {
+        lock (_bookmarkLock)
+        {
+            if (string.IsNullOrWhiteSpace(comicRootOrTitle))
+            {
+                return _bookmarks.OrderByDescending(b => b.CreatedAtUnixSeconds).ToList();
+            }
+
+            string cleanRoot = NormalizeKey(comicRootOrTitle);
+            var filtered = _bookmarks
+                .Where(b =>
+                    string.Equals(NormalizeKey(b.ComicRootPath), cleanRoot, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(b.ComicTitle, comicRootOrTitle, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(b => b.CreatedAtUnixSeconds)
+                .ToList();
+
+            // Nếu bộ truyện hiện tại chưa có bookmark riêng, trả về danh sách bookmark gần nhất để người dùng tiện tra cứu
+            return filtered.Count > 0
+                ? filtered
+                : _bookmarks.OrderByDescending(b => b.CreatedAtUnixSeconds).ToList();
+        }
+    }
+
+    public void AddOrUpdateBookmark(ReaderBookmarkItem item)
+    {
+        if (item == null) return;
+        lock (_bookmarkLock)
+        {
+            // Nếu đã có bookmark trùng chương + trùng trang thì cập nhật Memo và thời gian
+            var existing = _bookmarks.FirstOrDefault(b =>
+                string.Equals(b.ChapterProgressKey, item.ChapterProgressKey, StringComparison.OrdinalIgnoreCase) &&
+                b.PageIndex == item.PageIndex);
+
+            if (existing != null)
+            {
+                existing.Memo = item.Memo;
+                existing.TotalPages = item.TotalPages;
+                existing.CreatedAtUnixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            }
+            else
+            {
+                _bookmarks.Insert(0, item);
+            }
+
+            SaveBookmarksToDisk();
+        }
+    }
+
+    public void RemoveBookmark(string bookmarkId)
+    {
+        if (string.IsNullOrWhiteSpace(bookmarkId)) return;
+        lock (_bookmarkLock)
+        {
+            int removed = _bookmarks.RemoveAll(b => string.Equals(b.Id, bookmarkId, StringComparison.OrdinalIgnoreCase));
+            if (removed > 0)
+            {
+                SaveBookmarksToDisk();
+            }
+        }
+    }
+
+    private void SaveBookmarksToDisk()
+    {
+        try
+        {
+            string filePath = GetBookmarksFilePath();
+            string tmpPath = filePath + ".tmp";
+            string json = JsonSerializer.Serialize(_bookmarks, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(tmpPath, json);
+            File.Move(tmpPath, filePath, overwrite: true);
+        }
+        catch { }
+    }
+
+    private void LoadBookmarksFromDisk()
+    {
+        try
+        {
+            string filePath = GetBookmarksFilePath();
+            if (!File.Exists(filePath)) return;
+            string json = File.ReadAllText(filePath);
+            var list = JsonSerializer.Deserialize<List<ReaderBookmarkItem>>(json);
+            if (list != null)
+            {
+                lock (_bookmarkLock)
+                {
+                    _bookmarks.Clear();
+                    _bookmarks.AddRange(list);
+                }
+            }
+        }
+        catch { }
     }
 
     private void RegisterComicFromChapterKeyInternal(string normalizedChapterKey, bool touchTimestamp)

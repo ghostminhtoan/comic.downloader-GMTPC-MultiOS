@@ -51,6 +51,9 @@ public class ComicReaderActivity : AvaloniaActivity
         base.OnCreate(savedInstanceState);
         CurrentInstance = this;
 
+        ComicReaderService.AndroidSetOrientationMode = ApplyOrientationMode;
+        ComicReaderService.AndroidApplyDisplaySettings = ApplyDisplaySettings;
+
         BackRequested += OnActivityBackRequested;
 
         _readerControl = new ComicReaderControl();
@@ -58,6 +61,11 @@ public class ComicReaderActivity : AvaloniaActivity
 
         BindOrRestoreReaderSession(Intent);
         ApplyImmersiveFullScreen(_subscribedVm?.IsFullScreen ?? true);
+        if (_subscribedVm != null)
+        {
+            ApplyOrientationMode(_subscribedVm.OrientationLockMode);
+            ApplyDisplaySettings(_subscribedVm.IsAutoSystemBrightness, _subscribedVm.SystemBrightnessPercent, _subscribedVm.IsKeepScreenOn);
+        }
     }
 
     protected override void OnNewIntent(Intent? intent)
@@ -71,12 +79,69 @@ public class ComicReaderActivity : AvaloniaActivity
     protected override void OnResume()
     {
         base.OnResume();
+        CurrentInstance = this;
+        ComicReaderService.AndroidSetOrientationMode = ApplyOrientationMode;
+        ComicReaderService.AndroidApplyDisplaySettings = ApplyDisplaySettings;
+
         if (ComicReaderService.Instance.ActiveExternalReaderViewModel != null &&
             !ReferenceEquals(_subscribedVm, ComicReaderService.Instance.ActiveExternalReaderViewModel))
         {
             BindOrRestoreReaderSession(Intent);
         }
         ApplyImmersiveFullScreen(_subscribedVm?.IsFullScreen ?? true);
+        if (_subscribedVm != null)
+        {
+            ApplyOrientationMode(_subscribedVm.OrientationLockMode);
+            ApplyDisplaySettings(_subscribedVm.IsAutoSystemBrightness, _subscribedVm.SystemBrightnessPercent, _subscribedVm.IsKeepScreenOn);
+        }
+    }
+
+    private void ApplyOrientationMode(int mode)
+    {
+        RunOnUiThread(() =>
+        {
+            try
+            {
+                RequestedOrientation = mode switch
+                {
+                    1 => ScreenOrientation.SensorLandscape,
+                    2 => ScreenOrientation.SensorPortrait,
+                    _ => ScreenOrientation.Unspecified
+                };
+            }
+            catch { }
+        });
+    }
+
+    private void ApplyDisplaySettings(bool autoBrightness, double brightnessPercent, bool keepScreenOn)
+    {
+        RunOnUiThread(() =>
+        {
+            try
+            {
+                var window = Window;
+                if (window == null) return;
+
+                if (keepScreenOn)
+                {
+                    window.AddFlags(WindowManagerFlags.KeepScreenOn);
+                }
+                else
+                {
+                    window.ClearFlags(WindowManagerFlags.KeepScreenOn);
+                }
+
+                var lp = window.Attributes;
+                if (lp != null)
+                {
+                    lp.ScreenBrightness = autoBrightness
+                        ? WindowManagerLayoutParams.BrightnessOverrideNone
+                        : (float)Math.Clamp(brightnessPercent / 100.0, 0.02, 1.0);
+                    window.Attributes = lp;
+                }
+            }
+            catch { }
+        });
     }
 
     public override void OnWindowFocusChanged(bool hasFocus)
@@ -248,9 +313,8 @@ public class ComicReaderActivity : AvaloniaActivity
 
     private void OnActivityBackRequested(object? sender, AndroidBackRequestedEventArgs e)
     {
-        if (_subscribedVm != null && _subscribedVm.IsOverlayVisible)
+        if (_subscribedVm != null && _subscribedVm.HandleBackNavigation())
         {
-            _subscribedVm.IsOverlayVisible = false;
             e.Handled = true;
             return;
         }
@@ -262,9 +326,8 @@ public class ComicReaderActivity : AvaloniaActivity
 #pragma warning disable CA1422
     public override void OnBackPressed()
     {
-        if (_subscribedVm != null && _subscribedVm.IsOverlayVisible)
+        if (_subscribedVm != null && _subscribedVm.HandleBackNavigation())
         {
-            _subscribedVm.IsOverlayVisible = false;
             return;
         }
 
@@ -276,9 +339,8 @@ public class ComicReaderActivity : AvaloniaActivity
     {
         if (keyCode == Keycode.Back && e?.Action == KeyEventActions.Down)
         {
-            if (_subscribedVm != null && _subscribedVm.IsOverlayVisible)
+            if (_subscribedVm != null && _subscribedVm.HandleBackNavigation())
             {
-                _subscribedVm.IsOverlayVisible = false;
                 return true;
             }
 

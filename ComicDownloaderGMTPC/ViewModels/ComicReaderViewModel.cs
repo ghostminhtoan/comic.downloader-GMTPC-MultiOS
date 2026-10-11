@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -17,9 +18,13 @@ public partial class ComicReaderViewModel : ViewModelBase
     private readonly ReadProgressStore _progressStore = ReadProgressStore.Instance;
     private CancellationTokenSource? _loadCts;
     private CancellationTokenSource? _prefetchCts;
+    private CancellationTokenSource? _effectRefreshCts;
     private bool _suppressChapterSelectionChanged;
     private bool _suppressPdfBookmarkSelectionChanged;
     private bool _suppressScrollSync;
+    private bool _suppressBrightnessAutoUncheck;
+    private double _viewportWidth = 1080;
+    private double _viewportHeight = 1920;
 
     public LibraryComicItem? ParentComic { get; private set; }
 
@@ -29,15 +34,22 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public ObservableCollection<ReaderPageItem> Pages { get; } = new();
 
+    public ObservableCollection<ReaderBookmarkItem> Bookmarks { get; } = new();
+
+    public bool HasBookmarks => Bookmarks.Count > 0;
+
     [ObservableProperty]
     private PdfBookmarkItem? _selectedPdfBookmark;
 
     public bool HasPdfBookmarks => PdfBookmarks.Count > 0;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AddBookmarkLeftInfoText))]
     private string _comicTitle = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HeaderSubTitleText))]
+    [NotifyPropertyChangedFor(nameof(AddBookmarkLeftInfoText))]
     private string _chapterTitle = string.Empty;
 
     [ObservableProperty]
@@ -48,6 +60,10 @@ public partial class ComicReaderViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrentPageDisplayNumber))]
     [NotifyPropertyChangedFor(nameof(PageCounterText))]
+    [NotifyPropertyChangedFor(nameof(ComicScreenPageBadgeText))]
+    [NotifyPropertyChangedFor(nameof(HeaderSubTitleText))]
+    [NotifyPropertyChangedFor(nameof(AddBookmarkLeftInfoText))]
+    [NotifyPropertyChangedFor(nameof(AddBookmarkRightInfoText))]
     [NotifyPropertyChangedFor(nameof(ProgressPercentText))]
     [NotifyPropertyChangedFor(nameof(CanGoPrevPage))]
     [NotifyPropertyChangedFor(nameof(CanGoNextPage))]
@@ -55,6 +71,8 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PageCounterText))]
+    [NotifyPropertyChangedFor(nameof(ComicScreenPageBadgeText))]
+    [NotifyPropertyChangedFor(nameof(AddBookmarkRightInfoText))]
     [NotifyPropertyChangedFor(nameof(MaxPageIndex))]
     private int _totalPages;
 
@@ -63,6 +81,40 @@ public partial class ComicReaderViewModel : ViewModelBase
     public int CurrentPageDisplayNumber => TotalPages == 0 ? 0 : CurrentPageIndex + 1;
 
     public string PageCounterText => TotalPages == 0 ? "0 / 0" : $"Trang {CurrentPageIndex + 1} / {TotalPages}";
+
+    /// <summary>
+    /// Badge hiển thị số trang kiểu ComicScreen ngay phía trên thanh trượt (VD: "12-13 / 13" khi ghép 2 trang, hoặc "12 / 13" khi 1 trang).
+    /// </summary>
+    public string ComicScreenPageBadgeText
+    {
+        get
+        {
+            if (TotalPages <= 0) return "0 / 0";
+            int p1 = CurrentPageIndex + 1;
+            if (IsFlipMode && IsDoublePage && SecondaryPage != null && p1 + 1 <= TotalPages)
+            {
+                return $"{p1}-{p1 + 1} / {TotalPages}";
+            }
+            return $"{p1} / {TotalPages}";
+        }
+    }
+
+    /// <summary>
+    /// Dòng tiêu đề phụ trên thanh Top Bar kiểu ComicScreen (hiển thị tên chương + tên file trang hiện tại như "012.jpg").
+    /// </summary>
+    public string HeaderSubTitleText
+    {
+        get
+        {
+            string pageName = CurrentPage?.Title ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(ChapterTitle)) return pageName;
+            if (string.IsNullOrWhiteSpace(pageName) || string.Equals(ChapterTitle, pageName, StringComparison.OrdinalIgnoreCase))
+            {
+                return ChapterTitle;
+            }
+            return $"{ChapterTitle}  •  {pageName}";
+        }
+    }
 
     public string ProgressPercentText =>
         TotalPages > 0
@@ -84,12 +136,15 @@ public partial class ComicReaderViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LeftFlipPage))]
     [NotifyPropertyChangedFor(nameof(RightFlipPage))]
+    [NotifyPropertyChangedFor(nameof(HeaderSubTitleText))]
+    [NotifyPropertyChangedFor(nameof(ComicScreenPageBadgeText))]
     private ReaderPageItem? _currentPage;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LeftFlipPage))]
     [NotifyPropertyChangedFor(nameof(RightFlipPage))]
     [NotifyPropertyChangedFor(nameof(HasSecondaryPage))]
+    [NotifyPropertyChangedFor(nameof(ComicScreenPageBadgeText))]
     private ReaderPageItem? _secondaryPage;
 
     public bool HasSecondaryPage => IsDoublePage && SecondaryPage != null;
@@ -104,13 +159,995 @@ public partial class ComicReaderViewModel : ViewModelBase
             ? null
             : (IsRightToLeft ? CurrentPage : SecondaryPage);
 
+    // =========================================================================
+    // THANH CÔNG CỤ 10 NÚT KIỂU COMICSCREEN (SWIPE GIỮA BUTTON 1-5 VÀ 6-10)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsToolbarPageOne))]
+    [NotifyPropertyChangedFor(nameof(ToolbarPageIndicatorText))]
+    [NotifyPropertyChangedFor(nameof(ToolbarArrowIconText))]
+    private bool _isToolbarPageTwo = false;
+
+    public bool IsToolbarPageOne => !IsToolbarPageTwo;
+
+    public string ToolbarPageIndicatorText => IsToolbarPageTwo ? "6-10" : "1-5";
+
+    public string ToolbarArrowIconText => IsToolbarPageTwo ? "❮" : "❯";
+
+    [RelayCommand]
+    public void ToggleToolbarPage()
+    {
+        SetToolbarPage(!IsToolbarPageTwo);
+    }
+
+    public void SetToolbarPage(bool pageTwo)
+    {
+        if (IsToolbarPageTwo == pageTwo) return;
+        IsToolbarPageTwo = pageTwo;
+        if (!IsMarginEditorOpen)
+        {
+            ActivePopup = string.Empty;
+        }
+    }
+
+    // =========================================================================
+    // QUẢN LÝ POPUP ĐANG MỞ (CHỈ MỞ 1 POPUP TẠI 1 THỜI ĐIỂM)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActivePopup))]
+    [NotifyPropertyChangedFor(nameof(IsPageScrollingPopupOpen))]
+    [NotifyPropertyChangedFor(nameof(IsPageLayoutPopupOpen))]
+    [NotifyPropertyChangedFor(nameof(IsMarginEditorOpen))]
+    [NotifyPropertyChangedFor(nameof(IsBrightnessPopupOpen))]
+    [NotifyPropertyChangedFor(nameof(IsFilterPopupOpen))]
+    [NotifyPropertyChangedFor(nameof(IsPageSpacingPopupOpen))]
+    [NotifyPropertyChangedFor(nameof(IsAddBookmarkPopupOpen))]
+    [NotifyPropertyChangedFor(nameof(IsBookmarkListPopupOpen))]
+    [NotifyPropertyChangedFor(nameof(IsChapterDrawerOpen))]
+    [NotifyPropertyChangedFor(nameof(IsMoreMenuOpen))]
+    [NotifyPropertyChangedFor(nameof(IsStandardOverlayBarsVisible))]
+    private string _activePopup = string.Empty;
+
+    public bool HasActivePopup => !string.IsNullOrEmpty(ActivePopup);
+    public bool IsPageScrollingPopupOpen => ActivePopup == "PageScrolling";
+    public bool IsPageLayoutPopupOpen => ActivePopup == "PageLayout";
+    public bool IsMarginEditorOpen => ActivePopup == "MarginCrop";
+    public bool IsBrightnessPopupOpen => ActivePopup == "Brightness";
+    public bool IsFilterPopupOpen => ActivePopup == "Filter";
+    public bool IsPageSpacingPopupOpen => ActivePopup == "PageSpacing";
+    public bool IsAddBookmarkPopupOpen => ActivePopup == "AddBookmark";
+    public bool IsBookmarkListPopupOpen => ActivePopup == "BookmarkList";
+    public bool IsChapterDrawerOpen => ActivePopup == "ChapterDrawer";
+    public bool IsMoreMenuOpen => ActivePopup == "MoreMenu";
+
+    public bool IsStandardOverlayBarsVisible => IsOverlayVisible && !IsMarginEditorOpen;
+
+    private void TogglePopup(string popupName)
+    {
+        ActivePopup = (ActivePopup == popupName) ? string.Empty : popupName;
+    }
+
+    [RelayCommand]
+    public void CloseAllPopups()
+    {
+        ActivePopup = string.Empty;
+    }
+
+    [RelayCommand]
+    public void ToggleChapterDrawer() => TogglePopup("ChapterDrawer");
+
+    [RelayCommand]
+    public void ToggleMoreMenu() => TogglePopup("MoreMenu");
+
     /// <summary>
-    /// Mặc định mở ở chế độ Scroll dọc (Webtoon). False = Chế độ Lật trang (Flip).
+    /// Xử lý nút Back trên Android / phím Esc trên Desktop theo thứ tự ưu tiên:
+    /// 1. Đóng Margin Crop Editor (nếu đang mở)
+    /// 2. Đóng Popup chức năng đang mở (Button 1..10)
+    /// 3. Ẩn thanh Overlay
     /// </summary>
+    public bool HandleBackNavigation()
+    {
+        if (IsMarginEditorOpen)
+        {
+            CancelMarginEditor();
+            return true;
+        }
+
+        if (HasActivePopup)
+        {
+            ActivePopup = string.Empty;
+            return true;
+        }
+
+        if (IsOverlayVisible)
+        {
+            IsOverlayVisible = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    // =========================================================================
+    // BUTTON 1: PAGE SCROLLING (6 CHẾ ĐỘ CUỘN / LẬT TRANG NHƯ COMICSCREEN)
+    // 0 = Right (Flip LTR), 1 = Left (Flip RTL), 2 = Right+Vertical (Scroll RTL),
+    // 3 = Right Slide (Slide LTR), 4 = Left Slide (Slide RTL), 5 = Left+Vertical (Scroll LTR)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Button1IconBadgeText))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode0Border))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode1Border))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode2Border))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode3Border))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode4Border))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode5Border))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode0Bg))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode1Bg))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode2Bg))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode3Bg))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode4Bg))]
+    [NotifyPropertyChangedFor(nameof(ScrollMode5Bg))]
+    private int _pageScrollingMode = 5;
+
+    public string Button1IconBadgeText => PageScrollingMode switch
+    {
+        0 => "→",
+        1 => "←",
+        2 => "R↓",
+        3 => "S→",
+        4 => "←S",
+        _ => "↓L"
+    };
+
+    public string ScrollMode0Border => PageScrollingMode == 0 ? "#4FC3F7" : "#4B5563";
+    public string ScrollMode1Border => PageScrollingMode == 1 ? "#4FC3F7" : "#4B5563";
+    public string ScrollMode2Border => PageScrollingMode == 2 ? "#4FC3F7" : "#4B5563";
+    public string ScrollMode3Border => PageScrollingMode == 3 ? "#4FC3F7" : "#4B5563";
+    public string ScrollMode4Border => PageScrollingMode == 4 ? "#4FC3F7" : "#4B5563";
+    public string ScrollMode5Border => PageScrollingMode == 5 ? "#4FC3F7" : "#4B5563";
+
+    public string ScrollMode0Bg => PageScrollingMode == 0 ? "#1E3A5F" : "#2C323B";
+    public string ScrollMode1Bg => PageScrollingMode == 1 ? "#1E3A5F" : "#2C323B";
+    public string ScrollMode2Bg => PageScrollingMode == 2 ? "#1E3A5F" : "#2C323B";
+    public string ScrollMode3Bg => PageScrollingMode == 3 ? "#1E3A5F" : "#2C323B";
+    public string ScrollMode4Bg => PageScrollingMode == 4 ? "#1E3A5F" : "#2C323B";
+    public string ScrollMode5Bg => PageScrollingMode == 5 ? "#1E3A5F" : "#2C323B";
+
+    [RelayCommand]
+    public void OpenPageScrollingPopup() => TogglePopup("PageScrolling");
+
+    [RelayCommand]
+    public void SelectPageScrollingMode(string? modeParam)
+    {
+        if (!int.TryParse(modeParam, out int mode)) return;
+        PageScrollingMode = Math.Clamp(mode, 0, 5);
+
+        switch (PageScrollingMode)
+        {
+            case 0: // Right (Flip LTR)
+                IsScrollMode = false;
+                IsRightToLeft = false;
+                ShowTransientToast("📄 Page scrolling: Right (Lật trang Trái → Phải)");
+                break;
+            case 1: // Left (Flip RTL)
+                IsScrollMode = false;
+                IsRightToLeft = true;
+                ShowTransientToast("📄 Page scrolling: Left (Lật trang Phải → Trái)");
+                break;
+            case 2: // Right + Vertical
+                IsScrollMode = true;
+                IsRightToLeft = true;
+                ShowTransientToast("📜 Page scrolling: Right + Vertical (Cuộn dọc RTL)");
+                break;
+            case 3: // Right Slide
+                IsScrollMode = false;
+                IsRightToLeft = false;
+                ShowTransientToast("🎞 Page scrolling: Right Slide (Trượt ngang Trái → Phải)");
+                break;
+            case 4: // Left Slide
+                IsScrollMode = false;
+                IsRightToLeft = true;
+                ShowTransientToast("🎞 Page scrolling: Left Slide (Trượt ngang Phải → Trái)");
+                break;
+            default: // 5 = Left + Vertical
+                IsScrollMode = true;
+                IsRightToLeft = false;
+                ShowTransientToast("📜 Page scrolling: Left + Vertical (Cuộn dọc Webtoon)");
+                break;
+        }
+
+        UpdateCurrentFlipPages();
+        TriggerPrefetch(CurrentPageIndex);
+        if (IsScrollMode)
+        {
+            Dispatcher.UIThread.Post(() => RequestScrollToPage(CurrentPageIndex), DispatcherPriority.Background);
+        }
+        ActivePopup = string.Empty;
+    }
+
+    // =========================================================================
+    // BUTTON 2: ORIENTATION LOCK (0 = Auto, 1 = Landscape, 2 = Portrait)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OrientationBadgeText))]
+    [NotifyPropertyChangedFor(nameof(Button2IconTint))]
+    private int _orientationLockMode = 0;
+
+    public string OrientationBadgeText => OrientationLockMode switch
+    {
+        1 => "NGANG",
+        2 => "DỌC",
+        _ => "AUTO"
+    };
+
+    public string Button2IconTint => OrientationLockMode == 0 ? "#E2E8F0" : "#4FC3F7";
+
+    [RelayCommand]
+    public void CycleOrientationLock()
+    {
+        ActivePopup = string.Empty;
+        OrientationLockMode = (OrientationLockMode + 1) % 3;
+        ComicReaderService.AndroidSetOrientationMode?.Invoke(OrientationLockMode);
+
+        string msg = OrientationLockMode switch
+        {
+            1 => "📲 Đã khóa xoay màn hình: Nằm ngang (Landscape)",
+            2 => "📲 Đã khóa xoay màn hình: Thẳng đứng (Portrait)",
+            _ => "📲 Xoay màn hình: Tự động theo cảm biến (Auto)"
+        };
+        ShowTransientToast(msg);
+    }
+
+    // =========================================================================
+    // BUTTON 3: PAGE LAYOUT (0 = Off, 1 = Single page, 2 = Dual pages, 3 = Auto)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Button3BadgeText))]
+    [NotifyPropertyChangedFor(nameof(LayoutMode0Border))]
+    [NotifyPropertyChangedFor(nameof(LayoutMode1Border))]
+    [NotifyPropertyChangedFor(nameof(LayoutMode2Border))]
+    [NotifyPropertyChangedFor(nameof(LayoutMode3Border))]
+    [NotifyPropertyChangedFor(nameof(LayoutMode0Bg))]
+    [NotifyPropertyChangedFor(nameof(LayoutMode1Bg))]
+    [NotifyPropertyChangedFor(nameof(LayoutMode2Bg))]
+    [NotifyPropertyChangedFor(nameof(LayoutMode3Bg))]
+    private int _pageLayoutMode = 0;
+
+    public string Button3BadgeText => PageLayoutMode switch
+    {
+        1 => "1P",
+        2 => "2P",
+        3 => "A",
+        _ => "OFF"
+    };
+
+    public string LayoutMode0Border => PageLayoutMode == 0 ? "#4FC3F7" : "#4B5563";
+    public string LayoutMode1Border => PageLayoutMode == 1 ? "#4FC3F7" : "#4B5563";
+    public string LayoutMode2Border => PageLayoutMode == 2 ? "#4FC3F7" : "#4B5563";
+    public string LayoutMode3Border => PageLayoutMode == 3 ? "#4FC3F7" : "#4B5563";
+
+    public string LayoutMode0Bg => PageLayoutMode == 0 ? "#1E3A5F" : "#2C323B";
+    public string LayoutMode1Bg => PageLayoutMode == 1 ? "#1E3A5F" : "#2C323B";
+    public string LayoutMode2Bg => PageLayoutMode == 2 ? "#1E3A5F" : "#2C323B";
+    public string LayoutMode3Bg => PageLayoutMode == 3 ? "#1E3A5F" : "#2C323B";
+
+    [RelayCommand]
+    public void OpenPageLayoutPopup() => TogglePopup("PageLayout");
+
+    [RelayCommand]
+    public void SelectPageLayoutMode(string? modeParam)
+    {
+        if (!int.TryParse(modeParam, out int mode)) return;
+        PageLayoutMode = Math.Clamp(mode, 0, 3);
+
+        switch (PageLayoutMode)
+        {
+            case 0: // Off
+                IsDoublePage = false;
+                ShowTransientToast("📄 Page layout: Off (1 trang mặc định)");
+                break;
+            case 1: // Single page
+                IsDoublePage = false;
+                ZoomLevel = 1.0;
+                ShowTransientToast("📄 Page layout: Single page (1 trang chuẩn)");
+                break;
+            case 2: // Dual pages
+                IsDoublePage = true;
+                if (IsScrollMode)
+                {
+                    IsScrollMode = false;
+                    PageScrollingMode = IsRightToLeft ? 1 : 0;
+                }
+                ShowTransientToast("📖 Page layout: Dual pages (Ghép 2 trang song song)");
+                break;
+            case 3: // Auto
+                bool landscape = _viewportWidth > _viewportHeight * 1.05;
+                IsDoublePage = landscape;
+                if (landscape && IsScrollMode)
+                {
+                    IsScrollMode = false;
+                    PageScrollingMode = IsRightToLeft ? 1 : 0;
+                }
+                ShowTransientToast($"📐 Page layout: Auto ({(landscape ? "2 trang Ngang" : "1 trang Dọc")})");
+                break;
+        }
+
+        UpdateCurrentFlipPages();
+        TriggerPrefetch(CurrentPageIndex);
+        ActivePopup = string.Empty;
+    }
+
+    public void UpdateViewportDimensions(double width, double height)
+    {
+        if (width <= 10 || height <= 10) return;
+        _viewportWidth = width;
+        _viewportHeight = height;
+        OnPropertyChanged(nameof(CropFrameMargin));
+
+        if (PageLayoutMode == 3)
+        {
+            bool shouldBeDouble = width > height * 1.05;
+            if (IsDoublePage != shouldBeDouble)
+            {
+                IsDoublePage = shouldBeDouble;
+                UpdateCurrentFlipPages();
+            }
+        }
+    }
+
+    // =========================================================================
+    // BUTTON 4: MARGIN / CROP EDITOR (KHUNG CẮT LỀ HỒNG #E91E63 NHƯ COMICSCREEN)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CropFrameMargin))]
+    [NotifyPropertyChangedFor(nameof(MarginStatusSummaryText))]
+    private double _pendingCropLeft = 2.0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CropFrameMargin))]
+    [NotifyPropertyChangedFor(nameof(MarginStatusSummaryText))]
+    private double _pendingCropTop = 2.0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CropFrameMargin))]
+    [NotifyPropertyChangedFor(nameof(MarginStatusSummaryText))]
+    private double _pendingCropRight = 2.0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CropFrameMargin))]
+    [NotifyPropertyChangedFor(nameof(MarginStatusSummaryText))]
+    private double _pendingCropBottom = 2.0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveCrop))]
+    [NotifyPropertyChangedFor(nameof(Button4IconTint))]
+    private double _appliedCropLeft;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveCrop))]
+    [NotifyPropertyChangedFor(nameof(Button4IconTint))]
+    private double _appliedCropTop;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveCrop))]
+    [NotifyPropertyChangedFor(nameof(Button4IconTint))]
+    private double _appliedCropRight;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveCrop))]
+    [NotifyPropertyChangedFor(nameof(Button4IconTint))]
+    private double _appliedCropBottom;
+
+    public bool HasActiveCrop =>
+        AppliedCropLeft > 0.1 || AppliedCropTop > 0.1 || AppliedCropRight > 0.1 || AppliedCropBottom > 0.1;
+
+    public string Button4IconTint => HasActiveCrop ? "#4FC3F7" : "#E2E8F0";
+
+    public Thickness CropFrameMargin
+    {
+        get
+        {
+            double w = Math.Max(320, _viewportWidth);
+            double h = Math.Max(400, _viewportHeight - 68);
+            double left = Math.Round(w * Math.Clamp(PendingCropLeft, 0.5, 30.0) / 100.0);
+            double right = Math.Round(w * Math.Clamp(PendingCropRight, 0.5, 30.0) / 100.0);
+            double top = Math.Round(h * Math.Clamp(PendingCropTop, 0.5, 30.0) / 100.0);
+            double bottom = Math.Round(h * Math.Clamp(PendingCropBottom, 0.5, 30.0) / 100.0);
+            return new Thickness(left, top, right, bottom);
+        }
+    }
+
+    public string MarginStatusSummaryText =>
+        $"Dọc (Trên/Dưới): {PendingCropTop:0}% / {PendingCropBottom:0}%   •   Ngang (Trái/Phải): {PendingCropLeft:0}% / {PendingCropRight:0}%";
+
+    [RelayCommand]
+    public void OpenMarginEditor()
+    {
+        if (IsMarginEditorOpen)
+        {
+            ActivePopup = string.Empty;
+            return;
+        }
+
+        if (HasActiveCrop)
+        {
+            PendingCropLeft = AppliedCropLeft;
+            PendingCropTop = AppliedCropTop;
+            PendingCropRight = AppliedCropRight;
+            PendingCropBottom = AppliedCropBottom;
+        }
+        else
+        {
+            PendingCropLeft = 3.0;
+            PendingCropTop = 3.0;
+            PendingCropRight = 3.0;
+            PendingCropBottom = 3.0;
+        }
+
+        IsOverlayVisible = true;
+        ActivePopup = "MarginCrop";
+    }
+
+    [RelayCommand]
+    public void MarginAutoTrim()
+    {
+        if (Math.Abs(PendingCropTop - 5.0) < 0.5 && Math.Abs(PendingCropLeft - 4.0) < 0.5)
+        {
+            PendingCropTop = 8.0;
+            PendingCropBottom = 8.0;
+            PendingCropLeft = 6.0;
+            PendingCropRight = 6.0;
+        }
+        else
+        {
+            PendingCropTop = 5.0;
+            PendingCropBottom = 5.0;
+            PendingCropLeft = 4.0;
+            PendingCropRight = 4.0;
+        }
+        ShowTransientToast($"✨ Auto Margin: Dọc {PendingCropTop:0}% • Ngang {PendingCropLeft:0}%");
+    }
+
+    [RelayCommand]
+    public void MarginCycleVertical()
+    {
+        double next = PendingCropTop switch
+        {
+            < 3.0 => 4.0,
+            < 6.0 => 8.0,
+            < 10.0 => 12.0,
+            < 15.0 => 18.0,
+            _ => 0.0
+        };
+        PendingCropTop = next;
+        PendingCropBottom = next;
+        ShowTransientToast($"⇕ Lề Dọc (Vertical): {next:0}%");
+    }
+
+    [RelayCommand]
+    public void MarginCycleHorizontal()
+    {
+        double next = PendingCropLeft switch
+        {
+            < 3.0 => 4.0,
+            < 6.0 => 8.0,
+            < 10.0 => 12.0,
+            < 15.0 => 18.0,
+            _ => 0.0
+        };
+        PendingCropLeft = next;
+        PendingCropRight = next;
+        ShowTransientToast($"⇔ Lề Ngang (Horizontal): {next:0}%");
+    }
+
+    [RelayCommand]
+    public void MarginReset()
+    {
+        PendingCropLeft = 0.0;
+        PendingCropTop = 0.0;
+        PendingCropRight = 0.0;
+        PendingCropBottom = 0.0;
+        ShowTransientToast("↺ Đã đặt lại khung cắt lề về 0%");
+    }
+
+    [RelayCommand]
+    public void MarginApply()
+    {
+        AppliedCropLeft = PendingCropLeft;
+        AppliedCropTop = PendingCropTop;
+        AppliedCropRight = PendingCropRight;
+        AppliedCropBottom = PendingCropBottom;
+
+        ActivePopup = string.Empty;
+        IsOverlayVisible = false;
+        SyncAndRefreshVisualEffects();
+
+        if (HasActiveCrop)
+        {
+            ShowTransientToast($"✓ Đã áp dụng cắt lề: Dọc {AppliedCropTop:0}% • Ngang {AppliedCropLeft:0}%");
+        }
+        else
+        {
+            ShowTransientToast("✓ Đã tắt cắt lề trang truyện");
+        }
+    }
+
+    public void CancelMarginEditor()
+    {
+        ActivePopup = string.Empty;
+    }
+
+    public void AdjustPendingCropByDrag(double deltaLeftPct, double deltaTopPct, double deltaRightPct, double deltaBottomPct)
+    {
+        PendingCropLeft = Math.Clamp(Math.Round(PendingCropLeft + deltaLeftPct, 1), 0.0, 28.0);
+        PendingCropTop = Math.Clamp(Math.Round(PendingCropTop + deltaTopPct, 1), 0.0, 28.0);
+        PendingCropRight = Math.Clamp(Math.Round(PendingCropRight + deltaRightPct, 1), 0.0, 28.0);
+        PendingCropBottom = Math.Clamp(Math.Round(PendingCropBottom + deltaBottomPct, 1), 0.0, 28.0);
+    }
+
+    // =========================================================================
+    // BUTTON 5: BRIGHTNESS, BACKGROUND, KEEP SCREEN, IMAGE BRIGHTNESS, SATURATION, BLUE LIGHT
+    // =========================================================================
+
+    [ObservableProperty]
+    private bool _isAutoSystemBrightness = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SystemBrightnessText))]
+    private double _systemBrightnessPercent = 35.0;
+
+    public string SystemBrightnessText => $"{Math.Round(SystemBrightnessPercent):0}%";
+
+    [ObservableProperty]
+    private string _readerBackgroundColor = "#05080F";
+
+    [ObservableProperty]
+    private bool _isKeepScreenOn = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsImageBrightnessOverlayVisible))]
+    [NotifyPropertyChangedFor(nameof(ImageBrightnessOverlayColor))]
+    [NotifyPropertyChangedFor(nameof(ImageBrightnessOverlayOpacity))]
+    private bool _isImageBrightnessEnabled = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsImageBrightnessOverlayVisible))]
+    [NotifyPropertyChangedFor(nameof(ImageBrightnessOverlayColor))]
+    [NotifyPropertyChangedFor(nameof(ImageBrightnessOverlayOpacity))]
+    [NotifyPropertyChangedFor(nameof(ImageBrightnessText))]
+    private double _imageBrightnessValue = 100.0;
+
+    public string ImageBrightnessText => $"{Math.Round(ImageBrightnessValue):0}%";
+
+    public bool IsImageBrightnessOverlayVisible =>
+        IsImageBrightnessEnabled && Math.Abs(ImageBrightnessValue - 100.0) > 1.0;
+
+    public string ImageBrightnessOverlayColor =>
+        ImageBrightnessValue < 100.0 ? "#000000" : "#FFFFFF";
+
+    public double ImageBrightnessOverlayOpacity
+    {
+        get
+        {
+            if (!IsImageBrightnessEnabled) return 0.0;
+            if (ImageBrightnessValue < 100.0)
+            {
+                return Math.Clamp((100.0 - ImageBrightnessValue) / 105.0, 0.0, 0.88);
+            }
+            if (ImageBrightnessValue > 100.0)
+            {
+                return Math.Clamp((ImageBrightnessValue - 100.0) / 140.0, 0.0, 0.35);
+            }
+            return 0.0;
+        }
+    }
+
+    [ObservableProperty]
+    private bool _isSaturationEnabled = false;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SaturationText))]
+    private double _saturationValue = 100.0;
+
+    public string SaturationText => $"{Math.Round(SaturationValue):0}%";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBlueLightOverlayVisible))]
+    [NotifyPropertyChangedFor(nameof(BlueLightOverlayOpacity))]
+    private bool _isBlueLightEnabled = false;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBlueLightOverlayVisible))]
+    [NotifyPropertyChangedFor(nameof(BlueLightOverlayOpacity))]
+    [NotifyPropertyChangedFor(nameof(BlueLightText))]
+    private double _blueLightValue = 35.0;
+
+    public string BlueLightText => $"{Math.Round(BlueLightValue):0}%";
+
+    public bool IsBlueLightOverlayVisible => IsBlueLightEnabled && BlueLightValue > 1.0;
+
+    public double BlueLightOverlayOpacity =>
+        IsBlueLightEnabled ? Math.Clamp(BlueLightValue / 100.0 * 0.46, 0.0, 0.46) : 0.0;
+
+    partial void OnIsAutoSystemBrightnessChanged(bool value)
+    {
+        ComicReaderService.AndroidApplyDisplaySettings?.Invoke(value, SystemBrightnessPercent, IsKeepScreenOn);
+    }
+
+    partial void OnSystemBrightnessPercentChanged(double value)
+    {
+        if (!_suppressBrightnessAutoUncheck && IsAutoSystemBrightness)
+        {
+            _suppressBrightnessAutoUncheck = true;
+            IsAutoSystemBrightness = false;
+            _suppressBrightnessAutoUncheck = false;
+        }
+        ComicReaderService.AndroidApplyDisplaySettings?.Invoke(IsAutoSystemBrightness, value, IsKeepScreenOn);
+    }
+
+    partial void OnIsKeepScreenOnChanged(bool value)
+    {
+        ComicReaderService.AndroidApplyDisplaySettings?.Invoke(IsAutoSystemBrightness, SystemBrightnessPercent, value);
+    }
+
+    partial void OnIsSaturationEnabledChanged(bool value)
+    {
+        SyncAndRefreshVisualEffects();
+    }
+
+    partial void OnSaturationValueChanged(double value)
+    {
+        if (IsSaturationEnabled)
+        {
+            SyncAndRefreshVisualEffects(debounced: true);
+        }
+    }
+
+    [RelayCommand]
+    public void OpenBrightnessPopup() => TogglePopup("Brightness");
+
+    [RelayCommand]
+    public void CycleBackgroundColor()
+    {
+        ReaderBackgroundColor = ReaderBackgroundColor switch
+        {
+            "#05080F" => "#1E293B",
+            "#1E293B" => "#282015",
+            "#282015" => "#E2E8F0",
+            _ => "#05080F"
+        };
+        ShowTransientToast($"🎨 Đã đổi màu nền trình đọc: {ReaderBackgroundColor}");
+    }
+
+    [RelayCommand]
+    public void ResetBrightnessDefaults()
+    {
+        _suppressBrightnessAutoUncheck = true;
+        IsAutoSystemBrightness = true;
+        SystemBrightnessPercent = 35.0;
+        _suppressBrightnessAutoUncheck = false;
+
+        ReaderBackgroundColor = "#05080F";
+        IsKeepScreenOn = true;
+        IsImageBrightnessEnabled = true;
+        ImageBrightnessValue = 100.0;
+        IsSaturationEnabled = false;
+        SaturationValue = 100.0;
+        IsBlueLightEnabled = false;
+        BlueLightValue = 35.0;
+
+        ComicReaderService.AndroidApplyDisplaySettings?.Invoke(IsAutoSystemBrightness, SystemBrightnessPercent, IsKeepScreenOn);
+        SyncAndRefreshVisualEffects();
+        ShowTransientToast("☀ Đã khôi phục cài đặt Độ sáng & Màu sắc mặc định");
+    }
+
+    // =========================================================================
+    // BUTTON 6: PINCH ZOOM (PLACEHOLDER LÀM SAU THEO YÊU CẦU)
+    // =========================================================================
+
+    [RelayCommand]
+    public void PinchZoomPlaceholder()
+    {
+        ActivePopup = string.Empty;
+        ShowTransientToast("📌 Tính năng Pinch Zoom (Button 6) sẽ được cập nhật sau");
+    }
+
+    // =========================================================================
+    // BUTTON 7: FILTER (GRAY SCALE, AUTO CONTRAST, UPSCALING, SHARPEN, INVERT, BLUE LIGHT)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Button7IconTint))]
+    private bool _isGrayScale = false;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Button7IconTint))]
+    private bool _isAutoContrast = false;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Button7IconTint))]
+    private bool _isUpscaling = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Button7IconTint))]
+    private bool _isSharpenFilter = false;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Button7IconTint))]
+    private bool _isInvertColor = false;
+
+    public string Button7IconTint =>
+        (IsGrayScale || IsAutoContrast || IsSharpenFilter || IsInvertColor || IsBlueLightEnabled)
+            ? "#4FC3F7"
+            : "#E2E8F0";
+
+    [RelayCommand]
+    public void OpenFilterPopup() => TogglePopup("Filter");
+
+    partial void OnIsGrayScaleChanged(bool value) => SyncAndRefreshVisualEffects();
+    partial void OnIsAutoContrastChanged(bool value) => SyncAndRefreshVisualEffects();
+    partial void OnIsSharpenFilterChanged(bool value) => SyncAndRefreshVisualEffects();
+    partial void OnIsInvertColorChanged(bool value) => SyncAndRefreshVisualEffects();
+
+    partial void OnIsUpscalingChanged(bool value)
+    {
+        ShowTransientToast(value
+            ? "🪄 Đã bật làm nét ảnh độ phân giải cao (Upscaling)"
+            : "🪄 Đã tắt Upscaling");
+    }
+
+    private void SyncAndRefreshVisualEffects(bool debounced = false)
+    {
+        OnPropertyChanged(nameof(Button7IconTint));
+
+        var settings = _readerService.ActiveEffectSettings;
+        settings.CropLeftPercent = AppliedCropLeft;
+        settings.CropTopPercent = AppliedCropTop;
+        settings.CropRightPercent = AppliedCropRight;
+        settings.CropBottomPercent = AppliedCropBottom;
+        settings.IsGrayScale = IsGrayScale;
+        settings.IsAutoContrast = IsAutoContrast;
+        settings.IsSharpenFilter = IsSharpenFilter;
+        settings.IsInvertColor = IsInvertColor;
+        settings.IsSaturationEnabled = IsSaturationEnabled;
+        settings.SaturationValue = SaturationValue;
+
+        _effectRefreshCts?.Cancel();
+        _effectRefreshCts = new CancellationTokenSource();
+        var ct = _effectRefreshCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (debounced)
+                {
+                    await Task.Delay(180, ct);
+                }
+                if (ct.IsCancellationRequested) return;
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    foreach (var p in Pages)
+                    {
+                        if (p.IsLoaded && p.Image != null)
+                        {
+                            var old = p.Image;
+                            p.Image = null;
+                            p.IsLoaded = false;
+                            try { old.Dispose(); } catch { }
+                        }
+                    }
+                });
+
+                if (Pages.Count > 0 && !ct.IsCancellationRequested)
+                {
+                    TriggerPrefetch(CurrentPageIndex);
+                }
+            }
+            catch { }
+        }, ct);
+    }
+
+    // =========================================================================
+    // BUTTON 8: PAGE SPACING (KHOẢNG CÁCH GIỮA CÁC TRANG TRUYỆN)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Button8IconTint))]
+    [NotifyPropertyChangedFor(nameof(FlipPageMargin))]
+    private bool _isPageSpacingEnabled = false;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageSpacingFormattedText))]
+    [NotifyPropertyChangedFor(nameof(FlipPageMargin))]
+    private double _pageSpacingPercent = 0.0;
+
+    public string Button8IconTint => IsPageSpacingEnabled ? "#4FC3F7" : "#E2E8F0";
+
+    public string PageSpacingFormattedText =>
+        PageSpacingPercent < -0.05
+            ? $"- {Math.Abs(PageSpacingPercent):0.0} %"
+            : $"{PageSpacingPercent:0.0} %";
+
+    public Thickness FlipPageMargin
+    {
+        get
+        {
+            if (!IsPageSpacingEnabled) return new Thickness(2, 0);
+            double px = Math.Round(PageSpacingPercent * 0.8);
+            return new Thickness(Math.Max(-20, px), 0);
+        }
+    }
+
+    [RelayCommand]
+    public void OpenPageSpacingPopup() => TogglePopup("PageSpacing");
+
+    partial void OnIsPageSpacingEnabledChanged(bool value)
+    {
+        ApplyPageSpacingToAllItems();
+    }
+
+    partial void OnPageSpacingPercentChanged(double value)
+    {
+        if (!IsPageSpacingEnabled && Math.Abs(value) > 0.2)
+        {
+            IsPageSpacingEnabled = true;
+            return;
+        }
+        ApplyPageSpacingToAllItems();
+    }
+
+    private Thickness CalculateCurrentPageItemMargin()
+    {
+        if (!IsPageSpacingEnabled) return new Thickness(0);
+        double verticalPx = Math.Round(PageSpacingPercent * 1.2);
+        return new Thickness(0, verticalPx, 0, verticalPx);
+    }
+
+    private void ApplyPageSpacingToAllItems()
+    {
+        var margin = CalculateCurrentPageItemMargin();
+        foreach (var page in Pages)
+        {
+            page.PageMargin = margin;
+        }
+    }
+
+    // =========================================================================
+    // BUTTON 9 & 10: ADD BOOKMARK & BOOKMARK LIST
+    // =========================================================================
+
+    [ObservableProperty]
+    private string _bookmarkMemoInput = string.Empty;
+
+    public string AddBookmarkLeftInfoText =>
+        $"...{ComicTitle}/{ChapterTitle} {CurrentPageDisplayNumber:D3}";
+
+    public string AddBookmarkRightInfoText =>
+        $"{CurrentPageDisplayNumber}/{TotalPages}";
+
+    [RelayCommand]
+    public void OpenAddBookmarkPopup()
+    {
+        BookmarkMemoInput = string.Empty;
+        OnPropertyChanged(nameof(AddBookmarkLeftInfoText));
+        OnPropertyChanged(nameof(AddBookmarkRightInfoText));
+        ActivePopup = "AddBookmark";
+    }
+
+    [RelayCommand]
+    public void CancelAddBookmark()
+    {
+        ActivePopup = string.Empty;
+    }
+
+    [RelayCommand]
+    public void ConfirmAddBookmark()
+    {
+        if (CurrentChapter == null || TotalPages <= 0)
+        {
+            ActivePopup = string.Empty;
+            return;
+        }
+
+        string rootPath = ParentComic?.RootFolderPath ?? CurrentChapter.LocalPath;
+        var item = new ReaderBookmarkItem
+        {
+            ComicRootPath = rootPath,
+            ComicTitle = string.IsNullOrWhiteSpace(ComicTitle) ? CurrentChapter.Title : ComicTitle,
+            ChapterLocalPath = CurrentChapter.LocalPath,
+            ChapterProgressKey = CurrentChapter.EffectiveProgressKey,
+            ChapterIndex = CurrentChapter.Index,
+            ChapterTitle = CurrentChapter.Title,
+            PageIndex = CurrentPageIndex,
+            TotalPages = TotalPages,
+            Memo = (BookmarkMemoInput ?? string.Empty).Trim()
+        };
+
+        _progressStore.AddOrUpdateBookmark(item);
+        RefreshBookmarksList();
+        ActivePopup = string.Empty;
+        ShowTransientToast($"🔖 Đã thêm dấu trang: {CurrentChapter.Title} - Trang {CurrentPageDisplayNumber}/{TotalPages}");
+    }
+
+    [RelayCommand]
+    public void OpenBookmarkListPopup()
+    {
+        RefreshBookmarksList();
+        TogglePopup("BookmarkList");
+    }
+
+    [RelayCommand]
+    public void CloseBookmarkListPopup()
+    {
+        ActivePopup = string.Empty;
+    }
+
+    [RelayCommand]
+    public async Task JumpToBookmarkAsync(ReaderBookmarkItem? item)
+    {
+        if (item == null) return;
+        ActivePopup = string.Empty;
+
+        var targetChap = ChapterList.FirstOrDefault(c =>
+            string.Equals(c.EffectiveProgressKey, item.ChapterProgressKey, StringComparison.OrdinalIgnoreCase) ||
+            (c.Index == item.ChapterIndex && string.Equals(c.Title, item.ChapterTitle, StringComparison.OrdinalIgnoreCase)));
+
+        if (targetChap != null && !ReferenceEquals(targetChap, CurrentChapter))
+        {
+            _progressStore.SaveProgress(targetChap.EffectiveProgressKey, item.PageIndex);
+            _suppressChapterSelectionChanged = true;
+            CurrentChapter = targetChap;
+            _suppressChapterSelectionChanged = false;
+            await LoadChapterInternalAsync(targetChap);
+        }
+
+        if (Pages.Count > 0)
+        {
+            int targetIdx = Math.Clamp(item.PageIndex, 0, Pages.Count - 1);
+            CurrentPageIndex = targetIdx;
+            RequestScrollToPage(targetIdx);
+            ShowTransientToast($"🔖 Đã nhảy tới dấu trang: {item.LeftDisplayText}");
+        }
+    }
+
+    [RelayCommand]
+    public void DeleteBookmark(ReaderBookmarkItem? item)
+    {
+        if (item == null) return;
+        _progressStore.RemoveBookmark(item.Id);
+        RefreshBookmarksList();
+        ShowTransientToast("🗑 Đã xóa dấu trang");
+    }
+
+    private void RefreshBookmarksList()
+    {
+        string? filterKey = ParentComic?.RootFolderPath ?? CurrentChapter?.LocalPath ?? ComicTitle;
+        var list = _progressStore.GetBookmarks(filterKey);
+        Bookmarks.Clear();
+        foreach (var bm in list)
+        {
+            Bookmarks.Add(bm);
+        }
+        OnPropertyChanged(nameof(HasBookmarks));
+    }
+
+    // =========================================================================
+    // CÁC THUỘC TÍNH CHẾ ĐỘ ĐỌC CỐT LÕI (SCROLL / FLIP / RTL / DOUBLE PAGE / ZOOM)
+    // =========================================================================
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFlipMode))]
     [NotifyPropertyChangedFor(nameof(ModeButtonText))]
     [NotifyPropertyChangedFor(nameof(ModeBadgeBackground))]
+    [NotifyPropertyChangedFor(nameof(ComicScreenPageBadgeText))]
     private bool _isScrollMode = true;
 
     public bool IsFlipMode => !IsScrollMode;
@@ -119,9 +1156,6 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public string ModeBadgeBackground => IsScrollMode ? "#0284C7" : "#7C3AED";
 
-    /// <summary>
-    /// Bật/tắt chế độ đọc từ Phải sang Trái (Manga RTL) khi ở chế độ Lật trang.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RtlButtonText))]
     [NotifyPropertyChangedFor(nameof(RtlButtonBackground))]
@@ -133,9 +1167,6 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public string RtlButtonBackground => IsRightToLeft ? "#D97706" : "#1E293B";
 
-    /// <summary>
-    /// Bật/tắt ghép 2 trang song song trong chế độ Lật trang.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DoublePageButtonText))]
     [NotifyPropertyChangedFor(nameof(DoublePageButtonBackground))]
@@ -143,6 +1174,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(HasSecondaryPage))]
     [NotifyPropertyChangedFor(nameof(LeftFlipPage))]
     [NotifyPropertyChangedFor(nameof(RightFlipPage))]
+    [NotifyPropertyChangedFor(nameof(ComicScreenPageBadgeText))]
     private bool _isDoublePage = false;
 
     public string DoublePageButtonText => IsDoublePage ? "📖 2 Trang Kép" : "📄 1 Trang Đơn";
@@ -151,15 +1183,18 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public int FlipGridColumns => (IsDoublePage && SecondaryPage != null) ? 2 : 1;
 
-    /// <summary>
-    /// Lớp phủ điều khiển kiểu ComicScreen (mặc định ẩn khi mở để đọc toàn màn hình, chạm vào giữa để bật/tắt).
-    /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsStandardOverlayBarsVisible))]
     private bool _isOverlayVisible = false;
 
-    /// <summary>
-    /// Tự động toàn màn hình khi mở trình đọc.
-    /// </summary>
+    partial void OnIsOverlayVisibleChanged(bool value)
+    {
+        if (!value && !IsMarginEditorOpen)
+        {
+            ActivePopup = string.Empty;
+        }
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FullScreenButtonText))]
     private bool _isFullScreen = true;
@@ -218,6 +1253,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         CurrentChapter = targetChapter;
         _suppressChapterSelectionChanged = false;
 
+        RefreshBookmarksList();
         OnPropertyChanged(nameof(CanGoPrevChapter));
         OnPropertyChanged(nameof(CanGoNextChapter));
 
@@ -227,6 +1263,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     partial void OnCurrentChapterChanged(LibraryChapterItem? value)
     {
         if (_suppressChapterSelectionChanged || value == null) return;
+        ActivePopup = string.Empty;
         _ = LoadChapterInternalAsync(value);
     }
 
@@ -240,6 +1277,7 @@ public partial class ComicReaderViewModel : ViewModelBase
             RequestScrollToPage(targetIndex);
             ShowTransientToast($"📑 Đã chuyển tới mục lục PDF: {value.Title} (Trang {targetIndex + 1})");
         }
+        ActivePopup = string.Empty;
     }
 
     partial void OnCurrentPageIndexChanged(int value)
@@ -264,10 +1302,6 @@ public partial class ComicReaderViewModel : ViewModelBase
         ScrollToPageRequested?.Invoke(clamped);
     }
 
-    /// <summary>
-    /// Được gọi trực tiếp khi người dùng kéo hoặc nhấn trên thanh trượt tiến độ trang (PageScrubberSlider).
-    /// Tách biệt hoàn toàn khỏi luồng cập nhật tự động của ScrollViewer để chống nhảy trang qua lại.
-    /// </summary>
     public void ScrubToPage(int targetPageIndex)
     {
         if (Pages.Count == 0) return;
@@ -315,6 +1349,15 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    public async Task ReloadCurrentChapterAsync()
+    {
+        if (CurrentChapter == null) return;
+        ActivePopup = string.Empty;
+        ShowTransientToast("↻ Đang tải lại trang và chương hiện tại...");
+        await LoadChapterInternalAsync(CurrentChapter);
+    }
+
     private async Task LoadChapterInternalAsync(LibraryChapterItem chapter)
     {
         _loadCts?.Cancel();
@@ -340,9 +1383,11 @@ public partial class ComicReaderViewModel : ViewModelBase
             if (ct.IsCancellationRequested) return;
 
             double currentDisplayWidth = PageDisplayWidth;
+            Thickness currentMargin = CalculateCurrentPageItemMargin();
             foreach (var p in loadedPages)
             {
                 p.DisplayWidth = currentDisplayWidth;
+                p.PageMargin = currentMargin;
                 Pages.Add(p);
             }
 
@@ -371,7 +1416,6 @@ public partial class ComicReaderViewModel : ViewModelBase
             SyncActivePdfBookmark(startIndex);
             RecordReadingProgress(startIndex);
 
-            // Nạp ngay trang mục tiêu trước khi cuộn tới và đồng bộ tỷ lệ khung hình ban đầu
             if (TotalPages > 0)
             {
                 var firstTarget = Pages[startIndex];
@@ -425,6 +1469,7 @@ public partial class ComicReaderViewModel : ViewModelBase
             CurrentPage = null;
             SecondaryPage = null;
             OnPropertyChanged(nameof(FlipGridColumns));
+            OnPropertyChanged(nameof(ComicScreenPageBadgeText));
             return;
         }
 
@@ -443,6 +1488,8 @@ public partial class ComicReaderViewModel : ViewModelBase
         OnPropertyChanged(nameof(FlipGridColumns));
         OnPropertyChanged(nameof(LeftFlipPage));
         OnPropertyChanged(nameof(RightFlipPage));
+        OnPropertyChanged(nameof(ComicScreenPageBadgeText));
+        OnPropertyChanged(nameof(HeaderSubTitleText));
     }
 
     private void RecordReadingProgress(int pageIndex)
@@ -494,6 +1541,12 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void ToggleOverlay()
     {
+        if (IsMarginEditorOpen) return;
+        if (HasActivePopup)
+        {
+            ActivePopup = string.Empty;
+            return;
+        }
         IsOverlayVisible = !IsOverlayVisible;
     }
 
@@ -501,6 +1554,10 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void ToggleMode()
     {
         IsScrollMode = !IsScrollMode;
+        PageScrollingMode = IsScrollMode
+            ? (IsRightToLeft ? 2 : 5)
+            : (IsRightToLeft ? 1 : 0);
+
         UpdateCurrentFlipPages();
         TriggerPrefetch(CurrentPageIndex);
 
@@ -519,6 +1576,9 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void ToggleRtl()
     {
         IsRightToLeft = !IsRightToLeft;
+        PageScrollingMode = IsScrollMode
+            ? (IsRightToLeft ? 2 : 5)
+            : (IsRightToLeft ? 1 : 0);
         UpdateCurrentFlipPages();
         ShowTransientToast(IsRightToLeft
             ? "◀ Đã bật chế độ đọc Manga (Phải → Trái)"
@@ -529,6 +1589,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void ToggleDoublePage()
     {
         IsDoublePage = !IsDoublePage;
+        PageLayoutMode = IsDoublePage ? 2 : 1;
         UpdateCurrentFlipPages();
         TriggerPrefetch(CurrentPageIndex);
         ShowTransientToast(IsDoublePage
@@ -578,12 +1639,16 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// Xử lý chạm/nhấn phía bên TRÁI màn hình ở chế độ Lật trang (tự động đảo chiều nếu bật RTL).
-    /// </summary>
     [RelayCommand]
     public void TapLeftZone()
     {
+        if (IsMarginEditorOpen) return;
+        if (HasActivePopup)
+        {
+            ActivePopup = string.Empty;
+            return;
+        }
+
         if (IsScrollMode)
         {
             ToggleOverlay();
@@ -596,12 +1661,16 @@ public partial class ComicReaderViewModel : ViewModelBase
             PrevPage();
     }
 
-    /// <summary>
-    /// Xử lý chạm/nhấn phía bên PHẢI màn hình ở chế độ Lật trang (tự động đảo chiều nếu bật RTL).
-    /// </summary>
     [RelayCommand]
     public void TapRightZone()
     {
+        if (IsMarginEditorOpen) return;
+        if (HasActivePopup)
+        {
+            ActivePopup = string.Empty;
+            return;
+        }
+
         if (IsScrollMode)
         {
             ToggleOverlay();
@@ -617,6 +1686,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void FirstPage()
     {
+        ActivePopup = string.Empty;
         if (Pages.Count > 0)
         {
             CurrentPageIndex = 0;
@@ -627,6 +1697,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void LastPage()
     {
+        ActivePopup = string.Empty;
         if (Pages.Count > 0)
         {
             CurrentPageIndex = Pages.Count - 1;
@@ -637,6 +1708,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void NextChapter()
     {
+        ActivePopup = string.Empty;
         if (CurrentChapter == null) return;
         int idx = ChapterList.IndexOf(CurrentChapter);
         if (idx >= 0 && idx < ChapterList.Count - 1)
@@ -649,6 +1721,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void PrevChapter()
     {
+        ActivePopup = string.Empty;
         if (CurrentChapter == null) return;
         int idx = ChapterList.IndexOf(CurrentChapter);
         if (idx > 0)
@@ -679,6 +1752,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void ToggleFullScreen()
     {
+        ActivePopup = string.Empty;
         IsFullScreen = !IsFullScreen;
         FullScreenChangedRequested?.Invoke(IsFullScreen);
     }
@@ -696,6 +1770,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         {
             _loadCts?.Cancel();
             _prefetchCts?.Cancel();
+            _effectRefreshCts?.Cancel();
             _progressStore.FlushImmediately();
             DisposeLoadedBitmaps();
         }
@@ -741,4 +1816,3 @@ public partial class ComicReaderViewModel : ViewModelBase
         }, token);
     }
 }
-
