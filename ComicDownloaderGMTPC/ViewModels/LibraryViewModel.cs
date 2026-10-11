@@ -97,6 +97,56 @@ public partial class LibraryViewModel : ViewModelBase
     [ObservableProperty]
     private ComicReaderViewModel? _inlineReaderVm;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsMobileLayout))]
+    [NotifyPropertyChangedFor(nameof(IsDesktopLayout))]
+    private bool _isCompactWidth;
+
+    public bool IsMobileLayout => IsCompactWidth || OperatingSystem.IsAndroid();
+    public bool IsDesktopLayout => !IsMobileLayout;
+
+    /// <summary>
+    /// Trên màn hình nhỏ/Android: 0 = Xem danh sách truyện (Comics), 1 = Xem danh sách chương (Chapters)
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsShowingComicsTab))]
+    [NotifyPropertyChangedFor(nameof(IsShowingChaptersTab))]
+    [NotifyPropertyChangedFor(nameof(ComicsTabBackground))]
+    [NotifyPropertyChangedFor(nameof(ChaptersTabBackground))]
+    private int _mobileViewTabIndex = 0;
+
+    public bool IsShowingComicsTab => MobileViewTabIndex == 0;
+    public bool IsShowingChaptersTab => MobileViewTabIndex == 1;
+
+    public string ComicsTabBackground => IsShowingComicsTab ? "#0284C7" : "#1E293B";
+    public string ChaptersTabBackground => IsShowingChaptersTab ? "#7C3AED" : "#1E293B";
+
+    [RelayCommand]
+    public void SwitchMobileTab(string? tabIndexStr)
+    {
+        if (int.TryParse(tabIndexStr, out int idx))
+        {
+            MobileViewTabIndex = Math.Clamp(idx, 0, 1);
+        }
+    }
+
+    [RelayCommand]
+    public void BackToComicsList()
+    {
+        MobileViewTabIndex = 0;
+    }
+
+    [RelayCommand]
+    public void SelectComicAndOpenChapters(LibraryComicItem? comic)
+    {
+        if (comic == null) return;
+        SelectedComic = comic;
+        if (IsMobileLayout)
+        {
+            MobileViewTabIndex = 1;
+        }
+    }
+
     public LibraryViewModel()
     {
         LibraryRootPath = ReadProgressStore.Instance.GetLastLibraryRootPath()

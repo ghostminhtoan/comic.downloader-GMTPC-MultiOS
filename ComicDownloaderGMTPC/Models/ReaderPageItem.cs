@@ -59,8 +59,18 @@ public partial class ReaderPageItem : ObservableObject
     [ObservableProperty]
     private Thickness _pageMargin = new(0);
 
+    private ImageFitMode _lastFitMode = ImageFitMode.FitWidth;
+    private double _lastVw = 0;
+    private double _lastVh = 0;
+    private double _lastZoom = 1.0;
+
     public void RecalculateDimensions(ImageFitMode fitMode, double viewportWidth, double viewportHeight, double zoomLevel)
     {
+        _lastFitMode = fitMode;
+        _lastVw = viewportWidth;
+        _lastVh = viewportHeight;
+        _lastZoom = zoomLevel;
+
         double effectiveZoom = Math.Max(0.2, zoomLevel);
         double vw = Math.Max(240, viewportWidth);
         double vh = Math.Max(240, viewportHeight);
@@ -107,11 +117,18 @@ public partial class ReaderPageItem : ObservableObject
     public void SetKnownDimensions(int width, int height)
     {
         if (width <= 0 || height <= 0) return;
-        if (_aspectWidth == width && _aspectHeight == height) return;
+        bool changed = _aspectWidth != width || _aspectHeight != height;
         _aspectWidth = width;
         _aspectHeight = height;
-        OnPropertyChanged(nameof(AspectWidth));
-        OnPropertyChanged(nameof(AspectHeight));
+        if (changed)
+        {
+            OnPropertyChanged(nameof(AspectWidth));
+            OnPropertyChanged(nameof(AspectHeight));
+            if (_lastVw > 0 && _lastVh > 0)
+            {
+                RecalculateDimensions(_lastFitMode, _lastVw, _lastVh, _lastZoom);
+            }
+        }
     }
 
     [ObservableProperty]

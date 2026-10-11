@@ -276,14 +276,22 @@ public partial class ComicReaderControl : UserControl
         }
     }
 
-    private void OnVmAutoScrollStepRequested(double deltaY)
+    private void OnVmAutoScrollStepRequested(double delta)
     {
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
         if (listBox == null) return;
         var scrollViewer = listBox.FindDescendantOfType<ScrollViewer>();
         if (scrollViewer != null)
         {
-            scrollViewer.Offset = new Vector(scrollViewer.Offset.X, scrollViewer.Offset.Y + deltaY);
+            if (DataContext is ComicReaderViewModel vm && vm.IsHorizontalScrollMode)
+            {
+                double dir = vm.IsRightToLeft ? -1.0 : 1.0;
+                scrollViewer.Offset = new Vector(scrollViewer.Offset.X + delta * dir, scrollViewer.Offset.Y);
+            }
+            else
+            {
+                scrollViewer.Offset = new Vector(scrollViewer.Offset.X, scrollViewer.Offset.Y + delta);
+            }
         }
     }
 
@@ -354,6 +362,46 @@ public partial class ComicReaderControl : UserControl
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
         if (listBox == null) return;
 
+        if (vm.IsHorizontalScrollMode)
+        {
+            double viewportCenterX = listBox.Bounds.Width * 0.5;
+            int bestPageIndexX = -1;
+            double bestDistX = double.MaxValue;
+
+            foreach (var child in listBox.GetVisualDescendants())
+            {
+                if (child is ListBoxItem container && container.DataContext is ReaderPageItem page)
+                {
+                    var pos = container.TranslatePoint(new Point(0, 0), listBox);
+                    if (pos.HasValue)
+                    {
+                        double left = pos.Value.X;
+                        double right = left + container.Bounds.Width;
+                        if (left <= viewportCenterX && right >= viewportCenterX)
+                        {
+                            bestPageIndexX = page.Index;
+                            break;
+                        }
+
+                        double mid = (left + right) * 0.5;
+                        double dist = Math.Abs(mid - viewportCenterX);
+                        if (dist < bestDistX)
+                        {
+                            bestDistX = dist;
+                            bestPageIndexX = page.Index;
+                        }
+                    }
+                }
+            }
+
+            if (bestPageIndexX >= 0)
+            {
+                vm.UpdatePageIndexFromScroll(bestPageIndexX);
+            }
+            return;
+        }
+
+        // Chế độ cuộn dọc (Webtoon / Vertical Scroll)
         double viewportCenterY = listBox.Bounds.Height * 0.45;
         int bestPageIndex = -1;
         double bestDist = double.MaxValue;
@@ -508,6 +556,21 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
+        // Chế độ Cuộn ngang liên tiếp: lăn chuột dọc chuyển thành cuộn ngang mượt mà
+        if (vm.IsScrollMode && vm.IsHorizontalScrollMode && vm.ZoomLevel <= 1.05)
+        {
+            var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
+            var scrollViewer = listBox?.FindDescendantOfType<ScrollViewer>();
+            if (scrollViewer != null)
+            {
+                double step = (e.Delta.Y != 0 ? -e.Delta.Y : e.Delta.X) * 140.0;
+                double dir = vm.IsRightToLeft ? -1.0 : 1.0;
+                scrollViewer.Offset = new Vector(Math.Max(0, scrollViewer.Offset.X + step * dir), scrollViewer.Offset.Y);
+                e.Handled = true;
+                return;
+            }
+        }
+
         // Ở chế độ Flip mode (khi không giữ Ctrl): lăn chuột chuyển trang mượt mà
         if (vm.IsFlipMode && vm.ZoomLevel <= 1.05)
         {
@@ -602,7 +665,7 @@ public partial class ComicReaderControl : UserControl
 
             case Key.Left:
             case Key.A:
-                if (vm.IsFlipMode)
+                if (vm.IsFlipMode || vm.IsHorizontalScrollMode)
                 {
                     vm.TapLeftZone();
                     e.Handled = true;
@@ -611,7 +674,7 @@ public partial class ComicReaderControl : UserControl
 
             case Key.Right:
             case Key.D:
-                if (vm.IsFlipMode)
+                if (vm.IsFlipMode || vm.IsHorizontalScrollMode)
                 {
                     vm.TapRightZone();
                     e.Handled = true;

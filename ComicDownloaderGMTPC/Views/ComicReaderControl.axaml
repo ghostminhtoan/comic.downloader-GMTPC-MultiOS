@@ -44,9 +44,10 @@
         <!-- ========================================================================= -->
         <Panel x:Name="ReaderViewportPanel" Background="{Binding ReaderBackgroundColor}">
 
-            <!-- A. CHẾ ĐỘ CUỘN DỌC (SCROLL MODE) -->
+            <!-- A. CHẾ ĐỘ CUỘN (SCROLL MODE - DỌC WEBTOON & NGANG LIÊN TIẾP) -->
             <ListBox x:Name="ReaderPagesListBox"
                      IsVisible="{Binding IsScrollMode}"
+                     Classes.horizontalMode="{Binding IsHorizontalScrollMode}"
                      ItemsSource="{Binding Pages}"
                      Background="{Binding ReaderBackgroundColor}"
                      BorderThickness="0"
@@ -55,15 +56,19 @@
                      ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <VirtualizingStackPanel Orientation="Vertical" />
+                        <VirtualizingStackPanel Orientation="{Binding PageScrollOrientation}" />
                     </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
                 <ListBox.Styles>
+                    <Style Selector="ListBox.horizontalMode VirtualizingStackPanel">
+                        <Setter Property="Orientation" Value="Horizontal" />
+                    </Style>
                     <Style Selector="ListBoxItem">
                         <Setter Property="Padding" Value="0" />
                         <Setter Property="Margin" Value="0" />
                         <Setter Property="Background" Value="Transparent" />
                         <Setter Property="HorizontalContentAlignment" Value="Center" />
+                        <Setter Property="VerticalContentAlignment" Value="Center" />
                     </Style>
                     <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
                         <Setter Property="Background" Value="Transparent" />
@@ -75,6 +80,7 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="models:ReaderPageItem">
                         <Panel HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
                                Width="{Binding DisplayWidth}"
                                Height="{Binding DisplayHeight}"
                                Margin="{Binding PageMargin}"

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Layout;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -331,31 +332,37 @@ public partial class ComicReaderViewModel : ViewModelBase
         {
             case 0: // Right (Flip LTR)
                 IsScrollMode = false;
+                IsHorizontalScrollMode = false;
                 IsRightToLeft = false;
                 ShowTransientToast("📄 Page scrolling: Right (Lật trang Trái → Phải)");
                 break;
             case 1: // Left (Flip RTL)
                 IsScrollMode = false;
+                IsHorizontalScrollMode = false;
                 IsRightToLeft = true;
                 ShowTransientToast("📄 Page scrolling: Left (Lật trang Phải → Trái)");
                 break;
-            case 2: // Right + Vertical
+            case 2: // Right + Vertical (Cuộn dọc RTL)
                 IsScrollMode = true;
+                IsHorizontalScrollMode = false;
                 IsRightToLeft = true;
                 ShowTransientToast("📜 Page scrolling: Right + Vertical (Cuộn dọc RTL)");
                 break;
-            case 3: // Right Slide
-                IsScrollMode = false;
-                IsRightToLeft = false;
-                ShowTransientToast("🎞 Page scrolling: Right Slide (Trượt ngang Trái → Phải)");
-                break;
-            case 4: // Left Slide
-                IsScrollMode = false;
-                IsRightToLeft = true;
-                ShowTransientToast("🎞 Page scrolling: Left Slide (Trượt ngang Phải → Trái)");
-                break;
-            default: // 5 = Left + Vertical
+            case 3: // Right S (Horizontal Scroll LTR - Cuộn ngang Trái → Phải)
                 IsScrollMode = true;
+                IsHorizontalScrollMode = true;
+                IsRightToLeft = false;
+                ShowTransientToast("↔ Page scrolling: Right S (Cuộn ngang Trái → Phải)");
+                break;
+            case 4: // Left S (Horizontal Scroll RTL - Cuộn ngang Phải → Trái)
+                IsScrollMode = true;
+                IsHorizontalScrollMode = true;
+                IsRightToLeft = true;
+                ShowTransientToast("↔ Page scrolling: Left S (Cuộn ngang Phải → Trái)");
+                break;
+            default: // 5 = Left + Vertical (Webtoon Scroll LTR)
+                IsScrollMode = true;
+                IsHorizontalScrollMode = false;
                 IsRightToLeft = false;
                 ShowTransientToast("📜 Page scrolling: Left + Vertical (Cuộn dọc Webtoon)");
                 break;
@@ -1379,11 +1386,34 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(ComicScreenPageBadgeText))]
     private bool _isScrollMode = true;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ModeButtonText))]
+    [NotifyPropertyChangedFor(nameof(PageScrollOrientation))]
+    private bool _isHorizontalScrollMode = false;
+
+    public Avalonia.Layout.Orientation PageScrollOrientation =>
+        IsHorizontalScrollMode ? Avalonia.Layout.Orientation.Horizontal : Avalonia.Layout.Orientation.Vertical;
+
+    partial void OnIsHorizontalScrollModeChanged(bool value)
+    {
+        ApplyFitModeLayout();
+        if (IsScrollMode)
+        {
+            Dispatcher.UIThread.Post(() => RequestScrollToPage(CurrentPageIndex), DispatcherPriority.Background);
+        }
+    }
+
     public bool IsFlipMode => !IsScrollMode;
 
-    public string ModeButtonText => IsScrollMode ? "📜 Chế độ: Cuộn Dọc" : "📄 Chế độ: Lật Trang";
+    public string ModeButtonText =>
+        !IsScrollMode
+            ? "📄 Chế độ: Lật Trang"
+            : (IsHorizontalScrollMode ? "↔ Chế độ: Cuộn Ngang" : "📜 Chế độ: Cuộn Dọc");
 
-    public string ModeBadgeBackground => IsScrollMode ? "#0284C7" : "#7C3AED";
+    public string ModeBadgeBackground =>
+        !IsScrollMode
+            ? "#7C3AED"
+            : (IsHorizontalScrollMode ? "#0D9488" : "#0284C7");
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RtlButtonText))]
@@ -1650,11 +1680,12 @@ public partial class ComicReaderViewModel : ViewModelBase
                     int h = firstTarget.AspectHeight;
                     foreach (var p in Pages)
                     {
-                        if (!p.IsLoaded && p.AspectWidth == 900 && p.AspectHeight == 1350)
+                        if (!p.IsLoaded && (p.AspectWidth == 900 && p.AspectHeight == 1350 || p.AspectWidth <= 0))
                         {
                             p.SetKnownDimensions(w, h);
                         }
                     }
+                    ApplyFitModeLayout();
                 }
 
                 if (IsDoublePage && startIndex + 1 < TotalPages)
@@ -1694,6 +1725,8 @@ public partial class ComicReaderViewModel : ViewModelBase
             SecondaryPage = null;
             OnPropertyChanged(nameof(FlipGridColumns));
             OnPropertyChanged(nameof(ComicScreenPageBadgeText));
+            OnPropertyChanged(nameof(FlipDisplayWidth));
+            OnPropertyChanged(nameof(FlipDisplayHeight));
             return;
         }
 
@@ -1714,6 +1747,9 @@ public partial class ComicReaderViewModel : ViewModelBase
         OnPropertyChanged(nameof(RightFlipPage));
         OnPropertyChanged(nameof(ComicScreenPageBadgeText));
         OnPropertyChanged(nameof(HeaderSubTitleText));
+        OnPropertyChanged(nameof(FlipDisplayWidth));
+        OnPropertyChanged(nameof(FlipDisplayHeight));
+        OnPropertyChanged(nameof(FlipImageStretch));
     }
 
     private void RecordReadingProgress(int pageIndex)
@@ -1778,21 +1814,30 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void ToggleMode()
     {
         IsScrollMode = !IsScrollMode;
-        PageScrollingMode = IsScrollMode
-            ? (IsRightToLeft ? 2 : 5)
-            : (IsRightToLeft ? 1 : 0);
+        if (IsHorizontalScrollMode && IsScrollMode)
+        {
+            PageScrollingMode = IsRightToLeft ? 4 : 3;
+        }
+        else
+        {
+            PageScrollingMode = IsScrollMode
+                ? (IsRightToLeft ? 2 : 5)
+                : (IsRightToLeft ? 1 : 0);
+        }
 
         UpdateCurrentFlipPages();
         TriggerPrefetch(CurrentPageIndex);
 
         if (IsScrollMode)
         {
-            ShowTransientToast("📜 Đã chuyển sang chế độ Cuộn dọc (Webtoon)");
+            ShowTransientToast(IsHorizontalScrollMode
+                ? "↔ Đã chuyển sang chế độ Cuộn ngang liên tiếp"
+                : "📜 Đã chuyển sang chế độ Cuộn dọc (Webtoon)");
             Dispatcher.UIThread.Post(() => RequestScrollToPage(CurrentPageIndex), DispatcherPriority.Background);
         }
         else
         {
-            ShowTransientToast("📄 Đã chuyển sang chế độ Lật trang (Manga)");
+            ShowTransientToast("📄 Đã chuyển sang chế độ Lật trang (Flip)");
         }
     }
 
@@ -1800,9 +1845,16 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void ToggleRtl()
     {
         IsRightToLeft = !IsRightToLeft;
-        PageScrollingMode = IsScrollMode
-            ? (IsRightToLeft ? 2 : 5)
-            : (IsRightToLeft ? 1 : 0);
+        if (IsHorizontalScrollMode && IsScrollMode)
+        {
+            PageScrollingMode = IsRightToLeft ? 4 : 3;
+        }
+        else
+        {
+            PageScrollingMode = IsScrollMode
+                ? (IsRightToLeft ? 2 : 5)
+                : (IsRightToLeft ? 1 : 0);
+        }
         UpdateCurrentFlipPages();
         ShowTransientToast(IsRightToLeft
             ? "◀ Đã bật chế độ đọc Manga (Phải → Trái)"
