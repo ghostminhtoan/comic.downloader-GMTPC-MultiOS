@@ -2280,3 +2280,25 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Kiểm thử trực tiếp với 2 file thực tế của người dùng (`Ta Luyện Khí Ba Ngàn Năm.pdf` tách chuẩn 381 chương; `Một Ngày Nọ Tôi Bỗng Thành Nàng Công Chúa.zip` tách chuẩn toàn bộ các chương con) và khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.69 Lịch Sử Đọc Truyện Toàn Cục Xuyên Thư Mục (`Global Reading History Registry`) & Khóa Nhận Diện Linh Hoạt Không Phụ Thuộc Đường Dẫn Cứng (`Portable Identity Keys`) (`ReadProgressStore.cs`, `LibraryScannerService.cs`, `LibraryComicItem.cs`, `LibraryViewModel.cs`, `LibraryView.axaml`) (2026-10-11)
+- **Bối Cảnh & Yêu Cầu Thực Tế Của Người Dùng**:
+  - Trước đây, danh sách truyện trong `📚 TAB THƯ VIỆN` chỉ quét gói gọn bên trong 1 thư mục `LibraryRootPath` đang chọn, và khóa tiến độ đọc chỉ gắn cứng với đường dẫn tuyệt đối của thư mục đó. Khi người dùng chuyển sang thư mục khác (hoặc di chuyển truyện sang ổ đĩa/thư mục khác), các bộ truyện `⏳ Đang đọc dở` và `✅ Đã đọc xong` trước đó biến mất khỏi danh sách.
+- **Giải Pháp Kiến Trúc & Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Sổ Đăng Ký Lịch Sử Đọc Toàn Cục (`@history|<Path>` & `@last_root|<Path>` trong `ReadProgressStore.cs`)**:
+     - Tự động ghi nhận mọi bộ truyện (dạng thư mục, `.cbz`, `.zip`, `.pdf`) từng được mở hoặc có tiến độ đọc vào sổ lịch sử toàn cục kèm dấu thời gian đọc gần nhất (`GetCurrentOrderStamp()`), đồng thời tự động hồi tố (backfill) lịch sử từ toàn bộ dữ liệu sẵn có trong `read_progress.json` ngay khi khởi động.
+     - Tự động lưu và khôi phục thư mục thư viện gần nhất người dùng đã chọn (`SaveLastLibraryRootPath` / `GetLastLibraryRootPath`).
+  2. **Khóa Định Danh Linh Hoạt Đa Tầng (`Portable Identity Keys` `@id|...` trong `ReadProgressStore.cs`)**:
+     - Song song với khóa đường dẫn đầy đủ, mỗi chương và mỗi bộ truyện được ánh xạ thêm khóa định danh tương đối theo cấu trúc tên truyện/chương (`@id|pair|<ComicName>/<ChapterName>`, `@id|leaf|<FileName>::<SubChapter>`, `@id|file|<FileName>`).
+     - Ngay cả khi người dùng di chuyển (move/copy) thư mục truyện hoặc file `.pdf`/`.zip`/`.cbz` sang thư mục khác hoặc ổ đĩa khác, `GetLastReadPage` và `GetLastActiveChapterIndex` vẫn tự động nhận diện và khôi phục 100% số chương/trang đang đọc dở.
+  3. **Hợp Nhất Tự Động Lịch Sử Đọc Toàn Cục Khi Quét Thư Mục Bất Kỳ (`AppendGlobalHistoryComics` trong `LibraryScannerService.cs`)**:
+     - Khi người dùng chọn bất kỳ thư mục nào (kể cả thư mục mới trống), `ScanLibraryRootAsync` vừa quét thư mục hiện tại vừa tự động nạp bổ sung toàn bộ các bộ truyện `Đang đọc dở` / `Đã đọc xong` từ lịch sử đọc ở các thư mục/ổ đĩa khác, gắn nhãn nguồn trực quan (`🕒 Lịch sử • <Tên thư mục>` màu tím hoặc `📁 <Tên thư mục>` cho thư mục hiện tại).
+  4. **Bộ Lọc Linh Hoạt 5 Chế Độ Có Đánh Dấu Trạng Thái Đang Chọn (`LibraryViewModel.cs` & `LibraryView.axaml`)**:
+     - `📋 Tất cả`: Hiển thị toàn bộ truyện trong thư mục đang chọn + lịch sử truyện đã đọc từ mọi nơi.
+     - `📂 Thư mục này`: Chỉ lọc riêng các truyện nằm trong thư mục đang chọn.
+     - `⏳ Đang đọc dở`: Hiển thị mọi bộ truyện đang đọc dở trên toàn bộ các thư mục/ổ đĩa, ưu tiên xếp truyện vừa đọc gần nhất lên đầu.
+     - `✅ Đã đọc xong`: Hiển thị mọi bộ truyện đã đọc hoàn tất trên toàn bộ các thư mục/ổ đĩa.
+     - `🆕 Chưa đọc`: Hiển thị các bộ truyện chưa đọc trong thư mục đang chọn.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+

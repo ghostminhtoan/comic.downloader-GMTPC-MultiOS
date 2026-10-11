@@ -30,21 +30,34 @@ public partial class LibraryViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFilterAll))]
+    [NotifyPropertyChangedFor(nameof(IsFilterCurrentFolder))]
     [NotifyPropertyChangedFor(nameof(IsFilterInProgress))]
     [NotifyPropertyChangedFor(nameof(IsFilterUnread))]
     [NotifyPropertyChangedFor(nameof(IsFilterCompleted))]
-    private string _filterMode = "All"; // All, InProgress, Unread, Completed
+    [NotifyPropertyChangedFor(nameof(FilterAllBackground))]
+    [NotifyPropertyChangedFor(nameof(FilterCurrentFolderBackground))]
+    [NotifyPropertyChangedFor(nameof(FilterInProgressBackground))]
+    [NotifyPropertyChangedFor(nameof(FilterUnreadBackground))]
+    [NotifyPropertyChangedFor(nameof(FilterCompletedBackground))]
+    private string _filterMode = "All"; // All, CurrentFolder, InProgress, Unread, Completed
 
     public bool IsFilterAll => FilterMode == "All";
+    public bool IsFilterCurrentFolder => FilterMode == "CurrentFolder";
     public bool IsFilterInProgress => FilterMode == "InProgress";
     public bool IsFilterUnread => FilterMode == "Unread";
     public bool IsFilterCompleted => FilterMode == "Completed";
+
+    public string FilterAllBackground => IsFilterAll ? "#0284C7" : "#1E293B";
+    public string FilterCurrentFolderBackground => IsFilterCurrentFolder ? "#0284C7" : "#1E293B";
+    public string FilterInProgressBackground => IsFilterInProgress ? "#D97706" : "#1E293B";
+    public string FilterUnreadBackground => IsFilterUnread ? "#475569" : "#1E293B";
+    public string FilterCompletedBackground => IsFilterCompleted ? "#059669" : "#1E293B";
 
     [ObservableProperty]
     private bool _isScanning;
 
     [ObservableProperty]
-    private string _statusMessage = "Nhấn 'Quét Thư Viện' để nạp danh sách truyện đã tải.";
+    private string _statusMessage = "Nhấn 'Quét Thư Viện' để nạp danh sách truyện đã tải và lịch sử đọc.";
 
     public ObservableCollection<LibraryComicItem> AllComics { get; } = new();
 
@@ -70,7 +83,8 @@ public partial class LibraryViewModel : ViewModelBase
 
     public LibraryViewModel()
     {
-        LibraryRootPath = DownloadEngineService.Instance.DownloadRoot;
+        LibraryRootPath = ReadProgressStore.Instance.GetLastLibraryRootPath()
+                          ?? DownloadEngineService.Instance.DownloadRoot;
     }
 
     partial void OnSearchQueryChanged(string value)
@@ -115,21 +129,33 @@ public partial class LibraryViewModel : ViewModelBase
         {
             comic.RefreshReadStatus();
 
+            if (FilterMode == "CurrentFolder" && comic.IsExternalHistoryItem)
+                continue;
             if (FilterMode == "InProgress" && (!comic.HasAnyReadProgress || comic.IsAllChaptersRead))
                 continue;
-            if (FilterMode == "Unread" && comic.HasAnyReadProgress)
+            if (FilterMode == "Unread" && (comic.HasAnyReadProgress || comic.IsExternalHistoryItem))
                 continue;
             if (FilterMode == "Completed" && !comic.IsAllChaptersRead)
                 continue;
 
             if (!string.IsNullOrEmpty(q) &&
                 comic.Title.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0 &&
-                comic.CategoryName.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0)
+                comic.CategoryName.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0 &&
+                comic.SourceLocationLabel.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0 &&
+                comic.RootFolderPath.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0)
             {
                 continue;
             }
 
             matches.Add(comic);
+        }
+
+        if (FilterMode == "InProgress" || FilterMode == "Completed")
+        {
+            matches = matches
+                .OrderByDescending(c => c.LastReadOrder)
+                .ThenBy(c => c.Title, NaturalSortComparer.Instance)
+                .ToList();
         }
 
         FilteredComics.Clear();
@@ -153,13 +179,8 @@ public partial class LibraryViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(LibraryRootPath))
         {
-            LibraryRootPath = DownloadEngineService.Instance.DownloadRoot;
-        }
-
-        if (string.IsNullOrWhiteSpace(LibraryRootPath) || !Directory.Exists(LibraryRootPath))
-        {
-            StatusMessage = "⚠️ Thư mục thư viện chưa tồn tại. Hãy chọn thư mục chứa truyện đã tải.";
-            return;
+            LibraryRootPath = ReadProgressStore.Instance.GetLastLibraryRootPath()
+                              ?? DownloadEngineService.Instance.DownloadRoot;
         }
 
         _scanCts?.Cancel();
@@ -167,7 +188,7 @@ public partial class LibraryViewModel : ViewModelBase
         var ct = _scanCts.Token;
 
         IsScanning = true;
-        StatusMessage = $"⏳ Đang quét thư viện tại: {LibraryRootPath}...";
+        StatusMessage = $"⏳ Đang quét thư viện & đồng bộ lịch sử đọc...";
 
         try
         {
@@ -183,7 +204,21 @@ public partial class LibraryViewModel : ViewModelBase
             ApplyFilter();
 
             int totalChapters = list.Sum(c => c.TotalChapters);
-            StatusMessage = $"✅ Đã tìm thấy {list.Count} bộ truyện ({totalChapters} chương). Chọn chương và nhấn 'Đọc ngay'.";
+            int externalHistoryCount = list.Count(c => c.IsExternalHistoryItem);
+            int localCount = list.Count - externalHistoryCount;
+
+            if (externalHistoryCount > 0)
+            {
+                StatusMessage = $"✅ Đã nạp {list.Count} bộ truyện ({localCount} tại thư mục đang chọn + {externalHistoryCount} từ Lịch sử đọc ở thư mục khác • {totalChapters} chương).";
+            }
+            else if (list.Count > 0)
+            {
+                StatusMessage = $"✅ Đã tìm thấy {list.Count} bộ truyện ({totalChapters} chương). Chọn chương và nhấn 'Đọc ngay'.";
+            }
+            else
+            {
+                StatusMessage = "ℹ️ Chưa có truyện trong thư mục đang chọn. Bạn có thể chọn thư mục khác hoặc mở trực tiếp file CBZ/ZIP/PDF.";
+            }
 
             // Nạp ảnh bìa bất đồng bộ trên nền
             _ = _scanner.LoadCoversAsync(list, ct);
@@ -265,6 +300,7 @@ public partial class LibraryViewModel : ViewModelBase
                     var quickComic = _scanner.CreateQuickComicFromPath(normalized);
                     if (quickComic != null && quickComic.Chapters.Count > 0)
                     {
+                        ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
                         var existing = AllComics.FirstOrDefault(c =>
                             string.Equals(c.RootFolderPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
                         if (existing == null)
@@ -315,6 +351,15 @@ public partial class LibraryViewModel : ViewModelBase
 
     private async Task OpenChapterInternalAsync(LibraryComicItem? comic, LibraryChapterItem chapter)
     {
+        if (comic != null && !string.IsNullOrWhiteSpace(comic.RootFolderPath))
+        {
+            ReadProgressStore.Instance.RegisterReadComic(comic.RootFolderPath, touchTimestamp: true);
+        }
+        else if (!string.IsNullOrWhiteSpace(chapter.LocalPath))
+        {
+            ReadProgressStore.Instance.RegisterReadComic(chapter.LocalPath, touchTimestamp: true);
+        }
+
         var readerVm = new ComicReaderViewModel();
 
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime)
@@ -327,6 +372,7 @@ public partial class LibraryViewModel : ViewModelBase
             {
                 readerVm.Cleanup();
                 comic?.RefreshReadStatus();
+                ApplyFilter();
             };
             win.Show();
             await readerVm.InitializeAsync(comic, chapter);
@@ -339,6 +385,7 @@ public partial class LibraryViewModel : ViewModelBase
                 IsInlineReaderVisible = false;
                 InlineReaderVm = null;
                 comic?.RefreshReadStatus();
+                ApplyFilter();
             };
             InlineReaderVm = readerVm;
             IsInlineReaderVisible = true;

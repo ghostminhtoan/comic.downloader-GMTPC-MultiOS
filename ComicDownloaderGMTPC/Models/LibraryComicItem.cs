@@ -14,6 +14,21 @@ public partial class LibraryComicItem : ObservableObject
 
     public string CategoryName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Đánh dấu bộ truyện được nạp từ Lịch sử đọc toàn cục (nằm ngoài thư mục thư viện đang chọn).
+    /// </summary>
+    public bool IsExternalHistoryItem { get; set; }
+
+    public int LastReadOrder { get; set; }
+
+    public string SourceLocationLabel { get; set; } = string.Empty;
+
+    public bool HasSourceLocationLabel => !string.IsNullOrWhiteSpace(SourceLocationLabel);
+
+    public string SourceBadgeBackground => IsExternalHistoryItem ? "#4C1D95" : "#1E293B";
+
+    public string SourceBadgeForeground => IsExternalHistoryItem ? "#DDD6FE" : "#94A3B8";
+
     public string? CoverFilePath { get; set; }
 
     public string? CoverArchivePath { get; set; }
@@ -117,6 +132,12 @@ public partial class LibraryComicItem : ObservableObject
             ReadStatusText = "Mới / Chưa đọc";
             ReadStatusBackground = "#334155";
             OverallProgressPercent = 0;
+        }
+
+        if (HasAnyReadProgress && !string.IsNullOrWhiteSpace(RootFolderPath))
+        {
+            Services.ReadProgressStore.Instance.RegisterReadComic(RootFolderPath, touchTimestamp: false);
+            LastReadOrder = Math.Max(LastReadOrder, Services.ReadProgressStore.Instance.GetComicLastReadOrder(RootFolderPath));
         }
 
         OnPropertyChanged(nameof(HasAnyReadProgress));

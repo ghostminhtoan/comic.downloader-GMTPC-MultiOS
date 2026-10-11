@@ -53,33 +53,108 @@ public sealed class LibraryScannerService
         return Task.Run(() =>
         {
             var comics = new List<LibraryComicItem>();
-            if (string.IsNullOrWhiteSpace(rootPath))
+            if (!string.IsNullOrWhiteSpace(rootPath))
             {
-                return comics;
+                if (File.Exists(rootPath))
+                {
+                    var single = CreateQuickComicFromPath(rootPath);
+                    if (single != null)
+                    {
+                        single.IsExternalHistoryItem = false;
+                        single.SourceLocationLabel = BuildShortLocationBadge(single.RootFolderPath, isExternal: false);
+                        comics.Add(single);
+                    }
+                }
+                else if (Directory.Exists(rootPath))
+                {
+                    ReadProgressStore.Instance.SaveLastLibraryRootPath(rootPath);
+                    try
+                    {
+                        ScanDirectoryRecursive(rootPath, rootPath, depth: 0, maxDepth: 4, comics, ct);
+                    }
+                    catch { }
+
+                    foreach (var c in comics)
+                    {
+                        c.IsExternalHistoryItem = false;
+                        c.SourceLocationLabel = BuildShortLocationBadge(c.RootFolderPath, isExternal: false);
+                    }
+                }
             }
 
-            if (File.Exists(rootPath))
-            {
-                var single = CreateQuickComicFromPath(rootPath);
-                if (single != null) comics.Add(single);
-                return comics;
-            }
-
-            if (!Directory.Exists(rootPath))
-            {
-                return comics;
-            }
-
-            try
-            {
-                ScanDirectoryRecursive(rootPath, rootPath, depth: 0, maxDepth: 4, comics, ct);
-            }
-            catch { }
+            // Luôn nạp bổ sung các bộ truyện đã đọc dở / đã đọc xong từ Lịch sử đọc toàn cục (ở bất kỳ thư mục/ổ đĩa nào)
+            AppendGlobalHistoryComics(comics, ct);
 
             return comics
-                .OrderBy(c => c.Title, NaturalSortComparer.Instance)
+                .OrderByDescending(c => c.HasAnyReadProgress ? 1 : 0)
+                .ThenByDescending(c => c.LastReadOrder)
+                .ThenBy(c => c.Title, NaturalSortComparer.Instance)
                 .ToList();
         }, ct);
+    }
+
+    private void AppendGlobalHistoryComics(List<LibraryComicItem> currentList, CancellationToken ct)
+    {
+        try
+        {
+            var knownPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();
+            if (knownPaths.Count == 0) return;
+
+            var existingNormalizedPaths = new HashSet<string>(
+                currentList
+                    .Where(c => !string.IsNullOrWhiteSpace(c.RootFolderPath))
+                    .Select(c => ReadProgressStore.NormalizeKey(c.RootFolderPath)),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (string histPath in knownPaths)
+            {
+                if (ct.IsCancellationRequested) break;
+                string normHist = ReadProgressStore.NormalizeKey(histPath);
+                if (string.IsNullOrWhiteSpace(normHist) || existingNormalizedPaths.Contains(normHist))
+                    continue;
+
+                // Nếu truyện đã được di chuyển sang thư mục hiện tại (trùng tên bộ truyện) và đã khớp qua Portable Identity Key, tránh nhân đôi
+                string histName = Path.GetFileNameWithoutExtension(normHist.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (currentList.Any(c =>
+                        !c.IsExternalHistoryItem &&
+                        string.Equals(c.Title, histName, StringComparison.OrdinalIgnoreCase) &&
+                        c.HasAnyReadProgress))
+                {
+                    continue;
+                }
+
+                var histComic = CreateQuickComicFromPath(normHist);
+                if (histComic != null && histComic.Chapters.Count > 0 && histComic.HasAnyReadProgress)
+                {
+                    histComic.IsExternalHistoryItem = true;
+                    histComic.LastReadOrder = ReadProgressStore.Instance.GetComicLastReadOrder(normHist);
+                    histComic.SourceLocationLabel = BuildShortLocationBadge(histComic.RootFolderPath, isExternal: true);
+                    currentList.Add(histComic);
+                    existingNormalizedPaths.Add(ReadProgressStore.NormalizeKey(histComic.RootFolderPath));
+                }
+            }
+        }
+        catch { }
+    }
+
+    public static string BuildShortLocationBadge(string fullPath, bool isExternal)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath)) return string.Empty;
+        try
+        {
+            string clean = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string? parent = Path.GetDirectoryName(clean);
+            string folderName = !string.IsNullOrWhiteSpace(parent)
+                ? Path.GetFileName(parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                : clean;
+            if (string.IsNullOrWhiteSpace(folderName)) folderName = clean;
+
+            return isExternal ? $"🕒 Lịch sử • {folderName}" : $"📁 {folderName}";
+        }
+        catch
+        {
+            return isExternal ? "🕒 Lịch sử đọc" : string.Empty;
+        }
     }
 
     private void ScanDirectoryRecursive(
@@ -722,7 +797,9 @@ public sealed class LibraryScannerService
                 int idx = 1;
                 var expanded = ExpandArchiveIntoChapters(targetPath, ref idx, out string? firstEntry);
                 if (expanded.Count == 0) return null;
-                return BuildStandaloneComicFromExpandedFile(targetPath, dir, dir, expanded, isPdf: false, firstArchiveEntry: firstEntry);
+                var comic = BuildStandaloneComicFromExpandedFile(targetPath, dir, dir, expanded, isPdf: false, firstArchiveEntry: firstEntry);
+                comic.SourceLocationLabel = BuildShortLocationBadge(comic.RootFolderPath, comic.IsExternalHistoryItem);
+                return comic;
             }
 
             if (IsPdfFile(targetPath))
@@ -731,21 +808,44 @@ public sealed class LibraryScannerService
                 int idx = 1;
                 var expanded = ExpandPdfIntoChapters(targetPath, ref idx);
                 if (expanded.Count == 0) return null;
-                return BuildStandaloneComicFromExpandedFile(targetPath, dir, dir, expanded, isPdf: true, firstArchiveEntry: null);
+                var comic = BuildStandaloneComicFromExpandedFile(targetPath, dir, dir, expanded, isPdf: true, firstArchiveEntry: null);
+                comic.SourceLocationLabel = BuildShortLocationBadge(comic.RootFolderPath, comic.IsExternalHistoryItem);
+                return comic;
             }
         }
 
         if (Directory.Exists(targetPath))
         {
+            var tempResults = new List<LibraryComicItem>();
+            try
+            {
+                ScanDirectoryRecursive(targetPath, targetPath, depth: 0, maxDepth: 2, tempResults, CancellationToken.None);
+            }
+            catch { }
+
+            if (tempResults.Count > 0)
+            {
+                var best = tempResults.FirstOrDefault(c =>
+                               string.Equals(
+                                   c.RootFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                                   targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                                   StringComparison.OrdinalIgnoreCase))
+                           ?? tempResults[0];
+                best.SourceLocationLabel = BuildShortLocationBadge(best.RootFolderPath, best.IsExternalHistoryItem);
+                return best;
+            }
+
             var directImgs = GetDirectImagesSafe(targetPath);
             if (directImgs.Count > 0)
             {
-                return BuildComicItem(
+                var comic = BuildComicItem(
                     targetPath,
                     targetPath,
                     new List<(string, List<string>)> { (targetPath, directImgs) },
                     new List<string>(),
                     new List<string>());
+                comic.SourceLocationLabel = BuildShortLocationBadge(comic.RootFolderPath, comic.IsExternalHistoryItem);
+                return comic;
             }
         }
 

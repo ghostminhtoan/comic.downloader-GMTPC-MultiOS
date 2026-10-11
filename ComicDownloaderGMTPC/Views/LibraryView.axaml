@@ -63,21 +63,31 @@
 
                         <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                             <Button Command="{Binding SetFilterModeCommand}" CommandParameter="All"
-                                    Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
-                                    Foreground="#F8FAFC" Padding="9,4" Height="28" CornerRadius="5">
+                                    Background="{Binding FilterAllBackground}" BorderBrush="#38BDF8" BorderThickness="1"
+                                    Foreground="#F8FAFC" Padding="9,4" Height="28" CornerRadius="5"
+                                    ToolTip.Tip="Hiện tất cả truyện trong thư mục đang chọn + lịch sử truyện đã đọc từ mọi nơi">
                                 <TextBlock Text="📋 Tất cả" FontSize="10.5" FontWeight="SemiBold" />
                             </Button>
+                            <Button Command="{Binding SetFilterModeCommand}" CommandParameter="CurrentFolder"
+                                    Background="{Binding FilterCurrentFolderBackground}" BorderBrush="#334155" BorderThickness="1"
+                                    Foreground="#E2E8F0" Padding="9,4" Height="28" CornerRadius="5"
+                                    ToolTip.Tip="Chỉ hiện các bộ truyện nằm trong thư mục đang chọn">
+                                <TextBlock Text="📂 Thư mục này" FontSize="10.5" FontWeight="SemiBold" />
+                            </Button>
                             <Button Command="{Binding SetFilterModeCommand}" CommandParameter="InProgress"
-                                    Background="#1E293B" Foreground="#FBBF24" Padding="9,4" Height="28" CornerRadius="5">
+                                    Background="{Binding FilterInProgressBackground}" Foreground="#FBBF24" Padding="9,4" Height="28" CornerRadius="5"
+                                    ToolTip.Tip="Hiện tất cả truyện đang đọc dở trên toàn bộ các thư mục / ổ đĩa">
                                 <TextBlock Text="⏳ Đang đọc dở" FontSize="10.5" FontWeight="SemiBold" />
                             </Button>
-                            <Button Command="{Binding SetFilterModeCommand}" CommandParameter="Unread"
-                                    Background="#1E293B" Foreground="#94A3B8" Padding="9,4" Height="28" CornerRadius="5">
-                                <TextBlock Text="🆕 Chưa đọc" FontSize="10.5" FontWeight="SemiBold" />
-                            </Button>
                             <Button Command="{Binding SetFilterModeCommand}" CommandParameter="Completed"
-                                    Background="#1E293B" Foreground="#34D399" Padding="9,4" Height="28" CornerRadius="5">
+                                    Background="{Binding FilterCompletedBackground}" Foreground="#34D399" Padding="9,4" Height="28" CornerRadius="5"
+                                    ToolTip.Tip="Hiện tất cả truyện đã đọc xong trên toàn bộ các thư mục / ổ đĩa">
                                 <TextBlock Text="✅ Đã đọc xong" FontSize="10.5" FontWeight="SemiBold" />
+                            </Button>
+                            <Button Command="{Binding SetFilterModeCommand}" CommandParameter="Unread"
+                                    Background="{Binding FilterUnreadBackground}" Foreground="#94A3B8" Padding="9,4" Height="28" CornerRadius="5"
+                                    ToolTip.Tip="Hiện các bộ truyện chưa đọc trong thư mục đang chọn">
+                                <TextBlock Text="🆕 Chưa đọc" FontSize="10.5" FontWeight="SemiBold" />
                             </Button>
                         </StackPanel>
 
@@ -94,7 +104,7 @@
                 <Border Grid.Column="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="8">
                     <Grid RowDefinitions="Auto, *">
                         <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="4,2,4,8">
-                            <TextBlock Grid.Column="0" Text="📚 DANH SÁCH TRUYỆN ĐÃ TẢI" Foreground="#38BDF8" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Text="📚 DANH SÁCH TRUYỆN &amp; LỊCH SỬ ĐỌC" Foreground="#38BDF8" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
                             <Border Grid.Column="1" Background="#1E293B" CornerRadius="4" Padding="6,2">
                                 <TextBlock Text="{Binding FilteredComics.Count, StringFormat='{}{0} bộ'}" Foreground="#E2E8F0" FontSize="10.5" FontWeight="Bold" />
                             </Border>
@@ -112,7 +122,8 @@
                             </ListBox.ItemsPanel>
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="models:LibraryComicItem">
-                                    <Border Background="#131C31" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,2">
+                                    <Border Background="#131C31" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,2"
+                                            ToolTip.Tip="{Binding RootFolderPath}">
                                         <Grid ColumnDefinitions="62, 10, *, Auto">
                                             <!-- Ảnh bìa thu nhỏ -->
                                             <Border Grid.Column="0" Width="62" Height="84" CornerRadius="4" Background="#090D16" ClipToBounds="True">
@@ -131,6 +142,11 @@
                                                 <WrapPanel Orientation="Horizontal">
                                                     <Border Background="#1E293B" CornerRadius="4" Padding="6,2" Margin="0,0,6,2">
                                                         <TextBlock Text="{Binding ChapterCountText}" Foreground="#38BDF8" FontSize="10" FontWeight="Bold" />
+                                                    </Border>
+                                                    <Border Background="{Binding SourceBadgeBackground}" CornerRadius="4" Padding="6,2" Margin="0,0,6,2"
+                                                            IsVisible="{Binding HasSourceLocationLabel}">
+                                                        <TextBlock Text="{Binding SourceLocationLabel}" Foreground="{Binding SourceBadgeForeground}" FontSize="9.5" FontWeight="SemiBold"
+                                                                   MaxWidth="150" TextTrimming="CharacterEllipsis" />
                                                     </Border>
                                                     <Border Background="{Binding ReadStatusBackground}" CornerRadius="4" Padding="6,2" Margin="0,0,0,2">
                                                         <TextBlock Text="{Binding ReadStatusText}" Foreground="#FFFFFF" FontSize="10" FontWeight="SemiBold"
