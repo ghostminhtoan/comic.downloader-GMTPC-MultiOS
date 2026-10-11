@@ -52,6 +52,16 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private int _selectedRootTabIndex = 0;
 
+    public LibraryViewModel LibraryVm { get; } = new();
+
+    partial void OnSelectedRootTabIndexChanged(int value)
+    {
+        if (value == 4 && LibraryVm.AllComics.Count == 0 && !LibraryVm.IsScanning)
+        {
+            _ = LibraryVm.ScanLibraryAsync();
+        }
+    }
+
     [ObservableProperty]
     private string _urlInput = string.Empty;
 
@@ -1849,6 +1859,7 @@ public partial class MainViewModel : ViewModelBase
 
     public void FlushAutoSaveImmediately()
     {
+        ReadProgressStore.Instance.FlushImmediately();
         if (_isAutoSaveSuspended) return;
         SyncAutoSaveSettingsToService();
         QueueBackupService.Instance.FlushAutoSaveImmediately(ComicBooks);
@@ -3226,6 +3237,30 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task ReadBookInLibraryAsync(ComicBookItem? item)
+    {
+        var target = item ?? SelectedComic;
+        SelectedRootTabIndex = 4;
+
+        await LibraryVm.ScanLibraryAsync();
+
+        if (target != null)
+        {
+            var matched = LibraryVm.AllComics.FirstOrDefault(c =>
+                (!string.IsNullOrWhiteSpace(target.LocalDirectory) &&
+                 string.Equals(c.RootFolderPath, target.LocalDirectory, StringComparison.OrdinalIgnoreCase)) ||
+                string.Equals(c.Title, target.Title, StringComparison.OrdinalIgnoreCase));
+
+            if (matched != null)
+            {
+                LibraryVm.SelectedComic = matched;
+                await LibraryVm.ContinueReadingSelectedComicAsync(matched);
+                return;
+            }
+        }
+    }
+
+    [RelayCommand]
     public void OpenDownloadRoot()
     {
         _downloadEngine.OpenDirectoryInExplorer(_downloadEngine.DownloadRoot);
@@ -3256,6 +3291,7 @@ public partial class MainViewModel : ViewModelBase
                         string writable = _downloadEngine.EnsureWritableDownloadRoot(normalized);
                         _downloadEngine.SetDownloadRoot(writable);
                         DownloadPathText = _downloadEngine.DownloadRoot;
+                        LibraryVm.LibraryRootPath = _downloadEngine.DownloadRoot;
                         AddLog("SUCCESS", $"Đã chọn thư mục tải mới: {_downloadEngine.DownloadRoot}");
                         return;
                     }

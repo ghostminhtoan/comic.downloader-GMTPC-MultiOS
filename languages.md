@@ -756,5 +756,26 @@
 | Scan Folder | Quét Folder |
 | Browse | Duyệt |
 
+## 17. Comic Library & Reader (Thư Viện & Trình Đọc Truyện)
 
-
+| English | Vietnamese |
+| :--- | :--- |
+| LIBRARY TAB (READ COMICS) | TAB THƯ VIỆN (ĐỌC TRUYỆN) |
+| Scan Library | Quét Thư Viện |
+| Choose Folder | Chọn Thư Mục |
+| Open CBZ / ZIP | Mở File CBZ / ZIP |
+| All Comics | Tất Cả |
+| Reading In Progress | Đang Đọc |
+| Unread | Chưa Đọc |
+| Completed Read | Đã Đọc Hết |
+| Continue Reading | Đọc Tiếp |
+| Read Now | Đọc ngay |
+| Vertical Scroll | Cuộn dọc |
+| Page Flip | Lật trang |
+| LTR: Left to Right | LTR: Trái → Phải |
+| RTL: Right to Left | RTL: Phải → Trái |
+| 1 Page | 1 Trang |
+| 2 Pages | 2 Trang |
+| Fullscreen | Toàn màn hình |
+| Windowed | Cửa sổ |
+| Exit Reader | Thoát |

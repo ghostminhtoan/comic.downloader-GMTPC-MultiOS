@@ -1,0 +1,347 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using ComicDownloaderGMTPC.Models;
+using ComicDownloaderGMTPC.Services;
+using ComicDownloaderGMTPC.Views;
+
+namespace ComicDownloaderGMTPC.ViewModels;
+
+public partial class LibraryViewModel : ViewModelBase
+{
+    private readonly LibraryScannerService _scanner = LibraryScannerService.Instance;
+    private CancellationTokenSource? _scanCts;
+
+    [ObservableProperty]
+    private string _libraryRootPath = string.Empty;
+
+    [ObservableProperty]
+    private string _searchQuery = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFilterAll))]
+    [NotifyPropertyChangedFor(nameof(IsFilterInProgress))]
+    [NotifyPropertyChangedFor(nameof(IsFilterUnread))]
+    [NotifyPropertyChangedFor(nameof(IsFilterCompleted))]
+    private string _filterMode = "All"; // All, InProgress, Unread, Completed
+
+    public bool IsFilterAll => FilterMode == "All";
+    public bool IsFilterInProgress => FilterMode == "InProgress";
+    public bool IsFilterUnread => FilterMode == "Unread";
+    public bool IsFilterCompleted => FilterMode == "Completed";
+
+    [ObservableProperty]
+    private bool _isScanning;
+
+    [ObservableProperty]
+    private string _statusMessage = "Nhấn 'Quét Thư Viện' để nạp danh sách truyện đã tải.";
+
+    public ObservableCollection<LibraryComicItem> AllComics { get; } = new();
+
+    public ObservableCollection<LibraryComicItem> FilteredComics { get; } = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedComic))]
+    private LibraryComicItem? _selectedComic;
+
+    public bool HasSelectedComic => SelectedComic != null;
+
+    [ObservableProperty]
+    private ObservableCollection<LibraryChapterItem> _selectedComicChapters = new();
+
+    /// <summary>
+    /// Hỗ trợ trình đọc toàn màn hình trực tiếp trên Mobile/Android SingleView (hoặc khi không mở cửa sổ rời).
+    /// </summary>
+    [ObservableProperty]
+    private bool _isInlineReaderVisible;
+
+    [ObservableProperty]
+    private ComicReaderViewModel? _inlineReaderVm;
+
+    public LibraryViewModel()
+    {
+        LibraryRootPath = DownloadEngineService.Instance.DownloadRoot;
+    }
+
+    partial void OnSearchQueryChanged(string value)
+    {
+        ApplyFilter();
+    }
+
+    partial void OnFilterModeChanged(string value)
+    {
+        ApplyFilter();
+    }
+
+    partial void OnSelectedComicChanged(LibraryComicItem? value)
+    {
+        if (value != null)
+        {
+            value.RefreshReadStatus();
+            SelectedComicChapters = new ObservableCollection<LibraryChapterItem>(value.Chapters);
+        }
+        else
+        {
+            SelectedComicChapters = new ObservableCollection<LibraryChapterItem>();
+        }
+    }
+
+    [RelayCommand]
+    public void SetFilterMode(string mode)
+    {
+        if (!string.IsNullOrWhiteSpace(mode))
+        {
+            FilterMode = mode;
+        }
+    }
+
+    public void ApplyFilter()
+    {
+        var prevSelected = SelectedComic;
+        string q = (SearchQuery ?? string.Empty).Trim();
+
+        var matches = new List<LibraryComicItem>();
+        foreach (var comic in AllComics)
+        {
+            comic.RefreshReadStatus();
+
+            if (FilterMode == "InProgress" && (!comic.HasAnyReadProgress || comic.IsAllChaptersRead))
+                continue;
+            if (FilterMode == "Unread" && comic.HasAnyReadProgress)
+                continue;
+            if (FilterMode == "Completed" && !comic.IsAllChaptersRead)
+                continue;
+
+            if (!string.IsNullOrEmpty(q) &&
+                comic.Title.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0 &&
+                comic.CategoryName.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                continue;
+            }
+
+            matches.Add(comic);
+        }
+
+        FilteredComics.Clear();
+        foreach (var item in matches)
+        {
+            FilteredComics.Add(item);
+        }
+
+        if (prevSelected != null && FilteredComics.Contains(prevSelected))
+        {
+            SelectedComic = prevSelected;
+        }
+        else
+        {
+            SelectedComic = FilteredComics.FirstOrDefault();
+        }
+    }
+
+    [RelayCommand]
+    public async Task ScanLibraryAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LibraryRootPath))
+        {
+            LibraryRootPath = DownloadEngineService.Instance.DownloadRoot;
+        }
+
+        if (string.IsNullOrWhiteSpace(LibraryRootPath) || !Directory.Exists(LibraryRootPath))
+        {
+            StatusMessage = "⚠️ Thư mục thư viện chưa tồn tại. Hãy chọn thư mục chứa truyện đã tải.";
+            return;
+        }
+
+        _scanCts?.Cancel();
+        _scanCts = new CancellationTokenSource();
+        var ct = _scanCts.Token;
+
+        IsScanning = true;
+        StatusMessage = $"⏳ Đang quét thư viện tại: {LibraryRootPath}...";
+
+        try
+        {
+            var list = await _scanner.ScanLibraryRootAsync(LibraryRootPath, ct);
+            if (ct.IsCancellationRequested) return;
+
+            AllComics.Clear();
+            foreach (var c in list)
+            {
+                AllComics.Add(c);
+            }
+
+            ApplyFilter();
+
+            int totalChapters = list.Sum(c => c.TotalChapters);
+            StatusMessage = $"✅ Đã tìm thấy {list.Count} bộ truyện ({totalChapters} chương). Chọn chương và nhấn 'Đọc ngay'.";
+
+            // Nạp ảnh bìa bất đồng bộ trên nền
+            _ = _scanner.LoadCoversAsync(list, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = "⏹ Đã dừng quét thư viện.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi quét thư viện: {ex.Message}";
+        }
+        finally
+        {
+            IsScanning = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task BrowseLibraryFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider == null) return;
+
+            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "Chọn Thư Mục Thư Viện Truyện Đã Tải",
+                AllowMultiple = false
+            });
+
+            if (folders != null && folders.Count > 0)
+            {
+                var selected = folders[0];
+                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    LibraryRootPath = normalized;
+                    await ScanLibraryAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Không thể chọn thư mục: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task OpenCbzFileDirectAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider == null) return;
+
+            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Chọn File Truyện CBZ / ZIP Để Đọc Ngay",
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("Comic Archive (*.cbz, *.zip)")
+                    {
+                        Patterns = new[] { "*.cbz", "*.zip" }
+                    }
+                }
+            });
+
+            if (files != null && files.Count > 0)
+            {
+                var selected = files[0];
+                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                if (!string.IsNullOrWhiteSpace(normalized) && File.Exists(normalized))
+                {
+                    var quickComic = _scanner.CreateQuickComicFromPath(normalized);
+                    if (quickComic != null && quickComic.Chapters.Count > 0)
+                    {
+                        await OpenChapterInternalAsync(quickComic, quickComic.Chapters[0]);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi mở file CBZ: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task ReadChapterAsync(LibraryChapterItem? chapter)
+    {
+        if (chapter == null) return;
+        await OpenChapterInternalAsync(SelectedComic, chapter);
+    }
+
+    [RelayCommand]
+    public async Task ContinueReadingSelectedComicAsync(LibraryComicItem? comic)
+    {
+        var targetComic = comic ?? SelectedComic;
+        if (targetComic == null || targetComic.Chapters.Count == 0) return;
+
+        SelectedComic = targetComic;
+
+        var targetChapter = targetComic.Chapters.LastOrDefault(c => c.LastReadPage > 0 && !c.IsCompletedRead)
+                            ?? targetComic.Chapters.FirstOrDefault(c => !c.IsCompletedRead)
+                            ?? targetComic.Chapters[0];
+
+        await OpenChapterInternalAsync(targetComic, targetChapter);
+    }
+
+    private async Task OpenChapterInternalAsync(LibraryComicItem? comic, LibraryChapterItem chapter)
+    {
+        var readerVm = new ComicReaderViewModel();
+
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime)
+        {
+            var win = new ComicReaderWindow
+            {
+                DataContext = readerVm
+            };
+            win.Closed += (_, _) =>
+            {
+                readerVm.Cleanup();
+                comic?.RefreshReadStatus();
+            };
+            win.Show();
+            await readerVm.InitializeAsync(comic, chapter);
+        }
+        else
+        {
+            // Mobile / Android SingleView: Mở lớp phủ đọc truyện toàn màn hình trực tiếp
+            readerVm.CloseRequested += () =>
+            {
+                IsInlineReaderVisible = false;
+                InlineReaderVm = null;
+                comic?.RefreshReadStatus();
+            };
+            InlineReaderVm = readerVm;
+            IsInlineReaderVisible = true;
+            await readerVm.InitializeAsync(comic, chapter);
+        }
+    }
+
+    private static TopLevel? GetTopLevel()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop && desktop.MainWindow != null)
+        {
+            return desktop.MainWindow;
+        }
+        if (MainView.Instance != null)
+        {
+            return TopLevel.GetTopLevel(MainView.Instance);
+        }
+        return null;
+    }
+}
+

@@ -46,6 +46,14 @@ File quy chuẩn bảng ánh xạ ngôn ngữ và giao diện song ngữ Tiếng
 | Stop Crawl | Dừng Cào | Source Action |
 | Update Stable | Cập Nhật Stable | System Update |
 | Update Beta | Cập Nhật Beta | System Update |
+| Library Tab | Tab Thư Viện (Đọc Truyện) | Tab Header |
+| Scan Library | Quét Thư Viện | Library Action |
+| Open CBZ / ZIP | Mở File CBZ / ZIP | Library Action |
+| Continue Reading | Đọc Tiếp | Reader Action |
+| Vertical Scroll | Cuộn Dọc | Reader Mode |
+| Page Flip | Lật Trang | Reader Mode |
+| RTL Toggle | Đảo Chiều Đọc (Trái ↔ Phải) | Reader Option |
+| Double Page | Chế Độ 1 Trang / 2 Trang | Reader Option |
 
 ---
 

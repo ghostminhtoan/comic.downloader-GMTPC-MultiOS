@@ -1,0 +1,353 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:ComicDownloaderGMTPC.ViewModels"
+        xmlns:models="using:ComicDownloaderGMTPC.Models"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="800"
+        x:Class="ComicDownloaderGMTPC.Views.ComicReaderWindow"
+        x:DataType="vm:ComicReaderViewModel"
+        Title="{Binding ChapterTitle, StringFormat='📖 Đọc Truyện - {0}'}"
+        WindowState="FullScreen"
+        WindowStartupLocation="CenterScreen"
+        Background="#05080F">
+
+    <Grid x:Name="RootReaderGrid" Background="#05080F">
+
+        <!-- ========================================================================= -->
+        <!-- 1. VÙNG ĐỌC TRUYỆN CHÍNH (SCROLL DỌC WEBTOON & LẬT TRANG MANGA)           -->
+        <!-- ========================================================================= -->
+        <Panel x:Name="ReaderViewportPanel" Background="#05080F">
+
+            <!-- A. CHẾ ĐỘ CUỘN DỌC (SCROLL MODE - MẶC ĐỊNH) -->
+            <ListBox x:Name="ReaderPagesListBox"
+                     IsVisible="{Binding IsScrollMode}"
+                     ItemsSource="{Binding Pages}"
+                     Background="#05080F"
+                     BorderThickness="0"
+                     Padding="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel Orientation="Vertical" />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.Styles>
+                    <Style Selector="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="HorizontalContentAlignment" Value="Center" />
+                    </Style>
+                    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                        <Setter Property="Background" Value="Transparent" />
+                    </Style>
+                    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                        <Setter Property="Background" Value="Transparent" />
+                    </Style>
+                </ListBox.Styles>
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="models:ReaderPageItem">
+                        <Panel HorizontalAlignment="Center"
+                               Width="{Binding $parent[Window].((vm:ComicReaderViewModel)DataContext).PageDisplayWidth}"
+                               MinHeight="280"
+                               AttachedToVisualTree="OnPageContainerAttached">
+                            <!-- Khung chờ khi trang đang giải mã -->
+                            <Border Background="#0B1120" BorderBrush="#1E293B" BorderThickness="0,0,0,1"
+                                    Height="720"
+                                    IsVisible="{Binding !HasImage}">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
+                                    <TextBlock Text="{Binding DisplayPageNumber, StringFormat='⏳ Đang tải trang {0}...'}"
+                                               Foreground="#38BDF8" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{Binding Title}" Foreground="#64748B" FontSize="11" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Ảnh trang truyện -->
+                            <Image Source="{Binding Image}"
+                                   IsVisible="{Binding HasImage}"
+                                   Stretch="Uniform"
+                                   HorizontalAlignment="Center"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
+                        </Panel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- B. CHẾ ĐỘ LẬT TRANG (FLIP MODE - HỖ TRỢ 1 TRANG / 2 TRANG & RTL) -->
+            <ScrollViewer x:Name="FlipModeScrollViewer"
+                          IsVisible="{Binding IsFlipMode}"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          Background="#05080F">
+                <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <LayoutTransformControl.LayoutTransform>
+                        <ScaleTransform ScaleX="{Binding ZoomLevel}" ScaleY="{Binding ZoomLevel}" />
+                    </LayoutTransformControl.LayoutTransform>
+
+                    <UniformGrid Columns="{Binding FlipGridColumns}" Rows="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <!-- Trang Trái (hoặc Trang Đơn) -->
+                        <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0">
+                            <Border Background="#0B1120" Width="600" Height="850" CornerRadius="6"
+                                    IsVisible="{Binding LeftFlipPage.HasImage, Converter={x:Static BoolConverters.Not}, FallbackValue=True}">
+                                <TextBlock Text="⏳ Đang nạp trang..." Foreground="#38BDF8" FontSize="14" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <Image Source="{Binding LeftFlipPage.Image}"
+                                   Stretch="Uniform"
+                                   MaxHeight="1040"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
+                        </Panel>
+
+                        <!-- Trang Phải (chỉ hiện khi bật 2 Trang Kép) -->
+                        <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0"
+                               IsVisible="{Binding HasSecondaryPage}">
+                            <Image Source="{Binding RightFlipPage.Image}"
+                                   Stretch="Uniform"
+                                   MaxHeight="1040"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
+                        </Panel>
+                    </UniformGrid>
+                </LayoutTransformControl>
+            </ScrollViewer>
+
+            <!-- C. BADGE CHỈ SỐ TRANG MINI GÓC DƯỚI PHẢI (HIỆN KHI ẨN OVERLAY) -->
+            <Border IsVisible="{Binding !IsOverlayVisible}"
+                    IsHitTestVisible="False"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,16,12" Padding="10,4" CornerRadius="12"
+                    Background="#B30B0F19" BorderBrush="#334155" BorderThickness="1">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="{Binding ChapterTitle}" Foreground="#94A3B8" FontSize="11" MaxWidth="180" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="•" Foreground="#475569" FontSize="11" />
+                    <TextBlock Text="{Binding PageCounterText}" Foreground="#38BDF8" FontSize="11" FontWeight="Bold" />
+                </StackPanel>
+            </Border>
+
+            <!-- D. TOAST THÔNG BÁO TRẠNG THÁI NHANH -->
+            <Border IsVisible="{Binding IsStatusToastVisible}"
+                    IsHitTestVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Top"
+                    Margin="0,72,0,0" Padding="14,8" CornerRadius="20"
+                    Background="#E60F172A" BorderBrush="#00E5FF" BorderThickness="1.2"
+                    ZIndex="2600">
+                <TextBlock Text="{Binding StatusToastText}" Foreground="#F8FAFC" FontSize="12" FontWeight="Bold" />
+            </Border>
+        </Panel>
+
+        <!-- ========================================================================= -->
+        <!-- 2. LỚP PHỦ TÙY CHỌN KIỂU COMICSCREEN (TAP VÀO GIỮA MÀN HÌNH ĐỂ BẬT/TẮT)    -->
+        <!-- ========================================================================= -->
+        <Grid x:Name="OverlayRootGrid"
+              IsVisible="{Binding IsOverlayVisible}"
+              RowDefinitions="Auto, *, Auto"
+              ZIndex="2000">
+
+            <!-- TOP BAR: Quay lại, Tên truyện/chương, Chọn chương, Chap Trước/Sau, Fullscreen -->
+            <Border x:Name="TopOverlayBar"
+                    Grid.Row="0"
+                    Background="#E60B0F19"
+                    BorderBrush="#1E293B"
+                    BorderThickness="0,0,0,1"
+                    Padding="14,10">
+                <Grid ColumnDefinitions="Auto, *, Auto">
+                    <!-- Cột 0: Nút Đóng & Tiêu đề -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Command="{Binding CloseReaderCommand}"
+                                Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold"
+                                Padding="12,6" CornerRadius="6"
+                                ToolTip.Tip="Đóng trình đọc truyện (Esc)">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <TextBlock Text="←" FontSize="13" FontWeight="ExtraBold" VerticalAlignment="Center" />
+                                <TextBlock Text="THOÁT ĐỌC" FontSize="11.5" FontWeight="Bold" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                        <StackPanel VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="{Binding ComicTitle}" Foreground="#FDE047" FontSize="13" FontWeight="Bold"
+                                       MaxWidth="360" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding ChapterTitle}" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold"
+                                       MaxWidth="360" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Cột 1: Chọn chương nhanh & Điều hướng Chương Trước / Chương Sau -->
+                    <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Button Command="{Binding PrevChapterCommand}"
+                                IsEnabled="{Binding CanGoPrevChapter}"
+                                Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
+                                Foreground="#E2E8F0" FontWeight="SemiBold"
+                                Padding="10,6" CornerRadius="6" Margin="0,2,6,2"
+                                ToolTip.Tip="Chương trước (Ctrl + ←)">
+                            <TextBlock Text="⏮ Chap trước" FontSize="11" />
+                        </Button>
+
+                        <ComboBox ItemsSource="{Binding ChapterList}"
+                                  SelectedItem="{Binding CurrentChapter}"
+                                  MinWidth="190" MaxWidth="280" Height="32"
+                                  Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8"
+                                  FontSize="11.5" Margin="0,2,6,2">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:LibraryChapterItem">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding ProgressStatusText}" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+
+                        <Button Command="{Binding NextChapterCommand}"
+                                IsEnabled="{Binding CanGoNextChapter}"
+                                Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
+                                Foreground="#E2E8F0" FontWeight="SemiBold"
+                                Padding="10,6" CornerRadius="6" Margin="0,2,0,2"
+                                ToolTip.Tip="Chương tiếp theo (Ctrl + →)">
+                            <TextBlock Text="Chap sau ⏭" FontSize="11" />
+                        </Button>
+                    </WrapPanel>
+
+                    <!-- Cột 2: Nút Toàn màn hình -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Command="{Binding ToggleFullScreenCommand}"
+                                Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                Foreground="#38BDF8" FontWeight="Bold"
+                                Padding="10,6" CornerRadius="6"
+                                ToolTip.Tip="Bật / Tắt Toàn màn hình (F / F11)">
+                            <TextBlock Text="{Binding FullScreenButtonText}" FontSize="11" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- VÙNG GIỮA TRONG SUỐT (NHẤN VÀO ĐÂY CŨNG ĐÓNG OVERLAY) -->
+            <Border Grid.Row="1" Background="Transparent" IsHitTestVisible="False" />
+
+            <!-- BOTTOM BAR KIỂU COMICSCREEN: Thanh trượt trang + Các nút tùy chọn Chế độ đọc / RTL / Zoom -->
+            <Border x:Name="BottomOverlayBar"
+                    Grid.Row="2"
+                    Background="#E60B0F19"
+                    BorderBrush="#1E293B"
+                    BorderThickness="0,1,0,0"
+                    Padding="16,10">
+                <StackPanel Spacing="10">
+                    <!-- Hàng 0: Thanh trượt tiến độ trang (Page Scrubber) -->
+                    <Grid ColumnDefinitions="Auto, Auto, *, Auto, Auto, Auto" VerticalAlignment="Center">
+                        <Button Grid.Column="0" Command="{Binding FirstPageCommand}"
+                                IsEnabled="{Binding CanGoPrevPage}"
+                                Background="#1E293B" Foreground="#94A3B8" Padding="8,5" CornerRadius="5" Margin="0,0,6,0"
+                                ToolTip.Tip="Trang đầu tiên (Home)">
+                            <TextBlock Text="⏮" FontSize="11" />
+                        </Button>
+
+                        <Button Grid.Column="1" Command="{Binding PrevPageCommand}"
+                                IsEnabled="{Binding CanGoPrevPage}"
+                                Background="#1E293B" Foreground="#38BDF8" FontWeight="Bold" Padding="10,5" CornerRadius="5" Margin="0,0,10,0"
+                                ToolTip.Tip="Trang trước (← / A)">
+                            <TextBlock Text="◀ Trước" FontSize="11" />
+                        </Button>
+
+                        <Slider Grid.Column="2"
+                                Minimum="0"
+                                Maximum="{Binding MaxPageIndex}"
+                                Value="{Binding CurrentPageIndex, Mode=TwoWay}"
+                                SmallChange="1" LargeChange="5"
+                                VerticalAlignment="Center"
+                                Margin="4,0,10,0" />
+
+                        <Button Grid.Column="3" Command="{Binding NextPageCommand}"
+                                IsEnabled="{Binding CanGoNextPage}"
+                                Background="#1E293B" Foreground="#38BDF8" FontWeight="Bold" Padding="10,5" CornerRadius="5" Margin="0,0,6,0"
+                                ToolTip.Tip="Trang tiếp theo (→ / D)">
+                            <TextBlock Text="Sau ▶" FontSize="11" />
+                        </Button>
+
+                        <Button Grid.Column="4" Command="{Binding LastPageCommand}"
+                                IsEnabled="{Binding CanGoNextPage}"
+                                Background="#1E293B" Foreground="#94A3B8" Padding="8,5" CornerRadius="5" Margin="0,0,10,0"
+                                ToolTip.Tip="Trang cuối cùng (End)">
+                            <TextBlock Text="⏭" FontSize="11" />
+                        </Button>
+
+                        <Border Grid.Column="5" Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="6" Padding="10,5">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding PageCounterText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="11.5" />
+                                <TextBlock Text="{Binding ProgressPercentText, StringFormat='({0})'}" Foreground="#10B981" FontWeight="Bold" FontSize="11" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Hàng 1: Dải nút tùy chọn ComicScreen (Mode Scroll/Flip, RTL Toggle, 1/2 Trang, Zoom) -->
+                    <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <!-- 1. Chuyển chế độ Scroll dọc ↔ Lật trang -->
+                        <Button Command="{Binding ToggleModeCommand}"
+                                Background="{Binding ModeBadgeBackground}"
+                                Foreground="#FFFFFF" FontWeight="Bold"
+                                Padding="12,6" CornerRadius="6" Margin="4,2"
+                                ToolTip.Tip="Chuyển đổi giữa Cuộn dọc (Webtoon) và Lật trang (Manga) (Phím M)">
+                            <TextBlock Text="{Binding ModeButtonText}" FontSize="11.5" />
+                        </Button>
+
+                        <!-- 2. Toggle RTL (Đọc Phải sang Trái cho Manga) -->
+                        <Button Command="{Binding ToggleRtlCommand}"
+                                IsVisible="{Binding IsFlipMode}"
+                                Background="{Binding RtlButtonBackground}"
+                                BorderBrush="#F59E0B" BorderThickness="1"
+                                Foreground="#FFFFFF" FontWeight="Bold"
+                                Padding="12,6" CornerRadius="6" Margin="4,2"
+                                ToolTip.Tip="Đảo chiều lật trang Trái → Phải (LTR) hoặc Phải → Trái (Manga RTL) (Phím R)">
+                            <TextBlock Text="{Binding RtlButtonText}" FontSize="11.5" />
+                        </Button>
+
+                        <!-- 3. Toggle 1 Trang / 2 Trang Kép -->
+                        <Button Command="{Binding ToggleDoublePageCommand}"
+                                IsVisible="{Binding IsFlipMode}"
+                                Background="{Binding DoublePageButtonBackground}"
+                                BorderBrush="#10B981" BorderThickness="1"
+                                Foreground="#FFFFFF" FontWeight="Bold"
+                                Padding="12,6" CornerRadius="6" Margin="4,2"
+                                ToolTip.Tip="Ghép 2 trang song song hoặc hiển thị 1 trang đơn (Phím P)">
+                            <TextBlock Text="{Binding DoublePageButtonText}" FontSize="11.5" />
+                        </Button>
+
+                        <!-- 4. Cụm điều khiển Phóng to / Thu nhỏ (Zoom) -->
+                        <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="6" Padding="6,2" Margin="4,2">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Button Command="{Binding ZoomOutCommand}"
+                                        Background="#1E293B" Foreground="#E2E8F0" FontWeight="Bold"
+                                        Padding="8,4" CornerRadius="4" ToolTip.Tip="Thu nhỏ (-)">
+                                    <TextBlock Text="🔍-" FontSize="11" />
+                                </Button>
+                                <TextBlock Text="{Binding ZoomPercentText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="11.5"
+                                           MinWidth="46" TextAlignment="Center" VerticalAlignment="Center" />
+                                <Button Command="{Binding ZoomInCommand}"
+                                        Background="#1E293B" Foreground="#E2E8F0" FontWeight="Bold"
+                                        Padding="8,4" CornerRadius="4" ToolTip.Tip="Phóng to (+)">
+                                    <TextBlock Text="🔍+" FontSize="11" />
+                                </Button>
+                                <Button Command="{Binding ResetZoomCommand}"
+                                        Background="#1E293B" Foreground="#10B981" FontWeight="Bold"
+                                        Padding="8,4" CornerRadius="4" ToolTip.Tip="Khôi phục kích thước 100% (Phím 0)">
+                                    <TextBlock Text="100%" FontSize="11" />
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 5. Hướng dẫn nhanh -->
+                        <Border Background="#111827" CornerRadius="6" Padding="10,6" Margin="4,2" VerticalAlignment="Center">
+                            <TextBlock Text="💡 Chạm giữa màn hình: Ẩn/Hiện menu • Phím ←/→ hoặc A/D: Chuyển trang • F11: Fullscreen"
+                                       Foreground="#94A3B8" FontSize="10.5" VerticalAlignment="Center" />
+                        </Border>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+    </Grid>
+</Window>
+

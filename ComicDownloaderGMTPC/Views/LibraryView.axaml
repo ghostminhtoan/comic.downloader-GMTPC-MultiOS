@@ -1,0 +1,324 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:ComicDownloaderGMTPC.ViewModels"
+             xmlns:models="using:ComicDownloaderGMTPC.Models"
+             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="700"
+             x:Class="ComicDownloaderGMTPC.Views.LibraryView"
+             x:DataType="vm:LibraryViewModel"
+             Background="#0B0F19">
+
+    <Grid>
+        <!-- ========================================================================= -->
+        <!-- 1. GIAO DIỆN QUẢN LÝ THƯ VIỆN & DANH SÁCH CHƯƠNG                          -->
+        <!-- ========================================================================= -->
+        <Grid RowDefinitions="Auto, *" Margin="8">
+
+            <!-- HEADER TOOLBAR: Đường dẫn thư viện, Quét, Mở CBZ, Tìm kiếm & Bộ lọc -->
+            <Border Grid.Row="0" Background="#111827" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
+                <StackPanel Spacing="8">
+                    <!-- Hàng 0: Chọn thư mục thư viện & Quét -->
+                    <Grid ColumnDefinitions="Auto, *, Auto, Auto, Auto">
+                        <TextBlock Grid.Column="0" Text="📚 Thư mục Thư viện:" Foreground="#38BDF8" FontWeight="Bold" FontSize="11.5"
+                                   VerticalAlignment="Center" Margin="0,0,8,0" />
+
+                        <TextBox Grid.Column="1" Text="{Binding LibraryRootPath}"
+                                 PlaceholderText="Đường dẫn thư mục chứa truyện đã tải (Folder hoặc file .cbz/.zip)..."
+                                 Height="32" CornerRadius="5" VerticalContentAlignment="Center"
+                                 Background="#0B0F19" BorderBrush="#334155" Foreground="#F8FAFC" FontSize="11"
+                                 Margin="0,0,6,0" />
+
+                        <Button Grid.Column="2" Command="{Binding BrowseLibraryFolderCommand}"
+                                Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                Foreground="#38BDF8" FontWeight="SemiBold"
+                                Padding="10,5" Height="32" CornerRadius="5" Margin="0,0,6,0"
+                                ToolTip.Tip="Chọn thư mục chứa các bộ truyện đã tải">
+                            <TextBlock Text="📁 Chọn Thư Mục" FontSize="11" VerticalAlignment="Center" />
+                        </Button>
+
+                        <Button Grid.Column="3" Command="{Binding ScanLibraryCommand}"
+                                IsEnabled="{Binding !IsScanning}"
+                                Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
+                                Padding="12,5" Height="32" CornerRadius="5" Margin="0,0,6,0"
+                                ToolTip.Tip="Quét toàn bộ truyện và chương trong thư mục thư viện">
+                            <TextBlock Text="🔄 Quét Thư Viện" FontSize="11" VerticalAlignment="Center" />
+                        </Button>
+
+                        <Button Grid.Column="4" Command="{Binding OpenCbzFileDirectCommand}"
+                                Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold"
+                                Padding="10,5" Height="32" CornerRadius="5"
+                                ToolTip.Tip="Mở nhanh 1 file .cbz hoặc .zip bất kỳ để đọc ngay">
+                            <TextBlock Text="📦 Mở File CBZ/ZIP" FontSize="11" VerticalAlignment="Center" />
+                        </Button>
+                    </Grid>
+
+                    <!-- Hàng 1: Tìm kiếm tên truyện + Bộ lọc trạng thái đọc + Thông báo -->
+                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBox Text="{Binding SearchQuery}"
+                                 PlaceholderText="🔍 Tìm nhanh tên bộ truyện..."
+                                 Width="260" Height="30" CornerRadius="5" VerticalContentAlignment="Center"
+                                 Background="#0B0F19" BorderBrush="#334155" Foreground="#F8FAFC" FontSize="11"
+                                 Margin="0,0,10,4" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                            <Button Command="{Binding SetFilterModeCommand}" CommandParameter="All"
+                                    Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                    Foreground="#F8FAFC" Padding="9,4" Height="28" CornerRadius="5">
+                                <TextBlock Text="📋 Tất cả" FontSize="10.5" FontWeight="SemiBold" />
+                            </Button>
+                            <Button Command="{Binding SetFilterModeCommand}" CommandParameter="InProgress"
+                                    Background="#1E293B" Foreground="#FBBF24" Padding="9,4" Height="28" CornerRadius="5">
+                                <TextBlock Text="⏳ Đang đọc dở" FontSize="10.5" FontWeight="SemiBold" />
+                            </Button>
+                            <Button Command="{Binding SetFilterModeCommand}" CommandParameter="Unread"
+                                    Background="#1E293B" Foreground="#94A3B8" Padding="9,4" Height="28" CornerRadius="5">
+                                <TextBlock Text="🆕 Chưa đọc" FontSize="10.5" FontWeight="SemiBold" />
+                            </Button>
+                            <Button Command="{Binding SetFilterModeCommand}" CommandParameter="Completed"
+                                    Background="#1E293B" Foreground="#34D399" Padding="9,4" Height="28" CornerRadius="5">
+                                <TextBlock Text="✅ Đã đọc xong" FontSize="10.5" FontWeight="SemiBold" />
+                            </Button>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding StatusMessage}" Foreground="#10B981" FontSize="11" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" Margin="0,0,0,4" TextTrimming="CharacterEllipsis" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- BODY: 2 CỘT MASTER - DETAIL (TRÁI: DANH SÁCH TRUYỆN | PHẢI: DANH SÁCH CHƯƠNG & TIẾN ĐỘ ĐỌC) -->
+            <Grid Grid.Row="1" ColumnDefinitions="1.05*, 8, 1.35*" MinHeight="420">
+
+                <!-- CỘT TRÁI: DANH SÁCH BỘ TRUYỆN TRONG THƯ VIỆN -->
+                <Border Grid.Column="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="8">
+                    <Grid RowDefinitions="Auto, *">
+                        <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="4,2,4,8">
+                            <TextBlock Grid.Column="0" Text="📚 DANH SÁCH TRUYỆN ĐÃ TẢI" Foreground="#38BDF8" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+                            <Border Grid.Column="1" Background="#1E293B" CornerRadius="4" Padding="6,2">
+                                <TextBlock Text="{Binding FilteredComics.Count, StringFormat='{}{0} bộ'}" Foreground="#E2E8F0" FontSize="10.5" FontWeight="Bold" />
+                            </Border>
+                        </Grid>
+
+                        <ListBox Grid.Row="1"
+                                 ItemsSource="{Binding FilteredComics}"
+                                 SelectedItem="{Binding SelectedComic}"
+                                 Background="Transparent"
+                                 BorderThickness="0">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel Orientation="Vertical" />
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:LibraryComicItem">
+                                    <Border Background="#131C31" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,2">
+                                        <Grid ColumnDefinitions="62, 10, *, Auto">
+                                            <!-- Ảnh bìa thu nhỏ -->
+                                            <Border Grid.Column="0" Width="62" Height="84" CornerRadius="4" Background="#090D16" ClipToBounds="True">
+                                                <Panel>
+                                                    <TextBlock Text="📖" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                               IsVisible="{Binding !HasCover}" />
+                                                    <Image Source="{Binding Cover}" Stretch="UniformToFill" IsVisible="{Binding HasCover}" />
+                                                </Panel>
+                                            </Border>
+
+                                            <!-- Thông tin bộ truyện -->
+                                            <StackPanel Grid.Column="2" Spacing="4" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Title}" Foreground="#FDE047" FontWeight="Bold" FontSize="12.5"
+                                                           TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <Border Background="#1E293B" CornerRadius="4" Padding="6,2" Margin="0,0,6,2">
+                                                        <TextBlock Text="{Binding ChapterCountText}" Foreground="#38BDF8" FontSize="10" FontWeight="Bold" />
+                                                    </Border>
+                                                    <Border Background="{Binding ReadStatusBackground}" CornerRadius="4" Padding="6,2" Margin="0,0,0,2">
+                                                        <TextBlock Text="{Binding ReadStatusText}" Foreground="#FFFFFF" FontSize="10" FontWeight="SemiBold"
+                                                                   MaxWidth="190" TextTrimming="CharacterEllipsis" />
+                                                    </Border>
+                                                </WrapPanel>
+
+                                                <ProgressBar Value="{Binding OverallProgressPercent}" Minimum="0" Maximum="100"
+                                                             Height="5" CornerRadius="3" Foreground="#10B981" Background="#090D16" />
+                                            </StackPanel>
+
+                                            <!-- Nút Đọc nhanh -->
+                                            <Button Grid.Column="3"
+                                                    Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ContinueReadingSelectedComicCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
+                                                    Padding="10,6" CornerRadius="6" VerticalAlignment="Center" Margin="6,0,0,0"
+                                                    ToolTip.Tip="Đọc ngay từ chương đang đọc dở hoặc chương đầu tiên">
+                                                <TextBlock Text="▶ Đọc" FontSize="11" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+
+                <!-- CỘT PHẢI: DANH SÁCH CHƯƠNG CỦA BỘ TRUYỆN ĐANG CHỌN -->
+                <Border Grid.Column="2" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="8">
+                    <Grid RowDefinitions="Auto, *">
+                        <!-- Header Bộ truyện đang chọn -->
+                        <Border Grid.Row="0" Background="#131C31" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,0,8">
+                            <Grid ColumnDefinitions="*, Auto">
+                                <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SelectedComic.Title, FallbackValue='(Chưa chọn bộ truyện)'}"
+                                               Foreground="#F8FAFC" FontWeight="Bold" FontSize="13.5"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding SelectedComic.ReadStatusText, FallbackValue='Hãy chọn một bộ truyện ở cột bên trái'}"
+                                               Foreground="#38BDF8" FontSize="11" />
+                                </StackPanel>
+
+                                <Button Grid.Column="1"
+                                        Command="{Binding ContinueReadingSelectedComicCommand}"
+                                        CommandParameter="{Binding SelectedComic}"
+                                        IsEnabled="{Binding HasSelectedComic}"
+                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
+                                        Padding="12,7" CornerRadius="6" VerticalAlignment="Center">
+                                    <TextBlock Text="▶ ĐỌC TIẾP BỘ NÀY" FontSize="11" />
+                                </Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- Danh sách các chương -->
+                        <ListBox Grid.Row="1"
+                                 ItemsSource="{Binding SelectedComicChapters}"
+                                 Background="Transparent"
+                                 BorderThickness="0">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel Orientation="Vertical" />
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:LibraryChapterItem">
+                                    <Border Background="#131C31" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,7" Margin="0,2">
+                                        <Grid ColumnDefinitions="Auto, *, Auto">
+                                            <!-- Số thứ tự & Loại file (FOLDER/CBZ) -->
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                <Border Background="{Binding TypeBadgeBackground}" CornerRadius="4" Padding="5,2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding TypeBadgeText}" Foreground="#FFFFFF" FontSize="9" FontWeight="ExtraBold" />
+                                                </Border>
+                                            </StackPanel>
+
+                                            <!-- Tên chương & Thanh tiến độ trang đã đọc -->
+                                            <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Title}" Foreground="#F8FAFC" FontWeight="SemiBold" FontSize="12"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <Grid ColumnDefinitions="120, 8, *">
+                                                    <ProgressBar Grid.Column="0" Value="{Binding ProgressPercent}" Minimum="0" Maximum="100"
+                                                                 Height="6" CornerRadius="3" Foreground="#38BDF8" Background="#090D16"
+                                                                 VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="2" Text="{Binding ProgressStatusText}"
+                                                               Foreground="#94A3B8" FontSize="10.5" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <!-- Nút Mở Trình Đọc -->
+                                            <Button Grid.Column="2"
+                                                    Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ReadChapterCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Background="#059669" BorderBrush="#10B981" BorderThickness="1"
+                                                    Foreground="#FFFFFF" FontWeight="Bold"
+                                                    Padding="12,6" CornerRadius="6" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                <TextBlock Text="{Binding ReadButtonLabel}" FontSize="11" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- ========================================================================= -->
+        <!-- 2. LỚP PHỦ ĐỌC TRUYỆN TOÀN MÀN HÌNH DÀNH CHO MOBILE / ANDROID SINGLEVIEW  -->
+        <!-- ========================================================================= -->
+        <Border IsVisible="{Binding IsInlineReaderVisible}"
+                Background="#05080F"
+                ZIndex="3500"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch">
+            <Panel DataContext="{Binding InlineReaderVm}">
+                <Grid x:Name="InlineReaderRootGrid" x:DataType="vm:ComicReaderViewModel">
+                <Panel x:Name="InlineReaderViewportPanel" Background="#05080F">
+                    <!-- Cuộn dọc -->
+                    <ListBox x:Name="InlineReaderPagesListBox"
+                             IsVisible="{Binding IsScrollMode}"
+                             ItemsSource="{Binding Pages}"
+                             Background="#05080F"
+                             BorderThickness="0"
+                             Padding="0">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel Orientation="Vertical" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:ReaderPageItem">
+                                <Panel HorizontalAlignment="Center" MinHeight="240" AttachedToVisualTree="OnInlinePageContainerAttached">
+                                    <Image Source="{Binding Image}" Stretch="Uniform" HorizontalAlignment="Center" />
+                                </Panel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- Lật trang -->
+                    <ScrollViewer IsVisible="{Binding IsFlipMode}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                        <Image Source="{Binding CurrentPage.Image}" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </ScrollViewer>
+                </Panel>
+
+                <!-- Overlay điều khiển cho Mobile -->
+                <Grid IsVisible="{Binding IsOverlayVisible}" RowDefinitions="Auto, *, Auto" ZIndex="3600">
+                    <Border Grid.Row="0" Background="#E60B0F19" Padding="10,8">
+                        <Grid ColumnDefinitions="Auto, *, Auto">
+                            <Button Grid.Column="0" Command="{Binding CloseReaderCommand}" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="5">
+                                <TextBlock Text="← Đóng" FontSize="11" />
+                            </Button>
+                            <TextBlock Grid.Column="1" Text="{Binding ChapterTitle}" Foreground="#FDE047" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="8,0" />
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                                <Button Command="{Binding PrevChapterCommand}" IsEnabled="{Binding CanGoPrevChapter}" Background="#1E293B" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4">
+                                    <TextBlock Text="⏮" FontSize="11" />
+                                </Button>
+                                <Button Command="{Binding NextChapterCommand}" IsEnabled="{Binding CanGoNextChapter}" Background="#1E293B" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4">
+                                    <TextBlock Text="⏭" FontSize="11" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="2" Background="#E60B0F19" Padding="12,8">
+                        <StackPanel Spacing="6">
+                            <Grid ColumnDefinitions="Auto, *, Auto">
+                                <Button Grid.Column="0" Command="{Binding PrevPageCommand}" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4">
+                                    <TextBlock Text="◀" FontSize="11" />
+                                </Button>
+                                <Slider Grid.Column="1" Minimum="0" Maximum="{Binding MaxPageIndex}" Value="{Binding CurrentPageIndex, Mode=TwoWay}" Margin="8,0" />
+                                <Button Grid.Column="2" Command="{Binding NextPageCommand}" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4">
+                                    <TextBlock Text="▶" FontSize="11" />
+                                </Button>
+                            </Grid>
+                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Command="{Binding ToggleModeCommand}" Background="{Binding ModeBadgeBackground}" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="5" Margin="3,2">
+                                    <TextBlock Text="{Binding ModeButtonText}" FontSize="11" />
+                                </Button>
+                                <Button Command="{Binding ToggleRtlCommand}" IsVisible="{Binding IsFlipMode}" Background="{Binding RtlButtonBackground}" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="5" Margin="3,2">
+                                    <TextBlock Text="{Binding RtlButtonText}" FontSize="11" />
+                                </Button>
+                                <TextBlock Text="{Binding PageCounterText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="8,2" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+                </Grid>
+            </Panel>
+        </Border>
+    </Grid>
+</UserControl>

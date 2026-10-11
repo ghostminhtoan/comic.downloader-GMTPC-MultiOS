@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:ComicDownloaderGMTPC.ViewModels"
+             xmlns:views="using:ComicDownloaderGMTPC.Views"
              xmlns:services="using:ComicDownloaderGMTPC.Services"
              xmlns:models="using:ComicDownloaderGMTPC.Models"
              mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="850"
@@ -1595,6 +1596,13 @@
                                                                         <TextBlock Text="📁" Foreground="#FDE047" FontSize="12" VerticalAlignment="Center" />
                                                                     </MenuItem.Icon>
                                                                 </MenuItem>
+                                                                <MenuItem Header="📖 Đọc truyện ngay (Open in Reader)"
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ReadBookInLibraryCommand}"
+                                                                          CommandParameter="{Binding .}">
+                                                                    <MenuItem.Icon>
+                                                                        <TextBlock Text="📖" Foreground="#10B981" FontSize="12" VerticalAlignment="Center" />
+                                                                    </MenuItem.Icon>
+                                                                </MenuItem>
                                                                 <Separator Background="#334155" />
                                                                 <MenuItem Header="📋 Sao chép link truyện (Copy Link)"
                                                                           Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CopyBookLinkCommand}"
@@ -1701,7 +1709,7 @@
                                                                                ToolTip.Tip="{Binding Title}" />
                                                                 </Grid>
 
-                                                                <!-- Hàng 1: Các nút thao tác hàng (🔍, 📂, ▲, ▼, ✕) & Badges nằm ngay bên dưới tên truyện -->
+                                                                <!-- Hàng 1: Các nút thao tác hàng (🔍, 📂, 📖, ▲, ▼, ✕) & Badges nằm ngay bên dưới tên truyện -->
                                                                 <WrapPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="38,0,8,3">
                                                                     <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,2">
                                                                         <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SendTitleToSearchCommand}"
@@ -1713,6 +1721,11 @@
                                                                                 CommandParameter="{Binding .}" ToolTip.Tip="Mở thư mục"
                                                                                 Background="#1E293B" Foreground="#38BDF8" Padding="6,2" FontSize="9.5" CornerRadius="3">
                                                                             <TextBlock Text="📂" />
+                                                                        </Button>
+                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ReadBookInLibraryCommand}"
+                                                                                CommandParameter="{Binding .}" ToolTip.Tip="Đọc truyện đã tải trong Trình Đọc Truyện"
+                                                                                Background="#1E293B" Foreground="#10B981" Padding="6,2" FontSize="9.5" CornerRadius="3">
+                                                                            <TextBlock Text="📖" />
                                                                         </Button>
                                                                         <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveUpCommand}"
                                                                                 CommandParameter="{Binding .}"
@@ -3303,6 +3316,13 @@
 
                         </TabControl>
                     </Border>
+                </TabItem>
+
+                <!-- ========================================================================= -->
+                <!-- [TAB 5 LỚN] TAB THƯ VIỆN: ĐỌC TRUYỆN OFFLINE (COMIC READER & LIBRARY) -->
+                <!-- ========================================================================= -->
+                <TabItem Header="📚 TAB THƯ VIỆN (ĐỌC TRUYỆN)" FontSize="13" FontWeight="Bold">
+                    <views:LibraryView DataContext="{Binding LibraryVm}" />
                 </TabItem>
             </TabControl>
 

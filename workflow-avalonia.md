@@ -2206,4 +2206,22 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
-
+### 15.66 Tích Hợp Tab Thư Viện (`📚 TAB THƯ VIỆN (ĐỌC TRUYỆN)`) & Trình Đọc Truyện Toàn Màn Hình Kiểu ComicScreen (Scroll Dọc / Lật Trang / RTL Toggle / Nhớ Trang Per Chapter) (2026-10-11)
+- **Mục Tiêu & 5 Quyết Định Kiến Trúc Đã Chốt**:
+  1. **Tab Thư Viện Riêng (`📚 TAB THƯ VIỆN (ĐỌC TRUYỆN)`)**: Thêm Tab gốc số 5 (`Index = 4`) trên `MainView.axaml` (kèm nút mở đọc nhanh `📖` và menu chuột phải `📖 Đọc truyện ngay (Open in Reader)` trong hàng đợi tải), tự động quét thư mục tải về để nhận diện cả bộ truyện dạng **thư mục ảnh** (`Chapter 1\001.jpg...`) lẫn tệp nén **`.cbz` / `.zip`** mà không cần giải nén ra ổ cứng.
+  2. **Chế Độ Đọc Mặc Định — Cuộn Dọc (`Scroll` Webtoon) & Chuyển Đổi Sang Lật Trang (`Flip`)**: Mặc định mở ở chế độ **Cuộn dọc (`📜 Cuộn dọc`)** sử dụng `ListBox` + `VirtualizingStackPanel` kết hợp nạp ảnh trượt (`Sliding Window ±6 trang`) chống tràn RAM; hỗ trợ nút chuyển đổi tức thì sang chế độ **Lật trang (`📖 Lật trang`)** (1 trang hoặc 2 trang đôi `1 Trang / 2 Trang`).
+  3. **Nút Toggle Đảo Chiều Đọc Manga RTL (`▶ LTR: Trái → Phải` ↔ `◀ RTL: Phải → Trái`)**: Trong chế độ Lật trang, hỗ trợ nút bật/tắt chiều đọc Manga Nhật Bản (Phải sang Trái) để tự động đảo chiều hiển thị 2 trang đôi cũng như đảo vùng chạm lật trang Trái/Phải và phím mũi tên `Left`/`Right`.
+  4. **Tự Động Toàn Màn Hình (`Auto Fullscreen`) + Chạm Giữa Màn Hình Hiện/Ẩn Overlay Kiểu App ComicScreen**:
+     - Khi mở chương truyện trên Desktop, cửa sổ `ComicReaderWindow` tự động vào chế độ `WindowState.FullScreen`; trên Mobile/Android SingleView mở lớp phủ toàn màn hình trực tiếp.
+     - Chia màn hình thành 3 vùng tương tác thông minh (3-Zone Tap): Chạm vào **1/3 giữa màn hình** sẽ bật/tắt thanh điều khiển **Top Bar & Bottom Bar Overlay** giống hệt app **ComicScreen** (gồm: Chọn nhanh chương `ComboBox`, Chương trước/sau, Thanh trượt trang `Slider`, Nút chuyển `📜 Cuộn dọc` / `📖 Lật trang`, Nút `◀ RTL` / `▶ LTR`, Nút `1 Trang` / `2 Trang`, Zoom `− / Reset / +`, Nút `⛶ Toàn màn hình`, Nút `✕ Thoát`). Trong chế độ Lật trang, chạm **1/3 trái** hoặc **1/3 phải** để lật trang nhanh.
+  5. **Ghi Nhớ Trang Đang Đọc Theo Từng Chương (`ReadProgressStore` — Per Chapter)**:
+     - Lưu bền vững vị trí trang đang đọc (`LastReadPage`, `TotalPages`, `IsCompleted`, `LastReadAtUtc`) theo từng chương vào `read_progress.json` với cơ chế Debounce 500ms và `FlushImmediately()` khi đóng trình đọc hoặc thoát ứng dụng.
+     - Khi mở lại chương đang đọc dở, trình đọc tự động cuộn/nhảy tới đúng trang cuối cùng người dùng đang xem và hiển thị huy hiệu tiến độ (`Đang đọc Tr.X/Y`, `✓ Đã đọc`) ngay trên danh sách chương.
+- **Danh Sách File Tạo Mới & Cập Nhật**:
+  - `Models/ReaderPageItem.cs`, `Models/LibraryChapterItem.cs`, `Models/LibraryComicItem.cs`
+  - `Services/ReadProgressStore.cs`, `Services/LibraryScannerService.cs`, `Services/ComicReaderService.cs`
+  - `ViewModels/ComicReaderViewModel.cs`, `ViewModels/LibraryViewModel.cs`, `ViewModels/MainViewModel.cs`
+  - `Views/ComicReaderWindow.axaml`, `Views/ComicReaderWindow.axaml.cs`, `Views/LibraryView.axaml`, `Views/LibraryView.axaml.cs`, `Views/MainView.axaml`
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
