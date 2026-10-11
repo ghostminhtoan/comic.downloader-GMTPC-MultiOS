@@ -2302,3 +2302,32 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.70 Cửa Sổ Đọc Truyện FullScreen Độc Lập Đa Nhiệm Trên Android (`Multiple Tasks / New Task Launch Mode` — `ComicReaderActivity.cs`, `ComicReaderControl.axaml`, `MainActivity.cs`, `LibraryViewModel.cs`) (2026-10-11)
+- **Bối Cảnh & Yêu Cầu Thực Tế Của Người Dùng**:
+  - Người dùng cần trình đọc truyện trên Android mở ở một màn hình **FullScreen hoàn toàn độc lập** với màn hình chính (`MainWindow` / `MainActivity`).
+  - Khi bấm nút **Đa nhiệm (`Recents` / `Overview`)** của Android, hệ thống phải hiển thị **tách thành 2 thẻ (card) ứng dụng riêng biệt**:
+    1. **Thẻ 1**: Màn hình chính (Danh sách truyện / Tải truyện).
+    2. **Thẻ 2**: Màn hình đọc truyện FullScreen (`📖 <Tên truyện> • <Tên chương>`).
+  - Người dùng có thể chuyển qua lại giữa 2 thẻ trong Đa nhiệm hoặc vuốt tắt thẻ Đọc truyện mà màn hình chính vẫn giữ nguyên 100%, không bị ảnh hưởng.
+- **Giải Pháp Kiến Trúc & Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Tách `ComicReaderControl` (`Views/ComicReaderControl.axaml` & `.cs`) Dùng Chung 100% Tính Năng Giữa Desktop & Android**:
+     - Đóng gói toàn bộ giao diện và luồng điều khiển cao cấp của trình đọc (Cuộn dọc Webtoon `Zero-Bounce`, Lật trang 1/2 trang kép, Manga RTL, Mục lục PDF, Chọn chương nhanh, Thanh trượt Scrubber `OneWay`, Phóng to/Thu nhỏ Zoom, Chạm vùng giữa bật/tắt menu kiểu ComicScreen) vào `ComicReaderControl`.
+     - Trên Desktop (`ComicReaderWindow`) và trên Android (`ComicReaderActivity`) đều nhúng trực tiếp `ComicReaderControl`, đảm bảo tính năng đồng nhất 100%.
+  2. **Thiết Kế `ComicReaderActivity : AvaloniaActivity` Chạy Trên Task Độc Lập (`ComicDownloaderGMTPC.Android/ComicReaderActivity.cs`)**:
+     - Cấu hình `[Activity]` với:
+       - `TaskAffinity = "com.CompanyName.ComicDownloaderGMTPC.reader"` (tách Task Affinity riêng biệt khỏi `MainActivity`).
+       - `LaunchMode = LaunchMode.SingleTask` & `DocumentLaunchMode = DocumentLaunchMode.IntoExisting`.
+       - `AutoRemoveFromRecents = false`, `SupportsPictureInPicture = true`, `ResizeableActivity = true`.
+     - Trong `MainActivity.LaunchComicReaderTask`: Khởi chạy `Intent(this, typeof(ComicReaderActivity))` kèm cờ `ActivityFlags.NewTask | ActivityFlags.NewDocument | ActivityFlags.MultipleTask` và các `Extra` định danh truyện/chương (`comic_root_path`, `chapter_local_path`).
+     - Tự động cập nhật tiêu đề thẻ Đa nhiệm (Recents Card Title) qua `ActivityManager.TaskDescription` (`📖 <Tên truyện> • <Tên chương>`) mỗi khi chuyển chương.
+     - Tự động kích hoạt chế độ **Android Immersive Sticky FullScreen** (`WindowInsetsController` trên Android 11+ / API 30+ và `SystemUiFlags.ImmersiveSticky` trên API 23–29) để ẩn hoàn toàn thanh trạng thái (Status Bar) và thanh điều hướng (Navigation Bar).
+     - Hỗ trợ tự động khôi phục phiên đọc từ `Intent` extras nếu người dùng bấm lại thẻ Đọc truyện trong Recents sau khi tiến trình nền bị hệ điều hành thu hồi.
+     - Xử lý nút Back vật lý / cử chỉ vuốt cạnh độc lập: Nếu menu Overlay đang mở thì ẩn Overlay; nếu đang đọc thì đóng riêng Task đọc truyện (`FinishAndRemoveTask()`) và cập nhật tiến độ đọc về Thư viện mà không làm ảnh hưởng `MainActivity`.
+  3. **Tích Hợp Nút Chuyển Đổi & Nút Tách Cửa Sổ Độc Lập Trên Giao Diện Thư Viện (`LibraryViewModel.cs` & `LibraryView.axaml`)**:
+     - Mặc định bật sẵn chế độ `🗗 Cửa sổ đọc riêng (Đa nhiệm): BẬT` (`IsSeparateReaderWindowEnabled = true`) để mọi thao tác bấm `▶ Đọc` / `📖 Đọc ngay` / `▶ Đọc tiếp` đều mở thẳng ra cửa sổ/Task độc lập.
+     - Bổ sung nút `🗗 CỬA SỔ ĐỘC LẬP` ở tiêu đề bộ truyện và nút nổi `🗗 Tách Cửa Sổ Riêng (Đa Nhiệm)` (`PopOutInlineReaderCommand`) khi đọc nội tuyến để chuyển tức thì sang Task độc lập bất cứ lúc nào.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+

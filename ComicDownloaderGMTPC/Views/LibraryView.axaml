@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:ComicDownloaderGMTPC.ViewModels"
              xmlns:models="using:ComicDownloaderGMTPC.Models"
+             xmlns:views="using:ComicDownloaderGMTPC.Views"
              mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="700"
              x:Class="ComicDownloaderGMTPC.Views.LibraryView"
              x:DataType="vm:LibraryViewModel"
@@ -53,15 +54,15 @@
                         </Button>
                     </Grid>
 
-                    <!-- Hàng 1: Tìm kiếm tên truyện + Bộ lọc trạng thái đọc + Thông báo -->
+                    <!-- Hàng 1: Tìm kiếm tên truyện + Bộ lọc trạng thái đọc + Chế độ Cửa sổ đọc riêng (Đa nhiệm) -->
                     <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBox Text="{Binding SearchQuery}"
                                  PlaceholderText="🔍 Tìm nhanh tên bộ truyện..."
-                                 Width="260" Height="30" CornerRadius="5" VerticalContentAlignment="Center"
+                                 Width="240" Height="30" CornerRadius="5" VerticalContentAlignment="Center"
                                  Background="#0B0F19" BorderBrush="#334155" Foreground="#F8FAFC" FontSize="11"
-                                 Margin="0,0,10,4" />
+                                 Margin="0,0,8,4" />
 
-                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,8,4">
                             <Button Command="{Binding SetFilterModeCommand}" CommandParameter="All"
                                     Background="{Binding FilterAllBackground}" BorderBrush="#38BDF8" BorderThickness="1"
                                     Foreground="#F8FAFC" Padding="9,4" Height="28" CornerRadius="5"
@@ -90,6 +91,15 @@
                                 <TextBlock Text="🆕 Chưa đọc" FontSize="10.5" FontWeight="SemiBold" />
                             </Button>
                         </StackPanel>
+
+                        <Button Command="{Binding ToggleSeparateReaderWindowCommand}"
+                                Background="{Binding SeparateWindowModeBackground}"
+                                BorderBrush="#10B981" BorderThickness="1"
+                                Foreground="#FFFFFF" Padding="10,4" Height="28" CornerRadius="5"
+                                Margin="0,0,10,4"
+                                ToolTip.Tip="Bật để mở trình đọc ở Cửa sổ FullScreen độc lập (trên Android sẽ tách thành 2 thẻ riêng biệt trong màn hình Đa nhiệm Recents)">
+                            <TextBlock Text="{Binding SeparateWindowModeText}" FontSize="10.5" FontWeight="Bold" />
+                        </Button>
 
                         <TextBlock Text="{Binding StatusMessage}" Foreground="#10B981" FontSize="11" FontWeight="SemiBold"
                                    VerticalAlignment="Center" Margin="0,0,0,4" TextTrimming="CharacterEllipsis" />
@@ -189,14 +199,26 @@
                                                Foreground="#38BDF8" FontSize="11" />
                                 </StackPanel>
 
-                                <Button Grid.Column="1"
-                                        Command="{Binding ContinueReadingSelectedComicCommand}"
-                                        CommandParameter="{Binding SelectedComic}"
-                                        IsEnabled="{Binding HasSelectedComic}"
-                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
-                                        Padding="12,7" CornerRadius="6" VerticalAlignment="Center">
-                                    <TextBlock Text="▶ ĐỌC TIẾP BỘ NÀY" FontSize="11" />
-                                </Button>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Command="{Binding ContinueReadingSelectedComicCommand}"
+                                            CommandParameter="{Binding SelectedComic}"
+                                            IsEnabled="{Binding HasSelectedComic}"
+                                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
+                                            Padding="12,7" CornerRadius="6" VerticalAlignment="Center"
+                                            ToolTip.Tip="Đọc tiếp bộ truyện từ chương &amp; trang đang đọc dở">
+                                        <TextBlock Text="▶ ĐỌC TIẾP BỘ NÀY" FontSize="11" />
+                                    </Button>
+
+                                    <Button Command="{Binding OpenSelectedComicInSeparateWindowCommand}"
+                                            CommandParameter="{Binding SelectedComic}"
+                                            IsEnabled="{Binding HasSelectedComic}"
+                                            Background="#7C3AED" BorderBrush="#A855F7" BorderThickness="1"
+                                            Foreground="#FFFFFF" FontWeight="Bold"
+                                            Padding="10,7" CornerRadius="6" VerticalAlignment="Center"
+                                            ToolTip.Tip="Mở bộ truyện này ở một Cửa sổ / Task FullScreen hoàn toàn độc lập (hiển thị thành 2 thẻ riêng trong Đa nhiệm Android)">
+                                        <TextBlock Text="🗗 CỬA SỔ ĐỘC LẬP" FontSize="11" />
+                                    </Button>
+                                </StackPanel>
                             </Grid>
                         </Border>
 
@@ -254,121 +276,27 @@
         </Grid>
 
         <!-- ========================================================================= -->
-        <!-- 2. LỚP PHỦ ĐỌC TRUYỆN TOÀN MÀN HÌNH DÀNH CHO MOBILE / ANDROID SINGLEVIEW  -->
+        <!-- 2. LỚP PHỦ ĐỌC TRUYỆN NỘI TUYẾN (KHI CHỌN ĐỌC TRÊN MÀN HÌNH CHÍNH)        -->
         <!-- ========================================================================= -->
         <Border IsVisible="{Binding IsInlineReaderVisible}"
                 Background="#05080F"
                 ZIndex="3500"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Stretch">
-            <Panel DataContext="{Binding InlineReaderVm}">
-                <Grid x:Name="InlineReaderRootGrid" x:DataType="vm:ComicReaderViewModel">
-                <Panel x:Name="InlineReaderViewportPanel" Background="#05080F">
-                    <!-- Cuộn dọc -->
-                    <ListBox x:Name="InlineReaderPagesListBox"
-                             IsVisible="{Binding IsScrollMode}"
-                             ItemsSource="{Binding Pages}"
-                             Background="#05080F"
-                             BorderThickness="0"
-                             Padding="0">
-                        <ListBox.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <VirtualizingStackPanel Orientation="Vertical" />
-                            </ItemsPanelTemplate>
-                        </ListBox.ItemsPanel>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="models:ReaderPageItem">
-                                <Panel HorizontalAlignment="Center"
-                                       Width="{Binding DisplayWidth}"
-                                       Height="{Binding DisplayHeight}"
-                                       MinHeight="240"
-                                       AttachedToVisualTree="OnInlinePageContainerAttached">
-                                    <Border Background="#0B1120" BorderBrush="#1E293B" BorderThickness="0,0,0,1"
-                                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                                            IsVisible="{Binding !HasImage}">
-                                        <TextBlock Text="{Binding DisplayPageNumber, StringFormat='⏳ Đang tải trang {0}...'}"
-                                                   Foreground="#38BDF8" FontSize="13" FontWeight="Bold"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    </Border>
-                                    <Image Source="{Binding Image}" IsVisible="{Binding HasImage}" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Panel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+            <Panel>
+                <views:ComicReaderControl DataContext="{Binding InlineReaderVm}" />
 
-                    <!-- Lật trang -->
-                    <ScrollViewer IsVisible="{Binding IsFlipMode}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                        <Image Source="{Binding CurrentPage.Image}" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </ScrollViewer>
-                </Panel>
-
-                <!-- Overlay điều khiển cho Mobile -->
-                <Grid IsVisible="{Binding IsOverlayVisible}" RowDefinitions="Auto, *, Auto" ZIndex="3600">
-                    <Border Grid.Row="0" Background="#E60B0F19" Padding="10,8">
-                        <Grid ColumnDefinitions="Auto, *, Auto">
-                            <Button Grid.Column="0" Command="{Binding CloseReaderCommand}" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="5">
-                                <TextBlock Text="← Đóng" FontSize="11" />
-                            </Button>
-                            <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8,0">
-                                <ComboBox ItemsSource="{Binding ChapterList}"
-                                          SelectedItem="{Binding CurrentChapter}"
-                                          MinWidth="140" MaxWidth="220" Height="28"
-                                          Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8"
-                                          FontSize="10.5" Margin="0,2,6,2">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="models:LibraryChapterItem">
-                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                                <ComboBox ItemsSource="{Binding PdfBookmarks}"
-                                          SelectedItem="{Binding SelectedPdfBookmark}"
-                                          IsVisible="{Binding HasPdfBookmarks}"
-                                          MinWidth="140" MaxWidth="220" Height="28"
-                                          Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#E11D48"
-                                          FontSize="10.5" Margin="0,2">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="models:PdfBookmarkItem">
-                                            <TextBlock Text="{Binding DisplayText}" FontWeight="SemiBold" />
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                            </WrapPanel>
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
-                                <Button Command="{Binding PrevChapterCommand}" IsEnabled="{Binding CanGoPrevChapter}" Background="#1E293B" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4">
-                                    <TextBlock Text="⏮" FontSize="11" />
-                                </Button>
-                                <Button Command="{Binding NextChapterCommand}" IsEnabled="{Binding CanGoNextChapter}" Background="#1E293B" Foreground="#FFFFFF" Padding="8,5" CornerRadius="4">
-                                    <TextBlock Text="⏭" FontSize="11" />
-                                </Button>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-                    <Border Grid.Row="2" Background="#E60B0F19" Padding="12,8">
-                        <StackPanel Spacing="6">
-                            <Grid ColumnDefinitions="Auto, *, Auto">
-                                <Button Grid.Column="0" Command="{Binding PrevPageCommand}" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4">
-                                    <TextBlock Text="◀" FontSize="11" />
-                                </Button>
-                                <Slider x:Name="InlinePageScrubberSlider" Grid.Column="1" Minimum="0" Maximum="{Binding MaxPageIndex}" Value="{Binding CurrentPageIndex, Mode=OneWay}" Margin="8,0" />
-                                <Button Grid.Column="2" Command="{Binding NextPageCommand}" Background="#1E293B" Foreground="#38BDF8" Padding="8,4" CornerRadius="4">
-                                    <TextBlock Text="▶" FontSize="11" />
-                                </Button>
-                            </Grid>
-                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <Button Command="{Binding ToggleModeCommand}" Background="{Binding ModeBadgeBackground}" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="5" Margin="3,2">
-                                    <TextBlock Text="{Binding ModeButtonText}" FontSize="11" />
-                                </Button>
-                                <Button Command="{Binding ToggleRtlCommand}" IsVisible="{Binding IsFlipMode}" Background="{Binding RtlButtonBackground}" Foreground="#FFFFFF" FontWeight="Bold" Padding="10,5" CornerRadius="5" Margin="3,2">
-                                    <TextBlock Text="{Binding RtlButtonText}" FontSize="11" />
-                                </Button>
-                                <TextBlock Text="{Binding PageCounterText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="8,2" />
-                            </WrapPanel>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-                </Grid>
+                <!-- Nút nổi tách nhanh sang Cửa sổ / Task Độc lập (Đa nhiệm Android) -->
+                <Button Command="{Binding PopOutInlineReaderCommand}"
+                        IsVisible="{Binding InlineReaderVm.IsOverlayVisible, FallbackValue=True}"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Margin="0,56,16,0" ZIndex="3700"
+                        Background="#7C3AED" BorderBrush="#C084FC" BorderThickness="1.2"
+                        Foreground="#FFFFFF" FontWeight="Bold"
+                        Padding="12,6" CornerRadius="16"
+                        ToolTip.Tip="Tách trình đọc đang mở sang một Cửa sổ / Task FullScreen độc lập (2 thẻ riêng biệt trong Đa nhiệm Android)">
+                    <TextBlock Text="🗗 Tách Cửa Sổ Riêng (Đa Nhiệm)" FontSize="11" />
+                </Button>
             </Panel>
         </Border>
     </Grid>

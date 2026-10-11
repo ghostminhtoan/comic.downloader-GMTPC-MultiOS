@@ -73,7 +73,23 @@ public partial class LibraryViewModel : ViewModelBase
     private ObservableCollection<LibraryChapterItem> _selectedComicChapters = new();
 
     /// <summary>
-    /// Hỗ trợ trình đọc toàn màn hình trực tiếp trên Mobile/Android SingleView (hoặc khi không mở cửa sổ rời).
+    /// Bật/tắt chế độ mở trình đọc ở cửa sổ / Task độc lập (Mặc định BẬT trên cả Desktop và Android Đa nhiệm).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SeparateWindowModeText))]
+    [NotifyPropertyChangedFor(nameof(SeparateWindowModeBackground))]
+    private bool _isSeparateReaderWindowEnabled = true;
+
+    public string SeparateWindowModeText =>
+        IsSeparateReaderWindowEnabled
+            ? "🗗 Cửa sổ đọc riêng (Đa nhiệm): BẬT"
+            : "📌 Đọc trên màn hình chính: BẬT";
+
+    public string SeparateWindowModeBackground =>
+        IsSeparateReaderWindowEnabled ? "#059669" : "#334155";
+
+    /// <summary>
+    /// Hỗ trợ trình đọc toàn màn hình trực tiếp trên Mobile/Android SingleView (khi tắt chế độ cửa sổ độc lập).
     /// </summary>
     [ObservableProperty]
     private bool _isInlineReaderVisible;
@@ -330,10 +346,19 @@ public partial class LibraryViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void ToggleSeparateReaderWindow()
+    {
+        IsSeparateReaderWindowEnabled = !IsSeparateReaderWindowEnabled;
+        StatusMessage = IsSeparateReaderWindowEnabled
+            ? "🗗 Đã bật chế độ mở trình đọc ở Cửa sổ / Task độc lập (tách thẻ riêng trong Đa nhiệm Android)."
+            : "📌 Đã chuyển sang chế độ đọc trực tiếp ngay trên màn hình chính.";
+    }
+
+    [RelayCommand]
     public async Task ReadChapterAsync(LibraryChapterItem? chapter)
     {
         if (chapter == null) return;
-        await OpenChapterInternalAsync(SelectedComic, chapter);
+        await OpenChapterInternalAsync(SelectedComic, chapter, forceSeparateWindow: false);
     }
 
     [RelayCommand]
@@ -346,10 +371,67 @@ public partial class LibraryViewModel : ViewModelBase
 
         var targetChapter = targetComic.GetBestResumeChapter() ?? targetComic.Chapters[0];
 
-        await OpenChapterInternalAsync(targetComic, targetChapter);
+        await OpenChapterInternalAsync(targetComic, targetChapter, forceSeparateWindow: false);
     }
 
-    private async Task OpenChapterInternalAsync(LibraryComicItem? comic, LibraryChapterItem chapter)
+    [RelayCommand]
+    public async Task OpenSelectedComicInSeparateWindowAsync(LibraryComicItem? comic)
+    {
+        var targetComic = comic ?? SelectedComic;
+        if (targetComic == null || targetComic.Chapters.Count == 0) return;
+
+        SelectedComic = targetComic;
+
+        var targetChapter = targetComic.GetBestResumeChapter() ?? targetComic.Chapters[0];
+
+        await OpenChapterInternalAsync(targetComic, targetChapter, forceSeparateWindow: true);
+    }
+
+    [RelayCommand]
+    public void PopOutInlineReader()
+    {
+        var activeVm = InlineReaderVm;
+        if (activeVm == null) return;
+
+        var parentComic = activeVm.ParentComic;
+        IsInlineReaderVisible = false;
+        InlineReaderVm = null;
+
+        LaunchExternalReaderForViewModel(activeVm, parentComic);
+    }
+
+    private void LaunchExternalReaderForViewModel(ComicReaderViewModel readerVm, LibraryComicItem? comic)
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime)
+        {
+            var win = new ComicReaderWindow
+            {
+                DataContext = readerVm
+            };
+            win.Closed += (_, _) =>
+            {
+                readerVm.Cleanup();
+                comic?.RefreshReadStatus();
+                ApplyFilter();
+            };
+            win.Show();
+        }
+        else if (ComicReaderService.AndroidLaunchSeparateReaderTask != null)
+        {
+            ComicReaderService.Instance.ActiveExternalReaderViewModel = readerVm;
+            ComicReaderService.Instance.ActiveExternalReaderClosedCallback = () =>
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    comic?.RefreshReadStatus();
+                    ApplyFilter();
+                });
+            };
+            ComicReaderService.AndroidLaunchSeparateReaderTask.Invoke(readerVm);
+        }
+    }
+
+    private async Task OpenChapterInternalAsync(LibraryComicItem? comic, LibraryChapterItem chapter, bool forceSeparateWindow = false)
     {
         if (comic != null && !string.IsNullOrWhiteSpace(comic.RootFolderPath))
         {
@@ -361,8 +443,9 @@ public partial class LibraryViewModel : ViewModelBase
         }
 
         var readerVm = new ComicReaderViewModel();
+        bool useSeparateWindow = forceSeparateWindow || IsSeparateReaderWindowEnabled;
 
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime)
+        if (useSeparateWindow && Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime)
         {
             var win = new ComicReaderWindow
             {
@@ -377,16 +460,34 @@ public partial class LibraryViewModel : ViewModelBase
             win.Show();
             await readerVm.InitializeAsync(comic, chapter);
         }
+        else if (useSeparateWindow && ComicReaderService.AndroidLaunchSeparateReaderTask != null)
+        {
+            // Android Multiple Tasks (New Task Launch Mode): Mở ComicReaderActivity ở Task độc lập (tách thành 2 thẻ riêng trong Recents)
+            ComicReaderService.Instance.ActiveExternalReaderViewModel = readerVm;
+            ComicReaderService.Instance.ActiveExternalReaderClosedCallback = () =>
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    comic?.RefreshReadStatus();
+                    ApplyFilter();
+                });
+            };
+            await readerVm.InitializeAsync(comic, chapter);
+            ComicReaderService.AndroidLaunchSeparateReaderTask.Invoke(readerVm);
+        }
         else
         {
-            // Mobile / Android SingleView: Mở lớp phủ đọc truyện toàn màn hình trực tiếp
-            readerVm.CloseRequested += () =>
+            // Chế độ đọc nội tuyến (Inline Overlay) ngay trên MainWindow / MainView
+            void OnInlineClose()
             {
+                readerVm.CloseRequested -= OnInlineClose;
                 IsInlineReaderVisible = false;
                 InlineReaderVm = null;
                 comic?.RefreshReadStatus();
                 ApplyFilter();
-            };
+            }
+
+            readerVm.CloseRequested += OnInlineClose;
             InlineReaderVm = readerVm;
             IsInlineReaderVisible = true;
             await readerVm.InitializeAsync(comic, chapter);

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using ComicDownloaderGMTPC.Models;
+using ComicDownloaderGMTPC.ViewModels;
 
 namespace ComicDownloaderGMTPC.Services;
 
@@ -15,6 +16,18 @@ public sealed class ComicReaderService
 {
     private static readonly Lazy<ComicReaderService> _lazy = new(() => new ComicReaderService());
     public static ComicReaderService Instance => _lazy.Value;
+
+    /// <summary>
+    /// Delegate khởi chạy Activity đọc truyện độc lập trên Android (New Task Launch Mode / Multiple Tasks).
+    /// Khi kích hoạt, Android sẽ mở ComicReaderActivity ở một Task hoàn toàn mới (hiển thị thành 2 thẻ độc lập trong Đa nhiệm Recents).
+    /// </summary>
+    public static Action<ComicReaderViewModel>? AndroidLaunchSeparateReaderTask { get; set; }
+
+    public static bool IsAndroidSeparateReaderSupported => AndroidLaunchSeparateReaderTask != null;
+
+    public ComicReaderViewModel? ActiveExternalReaderViewModel { get; set; }
+
+    public Action? ActiveExternalReaderClosedCallback { get; set; }
 
     private readonly SemaphoreSlim _decodeSemaphore = new(3, 3);
 

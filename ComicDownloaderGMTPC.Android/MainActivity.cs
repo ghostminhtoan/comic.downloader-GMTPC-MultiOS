@@ -125,6 +125,7 @@ public class MainActivity : AvaloniaMainActivity
         Services.DownloadEngineService.OpenStorageSettingsRequested += OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested += OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
+        Services.ComicReaderService.AndroidLaunchSeparateReaderTask = LaunchComicReaderTask;
 
         // Đăng ký Native Android Audio Player cho âm thanh thông báo (Startup / DownloadFinish / Error)
         Services.SoundNotificationService.AndroidPlaySoundHandler = (type, filePath) =>
@@ -166,6 +167,42 @@ public class MainActivity : AvaloniaMainActivity
         };
 
         RequestAppStoragePermissions();
+    }
+
+    private void LaunchComicReaderTask(ViewModels.ComicReaderViewModel readerVm)
+    {
+        RunOnUiThread(() =>
+        {
+            try
+            {
+                var intent = new Intent(this, typeof(ComicReaderActivity));
+                intent.SetData(global::Android.Net.Uri.Parse("gmtpc://reader/session"));
+                intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.NewDocument | ActivityFlags.MultipleTask);
+
+                if (!string.IsNullOrWhiteSpace(readerVm.ParentComic?.RootFolderPath))
+                {
+                    intent.PutExtra(ComicReaderActivity.ExtraComicRootPath, readerVm.ParentComic.RootFolderPath);
+                }
+                if (!string.IsNullOrWhiteSpace(readerVm.CurrentChapter?.LocalPath))
+                {
+                    intent.PutExtra(ComicReaderActivity.ExtraChapterLocalPath, readerVm.CurrentChapter.LocalPath);
+                }
+                if (!string.IsNullOrWhiteSpace(readerVm.ComicTitle))
+                {
+                    intent.PutExtra(ComicReaderActivity.ExtraComicTitle, readerVm.ComicTitle);
+                }
+                if (!string.IsNullOrWhiteSpace(readerVm.ChapterTitle))
+                {
+                    intent.PutExtra(ComicReaderActivity.ExtraChapterTitle, readerVm.ChapterTitle);
+                }
+
+                StartActivity(intent);
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi mở cửa sổ đọc truyện độc lập: {ex.Message}");
+            }
+        });
     }
 
     protected override void OnResume()
@@ -218,6 +255,7 @@ public class MainActivity : AvaloniaMainActivity
         Services.BackgroundExecutionService.NativeRequestExitBubbleMode = null;
         Services.BackgroundExecutionService.NativeMinimizeOrHide = null;
         Services.BackgroundExecutionService.NativeForceExit = null;
+        Services.ComicReaderService.AndroidLaunchSeparateReaderTask = null;
 
         Services.DownloadEngineService.OpenStorageSettingsRequested -= OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested -= OnOpenFolderRequested;
