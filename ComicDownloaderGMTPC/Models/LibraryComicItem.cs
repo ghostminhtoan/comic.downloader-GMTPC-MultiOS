@@ -47,6 +47,41 @@ public partial class LibraryComicItem : ObservableObject
 
     public bool IsAllChaptersRead => Chapters.Count > 0 && Chapters.All(c => c.IsCompletedRead);
 
+    public LibraryChapterItem? GetBestResumeChapter()
+    {
+        if (Chapters.Count == 0) return null;
+
+        int savedActiveIdx = Services.ReadProgressStore.Instance.GetLastActiveChapterIndex(RootFolderPath);
+        if (savedActiveIdx > 0)
+        {
+            var savedCh = Chapters.FirstOrDefault(c => c.Index == savedActiveIdx);
+            if (savedCh != null)
+            {
+                return savedCh;
+            }
+        }
+
+        string? firstLocalPath = Chapters[0].LocalPath;
+        if (!string.IsNullOrWhiteSpace(firstLocalPath) &&
+            !string.Equals(firstLocalPath, RootFolderPath, StringComparison.OrdinalIgnoreCase))
+        {
+            int savedFileIdx = Services.ReadProgressStore.Instance.GetLastActiveChapterIndex(firstLocalPath);
+            if (savedFileIdx > 0)
+            {
+                var savedCh = Chapters.FirstOrDefault(c => c.Index == savedFileIdx);
+                if (savedCh != null)
+                {
+                    return savedCh;
+                }
+            }
+        }
+
+        return Chapters.LastOrDefault(c => c.LastReadPage > 0 && !c.IsCompletedRead)
+               ?? (Chapters.Any(c => c.LastReadPage > 0) ? Chapters.FirstOrDefault(c => !c.IsCompletedRead) : null)
+               ?? Chapters.LastOrDefault(c => c.LastReadPage > 0)
+               ?? Chapters[0];
+    }
+
     public void RefreshReadStatus()
     {
         if (Chapters.Count == 0)
@@ -58,8 +93,11 @@ public partial class LibraryComicItem : ObservableObject
         }
 
         int completedChapters = Chapters.Count(c => c.IsCompletedRead);
-        var inProgressChapter = Chapters.LastOrDefault(c => c.LastReadPage > 0 && !c.IsCompletedRead)
-                                ?? Chapters.LastOrDefault(c => c.LastReadPage > 0);
+        var inProgressChapter = GetBestResumeChapter();
+        if (inProgressChapter != null && inProgressChapter.LastReadPage <= 0 && !Chapters.Any(c => c.LastReadPage > 0))
+        {
+            inProgressChapter = null;
+        }
 
         if (completedChapters >= Chapters.Count)
         {
@@ -69,7 +107,7 @@ public partial class LibraryComicItem : ObservableObject
         }
         else if (inProgressChapter != null)
         {
-            ReadStatusText = $"Đang đọc: {inProgressChapter.Title} (Tr.{inProgressChapter.LastReadPage})";
+            ReadStatusText = $"Đang đọc: {inProgressChapter.Title} (Tr.{Math.Max(1, inProgressChapter.LastReadPage)})";
             ReadStatusBackground = "#D97706";
             double sumRatio = Chapters.Sum(c => c.ProgressPercent / 100.0);
             OverallProgressPercent = Math.Clamp(sumRatio / Chapters.Count * 100.0, 2.0, 99.0);
@@ -87,4 +125,5 @@ public partial class LibraryComicItem : ObservableObject
         OnPropertyChanged(nameof(ChapterCountText));
     }
 }
+
 

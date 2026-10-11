@@ -35,50 +35,77 @@ public sealed class ComicReaderService
                     if (!File.Exists(chapter.LocalPath)) return pages;
 
                     var pdfMeta = PdfComicParser.Instance.InspectPdf(chapter.LocalPath);
-                    if (pdfMeta.Bookmarks.Count > 0 && chapter.PdfBookmarks.Count == 0)
-                    {
-                        chapter.PdfBookmarks = pdfMeta.Bookmarks;
-                    }
+                    if (pdfMeta.Pages.Count == 0) return pages;
 
-                    for (int i = 0; i < pdfMeta.Pages.Count; i++)
+                    int startPage = Math.Clamp(chapter.PdfStartPageIndex, 0, pdfMeta.Pages.Count - 1);
+                    int endPage = chapter.PdfEndPageIndex >= startPage
+                        ? Math.Min(chapter.PdfEndPageIndex, pdfMeta.Pages.Count - 1)
+                        : (pdfMeta.Pages.Count - 1);
+
+                    int localIdx = 0;
+                    for (int pIdx = startPage; pIdx <= endPage; pIdx++)
                     {
                         if (ct.IsCancellationRequested) break;
-                        var pInfo = pdfMeta.Pages[i];
-                        pages.Add(new ReaderPageItem
+                        var pInfo = pdfMeta.Pages[pIdx];
+                        var item = new ReaderPageItem
                         {
-                            Index = i,
-                            Title = $"Trang {i + 1}",
+                            Index = localIdx,
+                            Title = $"Trang {localIdx + 1}",
                             SourcePath = chapter.LocalPath,
                             ArchiveEntryFullName = string.Empty,
                             IsPdfEntry = true,
-                            PdfPageIndex = i,
+                            PdfPageIndex = pIdx,
                             FileSizeBytes = pInfo.StreamLength
-                        });
+                        };
+                        if (pInfo.Width > 0 && pInfo.Height > 0)
+                        {
+                            item.SetKnownDimensions(pInfo.Width, pInfo.Height);
+                        }
+                        pages.Add(item);
+                        localIdx++;
                     }
                 }
                 else if (chapter.IsCbz || LibraryScannerService.IsArchiveFile(chapter.LocalPath))
                 {
                     if (!File.Exists(chapter.LocalPath)) return pages;
 
-                    using var fs = new FileStream(chapter.LocalPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                    using var zip = new ZipArchive(fs, ZipArchiveMode.Read);
-                    var sortedEntries = zip.Entries
-                        .Where(e => !string.IsNullOrEmpty(e.Name) && LibraryScannerService.IsImageFile(e.Name) && e.Length > 0)
-                        .OrderBy(e => e.FullName, NaturalSortComparer.Instance)
-                        .ToList();
-
-                    for (int i = 0; i < sortedEntries.Count; i++)
+                    if (chapter.ArchiveEntryNames != null && chapter.ArchiveEntryNames.Count > 0)
                     {
-                        if (ct.IsCancellationRequested) break;
-                        var entry = sortedEntries[i];
-                        pages.Add(new ReaderPageItem
+                        for (int i = 0; i < chapter.ArchiveEntryNames.Count; i++)
                         {
-                            Index = i,
-                            Title = entry.Name,
-                            SourcePath = chapter.LocalPath,
-                            ArchiveEntryFullName = entry.FullName,
-                            FileSizeBytes = entry.Length
-                        });
+                            if (ct.IsCancellationRequested) break;
+                            string entryFullName = chapter.ArchiveEntryNames[i];
+                            pages.Add(new ReaderPageItem
+                            {
+                                Index = i,
+                                Title = Path.GetFileName(entryFullName.Replace('\\', '/')),
+                                SourcePath = chapter.LocalPath,
+                                ArchiveEntryFullName = entryFullName
+                            });
+                        }
+                    }
+                    else
+                    {
+                        using var fs = new FileStream(chapter.LocalPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        using var zip = new ZipArchive(fs, ZipArchiveMode.Read);
+                        var sortedEntries = zip.Entries
+                            .Where(e => !string.IsNullOrEmpty(e.Name) && LibraryScannerService.IsImageFile(e.Name) && e.Length > 0)
+                            .OrderBy(e => e.FullName, NaturalSortComparer.Instance)
+                            .ToList();
+
+                        for (int i = 0; i < sortedEntries.Count; i++)
+                        {
+                            if (ct.IsCancellationRequested) break;
+                            var entry = sortedEntries[i];
+                            pages.Add(new ReaderPageItem
+                            {
+                                Index = i,
+                                Title = entry.Name,
+                                SourcePath = chapter.LocalPath,
+                                ArchiveEntryFullName = entry.FullName,
+                                FileSizeBytes = entry.Length
+                            });
+                        }
                     }
                 }
                 else if (Directory.Exists(chapter.LocalPath))
@@ -94,14 +121,25 @@ public sealed class ComicReaderService
                         long size = 0;
                         try { size = new FileInfo(file).Length; } catch { }
 
-                        pages.Add(new ReaderPageItem
+                        var item = new ReaderPageItem
                         {
                             Index = i,
                             Title = Path.GetFileName(file),
                             SourcePath = file,
                             ArchiveEntryFullName = string.Empty,
                             FileSizeBytes = size
-                        });
+                        };
+
+                        if (UniversalImageDecoder.TryGetFastJpegInfo(file, out int jw, out int jh) && jw > 0 && jh > 0)
+                        {
+                            item.SetKnownDimensions(jw, jh);
+                        }
+                        else if (UniversalImageDecoder.TryGetFastPngInfo(file, out var pInfo) && pInfo.Width > 0 && pInfo.Height > 0)
+                        {
+                            item.SetKnownDimensions(pInfo.Width, pInfo.Height);
+                        }
+
+                        pages.Add(item);
                     }
                 }
             }
@@ -130,8 +168,14 @@ public sealed class ComicReaderService
             Bitmap? bmp = await Task.Run(() => DecodePageBitmap(page), ct).ConfigureAwait(false);
             if (bmp != null && !ct.IsCancellationRequested)
             {
+                int pxW = bmp.PixelSize.Width;
+                int pxH = bmp.PixelSize.Height;
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
+                    if (pxW > 0 && pxH > 0)
+                    {
+                        page.SetKnownDimensions(pxW, pxH);
+                    }
                     page.Image = bmp;
                     page.IsLoaded = true;
                 });
@@ -160,14 +204,14 @@ public sealed class ComicReaderService
         if (pages == null || pages.Count == 0 || ct.IsCancellationRequested) return;
 
         int safeCurrent = Math.Clamp(currentIndex, 0, pages.Count - 1);
-        int preloadBehind = isScrollMode ? 2 : 2;
-        int preloadAhead = isScrollMode ? 4 : 3;
-        int keepRadius = isScrollMode ? 10 : 5;
+        int preloadBehind = isScrollMode ? 3 : 2;
+        int preloadAhead = isScrollMode ? 5 : 3;
+        int keepRadius = isScrollMode ? 14 : 6;
 
         int minLoad = Math.Max(0, safeCurrent - preloadBehind);
         int maxLoad = Math.Min(pages.Count - 1, safeCurrent + preloadAhead);
 
-        // 1. Giải phóng các trang nằm xa ngoài vùng nhìn để tiết kiệm RAM
+        // 1. Giải phóng các trang nằm xa ngoài vùng nhìn để tiết kiệm RAM (nhưng vẫn giữ nguyên AspectWidth/AspectHeight)
         int minKeep = Math.Max(0, safeCurrent - keepRadius);
         int maxKeep = Math.Min(pages.Count - 1, safeCurrent + keepRadius);
 
@@ -227,7 +271,7 @@ public sealed class ComicReaderService
                 if (entry == null) return null;
 
                 using var es = entry.Open();
-                using var ms = new MemoryStream((int)Math.Min(entry.Length, 32 * 1024 * 1024));
+                using var ms = new MemoryStream();
                 es.CopyTo(ms);
                 rawBytes = ms.ToArray();
             }
@@ -239,23 +283,17 @@ public sealed class ComicReaderService
 
             if (rawBytes == null || rawBytes.Length == 0) return null;
 
-            // Thử nạp trực tiếp qua Avalonia Bitmap (Skia backend)
             try
             {
-                using var ms = new MemoryStream(rawBytes);
-                if (OperatingSystem.IsAndroid() && rawBytes.Length > 4 * 1024 * 1024)
-                {
-                    return Bitmap.DecodeToWidth(ms, 1440);
-                }
+                using var ms = new MemoryStream(rawBytes, writable: false);
                 return new Bitmap(ms);
             }
             catch
             {
-                // Fallback qua UniversalImageDecoder (hỗ trợ mọi định dạng WebP VP8L/VP8X, Fake-JPG, PNG...)
-                var (jpegBytes, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(rawBytes, 93);
+                var (jpegBytes, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(rawBytes, 92);
                 if (jpegBytes.Length > 0)
                 {
-                    using var ms2 = new MemoryStream(jpegBytes);
+                    using var ms2 = new MemoryStream(jpegBytes, writable: false);
                     return new Bitmap(ms2);
                 }
             }
@@ -265,4 +303,3 @@ public sealed class ComicReaderService
         return null;
     }
 }
-

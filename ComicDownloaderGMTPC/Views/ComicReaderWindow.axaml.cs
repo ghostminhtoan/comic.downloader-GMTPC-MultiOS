@@ -17,6 +17,9 @@ public partial class ComicReaderWindow : Window
     private long _pointerPressTick;
     private bool _isPointerTapCandidate;
     private bool _isProgrammaticScroll;
+    private bool _isUserDraggingScrubber;
+    private int _scrollRequestVersion;
+    private long _lastUserScrollInputTick;
 
     public ComicReaderWindow()
     {
@@ -34,12 +37,58 @@ public partial class ComicReaderWindow : Window
         var viewport = this.FindControl<Panel>("ReaderViewportPanel");
         if (viewport != null)
         {
-            viewport.AddHandler(PointerPressedEvent, OnViewportPointerPressed, RoutingStrategies.Tunnel);
-            viewport.AddHandler(PointerReleasedEvent, OnViewportPointerReleased, RoutingStrategies.Tunnel);
-            viewport.AddHandler(PointerWheelChangedEvent, OnViewportPointerWheelChanged, RoutingStrategies.Tunnel);
+            viewport.AddHandler(PointerPressedEvent, OnViewportPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+            viewport.AddHandler(PointerReleasedEvent, OnViewportPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+            viewport.AddHandler(PointerWheelChangedEvent, OnViewportPointerWheelChanged, RoutingStrategies.Tunnel, handledEventsToo: true);
+        }
+
+        // Lắng nghe trực tiếp thao tác kéo thanh trượt trang của người dùng (tránh vòng lặp TwoWay với ScrollViewer)
+        var scrubber = this.FindControl<Slider>("PageScrubberSlider");
+        if (scrubber != null)
+        {
+            scrubber.AddHandler(PointerPressedEvent, OnScrubberPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+            scrubber.AddHandler(PointerReleasedEvent, OnScrubberPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+            scrubber.AddHandler(PointerCaptureLostEvent, OnScrubberPointerCaptureLost, RoutingStrategies.Tunnel, handledEventsToo: true);
+            scrubber.PropertyChanged += OnScrubberPropertyChanged;
         }
 
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+    }
+
+    private void OnScrubberPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _isUserDraggingScrubber = true;
+    }
+
+    private void OnScrubberPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_isUserDraggingScrubber) return;
+        _isUserDraggingScrubber = false;
+        if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
+        {
+            vm.ScrubToPage((int)Math.Round(slider.Value));
+        }
+    }
+
+    private void OnScrubberPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (!_isUserDraggingScrubber) return;
+        _isUserDraggingScrubber = false;
+        if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
+        {
+            vm.ScrubToPage((int)Math.Round(slider.Value));
+        }
+    }
+
+    private void OnScrubberPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (_isUserDraggingScrubber &&
+            e.Property == RangeBase.ValueProperty &&
+            sender is Slider slider &&
+            DataContext is ComicReaderViewModel vm)
+        {
+            vm.ScrubToPage((int)Math.Round(slider.Value));
+        }
     }
 
     private void OnReaderDataContextChanged(object? sender, EventArgs e)
@@ -69,6 +118,7 @@ public partial class ComicReaderWindow : Window
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
         if (listBox == null) return;
 
+        int reqVersion = ++_scrollRequestVersion;
         var targetItem = vm.Pages[pageIndex];
         _isProgrammaticScroll = true;
         try
@@ -79,6 +129,14 @@ public partial class ComicReaderWindow : Window
 
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            if (reqVersion != _scrollRequestVersion) return;
+            // Không giật ngược vị trí nếu người dùng vừa mới chủ động lăn chuột / kéo thanh cuộn
+            if (!_isUserDraggingScrubber && Environment.TickCount64 - _lastUserScrollInputTick < 220)
+            {
+                _isProgrammaticScroll = false;
+                return;
+            }
+
             try
             {
                 if (pageIndex >= 0 && pageIndex < vm.Pages.Count)
@@ -90,7 +148,13 @@ public partial class ComicReaderWindow : Window
             finally
             {
                 Avalonia.Threading.Dispatcher.UIThread.Post(
-                    () => _isProgrammaticScroll = false,
+                    () =>
+                    {
+                        if (reqVersion == _scrollRequestVersion)
+                        {
+                            _isProgrammaticScroll = false;
+                        }
+                    },
                     Avalonia.Threading.DispatcherPriority.Background);
             }
         }, Avalonia.Threading.DispatcherPriority.Loaded);
@@ -118,7 +182,7 @@ public partial class ComicReaderWindow : Window
 
     private void OnReaderScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_isProgrammaticScroll) return;
+        if (_isProgrammaticScroll || _isUserDraggingScrubber) return;
         if (DataContext is not ComicReaderViewModel vm || !vm.IsScrollMode || vm.Pages.Count == 0) return;
 
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
@@ -164,6 +228,7 @@ public partial class ComicReaderWindow : Window
     {
         if (IsScrollBarOrInteractiveControl(e.Source as Visual))
         {
+            _lastUserScrollInputTick = Environment.TickCount64;
             _isPointerTapCandidate = false;
             return;
         }
@@ -230,6 +295,8 @@ public partial class ComicReaderWindow : Window
     private void OnViewportPointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
         if (DataContext is not ComicReaderViewModel vm) return;
+
+        _lastUserScrollInputTick = Environment.TickCount64;
 
         // Giữ Ctrl + lăn chuột = Phóng to / Thu nhỏ
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))

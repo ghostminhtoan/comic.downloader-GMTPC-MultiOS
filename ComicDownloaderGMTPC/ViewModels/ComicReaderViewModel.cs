@@ -175,6 +175,15 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public double PageDisplayWidth => Math.Round(900 * ZoomLevel);
 
+    partial void OnZoomLevelChanged(double value)
+    {
+        double targetWidth = PageDisplayWidth;
+        foreach (var page in Pages)
+        {
+            page.DisplayWidth = targetWidth;
+        }
+    }
+
     [ObservableProperty]
     private bool _isLoadingChapter;
 
@@ -228,6 +237,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         if (CurrentPageIndex != targetIndex)
         {
             CurrentPageIndex = targetIndex;
+            RequestScrollToPage(targetIndex);
             ShowTransientToast($"📑 Đã chuyển tới mục lục PDF: {value.Title} (Trang {targetIndex + 1})");
         }
     }
@@ -245,11 +255,27 @@ public partial class ComicReaderViewModel : ViewModelBase
         SyncActivePdfBookmark(clamped);
         RecordReadingProgress(clamped);
         TriggerPrefetch(clamped);
+    }
 
-        if (IsScrollMode && !_suppressScrollSync)
-        {
-            ScrollToPageRequested?.Invoke(clamped);
-        }
+    private void RequestScrollToPage(int pageIndex)
+    {
+        if (!IsScrollMode || _suppressScrollSync || Pages.Count == 0) return;
+        int clamped = Math.Clamp(pageIndex, 0, Pages.Count - 1);
+        ScrollToPageRequested?.Invoke(clamped);
+    }
+
+    /// <summary>
+    /// Được gọi trực tiếp khi người dùng kéo hoặc nhấn trên thanh trượt tiến độ trang (PageScrubberSlider).
+    /// Tách biệt hoàn toàn khỏi luồng cập nhật tự động của ScrollViewer để chống nhảy trang qua lại.
+    /// </summary>
+    public void ScrubToPage(int targetPageIndex)
+    {
+        if (Pages.Count == 0) return;
+        int clamped = Math.Clamp(targetPageIndex, 0, Pages.Count - 1);
+        if (CurrentPageIndex == clamped) return;
+
+        CurrentPageIndex = clamped;
+        RequestScrollToPage(clamped);
     }
 
     private void SyncActivePdfBookmark(int pageIndex)
@@ -313,8 +339,10 @@ public partial class ComicReaderViewModel : ViewModelBase
             var loadedPages = await _readerService.LoadChapterPagesAsync(chapter, ct);
             if (ct.IsCancellationRequested) return;
 
+            double currentDisplayWidth = PageDisplayWidth;
             foreach (var p in loadedPages)
             {
+                p.DisplayWidth = currentDisplayWidth;
                 Pages.Add(p);
             }
 
@@ -332,8 +360,7 @@ public partial class ComicReaderViewModel : ViewModelBase
             TotalPages = Pages.Count;
             chapter.TotalPages = TotalPages;
 
-            int savedPageIndex = _progressStore.GetLastPageIndex(chapter.LocalPath, TotalPages);
-            // Nếu chương đã đọc tới trang cuối trước đó và người dùng mở lại, giữ ở trang đã lưu hoặc trang đầu
+            int savedPageIndex = _progressStore.GetLastPageIndex(chapter.EffectiveProgressKey, TotalPages);
             int startIndex = Math.Clamp(savedPageIndex, 0, Math.Max(0, TotalPages - 1));
 
             _suppressScrollSync = true;
@@ -344,10 +371,24 @@ public partial class ComicReaderViewModel : ViewModelBase
             SyncActivePdfBookmark(startIndex);
             RecordReadingProgress(startIndex);
 
-            // Nạp ngay trang mục tiêu trước khi cuộn tới
+            // Nạp ngay trang mục tiêu trước khi cuộn tới và đồng bộ tỷ lệ khung hình ban đầu
             if (TotalPages > 0)
             {
-                await _readerService.EnsurePageLoadedAsync(Pages[startIndex], ct);
+                var firstTarget = Pages[startIndex];
+                await _readerService.EnsurePageLoadedAsync(firstTarget, ct);
+                if (firstTarget.AspectWidth > 0 && firstTarget.AspectHeight > 0)
+                {
+                    int w = firstTarget.AspectWidth;
+                    int h = firstTarget.AspectHeight;
+                    foreach (var p in Pages)
+                    {
+                        if (!p.IsLoaded && p.AspectWidth == 900 && p.AspectHeight == 1350)
+                        {
+                            p.SetKnownDimensions(w, h);
+                        }
+                    }
+                }
+
                 if (IsDoublePage && startIndex + 1 < TotalPages)
                 {
                     await _readerService.EnsurePageLoadedAsync(Pages[startIndex + 1], ct);
@@ -359,12 +400,12 @@ public partial class ComicReaderViewModel : ViewModelBase
             if (startIndex > 0)
             {
                 string bookmarkHint = SelectedPdfBookmark != null ? $" ({SelectedPdfBookmark.Title})" : string.Empty;
-                ShowTransientToast($"📖 Đã khôi phục vị trí đọc: Trang {startIndex + 1}/{TotalPages}{bookmarkHint}");
-                Dispatcher.UIThread.Post(() => ScrollToPageRequested?.Invoke(startIndex), DispatcherPriority.Background);
+                ShowTransientToast($"📖 Đã khôi phục vị trí đọc: {chapter.Title} - Trang {startIndex + 1}/{TotalPages}{bookmarkHint}");
+                Dispatcher.UIThread.Post(() => RequestScrollToPage(startIndex), DispatcherPriority.Background);
             }
             else
             {
-                Dispatcher.UIThread.Post(() => ScrollToPageRequested?.Invoke(0), DispatcherPriority.Background);
+                Dispatcher.UIThread.Post(() => RequestScrollToPage(0), DispatcherPriority.Background);
             }
         }
         finally
@@ -411,9 +452,18 @@ public partial class ComicReaderViewModel : ViewModelBase
         int page1Based = Math.Clamp(pageIndex + 1, 1, TotalPages);
         CurrentChapter.TotalPages = TotalPages;
         CurrentChapter.LastReadPage = page1Based;
-        ParentComic?.RefreshReadStatus();
 
-        _progressStore.SaveProgress(CurrentChapter.LocalPath, pageIndex);
+        _progressStore.SaveProgress(CurrentChapter.EffectiveProgressKey, pageIndex);
+        if (ParentComic != null && !string.IsNullOrWhiteSpace(ParentComic.RootFolderPath))
+        {
+            _progressStore.SaveLastActiveChapterIndex(ParentComic.RootFolderPath, CurrentChapter.Index);
+        }
+        if (!string.IsNullOrWhiteSpace(CurrentChapter.LocalPath))
+        {
+            _progressStore.SaveLastActiveChapterIndex(CurrentChapter.LocalPath, CurrentChapter.Index);
+        }
+
+        ParentComic?.RefreshReadStatus();
     }
 
     private void TriggerPrefetch(int centerIndex)
@@ -457,7 +507,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         if (IsScrollMode)
         {
             ShowTransientToast("📜 Đã chuyển sang chế độ Cuộn dọc (Webtoon)");
-            Dispatcher.UIThread.Post(() => ScrollToPageRequested?.Invoke(CurrentPageIndex), DispatcherPriority.Background);
+            Dispatcher.UIThread.Post(() => RequestScrollToPage(CurrentPageIndex), DispatcherPriority.Background);
         }
         else
         {
@@ -494,10 +544,12 @@ public partial class ComicReaderViewModel : ViewModelBase
         if (CurrentPageIndex + step < Pages.Count)
         {
             CurrentPageIndex += step;
+            RequestScrollToPage(CurrentPageIndex);
         }
         else if (CurrentPageIndex < Pages.Count - 1)
         {
             CurrentPageIndex = Pages.Count - 1;
+            RequestScrollToPage(CurrentPageIndex);
         }
         else if (CanGoNextChapter)
         {
@@ -513,10 +565,12 @@ public partial class ComicReaderViewModel : ViewModelBase
         if (CurrentPageIndex - step >= 0)
         {
             CurrentPageIndex -= step;
+            RequestScrollToPage(CurrentPageIndex);
         }
         else if (CurrentPageIndex > 0)
         {
             CurrentPageIndex = 0;
+            RequestScrollToPage(CurrentPageIndex);
         }
         else if (CanGoPrevChapter)
         {
@@ -566,6 +620,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         if (Pages.Count > 0)
         {
             CurrentPageIndex = 0;
+            RequestScrollToPage(0);
         }
     }
 
@@ -575,6 +630,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         if (Pages.Count > 0)
         {
             CurrentPageIndex = Pages.Count - 1;
+            RequestScrollToPage(CurrentPageIndex);
         }
     }
 

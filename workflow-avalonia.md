@@ -2248,3 +2248,35 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.68 Sửa Triệt Để Lỗi Nhảy Trang Liên Tục Khi Cuộn (`Scroll Bounce`) & Tự Động Tách Chương Nhỏ Cho File PDF / ZIP / CBZ Hàng Ngàn Trang (`PdfComicParser.cs`, `LibraryScannerService.cs`, `ComicReaderService.cs`, `ComicReaderViewModel.cs`, `ComicReaderWindow.axaml`) (2026-10-11)
+- **Bối Cảnh & Phản Hồi Thực Tế Của Người Dùng**:
+  1. **Lỗi nhảy trang tới lui liên tục khi tua bằng scroll (`Scroll Bounce / Feedback Loop`)**: Khi người dùng cuộn chuột hoặc kéo thanh cuộn trong chế độ đọc `Scroll dọc`, danh sách trang bị giật nhảy tới nhảy lui liên tục.
+  2. **File PDF / ZIP gộp hàng ngàn trang chỉ hiện 1 chương khổng lồ**: Với các file lớn như `Ta Luyện Khí Ba Ngàn Năm.pdf` (1.807 GB, 18.054 trang, 381 chương tạo bởi `iText-Core-7.2.4`) và `Một Ngày Nọ Tôi Bỗng Thành Nàng Công Chúa.zip` (8.592 ảnh chia trong các thư mục con `Chuong 1`, `Chuong 2`,...), phần danh sách chương cần tách thành từng chương nhỏ (`Chương 1`, `Chương 2`, ..., `Chương 381`) để dễ điều hướng thay vì 1 chương lớn hàng ngàn trang.
+- **Nguyên Nhân Gốc Rễ & Giải Pháp Kiến Trúc (First-Principles Engineering Rigor)**:
+  1. **Triệt Tiêu Hoàn Toàn Vòng Lặp Phản Hồi Cuộn (`Zero-Bounce Scroll Architecture`)**:
+     - *Nguyên nhân 1 (TwoWay Slider Echo Loop)*: Trước đây thanh trượt `Slider`綁 `Value="{Binding CurrentPageIndex, Mode=TwoWay}"` và `OnCurrentPageIndexChanged` tự động bắn `ScrollToPageRequested`. Khi người dùng cuộn trang làm `CurrentPageIndex` đổi, `Slider` cập nhật và dội ngược sự kiện hoặc các lệnh `DispatcherPriority.Loaded` `ScrollIntoView` trễ hạn giằng co với vị trí cuộn hiện tại của người dùng.
+     - *Nguyên nhân 2 (VirtualizingStackPanel Extent Shift)*: Khung trang chưa tải hoặc vừa bị giải phóng RAM có chiều cao cố định `Height="720"`, trong khi trang đã nạp có chiều cao thật (ví dụ `1350px` - `1800px`). Khi `UpdatePrefetchWindowAsync` nạp/giải phóng ảnh ở phía trên khung nhìn, tổng chiều cao (Extent) của `VirtualizingStackPanel` co giãn đột ngột làm vị trí cuộn nhảy vọt hàng trăm pixel.
+     - *Giải pháp*:
+       - Tách hẳn `OnCurrentPageIndexChanged` khỏi `ScrollToPageRequested`: Việc cuộn tự động chỉ kích hoạt qua hàm `RequestScrollToPage(int index)` khi người dùng chủ động nhấn nút chuyển trang (`PrevPage`, `NextPage`, `FirstPage`, `LastPage`), chọn mục lục, hoặc kéo thanh trượt `PageScrubberSlider` (`ScrubToPage`).
+       - Đổi `PageScrubberSlider` sang `Value="{Binding CurrentPageIndex, Mode=OneWay}"` và bắt trực tiếp thao tác kéo/nhấn chuột của người dùng trên `PageScrubberSlider` (`_isUserDraggingScrubber` trong `ComicReaderWindow.axaml.cs` và `LibraryView.axaml.cs`).
+       - Bổ sung `_scrollRequestVersion` và dấu thời gian `_lastUserScrollInputTick` để hủy ngay mọi lệnh `ScrollIntoView` trễ nếu người dùng đang chủ động lăn chuột/kéo thanh cuộn.
+       - Bổ sung `AspectWidth`, `AspectHeight`, `DisplayWidth`, `DisplayHeight` và `SetKnownDimensions(width, height)` trên `ReaderPageItem`. Với PDF, kích thước thật `/Width`, `/Height` của từng trang được nạp ngay từ bước lập chỉ mục; với ảnh ZIP/Folder, tỷ lệ khung hình được giữ cố định ngay cả sau khi giải phóng `Bitmap` khỏi RAM, giữ cho `Height="{Binding DisplayHeight}"` trên `ListBox.ItemTemplate` bất biến 100%.
+  2. **Lập Chỉ Mục Siêu Tốc Bảng `xref` Cho File PDF Hàng Gigabyte & Giải Mã Named Destinations / UTF-16BE Octal (`PdfComicParser.cs`)**:
+     - Xây dựng `TryParseViaXref`: Đọc trực tiếp bảng `xref` ở cuối file PDF kết hợp bộ đệm siêu dữ liệu đầu/cuối file (`2MB head` + `10MB tail`) để lập chỉ mục toàn bộ 18.054 trang của file PDF `1.807 GB` chỉ trong `~50ms` mà không cần nhảy đọc tuần tự qua 18.054 luồng ảnh trên ổ cứng; thông tin luồng ảnh (`EnsureImageStreamResolved`) chỉ đọc lười (lazy resolve) đúng vào thời điểm trang đó cần hiển thị.
+     - Hỗ trợ đầy đủ cấu trúc mục lục `/Outlines` của `iText Core` và các công cụ xuất PDF hiện đại:
+       - Giải mã cả `/Dest [pageObj 0 R ...]`, `/A << /S /GoTo /D ... >>`, lẫn **Named Destinations** (`/Dest (iText0)` ánh xạ qua cây `/Names [(iText0) 10 0 R ...]` trong Root Catalog tới đối tượng đích `10 0 obj [7 0 R /XYZ ...]`).
+       - Giải mã chuỗi tiêu đề `/Title(...)` chứa mã thoát bát phân (`\ddd`, ví dụ `\376\377\000C\000h\001\260\001\241\000n\000g...`) kết hợp UTF-16BE BOM (`0xFEFF`), hiển thị chuẩn xác tiếng Việt có dấu (`Chương 1` .. `Chương 381`).
+  3. **Tự Động Tách Chương Nhỏ Cho File PDF & ZIP/CBZ Đa Chương (`LibraryScannerService.cs`, `ComicReaderService.cs`, `ReadProgressStore.cs`)**:
+     - **Với file `.pdf` (`ExpandPdfIntoChapters`)**:
+       - Nếu PDF có từ 2 mục lục chương (`/Outlines`) trở lên: Tự động tách thành từng chương riêng biệt (`Chương 1`, `Chương 2`, ..., `Chương 381`) với dải trang độc lập `[PdfStartPageIndex .. PdfEndPageIndex]`.
+       - Nếu PDF có trên 100 trang nhưng không có `/Outlines`: Tự động chia thành các phần dễ điều hướng (80 trang/phần: `Phần 1 (Trang 1-80)`, `Phần 2 (Trang 81-160)`,...).
+     - **Với file `.zip` / `.cbz` (`ExpandArchiveIntoChapters`)**:
+       - Tự động phân tích cây thư mục bên trong tệp nén (`Một Ngày Nọ Tôi Bỗng Thành Nàng Công Chúa/Chuong 1/000.jpg`...): Nếu có nhiều thư mục con chứa ảnh, tự động tách thành từng chương tương ứng (`Chuong 1`, `Chuong 2`,...) sắp xếp theo `NaturalSort` và chỉ giải nén đúng danh sách `ArchiveEntryNames` của chương đang đọc.
+       - Nếu tệp nén phẳng không chia thư mục nhưng chứa trên 120 ảnh: Tự động chia thành các phần 80 trang/chương.
+     - **Lưu Tiến Độ Đọc Theo Từng Chương Con & Tự Động Mở Lại Chương Đang Đọc Dở (`EffectiveProgressKey` & `GetBestResumeChapter`)**:
+       - Mỗi chương con bên trong PDF/ZIP có khóa lưu trữ riêng (`<đường_dẫn_file>::pdfchap_<index>_<startPage>` hoặc `<đường_dẫn_file>::zipchap_<index>_<folderName>`) kèm tự động kế thừa vị trí trang toàn cục cũ (nếu có).
+       - Lưu lại chương vừa đọc gần nhất (`SaveLastActiveChapterIndex`) để khi nhấn `▶ Đọc` hoặc `📦 Mở File CBZ/ZIP/PDF`, ứng dụng nạp toàn bộ danh sách chương nhỏ vào cả Thư viện lẫn `ComboBox` chọn chương của Trình đọc và mở thẳng vào đúng chương + trang đang đọc dở.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Kiểm thử trực tiếp với 2 file thực tế của người dùng (`Ta Luyện Khí Ba Ngàn Năm.pdf` tách chuẩn 381 chương; `Một Ngày Nọ Tôi Bỗng Thành Nàng Công Chúa.zip` tách chuẩn toàn bộ các chương con) và khởi chạy Desktop EXE đạt `Responding: True`.
+

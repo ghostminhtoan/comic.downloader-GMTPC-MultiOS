@@ -50,12 +50,14 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="models:ReaderPageItem">
                         <Panel HorizontalAlignment="Center"
-                               Width="{Binding $parent[Window].((vm:ComicReaderViewModel)DataContext).PageDisplayWidth}"
+                               Width="{Binding DisplayWidth}"
+                               Height="{Binding DisplayHeight}"
                                MinHeight="280"
                                AttachedToVisualTree="OnPageContainerAttached">
                             <!-- Khung chờ khi trang đang giải mã -->
                             <Border Background="#0B1120" BorderBrush="#1E293B" BorderThickness="0,0,0,1"
-                                    Height="720"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
                                     IsVisible="{Binding !HasImage}">
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
                                     <TextBlock Text="{Binding DisplayPageNumber, StringFormat='⏳ Đang tải trang {0}...'}"
@@ -69,6 +71,7 @@
                                    IsVisible="{Binding HasImage}"
                                    Stretch="Uniform"
                                    HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
                                    RenderOptions.BitmapInterpolationMode="HighQuality" />
                         </Panel>
                     </DataTemplate>
@@ -270,10 +273,11 @@
                             <TextBlock Text="◀ Trước" FontSize="11" />
                         </Button>
 
-                        <Slider Grid.Column="2"
+                        <Slider x:Name="PageScrubberSlider"
+                                Grid.Column="2"
                                 Minimum="0"
                                 Maximum="{Binding MaxPageIndex}"
-                                Value="{Binding CurrentPageIndex, Mode=TwoWay}"
+                                Value="{Binding CurrentPageIndex, Mode=OneWay}"
                                 SmallChange="1" LargeChange="5"
                                 VerticalAlignment="Center"
                                 Margin="4,0,10,0" />

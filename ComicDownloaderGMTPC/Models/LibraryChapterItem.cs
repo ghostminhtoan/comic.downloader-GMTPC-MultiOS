@@ -25,9 +25,28 @@ public partial class LibraryChapterItem : ObservableObject
     /// </summary>
     public string LocalPath { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Khóa định danh lưu tiến độ đọc riêng cho chương (hỗ trợ nhiều chương con nằm chung 1 file .pdf hoặc .zip/.cbz).
+    /// </summary>
+    public string ProgressKey { get; set; } = string.Empty;
+
+    public string EffectiveProgressKey => string.IsNullOrWhiteSpace(ProgressKey) ? LocalPath : ProgressKey;
+
     public bool IsCbz { get; set; }
 
     public bool IsPdf { get; set; }
+
+    /// <summary>
+    /// Phạm vi trang (0-based, inclusive) của chương này bên trong file PDF. PdfEndPageIndex = -1 nghĩa là toàn bộ file.
+    /// </summary>
+    public int PdfStartPageIndex { get; set; } = 0;
+
+    public int PdfEndPageIndex { get; set; } = -1;
+
+    /// <summary>
+    /// Danh sách các entry ảnh thuộc riêng chương này bên trong file .zip/.cbz (nếu file nén chứa nhiều chương con).
+    /// </summary>
+    public List<string>? ArchiveEntryNames { get; set; }
 
     public List<PdfBookmarkItem> PdfBookmarks { get; set; } = new();
 

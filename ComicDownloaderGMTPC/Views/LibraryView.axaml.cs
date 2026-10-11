@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
@@ -16,6 +17,8 @@ public partial class LibraryView : UserControl
     private long _inlinePressTick;
     private bool _hasScannedOnce;
     private bool _isInlineProgrammaticScroll;
+    private bool _isInlineUserDraggingScrubber;
+    private int _inlineScrollRequestVersion;
     private LibraryViewModel? _subscribedLibVm;
     private ComicReaderViewModel? _subscribedInlineReaderVm;
 
@@ -31,8 +34,53 @@ public partial class LibraryView : UserControl
         var inlineViewport = this.FindControl<Panel>("InlineReaderViewportPanel");
         if (inlineViewport != null)
         {
-            inlineViewport.AddHandler(PointerPressedEvent, OnInlineViewportPressed, RoutingStrategies.Tunnel);
-            inlineViewport.AddHandler(PointerReleasedEvent, OnInlineViewportReleased, RoutingStrategies.Tunnel);
+            inlineViewport.AddHandler(PointerPressedEvent, OnInlineViewportPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+            inlineViewport.AddHandler(PointerReleasedEvent, OnInlineViewportReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        }
+
+        var inlineScrubber = this.FindControl<Slider>("InlinePageScrubberSlider");
+        if (inlineScrubber != null)
+        {
+            inlineScrubber.AddHandler(PointerPressedEvent, OnInlineScrubberPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+            inlineScrubber.AddHandler(PointerReleasedEvent, OnInlineScrubberReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+            inlineScrubber.AddHandler(PointerCaptureLostEvent, OnInlineScrubberCaptureLost, RoutingStrategies.Tunnel, handledEventsToo: true);
+            inlineScrubber.PropertyChanged += OnInlineScrubberPropertyChanged;
+        }
+    }
+
+    private void OnInlineScrubberPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _isInlineUserDraggingScrubber = true;
+    }
+
+    private void OnInlineScrubberReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_isInlineUserDraggingScrubber) return;
+        _isInlineUserDraggingScrubber = false;
+        if (sender is Slider slider && _subscribedInlineReaderVm != null)
+        {
+            _subscribedInlineReaderVm.ScrubToPage((int)Math.Round(slider.Value));
+        }
+    }
+
+    private void OnInlineScrubberCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (!_isInlineUserDraggingScrubber) return;
+        _isInlineUserDraggingScrubber = false;
+        if (sender is Slider slider && _subscribedInlineReaderVm != null)
+        {
+            _subscribedInlineReaderVm.ScrubToPage((int)Math.Round(slider.Value));
+        }
+    }
+
+    private void OnInlineScrubberPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (_isInlineUserDraggingScrubber &&
+            e.Property == RangeBase.ValueProperty &&
+            sender is Slider slider &&
+            _subscribedInlineReaderVm != null)
+        {
+            _subscribedInlineReaderVm.ScrubToPage((int)Math.Round(slider.Value));
         }
     }
 
@@ -87,6 +135,7 @@ public partial class LibraryView : UserControl
         var listBox = this.FindControl<ListBox>("InlineReaderPagesListBox");
         if (listBox == null) return;
 
+        int reqVersion = ++_inlineScrollRequestVersion;
         _isInlineProgrammaticScroll = true;
         try
         {
@@ -96,6 +145,7 @@ public partial class LibraryView : UserControl
 
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            if (reqVersion != _inlineScrollRequestVersion) return;
             try
             {
                 if (pageIndex >= 0 && pageIndex < readerVm.Pages.Count)
@@ -107,7 +157,13 @@ public partial class LibraryView : UserControl
             finally
             {
                 Avalonia.Threading.Dispatcher.UIThread.Post(
-                    () => _isInlineProgrammaticScroll = false,
+                    () =>
+                    {
+                        if (reqVersion == _inlineScrollRequestVersion)
+                        {
+                            _isInlineProgrammaticScroll = false;
+                        }
+                    },
                     Avalonia.Threading.DispatcherPriority.Background);
             }
         }, Avalonia.Threading.DispatcherPriority.Loaded);
@@ -115,7 +171,7 @@ public partial class LibraryView : UserControl
 
     private void OnInlineReaderScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_isInlineProgrammaticScroll) return;
+        if (_isInlineProgrammaticScroll || _isInlineUserDraggingScrubber) return;
         var readerVm = _subscribedInlineReaderVm;
         if (readerVm == null || !readerVm.IsScrollMode || readerVm.Pages.Count == 0) return;
 

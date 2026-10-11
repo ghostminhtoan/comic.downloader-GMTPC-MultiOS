@@ -33,25 +33,42 @@ public sealed class ReadProgressStore
         return Path.Combine(dir, "read_progress.json");
     }
 
-    public static string NormalizeKey(string chapterPath)
+    public static string NormalizeKey(string chapterKey)
     {
-        if (string.IsNullOrWhiteSpace(chapterPath)) return string.Empty;
+        if (string.IsNullOrWhiteSpace(chapterKey)) return string.Empty;
+        string trimmed = chapterKey.Trim();
+
+        int sepIdx = trimmed.IndexOf("::", StringComparison.Ordinal);
+        if (sepIdx > 0)
+        {
+            string basePath = trimmed.Substring(0, sepIdx);
+            string suffix = trimmed.Substring(sepIdx);
+            try
+            {
+                return Path.GetFullPath(basePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + suffix;
+            }
+            catch
+            {
+                return basePath.TrimEnd('\\', '/') + suffix;
+            }
+        }
+
         try
         {
-            return Path.GetFullPath(chapterPath.Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
         catch
         {
-            return chapterPath.Trim().TrimEnd('\\', '/');
+            return trimmed.TrimEnd('\\', '/');
         }
     }
 
     /// <summary>
     /// Trả về số trang đang đọc (1-based: 0 = chưa đọc, 1..N = trang đang đọc).
     /// </summary>
-    public int GetLastReadPage(string chapterPath)
+    public int GetLastReadPage(string chapterKey)
     {
-        string key = NormalizeKey(chapterPath);
+        string key = NormalizeKey(chapterKey);
         if (string.IsNullOrEmpty(key)) return 0;
         return _progressMap.TryGetValue(key, out int page) && page > 0 ? page : 0;
     }
@@ -59,9 +76,9 @@ public sealed class ReadProgressStore
     /// <summary>
     /// Trả về chỉ số trang (0-based index) để nhảy tới khi mở chương.
     /// </summary>
-    public int GetLastPageIndex(string chapterPath, int totalPages)
+    public int GetLastPageIndex(string chapterKey, int totalPages)
     {
-        int page1Based = GetLastReadPage(chapterPath);
+        int page1Based = GetLastReadPage(chapterKey);
         if (page1Based <= 1) return 0;
         if (totalPages > 0)
         {
@@ -73,9 +90,9 @@ public sealed class ReadProgressStore
     /// <summary>
     /// Lưu trang đang đọc (0-based pageIndex -> lưu thành 1-based page number) với cơ chế debounce 500ms.
     /// </summary>
-    public void SaveProgress(string chapterPath, int pageIndex)
+    public void SaveProgress(string chapterKey, int pageIndex)
     {
-        string key = NormalizeKey(chapterPath);
+        string key = NormalizeKey(chapterKey);
         if (string.IsNullOrEmpty(key)) return;
 
         int page1Based = Math.Max(1, pageIndex + 1);
@@ -87,6 +104,30 @@ public sealed class ReadProgressStore
             _debounceTimer.Change(500, Timeout.Infinite);
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Lưu chỉ số chương (1-based Chapter.Index) đang đọc gần nhất của 1 bộ truyện / file PDF / file ZIP.
+    /// </summary>
+    public void SaveLastActiveChapterIndex(string comicOrFilePath, int chapterIndex1Based)
+    {
+        if (string.IsNullOrWhiteSpace(comicOrFilePath) || chapterIndex1Based <= 0) return;
+        string key = NormalizeKey(comicOrFilePath) + "::#last_active_chapter";
+        _progressMap[key] = chapterIndex1Based;
+        _isDirty = true;
+
+        try
+        {
+            _debounceTimer.Change(500, Timeout.Infinite);
+        }
+        catch { }
+    }
+
+    public int GetLastActiveChapterIndex(string comicOrFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(comicOrFilePath)) return 0;
+        string key = NormalizeKey(comicOrFilePath) + "::#last_active_chapter";
+        return _progressMap.TryGetValue(key, out int idx) && idx > 0 ? idx : 0;
     }
 
     public void FlushImmediately()

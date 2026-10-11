@@ -265,7 +265,24 @@ public partial class LibraryViewModel : ViewModelBase
                     var quickComic = _scanner.CreateQuickComicFromPath(normalized);
                     if (quickComic != null && quickComic.Chapters.Count > 0)
                     {
-                        await OpenChapterInternalAsync(quickComic, quickComic.Chapters[0]);
+                        var existing = AllComics.FirstOrDefault(c =>
+                            string.Equals(c.RootFolderPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
+                        if (existing == null)
+                        {
+                            AllComics.Insert(0, quickComic);
+                            _ = _scanner.LoadCoversAsync(new[] { quickComic }, CancellationToken.None);
+                        }
+                        else
+                        {
+                            quickComic = existing;
+                        }
+
+                        ApplyFilter();
+                        SelectedComic = quickComic;
+
+                        var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
+                        StatusMessage = $"📖 Đã nạp '{quickComic.Title}' ({quickComic.TotalChapters} chương). Đang mở: {targetChap.Title}";
+                        await OpenChapterInternalAsync(quickComic, targetChap);
                     }
                 }
             }
@@ -291,9 +308,7 @@ public partial class LibraryViewModel : ViewModelBase
 
         SelectedComic = targetComic;
 
-        var targetChapter = targetComic.Chapters.LastOrDefault(c => c.LastReadPage > 0 && !c.IsCompletedRead)
-                            ?? targetComic.Chapters.FirstOrDefault(c => !c.IsCompletedRead)
-                            ?? targetComic.Chapters[0];
+        var targetChapter = targetComic.GetBestResumeChapter() ?? targetComic.Chapters[0];
 
         await OpenChapterInternalAsync(targetComic, targetChapter);
     }

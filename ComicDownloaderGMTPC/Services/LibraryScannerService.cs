@@ -27,6 +27,8 @@ public sealed class LibraryScannerService
         ".cbz", ".zip"
     };
 
+    private const int DefaultAutoSplitPagesPerChapter = 80;
+
     private readonly SemaphoreSlim _coverDecodeSemaphore = new(OperatingSystem.IsAndroid() ? 2 : 4);
 
     public static bool IsImageFile(string path)
@@ -51,14 +53,25 @@ public sealed class LibraryScannerService
         return Task.Run(() =>
         {
             var comics = new List<LibraryComicItem>();
-            if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+            if (string.IsNullOrWhiteSpace(rootPath))
+            {
+                return comics;
+            }
+
+            if (File.Exists(rootPath))
+            {
+                var single = CreateQuickComicFromPath(rootPath);
+                if (single != null) comics.Add(single);
+                return comics;
+            }
+
+            if (!Directory.Exists(rootPath))
             {
                 return comics;
             }
 
             try
             {
-                // Nếu chính thư mục chọn là 1 file/folder chương đơn lẻ hoặc bộ truyện
                 ScanDirectoryRecursive(rootPath, rootPath, depth: 0, maxDepth: 4, comics, ct);
             }
             catch { }
@@ -103,7 +116,6 @@ public sealed class LibraryScannerService
         var pdfFiles = files.Where(IsPdfFile).NaturalSort();
         var directImages = files.Where(IsImageFile).NaturalSort();
 
-        // Kiểm tra xem các thư mục con có phải là thư mục chương chứa ảnh không
         var chapterDirs = new List<(string DirPath, List<string> ImageFiles)>();
         var nonChapterDirs = new List<string>();
 
@@ -124,16 +136,57 @@ public sealed class LibraryScannerService
             }
         }
 
-        // Nếu thư mục hiện tại có các chương con hoặc có các file .cbz/.zip/.pdf -> Đây là 1 Bộ Truyện
-        if (chapterDirs.Count > 0 || archiveFiles.Count > 0 || pdfFiles.Count > 0)
+        // Phân loại các file .zip/.cbz/.pdf:
+        // - Nếu 1 file .pdf hoặc .zip/.cbz chứa nhiều chương bên trong (ví dụ Ta Luyện Khí Ba Ngàn Năm.pdf có 381 chương,
+        //   hoặc Một Ngày Nọ Tôi Bỗng Thành Nàng Công Chúa.zip có hàng trăm thư mục chương), hoặc nằm trong thư mục gốc chung
+        //   không có chapterDirs -> Tạo thành 1 Bộ Truyện (LibraryComicItem) độc lập với đầy đủ danh sách chương con!
+        var singleChapterArchives = new List<string>();
+        var singleChapterPdfs = new List<string>();
+
+        foreach (string archPath in archiveFiles)
         {
-            var comic = BuildComicItem(currentDir, rootDir, chapterDirs, archiveFiles, pdfFiles);
+            if (ct.IsCancellationRequested) return;
+            int tempIdx = 1;
+            var expanded = ExpandArchiveIntoChapters(archPath, ref tempIdx, out string? firstEntry);
+            if (expanded.Count == 0) continue;
+
+            if (expanded.Count >= 2 || (chapterDirs.Count == 0 && archiveFiles.Count + pdfFiles.Count >= 1))
+            {
+                var standaloneComic = BuildStandaloneComicFromExpandedFile(archPath, currentDir, rootDir, expanded, isPdf: false, firstArchiveEntry: firstEntry);
+                results.Add(standaloneComic);
+            }
+            else
+            {
+                singleChapterArchives.Add(archPath);
+            }
+        }
+
+        foreach (string pdfPath in pdfFiles)
+        {
+            if (ct.IsCancellationRequested) return;
+            int tempIdx = 1;
+            var expanded = ExpandPdfIntoChapters(pdfPath, ref tempIdx);
+            if (expanded.Count == 0) continue;
+
+            if (expanded.Count >= 2 || (chapterDirs.Count == 0 && archiveFiles.Count + pdfFiles.Count >= 1))
+            {
+                var standaloneComic = BuildStandaloneComicFromExpandedFile(pdfPath, currentDir, rootDir, expanded, isPdf: true, firstArchiveEntry: null);
+                results.Add(standaloneComic);
+            }
+            else
+            {
+                singleChapterPdfs.Add(pdfPath);
+            }
+        }
+
+        if (chapterDirs.Count > 0 || singleChapterArchives.Count > 0 || singleChapterPdfs.Count > 0)
+        {
+            var comic = BuildComicItem(currentDir, rootDir, chapterDirs, singleChapterArchives, singleChapterPdfs);
             if (comic.Chapters.Count > 0)
             {
                 results.Add(comic);
             }
 
-            // Nếu vẫn còn thư mục con không phải chương (ví dụ thư mục nhóm hoặc subfolder), quét tiếp
             foreach (string nextDir in nonChapterDirs)
             {
                 if (ct.IsCancellationRequested) break;
@@ -142,7 +195,6 @@ public sealed class LibraryScannerService
             return;
         }
 
-        // Nếu người dùng chọn trực tiếp 1 thư mục chỉ chứa ảnh rời ở ngay root (depth == 0)
         if (depth == 0 && directImages.Count > 0)
         {
             var singleChapterList = new List<(string DirPath, List<string> ImageFiles)>
@@ -157,12 +209,61 @@ public sealed class LibraryScannerService
             return;
         }
 
-        // Duyệt xuống tầng tiếp theo
         foreach (string nextDir in nonChapterDirs)
         {
             if (ct.IsCancellationRequested) break;
             ScanDirectoryRecursive(nextDir, rootDir, depth + 1, maxDepth, results, ct);
         }
+    }
+
+    private LibraryComicItem BuildStandaloneComicFromExpandedFile(
+        string filePath,
+        string parentDir,
+        string rootDir,
+        List<LibraryChapterItem> chapters,
+        bool isPdf,
+        string? firstArchiveEntry)
+    {
+        string title = Path.GetFileNameWithoutExtension(filePath);
+        if (string.IsNullOrWhiteSpace(title)) title = "Truyện Đã Tải";
+
+        string category = string.Empty;
+        try
+        {
+            string cleanParent = parentDir.TrimEnd('\\', '/');
+            if (!string.IsNullOrWhiteSpace(cleanParent) &&
+                !string.Equals(cleanParent, rootDir.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            {
+                category = Path.GetFileName(cleanParent);
+            }
+        }
+        catch { }
+
+        var comic = new LibraryComicItem
+        {
+            Title = title,
+            RootFolderPath = filePath,
+            CategoryName = category
+        };
+
+        if (isPdf)
+        {
+            comic.CoverPdfPath = filePath;
+        }
+        else if (!string.IsNullOrEmpty(firstArchiveEntry))
+        {
+            comic.CoverArchivePath = filePath;
+            comic.CoverArchiveEntry = firstArchiveEntry;
+        }
+
+        for (int i = 0; i < chapters.Count; i++)
+        {
+            chapters[i].Index = i + 1;
+            comic.Chapters.Add(chapters[i]);
+        }
+
+        comic.RefreshReadStatus();
+        return comic;
     }
 
     private LibraryComicItem BuildComicItem(
@@ -210,6 +311,7 @@ public sealed class LibraryScannerService
                 Index = idx++,
                 Title = chTitle,
                 LocalPath = dirPath,
+                ProgressKey = dirPath,
                 IsCbz = false,
                 IsPdf = false,
                 TotalPages = imgFiles.Count,
@@ -223,59 +325,32 @@ public sealed class LibraryScannerService
             }
         }
 
-        // 2. Nạp các file .cbz / .zip
+        // 2. Nạp các file .cbz / .zip (tự động tách thành các chương nhỏ nếu trong file nén có nhiều thư mục chương)
         foreach (string archivePath in archiveFiles)
         {
-            string chTitle = Path.GetFileNameWithoutExtension(archivePath);
-            int lastRead = ReadProgressStore.Instance.GetLastReadPage(archivePath);
-            DateTime lastMod = DateTime.MinValue;
-            try { lastMod = File.GetLastWriteTime(archivePath); } catch { }
-
-            var (pageCount, firstEntry) = InspectArchiveQuick(archivePath);
-            if (pageCount <= 0) continue;
-
-            comic.Chapters.Add(new LibraryChapterItem
+            var expanded = ExpandArchiveIntoChapters(archivePath, ref idx, out string? firstEntry);
+            foreach (var ch in expanded)
             {
-                Index = idx++,
-                Title = chTitle,
-                LocalPath = archivePath,
-                IsCbz = true,
-                IsPdf = false,
-                TotalPages = pageCount,
-                LastReadPage = lastRead,
-                LastModified = lastMod
-            });
+                comic.Chapters.Add(ch);
+            }
 
-            if (string.IsNullOrEmpty(comic.CoverFilePath) && string.IsNullOrEmpty(comic.CoverArchivePath) && !string.IsNullOrEmpty(firstEntry))
+            if (string.IsNullOrEmpty(comic.CoverFilePath) &&
+                string.IsNullOrEmpty(comic.CoverArchivePath) &&
+                !string.IsNullOrEmpty(firstEntry))
             {
                 comic.CoverArchivePath = archivePath;
                 comic.CoverArchiveEntry = firstEntry;
             }
         }
 
-        // 3. Nạp các file .pdf (mỗi file .pdf là 1 mục liền mạch + kèm danh sách mục lục chương nếu có)
+        // 3. Nạp các file .pdf (tự động tách thành các chương nhỏ theo Mục lục /Outlines hoặc chia phần thông minh)
         foreach (string pdfPath in pdfFiles)
         {
-            string chTitle = Path.GetFileNameWithoutExtension(pdfPath);
-            int lastRead = ReadProgressStore.Instance.GetLastReadPage(pdfPath);
-            DateTime lastMod = DateTime.MinValue;
-            try { lastMod = File.GetLastWriteTime(pdfPath); } catch { }
-
-            var pdfMeta = PdfComicParser.Instance.InspectPdf(pdfPath);
-            if (pdfMeta.Pages.Count <= 0) continue;
-
-            comic.Chapters.Add(new LibraryChapterItem
+            var expanded = ExpandPdfIntoChapters(pdfPath, ref idx);
+            foreach (var ch in expanded)
             {
-                Index = idx++,
-                Title = chTitle,
-                LocalPath = pdfPath,
-                IsCbz = false,
-                IsPdf = true,
-                PdfBookmarks = pdfMeta.Bookmarks,
-                TotalPages = pdfMeta.Pages.Count,
-                LastReadPage = lastRead,
-                LastModified = lastMod
-            });
+                comic.Chapters.Add(ch);
+            }
 
             if (string.IsNullOrEmpty(comic.CoverFilePath) &&
                 string.IsNullOrEmpty(comic.CoverArchivePath) &&
@@ -289,6 +364,352 @@ public sealed class LibraryScannerService
         return comic;
     }
 
+    private static List<LibraryChapterItem> ExpandPdfIntoChapters(string pdfPath, ref int nextIndex)
+    {
+        var list = new List<LibraryChapterItem>();
+        var pdfMeta = PdfComicParser.Instance.InspectPdf(pdfPath);
+        int totalPdfPages = pdfMeta.Pages.Count;
+        if (totalPdfPages <= 0) return list;
+
+        DateTime lastMod = DateTime.MinValue;
+        try { lastMod = File.GetLastWriteTime(pdfPath); } catch { }
+
+        int legacyGlobalPage1Based = ReadProgressStore.Instance.GetLastReadPage(pdfPath);
+
+        // Lọc và chuẩn hóa danh sách Bookmarks hợp lệ
+        var validBookmarks = new List<PdfBookmarkItem>();
+        if (pdfMeta.Bookmarks != null && pdfMeta.Bookmarks.Count > 0)
+        {
+            foreach (var bm in pdfMeta.Bookmarks.OrderBy(b => b.PageIndex))
+            {
+                int clampedPage = Math.Clamp(bm.PageIndex, 0, totalPdfPages - 1);
+                if (validBookmarks.Count > 0 && validBookmarks[^1].PageIndex == clampedPage)
+                {
+                    // Nếu 2 bookmark cùng trỏ vào 1 trang (ví dụ node tên truyện và Chương 1), ưu tiên giữ tên Chương cụ thể hơn
+                    validBookmarks[^1] = new PdfBookmarkItem
+                    {
+                        Title = bm.Title,
+                        PageIndex = clampedPage
+                    };
+                }
+                else
+                {
+                    validBookmarks.Add(new PdfBookmarkItem
+                    {
+                        Title = bm.Title,
+                        PageIndex = clampedPage
+                    });
+                }
+            }
+        }
+
+        // TRƯỜNG HỢP 1: File PDF có chứa Mục lục chương (/Outlines Bookmarks >= 2 chương)
+        if (validBookmarks.Count >= 2)
+        {
+            if (validBookmarks[0].PageIndex > 0)
+            {
+                int introEnd = validBookmarks[0].PageIndex - 1;
+                int introCount = introEnd + 1;
+                string introKey = $"{pdfPath}::pdf_0_{introEnd}";
+                int introSaved = ReadProgressStore.Instance.GetLastReadPage(introKey);
+
+                list.Add(new LibraryChapterItem
+                {
+                    Index = nextIndex++,
+                    Title = "Mở đầu / Bìa",
+                    LocalPath = pdfPath,
+                    ProgressKey = introKey,
+                    IsPdf = true,
+                    PdfStartPageIndex = 0,
+                    PdfEndPageIndex = introEnd,
+                    TotalPages = introCount,
+                    LastReadPage = introSaved,
+                    LastModified = lastMod
+                });
+            }
+
+            for (int i = 0; i < validBookmarks.Count; i++)
+            {
+                var bm = validBookmarks[i];
+                int startPage = bm.PageIndex;
+                int endPage = (i + 1 < validBookmarks.Count)
+                    ? Math.Max(startPage, validBookmarks[i + 1].PageIndex - 1)
+                    : (totalPdfPages - 1);
+                int count = endPage - startPage + 1;
+
+                string progressKey = $"{pdfPath}::pdf_{startPage}_{endPage}";
+                int savedPage = ReadProgressStore.Instance.GetLastReadPage(progressKey);
+
+                // Tự động chuyển đổi vị trí trang tổng (legacy) sang đúng chương và trang con
+                if (savedPage <= 0 && legacyGlobalPage1Based > 1)
+                {
+                    int legacyIdx0 = legacyGlobalPage1Based - 1;
+                    if (legacyIdx0 >= startPage && legacyIdx0 <= endPage)
+                    {
+                        savedPage = (legacyIdx0 - startPage) + 1;
+                        ReadProgressStore.Instance.SaveProgress(progressKey, savedPage - 1);
+                        ReadProgressStore.Instance.SaveLastActiveChapterIndex(pdfPath, nextIndex);
+                    }
+                }
+
+                list.Add(new LibraryChapterItem
+                {
+                    Index = nextIndex++,
+                    Title = string.IsNullOrWhiteSpace(bm.Title) ? $"Chương {i + 1}" : bm.Title,
+                    LocalPath = pdfPath,
+                    ProgressKey = progressKey,
+                    IsPdf = true,
+                    PdfStartPageIndex = startPage,
+                    PdfEndPageIndex = endPage,
+                    TotalPages = count,
+                    LastReadPage = savedPage,
+                    LastModified = lastMod
+                });
+            }
+
+            return list;
+        }
+
+        // TRƯỜNG HỢP 2: File PDF lớn (> 100 trang) nhưng không có Bookmarks -> Tự động chia thành các chương nhỏ 80 trang
+        if (totalPdfPages > 100)
+        {
+            int partNum = 1;
+            for (int startPage = 0; startPage < totalPdfPages; startPage += DefaultAutoSplitPagesPerChapter)
+            {
+                int endPage = Math.Min(totalPdfPages - 1, startPage + DefaultAutoSplitPagesPerChapter - 1);
+                int count = endPage - startPage + 1;
+                string progressKey = $"{pdfPath}::pdf_{startPage}_{endPage}";
+                int savedPage = ReadProgressStore.Instance.GetLastReadPage(progressKey);
+
+                if (savedPage <= 0 && legacyGlobalPage1Based > 1)
+                {
+                    int legacyIdx0 = legacyGlobalPage1Based - 1;
+                    if (legacyIdx0 >= startPage && legacyIdx0 <= endPage)
+                    {
+                        savedPage = (legacyIdx0 - startPage) + 1;
+                        ReadProgressStore.Instance.SaveProgress(progressKey, savedPage - 1);
+                        ReadProgressStore.Instance.SaveLastActiveChapterIndex(pdfPath, nextIndex);
+                    }
+                }
+
+                list.Add(new LibraryChapterItem
+                {
+                    Index = nextIndex++,
+                    Title = $"Chương {partNum} (Trang {startPage + 1} - {endPage + 1})",
+                    LocalPath = pdfPath,
+                    ProgressKey = progressKey,
+                    IsPdf = true,
+                    PdfStartPageIndex = startPage,
+                    PdfEndPageIndex = endPage,
+                    TotalPages = count,
+                    LastReadPage = savedPage,
+                    LastModified = lastMod
+                });
+                partNum++;
+            }
+
+            return list;
+        }
+
+        // TRƯỜNG HỢP 3: File PDF ngắn (<= 100 trang) -> 1 chương duy nhất
+        list.Add(new LibraryChapterItem
+        {
+            Index = nextIndex++,
+            Title = Path.GetFileNameWithoutExtension(pdfPath),
+            LocalPath = pdfPath,
+            ProgressKey = pdfPath,
+            IsPdf = true,
+            PdfStartPageIndex = 0,
+            PdfEndPageIndex = totalPdfPages - 1,
+            PdfBookmarks = validBookmarks,
+            TotalPages = totalPdfPages,
+            LastReadPage = legacyGlobalPage1Based,
+            LastModified = lastMod
+        });
+
+        return list;
+    }
+
+    private static List<LibraryChapterItem> ExpandArchiveIntoChapters(
+        string archivePath,
+        ref int nextIndex,
+        out string? firstCoverEntry)
+    {
+        firstCoverEntry = null;
+        var list = new List<LibraryChapterItem>();
+
+        try
+        {
+            using var fs = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var zip = new ZipArchive(fs, ZipArchiveMode.Read);
+
+            var allImageEntries = zip.Entries
+                .Where(e => !string.IsNullOrEmpty(e.Name) && IsImageFile(e.Name) && e.Length > 0)
+                .Select(e => e.FullName)
+                .ToList();
+
+            if (allImageEntries.Count == 0) return list;
+
+            DateTime lastMod = DateTime.MinValue;
+            try { lastMod = File.GetLastWriteTime(archivePath); } catch { }
+
+            string archiveBaseName = Path.GetFileNameWithoutExtension(archivePath);
+            int legacyGlobalPage1Based = ReadProgressStore.Instance.GetLastReadPage(archivePath);
+
+            // Nhóm các ảnh theo thư mục cha bên trong file .zip / .cbz
+            var folderGroups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (string fullName in allImageEntries)
+            {
+                string folderKey = GetArchiveEntryParentFolder(fullName);
+                if (!folderGroups.TryGetValue(folderKey, out var groupList))
+                {
+                    groupList = new List<string>();
+                    folderGroups[folderKey] = groupList;
+                }
+                groupList.Add(fullName);
+            }
+
+            // TRƯỜNG HỢP 1: File .zip/.cbz chứa nhiều thư mục chương con (ví dụ: Chuong 1/, Chuong 2/, ...)
+            if (folderGroups.Count >= 2)
+            {
+                var sortedFolderKeys = folderGroups.Keys
+                    .OrderBy(k => k, NaturalSortComparer.Instance)
+                    .ToList();
+
+                int runningPages = 0;
+                foreach (string folderKey in sortedFolderKeys)
+                {
+                    var sortedEntries = folderGroups[folderKey]
+                        .OrderBy(e => e, NaturalSortComparer.Instance)
+                        .ToList();
+
+                    if (sortedEntries.Count == 0) continue;
+                    firstCoverEntry ??= sortedEntries[0];
+
+                    string chTitle = ExtractReadableChapterTitleFromArchiveFolder(folderKey, archiveBaseName);
+                    string progressKey = $"{archivePath}::zip_{folderKey}";
+                    int savedPage = ReadProgressStore.Instance.GetLastReadPage(progressKey);
+
+                    if (savedPage <= 0 && legacyGlobalPage1Based > 1)
+                    {
+                        int legacyIdx0 = legacyGlobalPage1Based - 1;
+                        if (legacyIdx0 >= runningPages && legacyIdx0 < runningPages + sortedEntries.Count)
+                        {
+                            savedPage = (legacyIdx0 - runningPages) + 1;
+                            ReadProgressStore.Instance.SaveProgress(progressKey, savedPage - 1);
+                            ReadProgressStore.Instance.SaveLastActiveChapterIndex(archivePath, nextIndex);
+                        }
+                    }
+
+                    runningPages += sortedEntries.Count;
+
+                    list.Add(new LibraryChapterItem
+                    {
+                        Index = nextIndex++,
+                        Title = chTitle,
+                        LocalPath = archivePath,
+                        ProgressKey = progressKey,
+                        IsCbz = true,
+                        ArchiveEntryNames = sortedEntries,
+                        TotalPages = sortedEntries.Count,
+                        LastReadPage = savedPage,
+                        LastModified = lastMod
+                    });
+                }
+
+                return list;
+            }
+
+            // Sắp xếp toàn bộ ảnh trong trường hợp chỉ có 1 thư mục
+            var flatSorted = allImageEntries
+                .OrderBy(e => e, NaturalSortComparer.Instance)
+                .ToList();
+            firstCoverEntry = flatSorted[0];
+
+            // TRƯỜNG HỢP 2: File .zip/.cbz phẳng nhưng có quá nhiều ảnh (> 120 trang) -> chia thành các chương 80 trang
+            if (flatSorted.Count > 120)
+            {
+                int partNum = 1;
+                for (int start = 0; start < flatSorted.Count; start += DefaultAutoSplitPagesPerChapter)
+                {
+                    int count = Math.Min(DefaultAutoSplitPagesPerChapter, flatSorted.Count - start);
+                    var slice = flatSorted.GetRange(start, count);
+                    int end = start + count - 1;
+
+                    string progressKey = $"{archivePath}::zip_part_{start}_{end}";
+                    int savedPage = ReadProgressStore.Instance.GetLastReadPage(progressKey);
+
+                    if (savedPage <= 0 && legacyGlobalPage1Based > 1)
+                    {
+                        int legacyIdx0 = legacyGlobalPage1Based - 1;
+                        if (legacyIdx0 >= start && legacyIdx0 <= end)
+                        {
+                            savedPage = (legacyIdx0 - start) + 1;
+                            ReadProgressStore.Instance.SaveProgress(progressKey, savedPage - 1);
+                            ReadProgressStore.Instance.SaveLastActiveChapterIndex(archivePath, nextIndex);
+                        }
+                    }
+
+                    list.Add(new LibraryChapterItem
+                    {
+                        Index = nextIndex++,
+                        Title = $"Chương {partNum} (Trang {start + 1} - {end + 1})",
+                        LocalPath = archivePath,
+                        ProgressKey = progressKey,
+                        IsCbz = true,
+                        ArchiveEntryNames = slice,
+                        TotalPages = slice.Count,
+                        LastReadPage = savedPage,
+                        LastModified = lastMod
+                    });
+                    partNum++;
+                }
+
+                return list;
+            }
+
+            // TRƯỜNG HỢP 3: File .cbz/.zip 1 chương bình thường
+            list.Add(new LibraryChapterItem
+            {
+                Index = nextIndex++,
+                Title = archiveBaseName,
+                LocalPath = archivePath,
+                ProgressKey = archivePath,
+                IsCbz = true,
+                ArchiveEntryNames = flatSorted,
+                TotalPages = flatSorted.Count,
+                LastReadPage = legacyGlobalPage1Based,
+                LastModified = lastMod
+            });
+        }
+        catch { }
+
+        return list;
+    }
+
+    private static string GetArchiveEntryParentFolder(string entryFullName)
+    {
+        if (string.IsNullOrEmpty(entryFullName)) return string.Empty;
+        string normalized = entryFullName.Replace('\\', '/').TrimStart('/');
+        int lastSlash = normalized.LastIndexOf('/');
+        return lastSlash > 0 ? normalized.Substring(0, lastSlash) : string.Empty;
+    }
+
+    private static string ExtractReadableChapterTitleFromArchiveFolder(string folderKey, string archiveBaseName)
+    {
+        if (string.IsNullOrWhiteSpace(folderKey)) return archiveBaseName;
+        string[] parts = folderKey.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return archiveBaseName;
+
+        // Nếu thư mục gốc trùng tên file zip (ví dụ: "Một Ngày Nọ.../Chuong 1"), lấy phần tử con ("Chuong 1")
+        if (parts.Length >= 2 && string.Equals(parts[0], archiveBaseName, StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Join(" - ", parts.Skip(1));
+        }
+
+        return parts[^1];
+    }
+
     public LibraryComicItem? CreateQuickComicFromPath(string targetPath)
     {
         if (string.IsNullOrWhiteSpace(targetPath)) return null;
@@ -298,27 +719,19 @@ public sealed class LibraryScannerService
             if (IsArchiveFile(targetPath))
             {
                 string dir = Path.GetDirectoryName(targetPath) ?? string.Empty;
-                var comic = BuildComicItem(
-                    string.IsNullOrEmpty(dir) ? targetPath : dir,
-                    dir,
-                    new List<(string, List<string>)>(),
-                    new List<string> { targetPath },
-                    new List<string>());
-                comic.Title = Path.GetFileNameWithoutExtension(targetPath);
-                return comic;
+                int idx = 1;
+                var expanded = ExpandArchiveIntoChapters(targetPath, ref idx, out string? firstEntry);
+                if (expanded.Count == 0) return null;
+                return BuildStandaloneComicFromExpandedFile(targetPath, dir, dir, expanded, isPdf: false, firstArchiveEntry: firstEntry);
             }
 
             if (IsPdfFile(targetPath))
             {
                 string dir = Path.GetDirectoryName(targetPath) ?? string.Empty;
-                var comic = BuildComicItem(
-                    string.IsNullOrEmpty(dir) ? targetPath : dir,
-                    dir,
-                    new List<(string, List<string>)>(),
-                    new List<string>(),
-                    new List<string> { targetPath });
-                comic.Title = Path.GetFileNameWithoutExtension(targetPath);
-                return comic;
+                int idx = 1;
+                var expanded = ExpandPdfIntoChapters(targetPath, ref idx);
+                if (expanded.Count == 0) return null;
+                return BuildStandaloneComicFromExpandedFile(targetPath, dir, dir, expanded, isPdf: true, firstArchiveEntry: null);
             }
         }
 
@@ -350,25 +763,6 @@ public sealed class LibraryScannerService
         catch
         {
             return new List<string>();
-        }
-    }
-
-    private static (int PageCount, string? FirstEntryName) InspectArchiveQuick(string archivePath)
-    {
-        try
-        {
-            using var fs = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var zip = new ZipArchive(fs, ZipArchiveMode.Read);
-            var imgEntries = zip.Entries
-                .Where(e => !string.IsNullOrEmpty(e.Name) && IsImageFile(e.Name) && e.Length > 0)
-                .Select(e => e.FullName)
-                .NaturalSort();
-
-            return (imgEntries.Count, imgEntries.FirstOrDefault());
-        }
-        catch
-        {
-            return (0, null);
         }
     }
 
@@ -452,4 +846,3 @@ public sealed class LibraryScannerService
         return null;
     }
 }
-
