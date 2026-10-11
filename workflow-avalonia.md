@@ -2383,6 +2383,33 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
-
-
-
+### 15.73 Sửa Dứt Điểm Bug Reset Fit Width/Fit Height Khi Đổi Chương, Hoàn Thiện Cuộn Ngang Liên Tiếp (Horizontal Continuous Scroll Mode 3 & 4) & Tối Ưu Hóa Responsive Tab Thư Viện Trên Android (`ReaderPageItem.cs`, `ComicReaderViewModel.cs`, `ComicReaderControl.axaml`, `ComicReaderControl.axaml.cs`, `LibraryViewModel.cs`, `LibraryView.axaml`, `LibraryView.axaml.cs`) (2026-10-11)
+- **Bối Cảnh & Yêu Cầu Của Người Dùng**:
+  1. Khi đổi sang chương truyện khác, tính năng Fit Width và Fit Height bị reset dẫn đến kích thước trang ảnh hiển thị quá to hoặc quá nhỏ.
+  2. Các chế độ `Right S` (`S→`) và `Left S` (`←S`) trong menu Page Scrolling phải là **Cuộn Ngang Liên Tiếp (Continuous Horizontal Scroll)** giữa các trang, không phải lật trang Slide đơn lẻ.
+  3. Giao diện Tab Thư Viện trên Android bị lộn xộn, tràn viền toolbar, phân chia 2 cột dọc trái/phải không hợp lý trên màn hình điện thoại, cần tối ưu responsive toàn diện.
+- **Giải Pháp Kỹ Thuật & Kiến Trúc (`First-Principles Rigor`)**:
+  1. **Khắc Phục Triệt Để Bug Reset Kích Thước Fit Width / Fit Height Khi Đổi Chương (`ReaderPageItem.cs`, `ComicReaderViewModel.cs`)**:
+     - *Nguyên nhân gốc*: Khi tải chương mới (`LoadChapterInternalAsync`), các đối tượng `ReaderPageItem` mới được khởi tạo với tỷ lệ giả định 900×1350. Khi trang đầu tiên hoặc các trang tiếp theo giải mã xong bitmap thực tế (`pxW`, `pxH`), `SetKnownDimensions` cập nhật `_aspectWidth`/`_aspectHeight` nhưng không tính toán lại `DisplayWidth`/`DisplayHeight` theo `FitMode` đang kích hoạt.
+     - *Khắc phục*: `ReaderPageItem` lưu trữ trạng thái layout (`_lastFitMode`, `_lastVw`, `_lastVh`, `_lastZoom`). Ngay khi `SetKnownDimensions` nhận diện kích thước ảnh thật hoặc khi lan truyền kích thước cho toàn bộ trang của chương mới, hàm `RecalculateDimensions` tự động được kích hoạt tức thì. Đồng thời, `ApplyFitModeLayout()` được gọi lại ngay sau khi trang đầu nạp xong, bảo đảm kích thước trang luôn khớp 100% với viewport mà không bị vỡ hay co cụm.
+     - Đồng bộ cập nhật thuộc tính `FlipDisplayWidth` và `FlipDisplayHeight` trong `UpdateCurrentFlipPages()`.
+  2. **Hoàn Thiện Chế Độ Cuộn Ngang Liên Tiếp (Continuous Horizontal Scroll - Mode 3 & 4) (`ComicReaderViewModel.cs`, `ComicReaderControl.axaml`, `ComicReaderControl.axaml.cs`)**:
+     - Khởi tạo thuộc tính `IsHorizontalScrollMode` và `PageScrollOrientation` (`Avalonia.Layout.Orientation`).
+     - Khi chọn Mode 3 (`Right S`) hoặc Mode 4 (`Left S`): kích hoạt `IsScrollMode = true`, `IsHorizontalScrollMode = true`. Mode 3 cuộn ngang từ Trái sang Phải (LTR), Mode 4 cuộn ngang từ Phải sang Trái (RTL).
+     - Trong XAML: `VirtualizingStackPanel` của `ListBox` nhận ràng buộc `Orientation="{Binding PageScrollOrientation}"` kết hợp style selector `ListBox.horizontalMode`. Căn giữa theo trục dọc (`VerticalContentAlignment="Center"`).
+     - Trong code-behind:
+       + `OnReaderScrollChanged`: Nhận diện chỉ số trang đang hiển thị theo trục hoành X (`viewportCenterX = listBox.Bounds.Width * 0.5`).
+       + `OnVmAutoScrollStepRequested`: Tự động cuộn ngang rảnh tay theo trục hoành X (`Offset.X`).
+       + `OnViewportPointerWheelChanged`: Chuyển đổi lăn chuột dọc thành cuộn ngang mượt mà trên Desktop.
+       + Bắt phím điều hướng `Left` / `Right` / `A` / `D` chuyển trang mượt mà trong chế độ cuộn ngang.
+  3. **Tối Ưu Hóa Responsive Tab Thư Viện Trên Android (`LibraryViewModel.cs`, `LibraryView.axaml`, `LibraryView.axaml.cs`)**:
+     - Bổ sung phát hiện layout thích ứng `IsMobileLayout` (khi `OperatingSystem.IsAndroid()` hoặc bề rộng cửa sổ `< 780px`) vs. `IsDesktopLayout`.
+     - *Thanh công cụ 2 tầng (2-Tier Header Toolbar)*: Tầng trên gồm tiêu đề và WrapPanel chứa 3 nút bấm (`Chọn Thư Mục`, `Quét Thư Viện`, `Mở CBZ/ZIP/PDF`); tầng dưới dành trọn 100% bề rộng cho `TextBox` đường dẫn thư viện, triệt tiêu 100% hiện tượng tràn viền nút trên màn hình điện thoại hẹp.
+     - *Bộ lọc trạng thái*: Phân tách các nút lọc thành các chip độc lập trong WrapPanel, tự động xuống dòng linh hoạt.
+     - *Master-Detail Responsive*:
+       + Trên Desktop: Giữ nguyên bố cục 2 cột song song (Trái: Danh sách truyện, Phải: Chi tiết & danh sách chương).
+       + Trên Mobile / Android: Chuyển đổi thành bố cục Master-Detail toàn màn hình với thanh Tab Switcher 2 nút nổi (`📚 BỘ TRUYỆN` và `📑 CHƯƠNG & TIẾN ĐỘ`). Chạm vào truyện bất kỳ sẽ tự động chuyển sang xem danh sách chương toàn màn hình, kèm nút `⬅ Danh sách` quay lại nhanh chóng.
+- **Nghiệm Thu**:
+  - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
+  - Toàn bộ artifact đầu ra xuất đúng thư mục duy nhất `\publish\`.
+  - Local commit hash: `5516bca`.
