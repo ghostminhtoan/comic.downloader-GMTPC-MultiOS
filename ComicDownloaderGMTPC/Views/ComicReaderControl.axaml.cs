@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.ViewModels;
@@ -20,6 +21,22 @@ public partial class ComicReaderControl : UserControl
     private bool _isUserDraggingScrubber;
     private int _scrollRequestVersion;
     private long _lastUserScrollInputTick;
+
+    // Trạng thái Hold & Drag để Scroll (Pan-Drag Engine mượt mà mọi vùng)
+    private Point _panStartPoint;
+    private Point _panLastPoint;
+    private long _panStartTick;
+    private long _lastPanMoveTick;
+    private bool _isPanHolding;
+    private bool _isPanDragging;
+    private double _panVelocityX;
+    private double _panVelocityY;
+    private double _kineticVelocityX;
+    private double _kineticVelocityY;
+    private readonly DispatcherTimer _kineticTimer;
+
+    private ScrollViewer? _cachedReaderScrollViewer;
+    private ScrollViewer? _cachedFlipScrollViewer;
 
     // Trạng thái vuốt ngang (Swipe) trên thanh công cụ Button 1-5 ↔ Button 6-10
     private Point _toolbarSwipeStartPoint;
@@ -40,17 +57,25 @@ public partial class ComicReaderControl : UserControl
     {
         InitializeComponent();
 
+        _kineticTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+        _kineticTimer.Tick += OnKineticTimerTick;
+
         DataContextChanged += OnReaderDataContextChanged;
 
         // Lắng nghe sự kiện cuộn trên ListBox để cập nhật trang đang đọc và lưu tiến độ
         AddHandler(ScrollViewer.ScrollChangedEvent, OnReaderScrollChanged, RoutingStrategies.Bubble);
 
-        // Lắng nghe chạm / click trên vùng đọc truyện để bật/tắt Overlay kiểu ComicScreen hoặc lật trang
+        // Lắng nghe chạm / click / kéo trên vùng đọc truyện để Hold & Drag Scroll hoặc bật/tắt Overlay kiểu ComicScreen
         var viewport = this.FindControl<Panel>("ReaderViewportPanel");
         if (viewport != null)
         {
             viewport.AddHandler(PointerPressedEvent, OnViewportPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+            viewport.AddHandler(PointerMovedEvent, OnViewportPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
             viewport.AddHandler(PointerReleasedEvent, OnViewportPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+            viewport.AddHandler(PointerCaptureLostEvent, OnViewportPointerCaptureLost, RoutingStrategies.Tunnel, handledEventsToo: true);
             viewport.AddHandler(PointerWheelChangedEvent, OnViewportPointerWheelChanged, RoutingStrategies.Tunnel, handledEventsToo: true);
         }
 
@@ -95,6 +120,105 @@ public partial class ComicReaderControl : UserControl
             {
                 vm.UpdateViewportDimensions(b.Width, b.Height);
             }
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        StopKineticScroll();
+    }
+
+    private ScrollViewer? GetReaderScrollViewer()
+    {
+        if (_cachedReaderScrollViewer != null)
+            return _cachedReaderScrollViewer;
+        var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
+        _cachedReaderScrollViewer = listBox?.FindDescendantOfType<ScrollViewer>();
+        return _cachedReaderScrollViewer;
+    }
+
+    private ScrollViewer? GetFlipScrollViewer()
+    {
+        if (_cachedFlipScrollViewer != null)
+            return _cachedFlipScrollViewer;
+        _cachedFlipScrollViewer = this.FindControl<ScrollViewer>("FlipModeScrollViewer");
+        return _cachedFlipScrollViewer;
+    }
+
+    private void StopKineticScroll()
+    {
+        _kineticTimer.Stop();
+        _kineticVelocityX = 0;
+        _kineticVelocityY = 0;
+    }
+
+    private void OnKineticTimerTick(object? sender, EventArgs e)
+    {
+        if (DataContext is not ComicReaderViewModel vm)
+        {
+            StopKineticScroll();
+            return;
+        }
+
+        // Ma sát hãm đà quán tính mượt mà
+        _kineticVelocityX *= 0.915;
+        _kineticVelocityY *= 0.915;
+
+        if (Math.Abs(_kineticVelocityX) < 0.025 && Math.Abs(_kineticVelocityY) < 0.025)
+        {
+            StopKineticScroll();
+            return;
+        }
+
+        double stepX = _kineticVelocityX * 16.0;
+        double stepY = _kineticVelocityY * 16.0;
+
+        if (vm.IsScrollMode)
+        {
+            var scrollViewer = GetReaderScrollViewer();
+            if (scrollViewer != null)
+            {
+                double newX = scrollViewer.Offset.X - stepX;
+                double newY = scrollViewer.Offset.Y - stepY;
+
+                double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+                double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+
+                if (newX <= 0 || newX >= maxX) _kineticVelocityX = 0;
+                if (newY <= 0 || newY >= maxY) _kineticVelocityY = 0;
+
+                scrollViewer.Offset = new Vector(Math.Clamp(newX, 0, maxX), Math.Clamp(newY, 0, maxY));
+            }
+            else
+            {
+                StopKineticScroll();
+            }
+        }
+        else if (vm.IsFlipMode && vm.ZoomLevel > 1.02)
+        {
+            var flipScrollViewer = GetFlipScrollViewer();
+            if (flipScrollViewer != null)
+            {
+                double newX = flipScrollViewer.Offset.X - stepX;
+                double newY = flipScrollViewer.Offset.Y - stepY;
+
+                double maxX = Math.Max(0, flipScrollViewer.Extent.Width - flipScrollViewer.Viewport.Width);
+                double maxY = Math.Max(0, flipScrollViewer.Extent.Height - flipScrollViewer.Viewport.Height);
+
+                if (newX <= 0 || newX >= maxX) _kineticVelocityX = 0;
+                if (newY <= 0 || newY >= maxY) _kineticVelocityY = 0;
+
+                flipScrollViewer.Offset = new Vector(Math.Clamp(newX, 0, maxX), Math.Clamp(newY, 0, maxY));
+            }
+            else
+            {
+                StopKineticScroll();
+            }
+        }
+        else
+        {
+            StopKineticScroll();
         }
     }
 
@@ -209,6 +333,7 @@ public partial class ComicReaderControl : UserControl
 
     private void OnScrubberPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        StopKineticScroll();
         _isUserDraggingScrubber = true;
         if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
         {
@@ -278,9 +403,8 @@ public partial class ComicReaderControl : UserControl
 
     private void OnVmAutoScrollStepRequested(double delta)
     {
-        var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
-        if (listBox == null) return;
-        var scrollViewer = listBox.FindDescendantOfType<ScrollViewer>();
+        StopKineticScroll();
+        var scrollViewer = GetReaderScrollViewer();
         if (scrollViewer != null)
         {
             if (DataContext is ComicReaderViewModel vm && vm.IsHorizontalScrollMode)
@@ -297,6 +421,7 @@ public partial class ComicReaderControl : UserControl
 
     private void OnVmScrollToPageRequested(int pageIndex)
     {
+        StopKineticScroll();
         if (DataContext is not ComicReaderViewModel vm) return;
         if (pageIndex < 0 || pageIndex >= vm.Pages.Count) return;
 
@@ -440,31 +565,180 @@ public partial class ComicReaderControl : UserControl
 
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        StopKineticScroll();
+
         if (IsScrollBarOrInteractiveControl(e.Source as Visual))
         {
             _lastUserScrollInputTick = Environment.TickCount64;
             _isPointerTapCandidate = false;
+            _isPanHolding = false;
+            _isPanDragging = false;
             return;
         }
 
         var props = e.GetCurrentPoint(this).Properties;
-        if (!props.IsLeftButtonPressed && e.Pointer.Type != PointerType.Touch)
+        if (!props.IsLeftButtonPressed && e.Pointer.Type != PointerType.Touch && e.Pointer.Type != PointerType.Pen)
+        {
+            _isPointerTapCandidate = false;
+            _isPanHolding = false;
+            _isPanDragging = false;
+            return;
+        }
+
+        Point pos = e.GetPosition(this);
+        long now = Environment.TickCount64;
+
+        _pointerPressPoint = pos;
+        _pointerPressTick = now;
+        _isPointerTapCandidate = true;
+
+        _panStartPoint = pos;
+        _panLastPoint = pos;
+        _panStartTick = now;
+        _lastPanMoveTick = now;
+        _isPanHolding = true;
+        _isPanDragging = false;
+        _panVelocityX = 0;
+        _panVelocityY = 0;
+    }
+
+    private void OnViewportPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_isPanHolding) return;
+        if (DataContext is not ComicReaderViewModel vm) return;
+        if (vm.IsMarginEditorOpen) return;
+
+        Point currentPoint = e.GetPosition(this);
+        double totalDx = currentPoint.X - _panStartPoint.X;
+        double totalDy = currentPoint.Y - _panStartPoint.Y;
+        double totalDist = Math.Sqrt(totalDx * totalDx + totalDy * totalDy);
+
+        bool isZoomedFlip = vm.IsFlipMode && vm.ZoomLevel > 1.02;
+        bool canPanScroll = vm.IsScrollMode || isZoomedFlip;
+
+        if (!canPanScroll)
+        {
+            // Ở chế độ Flip mode zoom 1.0: không pan ScrollViewer, để cử chỉ Swipe lật trang xử lý khi nhả tay
+            return;
+        }
+
+        // Ngưỡng kéo: 3.5 pixel để đạt độ nhạy tức thì (Zero Lag) và mượt mà tuyệt đối
+        if (!_isPanDragging)
+        {
+            if (totalDist >= 3.5)
+            {
+                _isPanDragging = true;
+                _isPointerTapCandidate = false; // Đã kéo thì tuyệt đối không phải là Tap
+                var viewport = sender as IInputElement ?? this;
+                e.Pointer.Capture(viewport);
+
+                // Tự động ẩn thanh overlay nếu đang hiện khi người dùng bắt đầu cuộn trang
+                if (vm.IsOverlayVisible && !vm.HasActivePopup)
+                {
+                    vm.IsOverlayVisible = false;
+                }
+            }
+            else
+            {
+                return;
+            }
+        }
+
+        double deltaX = currentPoint.X - _panLastPoint.X;
+        double deltaY = currentPoint.Y - _panLastPoint.Y;
+
+        long now = Environment.TickCount64;
+        double dt = Math.Max(1.0, now - _lastPanMoveTick);
+        _lastPanMoveTick = now;
+
+        // Vận tốc tức thời (px/ms)
+        double instantVx = deltaX / dt;
+        double instantVy = deltaY / dt;
+        _panVelocityX = _panVelocityX * 0.35 + instantVx * 0.65;
+        _panVelocityY = _panVelocityY * 0.35 + instantVy * 0.65;
+
+        _panLastPoint = currentPoint;
+        _lastUserScrollInputTick = now;
+
+        if (vm.IsScrollMode)
+        {
+            var scrollViewer = GetReaderScrollViewer();
+            if (scrollViewer != null)
+            {
+                double newX = scrollViewer.Offset.X - deltaX;
+                double newY = scrollViewer.Offset.Y - deltaY;
+
+                double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+                double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+
+                scrollViewer.Offset = new Vector(Math.Clamp(newX, 0, maxX), Math.Clamp(newY, 0, maxY));
+            }
+        }
+        else if (isZoomedFlip)
+        {
+            var flipScrollViewer = GetFlipScrollViewer();
+            if (flipScrollViewer != null)
+            {
+                double newX = flipScrollViewer.Offset.X - deltaX;
+                double newY = flipScrollViewer.Offset.Y - deltaY;
+
+                double maxX = Math.Max(0, flipScrollViewer.Extent.Width - flipScrollViewer.Viewport.Width);
+                double maxY = Math.Max(0, flipScrollViewer.Extent.Height - flipScrollViewer.Viewport.Height);
+
+                flipScrollViewer.Offset = new Vector(Math.Clamp(newX, 0, maxX), Math.Clamp(newY, 0, maxY));
+            }
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        e.Pointer.Capture(null);
+
+        bool wasDragging = _isPanDragging;
+        _isPanHolding = false;
+        _isPanDragging = false;
+
+        if (IsScrollBarOrInteractiveControl(e.Source as Visual))
         {
             _isPointerTapCandidate = false;
             return;
         }
 
-        _pointerPressPoint = e.GetPosition(this);
-        _pointerPressTick = Environment.TickCount64;
-        _isPointerTapCandidate = true;
-    }
+        if (DataContext is not ComicReaderViewModel vm)
+        {
+            _isPointerTapCandidate = false;
+            return;
+        }
 
-    private void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
-    {
+        if (wasDragging)
+        {
+            _isPointerTapCandidate = false;
+            e.Handled = true;
+
+            // Kích hoạt Quán tính cuộn mượt mà (Kinetic Momentum)
+            long releaseNow = Environment.TickCount64;
+            long timeSinceLastMove = releaseNow - _lastPanMoveTick;
+
+            if (timeSinceLastMove <= 90)
+            {
+                const double MaxV = 3.0; // px/ms
+                _panVelocityX = Math.Clamp(_panVelocityX, -MaxV, MaxV);
+                _panVelocityY = Math.Clamp(_panVelocityY, -MaxV, MaxV);
+
+                if (Math.Abs(_panVelocityX) > 0.08 || Math.Abs(_panVelocityY) > 0.08)
+                {
+                    _kineticVelocityX = _panVelocityX;
+                    _kineticVelocityY = _panVelocityY;
+                    _kineticTimer.Start();
+                }
+            }
+            return;
+        }
+
         if (!_isPointerTapCandidate) return;
         _isPointerTapCandidate = false;
-
-        if (IsScrollBarOrInteractiveControl(e.Source as Visual)) return;
 
         Point releasePoint = e.GetPosition(this);
         long elapsedMs = Environment.TickCount64 - _pointerPressTick;
@@ -472,29 +746,27 @@ public partial class ComicReaderControl : UserControl
         double dy = releasePoint.Y - _pointerPressPoint.Y;
         double distance = Math.Sqrt(dx * dx + dy * dy);
 
-        // Nếu ở chế độ लật trang (Flip Mode) và người dùng vuốt ngang (Swipe) trên trang truyện -> Lật trang!
-        if (DataContext is ComicReaderViewModel swipeVm && swipeVm.IsFlipMode && !swipeVm.IsMarginEditorOpen)
+        // Nếu ở chế độ lật trang (Flip Mode) zoom 1.0 và người dùng vuốt ngang (Swipe) trên trang truyện -> Lật trang!
+        if (vm.IsFlipMode && vm.ZoomLevel <= 1.02 && !vm.IsMarginEditorOpen)
         {
-            if (Math.Abs(dx) >= 42.0 && Math.Abs(dx) > Math.Abs(dy) * 1.3 && elapsedMs < 650)
+            if (Math.Abs(dx) >= 36.0 && Math.Abs(dx) > Math.Abs(dy) * 1.25 && elapsedMs < 650)
             {
                 if (dx < 0)
                 {
                     // Vuốt từ phải sang trái
-                    swipeVm.TapRightZone();
+                    vm.TapRightZone();
                 }
                 else
                 {
                     // Vuốt từ trái sang phải
-                    swipeVm.TapLeftZone();
+                    vm.TapLeftZone();
                 }
                 return;
             }
         }
 
         // Chỉ tính là Tap khi người dùng chạm nhanh và không kéo cuộn trang
-        if (distance > 14.0 || elapsedMs > 450) return;
-
-        if (DataContext is not ComicReaderViewModel vm) return;
+        if (distance > 12.0 || elapsedMs > 500) return;
 
         long tapNow = Environment.TickCount64;
         double tapDx = releasePoint.X - _lastTapPoint.X;
@@ -517,7 +789,7 @@ public partial class ComicReaderControl : UserControl
 
         if (vm.IsScrollMode)
         {
-            // Ở chế độ Scroll dọc: chạm vào vùng giữa màn hình để bật/tắt tùy chọn ComicScreen
+            // Ở chế độ Scroll dọc / ngang: chạm vào vùng giữa màn hình để bật/tắt tùy chọn ComicScreen
             if (xRatio >= 0.12 && xRatio <= 0.88)
             {
                 vm.ToggleOverlay();
@@ -541,8 +813,16 @@ public partial class ComicReaderControl : UserControl
         }
     }
 
+    private void OnViewportPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        _isPanHolding = false;
+        _isPanDragging = false;
+        _isPointerTapCandidate = false;
+    }
+
     private void OnViewportPointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
+        StopKineticScroll();
         if (DataContext is not ComicReaderViewModel vm) return;
 
         _lastUserScrollInputTick = Environment.TickCount64;
@@ -559,8 +839,7 @@ public partial class ComicReaderControl : UserControl
         // Chế độ Cuộn ngang liên tiếp: lăn chuột dọc chuyển thành cuộn ngang mượt mà
         if (vm.IsScrollMode && vm.IsHorizontalScrollMode && vm.ZoomLevel <= 1.05)
         {
-            var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
-            var scrollViewer = listBox?.FindDescendantOfType<ScrollViewer>();
+            var scrollViewer = GetReaderScrollViewer();
             if (scrollViewer != null)
             {
                 double step = (e.Delta.Y != 0 ? -e.Delta.Y : e.Delta.X) * 140.0;

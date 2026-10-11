@@ -52,6 +52,7 @@
                      Background="{Binding ReaderBackgroundColor}"
                      BorderThickness="0"
                      Padding="0"
+                     Focusable="False"
                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
                      ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemsPanel>
@@ -67,6 +68,7 @@
                         <Setter Property="Padding" Value="0" />
                         <Setter Property="Margin" Value="0" />
                         <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="Focusable" Value="False" />
                         <Setter Property="HorizontalContentAlignment" Value="Center" />
                         <Setter Property="VerticalContentAlignment" Value="Center" />
                     </Style>
@@ -85,6 +87,7 @@
                                Height="{Binding DisplayHeight}"
                                Margin="{Binding PageMargin}"
                                MinHeight="240"
+                               Background="Transparent"
                                ClipToBounds="True"
                                AttachedToVisualTree="OnPageContainerAttached">
                             <!-- Khung chờ khi trang đang giải mã -->
