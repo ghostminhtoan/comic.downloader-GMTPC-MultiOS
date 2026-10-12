@@ -945,4 +945,100 @@ public sealed class LibraryScannerService
 
         return null;
     }
+
+    public Bitmap? DecodeCoverThumbnailForPath(string path, int targetWidth = 220)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+
+            if (File.Exists(path))
+            {
+                if (IsPdfFile(path))
+                {
+                    return PdfComicParser.Instance.DecodeCoverThumbnail(path, targetWidth);
+                }
+
+                if (IsArchiveFile(path))
+                {
+                    using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    using var zip = new ZipArchive(fs, ZipArchiveMode.Read);
+                    var imgEntry = zip.Entries
+                        .Where(e => IsImageFile(e.FullName) && !e.FullName.StartsWith("__MACOSX", StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(e => e.FullName, NaturalSortComparer.Instance)
+                        .FirstOrDefault();
+
+                    if (imgEntry != null)
+                    {
+                        using var es = imgEntry.Open();
+                        using var ms = new MemoryStream();
+                        es.CopyTo(ms);
+                        byte[] raw = ms.ToArray();
+                        try
+                        {
+                            using var imgStream = new MemoryStream(raw);
+                            return Bitmap.DecodeToWidth(imgStream, targetWidth);
+                        }
+                        catch
+                        {
+                            var (jpeg, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(raw, 85);
+                            if (jpeg.Length > 0)
+                            {
+                                using var ms2 = new MemoryStream(jpeg);
+                                return Bitmap.DecodeToWidth(ms2, targetWidth);
+                            }
+                        }
+                    }
+                }
+
+                if (IsImageFile(path))
+                {
+                    byte[] raw = File.ReadAllBytes(path);
+                    try
+                    {
+                        using var imgStream = new MemoryStream(raw);
+                        return Bitmap.DecodeToWidth(imgStream, targetWidth);
+                    }
+                    catch
+                    {
+                        var (jpeg, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(raw, 85);
+                        if (jpeg.Length > 0)
+                        {
+                            using var ms2 = new MemoryStream(jpeg);
+                            return Bitmap.DecodeToWidth(ms2, targetWidth);
+                        }
+                    }
+                }
+            }
+            else if (Directory.Exists(path))
+            {
+                var firstImg = Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories)
+                    .Where(IsImageFile)
+                    .OrderBy(f => f, NaturalSortComparer.Instance)
+                    .FirstOrDefault();
+
+                if (!string.IsNullOrEmpty(firstImg) && File.Exists(firstImg))
+                {
+                    byte[] raw = File.ReadAllBytes(firstImg);
+                    try
+                    {
+                        using var imgStream = new MemoryStream(raw);
+                        return Bitmap.DecodeToWidth(imgStream, targetWidth);
+                    }
+                    catch
+                    {
+                        var (jpeg, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(raw, 85);
+                        if (jpeg.Length > 0)
+                        {
+                            using var ms2 = new MemoryStream(jpeg);
+                            return Bitmap.DecodeToWidth(ms2, targetWidth);
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return null;
+    }
 }

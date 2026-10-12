@@ -2019,6 +2019,18 @@ public partial class ComicReaderViewModel : ViewModelBase
 
             TotalPages = Pages.Count;
             chapter.TotalPages = TotalPages;
+            if (TotalPages > 0)
+            {
+                _progressStore.SaveChapterTotalPages(chapter.EffectiveProgressKey, TotalPages);
+                if (!string.IsNullOrWhiteSpace(chapter.LocalPath))
+                {
+                    _progressStore.SaveChapterTotalPages(chapter.LocalPath, TotalPages);
+                }
+                if (ParentComic != null && !string.IsNullOrWhiteSpace(ParentComic.RootFolderPath) && ParentComic.TotalChapters <= 1)
+                {
+                    _progressStore.SaveChapterTotalPages(ParentComic.RootFolderPath, TotalPages);
+                }
+            }
 
             int savedPageIndex = _isNavigatingToPreviousChapter
                 ? Math.Max(0, TotalPages - 1)

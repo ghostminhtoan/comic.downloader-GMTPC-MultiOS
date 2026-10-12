@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -21,6 +22,64 @@ public partial class LibraryViewModel : ViewModelBase
 {
     private readonly LibraryScannerService _scanner = LibraryScannerService.Instance;
     private CancellationTokenSource? _scanCts;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsStorageTabActive))]
+    [NotifyPropertyChangedFor(nameof(IsDirectoryTabActive))]
+    [NotifyPropertyChangedFor(nameof(IsHistoryTabActive))]
+    [NotifyPropertyChangedFor(nameof(IsBookmarkTabActive))]
+    [NotifyPropertyChangedFor(nameof(StorageTabForeground))]
+    [NotifyPropertyChangedFor(nameof(DirectoryTabForeground))]
+    [NotifyPropertyChangedFor(nameof(HistoryTabForeground))]
+    [NotifyPropertyChangedFor(nameof(BookmarkTabForeground))]
+    [NotifyPropertyChangedFor(nameof(StorageTabLineBackground))]
+    [NotifyPropertyChangedFor(nameof(DirectoryTabLineBackground))]
+    [NotifyPropertyChangedFor(nameof(HistoryTabLineBackground))]
+    [NotifyPropertyChangedFor(nameof(BookmarkTabLineBackground))]
+    [NotifyPropertyChangedFor(nameof(StorageTabFontWeight))]
+    [NotifyPropertyChangedFor(nameof(DirectoryTabFontWeight))]
+    [NotifyPropertyChangedFor(nameof(HistoryTabFontWeight))]
+    [NotifyPropertyChangedFor(nameof(BookmarkTabFontWeight))]
+    private string _activeSubTab = "Storage"; // Storage, Directory, History, Bookmark
+
+    public bool IsStorageTabActive => ActiveSubTab == "Storage";
+    public bool IsDirectoryTabActive => ActiveSubTab == "Directory";
+    public bool IsHistoryTabActive => ActiveSubTab == "History";
+    public bool IsBookmarkTabActive => ActiveSubTab == "Bookmark";
+
+    public string StorageTabForeground => IsStorageTabActive ? "#38BDF8" : "#94A3B8";
+    public string DirectoryTabForeground => IsDirectoryTabActive ? "#38BDF8" : "#94A3B8";
+    public string HistoryTabForeground => IsHistoryTabActive ? "#38BDF8" : "#94A3B8";
+    public string BookmarkTabForeground => IsBookmarkTabActive ? "#38BDF8" : "#94A3B8";
+
+    public string StorageTabLineBackground => IsStorageTabActive ? "#38BDF8" : "Transparent";
+    public string DirectoryTabLineBackground => IsDirectoryTabActive ? "#38BDF8" : "Transparent";
+    public string HistoryTabLineBackground => IsHistoryTabActive ? "#38BDF8" : "Transparent";
+    public string BookmarkTabLineBackground => IsBookmarkTabActive ? "#38BDF8" : "Transparent";
+
+    public FontWeight StorageTabFontWeight => IsStorageTabActive ? FontWeight.Bold : FontWeight.Normal;
+    public FontWeight DirectoryTabFontWeight => IsDirectoryTabActive ? FontWeight.Bold : FontWeight.Normal;
+    public FontWeight HistoryTabFontWeight => IsHistoryTabActive ? FontWeight.Bold : FontWeight.Normal;
+    public FontWeight BookmarkTabFontWeight => IsBookmarkTabActive ? FontWeight.Bold : FontWeight.Normal;
+
+    public ObservableCollection<StorageItemModel> StorageItems { get; } = new();
+    public ObservableCollection<DirectoryItemModel> DirectoryItems { get; } = new();
+    public ObservableCollection<HistoryItemModel> HistoryItems { get; } = new();
+    public ObservableCollection<BookmarkGroupModel> BookmarkGroups { get; } = new();
+
+    [ObservableProperty]
+    private string _currentDirectoryPath = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DirectoryViewModeIcon))]
+    [NotifyPropertyChangedFor(nameof(DirectoryViewModeText))]
+    private bool _isDirectoryGridView;
+
+    public string DirectoryViewModeIcon => IsDirectoryGridView ? "📋" : "⊞";
+    public string DirectoryViewModeText => IsDirectoryGridView ? "Danh sách" : "Lưới ô";
+
+    [ObservableProperty]
+    private string _directorySortMode = "NameAsc"; // NameAsc, NameDesc, DateDesc, SizeDesc
 
     [ObservableProperty]
     private string _libraryRootPath = string.Empty;
@@ -151,6 +210,11 @@ public partial class LibraryViewModel : ViewModelBase
     {
         LibraryRootPath = ReadProgressStore.Instance.GetLastLibraryRootPath()
                           ?? DownloadEngineService.Instance.DownloadRoot;
+        CurrentDirectoryPath = LibraryRootPath;
+        LoadStorageItems();
+        LoadDirectory(CurrentDirectoryPath);
+        _ = LoadHistoryItemsAsync();
+        LoadBookmarkGroups();
     }
 
     partial void OnSearchQueryChanged(string value)
@@ -541,6 +605,697 @@ public partial class LibraryViewModel : ViewModelBase
             InlineReaderVm = readerVm;
             IsInlineReaderVisible = true;
             await readerVm.InitializeAsync(comic, chapter);
+        }
+    }
+
+    [RelayCommand]
+    public void SelectSubTab(string? tab)
+    {
+        if (string.IsNullOrWhiteSpace(tab)) return;
+        ActiveSubTab = tab;
+        if (tab == "Storage")
+        {
+            LoadStorageItems();
+        }
+        else if (tab == "Directory")
+        {
+            if (DirectoryItems.Count == 0 || string.IsNullOrWhiteSpace(CurrentDirectoryPath))
+            {
+                LoadDirectory(CurrentDirectoryPath);
+            }
+        }
+        else if (tab == "History")
+        {
+            _ = LoadHistoryItemsAsync();
+        }
+        else if (tab == "Bookmark")
+        {
+            LoadBookmarkGroups();
+        }
+    }
+
+    public static string FormatBytes(long bytes)
+    {
+        if (bytes <= 0) return string.Empty;
+        if (bytes >= 1024L * 1024L * 1024L)
+            return $"{bytes / (1024.0 * 1024.0 * 1024.0):F1} GB";
+        if (bytes >= 1024L * 1024L)
+            return $"{bytes / (1024.0 * 1024.0):F0} MB";
+        if (bytes >= 1024L)
+            return $"{bytes / 1024.0:F0} kB";
+        return $"{bytes} B";
+    }
+
+    public void LoadStorageItems()
+    {
+        try
+        {
+            StorageItems.Clear();
+
+            // 1. Recent
+            var recentPath = ReadProgressStore.Instance.GetKnownReadComicPaths().FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(recentPath) && (File.Exists(recentPath) || Directory.Exists(recentPath)))
+            {
+                StorageItems.Add(new StorageItemModel
+                {
+                    Type = StorageItemType.Recent,
+                    Title = "Recent",
+                    Path = recentPath,
+                    IconText = "🕒",
+                    IconColor = "#38BDF8"
+                });
+            }
+            else
+            {
+                StorageItems.Add(new StorageItemModel
+                {
+                    Type = StorageItemType.Recent,
+                    Title = "Recent",
+                    Path = "(Chưa có lịch sử đọc gần đây)",
+                    IconText = "🕒",
+                    IconColor = "#64748B"
+                });
+            }
+
+            // 2. Device
+            string devicePath = OperatingSystem.IsAndroid()
+                ? "/storage/emulated/0"
+                : (DownloadEngineService.Instance.DownloadRoot ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+            StorageItems.Add(new StorageItemModel
+            {
+                Type = StorageItemType.Device,
+                Title = "Device",
+                Path = devicePath,
+                IconText = "📱",
+                IconColor = "#94A3B8"
+            });
+
+            // 3. Thẻ SD / Ổ đĩa
+            if (OperatingSystem.IsAndroid())
+            {
+                try
+                {
+                    if (Directory.Exists("/storage"))
+                    {
+                        foreach (var d in Directory.GetDirectories("/storage"))
+                        {
+                            string name = Path.GetFileName(d);
+                            if (!string.Equals(name, "emulated", StringComparison.OrdinalIgnoreCase) &&
+                                !string.Equals(name, "self", StringComparison.OrdinalIgnoreCase))
+                            {
+                                StorageItems.Add(new StorageItemModel
+                                {
+                                    Type = StorageItemType.SDCard,
+                                    Title = "Thẻ SD",
+                                    Path = d,
+                                    IconText = "💾",
+                                    IconColor = "#38BDF8"
+                                });
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+            else
+            {
+                try
+                {
+                    foreach (var d in DriveInfo.GetDrives())
+                    {
+                        if (d.IsReady)
+                        {
+                            string driveName = d.Name.TrimEnd('\\', '/');
+                            StorageItems.Add(new StorageItemModel
+                            {
+                                Type = StorageItemType.SDCard,
+                                Title = $"Ổ đĩa {driveName}",
+                                Path = d.RootDirectory.FullName,
+                                IconText = "💾",
+                                IconColor = "#38BDF8"
+                            });
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // 4. Pinned Folders
+            var pinned = ReadProgressStore.Instance.GetPinnedFolders();
+            foreach (var p in pinned)
+            {
+                string name = Path.GetFileName(p.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (string.IsNullOrWhiteSpace(name)) name = p;
+
+                StorageItems.Add(new StorageItemModel
+                {
+                    Type = StorageItemType.PinnedFolder,
+                    Title = name,
+                    Path = p,
+                    IconText = "📁",
+                    IconColor = "#A78BFA"
+                });
+            }
+        }
+        catch { }
+    }
+
+    [RelayCommand]
+    public async Task SelectStorageItemAsync(StorageItemModel? item)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(item.Path)) return;
+
+        if (item.Type == StorageItemType.Recent && File.Exists(item.Path))
+        {
+            await OpenPathToReadAsync(item.Path);
+            return;
+        }
+
+        string targetDir = item.Path;
+        if (File.Exists(targetDir))
+        {
+            targetDir = Path.GetDirectoryName(targetDir) ?? targetDir;
+        }
+
+        if (Directory.Exists(targetDir))
+        {
+            CurrentDirectoryPath = targetDir;
+            LoadDirectory(targetDir);
+            SelectSubTab("Directory");
+        }
+        else
+        {
+            StatusMessage = $"⚠️ Đường dẫn không tồn tại: {item.Path}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task AddStorageFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider == null) return;
+
+            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "Chọn Thư Mục Để Ghim Vào Storage",
+                AllowMultiple = false
+            });
+
+            if (folders != null && folders.Count > 0)
+            {
+                var selected = folders[0];
+                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                if (!string.IsNullOrWhiteSpace(normalized) && Directory.Exists(normalized))
+                {
+                    ReadProgressStore.Instance.AddPinnedFolder(normalized);
+                    LoadStorageItems();
+                    StatusMessage = $"📌 Đã ghim thư mục: {normalized}";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi ghim thư mục: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public void RemovePinnedFolder(StorageItemModel? item)
+    {
+        if (item == null) return;
+        ReadProgressStore.Instance.RemovePinnedFolder(item.Path);
+        StorageItems.Remove(item);
+        StatusMessage = $"🗑️ Đã bỏ ghim thư mục: {item.Title}";
+    }
+
+    public void LoadDirectory(string? path)
+    {
+        try
+        {
+            string dir = path ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+            {
+                dir = LibraryRootPath;
+                if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+                {
+                    dir = DownloadEngineService.Instance.DownloadRoot;
+                }
+            }
+
+            if (!Directory.Exists(dir)) return;
+
+            CurrentDirectoryPath = dir;
+            ReadProgressStore.Instance.SaveLastLibraryRootPath(dir);
+
+            var list = new List<DirectoryItemModel>();
+
+            // 1. Thư mục con
+            try
+            {
+                foreach (var d in Directory.GetDirectories(dir))
+                {
+                    string name = Path.GetFileName(d);
+                    if (name.StartsWith(".") || name.StartsWith("$")) continue;
+
+                    var di = new DirectoryInfo(d);
+                    bool hasDirectImages = false;
+                    try
+                    {
+                        hasDirectImages = di.EnumerateFiles().Any(f => LibraryScannerService.IsImageFile(f.FullName));
+                    }
+                    catch { }
+
+                    int count = 0;
+                    try
+                    {
+                        count = Directory.EnumerateFileSystemEntries(d).Take(100).Count();
+                    }
+                    catch { }
+
+                    list.Add(new DirectoryItemModel
+                    {
+                        IsFolder = true,
+                        Name = name,
+                        FullPath = d,
+                        ItemCountOrSize = hasDirectImages ? "Chương ảnh" : $"{count} mục",
+                        IconText = hasDirectImages ? "🖼️" : "📁",
+                        IconColor = hasDirectImages ? "#10B981" : "#A78BFA",
+                        LastModified = di.LastWriteTime
+                    });
+                }
+            }
+            catch { }
+
+            // 2. File truyện (.cbz, .zip, .pdf, .cbr, .rar)
+            try
+            {
+                foreach (var f in Directory.GetFiles(dir))
+                {
+                    string ext = Path.GetExtension(f);
+                    if (string.IsNullOrEmpty(ext)) continue;
+
+                    bool isArchive = LibraryScannerService.IsArchiveFile(f);
+                    bool isPdf = LibraryScannerService.IsPdfFile(f);
+                    if (!isArchive && !isPdf) continue;
+
+                    var fi = new FileInfo(f);
+                    list.Add(new DirectoryItemModel
+                    {
+                        IsFolder = false,
+                        Name = fi.Name,
+                        FullPath = f,
+                        ItemCountOrSize = FormatBytes(fi.Length),
+                        IconText = isPdf ? "📄" : "📦",
+                        IconColor = "#38BDF8",
+                        Extension = ext,
+                        LastModified = fi.LastWriteTime,
+                        FileSizeBytes = fi.Length
+                    });
+                }
+            }
+            catch { }
+
+            SortDirectoryInternal(list, DirectorySortMode);
+
+            DirectoryItems.Clear();
+            foreach (var item in list)
+            {
+                DirectoryItems.Add(item);
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Không thể mở thư mục: {ex.Message}";
+        }
+    }
+
+    private static void SortDirectoryInternal(List<DirectoryItemModel> list, string mode)
+    {
+        switch (mode)
+        {
+            case "NameDesc":
+                list.Sort((a, b) =>
+                {
+                    if (a.IsFolder != b.IsFolder) return a.IsFolder ? -1 : 1;
+                    return NaturalSortComparer.Instance.Compare(b.Name, a.Name);
+                });
+                break;
+            case "DateDesc":
+                list.Sort((a, b) =>
+                {
+                    if (a.IsFolder != b.IsFolder) return a.IsFolder ? -1 : 1;
+                    return b.LastModified.CompareTo(a.LastModified);
+                });
+                break;
+            case "SizeDesc":
+                list.Sort((a, b) =>
+                {
+                    if (a.IsFolder != b.IsFolder) return a.IsFolder ? -1 : 1;
+                    return b.FileSizeBytes.CompareTo(a.FileSizeBytes);
+                });
+                break;
+            default: // NameAsc
+                list.Sort((a, b) =>
+                {
+                    if (a.IsFolder != b.IsFolder) return a.IsFolder ? -1 : 1;
+                    return NaturalSortComparer.Instance.Compare(a.Name, b.Name);
+                });
+                break;
+        }
+    }
+
+    [RelayCommand]
+    public void NavigateUpDirectory()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentDirectoryPath)) return;
+        try
+        {
+            string? parent = Path.GetDirectoryName(CurrentDirectoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent))
+            {
+                CurrentDirectoryPath = parent;
+                LoadDirectory(parent);
+            }
+            else
+            {
+                SelectSubTab("Storage");
+            }
+        }
+        catch { }
+    }
+
+    [RelayCommand]
+    public async Task SelectDirectoryItemAsync(DirectoryItemModel? item)
+    {
+        if (item == null) return;
+        if (item.IsFolder)
+        {
+            CurrentDirectoryPath = item.FullPath;
+            LoadDirectory(item.FullPath);
+        }
+        else
+        {
+            await OpenPathToReadAsync(item.FullPath);
+        }
+    }
+
+    [RelayCommand]
+    public void PinCurrentDirectoryToStorage()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentDirectoryPath) || !Directory.Exists(CurrentDirectoryPath)) return;
+        ReadProgressStore.Instance.AddPinnedFolder(CurrentDirectoryPath);
+        LoadStorageItems();
+        StatusMessage = $"📌 Đã ghim thư mục hiện tại vào Storage: {CurrentDirectoryPath}";
+    }
+
+    [RelayCommand]
+    public void SetCurrentDirectoryAsLibraryRoot()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentDirectoryPath) || !Directory.Exists(CurrentDirectoryPath)) return;
+        LibraryRootPath = CurrentDirectoryPath;
+        ReadProgressStore.Instance.SaveLastLibraryRootPath(CurrentDirectoryPath);
+        StatusMessage = $"📁 Đã đặt thư mục Thư viện mặc định: {CurrentDirectoryPath}";
+    }
+
+    [RelayCommand]
+    public void ToggleDirectoryViewMode()
+    {
+        IsDirectoryGridView = !IsDirectoryGridView;
+    }
+
+    [RelayCommand]
+    public void SortDirectory(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode)) return;
+        DirectorySortMode = mode;
+        var currentList = DirectoryItems.ToList();
+        SortDirectoryInternal(currentList, DirectorySortMode);
+        DirectoryItems.Clear();
+        foreach (var item in currentList)
+        {
+            DirectoryItems.Add(item);
+        }
+    }
+
+    [RelayCommand]
+    public void RefreshCurrentDirectory()
+    {
+        LoadDirectory(CurrentDirectoryPath);
+        StatusMessage = $"🔄 Đã làm mới thư mục: {CurrentDirectoryPath}";
+    }
+
+    public async Task LoadHistoryItemsAsync()
+    {
+        try
+        {
+            var knownPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();
+            var items = new List<HistoryItemModel>();
+
+            foreach (var path in knownPaths)
+            {
+                if (!File.Exists(path) && !Directory.Exists(path)) continue;
+
+                string title = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                string sizeText = string.Empty;
+                string dateText = string.Empty;
+
+                try
+                {
+                    if (File.Exists(path))
+                    {
+                        var fi = new FileInfo(path);
+                        sizeText = FormatBytes(fi.Length);
+                        dateText = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+                    }
+                    else if (Directory.Exists(path))
+                    {
+                        var di = new DirectoryInfo(path);
+                        dateText = di.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+                    }
+                }
+                catch { }
+
+                int lastPage = ReadProgressStore.Instance.GetLastReadPage(path);
+                int totalPages = ReadProgressStore.Instance.GetChapterTotalPages(path);
+                int percent = totalPages > 0 ? Math.Clamp((int)Math.Round((double)lastPage / totalPages * 100), 0, 100) : 0;
+                string progressText = totalPages > 0 ? $"{lastPage}/{totalPages}    {percent}%" : (lastPage > 0 ? $"Trang {lastPage}" : "0%");
+
+                int lastActiveChap = ReadProgressStore.Instance.GetLastActiveChapterIndex(path);
+                string subTitle = lastActiveChap > 0 ? $"Chương {lastActiveChap}" : string.Empty;
+
+                items.Add(new HistoryItemModel
+                {
+                    Path = path,
+                    Title = title,
+                    ChapterOrSubTitle = subTitle,
+                    FileSizeText = sizeText,
+                    LastReadDateText = dateText,
+                    CurrentPage = lastPage,
+                    TotalPages = totalPages,
+                    ProgressPercent = percent,
+                    ProgressText = progressText,
+                    ProgressBarColor = percent >= 100 ? "#10B981" : "#E91E63"
+                });
+            }
+
+            HistoryItems.Clear();
+            foreach (var it in items)
+            {
+                HistoryItems.Add(it);
+            }
+
+            // Tải ảnh bìa ngầm trên task nền
+            _ = Task.Run(() =>
+            {
+                foreach (var h in HistoryItems)
+                {
+                    if (h.Cover != null) continue;
+                    try
+                    {
+                        var bmp = _scanner.DecodeCoverThumbnailForPath(h.Path, 200);
+                        if (bmp != null)
+                        {
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() => h.Cover = bmp);
+                        }
+                    }
+                    catch { }
+                }
+            });
+        }
+        catch { }
+    }
+
+    [RelayCommand]
+    public async Task OpenHistoryItemAsync(HistoryItemModel? item)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(item.Path)) return;
+        await OpenPathToReadAsync(item.Path);
+    }
+
+    [RelayCommand]
+    public void OpenHistoryItemFolder(HistoryItemModel? item)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(item.Path)) return;
+        string targetDir = item.Path;
+        if (File.Exists(targetDir))
+        {
+            targetDir = Path.GetDirectoryName(targetDir) ?? targetDir;
+        }
+
+        if (Directory.Exists(targetDir))
+        {
+            CurrentDirectoryPath = targetDir;
+            LoadDirectory(targetDir);
+            SelectSubTab("Directory");
+        }
+    }
+
+    [RelayCommand]
+    public void RemoveHistoryItem(HistoryItemModel? item)
+    {
+        if (item == null) return;
+        ReadProgressStore.Instance.RemoveHistory(item.Path);
+        HistoryItems.Remove(item);
+        LoadStorageItems();
+        StatusMessage = $"🗑️ Đã xóa '{item.Title}' khỏi Lịch sử đọc.";
+    }
+
+    [RelayCommand]
+    public void ClearAllHistory()
+    {
+        ReadProgressStore.Instance.ClearAllHistory();
+        HistoryItems.Clear();
+        LoadStorageItems();
+        StatusMessage = "🗑️ Đã xóa toàn bộ Lịch sử đọc.";
+    }
+
+    public void LoadBookmarkGroups()
+    {
+        try
+        {
+            var rawBookmarks = ReadProgressStore.Instance.GetBookmarks(null);
+            BookmarkGroups.Clear();
+
+            var groups = rawBookmarks
+                .GroupBy(b => !string.IsNullOrWhiteSpace(b.ComicTitle) ? b.ComicTitle : Path.GetFileName(b.ComicRootPath))
+                .OrderBy(g => g.Key, NaturalSortComparer.Instance);
+
+            foreach (var g in groups)
+            {
+                var grpModel = new BookmarkGroupModel
+                {
+                    ComicTitle = g.Key,
+                    ComicRootPath = g.FirstOrDefault()?.ComicRootPath ?? string.Empty
+                };
+
+                foreach (var bm in g.OrderByDescending(b => b.CreatedAtUnixSeconds))
+                {
+                    int dispPage = bm.DisplayPageNumber;
+                    int tot = bm.TotalPages;
+                    string pageText = tot > 0 ? $"{dispPage} / {tot}" : $"{dispPage}";
+                    string pctText = tot > 0 ? $"{(dispPage * 100 / tot)}%" : string.Empty;
+                    string dateStr = DateTimeOffset.FromUnixTimeSeconds(bm.CreatedAtUnixSeconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+
+                    grpModel.Bookmarks.Add(new BookmarkItemDisplayModel
+                    {
+                        Bookmark = bm,
+                        ChapterTitle = !string.IsNullOrWhiteSpace(bm.ChapterTitle) ? bm.ChapterTitle : bm.ComicTitle,
+                        PageProgressText = pageText,
+                        PercentText = pctText,
+                        DateText = dateStr,
+                        Memo = bm.Memo
+                    });
+                }
+
+                BookmarkGroups.Add(grpModel);
+            }
+        }
+        catch { }
+    }
+
+    [RelayCommand]
+    public async Task OpenBookmarkAsync(BookmarkItemDisplayModel? item)
+    {
+        if (item?.Bookmark == null) return;
+        var bm = item.Bookmark;
+
+        string comicPath = bm.ComicRootPath;
+        if (string.IsNullOrWhiteSpace(comicPath) || (!File.Exists(comicPath) && !Directory.Exists(comicPath)))
+        {
+            comicPath = bm.ChapterLocalPath;
+        }
+        if (string.IsNullOrWhiteSpace(comicPath)) return;
+
+        var comic = _scanner.CreateQuickComicFromPath(comicPath);
+        if (comic == null || comic.Chapters.Count == 0) return;
+
+        LibraryChapterItem? targetChapter = null;
+        if (!string.IsNullOrWhiteSpace(bm.ChapterProgressKey))
+        {
+            targetChapter = comic.Chapters.FirstOrDefault(c => string.Equals(c.EffectiveProgressKey, bm.ChapterProgressKey, StringComparison.OrdinalIgnoreCase));
+        }
+        if (targetChapter == null && !string.IsNullOrWhiteSpace(bm.ChapterLocalPath))
+        {
+            targetChapter = comic.Chapters.FirstOrDefault(c => string.Equals(c.LocalPath, bm.ChapterLocalPath, StringComparison.OrdinalIgnoreCase));
+        }
+        if (targetChapter == null && !string.IsNullOrWhiteSpace(bm.ChapterTitle))
+        {
+            targetChapter = comic.Chapters.FirstOrDefault(c => string.Equals(c.Title, bm.ChapterTitle, StringComparison.OrdinalIgnoreCase));
+        }
+        if (targetChapter == null)
+        {
+            int idx = Math.Clamp(bm.ChapterIndex - 1, 0, comic.Chapters.Count - 1);
+            targetChapter = comic.Chapters[idx];
+        }
+
+        ReadProgressStore.Instance.SaveProgress(targetChapter.EffectiveProgressKey, bm.PageIndex);
+        await OpenChapterInternalAsync(comic, targetChapter);
+    }
+
+    [RelayCommand]
+    public void RemoveBookmark(BookmarkItemDisplayModel? item)
+    {
+        if (item?.Bookmark == null) return;
+        ReadProgressStore.Instance.RemoveBookmark(item.Bookmark.Id);
+        LoadBookmarkGroups();
+        StatusMessage = $"🗑️ Đã xóa bookmark trang {item.PageProgressText}.";
+    }
+
+    [RelayCommand]
+    public void ClearAllBookmarks()
+    {
+        ReadProgressStore.Instance.ClearAllBookmarks();
+        BookmarkGroups.Clear();
+        StatusMessage = "🗑️ Đã xóa toàn bộ Bookmark.";
+    }
+
+    [RelayCommand]
+    public async Task OpenPathToReadAsync(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        try
+        {
+            var quickComic = _scanner.CreateQuickComicFromPath(path);
+            if (quickComic != null && quickComic.Chapters.Count > 0)
+            {
+                ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
+                var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
+                await OpenChapterInternalAsync(quickComic, targetChap);
+                _ = LoadHistoryItemsAsync();
+                LoadStorageItems();
+            }
+            else
+            {
+                StatusMessage = $"⚠️ Không tìm thấy ảnh hoặc chương trong: {path}";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Không thể mở đọc: {ex.Message}";
         }
     }
 

@@ -2514,4 +2514,42 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` hoàn tất biên dịch và đóng gói cho Windows, Linux, Android vào thư mục duy nhất `\publish\`.
   - Khởi chạy Desktop EXE đạt `Responding: True` và nạp thành công 205MB bộ nhớ.
 
+### 15.77 Tái Cấu Trúc Tab Đọc Truyện Với Hệ Thống 4 Subtab Chuẩn 100% ComicScreen (Storage, Directory, History, Bookmark) Chuẩn Thiết Kế InstSoft (Ảnh 1-4) (`LibraryView.axaml`, `LibraryViewModel.cs`, `LibrarySubTabModels.cs`, `LibraryScannerService.cs`, `ReadProgressStore.cs`, `ComicReaderViewModel.cs`) (2026-10-12)
+- **Bối Cảnh & Yêu Cầu Từ Người Dùng**:
+  - Tab Đọc truyện / Thư viện trước đây bị rối mắt và chưa tối ưu trải nghiệm theo các ứng dụng đọc truyện chuyên nghiệp.
+  - Người dùng yêu cầu tái cấu trúc toàn diện theo thiết kế của ComicScreen (InstSoft) với hệ thống 4 Subtab độc lập:
+    1. **Storage** (Ảnh 1): Quản lý vị trí lưu trữ (Recent, Device/Bộ nhớ trong, Thẻ SD/Ổ đĩa, Thư mục đã ghim/yêu thích, nút FAB `📁+`).
+    2. **Directory** (Ảnh 2): Trình duyệt file/thư mục comic trực quan (Folder icon tím lavender `📁`, file `.cbz`/`.zip`/`.pdf` màu xanh cyan `📦`, breadcrumb điều hướng `⬆`, thanh đáy Edit, Recent, View, Sort).
+    3. **History** (Ảnh 3): Danh sách lịch sử đọc truyện toàn hệ thống (không bị trói buộc 1 folder), hiển thị Thumbnail bìa, tên file/truyện, dung lượng (300 MB, 1.2 GB), ngày đọc, thanh progress hồng rực `#E91E63`, tiến độ `1/1062 0%` - `2814/6558 42%`, menu `⋮`.
+    4. **Bookmark** (Ảnh 4): Danh sách dấu trang phân nhóm theo bộ truyện/tập nén (Header tên truyện màu Cyan `#38BDF8`), các mục con hiển thị tên chương, số trang/tổng trang cỡ lớn `747 / 6558 (11%)`, ngày lưu, memo ghi chú (`cover`), menu `⋮`.
+- **Giải Pháp Kỹ Thuật & Kiến Trúc (`First-Principles Engineering Rigor`)**:
+  1. **Định Nghĩa Model Dữ Liệu Chuyên Dụng (`LibrarySubTabModels.cs`)**:
+     - `StorageItemModel`: Phân loại `Recent`, `Device`, `SDCard`, `PinnedFolder`. Quản lý tiêu đề, đường dẫn, icon font và trạng thái ghim.
+     - `DirectoryItemModel`: Phân biệt Folder thường, Thư mục chương ảnh (`🖼️`), File nén truyện/PDF (`📦`/`📄`), tính toán dung lượng (`FormatBytes`) và số mục bên trong.
+     - `HistoryItemModel`: Chứa đường dẫn, tên truyện, tên chương đang đọc dở, dung lượng file, thời gian đọc, phần trăm và thanh tiến độ màu hồng `#E91E63`, hỗ trợ gán Bitmap bìa bất đồng bộ.
+     - `BookmarkGroupModel` & `BookmarkItemDisplayModel`: Gom nhóm dấu trang theo `ComicTitle` / `ComicRootPath`, định dạng tiến độ trang lớn `747 / 6558`, tỷ lệ %, ngày giờ định dạng chuẩn và memo ghi chú.
+  2. **Mở Rộng Dịch Vụ Lưu Trữ & Giải Mã Bìa (`ReadProgressStore.cs`, `LibraryScannerService.cs`, `ComicReaderViewModel.cs`)**:
+     - `ReadProgressStore.cs`: Bổ sung prefix `@pinned|` và các hàm quản lý thư mục ghim (`GetPinnedFolders()`, `AddPinnedFolder()`, `RemovePinnedFolder()`), hàm xóa lịch sử (`RemoveHistory()`, `ClearAllHistory()`), xóa bookmark (`ClearAllBookmarks()`), và lưu tổng số trang của chương (`SaveChapterTotalPages()`, `GetChapterTotalPages()`).
+     - `ComicReaderViewModel.cs`: Khi nạp xong chương, tự động ghi nhận tổng số trang `TotalPages` vào `ReadProgressStore` để Subtab History có thể hiển thị tức thời tiến độ `1/1062 0%` mà không cần quét lại file.
+     - `LibraryScannerService.cs`: Bổ sung `DecodeCoverThumbnailForPath(path, targetWidth)` tải ngầm và giải mã ảnh bìa tối ưu cho cả file PDF, file nén CBZ/ZIP, file ảnh đơn hoặc thư mục chứa ảnh.
+  3. **Tái Cấu Trúc Toàn Diện ViewModel (`LibraryViewModel.cs`)**:
+     - Quản lý trạng thái 4 Subtab: `ActiveSubTab` ("Storage", "Directory", "History", "Bookmark") với thanh highlight viền màu Cyan `#38BDF8`.
+     - Subtab Storage: Nạp Recent từ lịch sử đọc mới nhất, Device (bộ nhớ trong hoặc Download root), Thẻ SD (quét `/storage/` trên Android hoặc `DriveInfo.GetDrives()` trên Desktop), và danh sách Pinned Folders.
+     - Subtab Directory: Điều hướng thư mục mượt mà với `LoadDirectory`, `NavigateUpDirectory`, đổi chế độ xem Grid/List (`ToggleDirectoryViewMode`), sắp xếp linh hoạt A-Z, Z-A, Ngày, Dung lượng (`SortDirectory`).
+     - Subtab History: Nạp toàn bộ truyện từng đọc, chạy task nền giải mã ảnh bìa đưa lên UI, mở đọc ngay lập tức hoặc mở thư mục chứa.
+     - Subtab Bookmark: Nhóm bookmark theo truyện, mở đọc và nhảy thẳng tới đúng chương và đúng trang đã lưu.
+  4. **Giao Diện Chuẩn 100% ComicScreen Responsive (`LibraryView.axaml`)**:
+     - Thanh Header trên cùng tích hợp: Tên thư viện, trạng thái, nút `➕ Thêm Thư Mục`, `📦 Mở File CBZ/ZIP/PDF`, `🗗 Cửa Sổ Độc Lập`, và nút `🔄 Quét`.
+     - Thanh Subtab 4 nút với đường gạch chân Cyan `#38BDF8` nổi bật, căn giữa hoàn hảo.
+     - Subtab Storage: Danh sách vị trí lưu trữ kèm icon lớn trực quan + Nút nổi FAB tròn `📁+` góc dưới bên phải.
+     - Subtab Directory: Breadcrumb thanh điều hướng trên cùng, danh sách folder màu tím lavender 📁 và file truyện 📦, thanh đáy tác vụ 4 nút (Edit, Recent, View, Sort) chuẩn ảnh 2.
+     - Subtab History: Danh sách thẻ truyện có bìa thu nhỏ, tên truyện/file, dung lượng, ngày đọc, progress bar hồng rực `#E91E63`, text `1/1062 0%`, menu `⋮` chuẩn ảnh 3.
+     - Subtab Bookmark: Gom nhóm theo Header truyện màu Cyan `#38BDF8`, danh sách các bookmark hiển thị chương, số trang `747 / 6558 11%`, ngày giờ, memo `cover`, menu `⋮` chuẩn ảnh 4.
+     - Lớp phủ trình đọc nội tuyến (Inline Reader Overlay) giữ nguyên khi đọc trên màn hình chính.
+- **Nghiệm Thu**:
+  - `dotnet build` Release đạt `0 Warning(s), 0 Error(s)` cho cả Desktop và Android.
+  - `build-avalonia.bat` hoàn tất biên dịch và đóng gói cho Windows, Linux, Android vào thư mục duy nhất `\publish\`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+
 

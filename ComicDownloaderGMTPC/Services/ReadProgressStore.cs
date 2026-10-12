@@ -17,6 +17,7 @@ public sealed class ReadProgressStore
     private const string HistoryPrefix = "@history|";
     private const string FolderHistoryPrefix = "@folder|";
     private const string LastRootPrefix = "@last_root|";
+    private const string PinnedFolderPrefix = "@pinned|";
     private const string PortableIdPrefix = "@id|";
     private const long EpochOffsetSeconds = 1700000000L;
 
@@ -328,6 +329,88 @@ public sealed class ReadProgressStore
             .ToList();
     }
 
+    public void RemoveHistory(string comicRootOrFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(comicRootOrFilePath)) return;
+        string cleanPath = NormalizeKey(comicRootOrFilePath);
+        string histKey = HistoryPrefix + cleanPath;
+        _progressMap.TryRemove(histKey, out _);
+
+        string leafName = Path.GetFileName(cleanPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (!string.IsNullOrWhiteSpace(leafName))
+        {
+            foreach (var key in _progressMap.Keys.Where(k => k.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                string candidatePath = key.Substring(HistoryPrefix.Length);
+                string candidateLeaf = Path.GetFileName(candidatePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (string.Equals(leafName, candidateLeaf, StringComparison.OrdinalIgnoreCase))
+                {
+                    _progressMap.TryRemove(key, out _);
+                }
+            }
+        }
+        MarkDirtyAndScheduleFlush();
+    }
+
+    public void ClearAllHistory()
+    {
+        foreach (var key in _progressMap.Keys.Where(k => k.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            _progressMap.TryRemove(key, out _);
+        }
+        MarkDirtyAndScheduleFlush();
+    }
+
+    public List<string> GetPinnedFolders()
+    {
+        var list = new List<(string Path, int Order)>();
+        foreach (var kv in _progressMap)
+        {
+            if (kv.Key.StartsWith(PinnedFolderPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                string path = kv.Key.Substring(PinnedFolderPrefix.Length).Trim();
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    list.Add((path, kv.Value));
+                }
+            }
+        }
+        return list.OrderByDescending(x => x.Order).Select(x => x.Path).ToList();
+    }
+
+    public void AddPinnedFolder(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath)) return;
+        string clean = NormalizeKey(folderPath);
+        if (string.IsNullOrWhiteSpace(clean)) return;
+        _progressMap[PinnedFolderPrefix + clean] = GetCurrentOrderStamp();
+        MarkDirtyAndScheduleFlush();
+    }
+
+    public void RemovePinnedFolder(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath)) return;
+        string clean = NormalizeKey(folderPath);
+        _progressMap.TryRemove(PinnedFolderPrefix + clean, out _);
+        MarkDirtyAndScheduleFlush();
+    }
+
+    public void SaveChapterTotalPages(string chapterKey, int totalPages)
+    {
+        if (string.IsNullOrWhiteSpace(chapterKey) || totalPages <= 0) return;
+        string key = NormalizeKey(chapterKey) + "::#total_pages";
+        _progressMap[key] = totalPages;
+        MarkDirtyAndScheduleFlush();
+    }
+
+    public int GetChapterTotalPages(string chapterKey)
+    {
+        if (string.IsNullOrWhiteSpace(chapterKey)) return 0;
+        string key = NormalizeKey(chapterKey) + "::#total_pages";
+        if (_progressMap.TryGetValue(key, out int total) && total > 0) return total;
+        return 0;
+    }
+
     public void SaveLastLibraryRootPath(string folderPath)
     {
         if (string.IsNullOrWhiteSpace(folderPath)) return;
@@ -444,6 +527,15 @@ public sealed class ReadProgressStore
             {
                 SaveBookmarksToDisk();
             }
+        }
+    }
+
+    public void ClearAllBookmarks()
+    {
+        lock (_bookmarkLock)
+        {
+            _bookmarks.Clear();
+            SaveBookmarksToDisk();
         }
     }
 
