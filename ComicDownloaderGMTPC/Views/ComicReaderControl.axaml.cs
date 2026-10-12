@@ -382,6 +382,7 @@ public partial class ComicReaderControl : UserControl
         {
             _subscribedVm.ScrollToPageRequested -= OnVmScrollToPageRequested;
             _subscribedVm.AutoScrollStepRequested -= OnVmAutoScrollStepRequested;
+            _subscribedVm.PageButtonAreaScrollRequested -= OnVmPageButtonAreaScrollRequested;
             _subscribedVm = null;
         }
 
@@ -390,6 +391,7 @@ public partial class ComicReaderControl : UserControl
             _subscribedVm = vm;
             vm.ScrollToPageRequested += OnVmScrollToPageRequested;
             vm.AutoScrollStepRequested += OnVmAutoScrollStepRequested;
+            vm.PageButtonAreaScrollRequested += OnVmPageButtonAreaScrollRequested;
             if (Bounds.Width > 0 && Bounds.Height > 0)
             {
                 vm.UpdateViewportDimensions(Bounds.Width, Bounds.Height);
@@ -398,6 +400,30 @@ public partial class ComicReaderControl : UserControl
             {
                 OnVmScrollToPageRequested(vm.CurrentPageIndex);
             }
+        }
+    }
+
+    private void OnVmPageButtonAreaScrollRequested(double fraction, bool animated)
+    {
+        StopKineticScroll();
+        if (DataContext is not ComicReaderViewModel vm) return;
+        if (!vm.IsScrollMode) return;
+
+        var scrollViewer = GetReaderScrollViewer();
+        if (scrollViewer == null) return;
+
+        if (vm.IsHorizontalScrollMode)
+        {
+            double dir = vm.IsRightToLeft ? -1.0 : 1.0;
+            double step = scrollViewer.Viewport.Width * fraction * dir;
+            double newX = Math.Clamp(scrollViewer.Offset.X + step, 0, Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width));
+            scrollViewer.Offset = new Vector(newX, scrollViewer.Offset.Y);
+        }
+        else
+        {
+            double step = scrollViewer.Viewport.Height * fraction;
+            double newY = Math.Clamp(scrollViewer.Offset.Y + step, 0, Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height));
+            scrollViewer.Offset = new Vector(scrollViewer.Offset.X, newY);
         }
     }
 
@@ -775,42 +801,67 @@ public partial class ComicReaderControl : UserControl
 
         if (tapNow - _lastTapTick < 350 && tapDist < 30.0)
         {
-            // Chạm đúp (Double-Tap) -> Kích hoạt Double-Tap Smart Zoom
+            // Chạm đúp (Double-Tap) -> Kích hoạt Double-Tap Zoom theo cấu hình ComicScreen (Ảnh 4)
             _lastTapTick = 0;
-            vm.SmartDoubleTapZoom();
+            bool isInside = CheckIfPointIsInsideImage(releasePoint);
+            vm.ExecuteDoubleTapZoom(isInside);
             return;
         }
 
         _lastTapTick = tapNow;
         _lastTapPoint = releasePoint;
 
-        double width = Math.Max(1.0, Bounds.Width);
-        double xRatio = releasePoint.X / width;
+        // Bỏ việc ấn 1/3 trái phải để chuyển trang! Chạm vào màn hình đọc truyện là để Bật/tắt thanh Menu ComicScreen
+        vm.ToggleOverlay();
+    }
 
-        if (vm.IsScrollMode)
+    private bool CheckIfPointIsInsideImage(Point p)
+    {
+        if (DataContext is not ComicReaderViewModel vm) return true;
+
+        double vw = Math.Max(1.0, Bounds.Width);
+        double vh = Math.Max(1.0, Bounds.Height);
+
+        if (vm.IsFlipMode)
         {
-            // Ở chế độ Scroll dọc / ngang: chạm vào vùng giữa màn hình để bật/tắt tùy chọn ComicScreen
-            if (xRatio >= 0.12 && xRatio <= 0.88)
-            {
-                vm.ToggleOverlay();
-            }
+            double imgW = vm.FlipDisplayWidth;
+            double imgH = vm.FlipDisplayHeight;
+            if (double.IsNaN(imgW) || double.IsNaN(imgH) || imgW <= 0 || imgH <= 0)
+                return true;
+
+            double left = (vw - imgW) / 2.0;
+            double top = (vh - imgH) / 2.0;
+            return p.X >= left && p.X <= left + imgW && p.Y >= top && p.Y <= top + imgH;
         }
-        else
+        else if (vm.IsScrollMode)
         {
-            // Ở chế độ Lật trang: 1/3 Trái = lật trái, 1/3 Giữa = bật/tắt tùy chọn ComicScreen, 1/3 Phải = lật phải
-            if (xRatio < 0.32)
+            if (vm.IsHorizontalScrollMode)
             {
-                vm.TapLeftZone();
-            }
-            else if (xRatio > 0.68)
-            {
-                vm.TapRightZone();
+                // Chế độ cuộn ngang: ảnh được căn giữa theo trục Y
+                double imgH = vh;
+                if (vm.IsPageSpacingEnabled)
+                {
+                    double heightRatio = Math.Clamp(1.0 - Math.Abs(vm.PageSpacingPercent) / 100.0 * 0.45, 0.4, 1.0);
+                    imgH = Math.Round(vh * heightRatio);
+                }
+                double top = (vh - imgH) / 2.0;
+                return p.Y >= top && p.Y <= top + imgH;
             }
             else
             {
-                vm.ToggleOverlay();
+                // Chế độ cuộn dọc: ảnh được căn giữa theo trục X
+                double imgW = vw;
+                if (vm.IsPageSpacingEnabled && vm.PageSpacingPercent < 0)
+                {
+                    double widthRatio = Math.Clamp(1.0 + vm.PageSpacingPercent / 100.0, 0.4, 1.0);
+                    imgW = Math.Round(vw * widthRatio);
+                }
+                double left = (vw - imgW) / 2.0;
+                return p.X >= left && p.X <= left + imgW;
             }
         }
+
+        return true;
     }
 
     private void OnViewportPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)

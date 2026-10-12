@@ -2444,3 +2444,44 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` biên dịch và đóng gói hoàn tất cả 3 hệ điều hành (Windows, Linux, Android) với `0 Error(s), 0 Warning(s)`.
   - Toàn bộ artifact đầu ra xuất đúng thư mục duy nhất `\publish\`.
 
+### 15.75 Tinh Chỉnh Page Spacing Chuẩn ComicScreen, Hoàn Thiện Cuộn Ngang Liên Tiếp (Mode 3 & 4), Ra Mắt Bộ Điều Khiển Phím Chuyển Trang Ảo (Page Button Area Chuẩn Ảnh 3) & Bộ Tùy Chỉnh Chạm Đúp Phóng To (Double Tap Zoom Chuẩn Ảnh 4) (`ComicReaderViewModel.cs`, `ComicReaderControl.axaml`, `ComicReaderControl.axaml.cs`) (2026-10-12)
+- **Bối Cảnh & Phản Hồi Từ Người Dùng**:
+  1. *Page spacing chưa đúng với ComicScreen*:
+     - Cuộn dọc (Vertical scroll): % âm (ví dụ `-21.1%`) phải thu hẹp chiều rộng trang ảnh (`DisplayWidth`), tạo 2 dải lề đen ở 2 bên mép màn hình (Ảnh 1). % dương tăng khoảng cách dọc giữa các trang.
+     - Cuộn ngang & lật trang (Horizontal scroll & Flip mode): % (ví dụ `40.0%`) phải thu hẹp chiều cao trang ảnh (`DisplayHeight`), tạo dải lề đen ở đỉnh và đáy màn hình (Ảnh 2), đồng thời tạo khoảng cách ngang giữa các trang.
+  2. *Cuộn ngang liên tiếp (Mode 3 & 4)*: Phải cuộn ngang liên tiếp (Continuous Horizontal Scroll) mượt mà như Vertical scroll, các trang nối đuôi nhau theo trục hoành X, tự động Fit Height và phân định chiều RTL (Mode 4 `Left S`) / LTR (Mode 3 `Right S`).
+  3. *Bỏ tính năng ấn 1/3 trái phải chuyển trang (loại bỏ hardcode)*: Chạm bình thường chỉ để bật/tắt thanh Menu ComicScreen (`ToggleOverlay()`). Ra mắt hộp thoại và vùng nút ảo `Page button area` chuẩn 100% Ảnh 3.
+  4. *Hoàn thiện Double-Tap Zoom*: Xây dựng hộp thoại và cơ chế nhận diện điểm chạm chuẩn 100% Ảnh 4 với 4 chế độ (`Off`, `Fit Screen`, `Zoom`, `Zoom(inside) + Fit Screen(outside)`) và slider Scale 100%..400% (mặc định 193%).
+- **Giải Pháp Kỹ Thuật & Kiến Trúc (`First-Principles Engineering Rigor`)**:
+  1. **Page Spacing First-Principles Engine (`ComicReaderViewModel.cs`)**:
+     - *Cuộn dọc*: Nếu `PageSpacingPercent < 0`, tính `widthRatio = Math.Clamp(1.0 + PageSpacingPercent / 100.0, 0.4, 1.0)`, co hẹp `singlePageVw = Math.Round(singlePageVw * widthRatio)`. Trang ảnh căn giữa trục X, tự động sinh ra 2 dải lề đen ở hai bên mép màn hình chuẩn 100% như khung đỏ Ảnh 1. Nếu `% > 0`, áp dụng `PageMargin` cách đều đỉnh/đáy.
+     - *Cuộn ngang & Lật trang*: Tính `heightRatio = Math.Clamp(1.0 - Math.Abs(PageSpacingPercent) / 100.0 * 0.45, 0.4, 1.0)`, co hẹp `vh = Math.Round(vh * heightRatio)`. Trang ảnh căn giữa trục Y, sinh ra dải lề đen ở đỉnh và đáy màn hình chuẩn 100% như khung đỏ Ảnh 2. Khoảng cách ngang giữa các trang tạo bởi `FlipPageMargin` và `PageMargin`.
+  2. **Cuộn Ngang Liên Tiếp Mượt Mà (Mode 3 & 4 Continuous Horizontal Scroll)**:
+     - Gán `FlowDirection="{Binding ReaderFlowDirection}"` trên `ReaderPagesListBox` (Mode 4 RTL: `RightToLeft`, Mode 3 LTR: `LeftToRight`).
+     - Tự động kích hoạt `FitMode = ImageFitMode.FitHeight;` để các trang luôn ăn khớp chuẩn xác theo chiều cao viewport.
+     - Vô hiệu hóa cuộn dọc trên ListBox (`ScrollViewer.VerticalScrollBarVisibility="Disabled"`), kích hoạt cuộn ngang (`ScrollViewer.HorizontalScrollBarVisibility="Auto"`).
+  3. **Bộ Điều Khiển Phím Chuyển Trang Ảo (Page Button Area - Chuẩn 100% Ảnh 3)**:
+     - Khởi tạo Popup `Page button area`:
+       + Checkbox `Enable`, `Disable Previous Page`, `Reverse`, `Fixed`.
+       + 4 Type vị trí: `Type0` (Ngang ở Đáy hoặc Đỉnh), `Type1` (Cột dọc mép trái), `Type2` (2 bên mép lề trái/phải), `Type3` (Đỉnh và Đáy trải dài).
+       + Khung xem trước (Preview Box) thời gian thực mô phỏng màn hình thu nhỏ với 2 nút `Prev` (xanh `#5C7CFA`) và `Next` (hồng `#E56B6F`).
+       + Tùy chọn vị trí `Bottom` / `Top`.
+       + Sliders: `Opacity` (10%..100%), `Size` (10..100), `Scroll Distance` (10%..100%), Checkbox `Scroll animation`.
+       + Các nút hành động `DEFAULT`, `CANCEL`, `OK`.
+     - Lớp giao diện nổi `PageButtonAreaOverlayPanel` trên `ReaderViewportPanel`: Hiển thị 2 nút ảo `Prev` và `Next` trực tiếp trên màn hình đọc truyện. Khi bấm: ở Flip mode sẽ lật trang (`PrevPage` / `NextPage`), ở Scroll mode sẽ phát sự kiện `PageButtonAreaScrollRequested` cuộn mượt theo đúng `ScrollDistance%`.
+  4. **Bộ Tùy Chỉnh Chạm Đúp Phóng To (Double Tap Zoom - Chuẩn 100% Ảnh 4)**:
+     - Khởi tạo Popup `Double tap zoom`:
+       + 4 Radio options: `Off`, `Fit Screen`, `Zoom`, `Zoom(inside) + Fit Screen(outside)`.
+       + Slider `Scale` từ 100% đến 400% (mặc định `193%`), hiển thị badge % động.
+       + Các nút hành động `DEFAULT`, `CANCEL`, `OK`.
+     - Code-behind `CheckIfPointIsInsideImage(Point p)`: Tính toán vùng hiển thị thực tế của ảnh so với viewport. Khi người dùng chạm đúp:
+       + Nếu điểm chạm nằm trong vùng ảnh tranh: phóng to theo tỷ lệ `Scale` (193%), chạm đúp lần nữa đưa về 100%.
+       + Nếu điểm chạm nằm ở lề đen bên ngoài: đưa về `Fit Screen` tức thì.
+  5. **Loại Bỏ Hoàn Toàn Hardcode Chạm 1/3 Trái/Phải Chuyển Trang**:
+     - Mọi thao tác chạm (Tap) đơn giản trên màn hình đọc truyện giờ đây chỉ dùng để bật/tắt thanh công cụ ComicScreen (`vm.ToggleOverlay()`), chấm dứt triệt để tình trạng nhảy trang ngoài ý muốn khi người dùng muốn mở menu.
+- **Nghiệm Thu**:
+  - `dotnet build` Release đạt `0 Warning(s), 0 Error(s)` cho cả Desktop và Android.
+  - `build-avalonia.bat` hoàn tất biên dịch và đóng gói cho Windows, Linux, Android vào thư mục duy nhất `\publish\`.
+  - Khởi chạy Desktop EXE đạt `Responding: True`.
+
+

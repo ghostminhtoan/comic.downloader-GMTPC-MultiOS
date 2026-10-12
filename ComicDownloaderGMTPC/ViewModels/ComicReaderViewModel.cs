@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -209,6 +210,8 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsBookmarkListPopupOpen))]
     [NotifyPropertyChangedFor(nameof(IsChapterDrawerOpen))]
     [NotifyPropertyChangedFor(nameof(IsMoreMenuOpen))]
+    [NotifyPropertyChangedFor(nameof(IsPageButtonAreaPopupOpen))]
+    [NotifyPropertyChangedFor(nameof(IsDoubleTapZoomPopupOpen))]
     [NotifyPropertyChangedFor(nameof(IsStandardOverlayBarsVisible))]
     private string _activePopup = string.Empty;
 
@@ -224,6 +227,8 @@ public partial class ComicReaderViewModel : ViewModelBase
     public bool IsBookmarkListPopupOpen => ActivePopup == "BookmarkList";
     public bool IsChapterDrawerOpen => ActivePopup == "ChapterDrawer";
     public bool IsMoreMenuOpen => ActivePopup == "MoreMenu";
+    public bool IsPageButtonAreaPopupOpen => ActivePopup == "PageButtonArea";
+    public bool IsDoubleTapZoomPopupOpen => ActivePopup == "DoubleTapZoom";
 
     public bool IsStandardOverlayBarsVisible => IsOverlayVisible && !IsMarginEditorOpen;
 
@@ -236,6 +241,12 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void CloseAllPopups()
     {
         ActivePopup = string.Empty;
+    }
+
+    [RelayCommand]
+    public void ClosePopup()
+    {
+        CloseAllPopups();
     }
 
     [RelayCommand]
@@ -322,6 +333,9 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void OpenPageScrollingPopup() => TogglePopup("PageScrolling");
 
+    public FlowDirection ReaderFlowDirection =>
+        (IsHorizontalScrollMode && IsRightToLeft) ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+
     [RelayCommand]
     public void SelectPageScrollingMode(string? modeParam)
     {
@@ -348,17 +362,19 @@ public partial class ComicReaderViewModel : ViewModelBase
                 IsRightToLeft = true;
                 ShowTransientToast("📜 Page scrolling: Right + Vertical (Cuộn dọc RTL)");
                 break;
-            case 3: // Right S (Horizontal Scroll LTR - Cuộn ngang Trái → Phải)
+            case 3: // Right S (Horizontal Scroll LTR - Cuộn ngang liên tục Trái → Phải)
                 IsScrollMode = true;
                 IsHorizontalScrollMode = true;
                 IsRightToLeft = false;
-                ShowTransientToast("↔ Page scrolling: Right S (Cuộn ngang Trái → Phải)");
+                FitMode = ImageFitMode.FitHeight; // Bắt buộc Fit Height để trang khớp chiều cao và cuộn ngang liên tiếp
+                ShowTransientToast("↔ Page scrolling: Right S (Cuộn ngang liên tục Trái → Phải)");
                 break;
-            case 4: // Left S (Horizontal Scroll RTL - Cuộn ngang Phải → Trái)
+            case 4: // Left S (Horizontal Scroll RTL - Cuộn ngang liên tục Phải → Trái)
                 IsScrollMode = true;
                 IsHorizontalScrollMode = true;
                 IsRightToLeft = true;
-                ShowTransientToast("↔ Page scrolling: Left S (Cuộn ngang Phải → Trái)");
+                FitMode = ImageFitMode.FitHeight; // Bắt buộc Fit Height để trang khớp chiều cao và cuộn ngang liên tiếp
+                ShowTransientToast("↔ Page scrolling: Left S (Cuộn ngang liên tục Phải → Trái)");
                 break;
             default: // 5 = Left + Vertical (Webtoon Scroll LTR)
                 IsScrollMode = true;
@@ -368,6 +384,8 @@ public partial class ComicReaderViewModel : ViewModelBase
                 break;
         }
 
+        OnPropertyChanged(nameof(ReaderFlowDirection));
+        ApplyFitModeLayout();
         UpdateCurrentFlipPages();
         TriggerPrefetch(CurrentPageIndex);
         if (IsScrollMode)
@@ -553,6 +571,11 @@ public partial class ComicReaderViewModel : ViewModelBase
         {
             double vw = Math.Max(240, _viewportWidth);
             double singlePageVw = (IsDoublePage && SecondaryPage != null) ? Math.Max(120, vw * 0.498) : vw;
+            if (IsPageSpacingEnabled && (IsDoublePage && SecondaryPage != null))
+            {
+                double hGap = Math.Round(vw * (Math.Abs(PageSpacingPercent) / 100.0) * 0.25);
+                singlePageVw = Math.Max(120, singlePageVw - hGap);
+            }
             if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitWidth)
             {
                 return Math.Round(singlePageVw * ZoomLevel);
@@ -566,6 +589,11 @@ public partial class ComicReaderViewModel : ViewModelBase
         get
         {
             double vh = Math.Max(240, _viewportHeight);
+            if (IsPageSpacingEnabled)
+            {
+                double heightRatio = Math.Clamp(1.0 - Math.Abs(PageSpacingPercent) / 100.0 * 0.45, 0.4, 1.0);
+                vh = Math.Round(vh * heightRatio);
+            }
             if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitHeight)
             {
                 return Math.Round(vh * ZoomLevel);
@@ -583,14 +611,37 @@ public partial class ComicReaderViewModel : ViewModelBase
         double vh = Math.Max(240, _viewportHeight);
         double singlePageVw = (IsFlipMode && IsDoublePage) ? Math.Max(120, vw * 0.498) : vw;
 
+        // Áp dụng Page Spacing nếu đang bật
+        if (IsPageSpacingEnabled)
+        {
+            if (IsScrollMode && !IsHorizontalScrollMode)
+            {
+                // Cuộn dọc: nếu PageSpacingPercent < 0 -> thu hẹp chiều rộng tạo lề đen 2 bên (Ảnh 1)
+                if (PageSpacingPercent < 0)
+                {
+                    double widthRatio = Math.Clamp(1.0 + PageSpacingPercent / 100.0, 0.4, 1.0);
+                    singlePageVw = Math.Round(singlePageVw * widthRatio);
+                }
+            }
+            else if (IsHorizontalScrollMode || IsFlipMode)
+            {
+                // Cuộn ngang hoặc Lật trang: thu hẹp chiều cao tạo lề đen trên/dưới đỉnh đáy (Ảnh 2)
+                double heightRatio = Math.Clamp(1.0 - Math.Abs(PageSpacingPercent) / 100.0 * 0.45, 0.4, 1.0);
+                vh = Math.Round(vh * heightRatio);
+            }
+        }
+
         foreach (var page in Pages)
         {
             page.RecalculateDimensions(FitMode, singlePageVw, vh, ZoomLevel);
         }
 
+        ApplyPageSpacingToAllItems();
+
         OnPropertyChanged(nameof(FlipDisplayWidth));
         OnPropertyChanged(nameof(FlipDisplayHeight));
         OnPropertyChanged(nameof(FlipImageStretch));
+        OnPropertyChanged(nameof(FlipPageMargin));
     }
 
     public void UpdateViewportDimensions(double width, double height)
@@ -987,16 +1038,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void SmartDoubleTapZoom()
     {
-        if (ZoomLevel > 1.08)
-        {
-            ZoomLevel = 1.0;
-            ShowTransientToast("🔍 Reset Zoom: 100%");
-        }
-        else
-        {
-            ZoomLevel = 2.0;
-            ShowTransientToast("🔍 Double-Tap Smart Zoom: 200%");
-        }
+        ExecuteDoubleTapZoom(true);
     }
 
     [RelayCommand]
@@ -1227,7 +1269,7 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     partial void OnIsPageSpacingEnabledChanged(bool value)
     {
-        ApplyPageSpacingToAllItems();
+        ApplyFitModeLayout();
     }
 
     partial void OnPageSpacingPercentChanged(double value)
@@ -1237,14 +1279,22 @@ public partial class ComicReaderViewModel : ViewModelBase
             IsPageSpacingEnabled = true;
             return;
         }
-        ApplyPageSpacingToAllItems();
+        ApplyFitModeLayout();
     }
 
     private Thickness CalculateCurrentPageItemMargin()
     {
         if (!IsPageSpacingEnabled) return new Thickness(0);
-        double verticalPx = Math.Round(PageSpacingPercent * 1.2);
-        return new Thickness(0, verticalPx, 0, verticalPx);
+        if (IsHorizontalScrollMode)
+        {
+            double hPx = PageSpacingPercent > 0 ? Math.Round(PageSpacingPercent * 1.5) : 0;
+            return new Thickness(hPx, 0, hPx, 0);
+        }
+        else
+        {
+            double vPx = PageSpacingPercent > 0 ? Math.Round(PageSpacingPercent * 1.5) : 0;
+            return new Thickness(0, vPx, 0, vPx);
+        }
     }
 
     private void ApplyPageSpacingToAllItems()
@@ -1253,6 +1303,246 @@ public partial class ComicReaderViewModel : ViewModelBase
         foreach (var page in Pages)
         {
             page.PageMargin = margin;
+        }
+    }
+
+    // =========================================================================
+    // PAGE BUTTON AREA (VÙNG NÚT CHUYỂN TRANG ẢO CHUẨN 100% COMICSCREEN ẢNH 3)
+    // =========================================================================
+
+    [ObservableProperty]
+    private bool _isPageButtonAreaEnabled = false;
+
+    [ObservableProperty]
+    private bool _isPageButtonAreaDisablePrev = false;
+
+    [ObservableProperty]
+    private bool _isPageButtonAreaReverse = false;
+
+    [ObservableProperty]
+    private bool _isPageButtonAreaFixed = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPageButtonAreaType0))]
+    [NotifyPropertyChangedFor(nameof(IsPageButtonAreaType1))]
+    [NotifyPropertyChangedFor(nameof(IsPageButtonAreaType2))]
+    [NotifyPropertyChangedFor(nameof(IsPageButtonAreaType3))]
+    private int _pageButtonAreaType = 0; // 0: Bottom/Top, 1: Vertical left bar, 2: Both edges, 3: Top and Bottom
+
+    public bool IsPageButtonAreaType0 => PageButtonAreaType == 0;
+    public bool IsPageButtonAreaType1 => PageButtonAreaType == 1;
+    public bool IsPageButtonAreaType2 => PageButtonAreaType == 2;
+    public bool IsPageButtonAreaType3 => PageButtonAreaType == 3;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPageButtonAreaTop))]
+    private bool _isPageButtonAreaBottom = true; // true = Bottom, false = Top
+
+    public bool IsPageButtonAreaTop => !IsPageButtonAreaBottom;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaOpacityText))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaComputedOpacity))]
+    private double _pageButtonAreaOpacity = 100.0; // 10..100% (Ảnh 3 là 100)
+
+    public string PageButtonAreaOpacityText => $"{PageButtonAreaOpacity:0}";
+    public double PageButtonAreaComputedOpacity => Math.Clamp(PageButtonAreaOpacity / 100.0, 0.1, 1.0);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaSizeText))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaComputedWidth))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaComputedHeight))]
+    private double _pageButtonAreaSize = 26.0; // 10..100 (Ảnh 3 là 26)
+
+    public string PageButtonAreaSizeText => $"{PageButtonAreaSize:0}";
+    public double PageButtonAreaComputedWidth => Math.Round(72.0 + (PageButtonAreaSize - 10.0) * 1.4);
+    public double PageButtonAreaComputedHeight => Math.Round(38.0 + (PageButtonAreaSize - 10.0) * 0.65);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaScrollDistanceText))]
+    private double _pageButtonAreaScrollDistance = 50.0; // 10..100 (Ảnh 3 là 50)
+
+    public string PageButtonAreaScrollDistanceText => $"{PageButtonAreaScrollDistance:0}";
+
+    [ObservableProperty]
+    private bool _isPageButtonAreaScrollAnimation = true;
+
+    public event Action<double, bool>? PageButtonAreaScrollRequested;
+
+    [RelayCommand]
+    public void OpenPageButtonAreaPopup() => TogglePopup("PageButtonArea");
+
+    [RelayCommand]
+    public void SelectPageButtonAreaType(string? typeParam)
+    {
+        if (int.TryParse(typeParam, out int t))
+        {
+            PageButtonAreaType = Math.Clamp(t, 0, 3);
+        }
+    }
+
+    [RelayCommand]
+    public void SetPageButtonAreaPosition(string? posParam)
+    {
+        IsPageButtonAreaBottom = !string.Equals(posParam, "Top", StringComparison.OrdinalIgnoreCase);
+    }
+
+    [RelayCommand]
+    public void ResetPageButtonAreaDefault()
+    {
+        IsPageButtonAreaEnabled = true;
+        IsPageButtonAreaDisablePrev = false;
+        IsPageButtonAreaReverse = false;
+        IsPageButtonAreaFixed = true;
+        PageButtonAreaType = 0;
+        IsPageButtonAreaBottom = true;
+        PageButtonAreaOpacity = 100.0;
+        PageButtonAreaSize = 26.0;
+        PageButtonAreaScrollDistance = 50.0;
+        IsPageButtonAreaScrollAnimation = true;
+    }
+
+    [RelayCommand]
+    public void PageButtonAreaPrev()
+    {
+        if (IsPageButtonAreaReverse)
+        {
+            ExecutePageButtonAreaNextAction();
+        }
+        else
+        {
+            ExecutePageButtonAreaPrevAction();
+        }
+    }
+
+    [RelayCommand]
+    public void PageButtonAreaNext()
+    {
+        if (IsPageButtonAreaReverse)
+        {
+            ExecutePageButtonAreaPrevAction();
+        }
+        else
+        {
+            ExecutePageButtonAreaNextAction();
+        }
+    }
+
+    private void ExecutePageButtonAreaPrevAction()
+    {
+        if (IsFlipMode)
+        {
+            PrevPage();
+        }
+        else
+        {
+            double fraction = -(PageButtonAreaScrollDistance / 100.0);
+            PageButtonAreaScrollRequested?.Invoke(fraction, IsPageButtonAreaScrollAnimation);
+        }
+    }
+
+    private void ExecutePageButtonAreaNextAction()
+    {
+        if (IsFlipMode)
+        {
+            NextPage();
+        }
+        else
+        {
+            double fraction = PageButtonAreaScrollDistance / 100.0;
+            PageButtonAreaScrollRequested?.Invoke(fraction, IsPageButtonAreaScrollAnimation);
+        }
+    }
+
+    // =========================================================================
+    // DOUBLE TAP ZOOM (CHẾ ĐỘ CHẠM ĐÚP PHÓNG TO CHUẨN 100% COMICSCREEN ẢNH 4)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDoubleTapZoomOff))]
+    [NotifyPropertyChangedFor(nameof(IsDoubleTapZoomFitScreen))]
+    [NotifyPropertyChangedFor(nameof(IsDoubleTapZoomZoom))]
+    [NotifyPropertyChangedFor(nameof(IsDoubleTapZoomSmart))]
+    private int _doubleTapZoomMode = 3; // 0: Off, 1: Fit Screen, 2: Zoom, 3: Zoom(inside) + Fit Screen(outside) (Ảnh 4 mặc định 3)
+
+    public bool IsDoubleTapZoomOff => DoubleTapZoomMode == 0;
+    public bool IsDoubleTapZoomFitScreen => DoubleTapZoomMode == 1;
+    public bool IsDoubleTapZoomZoom => DoubleTapZoomMode == 2;
+    public bool IsDoubleTapZoomSmart => DoubleTapZoomMode == 3;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DoubleTapZoomScaleText))]
+    private double _doubleTapZoomScale = 193.0; // 100..400% (Ảnh 4 mặc định 193%)
+
+    public string DoubleTapZoomScaleText => $"{DoubleTapZoomScale:0}%";
+
+    [RelayCommand]
+    public void OpenDoubleTapZoomPopup() => TogglePopup("DoubleTapZoom");
+
+    [RelayCommand]
+    public void SelectDoubleTapZoomMode(string? modeParam)
+    {
+        if (int.TryParse(modeParam, out int m))
+        {
+            DoubleTapZoomMode = Math.Clamp(m, 0, 3);
+        }
+    }
+
+    [RelayCommand]
+    public void ResetDoubleTapZoomDefault()
+    {
+        DoubleTapZoomMode = 3;
+        DoubleTapZoomScale = 193.0;
+    }
+
+    public void ExecuteDoubleTapZoom(bool isInsideImage)
+    {
+        switch (DoubleTapZoomMode)
+        {
+            case 0: // Off
+                return;
+            case 1: // Fit Screen
+                FitMode = ImageFitMode.FitScreen;
+                ZoomLevel = 1.0;
+                ApplyFitModeLayout();
+                ShowTransientToast("⛶ Double-Tap: Fit Screen");
+                break;
+            case 2: // Zoom
+                if (ZoomLevel > 1.05)
+                {
+                    ZoomLevel = 1.0;
+                    ShowTransientToast("🔍 Double-Tap: 100%");
+                }
+                else
+                {
+                    ZoomLevel = Math.Clamp(DoubleTapZoomScale / 100.0, 1.0, 4.0);
+                    ShowTransientToast($"🔍 Double-Tap: {DoubleTapZoomScale:0}%");
+                }
+                ApplyFitModeLayout();
+                break;
+            case 3: // Zoom(inside) + Fit Screen(outside)
+            default:
+                if (isInsideImage)
+                {
+                    if (ZoomLevel > 1.05)
+                    {
+                        ZoomLevel = 1.0;
+                        ShowTransientToast("🔍 Double-Tap (trong ảnh): 100%");
+                    }
+                    else
+                    {
+                        ZoomLevel = Math.Clamp(DoubleTapZoomScale / 100.0, 1.0, 4.0);
+                        ShowTransientToast($"🔍 Double-Tap (trong ảnh): {DoubleTapZoomScale:0}%");
+                    }
+                }
+                else
+                {
+                    FitMode = ImageFitMode.FitScreen;
+                    ZoomLevel = 1.0;
+                    ShowTransientToast("⛶ Double-Tap (ngoài lề): Fit Screen");
+                }
+                ApplyFitModeLayout();
+                break;
         }
     }
 

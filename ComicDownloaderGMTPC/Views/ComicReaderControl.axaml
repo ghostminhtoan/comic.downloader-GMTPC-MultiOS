@@ -16,6 +16,12 @@
             <Setter Property="FontSize" Value="13.5" />
             <Setter Property="Margin" Value="0,3" />
         </Style>
+        <!-- Style chuẩn cho RadioButton màu kiểu ComicScreen -->
+        <Style Selector="RadioButton.comicRadio">
+            <Setter Property="Foreground" Value="#F1F5F9" />
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="Margin" Value="0,2" />
+        </Style>
         <!-- Style chuẩn cho Slider màu Cyan kiểu ComicScreen -->
         <Style Selector="Slider.comicSlider">
             <Setter Property="Foreground" Value="#4FC3F7" />
@@ -48,6 +54,7 @@
             <ListBox x:Name="ReaderPagesListBox"
                      IsVisible="{Binding IsScrollMode}"
                      Classes.horizontalMode="{Binding IsHorizontalScrollMode}"
+                     FlowDirection="{Binding ReaderFlowDirection}"
                      ItemsSource="{Binding Pages}"
                      Background="{Binding ReaderBackgroundColor}"
                      BorderThickness="0"
@@ -61,6 +68,10 @@
                     </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
                 <ListBox.Styles>
+                    <Style Selector="ListBox.horizontalMode">
+                        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+                        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+                    </Style>
                     <Style Selector="ListBox.horizontalMode VirtualizingStackPanel">
                         <Setter Property="Orientation" Value="Horizontal" />
                     </Style>
@@ -181,6 +192,146 @@
                     <TextBlock Text="{Binding ComicScreenPageBadgeText}" Foreground="#4FC3F7" FontSize="11" FontWeight="Bold" />
                 </StackPanel>
             </Border>
+
+            <!-- G. VÙNG NÚT CHUYỂN TRANG ẢO NỔI PAGE BUTTON AREA (PREV & NEXT) -->
+            <Panel x:Name="PageButtonAreaOverlayPanel"
+                   IsVisible="{Binding IsPageButtonAreaEnabled}"
+                   ZIndex="1500">
+                <!-- Type 0: Nằm ngang ở Đáy (hoặc Đỉnh) -->
+                <Panel IsVisible="{Binding IsPageButtonAreaType0}">
+                    <!-- Trường hợp Bottom -->
+                    <Border IsVisible="{Binding IsPageButtonAreaBottom}"
+                            VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                            Margin="0,0,0,24">
+                        <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center">
+                            <Button Command="{Binding PageButtonAreaPrevCommand}"
+                                    IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                                    Width="{Binding PageButtonAreaComputedWidth}"
+                                    Height="{Binding PageButtonAreaComputedHeight}"
+                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                    Background="#5C7CFA" Foreground="#FFFFFF"
+                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                <TextBlock Text="Prev" />
+                            </Button>
+                            <Button Command="{Binding PageButtonAreaNextCommand}"
+                                    Width="{Binding PageButtonAreaComputedWidth}"
+                                    Height="{Binding PageButtonAreaComputedHeight}"
+                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                    Background="#E56B6F" Foreground="#FFFFFF"
+                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                <TextBlock Text="Next" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                    <!-- Trường hợp Top -->
+                    <Border IsVisible="{Binding IsPageButtonAreaTop}"
+                            VerticalAlignment="Top" HorizontalAlignment="Center"
+                            Margin="0,24,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center">
+                            <Button Command="{Binding PageButtonAreaPrevCommand}"
+                                    IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                                    Width="{Binding PageButtonAreaComputedWidth}"
+                                    Height="{Binding PageButtonAreaComputedHeight}"
+                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                    Background="#5C7CFA" Foreground="#FFFFFF"
+                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                <TextBlock Text="Prev" />
+                            </Button>
+                            <Button Command="{Binding PageButtonAreaNextCommand}"
+                                    Width="{Binding PageButtonAreaComputedWidth}"
+                                    Height="{Binding PageButtonAreaComputedHeight}"
+                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                    Background="#E56B6F" Foreground="#FFFFFF"
+                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                <TextBlock Text="Next" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Panel>
+
+                <!-- Type 1: Xếp dọc ở lề trái -->
+                <Panel IsVisible="{Binding IsPageButtonAreaType1}">
+                    <Border HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0">
+                        <StackPanel Orientation="Vertical" Spacing="12">
+                            <Button Command="{Binding PageButtonAreaPrevCommand}"
+                                    IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                                    Width="{Binding PageButtonAreaComputedWidth}"
+                                    Height="{Binding PageButtonAreaComputedHeight}"
+                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                    Background="#5C7CFA" Foreground="#FFFFFF"
+                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                <TextBlock Text="Prev" />
+                            </Button>
+                            <Button Command="{Binding PageButtonAreaNextCommand}"
+                                    Width="{Binding PageButtonAreaComputedWidth}"
+                                    Height="{Binding PageButtonAreaComputedHeight}"
+                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                    Background="#E56B6F" Foreground="#FFFFFF"
+                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                <TextBlock Text="Next" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Panel>
+
+                <!-- Type 2: Hai bên mép lề màn hình -->
+                <Panel IsVisible="{Binding IsPageButtonAreaType2}">
+                    <Button Command="{Binding PageButtonAreaPrevCommand}"
+                            IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                            Margin="10,0,0,0"
+                            Width="{Binding PageButtonAreaComputedWidth}"
+                            Height="{Binding PageButtonAreaComputedHeight}"
+                            Opacity="{Binding PageButtonAreaComputedOpacity}"
+                            Background="#5C7CFA" Foreground="#FFFFFF"
+                            FontWeight="Bold" FontSize="14" CornerRadius="8"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="Prev" />
+                    </Button>
+                    <Button Command="{Binding PageButtonAreaNextCommand}"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Margin="0,0,10,0"
+                            Width="{Binding PageButtonAreaComputedWidth}"
+                            Height="{Binding PageButtonAreaComputedHeight}"
+                            Opacity="{Binding PageButtonAreaComputedOpacity}"
+                            Background="#E56B6F" Foreground="#FFFFFF"
+                            FontWeight="Bold" FontSize="14" CornerRadius="8"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="Next" />
+                    </Button>
+                </Panel>
+
+                <!-- Type 3: Đỉnh và Đáy trải dài -->
+                <Panel IsVisible="{Binding IsPageButtonAreaType3}">
+                    <Button Command="{Binding PageButtonAreaPrevCommand}"
+                            IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Top"
+                            Margin="20,16,20,0"
+                            Height="{Binding PageButtonAreaComputedHeight}"
+                            Opacity="{Binding PageButtonAreaComputedOpacity}"
+                            Background="#5C7CFA" Foreground="#FFFFFF"
+                            FontWeight="Bold" FontSize="14" CornerRadius="8"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="Prev" />
+                    </Button>
+                    <Button Command="{Binding PageButtonAreaNextCommand}"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Bottom"
+                            Margin="20,0,20,16"
+                            Height="{Binding PageButtonAreaComputedHeight}"
+                            Opacity="{Binding PageButtonAreaComputedOpacity}"
+                            Background="#E56B6F" Foreground="#FFFFFF"
+                            FontWeight="Bold" FontSize="14" CornerRadius="8"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock Text="Next" />
+                    </Button>
+                </Panel>
+            </Panel>
 
             <!-- F. TOAST THÔNG BÁO TRẠNG THÁI NHANH -->
             <Border IsVisible="{Binding IsStatusToastVisible}"
@@ -765,11 +916,11 @@
                                     Foreground="#FFFFFF" Padding="4,7" CornerRadius="4" Margin="2" HorizontalAlignment="Stretch">
                                 <TextBlock Text="1:1 Gốc" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Center" />
                             </Button>
-                            <!-- Smart Double-Tap -->
-                            <Button Command="{Binding SmartDoubleTapZoomCommand}"
+                            <!-- Smart Double-Tap & Double Tap Zoom Popup -->
+                            <Button Command="{Binding OpenDoubleTapZoomPopupCommand}"
                                     Background="#065F46" BorderBrush="#10B981" BorderThickness="1"
                                     Foreground="#A7F3D0" Padding="4,7" CornerRadius="4" Margin="2" HorizontalAlignment="Stretch">
-                                <TextBlock Text="👆 Đúp Zoom 2x" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" />
+                                <TextBlock Text="👆 Double tap zoom..." FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" />
                             </Button>
                         </UniformGrid>
 
@@ -834,8 +985,249 @@
                         </Grid>
 
                         <Slider Classes="comicSlider"
-                                Minimum="-30" Maximum="50"
+                                Minimum="-40" Maximum="50"
                                 Value="{Binding PageSpacingPercent}" />
+
+                        <Button Command="{Binding OpenPageButtonAreaPopupCommand}"
+                                Background="#1E293B" Foreground="#4FC3F7"
+                                BorderBrush="#334155" BorderThickness="1"
+                                Padding="8,5" CornerRadius="4" Margin="0,4,0,0"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                            <TextBlock Text="🔘 Cài đặt Page button area..." FontSize="11.5" FontWeight="SemiBold" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============================================================= -->
+                <!-- POPUP: PAGE BUTTON AREA (CHUẨN 100% COMICSCREEN ẢNH 3)         -->
+                <!-- ============================================================= -->
+                <Border IsVisible="{Binding IsPageButtonAreaPopupOpen}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Width="350"
+                        Background="#F222262E"
+                        BorderBrush="#475569" BorderThickness="1"
+                        CornerRadius="8" Padding="16,14"
+                        BoxShadow="0 10 30 0 #AA000000">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Page button area" Foreground="#FFFFFF" FontSize="16.5" FontWeight="Bold" />
+
+                        <!-- Hàng Checkbox 1: Enable & Disable Previous Page -->
+                        <Grid ColumnDefinitions="*, *">
+                            <CheckBox Grid.Column="0" Classes="comicCheck"
+                                      IsChecked="{Binding IsPageButtonAreaEnabled}"
+                                      Content="Enable" />
+                            <CheckBox Grid.Column="1" Classes="comicCheck"
+                                      IsChecked="{Binding IsPageButtonAreaDisablePrev}"
+                                      Content="Disable Previous Page" />
+                        </Grid>
+
+                        <!-- Hàng Checkbox 2: Reverse & Fixed -->
+                        <Grid ColumnDefinitions="*, *">
+                            <CheckBox Grid.Column="0" Classes="comicCheck"
+                                      IsChecked="{Binding IsPageButtonAreaReverse}"
+                                      Content="Reverse" />
+                            <CheckBox Grid.Column="1" Classes="comicCheck"
+                                      IsChecked="{Binding IsPageButtonAreaFixed}"
+                                      Content="Fixed" />
+                        </Grid>
+
+                        <!-- Khu vực 4 Type và Preview mô phỏng -->
+                        <Grid ColumnDefinitions="Auto, *" Margin="0,4">
+                            <!-- Danh sách 4 Type -->
+                            <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                <RadioButton Classes="comicRadio" GroupName="PageBtnAreaTypeGrp"
+                                             IsChecked="{Binding IsPageButtonAreaType0}"
+                                             Command="{Binding SelectPageButtonAreaTypeCommand}" CommandParameter="0"
+                                             Content="Type0" />
+                                <RadioButton Classes="comicRadio" GroupName="PageBtnAreaTypeGrp"
+                                             IsChecked="{Binding IsPageButtonAreaType1}"
+                                             Command="{Binding SelectPageButtonAreaTypeCommand}" CommandParameter="1"
+                                             Content="Type1" />
+                                <RadioButton Classes="comicRadio" GroupName="PageBtnAreaTypeGrp"
+                                             IsChecked="{Binding IsPageButtonAreaType2}"
+                                             Command="{Binding SelectPageButtonAreaTypeCommand}" CommandParameter="2"
+                                             Content="Type2" />
+                                <RadioButton Classes="comicRadio" GroupName="PageBtnAreaTypeGrp"
+                                             IsChecked="{Binding IsPageButtonAreaType3}"
+                                             Command="{Binding SelectPageButtonAreaTypeCommand}" CommandParameter="3"
+                                             Content="Type3" />
+                            </StackPanel>
+
+                            <!-- Khung Preview thời gian thực trực quan chuẩn Ảnh 3 -->
+                            <Border Grid.Column="1" Height="105" Background="#2B313C" BorderBrush="#4A5568" BorderThickness="1.5" CornerRadius="4" Margin="14,0,0,0">
+                                <Panel>
+                                    <!-- Type 0 Preview (Ngang đáy hoặc đỉnh) -->
+                                    <Panel IsVisible="{Binding IsPageButtonAreaType0}">
+                                        <Border VerticalAlignment="{Binding IsPageButtonAreaBottom, Converter={x:Static ObjectConverters.IsNull}}"
+                                                Classes.alignB="{Binding IsPageButtonAreaBottom}"
+                                                Classes.alignT="{Binding IsPageButtonAreaTop}"
+                                                Margin="0,6,0,6">
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6" VerticalAlignment="Bottom">
+                                                <Border Width="38" Height="22" Background="#5C7CFA" CornerRadius="2"
+                                                        IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
+                                                    <TextBlock Text="Prev" Foreground="#FFFFFF" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <Border Width="38" Height="22" Background="#E56B6F" CornerRadius="2">
+                                                    <TextBlock Text="Next" Foreground="#FFFFFF" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                            </StackPanel>
+                                        </Border>
+                                    </Panel>
+
+                                    <!-- Type 1 Preview (Xếp dọc lề trái) -->
+                                    <Panel IsVisible="{Binding IsPageButtonAreaType1}">
+                                        <StackPanel Orientation="Vertical" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0" Spacing="4">
+                                            <Border Width="32" Height="20" Background="#5C7CFA" CornerRadius="2"
+                                                    IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
+                                                <TextBlock Text="Prev" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                            <Border Width="32" Height="20" Background="#E56B6F" CornerRadius="2">
+                                                <TextBlock Text="Next" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                        </StackPanel>
+                                    </Panel>
+
+                                    <!-- Type 2 Preview (Hai bên mép lề) -->
+                                    <Panel IsVisible="{Binding IsPageButtonAreaType2}">
+                                        <Border HorizontalAlignment="Left" VerticalAlignment="Center" Width="20" Height="48" Margin="4,0,0,0" Background="#5C7CFA" CornerRadius="2"
+                                                IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
+                                            <TextBlock Text="P" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <Border HorizontalAlignment="Right" VerticalAlignment="Center" Width="20" Height="48" Margin="0,0,4,0" Background="#E56B6F" CornerRadius="2">
+                                            <TextBlock Text="N" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </Panel>
+
+                                    <!-- Type 3 Preview (Đỉnh và Đáy trải dài) -->
+                                    <Panel IsVisible="{Binding IsPageButtonAreaType3}">
+                                        <Border VerticalAlignment="Top" HorizontalAlignment="Stretch" Height="16" Margin="6,4,6,0" Background="#5C7CFA" CornerRadius="2"
+                                                IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
+                                            <TextBlock Text="Prev" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <Border VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Height="16" Margin="6,0,6,4" Background="#E56B6F" CornerRadius="2">
+                                            <TextBlock Text="Next" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </Panel>
+                                </Panel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Lựa chọn Vị trí Bottom / Top -->
+                        <StackPanel Orientation="Horizontal" Spacing="24">
+                            <RadioButton Classes="comicRadio" GroupName="PageBtnAreaPosGrp"
+                                         IsChecked="{Binding IsPageButtonAreaBottom}"
+                                         Command="{Binding SetPageButtonAreaPositionCommand}" CommandParameter="Bottom"
+                                         Content="Bottom" />
+                            <RadioButton Classes="comicRadio" GroupName="PageBtnAreaPosGrp"
+                                         IsChecked="{Binding IsPageButtonAreaTop}"
+                                         Command="{Binding SetPageButtonAreaPositionCommand}" CommandParameter="Top"
+                                         Content="Top" />
+                        </StackPanel>
+
+                        <!-- Sliders Opacity, Size, Scroll Distance -->
+                        <StackPanel Spacing="6">
+                            <!-- Opacity -->
+                            <Grid ColumnDefinitions="*, Auto">
+                                <TextBlock Grid.Column="0" Text="Opacity" Foreground="#CBD5E1" FontSize="13" />
+                                <TextBlock Grid.Column="1" Text="{Binding PageButtonAreaOpacityText}" Foreground="#FFFFFF" FontSize="13" FontWeight="SemiBold" />
+                            </Grid>
+                            <Slider Classes="comicSlider" Minimum="10" Maximum="100" Value="{Binding PageButtonAreaOpacity}" Margin="0,-4" />
+
+                            <!-- Size -->
+                            <Grid ColumnDefinitions="*, Auto">
+                                <TextBlock Grid.Column="0" Text="Size" Foreground="#CBD5E1" FontSize="13" />
+                                <TextBlock Grid.Column="1" Text="{Binding PageButtonAreaSizeText}" Foreground="#FFFFFF" FontSize="13" FontWeight="SemiBold" />
+                            </Grid>
+                            <Slider Classes="comicSlider" Minimum="10" Maximum="100" Value="{Binding PageButtonAreaSize}" Margin="0,-4" />
+
+                            <!-- Scroll Distance -->
+                            <Grid ColumnDefinitions="*, Auto">
+                                <TextBlock Grid.Column="0" Text="Scroll Distance" Foreground="#CBD5E1" FontSize="13" />
+                                <TextBlock Grid.Column="1" Text="{Binding PageButtonAreaScrollDistanceText}" Foreground="#FFFFFF" FontSize="13" FontWeight="SemiBold" />
+                            </Grid>
+                            <Slider Classes="comicSlider" Minimum="10" Maximum="100" Value="{Binding PageButtonAreaScrollDistance}" Margin="0,-4" />
+                        </StackPanel>
+
+                        <!-- Scroll animation Checkbox -->
+                        <CheckBox Classes="comicCheck" IsChecked="{Binding IsPageButtonAreaScrollAnimation}" Content="Scroll animation" />
+
+                        <!-- Nút DEFAULT, CANCEL, OK -->
+                        <Grid ColumnDefinitions="Auto, *, Auto, Auto" Margin="0,4,0,0">
+                            <Button Grid.Column="0" Command="{Binding ResetPageButtonAreaDefaultCommand}"
+                                    Background="Transparent" Foreground="#4FC3F7" FontWeight="Bold" Padding="8,5">
+                                <TextBlock Text="DEFAULT" FontSize="12.5" />
+                            </Button>
+                            <Button Grid.Column="2" Command="{Binding ClosePopupCommand}"
+                                    Background="Transparent" Foreground="#94A3B8" Padding="10,5">
+                                <TextBlock Text="CANCEL" FontSize="12.5" />
+                            </Button>
+                            <Button Grid.Column="3" Command="{Binding ClosePopupCommand}"
+                                    Background="Transparent" Foreground="#4FC3F7" FontWeight="Bold" Padding="10,5">
+                                <TextBlock Text="OK" FontSize="12.5" />
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============================================================= -->
+                <!-- POPUP: DOUBLE TAP ZOOM (CHUẨN 100% COMICSCREEN ẢNH 4)          -->
+                <!-- ============================================================= -->
+                <Border IsVisible="{Binding IsDoubleTapZoomPopupOpen}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Width="315"
+                        Background="#F222262E"
+                        BorderBrush="#475569" BorderThickness="1"
+                        CornerRadius="8" Padding="18,16"
+                        BoxShadow="0 10 30 0 #AA000000">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Double tap zoom" Foreground="#FFFFFF" FontSize="17" FontWeight="Bold" />
+
+                        <!-- 4 Chế độ Double-Tap -->
+                        <StackPanel Spacing="4">
+                            <RadioButton Classes="comicRadio" GroupName="DoubleTapZoomModeGrp"
+                                         IsChecked="{Binding IsDoubleTapZoomOff}"
+                                         Command="{Binding SelectDoubleTapZoomModeCommand}" CommandParameter="0"
+                                         Content="Off" />
+                            <RadioButton Classes="comicRadio" GroupName="DoubleTapZoomModeGrp"
+                                         IsChecked="{Binding IsDoubleTapZoomFitScreen}"
+                                         Command="{Binding SelectDoubleTapZoomModeCommand}" CommandParameter="1"
+                                         Content="Fit Screen" />
+                            <RadioButton Classes="comicRadio" GroupName="DoubleTapZoomModeGrp"
+                                         IsChecked="{Binding IsDoubleTapZoomZoom}"
+                                         Command="{Binding SelectDoubleTapZoomModeCommand}" CommandParameter="2"
+                                         Content="Zoom" />
+                            <RadioButton Classes="comicRadio" GroupName="DoubleTapZoomModeGrp"
+                                         IsChecked="{Binding IsDoubleTapZoomSmart}"
+                                         Command="{Binding SelectDoubleTapZoomModeCommand}" CommandParameter="3"
+                                         Content="Zoom(inside) + Fit Screen(outside)" />
+                        </StackPanel>
+
+                        <!-- Khung Slider Scale (100%..400%, mặc định 193%) -->
+                        <Border BorderBrush="#475569" BorderThickness="1" CornerRadius="4" Padding="10,6" Margin="0,4">
+                            <Grid ColumnDefinitions="Auto, *, Auto" VerticalAlignment="Center">
+                                <TextBlock Grid.Column="0" Text="Scale" Foreground="#CBD5E1" FontSize="13" VerticalAlignment="Center" />
+                                <Slider Grid.Column="1" Classes="comicSlider" Minimum="100" Maximum="400"
+                                        Value="{Binding DoubleTapZoomScale}" Margin="10,0" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding DoubleTapZoomScaleText}"
+                                           Foreground="#4FC3F7" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Nút DEFAULT, CANCEL, OK -->
+                        <Grid ColumnDefinitions="Auto, *, Auto, Auto" Margin="0,6,0,0">
+                            <Button Grid.Column="0" Command="{Binding ResetDoubleTapZoomDefaultCommand}"
+                                    Background="Transparent" Foreground="#4FC3F7" FontWeight="Bold" Padding="8,5">
+                                <TextBlock Text="DEFAULT" FontSize="12.5" />
+                            </Button>
+                            <Button Grid.Column="2" Command="{Binding ClosePopupCommand}"
+                                    Background="Transparent" Foreground="#94A3B8" Padding="10,5">
+                                <TextBlock Text="CANCEL" FontSize="12.5" />
+                            </Button>
+                            <Button Grid.Column="3" Command="{Binding ClosePopupCommand}"
+                                    Background="Transparent" Foreground="#4FC3F7" FontWeight="Bold" Padding="10,5">
+                                <TextBlock Text="OK" FontSize="12.5" />
+                            </Button>
+                        </Grid>
                     </StackPanel>
                 </Border>
 
@@ -1064,6 +1456,20 @@
                                 Foreground="#4FC3F7" FontWeight="Bold"
                                 Padding="8,6" CornerRadius="5" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
                             <TextBlock Text="{Binding FullScreenButtonText}" FontSize="11.5" />
+                        </Button>
+
+                        <Border Height="1" Background="#334155" Margin="0,2" />
+
+                        <Button Command="{Binding OpenPageButtonAreaPopupCommand}"
+                                Background="#1E293B" Foreground="#E2E8F0"
+                                Padding="8,6" CornerRadius="4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                            <TextBlock Text="🔘 Page button area..." FontSize="11.5" />
+                        </Button>
+
+                        <Button Command="{Binding OpenDoubleTapZoomPopupCommand}"
+                                Background="#1E293B" Foreground="#E2E8F0"
+                                Padding="8,6" CornerRadius="4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                            <TextBlock Text="🔍 Double tap zoom..." FontSize="11.5" />
                         </Button>
                     </StackPanel>
                 </Border>
