@@ -551,7 +551,70 @@
                             </Button>
                         </UniformGrid>
 
-                        <!-- NÚT MŨI TÊN CHUYỂN NHANH GIỮA BUTTON 1-5 VÀ 6-10 -->
+                        <!-- TRANG 3: BUTTON 11 (PAGE BUTTON AREA) & TIỆN ÍCH ĐỌC LIỀN MẠCH -->
+                        <UniformGrid Grid.Column="0"
+                                     Columns="5" Rows="1"
+                                     IsVisible="{Binding IsToolbarPageThree}">
+
+                            <!-- BUTTON 11: Page button area (Vùng phím ảo chuyển trang chuẩn ComicScreen) -->
+                            <Button Classes="toolbarBtn"
+                                    Command="{Binding OpenPageButtonAreaPopupCommand}"
+                                    ToolTip.Tip="Button 11: Cài đặt phím ảo chuyển trang (Page button area kiểu ComicScreen)">
+                                <Grid Width="36" Height="30">
+                                    <Border BorderBrush="{Binding Button11IconTint}" BorderThickness="1.5" CornerRadius="4"
+                                            Background="#1E293B">
+                                        <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock Text="📱" FontSize="11" VerticalAlignment="Center" />
+                                            <TextBlock Text="🔘" FontSize="11" Foreground="{Binding Button11IconTint}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border IsVisible="{Binding IsPageButtonAreaEnabled}"
+                                            Background="#4FC3F7" CornerRadius="3" Padding="2,0"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-2,0">
+                                        <TextBlock Text="ON" Foreground="#0F172A" FontSize="7.5" FontWeight="ExtraBold" />
+                                    </Border>
+                                </Grid>
+                            </Button>
+
+                            <!-- BẬT/TẮT NHANH PHÍM ẢO CHUYỂN TRANG -->
+                            <Button Classes="toolbarBtn"
+                                    Command="{Binding TogglePageButtonAreaEnabledCommand}"
+                                    ToolTip.Tip="Bật / Tắt nhanh vùng phím ảo chuyển trang">
+                                <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="{Binding PageButtonAreaQuickToggleIcon}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding PageButtonAreaQuickToggleText}" Foreground="{Binding Button11IconTint}"
+                                               FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- CHẾ ĐỘ ĐỌC LIỀN MẠCH / PHÂN CHƯƠNG -->
+                            <Button Classes="toolbarBtn"
+                                    Command="{Binding ToggleContinuousChaptersModeCommand}"
+                                    ToolTip.Tip="{Binding ContinuousModeTooltipText}">
+                                <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="📖" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding ContinuousModeBadgeText}" Foreground="#38BDF8"
+                                               FontSize="9" FontWeight="Bold" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- NÚT PHÓNG TO / THU NHỎ NHANH -->
+                            <Button Classes="toolbarBtn"
+                                    Command="{Binding SmartDoubleTapZoomCommand}"
+                                    ToolTip.Tip="Chạm đúp phóng to nhanh (Smart Zoom)">
+                                <TextBlock Text="🔍⚡" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Button>
+
+                            <!-- NÚT MỞ MENU MỞ RỘNG (⋮) -->
+                            <Button Classes="toolbarBtn"
+                                    Command="{Binding ToggleMoreMenuCommand}"
+                                    ToolTip.Tip="Menu cài đặt nâng cao">
+                                <TextBlock Text="⋮" Foreground="#E2E8F0" FontSize="18" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Button>
+                        </UniformGrid>
+
+                        <!-- NÚT MŨI TÊN CHUYỂN NHANH GIỮA CÁC TRANG CÔNG CỤ -->
                         <Button Grid.Column="1"
                                 Command="{Binding ToggleToolbarPageCommand}"
                                 Background="#283140"
@@ -559,7 +622,7 @@
                                 Foreground="#CBD5E1"
                                 Padding="8,4" CornerRadius="6" Margin="4,0,0,0"
                                 VerticalAlignment="Center"
-                                ToolTip.Tip="Chuyển qua lại giữa cụm nút 1-5 và 6-10 (hoặc vuốt ngang trên thanh công cụ)">
+                                ToolTip.Tip="Chuyển qua lại giữa các cụm nút 1-5, 6-10 và nút 11 (hoặc vuốt ngang trên thanh công cụ)">
                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding ToolbarPageIndicatorText}" Foreground="#4FC3F7" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
                                 <TextBlock Text="{Binding ToolbarArrowIconText}" Foreground="#F8FAFC" FontSize="13" FontWeight="ExtraBold" VerticalAlignment="Center" />
@@ -1374,6 +1437,12 @@
                             </Button>
                         </Grid>
 
+                        <CheckBox IsChecked="{Binding IsContinuousChaptersMode}"
+                                  Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold"
+                                  ToolTip.Tip="{Binding ContinuousModeTooltipText}">
+                            <TextBlock Text="Đọc liền mạch (tự động chuyển chương)" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" />
+                        </CheckBox>
+
                         <StackPanel Spacing="4">
                             <TextBlock Text="Chọn chương:" Foreground="#94A3B8" FontSize="11.5" />
                             <ComboBox ItemsSource="{Binding ChapterList}"
@@ -1460,6 +1529,14 @@
 
                         <Border Height="1" Background="#334155" Margin="0,2" />
 
+                        <CheckBox IsChecked="{Binding IsContinuousChaptersMode}"
+                                  Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold"
+                                  ToolTip.Tip="{Binding ContinuousModeTooltipText}" Margin="2,0">
+                            <TextBlock Text="Đọc liền mạch (tự qua chương)" FontSize="11" Foreground="#E2E8F0" />
+                        </CheckBox>
+
+                        <Border Height="1" Background="#334155" Margin="0,2" />
+
                         <Button Command="{Binding OpenPageButtonAreaPopupCommand}"
                                 Background="#1E293B" Foreground="#E2E8F0"
                                 Padding="8,6" CornerRadius="4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
@@ -1507,40 +1584,62 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Thanh trượt trang (Seekbar Cyan) -->
+                <!-- Thanh trượt trang (Seekbar Cyan) & Tùy chọn đọc liền mạch -->
                 <Border x:Name="BottomOverlayBar"
                         Background="#E6181C22"
                         BorderBrush="#2E3642"
                         BorderThickness="0,1,0,0"
-                        Padding="12,8">
-                    <Grid ColumnDefinitions="Auto, *, Auto" VerticalAlignment="Center">
-                        <Button Grid.Column="0"
-                                Command="{Binding PrevChapterCommand}"
-                                IsEnabled="{Binding CanGoPrevChapter}"
-                                Background="Transparent" Foreground="#94A3B8"
-                                Padding="8,4" Margin="0,0,6,0"
-                                ToolTip.Tip="Chương trước">
-                            <TextBlock Text="⏮" FontSize="14" />
-                        </Button>
+                        Padding="12,6">
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="Auto, *, Auto" VerticalAlignment="Center">
+                            <Button Grid.Column="0"
+                                    Command="{Binding PrevChapterCommand}"
+                                    IsEnabled="{Binding CanGoPrevChapter}"
+                                    Background="Transparent" Foreground="#94A3B8"
+                                    Padding="8,4" Margin="0,0,6,0"
+                                    ToolTip.Tip="Chương trước">
+                                <TextBlock Text="⏮" FontSize="14" />
+                            </Button>
 
-                        <Slider x:Name="PageScrubberSlider"
-                                Grid.Column="1"
-                                Classes="comicSlider"
-                                Minimum="0"
-                                Maximum="{Binding MaxPageIndex}"
-                                Value="{Binding CurrentPageIndex, Mode=OneWay}"
-                                SmallChange="1" LargeChange="5"
-                                VerticalAlignment="Center" />
+                            <Slider x:Name="PageScrubberSlider"
+                                    Grid.Column="1"
+                                    Classes="comicSlider"
+                                    Minimum="0"
+                                    Maximum="{Binding MaxPageIndex}"
+                                    Value="{Binding CurrentPageIndex, Mode=OneWay}"
+                                    SmallChange="1" LargeChange="5"
+                                    VerticalAlignment="Center" />
 
-                        <Button Grid.Column="2"
-                                Command="{Binding NextChapterCommand}"
-                                IsEnabled="{Binding CanGoNextChapter}"
-                                Background="Transparent" Foreground="#94A3B8"
-                                Padding="8,4" Margin="6,0,0,0"
-                                ToolTip.Tip="Chương tiếp theo">
-                            <TextBlock Text="⏭" FontSize="14" />
-                        </Button>
-                    </Grid>
+                            <Button Grid.Column="2"
+                                    Command="{Binding NextChapterCommand}"
+                                    IsEnabled="{Binding CanGoNextChapter}"
+                                    Background="Transparent" Foreground="#94A3B8"
+                                    Padding="8,4" Margin="6,0,0,0"
+                                    ToolTip.Tip="Chương tiếp theo">
+                                <TextBlock Text="⏭" FontSize="14" />
+                            </Button>
+                        </Grid>
+
+                        <!-- Hàng phụ: Tùy chọn Đọc liền mạch / Phân chương & Tên chương hiện tại -->
+                        <DockPanel LastChildFill="False">
+                            <CheckBox DockPanel.Dock="Left"
+                                      IsChecked="{Binding IsContinuousChaptersMode}"
+                                      Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold"
+                                      Margin="4,0,0,0"
+                                      ToolTip.Tip="{Binding ContinuousModeTooltipText}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="Đọc liền mạch" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" />
+                                    <TextBlock Text="(Tự động qua chương)" FontSize="9.5" Foreground="#94A3B8" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </CheckBox>
+
+                            <TextBlock DockPanel.Dock="Right"
+                                       Text="{Binding CurrentChapter.Title}"
+                                       Foreground="#64748B" FontSize="10.5" MaxWidth="260"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                       Margin="0,0,4,0" />
+                        </DockPanel>
+                    </StackPanel>
                 </Border>
             </StackPanel>
         </Grid>

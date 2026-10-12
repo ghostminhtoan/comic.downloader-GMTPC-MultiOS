@@ -114,11 +114,28 @@
                                 ToolTip.Tip="Dán trực tiếp liên kết từ bộ nhớ tạm (Clipboard) và nạp vào danh sách">
                             <TextBlock Text="📋 DÁN LINK" FontSize="11" />
                         </Button>
-                        <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="5" Padding="8,2" Height="30" Margin="0,0,8,4"
+                        <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="5" Padding="6,2" Height="30" Margin="0,0,8,4"
                                 ToolTip.Tip="Giới hạn số luồng CPU xử lý link/thumbnail/quét chương (Android mặc định 3, tối đa 6; Windows/Linux mặc định 4, tối đa bằng tổng số luồng CPU)">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4">
                                 <TextBlock Text="Số luồng CPU:" FontSize="11" Foreground="#CBD5E1" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <NumericUpDown Minimum="1" Maximum="{Binding MaxLinkCpuThreads}" Value="{Binding LinkCpuThreads, Mode=TwoWay}" Increment="1" FormatString="0" Width="86" Height="24" FontSize="11" />
+                                <Button Command="{Binding DecreaseLinkCpuThreadsCommand}"
+                                        Background="#1E293B" Foreground="#38BDF8" FontWeight="ExtraBold"
+                                        Padding="5,0" Height="22" MinWidth="22" CornerRadius="3"
+                                        VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                        ToolTip.Tip="Giảm 1 luồng CPU">
+                                    <TextBlock Text="−" FontSize="13" FontWeight="Bold" />
+                                </Button>
+                                <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="3" Padding="4,0" MinWidth="26" Height="22">
+                                    <TextBlock Text="{Binding LinkCpuThreads}" FontSize="11.5" FontWeight="Bold" Foreground="#38BDF8"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Button Command="{Binding IncreaseLinkCpuThreadsCommand}"
+                                        Background="#1E293B" Foreground="#38BDF8" FontWeight="ExtraBold"
+                                        Padding="5,0" Height="22" MinWidth="22" CornerRadius="3"
+                                        VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                                        ToolTip.Tip="Tăng 1 luồng CPU">
+                                    <TextBlock Text="+" FontSize="13" FontWeight="Bold" />
+                                </Button>
                             </StackPanel>
                         </Border>
                         <CheckBox IsChecked="{Binding IsAutoPasteClipboard}"
@@ -3829,13 +3846,27 @@
             </Panel>
         </Border>
 
-        <!-- FLOATING QUICK CONTROL BAR (DỌC, BÊN PHẢI, CÁCH LỀ PHẢI ĐỂ KHÔNG CHE VERTICAL SCROLLBAR) -->
-        <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
+        <!-- FLOATING QUICK CONTROL BAR (DỌC, MOVEABLE/DRAGGABLE KÉO THẢ TỰ DO ĐỔI VỊ TRÍ) -->
+        <Border x:Name="FloatingQuickControlBorder"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom"
                 Margin="0,0,24,45" CornerRadius="16"
                 Background="#E60B0F19" BorderBrush="#38BDF8" BorderThickness="1.2"
-                Padding="4,6" ZIndex="1200" IsHitTestVisible="True"
+                Padding="4,5" ZIndex="1200" IsHitTestVisible="True"
                 BoxShadow="0 8 24 0 #90000000">
-            <StackPanel Orientation="Vertical" Spacing="5" HorizontalAlignment="Center">
+            <Border.RenderTransform>
+                <TranslateTransform X="0" Y="0" />
+            </Border.RenderTransform>
+            <StackPanel Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
+                <!-- Thanh Grip kéo thả di chuyển vị trí (Move Handle) -->
+                <Border x:Name="FloatingGripBar"
+                        Background="#1E293B" CornerRadius="8"
+                        Width="44" Height="14" Margin="0,1,0,2"
+                        Cursor="SizeAll"
+                        ToolTip.Tip="Chạm giữ &amp; kéo để di chuyển vị trí cụm nút nổi này">
+                    <TextBlock Text="⋮⋮⋮" Foreground="#38BDF8" FontSize="9" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                </Border>
+
                 <!-- 1. Toggle Button Tải / Dừng tải -->
                 <Button Command="{Binding DownloadAllCommand}" IsVisible="{Binding !IsDownloading}"
                         Background="#4F46E5" Foreground="#FFFFFF" FontWeight="Bold"

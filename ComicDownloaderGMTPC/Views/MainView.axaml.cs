@@ -8,6 +8,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using Avalonia.Media;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.ViewModels;
 
@@ -145,6 +146,8 @@ public partial class MainView : UserControl
 
         ScheduleVisibleThumbnailScan(delayMs: 120);
 
+        SetupFloatingBarDraggable();
+
         // Khi bất kỳ ô nhập liệu nào (TextBox, NumericUpDown, ComboBox) nhận focus trên Android / Desktop:
         // Tự động cuộn khung nhìn để không bao giờ bị bàn phím ảo che khuất ô cần nhập
         AddHandler(InputElement.GotFocusEvent, (s, ev) =>
@@ -161,6 +164,92 @@ public partial class MainView : UserControl
                 }, Avalonia.Threading.DispatcherPriority.Background);
             }
         }, RoutingStrategies.Bubble);
+    }
+
+    private bool _isFloatingBarDragging = false;
+    private Point _floatingDragStartPointer;
+    private double _floatingStartTransformX = 0;
+    private double _floatingStartTransformY = 0;
+
+    /// <summary>
+    /// Kéo thả di chuyển tự do cụm phím nổi (Floating Quick Control Bar) quanh màn hình
+    /// để không bao giờ bị che khuất nút Đọc truyện hay các nút bấm khác bên dưới.
+    /// </summary>
+    private void SetupFloatingBarDraggable()
+    {
+        var gripBar = this.FindControl<Border>("FloatingGripBar");
+        var border = this.FindControl<Border>("FloatingQuickControlBorder");
+        if (border == null) return;
+
+        var transform = border.RenderTransform as TranslateTransform;
+        if (transform == null)
+        {
+            transform = new TranslateTransform();
+            border.RenderTransform = transform;
+        }
+
+        void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (e.Source is Button || (e.Source is Visual v && v.FindAncestorOfType<Button>() != null))
+                return;
+
+            var prop = e.GetCurrentPoint(this).Properties;
+            if (prop.IsLeftButtonPressed)
+            {
+                _isFloatingBarDragging = true;
+                _floatingDragStartPointer = e.GetPosition(this);
+                _floatingStartTransformX = transform.X;
+                _floatingStartTransformY = transform.Y;
+                e.Pointer.Capture(sender as IInputElement ?? border);
+                e.Handled = true;
+            }
+        }
+
+        void OnPointerMoved(object? sender, PointerEventArgs e)
+        {
+            if (!_isFloatingBarDragging) return;
+
+            var currentPoint = e.GetPosition(this);
+            double deltaX = currentPoint.X - _floatingDragStartPointer.X;
+            double deltaY = currentPoint.Y - _floatingDragStartPointer.Y;
+
+            double minX = -Math.Max(0, Bounds.Width - 70);
+            double maxX = 20;
+            double minY = -Math.Max(0, Bounds.Height - 70);
+            double maxY = 20;
+
+            transform.X = Math.Clamp(_floatingStartTransformX + deltaX, minX, maxX);
+            transform.Y = Math.Clamp(_floatingStartTransformY + deltaY, minY, maxY);
+            e.Handled = true;
+        }
+
+        void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (_isFloatingBarDragging)
+            {
+                _isFloatingBarDragging = false;
+                e.Pointer.Capture(null);
+                e.Handled = true;
+            }
+        }
+
+        void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+        {
+            _isFloatingBarDragging = false;
+        }
+
+        if (gripBar != null)
+        {
+            gripBar.PointerPressed += OnPointerPressed;
+            gripBar.PointerMoved += OnPointerMoved;
+            gripBar.PointerReleased += OnPointerReleased;
+            gripBar.PointerCaptureLost += OnPointerCaptureLost;
+        }
+
+        border.PointerPressed += OnPointerPressed;
+        border.PointerMoved += OnPointerMoved;
+        border.PointerReleased += OnPointerReleased;
+        border.PointerCaptureLost += OnPointerCaptureLost;
     }
 
     /// <summary>

@@ -151,6 +151,24 @@ public partial class MainViewModel : ViewModelBase
         RequestQueueAutoSave(250);
     }
 
+    [RelayCommand]
+    public void DecreaseLinkCpuThreads()
+    {
+        if (LinkCpuThreads > 1)
+        {
+            LinkCpuThreads--;
+        }
+    }
+
+    [RelayCommand]
+    public void IncreaseLinkCpuThreads()
+    {
+        if (LinkCpuThreads < MaxLinkCpuThreads)
+        {
+            LinkCpuThreads++;
+        }
+    }
+
     partial void OnConcurrentComicDownloadsChanged(int value)
     {
         int clamped = Math.Clamp(value, 1, 16);

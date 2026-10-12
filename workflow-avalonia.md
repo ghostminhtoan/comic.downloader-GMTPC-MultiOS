@@ -2484,4 +2484,34 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` hoàn tất biên dịch và đóng gói cho Windows, Linux, Android vào thư mục duy nhất `\publish\`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.76 Nút Số Luồng CPU Chuẩn Mobile (Ảnh 1), Cụm Nút Nổi Kéo Thả Di Chuyển Tự Do (Moveable/Draggable Quick Bar - Ảnh 2), Nút Số 11 Page Button Area Trên Toolbar Đọc Truyện & Cơ Chế Đọc Liền Mạch / Phân Chương Kèm Lưu Bookmark Chuẩn Theo Số Chương (`MainView.axaml`, `MainView.axaml.cs`, `ComicReaderViewModel.cs`, `ComicReaderControl.axaml`, `ComicReaderControl.axaml.cs`, `ReadProgressStore.cs`) (2026-10-12)
+- **Bối Cảnh & Phản Hồi Từ Người Dùng**:
+  1. *Nút số luồng CPU bị lỗi khó thao tác, không hiển thị số được (Ảnh 1)*: Ô NumericUpDown bị bóp nghẹt 24px khiến con số bị cắt xén, không nhìn thấy trên thiết bị di động.
+  2. *Cụm float button (Tải, Tạm dừng, Top, Bot) hardcode một vị trí che nút đọc truyện (Ảnh 2)*: Cần cho phép kéo thả di chuyển tự do (moveable/draggable) quanh màn hình để không che các nút bấm bên dưới.
+  3. *Chức năng Page button area cần được đặt thành nút riêng (Nút số 11)*: Mở rộng thanh công cụ đọc truyện từ 10 nút thành 11 nút (phân trang 3 cụm: 1-5, 6-10, 11).
+  4. *Checkbox "Đọc liền mạch / Phân chương"*: Cho phép đọc liền mạch tự động chuyển chương khi đến cuối trang hoặc cuộn chạm đáy, hoặc phân chương dừng lại ở cuối chương cần bấm nút chuyển thủ công. Dù đọc liền mạch thì khi Bookmark vẫn phải nhớ chính xác theo số chương và tên chương.
+  5. *Fix lỗi tàn dư Bookmark truyện cũ*: Khi mở truyện mới và mở danh sách bookmark, tàn dư bookmark của truyện cũ vẫn hiển thị thay vì lọc sạch theo đúng truyện hiện tại.
+- **Giải Pháp Kỹ Thuật & Kiến Trúc (`First-Principles Engineering Rigor`)**:
+  1. **Nút Điều Khiển Số Luồng CPU Chuẩn Mobile & Desktop (`MainView.axaml`, `MainViewModel.cs`)**:
+     - Thay thế hoàn toàn `NumericUpDown` bóp nghẹt bằng cụm nút bấm cảm ứng chuyên dụng: Nút `[−]` (giảm), Ô hiển thị số màu Cyan `#38BDF8` nổi bật, và Nút `[+]` (tăng) với `DecreaseLinkCpuThreadsCommand` và `IncreaseLinkCpuThreadsCommand`. Số to rõ, dễ chạm chính xác 100% trên cả ngón tay cảm ứng và chuột.
+  2. **Cụm Nút Nổi Di Chuyển Tự Do Khắp Màn Hình (Moveable Quick Floating Bar - `MainView.axaml`, `MainView.axaml.cs`)**:
+     - Bổ sung thanh Grip kéo thả `FloatingGripBar` (icon `⋮⋮⋮`, `Cursor="SizeAll"`).
+     - Gán `TranslateTransform` cho `FloatingQuickControlBorder`.
+     - Code-behind `SetupFloatingBarDraggable`: Bắt sự kiện con trỏ (`PointerPressed`, `PointerMoved`, `PointerReleased`, `PointerCaptureLost`), lọc thông minh (chạm vào các nút chức năng bên trong không kích hoạt kéo để giữ nguyên thao tác click nút), cập nhật mượt mà tọa độ `transform.X`, `transform.Y` với cơ chế kẹp biên giới hạn (`Math.Clamp`) không bao giờ để cụm phím bay mất ra ngoài màn hình.
+  3. **Mở Rộng Toolbar Đọc Truyện 11 Nút & Trang 3 Cho Page Button Area (`ComicReaderViewModel.cs`, `ComicReaderControl.axaml`, `ComicReaderControl.axaml.cs`)**:
+     - Nâng cấp phân trang thanh công cụ từ 2 trang lên 3 trang: `ToolbarPageIndex` (0: `1-5`, 1: `6-10`, 2: `11`). Nút điều hướng chuyển trang hiển thị tuần tự `1-5` ↔ `6-10` ↔ `11`.
+     - Trang 3 bổ sung **Button 11** mở hộp thoại cài đặt `Page button area`, nút toggle nhanh BẬT/TẮT vùng phím ảo, và nút chuyển nhanh chế độ Đọc liền mạch.
+     - Đồng bộ cử chỉ vuốt ngang trên thanh công cụ: vuốt trái gọi `NextToolbarPage()`, vuốt phải gọi `PrevToolbarPage()`.
+  4. **Cơ Chế Đọc Liền Mạch / Phân Chương & Lưu Bookmark Chuẩn Xác Theo Số Chương (`ComicReaderViewModel.cs`, `ComicReaderControl.axaml`, `ComicReaderControl.axaml.cs`, `ReadProgressStore.cs`)**:
+     - Thêm thuộc tính `IsContinuousChaptersMode` (mặc định `true`).
+     - Bổ sung CheckBox "Đọc liền mạch" tại 3 vị trí trực quan: `BottomOverlayBar` (ngay trên thanh trượt Seekbar), `MoreMenu` (menu mở rộng ⋮), và `ChapterDrawer` (đỉnh danh sách chương).
+     - Trong Flip Mode: Khi ở cuối chương bấm `NextPage` tự động gọi `NextChapter()` (nếu liền mạch) hoặc hiển thị toast nhắc bấm nút qua chương (nếu phân chương). Khi ở đầu chương bấm `PrevPage` tự động chuyển về chương trước và nhảy tới trang cuối của chương trước (`_isNavigatingToPreviousChapter`).
+     - Trong Scroll Mode (Dọc & Ngang): Thuật toán `CheckContinuousOverscroll` nhận diện cử chỉ kéo vuốt kịch đáy/mép và lăn chuột `OnViewportPointerWheelChanged` để kích hoạt chuyển chương mượt mà với bộ đệm chống nhảy kép 1200ms.
+     - Cơ chế Bookmark: Dù chuyển chương ngầm liên tục, `CurrentChapter` luôn cập nhật tức thời. Lệnh Bookmark luôn ghi nhớ chính xác `ChapterIndex`, `ChapterTitle`, `ChapterProgressKey` và `PageIndex` của chương hiện tại.
+     - Triệt tiêu 100% bug tàn dư Bookmark: Xóa bỏ logic fallback sai lệch trong `ReadProgressStore.cs` và gọi `RefreshBookmarksList()` trong `OnCurrentChapterChanged`.
+- **Nghiệm Thu**:
+  - `dotnet build` Release đạt `0 Warning(s), 0 Error(s)` cho cả Desktop và Android.
+  - `build-avalonia.bat` hoàn tất biên dịch và đóng gói cho Windows, Linux, Android vào thư mục duy nhất `\publish\`.
+  - Khởi chạy Desktop EXE đạt `Responding: True` và nạp thành công 205MB bộ nhớ.
+
 

@@ -162,35 +162,65 @@ public partial class ComicReaderViewModel : ViewModelBase
             : (IsRightToLeft ? CurrentPage : SecondaryPage);
 
     // =========================================================================
-    // THANH CÔNG CỤ 10 NÚT KIỂU COMICSCREEN (SWIPE GIỮA BUTTON 1-5 VÀ 6-10)
+    // THANH CÔNG CỤ 11 NÚT KIỂU COMICSCREEN (SWIPE GIỮA 1-5, 6-10, VÀ NÚT 11)
     // =========================================================================
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsToolbarPageOne))]
+    [NotifyPropertyChangedFor(nameof(IsToolbarPageTwo))]
+    [NotifyPropertyChangedFor(nameof(IsToolbarPageThree))]
     [NotifyPropertyChangedFor(nameof(ToolbarPageIndicatorText))]
     [NotifyPropertyChangedFor(nameof(ToolbarArrowIconText))]
-    private bool _isToolbarPageTwo = false;
+    private int _toolbarPageIndex = 0; // 0: "1-5", 1: "6-10", 2: "11"
 
-    public bool IsToolbarPageOne => !IsToolbarPageTwo;
+    public bool IsToolbarPageOne => ToolbarPageIndex == 0;
+    public bool IsToolbarPageTwo => ToolbarPageIndex == 1;
+    public bool IsToolbarPageThree => ToolbarPageIndex == 2;
 
-    public string ToolbarPageIndicatorText => IsToolbarPageTwo ? "6-10" : "1-5";
+    public string ToolbarPageIndicatorText => ToolbarPageIndex switch
+    {
+        0 => "1-5",
+        1 => "6-10",
+        _ => "11"
+    };
 
-    public string ToolbarArrowIconText => IsToolbarPageTwo ? "❮" : "❯";
+    public string ToolbarArrowIconText => ToolbarPageIndex switch
+    {
+        0 => "❯",
+        1 => "❯",
+        _ => "❮"
+    };
 
     [RelayCommand]
     public void ToggleToolbarPage()
     {
-        SetToolbarPage(!IsToolbarPageTwo);
+        SetToolbarPageIndex((ToolbarPageIndex + 1) % 3);
     }
 
-    public void SetToolbarPage(bool pageTwo)
+    public void NextToolbarPage()
     {
-        if (IsToolbarPageTwo == pageTwo) return;
-        IsToolbarPageTwo = pageTwo;
+        SetToolbarPageIndex((ToolbarPageIndex + 1) % 3);
+    }
+
+    public void PrevToolbarPage()
+    {
+        SetToolbarPageIndex((ToolbarPageIndex + 2) % 3);
+    }
+
+    public void SetToolbarPageIndex(int index)
+    {
+        int clamped = (index % 3 + 3) % 3;
+        if (ToolbarPageIndex == clamped) return;
+        ToolbarPageIndex = clamped;
         if (!IsMarginEditorOpen)
         {
             ActivePopup = string.Empty;
         }
+    }
+
+    public void SetToolbarPage(bool pageTwo)
+    {
+        SetToolbarPageIndex(pageTwo ? 1 : 0);
     }
 
     // =========================================================================
@@ -1307,11 +1337,51 @@ public partial class ComicReaderViewModel : ViewModelBase
     }
 
     // =========================================================================
-    // PAGE BUTTON AREA (VÙNG NÚT CHUYỂN TRANG ẢO CHUẨN 100% COMICSCREEN ẢNH 3)
+    // BUTTON 11: PAGE BUTTON AREA (VÙNG NÚT CHUYỂN TRANG ẢO CHUẨN 100% COMICSCREEN ẢNH 3)
     // =========================================================================
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Button11IconTint))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaQuickToggleIcon))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaQuickToggleText))]
     private bool _isPageButtonAreaEnabled = false;
+
+    public string Button11IconTint => IsPageButtonAreaEnabled ? "#4FC3F7" : "#E2E8F0";
+    public string PageButtonAreaQuickToggleIcon => IsPageButtonAreaEnabled ? "🟢" : "⚪";
+    public string PageButtonAreaQuickToggleText => IsPageButtonAreaEnabled ? "BẬT" : "TẮT";
+
+    [RelayCommand]
+    public void TogglePageButtonAreaEnabled()
+    {
+        IsPageButtonAreaEnabled = !IsPageButtonAreaEnabled;
+        ShowTransientToast(IsPageButtonAreaEnabled ? "🔘 Đã BẬT phím ảo chuyển trang (Page button area)" : "🔘 Đã TẮT phím ảo chuyển trang");
+    }
+
+    // =========================================================================
+    // CHẾ ĐỘ ĐỌC LIỀN MẠCH / PHÂN CHƯƠNG (CONTINUOUS READING VS PER CHAPTER)
+    // =========================================================================
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ContinuousModeBadgeText))]
+    [NotifyPropertyChangedFor(nameof(ContinuousModeTooltipText))]
+    private bool _isContinuousChaptersMode = true;
+
+    public string ContinuousModeBadgeText => IsContinuousChaptersMode ? "LIỀN MẠCH" : "THEO CHƯƠNG";
+
+    public string ContinuousModeTooltipText => IsContinuousChaptersMode
+        ? "Đọc liền mạch: Tự động chuyển chương khi đến cuối trang hoặc cuộn chạm mép"
+        : "Phân chương: Dừng lại ở cuối chương, yêu cầu bấm nút để chuyển chương";
+
+    [RelayCommand]
+    public void ToggleContinuousChaptersMode()
+    {
+        IsContinuousChaptersMode = !IsContinuousChaptersMode;
+        ShowTransientToast(IsContinuousChaptersMode
+            ? "📖⚡ Đã BẬT Đọc liền mạch: Tự động chuyển chương khi hết trang"
+            : "📑 Đã chuyển sang Phân chương: Dừng lại ở cuối chương, chuyển chương thủ công");
+    }
+
+    private bool _isNavigatingToPreviousChapter = false;
 
     [ObservableProperty]
     private bool _isPageButtonAreaDisablePrev = false;
@@ -1809,6 +1879,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     {
         if (_suppressChapterSelectionChanged || value == null) return;
         ActivePopup = string.Empty;
+        RefreshBookmarksList();
         _ = LoadChapterInternalAsync(value);
     }
 
@@ -1949,7 +2020,10 @@ public partial class ComicReaderViewModel : ViewModelBase
             TotalPages = Pages.Count;
             chapter.TotalPages = TotalPages;
 
-            int savedPageIndex = _progressStore.GetLastPageIndex(chapter.EffectiveProgressKey, TotalPages);
+            int savedPageIndex = _isNavigatingToPreviousChapter
+                ? Math.Max(0, TotalPages - 1)
+                : _progressStore.GetLastPageIndex(chapter.EffectiveProgressKey, TotalPages);
+            _isNavigatingToPreviousChapter = false;
             int startIndex = Math.Clamp(savedPageIndex, 0, Math.Max(0, TotalPages - 1));
 
             _suppressScrollSync = true;
@@ -2180,7 +2254,14 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
         else if (CanGoNextChapter)
         {
-            NextChapter();
+            if (IsContinuousChaptersMode)
+            {
+                NextChapter();
+            }
+            else
+            {
+                ShowTransientToast("🏁 Đã đến cuối chương. Bấm [⏭ Next Chap] để sang chương tiếp theo.");
+            }
         }
     }
 
@@ -2201,7 +2282,15 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
         else if (CanGoPrevChapter)
         {
-            PrevChapter();
+            if (IsContinuousChaptersMode)
+            {
+                _isNavigatingToPreviousChapter = true;
+                PrevChapter();
+            }
+            else
+            {
+                ShowTransientToast("🏁 Đã đến đầu chương. Bấm [⏮ Prev Chap] để về chương trước.");
+            }
         }
     }
 

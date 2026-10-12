@@ -404,10 +404,8 @@ public sealed class ReadProgressStore
                 .OrderByDescending(b => b.CreatedAtUnixSeconds)
                 .ToList();
 
-            // Nếu bộ truyện hiện tại chưa có bookmark riêng, trả về danh sách bookmark gần nhất để người dùng tiện tra cứu
-            return filtered.Count > 0
-                ? filtered
-                : _bookmarks.OrderByDescending(b => b.CreatedAtUnixSeconds).ToList();
+            // Chỉ trả về danh sách bookmark thuộc đúng bộ truyện được lọc, không để tàn dư truyện cũ
+            return filtered;
         }
     }
 
