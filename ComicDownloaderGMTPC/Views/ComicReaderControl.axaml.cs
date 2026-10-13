@@ -59,6 +59,21 @@ public partial class ComicReaderControl : UserControl
     private long _lastTapTick;
     private readonly DispatcherTimer _singleTapTimer;
 
+    // Theo dõi con trỏ đa điểm chạm (Multi-touch Tracking) cho Pinch-to-zoom chuẩn ComicScreen / MX Player
+    private readonly System.Collections.Generic.Dictionary<int, Point> _activePointers = new();
+    private bool _isPinching;
+    private double _pinchStartDistance;
+    private double _pinchLastDistance;
+    private double _pinchStartZoom;
+    private Point _pinchPivot;
+
+    private static double Distance(Point p1, Point p2)
+    {
+        double dx = p1.X - p2.X;
+        double dy = p1.Y - p2.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
     public ComicReaderControl()
     {
         InitializeComponent();
@@ -691,6 +706,28 @@ public partial class ComicReaderControl : UserControl
         Point pos = e.GetPosition(this);
         long now = Environment.TickCount64;
 
+        _activePointers[e.Pointer.Id] = pos;
+
+        // Nếu có từ 2 ngón tay chạm cùng lúc: kích hoạt chế độ Pinch-to-zoom ngay lập tức
+        if (_activePointers.Count >= 2)
+        {
+            _singleTapTimer.Stop();
+            _lastTapTick = 0;
+            _isPointerTapCandidate = false;
+            _isPanHolding = false;
+            _isPanDragging = false;
+            StopKineticScroll();
+
+            var pts = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Take(_activePointers.Values, 2));
+            double dist = Distance(pts[0], pts[1]);
+            _pinchStartDistance = Math.Max(10.0, dist);
+            _pinchLastDistance = _pinchStartDistance;
+            _pinchStartZoom = (DataContext is ComicReaderViewModel vmp) ? vmp.ZoomLevel : 1.0;
+            _pinchPivot = new Point((pts[0].X + pts[1].X) * 0.5, (pts[0].Y + pts[1].Y) * 0.5);
+            _isPinching = true;
+            return;
+        }
+
         _pointerPressPoint = pos;
         _pointerPressTick = now;
         _isPointerTapCandidate = true;
@@ -707,11 +744,83 @@ public partial class ComicReaderControl : UserControl
 
     private void OnViewportPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (!_isPanHolding) return;
+        Point currentPoint = e.GetPosition(this);
+        _activePointers[e.Pointer.Id] = currentPoint;
+
         if (DataContext is not ComicReaderViewModel vm) return;
         if (vm.IsMarginEditorOpen) return;
 
-        Point currentPoint = e.GetPosition(this);
+        // Xử lý cử chỉ 2 ngón tay Pinch-to-zoom mượt mà chuẩn ComicScreen và MX Player
+        if (_activePointers.Count >= 2)
+        {
+            var pts = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Take(_activePointers.Values, 2));
+            double currentDist = Distance(pts[0], pts[1]);
+            Point currentPivot = new Point((pts[0].X + pts[1].X) * 0.5, (pts[0].Y + pts[1].Y) * 0.5);
+
+            if (!_isPinching)
+            {
+                _isPinching = true;
+                _pinchStartDistance = Math.Max(10.0, currentDist);
+                _pinchLastDistance = _pinchStartDistance;
+                _pinchStartZoom = vm.ZoomLevel;
+                _pinchPivot = currentPivot;
+                _isPanHolding = false;
+                _isPanDragging = false;
+                _isPointerTapCandidate = false;
+                _singleTapTimer.Stop();
+            }
+
+            if (_pinchLastDistance > 5.0 && currentDist > 5.0)
+            {
+                double scaleFactor = currentDist / _pinchLastDistance;
+                if (Math.Abs(scaleFactor - 1.0) > 0.003 || Distance(currentPivot, _pinchPivot) > 2.0)
+                {
+                    double oldZoom = vm.ZoomLevel;
+                    double newZoom = Math.Clamp(oldZoom * scaleFactor, 0.4, 4.0);
+                    newZoom = Math.Round(newZoom, 3);
+
+                    if (Math.Abs(newZoom - oldZoom) > 0.001)
+                    {
+                        var scrollViewer = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
+                        Vector? oldOffset = scrollViewer?.Offset;
+
+                        vm.ZoomLevel = newZoom;
+
+                        // Neo tâm thu phóng (Pivot Zoom Alignment) để điểm ảnh dưới ngón tay không bị trôi lệch
+                        if (scrollViewer != null && oldOffset.HasValue)
+                        {
+                            double ratio = newZoom / oldZoom;
+                            double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+                            double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+
+                            double newOffsetX = (oldOffset.Value.X + currentPivot.X) * ratio - currentPivot.X;
+                            double newOffsetY = (oldOffset.Value.Y + currentPivot.Y) * ratio - currentPivot.Y;
+
+                            // Bù trừ dịch chuyển đồng thời của cả 2 ngón tay (Pinch + Pan đồng bộ)
+                            double panDx = currentPivot.X - _pinchPivot.X;
+                            double panDy = currentPivot.Y - _pinchPivot.Y;
+                            newOffsetX -= panDx;
+                            newOffsetY -= panDy;
+
+                            scrollViewer.Offset = new Vector(Math.Clamp(newOffsetX, 0, maxX), Math.Clamp(newOffsetY, 0, maxY));
+                        }
+                    }
+                    _pinchLastDistance = currentDist;
+                    _pinchPivot = currentPivot;
+                }
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (_isPinching)
+        {
+            // Vừa kết thúc pinch, bỏ qua cử chỉ pan đơn để chống giật màn hình
+            return;
+        }
+
+        if (!_isPanHolding) return;
         double totalDx = currentPoint.X - _panStartPoint.X;
         double totalDy = currentPoint.Y - _panStartPoint.Y;
         double totalDist = Math.Sqrt(totalDx * totalDx + totalDy * totalDy);
@@ -799,6 +908,29 @@ public partial class ComicReaderControl : UserControl
     private void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         e.Pointer.Capture(null);
+
+        _activePointers.Remove(e.Pointer.Id);
+
+        if (_isPinching)
+        {
+            if (_activePointers.Count < 2)
+            {
+                _isPinching = false;
+                _isPanHolding = false;
+                _isPanDragging = false;
+                _isPointerTapCandidate = false;
+
+                if (_activePointers.Count == 1)
+                {
+                    var remaining = System.Linq.Enumerable.First(_activePointers.Values);
+                    _panStartPoint = remaining;
+                    _panLastPoint = remaining;
+                    _lastPanMoveTick = Environment.TickCount64;
+                }
+                e.Handled = true;
+                return;
+            }
+        }
 
         _cumulativeOverscrollX = 0;
         _cumulativeOverscrollY = 0;
@@ -888,8 +1020,32 @@ public partial class ComicReaderControl : UserControl
             _singleTapTimer.Stop();
             _lastTapTick = 0;
 
+            double oldZoom = vm.ZoomLevel;
+            var scrollViewer = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
+            Vector oldOffset = scrollViewer?.Offset ?? Vector.Zero;
+            Point touchPoint = releasePoint;
+
             // Kích hoạt Double-Tap Zoom in / out trên mọi vùng (true = không phụ thuộc vùng ảnh)
             vm.ExecuteDoubleTapZoom(true);
+
+            double newZoom = vm.ZoomLevel;
+            // Nếu là phóng to (Zoom In): neo tâm cuộn quanh đúng tọa độ chạm ngón tay (Pivot Zoom Alignment)
+            if (scrollViewer != null && newZoom > oldZoom && oldZoom > 0.05)
+            {
+                double ratio = newZoom / oldZoom;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
+                    if (sv != null)
+                    {
+                        double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
+                        double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
+                        double targetX = (oldOffset.X + touchPoint.X) * ratio - touchPoint.X;
+                        double targetY = (oldOffset.Y + touchPoint.Y) * ratio - touchPoint.Y;
+                        sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), Math.Clamp(targetY, 0, maxY));
+                    }
+                }, DispatcherPriority.Render);
+            }
             return;
         }
 
@@ -952,6 +1108,8 @@ public partial class ComicReaderControl : UserControl
 
     private void OnViewportPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
+        _activePointers.Clear();
+        _isPinching = false;
         _isPanHolding = false;
         _isPanDragging = false;
         _isPointerTapCandidate = false;

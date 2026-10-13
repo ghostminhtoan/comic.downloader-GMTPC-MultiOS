@@ -221,94 +221,109 @@
 
                     <!-- DANH SÁCH ITEMS THƯ MỤC, FILE TRUYỆN VÀ FILE ẢNH ĐƠN LẺ ĐA TẦNG -->
                     <Border Grid.Row="2" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="4">
-                        <ListBox ItemsSource="{Binding DirectoryItems}"
-                                 Background="Transparent"
-                                 BorderThickness="0">
-                            <ListBox.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <VirtualizingStackPanel Orientation="Vertical" />
-                                </ItemsPanelTemplate>
-                            </ListBox.ItemsPanel>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="models:DirectoryItemModel">
-                                    <Border Background="#131C31" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="10,8" Margin="0,1">
-                                        <Grid ColumnDefinitions="38, *, Auto">
-                                            <!-- Icon tím lavender 📁 cho folder, xanh 📦/📄 cho truyện, xanh lá 🖼️ cho ảnh đơn/chương -->
-                                            <TextBlock Grid.Column="0" Text="{Binding IconText}" Foreground="{Binding IconColor}"
-                                                       FontSize="22" VerticalAlignment="Center" HorizontalAlignment="Left" />
+                        <Panel>
+                            <ListBox ItemsSource="{Binding DirectoryItems}"
+                                     Background="Transparent"
+                                     BorderThickness="0">
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel Orientation="Vertical" />
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:DirectoryItemModel">
+                                        <Border Background="#131C31" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="10,8" Margin="0,1">
+                                            <Grid ColumnDefinitions="38, *, Auto">
+                                                <!-- Icon tím lavender 📁 cho folder, xanh 📦/📄 cho truyện, xanh lá 🖼️ cho ảnh đơn/chương -->
+                                                <TextBlock Grid.Column="0" Text="{Binding IconText}" Foreground="{Binding IconColor}"
+                                                           FontSize="22" VerticalAlignment="Center" HorizontalAlignment="Left" />
 
-                                            <!-- Tên thư mục / file -->
-                                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" Margin="0,0,8,0">
-                                                <TextBlock Text="{Binding Name}" Foreground="#F8FAFC" FontSize="13" FontWeight="SemiBold"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="{Binding ItemCountOrSize}" Foreground="#94A3B8" FontSize="10.5"
-                                                           IsVisible="{Binding HasItemCountOrSize}" />
-                                            </StackPanel>
+                                                <!-- Tên thư mục / file -->
+                                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                    <TextBlock Text="{Binding Name}" Foreground="#F8FAFC" FontSize="13" FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding ItemCountOrSize}" Foreground="#94A3B8" FontSize="10.5"
+                                                               IsVisible="{Binding HasItemCountOrSize}" />
+                                                </StackPanel>
 
-                                            <!-- Cụm nút thao tác đa tầng -->
-                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                <!-- 1. Nếu là Chương ảnh: Có nút 'Xem ảnh ➔' và nút '▶ Đọc' -->
-                                                <Button IsVisible="{Binding ShowDirectReadButton}"
-                                                        Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
-                                                        CommandParameter="{Binding}"
-                                                        Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
-                                                        Foreground="#38BDF8" FontWeight="SemiBold"
-                                                        Padding="8,5" CornerRadius="5" VerticalAlignment="Center"
-                                                        ToolTip.Tip="Mở xem danh sách các ảnh trong chương này">
-                                                    <TextBlock Text="Xem ảnh ➔" FontSize="11" />
-                                                </Button>
+                                                <!-- Cụm nút thao tác đa tầng -->
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                    <!-- 1. Nếu là Chương ảnh: Có nút 'Xem ảnh ➔' và nút '▶ Đọc' -->
+                                                    <Button IsVisible="{Binding ShowDirectReadButton}"
+                                                            Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                                            Foreground="#38BDF8" FontWeight="SemiBold"
+                                                            Padding="8,5" CornerRadius="5" VerticalAlignment="Center"
+                                                            ToolTip.Tip="Mở xem danh sách các ảnh trong chương này">
+                                                        <TextBlock Text="Xem ảnh ➔" FontSize="11" />
+                                                    </Button>
 
-                                                <Button IsVisible="{Binding ShowDirectReadButton}"
-                                                        Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ReadDirectoryItemDirectlyCommand}"
-                                                        CommandParameter="{Binding}"
-                                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
-                                                        Padding="10,5" CornerRadius="5" VerticalAlignment="Center"
-                                                        ToolTip.Tip="Mở đọc ngay chương này từ đầu">
-                                                    <TextBlock Text="▶ Đọc" FontSize="11" />
-                                                </Button>
+                                                    <Button IsVisible="{Binding ShowDirectReadButton}"
+                                                            Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ReadDirectoryItemDirectlyCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
+                                                            Padding="10,5" CornerRadius="5" VerticalAlignment="Center"
+                                                            ToolTip.Tip="Mở đọc ngay chương này từ đầu">
+                                                        <TextBlock Text="▶ Đọc" FontSize="11" />
+                                                    </Button>
 
-                                                <!-- 2. Nếu là File ảnh đơn lẻ: Có nút '▶ Xem' để nhảy tới đúng trang ảnh đó -->
-                                                <Button IsVisible="{Binding IsImageFile}"
-                                                        Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
-                                                        CommandParameter="{Binding}"
-                                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
-                                                        Padding="10,5" CornerRadius="5" VerticalAlignment="Center"
-                                                        ToolTip.Tip="Mở trình đọc ngay từ trang ảnh này">
-                                                    <TextBlock Text="▶ Xem" FontSize="11" />
-                                                </Button>
+                                                    <!-- 2. Nếu là File ảnh đơn lẻ: Có nút '▶ Xem' để nhảy tới đúng trang ảnh đó -->
+                                                    <Button IsVisible="{Binding IsImageFile}"
+                                                            Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
+                                                            Padding="10,5" CornerRadius="5" VerticalAlignment="Center"
+                                                            ToolTip.Tip="Mở trình đọc ngay từ trang ảnh này">
+                                                        <TextBlock Text="▶ Xem" FontSize="11" />
+                                                    </Button>
 
-                                                <!-- 3. Nếu là Thư mục thông thường hoặc Bộ truyện (không phải chương ảnh) -->
-                                                <Button IsVisible="{Binding IsNormalFolder}"
-                                                        Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
-                                                        CommandParameter="{Binding}"
-                                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
-                                                        Padding="10,5" CornerRadius="5" VerticalAlignment="Center">
-                                                    <TextBlock Text="Mở ➔" FontSize="11" />
-                                                </Button>
+                                                    <!-- 3. Nếu là Thư mục thông thường hoặc Bộ truyện (không phải chương ảnh) -->
+                                                    <Button IsVisible="{Binding IsNormalFolder}"
+                                                            Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                                            Padding="10,5" CornerRadius="5" VerticalAlignment="Center">
+                                                        <TextBlock Text="Mở ➔" FontSize="11" />
+                                                    </Button>
 
-                                                <Button IsVisible="{Binding CanReadDirectNormalFolder}"
-                                                        Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ReadDirectoryItemDirectlyCommand}"
-                                                        CommandParameter="{Binding}"
-                                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
-                                                        Padding="10,5" CornerRadius="5" VerticalAlignment="Center"
-                                                        ToolTip.Tip="Mở đọc toàn bộ truyện này">
-                                                    <TextBlock Text="▶ Đọc" FontSize="11" />
-                                                </Button>
+                                                    <Button IsVisible="{Binding CanReadDirectNormalFolder}"
+                                                            Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ReadDirectoryItemDirectlyCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
+                                                            Padding="10,5" CornerRadius="5" VerticalAlignment="Center"
+                                                            ToolTip.Tip="Mở đọc toàn bộ truyện này">
+                                                        <TextBlock Text="▶ Đọc" FontSize="11" />
+                                                    </Button>
 
-                                                <!-- 4. Nếu là File nén truyện / PDF -->
-                                                <Button IsVisible="{Binding IsArchiveOrPdfFile}"
-                                                        Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
-                                                        CommandParameter="{Binding}"
-                                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
-                                                        Padding="10,5" CornerRadius="5" VerticalAlignment="Center">
-                                                    <TextBlock Text="▶ Đọc" FontSize="11" />
-                                                </Button>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                                                    <!-- 4. Nếu là File nén truyện / PDF -->
+                                                    <Button IsVisible="{Binding IsArchiveOrPdfFile}"
+                                                            Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
+                                                            Padding="10,5" CornerRadius="5" VerticalAlignment="Center">
+                                                        <TextBlock Text="▶ Đọc" FontSize="11" />
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- Khung báo trạng thái đang nạp thư mục (chống đơ UI trên MicroSD) -->
+                            <Border Background="#C00F172A"
+                                    IsVisible="{Binding IsDirectoryLoading}"
+                                    CornerRadius="6"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                                    <TextBlock Text="⏳ Đang mở thư mục..."
+                                               Foreground="#38BDF8" FontSize="14" FontWeight="Bold"
+                                               HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+                        </Panel>
                     </Border>
 
                     <!-- THANH ĐÁY ĐIỀU HƯỚNG VÀ TÁC VỤ (EDIT, RECENT, VIEW, SORT - CHUẨN ẢNH 2) -->
