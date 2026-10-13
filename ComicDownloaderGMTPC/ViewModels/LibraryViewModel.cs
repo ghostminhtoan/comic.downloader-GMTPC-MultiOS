@@ -731,10 +731,10 @@ public partial class LibraryViewModel : ViewModelBase
                             if (parts.Length >= 2)
                             {
                                 string mountPoint = parts[1];
-                                if ((mountPoint.StartsWith("/storage/", StringComparison.OrdinalIgnoreCase) ||
-                                     mountPoint.StartsWith("/mnt/media_rw/", StringComparison.OrdinalIgnoreCase)) &&
-                                    !mountPoint.Contains("emulated", StringComparison.OrdinalIgnoreCase) &&
-                                    !mountPoint.Contains("self", StringComparison.OrdinalIgnoreCase) &&
+                                if (mountPoint.StartsWith("/storage/", StringComparison.OrdinalIgnoreCase) &&
+                                    !mountPoint.StartsWith("/storage/emulated", StringComparison.OrdinalIgnoreCase) &&
+                                    !mountPoint.StartsWith("/storage/self", StringComparison.OrdinalIgnoreCase) &&
+                                    !mountPoint.Contains("media_rw", StringComparison.OrdinalIgnoreCase) &&
                                     !mountPoint.Contains("knox", StringComparison.OrdinalIgnoreCase))
                                 {
                                     string norm = mountPoint.TrimEnd('/', '\\');
@@ -749,10 +749,10 @@ public partial class LibraryViewModel : ViewModelBase
                 }
                 catch { }
 
-                // C. Fallback quét trực tiếp /storage và /mnt/media_rw
+                // C. Fallback quét trực tiếp /storage (loại bỏ hoàn toàn /mnt/media_rw vì không có quyền trực tiếp)
                 try
                 {
-                    string[] scanBases = { "/storage", "/mnt/media_rw" };
+                    string[] scanBases = { "/storage" };
                     var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
                     foreach (var baseDir in scanBases)
                     {
@@ -763,6 +763,8 @@ public partial class LibraryViewModel : ViewModelBase
                                 string name = Path.GetFileName(d);
                                 if (!string.Equals(name, "emulated", StringComparison.OrdinalIgnoreCase) &&
                                     !string.Equals(name, "self", StringComparison.OrdinalIgnoreCase) &&
+                                    !string.Equals(name, "rw", StringComparison.OrdinalIgnoreCase) &&
+                                    !name.Contains("media_rw", StringComparison.OrdinalIgnoreCase) &&
                                     !name.StartsWith("knox", StringComparison.OrdinalIgnoreCase) &&
                                     !name.StartsWith("."))
                                 {
@@ -776,7 +778,11 @@ public partial class LibraryViewModel : ViewModelBase
 
                 foreach (var sdPath in detectedSdRoots)
                 {
+                    if (string.IsNullOrWhiteSpace(sdPath)) continue;
+                    if (sdPath.Contains("media_rw", StringComparison.OrdinalIgnoreCase)) continue;
                     string name = Path.GetFileName(sdPath);
+                    if (string.Equals(name, "rw", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(name)) continue;
+
                     StorageItems.Add(new StorageItemModel
                     {
                         Type = StorageItemType.SDCard,
@@ -947,43 +953,83 @@ public partial class LibraryViewModel : ViewModelBase
                         int subImgCount = 0;
                         try
                         {
-                            var imgs = di.EnumerateFiles("*", enumOptions).Where(f => LibraryScannerService.IsImageFile(f.FullName)).ToList();
-                            hasDirectImages = imgs.Count > 0;
-                            subImgCount = imgs.Count;
-                        }
-                        catch { }
-
-                        int count = 0;
-                        try
-                        {
-                            count = di.EnumerateFileSystemInfos("*", enumOptions).Take(100).Count();
+                            // Kiểm tra nông tối đa 20 file để chống nghẽn I/O trên MicroSD
+                            var firstImgs = di.EnumerateFiles("*", enumOptions)
+                                .Where(f => LibraryScannerService.IsImageFile(f.FullName))
+                                .Take(20)
+                                .ToList();
+                            hasDirectImages = firstImgs.Count > 0;
+                            subImgCount = firstImgs.Count;
                         }
                         catch { }
 
                         bool isComicSeriesFolder = false;
+                        bool hasComicFiles = false;
                         if (!hasDirectImages)
                         {
                             try
                             {
-                                isComicSeriesFolder = di.EnumerateDirectories("*", enumOptions).Any(sub =>
-                                    sub.EnumerateFiles("*", enumOptions).Any(f => LibraryScannerService.IsImageFile(f.FullName)));
+                                // Kiểm tra xem folder có chứa file truyện nén (.cbz, .zip, .pdf) không
+                                hasComicFiles = di.EnumerateFiles("*", enumOptions)
+                                    .Take(10)
+                                    .Any(f => LibraryScannerService.IsArchiveFile(f.FullName) || LibraryScannerService.IsPdfFile(f.FullName));
+
+                                // Kiểm tra nhanh tối đa 3 subfolder đầu tiên xem có chương truyện/ảnh không
+                                if (!hasComicFiles)
+                                {
+                                    isComicSeriesFolder = di.EnumerateDirectories("*", enumOptions)
+                                        .Take(3)
+                                        .Any(sub => sub.EnumerateFiles("*", enumOptions)
+                                            .Take(10)
+                                            .Any(f => LibraryScannerService.IsImageFile(f.FullName) || LibraryScannerService.IsArchiveFile(f.FullName)));
+                                }
                             }
                             catch { }
                         }
 
+                        int count = 0;
+                        try
+                        {
+                            count = di.EnumerateFileSystemInfos("*", enumOptions).Take(20).Count();
+                        }
+                        catch { }
+
+                        bool canReadFolder = hasDirectImages || isComicSeriesFolder || hasComicFiles;
                         if (hasDirectImages) chapterFoldersCount++;
-                        else if (isComicSeriesFolder) chapterFoldersCount++;
+                        else if (isComicSeriesFolder || hasComicFiles) chapterFoldersCount++;
+
+                        string label;
+                        string icon;
+                        string iconCol;
+                        if (hasDirectImages)
+                        {
+                            label = $"Chương ({subImgCount} ảnh)";
+                            icon = "🖼️";
+                            iconCol = "#10B981";
+                        }
+                        else if (isComicSeriesFolder || hasComicFiles)
+                        {
+                            label = $"Bộ truyện ({count} mục)";
+                            icon = "📚";
+                            iconCol = "#38BDF8";
+                        }
+                        else
+                        {
+                            label = $"{count} mục";
+                            icon = "📁";
+                            iconCol = "#A78BFA";
+                        }
 
                         list.Add(new DirectoryItemModel
                         {
                             IsFolder = true,
                             IsImageFile = false,
-                            CanReadDirectly = hasDirectImages || isComicSeriesFolder,
+                            CanReadDirectly = canReadFolder,
                             Name = name,
                             FullPath = d,
-                            ItemCountOrSize = hasDirectImages ? $"Chương ({subImgCount} ảnh)" : (isComicSeriesFolder ? $"Bộ truyện ({count} mục)" : $"{count} mục"),
-                            IconText = hasDirectImages ? "🖼️" : (isComicSeriesFolder ? "📚" : "📁"),
-                            IconColor = hasDirectImages ? "#10B981" : (isComicSeriesFolder ? "#38BDF8" : "#A78BFA"),
+                            ItemCountOrSize = label,
+                            IconText = icon,
+                            IconColor = iconCol,
                             LastModified = di.LastWriteTime
                         });
                     }
@@ -1443,6 +1489,21 @@ public partial class LibraryViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task OpenMostRecentComicAsync()
+    {
+        var recentPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();
+        string? latestPath = recentPaths.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && (File.Exists(p) || Directory.Exists(p)));
+        if (!string.IsNullOrWhiteSpace(latestPath))
+        {
+            await OpenPathToReadInternalAsync(latestPath);
+        }
+        else
+        {
+            StatusMessage = "ℹ️ Chưa có truyện đọc gần đây.";
+        }
+    }
+
+    [RelayCommand]
     public async Task OpenPathToReadAsync(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
@@ -1465,7 +1526,8 @@ public partial class LibraryViewModel : ViewModelBase
                 {
                     try
                     {
-                        var allImgs = Directory.GetFiles(actualComicPath)
+                        var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
+                        var allImgs = Directory.EnumerateFiles(actualComicPath, "*", enumOpts)
                             .Where(LibraryScannerService.IsImageFile)
                             .NaturalSort();
                         int idx = allImgs.FindIndex(img => string.Equals(img, path, StringComparison.OrdinalIgnoreCase));

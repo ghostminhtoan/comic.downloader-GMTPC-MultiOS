@@ -363,9 +363,11 @@
                             Click="OnPageButtonAreaPrevClick"
                             IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
                             Width="{Binding PageButtonAreaComputedHitWidth}"
+                            VerticalAlignment="Stretch"
                             Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Center" VerticalAlignment="Center"
-                                Padding="8,4" Background="#40000000" CornerRadius="14"
+                        <Border HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Margin="2,0,0,0" Padding="8,4"
+                                Background="#40000000" CornerRadius="14"
                                 Opacity="{Binding PageButtonAreaComputedOpacity}"
                                 IsHitTestVisible="False">
                             <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
@@ -379,9 +381,11 @@
                             Command="{Binding PageButtonAreaNextCommand}"
                             Click="OnPageButtonAreaNextClick"
                             Width="{Binding PageButtonAreaComputedHitWidth}"
+                            VerticalAlignment="Stretch"
                             Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Center" VerticalAlignment="Center"
-                                Padding="8,4" Background="#40000000" CornerRadius="14"
+                        <Border HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Margin="0,0,2,0" Padding="8,4"
+                                Background="#40000000" CornerRadius="14"
                                 Opacity="{Binding PageButtonAreaComputedOpacity}"
                                 IsHitTestVisible="False">
                             <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
@@ -403,9 +407,11 @@
                             Click="OnPageButtonAreaPrevClick"
                             IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
                             Height="{Binding PageButtonAreaComputedHitHeight}"
+                            HorizontalAlignment="Stretch"
                             Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Center" VerticalAlignment="Center"
-                                Padding="8,4" Background="#40000000" CornerRadius="14"
+                        <Border HorizontalAlignment="Center" VerticalAlignment="Top"
+                                Margin="0,2,0,0" Padding="8,4"
+                                Background="#40000000" CornerRadius="14"
                                 Opacity="{Binding PageButtonAreaComputedOpacity}"
                                 IsHitTestVisible="False">
                             <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
@@ -419,9 +425,11 @@
                             Command="{Binding PageButtonAreaNextCommand}"
                             Click="OnPageButtonAreaNextClick"
                             Height="{Binding PageButtonAreaComputedHitHeight}"
+                            HorizontalAlignment="Stretch"
                             Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Center" VerticalAlignment="Center"
-                                Padding="8,4" Background="#40000000" CornerRadius="14"
+                        <Border HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                Margin="0,0,0,2" Padding="8,4"
+                                Background="#40000000" CornerRadius="14"
                                 Opacity="{Binding PageButtonAreaComputedOpacity}"
                                 IsHitTestVisible="False">
                             <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
@@ -433,6 +441,35 @@
                 </Grid>
             </Panel>
         </Panel>
+
+        <!-- NÚT NỔI CHUYỂN CHƯƠNG KHI Ở BIÊN CHẾ ĐỘ PHÂN CHƯƠNG (CHUẨN ẢNH 2) -->
+        <!-- 1. Nút mép phải: Chuyển sang chương tiếp theo khi ở trang cuối -->
+        <Button Command="{Binding NextChapterCommand}"
+                IsVisible="{Binding ShowBoundaryNextChapterButton}"
+                HorizontalAlignment="Right" VerticalAlignment="Center"
+                Width="56" Height="56" Margin="0"
+                Background="#C0A855F7" BorderThickness="0"
+                CornerRadius="10,0,0,10" Padding="0"
+                ZIndex="1500" Cursor="Hand"
+                ToolTip.Tip="Chuyển sang chương tiếp theo">
+            <Path Data="M 4 4 L 18 14 L 4 24 Z M 19 4 L 23 4 L 23 24 L 19 24 Z"
+                  Fill="#FFFFFF" Width="22" Height="22" Stretch="Uniform"
+                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Button>
+
+        <!-- 2. Nút mép trái: Chuyển về chương trước khi ở trang đầu -->
+        <Button Command="{Binding PrevChapterCommand}"
+                IsVisible="{Binding ShowBoundaryPrevChapterButton}"
+                HorizontalAlignment="Left" VerticalAlignment="Center"
+                Width="56" Height="56" Margin="0"
+                Background="#C0A855F7" BorderThickness="0"
+                CornerRadius="0,10,10,0" Padding="0"
+                ZIndex="1500" Cursor="Hand"
+                ToolTip.Tip="Chuyển về chương trước">
+            <Path Data="M 20 4 L 6 14 L 20 24 Z M 1 4 L 5 4 L 5 24 L 1 24 Z"
+                  Fill="#FFFFFF" Width="22" Height="22" Stretch="Uniform"
+                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Button>
 
         <!-- F. TOAST THÔNG BÁO TRẠNG THÁI NHANH -->
         <Border IsVisible="{Binding IsStatusToastVisible}"

@@ -57,6 +57,8 @@ public partial class ComicReaderViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanGoPrevChapter))]
     [NotifyPropertyChangedFor(nameof(CanGoNextChapter))]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryNextChapterButton))]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryPrevChapterButton))]
     private LibraryChapterItem? _currentChapter;
 
     [ObservableProperty]
@@ -69,6 +71,8 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(ProgressPercentText))]
     [NotifyPropertyChangedFor(nameof(CanGoPrevPage))]
     [NotifyPropertyChangedFor(nameof(CanGoNextPage))]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryNextChapterButton))]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryPrevChapterButton))]
     private int _currentPageIndex;
 
     [ObservableProperty]
@@ -76,6 +80,8 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(ComicScreenPageBadgeText))]
     [NotifyPropertyChangedFor(nameof(AddBookmarkRightInfoText))]
     [NotifyPropertyChangedFor(nameof(MaxPageIndex))]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryNextChapterButton))]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryPrevChapterButton))]
     private int _totalPages;
 
     public int MaxPageIndex => Math.Max(0, TotalPages - 1);
@@ -134,6 +140,12 @@ public partial class ComicReaderViewModel : ViewModelBase
         CurrentChapter != null &&
         ChapterList.IndexOf(CurrentChapter) >= 0 &&
         ChapterList.IndexOf(CurrentChapter) < ChapterList.Count - 1;
+
+    public bool ShowBoundaryNextChapterButton =>
+        !IsContinuousChaptersMode && CanGoNextChapter && TotalPages > 0 && CurrentPageIndex >= TotalPages - 1;
+
+    public bool ShowBoundaryPrevChapterButton =>
+        !IsContinuousChaptersMode && CanGoPrevChapter && TotalPages > 0 && CurrentPageIndex <= 0;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LeftFlipPage))]
@@ -1344,7 +1356,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(Button11IconTint))]
     [NotifyPropertyChangedFor(nameof(PageButtonAreaQuickToggleIcon))]
     [NotifyPropertyChangedFor(nameof(PageButtonAreaQuickToggleText))]
-    private bool _isPageButtonAreaEnabled = false;
+    private bool _isPageButtonAreaEnabled = true;
 
     public string Button11IconTint => IsPageButtonAreaEnabled ? "#4FC3F7" : "#E2E8F0";
     public string PageButtonAreaQuickToggleIcon => IsPageButtonAreaEnabled ? "🟢" : "⚪";
@@ -1364,6 +1376,8 @@ public partial class ComicReaderViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ContinuousModeBadgeText))]
     [NotifyPropertyChangedFor(nameof(ContinuousModeTooltipText))]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryNextChapterButton))]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryPrevChapterButton))]
     private bool _isContinuousChaptersMode = true;
 
     public string ContinuousModeBadgeText => IsContinuousChaptersMode ? "LIỀN MẠCH" : "THEO CHƯƠNG";

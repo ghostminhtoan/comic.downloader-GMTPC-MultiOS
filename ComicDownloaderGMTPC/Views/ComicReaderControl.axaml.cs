@@ -54,9 +54,10 @@ public partial class ComicReaderControl : UserControl
     private double _cropStartXRatio;
     private double _cropStartYRatio;
 
-    // Trạng thái gõ đúp (Double-Tap Smart Zoom)
+    // Trạng thái gõ đúp (Double-Tap Smart Zoom) và Single-Tap delay
     private Point _lastTapPoint;
     private long _lastTapTick;
+    private readonly DispatcherTimer _singleTapTimer;
 
     public ComicReaderControl()
     {
@@ -67,6 +68,19 @@ public partial class ComicReaderControl : UserControl
             Interval = TimeSpan.FromMilliseconds(16)
         };
         _kineticTimer.Tick += OnKineticTimerTick;
+
+        _singleTapTimer = new DispatcherTimer(DispatcherPriority.Normal)
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _singleTapTimer.Tick += (s, e) =>
+        {
+            _singleTapTimer.Stop();
+            if (DataContext is ComicReaderViewModel vm)
+            {
+                vm.ToggleOverlay();
+            }
+        };
 
         DataContextChanged += OnReaderDataContextChanged;
 
@@ -861,27 +875,30 @@ public partial class ComicReaderControl : UserControl
         }
 
         // Chỉ tính là Tap khi người dùng chạm nhanh và không kéo cuộn trang
-        if (distance > 12.0 || elapsedMs > 500) return;
+        if (distance > 15.0 || elapsedMs > 500) return;
 
         long tapNow = Environment.TickCount64;
         double tapDx = releasePoint.X - _lastTapPoint.X;
         double tapDy = releasePoint.Y - _lastTapPoint.Y;
         double tapDist = Math.Sqrt(tapDx * tapDx + tapDy * tapDy);
 
-        if (tapNow - _lastTapTick < 350 && tapDist < 30.0)
+        if (tapNow - _lastTapTick <= 500 && tapDist < 50.0)
         {
-            // Chạm đúp (Double-Tap) -> Kích hoạt Double-Tap Zoom theo cấu hình ComicScreen (Ảnh 4)
+            // Chạm đúp (Double-Tap) nhanh trong vòng 500ms -> HỦY timer single-tap ngay lập tức!
+            _singleTapTimer.Stop();
             _lastTapTick = 0;
-            bool isInside = CheckIfPointIsInsideImage(releasePoint);
-            vm.ExecuteDoubleTapZoom(isInside);
+
+            // Kích hoạt Double-Tap Zoom in / out trên mọi vùng (true = không phụ thuộc vùng ảnh)
+            vm.ExecuteDoubleTapZoom(true);
             return;
         }
 
+        // Chạm đơn (Single-Tap): Ghi nhận vị trí và bắt đầu đếm lùi 500ms (0.5 giây).
+        // Chỉ khi hết 500ms mà không có cú chạm đúp nào thì mới ẩn / hiện thanh công cụ!
         _lastTapTick = tapNow;
         _lastTapPoint = releasePoint;
-
-        // Bỏ việc ấn 1/3 trái phải để chuyển trang! Chạm vào màn hình đọc truyện là để Bật/tắt thanh Menu ComicScreen
-        vm.ToggleOverlay();
+        _singleTapTimer.Stop();
+        _singleTapTimer.Start();
     }
 
     private bool CheckIfPointIsInsideImage(Point p)

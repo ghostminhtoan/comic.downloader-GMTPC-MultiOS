@@ -181,8 +181,14 @@ public sealed class LibraryScannerService
         string[] files;
         try
         {
-            subDirs = Directory.GetDirectories(currentDir);
-            files = Directory.GetFiles(currentDir);
+            var enumOptions = new EnumerationOptions
+            {
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = false,
+                ReturnSpecialDirectories = false
+            };
+            subDirs = Directory.GetDirectories(currentDir, "*", enumOptions);
+            files = Directory.GetFiles(currentDir, "*", enumOptions);
         }
         catch
         {
@@ -858,7 +864,13 @@ public sealed class LibraryScannerService
     {
         try
         {
-            return Directory.EnumerateFiles(folderPath)
+            var enumOptions = new EnumerationOptions
+            {
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = false,
+                ReturnSpecialDirectories = false
+            };
+            return Directory.EnumerateFiles(folderPath, "*", enumOptions)
                 .Where(IsImageFile)
                 .NaturalSort();
         }

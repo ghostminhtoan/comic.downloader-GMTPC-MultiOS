@@ -162,15 +162,15 @@
                         </ListBox>
                     </Border>
 
-                    <!-- NÚT NỔI FAB (FLOATING ACTION BUTTON) Ở GÓC DƯỚI BÊN PHẢI (CHUẨN ẢNH 1 - CHỐNG CHE NÚT, CHỐNG CẮT MÉP) -->
-                    <Button Command="{Binding AddStorageFolderCommand}"
+                    <!-- NÚT NỔI FAB (FLOATING ACTION BUTTON) Ở GÓC DƯỚI BÊN PHẢI (CHUẨN ẢNH 1 - MỞ TRUYỆN MỚI MỞ GẦN NHẤT) -->
+                    <Button Command="{Binding OpenMostRecentComicCommand}"
                             Width="56" Height="56" CornerRadius="28"
                             Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="2"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom"
                             Margin="0,0,16,16" ZIndex="100"
                             ClipToBounds="False"
-                            ToolTip.Tip="Thêm thư mục mới vào Storage">
-                        <TextBlock Text="📁+" FontSize="20" Foreground="#FFFFFF" FontWeight="Bold"
+                            ToolTip.Tip="Mở truyện đọc gần đây nhất">
+                        <TextBlock Text="🕒" FontSize="22" Foreground="#FFFFFF" FontWeight="Bold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Button>
                 </Grid>

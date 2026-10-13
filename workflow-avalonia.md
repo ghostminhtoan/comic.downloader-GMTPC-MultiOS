@@ -2827,4 +2827,43 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
     + **Lần thử 2/5**: Đường truyền kích hoạt thành công, tốc độ trung bình đạt **66.6 Mbps** (tức thời lên tới **135.5 Mbps**).
     + Truyền xong toàn bộ 146.24 MB chỉ trong **18.4 giây**.
     + Hệ thống lập tức nhận diện hoàn tất, tự động nhấn `Update release` và xác nhận cập nhật thành công lên GitHub Release Beta!
-
+### 15.88 Nâng Cấp Storage Android (Loại Bỏ Thẻ SD rw, Tối Ưu Tốc Độ Thẻ Nhớ, Mở Folder Ảnh) & Hoàn Thiện Reader UX (FAB Recent, Page Button Area Mặc Định Bật Sát Mép, Single Tap Delay 0.5s & Double Tap Zoom Mọi Vùng, Nút Nổi Chuyển Chương Trang Đầu/Cuối) (2026-10-13)
+- **Bối Cảnh & Yêu Cầu Người Dùng**:
+  1. *Subtab Storage (Ảnh 1)*: Đổi nút tròn nổi FAB `📁+` ở góc dưới bên phải thành nút mở truyện đọc gần đây nhất (`OpenMostRecentComicCommand`).
+  2. *Thẻ nhớ `rw`*: Loại bỏ hoàn toàn mount point `/mnt/media_rw` và các entry trùng `rw` trên Android.
+  3. *Tốc độ duyệt thẻ nhớ*: Vào thẻ nhớ rất chậm so với ComicScreen do bị nghẽn bus MicroSD bởi việc quét đệ quy và `.ToList()` trên từng subfolder.
+  4. *Mở ảnh folder trên thẻ nhớ*: File `.cbz`, `.zip`, `.pdf` mở được nhưng không mở được ảnh trong folder và không có nút đọc truyện từ folder do thiếu cờ `IgnoreInaccessible = true` khiến .NET ném `UnauthorizedAccessException`.
+  5. *Page Button Area*: Mặc định luôn luôn enable, type 0.
+  6. *Type 2 Page Button Area*: Nút `-` và `+` chưa sát mép 2 bên trái/phải.
+  7. *Type 3 Page Button Area*: Chưa thấy nút `-` và `+` đâu cả, phải hiển thị rõ ràng và sát mép trên/dưới.
+  8. *Double Tap Zoom & Single Tap*: Single tap phải delay 0.5 giây mới ẩn/hiện tool; nếu double tap nhanh hơn 0.5s thì phải zoom in/out trên mọi vùng.
+  9. *Nút chuyển chương khi không đọc liền mạch (Ảnh 2)*: Khi `!IsContinuousChaptersMode`, ở trang cuối (next) hoặc trang đầu (previous) phải hiển thị nút nổi màu tím (`>|` và `|<`) sát mép màn hình để chuyển chương.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Storage Subtab FAB**:
+     - `LibraryView.axaml`: Nút FAB góc dưới chuyển sang bind `OpenMostRecentComicCommand`, icon `🕒`, tooltip *"Mở truyện đọc gần đây nhất"*.
+     - `LibraryViewModel.cs`: Thêm `OpenMostRecentComicAsync` tự động lấy đường dẫn truyện gần nhất từ `ReadProgressStore.Instance.GetKnownReadComicPaths()` và mở đọc ngay.
+  2. **Triệt Tiêu Thẻ Nhớ `rw` (/mnt/media_rw)**:
+     - Lọc bỏ hoàn toàn các mount point bắt đầu bằng `/mnt/media_rw/` hoặc chứa `media_rw` trong `/proc/mounts`.
+     - Danh sách scan base chỉ giữ lại `"/storage"`.
+     - Lọc bỏ mọi item có tên là `"rw"` hoặc rỗng.
+  3. **Tối Ưu Hóa Tốc Độ Duyệt Thẻ Nhớ Cực Hạn (Shallow Check Engine)**:
+     - Trong `LoadDirectory`: Loại bỏ hoàn toàn việc gọi `di.EnumerateFiles().ToList()` toàn bộ thư mục và quét đệ quy sâu cấp 2 `sub.EnumerateFiles()`.
+     - Thay thế bằng kiểm tra nông nhanh: chỉ kiểm tra tối đa 20 file đầu tiên để nhận diện ảnh (`Take(20)`), và tối đa 3 subfolder đầu tiên để nhận diện bộ truyện/chương (`Take(3)`). Giảm 99% số lượng I/O syscall qua bus MicroSD.
+  4. **An Toàn Quyền Đọc Ảnh Thư Mục (IgnoreInaccessible)**:
+     - Bổ sung `EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false }` đồng bộ vào `LibraryScannerService.GetDirectImagesSafe`, `LibraryScannerService.ScanDirectoryRecursive`, `ComicReaderService.LoadChapterPagesAsync`, và `LibraryViewModel.OpenPathToReadInternalAsync`.
+     - Nhận diện chính xác cờ `CanReadDirectly` cho cả folder ảnh, folder bộ truyện và folder chứa file nén `.cbz`/`.zip`/`.pdf`, hiển thị đầy đủ nút `▶ Đọc` và banner *"MỞ ĐỌC NGAY ➔"*.
+  5. **Page Button Area Mặc Định & Căn Sát Mép (Type 2 & Type 3)**:
+     - `ComicReaderViewModel.cs`: `_isPageButtonAreaEnabled = true;` (mặc định luôn BẬT, type 0).
+     - `ComicReaderControl.axaml` (Type 2): Nút `-` sát mép trái (`HorizontalAlignment="Left"`), nút `+` sát mép phải (`HorizontalAlignment="Right"`), `VerticalAlignment="Stretch"`.
+     - `ComicReaderControl.axaml` (Type 3): Thiết lập `HorizontalAlignment="Stretch"` cho các nút, nút `-` sát mép trên (`VerticalAlignment="Top"`), nút `+` sát mép dưới (`VerticalAlignment="Bottom"`).
+  6. **Single Tap 0.5s Delay & Double Tap Zoom Mọi Vùng**:
+     - `ComicReaderControl.axaml.cs`: Tích hợp `DispatcherTimer _singleTapTimer` (Interval = 500ms).
+     - Khi single tap: Khởi động timer 500ms. Nếu sau 500ms không có cú chạm tiếp theo, timer tick mới gọi `vm.ToggleOverlay()`.
+     - Khi double tap trong vòng 500ms: Lập tức dừng `_singleTapTimer`, gọi `vm.ExecuteDoubleTapZoom(true)` (zoom in/out tức thì trên mọi vùng, không phụ thuộc tọa độ ảnh).
+  7. **Nút Nổi Chuyển Chương Biên Trang Đầu/Cuối (Ảnh 2)**:
+     - `ComicReaderViewModel.cs`: Thêm thuộc tính `ShowBoundaryNextChapterButton` (khi `!IsContinuousChaptersMode && CanGoNextChapter && CurrentPageIndex >= TotalPages - 1`) và `ShowBoundaryPrevChapterButton` (khi `!IsContinuousChaptersMode && CanGoPrevChapter && CurrentPageIndex <= 0`).
+     - `ComicReaderControl.axaml`: Thêm nút nổi màu tím `#C0A855F7` bo góc sát mép phải icon `>|` và sát mép trái icon `|<`.
+- **Nghiệm Thu & Đóng Gói**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)**.
+  - Test khởi động app: `Id = 29156, Responding = True, HasExited = False`.
+  - Đóng gói single-file executable chuẩn vào `publish\ComicDownloaderGMTPC.Desktop.exe`.

@@ -189,7 +189,13 @@ public sealed class ComicReaderService
                 }
                 else if (Directory.Exists(chapter.LocalPath))
                 {
-                    var imageFiles = Directory.EnumerateFiles(chapter.LocalPath)
+                    var enumOptions = new EnumerationOptions
+                    {
+                        IgnoreInaccessible = true,
+                        RecurseSubdirectories = false,
+                        ReturnSpecialDirectories = false
+                    };
+                    var imageFiles = Directory.EnumerateFiles(chapter.LocalPath, "*", enumOptions)
                         .Where(LibraryScannerService.IsImageFile)
                         .NaturalSort();
 
