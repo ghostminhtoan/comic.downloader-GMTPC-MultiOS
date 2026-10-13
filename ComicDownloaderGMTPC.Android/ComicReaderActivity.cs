@@ -53,6 +53,7 @@ public class ComicReaderActivity : AvaloniaActivity
 
         ComicReaderService.AndroidSetOrientationMode = ApplyOrientationMode;
         ComicReaderService.AndroidApplyDisplaySettings = ApplyDisplaySettings;
+        ComicReaderViewModel.AndroidOverlayVisibilityChanged += OnAndroidOverlayVisibilityChanged;
 
         BackRequested += OnActivityBackRequested;
 
@@ -407,9 +408,25 @@ public class ComicReaderActivity : AvaloniaActivity
         });
     }
 
+    private void OnAndroidOverlayVisibilityChanged(bool isOverlayVisible)
+    {
+        RunOnUiThread(() =>
+        {
+            try
+            {
+                // Khi mở thanh công cụ (isOverlayVisible == true), hiển thị thanh điều hướng Android (Recent, Home, Back) và Status Bar ngay lập tức
+                // Khi đóng thanh công cụ (isOverlayVisible == false), quay lại chế độ đọc toàn màn hình (Immersive Mode) nếu ViewModel yêu cầu
+                bool fullScreen = !isOverlayVisible && (_subscribedVm?.IsFullScreen ?? true);
+                ApplyImmersiveFullScreen(fullScreen);
+            }
+            catch { }
+        });
+    }
+
     protected override void OnDestroy()
     {
         BackRequested -= OnActivityBackRequested;
+        ComicReaderViewModel.AndroidOverlayVisibilityChanged -= OnAndroidOverlayVisibilityChanged;
 
         if (!_isClosingTask && _subscribedVm != null)
         {

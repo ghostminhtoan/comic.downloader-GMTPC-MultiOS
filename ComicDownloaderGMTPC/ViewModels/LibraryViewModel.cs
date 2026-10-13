@@ -700,29 +700,92 @@ public partial class LibraryViewModel : ViewModelBase
             // 3. Thẻ SD / Ổ đĩa
             if (OperatingSystem.IsAndroid())
             {
+                var detectedSdRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // A. Lấy từ Android Native GetExternalFilesDirs
                 try
                 {
-                    if (Directory.Exists("/storage"))
+                    var nativePaths = LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
+                    if (nativePaths != null)
                     {
-                        foreach (var d in Directory.GetDirectories("/storage"))
+                        foreach (var np in nativePaths)
                         {
-                            string name = Path.GetFileName(d);
-                            if (!string.Equals(name, "emulated", StringComparison.OrdinalIgnoreCase) &&
-                                !string.Equals(name, "self", StringComparison.OrdinalIgnoreCase))
+                            if (!string.IsNullOrWhiteSpace(np) && Directory.Exists(np))
                             {
-                                StorageItems.Add(new StorageItemModel
-                                {
-                                    Type = StorageItemType.SDCard,
-                                    Title = "Thẻ SD",
-                                    Path = d,
-                                    IconText = "💾",
-                                    IconColor = "#38BDF8"
-                                });
+                                detectedSdRoots.Add(np);
                             }
                         }
                     }
                 }
                 catch { }
+
+                // B. Quét từ /proc/mounts
+                try
+                {
+                    if (File.Exists("/proc/mounts"))
+                    {
+                        var lines = File.ReadAllLines("/proc/mounts");
+                        foreach (var line in lines)
+                        {
+                            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                            if (parts.Length >= 2)
+                            {
+                                string mountPoint = parts[1];
+                                if ((mountPoint.StartsWith("/storage/", StringComparison.OrdinalIgnoreCase) ||
+                                     mountPoint.StartsWith("/mnt/media_rw/", StringComparison.OrdinalIgnoreCase)) &&
+                                    !mountPoint.Contains("emulated", StringComparison.OrdinalIgnoreCase) &&
+                                    !mountPoint.Contains("self", StringComparison.OrdinalIgnoreCase) &&
+                                    !mountPoint.Contains("knox", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    string norm = mountPoint.TrimEnd('/', '\\');
+                                    if (Directory.Exists(norm))
+                                    {
+                                        detectedSdRoots.Add(norm);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                // C. Fallback quét trực tiếp /storage và /mnt/media_rw
+                try
+                {
+                    string[] scanBases = { "/storage", "/mnt/media_rw" };
+                    var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
+                    foreach (var baseDir in scanBases)
+                    {
+                        if (Directory.Exists(baseDir))
+                        {
+                            foreach (var d in Directory.EnumerateDirectories(baseDir, "*", enumOpts))
+                            {
+                                string name = Path.GetFileName(d);
+                                if (!string.Equals(name, "emulated", StringComparison.OrdinalIgnoreCase) &&
+                                    !string.Equals(name, "self", StringComparison.OrdinalIgnoreCase) &&
+                                    !name.StartsWith("knox", StringComparison.OrdinalIgnoreCase) &&
+                                    !name.StartsWith("."))
+                                {
+                                    detectedSdRoots.Add(d);
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                foreach (var sdPath in detectedSdRoots)
+                {
+                    string name = Path.GetFileName(sdPath);
+                    StorageItems.Add(new StorageItemModel
+                    {
+                        Type = StorageItemType.SDCard,
+                        Title = $"Thẻ SD ({name})",
+                        Path = sdPath,
+                        IconText = "💾",
+                        IconColor = "#38BDF8"
+                    });
+                }
             }
             else
             {
@@ -862,58 +925,69 @@ public partial class LibraryViewModel : ViewModelBase
             int chapterFoldersCount = 0;
             int comicFilesCount = 0;
 
+            var enumOptions = new EnumerationOptions
+            {
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = false,
+                ReturnSpecialDirectories = false
+            };
+
             // 1. Thư mục con
             try
             {
-                foreach (var d in Directory.GetDirectories(dir))
+                foreach (var d in Directory.EnumerateDirectories(dir, "*", enumOptions))
                 {
-                    string name = Path.GetFileName(d);
-                    if (name.StartsWith(".") || name.StartsWith("$")) continue;
-
-                    var di = new DirectoryInfo(d);
-                    bool hasDirectImages = false;
-                    int subImgCount = 0;
                     try
                     {
-                        var imgs = di.EnumerateFiles().Where(f => LibraryScannerService.IsImageFile(f.FullName)).ToList();
-                        hasDirectImages = imgs.Count > 0;
-                        subImgCount = imgs.Count;
-                    }
-                    catch { }
+                        string name = Path.GetFileName(d);
+                        if (name.StartsWith(".") || name.StartsWith("$")) continue;
 
-                    int count = 0;
-                    try
-                    {
-                        count = Directory.EnumerateFileSystemEntries(d).Take(100).Count();
-                    }
-                    catch { }
-
-                    bool isComicSeriesFolder = false;
-                    if (!hasDirectImages)
-                    {
+                        var di = new DirectoryInfo(d);
+                        bool hasDirectImages = false;
+                        int subImgCount = 0;
                         try
                         {
-                            isComicSeriesFolder = di.EnumerateDirectories().Any(sub =>
-                                sub.EnumerateFiles().Any(f => LibraryScannerService.IsImageFile(f.FullName)));
+                            var imgs = di.EnumerateFiles("*", enumOptions).Where(f => LibraryScannerService.IsImageFile(f.FullName)).ToList();
+                            hasDirectImages = imgs.Count > 0;
+                            subImgCount = imgs.Count;
                         }
                         catch { }
+
+                        int count = 0;
+                        try
+                        {
+                            count = di.EnumerateFileSystemInfos("*", enumOptions).Take(100).Count();
+                        }
+                        catch { }
+
+                        bool isComicSeriesFolder = false;
+                        if (!hasDirectImages)
+                        {
+                            try
+                            {
+                                isComicSeriesFolder = di.EnumerateDirectories("*", enumOptions).Any(sub =>
+                                    sub.EnumerateFiles("*", enumOptions).Any(f => LibraryScannerService.IsImageFile(f.FullName)));
+                            }
+                            catch { }
+                        }
+
+                        if (hasDirectImages) chapterFoldersCount++;
+                        else if (isComicSeriesFolder) chapterFoldersCount++;
+
+                        list.Add(new DirectoryItemModel
+                        {
+                            IsFolder = true,
+                            IsImageFile = false,
+                            CanReadDirectly = hasDirectImages || isComicSeriesFolder,
+                            Name = name,
+                            FullPath = d,
+                            ItemCountOrSize = hasDirectImages ? $"Chương ({subImgCount} ảnh)" : (isComicSeriesFolder ? $"Bộ truyện ({count} mục)" : $"{count} mục"),
+                            IconText = hasDirectImages ? "🖼️" : (isComicSeriesFolder ? "📚" : "📁"),
+                            IconColor = hasDirectImages ? "#10B981" : (isComicSeriesFolder ? "#38BDF8" : "#A78BFA"),
+                            LastModified = di.LastWriteTime
+                        });
                     }
-
-                    if (hasDirectImages) chapterFoldersCount++;
-                    else if (isComicSeriesFolder) chapterFoldersCount++;
-
-                    list.Add(new DirectoryItemModel
-                    {
-                        IsFolder = true,
-                        IsImageFile = false,
-                        CanReadDirectly = hasDirectImages || isComicSeriesFolder,
-                        Name = name,
-                        FullPath = d,
-                        ItemCountOrSize = hasDirectImages ? $"Chương ({subImgCount} ảnh)" : (isComicSeriesFolder ? $"Bộ truyện ({count} mục)" : $"{count} mục"),
-                        IconText = hasDirectImages ? "🖼️" : (isComicSeriesFolder ? "📚" : "📁"),
-                        IconColor = hasDirectImages ? "#10B981" : (isComicSeriesFolder ? "#38BDF8" : "#A78BFA"),
-                        LastModified = di.LastWriteTime
-                    });
+                    catch { }
                 }
             }
             catch { }
@@ -922,54 +996,58 @@ public partial class LibraryViewModel : ViewModelBase
             try
             {
                 int imageIdx = 0;
-                foreach (var f in Directory.GetFiles(dir))
+                foreach (var f in Directory.EnumerateFiles(dir, "*", enumOptions))
                 {
-                    string ext = Path.GetExtension(f);
-                    if (string.IsNullOrEmpty(ext)) continue;
-
-                    bool isArchive = LibraryScannerService.IsArchiveFile(f);
-                    bool isPdf = LibraryScannerService.IsPdfFile(f);
-                    bool isImg = LibraryScannerService.IsImageFile(f);
-                    if (!isArchive && !isPdf && !isImg) continue;
-
-                    var fi = new FileInfo(f);
-                    if (isImg)
+                    try
                     {
-                        directImagesCount++;
-                        list.Add(new DirectoryItemModel
+                        string ext = Path.GetExtension(f);
+                        if (string.IsNullOrEmpty(ext)) continue;
+
+                        bool isArchive = LibraryScannerService.IsArchiveFile(f);
+                        bool isPdf = LibraryScannerService.IsPdfFile(f);
+                        bool isImg = LibraryScannerService.IsImageFile(f);
+                        if (!isArchive && !isPdf && !isImg) continue;
+
+                        var fi = new FileInfo(f);
+                        if (isImg)
                         {
-                            IsFolder = false,
-                            IsImageFile = true,
-                            CanReadDirectly = true,
-                            Name = fi.Name,
-                            FullPath = f,
-                            ItemCountOrSize = FormatBytes(fi.Length),
-                            IconText = "🖼️",
-                            IconColor = "#38BDF8",
-                            Extension = ext,
-                            LastModified = fi.LastWriteTime,
-                            FileSizeBytes = fi.Length,
-                            ImageIndexInFolder = imageIdx++
-                        });
-                    }
-                    else
-                    {
-                        comicFilesCount++;
-                        list.Add(new DirectoryItemModel
+                            directImagesCount++;
+                            list.Add(new DirectoryItemModel
+                            {
+                                IsFolder = false,
+                                IsImageFile = true,
+                                CanReadDirectly = true,
+                                Name = fi.Name,
+                                FullPath = f,
+                                ItemCountOrSize = FormatBytes(fi.Length),
+                                IconText = "🖼️",
+                                IconColor = "#38BDF8",
+                                Extension = ext,
+                                LastModified = fi.LastWriteTime,
+                                FileSizeBytes = fi.Length,
+                                ImageIndexInFolder = imageIdx++
+                            });
+                        }
+                        else
                         {
-                            IsFolder = false,
-                            IsImageFile = false,
-                            CanReadDirectly = true,
-                            Name = fi.Name,
-                            FullPath = f,
-                            ItemCountOrSize = FormatBytes(fi.Length),
-                            IconText = isPdf ? "📄" : "📦",
-                            IconColor = "#38BDF8",
-                            Extension = ext,
-                            LastModified = fi.LastWriteTime,
-                            FileSizeBytes = fi.Length
-                        });
+                            comicFilesCount++;
+                            list.Add(new DirectoryItemModel
+                            {
+                                IsFolder = false,
+                                IsImageFile = false,
+                                CanReadDirectly = true,
+                                Name = fi.Name,
+                                FullPath = f,
+                                ItemCountOrSize = FormatBytes(fi.Length),
+                                IconText = isPdf ? "📄" : "📦",
+                                IconColor = "#38BDF8",
+                                Extension = ext,
+                                LastModified = fi.LastWriteTime,
+                                FileSizeBytes = fi.Length
+                            });
+                        }
                     }
+                    catch { }
                 }
             }
             catch { }

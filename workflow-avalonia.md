@@ -2673,4 +2673,42 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Khởi chạy Desktop EXE đạt `Responding: True` (ProcessId: 39292).
   - Tự động chạy script `upload_beta.ps1` upload thành công 100% cả 3 gói cài đặt lên GitHub Release tag `beta` (APK Signed 55.57MB, Desktop EXE 48.96MB, Linux tar.gz 41.68MB).
 
+### 15.82 Tối Ưu Bố Cục Page Button Area Chuẩn ComicScreen (Hitbox Nửa Màn Hình), Mở Thẻ SD Card Android, Safe Margin Camera Nốt Ruồi & Tự Động Hủy/Retry Khi Upload Beta Dưới 20 Mbps (2026-10-13)
+- **Bối Cảnh & Phản Hồi Từ Người Dùng**:
+  1. *Bố cục Page Button Area*: Các vòng tròn to ở giữa màn hình gây vướng mắt khi đọc truyện; cần chuyển sang mô hình ComicScreen: icon nhỏ gọn tinh tế nằm sát mép ngoài, phần cảm ứng chạm (hitbox) vô hình chia đôi theo nửa màn hình tương ứng (Type 0: Bottom chia trái/phải; Type 1: Left side chia trên/dưới; Type 2: Left/Right side; Type 3: Top/Bottom side). Kích thước hitbox căn theo thanh trượt Size (`Height` cho Top/Bottom, `Width` cho Left/Right).
+  2. *Thẻ nhớ ngoài SD Card trên Android*: Tab Storage và Directory không hiển thị và không mở được thẻ nhớ ngoài SD Card `/storage/XXXX-XXXX` do các lớp bảo mật scoped storage của Android và lỗi crash khi duyệt qua thư mục hệ thống `Android/data`.
+  3. *Nút Back bị che bởi camera trên Android*: Nút Back ở góc trên bên trái trùng với camera nốt ruồi / giọt nước gây khó bấm và che khuất tầm nhìn.
+  4. *Thanh điều hướng Android (Recent, Home, Back)*: Khi đọc truyện mở thanh công cụ thì thanh điều hướng hệ thống Android không hiển thị, người dùng phải vuốt từ mép dưới lên mới thấy. Yêu cầu thanh điều hướng Android tự động hiển thị cùng lúc khi bật thanh công cụ đọc truyện.
+  5. *Tốc độ Upload Release Beta*: Mạng quốc tế đến GitHub upload hay bị nghẽn nhỏ giọt (< 5 Mbps). Yêu cầu `upload beta.cmd` và `upload_beta.ps1` đo tốc độ thời gian thực; nếu sau thời gian warm-up tốc độ < 20 Mbps thì tự động hủy kết nối ngay lập tức, xóa asset dở dang cũ và retry lại từ đầu cho đến khi đạt tốc độ >= 20 Mbps mới chuyển sang file tiếp theo.
+- **Phân Tích Kỹ Thuật & Giải Pháp Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Page Button Area Chuẩn ComicScreen (`ComicReaderControl.axaml`, `ComicReaderViewModel.cs`)**:
+     - Bỏ hoàn toàn các vòng tròn to đục ở giữa màn hình.
+     - Tạo style `Button.hitboxBtn`: Nền và viền hoàn toàn trong suốt (`Transparent`), không chớp hiệu ứng khi nhấn (`PointerOver`, `Pressed`).
+     - Chia hitbox vô hình phủ trọn nửa màn hình tương ứng theo từng Type (Type 0: nửa trái và nửa phải cạnh đáy; Type 1: nửa trên và nửa dưới cạnh trái; Type 2: trọn dải mép trái và mép phải; Type 3: trọn dải mép đỉnh và mép đáy).
+     - Biểu tượng `-` và `+` hiển thị dạng icon nhỏ gọn, tinh tế (`FontWeight="Bold"`, viền tròn mờ bo góc nhẹ hoặc gắn trực tiếp) nằm sát mép ngoài màn hình, độ mờ tuân theo thanh trượt Opacity, kích cỡ biểu tượng tự động scale tỉ lệ theo thanh trượt Size (`PageButtonAreaIconFontSize`).
+     - Bổ sung các thuộc tính tính toán trong `ComicReaderViewModel`: `PageButtonAreaComputedHitHeight` (dành cho Type 0 và Type 3, min 60px, max 240px), `PageButtonAreaComputedHitWidth` (dành cho Type 1 và Type 2, min 60px, max 240px), `PageButtonAreaIconFontSize` (min 16px, max 28px).
+  2. **Quét & Mở Thẻ Nhớ SD Card Ngoài Trên Android (`LibraryViewModel.cs`, `MainActivity.cs`, `LibraryScannerService.cs`)**:
+     - Trong `MainActivity.cs`: Cài đặt delegate `LibraryScannerService.AndroidGetExternalStoragePaths` bóc tách từ `GetExternalFilesDirs(null)` để trích xuất chính xác root path của thẻ nhớ vật lý (loại bỏ phần đuôi `/Android/data/...`).
+     - Trong `LibraryViewModel.LoadStorageItems()`: Kết hợp song song các phương thức quét SD Card: delegate Android, đọc `/proc/mounts`, và quét an toàn `/storage/*`, `/mnt/media_rw/*` để nhận diện toàn bộ thẻ nhớ SD Card và gán nhãn trực quan `💾 Thẻ nhớ ngoài (SD Card)`.
+     - Trong `LibraryViewModel.LoadDirectory()`: Cải tiến duyệt file/thư mục bằng `Directory.EnumerateDirectories` & `Directory.EnumerateFiles` với `EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false }` và bọc `try/catch` từng thư mục, đảm bảo không bị ngoại lệ `UnauthorizedAccessException` khi gặp folder hệ thống như `Android/data` làm gián đoạn việc duyệt file ảnh và truyện.
+  3. **Đệm Lề An Toàn Tránh Camera Nốt Ruồi/Giọt Nước (`ComicReaderControl.axaml`, `ComicReaderViewModel.cs`)**:
+     - Bổ sung thuộc tính `ReaderHeaderSafeMargin`: Trên Android mặc định đệm an toàn `Thickness(26, 6, 8, 6)` giúp nút Back góc trên bên trái dịch vào trong, hoàn toàn thoát khỏi vùng notch/camera giọt nước; trên Desktop giữ nguyên `Thickness(8, 6, 8, 6)`.
+     - Gán `Padding="{Binding ReaderHeaderSafeMargin}"` cho Top Header Bar trong `ComicReaderControl.axaml`.
+  4. **Tự Động Hiển Thị Thanh Điều Hướng Android (Recent, Home, Back) Khi Mở Tool (`ComicReaderActivity.cs`, `ComicReaderViewModel.cs`)**:
+     - Bổ sung event `AndroidOverlayVisibilityChanged` trong `ComicReaderViewModel`.
+     - Trong `ComicReaderActivity.cs`: Đăng ký lắng nghe sự kiện khi thanh công cụ đọc truyện hiện/ẩn (`IsOverlayVisible`).
+     - Khi thanh công cụ hiện (`isOverlayVisible == true`): Gọi `ApplyImmersiveFullScreen(false)` để hiển thị tức thời thanh điều hướng Android (Recent, Home, Back) cùng thanh công cụ mà người dùng không cần vuốt từ đáy màn hình.
+     - Khi đóng thanh công cụ: Gọi `ApplyImmersiveFullScreen(true)` đưa màn hình trở lại Immersive Mode toàn màn hình đọc truyện mượt mà.
+  5. **Giám Sát Tốc Độ & Tự Động Hủy/Retry Khi Upload Beta Dưới 20 Mbps (`upload beta.cmd`, `upload_beta.ps1`)**:
+     - Xây dựng hàm `Upload-AssetWithSpeedGuard` trong `upload_beta.ps1` sử dụng `System.Net.HttpWebRequest` với cơ chế streaming trực tiếp (`AllowWriteStreamBuffering = $false`, buffer 128KB).
+     - Giám sát tốc độ upload thời gian thực mỗi 1 giây và hiển thị phần trăm kèm tốc độ Mbps tức thời.
+     - Thiết lập cơ chế Speed Guard: Sau 4 giây warm-up ban đầu, nếu tốc độ trung bình thấp hơn 20 Mbps (hoặc biến môi trường `%MIN_SPEED_MBPS%`), script tự động `$request.Abort()` kết nối ngay lập tức, gọi API xóa asset dở dang bị hỏng trên GitHub Release (`Remove-ReleaseAssetByName`), và thực hiện thử lại (retry) từ đầu tối đa 30 lần cho đến khi đạt tốc độ cao.
+     - Đảm bảo chỉ khi file hiện tại upload thành công 100% thì mới chuyển tiếp sang upload file tiếp theo.
+- **Nghiệm Thu**:
+  - `dotnet build` Release đạt `0 Warning(s), 0 Error(s)` cho cả Desktop (`ComicDownloaderGMTPC.Desktop`) và Android (`ComicDownloaderGMTPC.Android`).
+  - Khởi chạy Desktop EXE đạt `Responding: True` (ProcessId: 37428).
+  - Đóng gói đầy đủ các gói phát hành trong `\publish\`: Desktop EXE, Linux tar.gz, DEB, APK Signed.
+  - Script `upload beta.cmd` và `upload_beta.ps1` tích hợp hoàn chỉnh cơ chế Speed Guard kiểm tra tốc độ >= 20 Mbps.
+
+
 

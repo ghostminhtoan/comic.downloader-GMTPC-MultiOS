@@ -4,6 +4,16 @@
 # Target Tag: beta
 # ==============================================================================
 
+param(
+    [double]$MinSpeedMbps = 20.0,
+    [int]$WarmupSeconds = 4,
+    [int]$MaxAttempts = 30
+)
+
+if ($env:MIN_SPEED_MBPS) {
+    [double]::TryParse($env:MIN_SPEED_MBPS, [ref]$MinSpeedMbps)
+}
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $Host.UI.RawUI.WindowTitle = "Upload Release Beta - Comic Downloader GMTPC"
 
@@ -11,6 +21,7 @@ Write-Host "========================================================" -Foregroun
 Write-Host "  UPLOAD RELEASE BETA - COMIC DOWNLOADER GMTPC MULTI-OS" -ForegroundColor Cyan
 Write-Host "  Repo: ghostminhtoan/comic.downloader-GMTPC-MultiOS" -ForegroundColor DarkCyan
 Write-Host "  Tag:  beta" -ForegroundColor DarkCyan
+Write-Host "  Nguong toc do toi thieu: $MinSpeedMbps Mbps" -ForegroundColor Yellow
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -82,6 +93,13 @@ Write-Host "[2/4] Xac thuc tai khoan GitHub..." -ForegroundColor Yellow
 $token = $env:GITHUB_TOKEN
 
 if (-not $token) {
+    $tokenFilePath = Join-Path $scriptDir "github_token.txt"
+    if (Test-Path $tokenFilePath) {
+        $token = (Get-Content -Path $tokenFilePath -Raw).Trim()
+    }
+}
+
+if (-not $token) {
     # Thu lay token tu Windows Git Credential Manager
     try {
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -92,6 +110,7 @@ if (-not $token) {
         $pinfo.RedirectStandardOutput = $true
         $pinfo.CreateNoWindow = $true
         $proc = [System.Diagnostics.Process]::Start($pinfo)
+        $proc.StandardInput.NewLine = "`n"
         $proc.StandardInput.WriteLine("protocol=https")
         $proc.StandardInput.WriteLine("host=github.com")
         $proc.StandardInput.WriteLine("")
@@ -107,13 +126,6 @@ if (-not $token) {
             }
         }
     } catch { }
-}
-
-if (-not $token) {
-    $tokenFilePath = Join-Path $scriptDir "github_token.txt"
-    if (Test-Path $tokenFilePath) {
-        $token = (Get-Content -Path $tokenFilePath -Raw).Trim()
-    }
 }
 
 if (-not $token) {
@@ -170,13 +182,181 @@ try {
 }
 
 Write-Host ""
-Write-Host "[4/4] Tien hanh upload $($uploadList.Count) file len Release beta..." -ForegroundColor Cyan
+Write-Host "[4/4] Tien hanh upload $($uploadList.Count) file len Release beta (Yeu cau toc do >= 20 Mbps)..." -ForegroundColor Cyan
 
-# Lay danh sach asset hien tai
-$existingAssets = @()
-try {
-    $existingAssets = Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo/releases/$($release.id)/assets" -Headers $headers -Method Get -ErrorAction Stop
-} catch { }
+# Kich hoat TLS 1.2 va TLS 1.3
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
+
+function Remove-ReleaseAssetByName {
+    param(
+        [string]$Owner,
+        [string]$Repo,
+        [int64]$ReleaseId,
+        [string]$AssetName,
+        [hashtable]$Headers
+    )
+    try {
+        $assetsUrl = "https://api.github.com/repos/$Owner/$Repo/releases/$ReleaseId/assets"
+        $assets = Invoke-RestMethod -Uri $assetsUrl -Headers $Headers -Method Get -ErrorAction Stop
+        foreach ($a in $assets) {
+            if ($a.name -ieq $AssetName) {
+                Write-Host "  -> Phat hien asset cu/do dang '$($a.name)' (ID: $($a.id)). Dang xoa de ghi de..." -ForegroundColor DarkYellow
+                Invoke-RestMethod -Uri "https://api.github.com/repos/$Owner/$Repo/releases/assets/$($a.id)" -Headers $Headers -Method Delete -ErrorAction Stop
+                Write-Host "  -> Da xoa asset cu thanh cong." -ForegroundColor DarkGray
+                Start-Sleep -Milliseconds 600
+            }
+        }
+    } catch { }
+}
+
+function Upload-AssetWithSpeedGuard {
+    param(
+        [string]$UploadUri,
+        [string]$FilePath,
+        [string]$FileName,
+        [string]$Token,
+        [string]$Owner,
+        [string]$Repo,
+        [int64]$ReleaseId,
+        [hashtable]$ApiHeaders,
+        [double]$MinSpeedMbps = 20.0,
+        [int]$WarmupSeconds = 4,
+        [int]$MaxAttempts = 30
+    )
+
+    $fileInfo = Get-Item $FilePath
+    $fileLength = $fileInfo.Length
+    $fileSizeMB = [math]::Round($fileLength / 1MB, 2)
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        Write-Host ""
+        Write-Host "  -> [Lan thu $attempt/$MaxAttempts] Ket noi upload '$FileName' ($fileSizeMB MB)..." -ForegroundColor Cyan
+        Write-Host "     (Nguong toc do yeu cau: >= $MinSpeedMbps Mbps. Tu dong huy & retry neu cham hon sau $WarmupSeconds giay)" -ForegroundColor DarkCyan
+
+        # Xoa sach asset cung ten hoac do dang tren GitHub truoc khi upload
+        Remove-ReleaseAssetByName -Owner $Owner -Repo $Repo -ReleaseId $ReleaseId -AssetName $FileName -Headers $ApiHeaders
+
+        $request = $null
+        $fileStream = $null
+        $requestStream = $null
+        $isAbortedDueToLowSpeed = $false
+
+        try {
+            $request = [System.Net.HttpWebRequest]::Create($UploadUri)
+            $request.Method = "POST"
+            $request.ContentType = "application/octet-stream"
+            $request.Headers.Add("Authorization", "Bearer $Token")
+            $request.Accept = "application/vnd.github+json"
+            $request.UserAgent = "ComicDownloaderUploader/1.0"
+            $request.ContentLength = $fileLength
+            $request.Timeout = 900000
+            $request.ReadWriteTimeout = 900000
+            $request.AllowWriteStreamBuffering = $false
+            $request.SendChunked = $false
+            $request.KeepAlive = $false
+            $request.ServicePoint.Expect100Continue = $false
+
+            $fileStream = [System.IO.File]::OpenRead($FilePath)
+            $requestStream = $request.GetRequestStream()
+
+            $buffer = New-Object byte[] (128 * 1024) # 128 KB buffer
+            $totalSent = 0
+            $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+            $lastCheckTime = $stopwatch.ElapsedMilliseconds
+            $lastSentBytes = 0
+            $slowCounter = 0
+
+            while (($bytesRead = $fileStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                $requestStream.Write($buffer, 0, $bytesRead)
+                $totalSent += $bytesRead
+
+                $nowMs = $stopwatch.ElapsedMilliseconds
+                $deltaMs = $nowMs - $lastCheckTime
+
+                if ($deltaMs -ge 1000 -or $totalSent -eq $fileLength) {
+                    $elapsedTotalSec = [math]::Max(0.1, $nowMs / 1000.0)
+                    $deltaSec = [math]::Max(0.1, $deltaMs / 1000.0)
+                    $bytesDelta = $totalSent - $lastSentBytes
+
+                    $instantSpeedMbps = [math]::Round(($bytesDelta * 8.0) / ($deltaSec * 1000000.0), 2)
+                    $avgSpeedMbps = [math]::Round(($totalSent * 8.0) / ($elapsedTotalSec * 1000000.0), 2)
+
+                    $percent = [math]::Round(($totalSent / $fileLength) * 100.0, 1)
+                    $sentMB = [math]::Round($totalSent / 1MB, 1)
+
+                    $speedColor = if ($instantSpeedMbps -ge $MinSpeedMbps) { "Green" } else { "Yellow" }
+                    Write-Host ("`r     [Tien do] $sentMB / $fileSizeMB MB ($percent%) | Toc do: $instantSpeedMbps Mbps | TB: $avgSpeedMbps Mbps    ") -NoNewline -ForegroundColor $speedColor
+
+                    $lastCheckTime = $nowMs
+                    $lastSentBytes = $totalSent
+
+                    # KIEM TRA TOC DO: Sau thoi gian warm-up, neu toc do < MinSpeedMbps thi tu dong huy
+                    if ($elapsedTotalSec -ge $WarmupSeconds -and $percent -lt 97.0) {
+                        if ($instantSpeedMbps -lt $MinSpeedMbps) {
+                            $slowCounter++
+                            if ($slowCounter -ge 2 -or ($elapsedTotalSec -ge 6 -and $avgSpeedMbps -lt $MinSpeedMbps)) {
+                                Write-Host ""
+                                Write-Host "     [CANH BAO TOC DO] Toc do $instantSpeedMbps Mbps (TB: $avgSpeedMbps Mbps) < $MinSpeedMbps Mbps! Dang huy ket noi de thu lai..." -ForegroundColor Red
+                                $isAbortedDueToLowSpeed = $true
+                                break
+                            }
+                        } else {
+                            $slowCounter = 0
+                        }
+                    }
+                }
+            }
+
+            if ($isAbortedDueToLowSpeed) {
+                try { $request.Abort() } catch { }
+                try { $fileStream.Close() } catch { }
+                try { $requestStream.Close() } catch { }
+                Write-Host "     -> Nghi 2 giay de giai phong socket truoc khi thu lai..." -ForegroundColor DarkGray
+                Start-Sleep -Seconds 2
+                continue
+            }
+
+            $requestStream.Flush()
+            $requestStream.Close()
+            $fileStream.Close()
+
+            $stopwatch.Stop()
+            $totalSec = [math]::Round($stopwatch.Elapsed.TotalSeconds, 1)
+
+            Write-Host ""
+            Write-Host "     -> File da truyen xong, dang cho GitHub xac nhan luu asset..." -ForegroundColor DarkCyan
+
+            $response = $request.GetResponse()
+            $streamReader = New-Object System.IO.StreamReader($response.GetResponseStream())
+            $responseJson = $streamReader.ReadToEnd()
+            $streamReader.Close()
+            $response.Close()
+
+            $resObj = $responseJson | ConvertFrom-Json
+            $finalSpeed = [math]::Round(($fileLength * 8.0) / ($totalSec * 1000000.0), 2)
+            Write-Host "  [THANH CONG] Upload hoan tat '$FileName' trong $totalSec giay! (Toc do TB: $finalSpeed Mbps)" -ForegroundColor Green
+            if ($resObj.browser_download_url) {
+                Write-Host "               URL: $($resObj.browser_download_url)" -ForegroundColor DarkGray
+            }
+            return $true
+
+        } catch {
+            if ($isAbortedDueToLowSpeed) {
+                continue
+            }
+            Write-Host ""
+            Write-Host "  [LOI KET NOI] $($_.Exception.Message)" -ForegroundColor Red
+            try { if ($request) { $request.Abort() } } catch { }
+            Start-Sleep -Seconds 3
+        } finally {
+            if ($fileStream) { try { $fileStream.Dispose() } catch { } }
+            if ($requestStream) { try { $requestStream.Dispose() } catch { } }
+        }
+    }
+
+    Write-Host "  [THAT BAI] Khong the upload '$FileName' sau $MaxAttempts lan thu dat toc do >= $MinSpeedMbps Mbps!" -ForegroundColor Red
+    return $false
+}
 
 $successCount = 0
 
@@ -184,57 +364,17 @@ for ($i = 0; $i -lt $uploadList.Count; $i++) {
     $item = $uploadList[$i]
     $step = "[$($i + 1)/$($uploadList.Count)]"
     Write-Host ""
-    Write-Host "$step Bat dau upload: $($item.Name) ($($item.SizeMB) MB)" -ForegroundColor Yellow
+    Write-Host "$step Chuan bi upload file: $($item.Name) ($($item.SizeMB) MB)" -ForegroundColor Yellow
 
-    # Kiem tra neu asset da ton tai thi xoa de upload moi ghi de
-    $matchAsset = $existingAssets | Where-Object { $_.name -ieq $item.Name }
-    if ($matchAsset) {
-        Write-Host "  -> Phat hien asset cu (ID: $($matchAsset.id)). Dang xoa de ghi de..." -ForegroundColor DarkYellow
-        try {
-            Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo/releases/assets/$($matchAsset.id)" -Headers $headers -Method Delete -ErrorAction Stop
-            Write-Host "  -> Da xoa asset cu thanh cong." -ForegroundColor DarkGray
-        } catch {
-            Write-Host "  -> Khong the xoa asset cu: $($_.Exception.Message)" -ForegroundColor DarkYellow
-        }
-    }
-
-    # Upload asset moi
     $uploadUri = "https://uploads.github.com/repos/$owner/$repo/releases/$($release.id)/assets?name=$($item.Name)"
-    $uploadHeaders = @{
-        "Authorization" = "Bearer $token"
-        "User-Agent" = "ComicDownloaderUploader/1.0"
-        "Accept" = "application/vnd.github+json"
-        "Content-Type" = "application/octet-stream"
-    }
 
-    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $uploaded = $false
-    $maxRetries = 3
+    $ok = Upload-AssetWithSpeedGuard -UploadUri $uploadUri -FilePath $item.Path -FileName $item.Name -Token $token -Owner $owner -Repo $repo -ReleaseId $release.id -ApiHeaders $headers -MinSpeedMbps $MinSpeedMbps -WarmupSeconds $WarmupSeconds -MaxAttempts $MaxAttempts
 
-    for ($retry = 1; $retry -le $maxRetries; $retry++) {
-        try {
-            if ($retry -gt 1) {
-                Write-Host "  -> Thu lai lan $retry/$maxRetries..." -ForegroundColor DarkYellow
-                Start-Sleep -Seconds 3
-            }
-
-            Write-Host "  -> Dang truyen file len GitHub..." -ForegroundColor Cyan
-            $uploadResp = Invoke-RestMethod -Uri $uploadUri -Headers $uploadHeaders -Method Post -InFile $item.Path -TimeoutSec 900 -ErrorAction Stop
-            $stopwatch.Stop()
-            $elapsedSec = [math]::Round($stopwatch.Elapsed.TotalSeconds, 1)
-
-            Write-Host "  [OK] Upload thanh cong trong $elapsedSec giay!" -ForegroundColor Green
-            Write-Host "       Download URL: $($uploadResp.browser_download_url)" -ForegroundColor DarkGray
-            $uploaded = $true
-            $successCount++
-            break
-        } catch {
-            Write-Host "  [CANH BAO] Loi khi upload ($($_.Exception.Message))" -ForegroundColor Red
-        }
-    }
-
-    if (-not $uploaded) {
-        Write-Host "  [THAT BAI] Khong the upload $($item.Name) sau $maxRetries lan thu!" -ForegroundColor Red
+    if ($ok) {
+        $successCount++
+        Write-Host "  [OK] File $($item.Name) da hoan tat. Chuyen sang file tiep theo..." -ForegroundColor Green
+    } else {
+        Write-Host "  [BO QUA] File $($item.Name) khong the upload dat toc do mong muon." -ForegroundColor Red
     }
 }
 

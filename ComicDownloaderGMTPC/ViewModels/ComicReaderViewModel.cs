@@ -1429,13 +1429,31 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(PageButtonAreaFontSize))]
     [NotifyPropertyChangedFor(nameof(PageButtonAreaComputedWidth))]
     [NotifyPropertyChangedFor(nameof(PageButtonAreaComputedHeight))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaComputedHitHeight))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaComputedHitWidth))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaIconFontSize))]
     private double _pageButtonAreaSize = 26.0; // 10..100 (Ảnh 3 là 26)
 
     public string PageButtonAreaSizeText => $"{PageButtonAreaSize:0}";
     public double PageButtonAreaComputedSize => Math.Round(38.0 + (PageButtonAreaSize - 10.0) * 0.52);
     public double PageButtonAreaFontSize => Math.Round(PageButtonAreaComputedSize * 0.54);
-    public double PageButtonAreaComputedWidth => PageButtonAreaComputedSize;
-    public double PageButtonAreaComputedHeight => PageButtonAreaComputedSize;
+    public double PageButtonAreaComputedWidth => PageButtonAreaComputedHitWidth;
+    public double PageButtonAreaComputedHeight => PageButtonAreaComputedHitHeight;
+
+    /// <summary>
+    /// Chiều cao vùng cảm ứng bấm (Hitbox) cho Type 0 (Bottom) và Type 3 (Top/Bottom) chuẩn ComicScreen.
+    /// </summary>
+    public double PageButtonAreaComputedHitHeight => Math.Round(50.0 + (PageButtonAreaSize - 10.0) * 1.35);
+
+    /// <summary>
+    /// Chiều rộng vùng cảm ứng bấm (Hitbox) cho Type 1 (Left Side) và Type 2 (Left/Right Side) chuẩn ComicScreen.
+    /// </summary>
+    public double PageButtonAreaComputedHitWidth => Math.Round(55.0 + (PageButtonAreaSize - 10.0) * 1.35);
+
+    /// <summary>
+    /// Kích thước font icon dấu - và + nhỏ gọn, tinh tế, không viền vướng mắt.
+    /// </summary>
+    public double PageButtonAreaIconFontSize => Math.Round(16.0 + (PageButtonAreaSize - 10.0) * 0.12);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PageButtonAreaScrollDistanceText))]
@@ -1815,12 +1833,22 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsStandardOverlayBarsVisible))]
     private bool _isOverlayVisible = false;
 
+    public static event Action<bool>? AndroidOverlayVisibilityChanged;
+
+    /// <summary>
+    /// Khoảng đệm an toàn góc trên bên trái giúp nút Back không bị che bởi camera nốt ruồi / giọt nước trên điện thoại.
+    /// </summary>
+    public Thickness ReaderHeaderSafeMargin => OperatingSystem.IsAndroid()
+        ? new Thickness(26, 6, 8, 6)
+        : new Thickness(8, 6, 8, 6);
+
     partial void OnIsOverlayVisibleChanged(bool value)
     {
         if (!value && !IsMarginEditorOpen)
         {
             ActivePopup = string.Empty;
         }
+        AndroidOverlayVisibilityChanged?.Invoke(value);
     }
 
     [ObservableProperty]

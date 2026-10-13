@@ -17,6 +17,8 @@ public sealed class LibraryScannerService
     private static readonly Lazy<LibraryScannerService> _lazy = new(() => new LibraryScannerService());
     public static LibraryScannerService Instance => _lazy.Value;
 
+    public static Func<List<string>>? AndroidGetExternalStoragePaths;
+
     public static readonly HashSet<string> ValidImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".jfif"

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Android;
 using Android.App;
@@ -126,6 +127,36 @@ public class MainActivity : AvaloniaMainActivity
         Services.DownloadEngineService.AndroidOpenFolderRequested += OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
         Services.ComicReaderService.AndroidLaunchSeparateReaderTask = LaunchComicReaderTask;
+
+        // Cung cấp danh sách đường dẫn Root của toàn bộ thẻ nhớ ngoài (SD Card)
+        Services.LibraryScannerService.AndroidGetExternalStoragePaths = () =>
+        {
+            var results = new List<string>();
+            try
+            {
+                var filesDirs = GetExternalFilesDirs(null);
+                if (filesDirs != null)
+                {
+                    foreach (var dir in filesDirs)
+                    {
+                        if (dir == null) continue;
+                        string abs = dir.AbsolutePath;
+                        int idx = abs.IndexOf("/Android/data", StringComparison.OrdinalIgnoreCase);
+                        if (idx > 0)
+                        {
+                            string root = abs.Substring(0, idx);
+                            if (!root.Contains("emulated", StringComparison.OrdinalIgnoreCase) &&
+                                !results.Any(r => string.Equals(r, root, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                results.Add(root);
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return results;
+        };
 
         // Đăng ký Native Android Audio Player cho âm thanh thông báo (Startup / DownloadFinish / Error)
         Services.SoundNotificationService.AndroidPlaySoundHandler = (type, filePath) =>

@@ -784,6 +784,8 @@ public partial class ComicReaderControl : UserControl
 
     private void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        e.Pointer.Capture(null);
+
         _cumulativeOverscrollX = 0;
         _cumulativeOverscrollY = 0;
 
