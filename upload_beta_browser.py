@@ -4,6 +4,7 @@
 Upload Release Beta via Microsoft Edge (Playwright)
 Direct-to-S3 Multi-part Accelerated Upload (~100+ Mbps)
 Persistent Automation Profile - Tu dong duy tri phien dang nhap vinh vien
+Speed Guard (< 20 Mbps Auto-Kill & Retry) + Precision Completion Detection
 Comic Downloader GMTPC
 """
 
@@ -32,6 +33,11 @@ TARGET_FILES = [
     PUBLISH_DIR / "ComicDownloaderGMTPC.Desktop.exe",
     PUBLISH_DIR / "ComicDownloaderGMTPC-linux-x64.tar.gz",
 ]
+
+# Cau hinh giam sat toc do va retry
+MIN_UPLOAD_SPEED_MBPS = 20.0  # Nguong toc do toi thieu bat buoc (20 Mbps ~ 2.5 MB/s)
+MAX_RETRIES = 5              # So lan thu lai neu toc do < 20 Mbps hoac bi stall
+GRACE_PERIOD_SEC = 5         # Thoi gian khoi tao ban dau (cho handshake S3) truoc khi kiem tra toc do
 
 
 def disable_quick_edit_mode():
@@ -119,19 +125,126 @@ def is_authenticated_context(context):
     return False
 
 
+JS_UPLOAD_TRACKER = """
+(() => {
+    window.__uploadTracker = {
+        files: {},
+        totalLoaded: 0,
+        totalBytes: 0,
+        activeCount: 0,
+        completedCount: 0,
+        failedCount: 0,
+        startTime: 0
+    };
+
+    const origOpen = XMLHttpRequest.prototype.open;
+    const origSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function(method, url) {
+        this.__reqUrl = url || '';
+        this.__isS3Upload = (
+            this.__reqUrl.includes('s3.amazonaws.com') ||
+            this.__reqUrl.includes('github-production-release-asset') ||
+            this.__reqUrl.includes('/upload/')
+        );
+        return origOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function(body) {
+        const isPayload = this.__isS3Upload || (body && (
+            (body instanceof Blob) ||
+            (body instanceof File) ||
+            (body instanceof FormData)
+        ));
+
+        if (isPayload) {
+            const reqId = 'req_' + Math.random().toString(36).substring(2, 9);
+            this.__reqId = reqId;
+
+            if (!window.__uploadTracker.startTime) {
+                window.__uploadTracker.startTime = Date.now();
+            }
+            window.__uploadTracker.activeCount++;
+
+            let approxSize = 0;
+            let filename = '';
+            if (body instanceof Blob || body instanceof File) {
+                approxSize = body.size;
+                filename = body.name || '';
+            } else if (body instanceof FormData) {
+                try {
+                    for (let [k, v] of body.entries()) {
+                        if (v instanceof File || v instanceof Blob) {
+                            approxSize = v.size;
+                            filename = v.name || k;
+                            break;
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            const rec = {
+                id: reqId,
+                url: this.__reqUrl,
+                filename: filename,
+                loaded: 0,
+                total: approxSize,
+                done: false
+            };
+            window.__uploadTracker.files[reqId] = rec;
+
+            if (this.upload) {
+                this.upload.addEventListener('progress', (e) => {
+                    rec.loaded = e.loaded;
+                    if (e.total && e.total > 0) rec.total = e.total;
+
+                    let sumLoaded = 0;
+                    let sumTotal = 0;
+                    for (const id in window.__uploadTracker.files) {
+                        sumLoaded += window.__uploadTracker.files[id].loaded;
+                        sumTotal += window.__uploadTracker.files[id].total;
+                    }
+                    window.__uploadTracker.totalLoaded = sumLoaded;
+                    if (sumTotal > window.__uploadTracker.totalBytes) {
+                        window.__uploadTracker.totalBytes = sumTotal;
+                    }
+                });
+            }
+
+            this.addEventListener('load', () => {
+                rec.loaded = rec.total;
+                rec.done = true;
+                window.__uploadTracker.activeCount = Math.max(0, window.__uploadTracker.activeCount - 1);
+                window.__uploadTracker.completedCount++;
+            });
+
+            this.addEventListener('error', () => {
+                window.__uploadTracker.activeCount = Math.max(0, window.__uploadTracker.activeCount - 1);
+                window.__uploadTracker.failedCount++;
+            });
+
+            this.addEventListener('abort', () => {
+                window.__uploadTracker.activeCount = Math.max(0, window.__uploadTracker.activeCount - 1);
+            });
+        }
+        return origSend.apply(this, arguments);
+    };
+})();
+"""
+
+
 def perform_browser_upload(force_login=False):
     disable_quick_edit_mode()
     verify_files_exist()
 
     target_names = [p.name for p in TARGET_FILES]
-    delete_existing_release_assets_via_api(target_names)
+    total_target_bytes = sum(p.stat().st_size for p in TARGET_FILES)
+    total_target_mb = total_target_bytes / (1024 * 1024)
 
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as p:
         print("[PROFILE] Su dung Persistent Profile tai: .edge_profile")
-        
-        # Khoi chay trinh duyet headless mac dinh (hoac co giao dien neu force_login)
         initial_headless = not force_login
 
         context = p.chromium.launch_persistent_context(
@@ -147,11 +260,14 @@ def perform_browser_upload(force_login=False):
 
         page = context.pages[0] if context.pages else context.new_page()
 
+        # Inject real-time XHR upload tracker ngay khi trang duoc khoi tao
+        page.add_init_script(JS_UPLOAD_TRACKER)
+
         # Kiem tra xac thuc
         page.goto("https://github.com", wait_until="domcontentloaded", timeout=45000)
         has_session = is_authenticated_context(context)
 
-        # Neu chua co session ma dang chay headless -> Mo Edge co giao dien de nguoi dung dang nhap 1 lan duy nhat
+        # Neu chua co session ma dang chay headless -> Mo Edge co giao dien de dang nhap 1 lan duy nhat
         if not has_session:
             if initial_headless:
                 print("\n[LOGIN] Phat hien chua co session dang nhap GitHub trong Profile.")
@@ -169,6 +285,7 @@ def perform_browser_upload(force_login=False):
                     ]
                 )
                 page = context.pages[0] if context.pages else context.new_page()
+                page.add_init_script(JS_UPLOAD_TRACKER)
                 page.goto("https://github.com/login", wait_until="domcontentloaded")
 
             print("\n>>> VUI LONG DANG NHAP GITHUB TREN CUA SO MICROSOFT EDGE VUA MO <<<")
@@ -196,70 +313,147 @@ def perform_browser_upload(force_login=False):
             print("[LOGIN] -> XAC NHAN DANG NHAP THANH CONG!")
             print("[LOGIN] -> Phien lam viec da duoc luu vinh vien vao Profile! Tu gio se khong can dang nhap lai.")
 
-        # Da co session hop le -> Truy cap trang edit release
-        print(f"\n[NAVIGATE] Dang truy cap trang Release Edit: {EDIT_URL}...")
-        page.goto(EDIT_URL, wait_until="domcontentloaded", timeout=60000)
+        # Vong lap Retry voi Co che Kiem Soat Toc Do (Speed Guard) & Nhan Dien Finish Chinh Xac
+        upload_success = False
+        final_elapsed = 0
+        final_speed = 0
 
-        # Kiem tra neu bi da ve login
-        if "github.com/login" in page.url.lower():
-            print("[CANH BAO] Phien dang nhap het han. Vui long chay lai voi tham so --login.")
-            context.close()
-            sys.exit(1)
+        for attempt in range(1, MAX_RETRIES + 1):
+            print("\n====================================================================")
+            print(f"  [LAN THU {attempt}/{MAX_RETRIES}] Khoi dong quy trinh upload Release Beta...")
+            print("====================================================================")
 
-        print("[WAIT] Dang tim khu vuc tai file Releases Upload (#releases-upload)...")
-        # Tim input file chuyen dung cho release assets (co id="releases-upload")
-        # Chu y: Input nay co class sr-only (an khoi man hinh) nen chi dung state="attached", khong dung state="visible"!
-        try:
-            page.wait_for_selector("#releases-upload", state="attached", timeout=15000)
-            file_input = page.locator("#releases-upload")
-        except Exception:
-            # Fallback: Tim input file khong phai release body
-            print("[WAIT] Fallback: Tim input file asset khong thuoc ve release body...")
-            page.wait_for_selector('input[type="file"]:not(#fc-release_body)', state="attached", timeout=15000)
-            file_input = page.locator('input[type="file"]:not(#fc-release_body)').first
+            # Don dep cac asset cu tren release truoc khi upload de dam bao trang thai sach
+            delete_existing_release_assets_via_api(target_names)
 
-        file_paths = [str(p) for p in TARGET_FILES]
+            print(f"[NAVIGATE] Dang truy cap trang Release Edit: {EDIT_URL}...")
+            page.goto(EDIT_URL, wait_until="domcontentloaded", timeout=60000)
 
-        print(f"[UPLOAD] Bat dau dinh kem {len(file_paths)} file de upload truc tiep len AWS S3...")
-        start_time = time.time()
-        file_input.set_input_files(file_paths)
+            # Kiem tra phien dang nhap
+            if "github.com/login" in page.url.lower():
+                print("[CANH BAO] Phien dang nhap het han. Vui long chay lai voi tham so --login.")
+                context.close()
+                sys.exit(1)
 
-        print("[UPLOAD] Dang truyen du lieu truc tiep len AWS S3 CDN (Toc do toi da duong truyen ~100+ Mbps)...")
+            print("[WAIT] Dang tim khu vuc tai file Releases Upload (#releases-upload)...")
+            try:
+                page.wait_for_selector("#releases-upload", state="attached", timeout=15000)
+                file_input = page.locator("#releases-upload")
+            except Exception:
+                print("[WAIT] Fallback: Tim input file asset khong thuoc ve release body...")
+                page.wait_for_selector('input[type="file"]:not(#fc-release_body)', state="attached", timeout=15000)
+                file_input = page.locator('input[type="file"]:not(#fc-release_body)').first
 
-        # Cho upload hoan tat
-        max_upload_wait = 180  # 3 phut (voi toc do 100 Mbps chi mat ~12-15s)
-        upload_complete = False
+            # Reset bo dem upload tracker trong browser
+            page.evaluate("""() => {
+                if (window.__uploadTracker) {
+                    window.__uploadTracker.startTime = 0;
+                    window.__uploadTracker.totalLoaded = 0;
+                    window.__uploadTracker.totalBytes = 0;
+                    window.__uploadTracker.files = {};
+                    window.__uploadTracker.activeCount = 0;
+                    window.__uploadTracker.completedCount = 0;
+                    window.__uploadTracker.failedCount = 0;
+                }
+            }""")
 
-        for i in range(max_upload_wait):
-            time.sleep(1)
-            elapsed = time.time() - start_time
+            file_paths = [str(p) for p in TARGET_FILES]
+            print(f"[UPLOAD] Bat dau dinh kem {len(file_paths)} file ({total_target_mb:.2f} MB) de truyen truc tiep len AWS S3...")
+            file_input.set_input_files(file_paths)
 
-            content = page.content()
-            is_still_uploading = (
-                "Uploading your file now" in content
-                or "upload-progress" in content
-                or "is-uploading" in content
-            )
+            start_time = time.time()
+            prev_loaded = 0
+            retry_needed = False
+            max_upload_wait = 180  # Toi da 3 phut cho moi lan thu
 
-            update_btn = page.locator('button:has-text("Update release")').first
-            is_btn_visible = update_btn.is_visible()
-            is_btn_enabled = update_btn.is_enabled() if is_btn_visible else False
+            for sec in range(1, max_upload_wait + 1):
+                time.sleep(1.0)
+                elapsed = time.time() - start_time
 
-            if i % 2 == 0:
-                print(f" [TIEN DO] Da troi qua {elapsed:.1f}s | Dang truyen du lieu len S3...")
+                # Lay thong so tu JS tracker
+                tracker = page.evaluate("() => window.__uploadTracker || {}")
+                total_loaded = tracker.get("totalLoaded", 0)
 
-            if not is_still_uploading and is_btn_enabled and elapsed >= 3:
-                # Kiem tra ca 3 file da co mat tren page
-                all_found = all(p.name in content for p in TARGET_FILES)
-                if all_found or elapsed >= 8:
-                    upload_complete = True
+                # Tinh toan toc do trung binh va toc do tuc thoi
+                avg_mbps = (total_loaded * 8) / (elapsed * 1_000_000) if elapsed > 0 else 0.0
+                instant_delta = max(0, total_loaded - prev_loaded)
+                instant_mbps = (instant_delta * 8) / (1.0 * 1_000_000)
+                prev_loaded = total_loaded
+
+                loaded_mb = total_loaded / (1024 * 1024)
+                pct = min(100.0, (total_loaded / total_target_bytes) * 100) if total_target_bytes > 0 else 0
+
+                # Kiem tra danh sach file da render tren DOM cua trang
+                ul_text = ""
+                try:
+                    ul_loc = page.locator("ul.uploaded-files")
+                    if ul_loc.count() > 0:
+                        ul_text = ul_loc.inner_text()
+                except Exception:
+                    pass
+
+                all_files_in_ul = all(p.name in ul_text for p in TARGET_FILES)
+
+                # Kiem tra xem co phan tu uploading nao dang hien thi (loai bo hoan toan template an d-none)
+                uploading_count = 0
+                try:
+                    uploading_count = page.locator(
+                        "ul.uploaded-files .upload-progress:not(.d-none), ul.uploaded-files .is-uploading, file-attachment.is-uploading"
+                    ).count()
+                except Exception:
+                    pass
+
+                update_btn = page.locator('button:has-text("Update release")').first
+                btn_ready = update_btn.is_visible() and update_btn.is_enabled()
+
+                # In tien do ro rang tung giay
+                status_desc = f"{loaded_mb:.1f}/{total_target_mb:.1f} MB ({pct:.1f}%) | TB: {avg_mbps:.1f} Mbps | Tuc thoi: {instant_mbps:.1f} Mbps | {elapsed:.1f}s"
+                print(f" [TIEN DO] {status_desc}")
+
+                # -------------------------------------------------------------
+                # 1. SPEED GUARD: Kiem tra toc do, neu < 20 Mbps -> KILL & RETRY
+                # -------------------------------------------------------------
+                if elapsed >= GRACE_PERIOD_SEC:
+                    is_stalled = (elapsed >= 8 and total_loaded == 0)
+                    is_below_threshold = (avg_mbps < MIN_UPLOAD_SPEED_MBPS and total_loaded > 0)
+
+                    if is_stalled or is_below_threshold:
+                        print(f"\n[CANH BAO TOC DO] Toc do upload trung binh dat {avg_mbps:.2f} Mbps (< nguong yeu cau {MIN_UPLOAD_SPEED_MBPS} Mbps)!")
+                        print(f"[KILL & RETRY] Tu dong huy upload (window.stop) va chuan bi thu lai lan {attempt + 1}/{MAX_RETRIES}...")
+                        try:
+                            page.evaluate("() => window.stop()")
+                        except Exception:
+                            pass
+                        retry_needed = True
+                        break
+
+                # -------------------------------------------------------------
+                # 2. FINISH GUARD: Nhan dien hoan tat 100% chuan xac
+                # -------------------------------------------------------------
+                is_tracker_done = (
+                    tracker.get("completedCount", 0) >= len(TARGET_FILES) or
+                    (total_loaded >= total_target_bytes * 0.99 and tracker.get("activeCount", 0) == 0)
+                )
+
+                if (is_tracker_done or all_files_in_ul) and uploading_count == 0 and btn_ready and elapsed >= 3:
+                    final_elapsed = elapsed
+                    final_speed = avg_mbps if avg_mbps > 0 else (total_target_mb * 8 / final_elapsed)
+                    print(f"\n[XAC NHAN HOAN TAT] 100% du lieu ({total_target_mb:.2f} MB) da truyen len S3 trong {final_elapsed:.1f}s (Toc do: {final_speed:.1f} Mbps)!")
+                    upload_success = True
                     break
 
-        total_elapsed = time.time() - start_time
-        total_mb = sum(p.stat().st_size for p in TARGET_FILES) / (1024 * 1024)
-        avg_mbps = (total_mb * 8) / total_elapsed if total_elapsed > 0 else 0
+            if upload_success:
+                break
+            elif retry_needed:
+                print(f"[RETRY] Cho 2 giay de he thong on dinh truoc khi thu lai...")
+                time.sleep(2)
+            else:
+                print(f"[TIMEOUT] Luot upload thu {attempt} qua 180s. Thu lai...")
 
-        print(f"\n[UPLOAD XONG] Hoan tat tai {total_mb:.2f} MB trong {total_elapsed:.1f}s (~{avg_mbps:.1f} Mbps)!")
+        if not upload_success:
+            print(f"\n[LOI] Da thu {MAX_RETRIES} lan nhung khong dat toc do > {MIN_UPLOAD_SPEED_MBPS} Mbps hoac bi loi mang.")
+            context.close()
+            sys.exit(1)
 
         # Bam nut "Update release"
         print("[SUBMIT] Dang bam nut 'Update release' de luu ban phat hanh...")
@@ -278,7 +472,7 @@ def perform_browser_upload(force_login=False):
 
     print("\n====================================================================")
     print("  [HOAN TAT 100%] Da upload thanh cong 3 file len Release Beta!")
-    print(f"  Tong dung luong: {total_mb:.2f} MB | Thoi gian: {total_elapsed:.1f}s | Toc do: {avg_mbps:.1f} Mbps")
+    print(f"  Tong dung luong: {total_target_mb:.2f} MB | Thoi gian: {final_elapsed:.1f}s | Toc do: {final_speed:.1f} Mbps")
     print(f"  URL: {VIEW_URL}")
     print("====================================================================")
 

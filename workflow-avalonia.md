@@ -2802,9 +2802,29 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
     + Truyền dữ liệu trực tiếp lên AWS S3 và tự động click nút `Update release`.
     + Đã cập nhật thành công 100% lên GitHub Release Beta tại `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`.
 
-
-
-
-
-
+### 15.87 Cơ Chế Speed Guard (< 20 Mbps Auto-Kill & Retry) & Nhận Diện Hoàn Tất Tức Thời Khi Upload AWS S3 (2026-10-13)
+- **Bối Cảnh & Phân Tích Lỗi**:
+  1. *Thiếu cơ chế kiểm soát tốc độ*: Khi đường truyền mạng bị bóp băng thông hoặc kết nối S3 bị stall (chỉ đạt < 20 Mbps), người dùng muốn tự động hủy (kill) tiến trình hiện tại và tự động thử lại (retry) để đạt tốc độ tối đa của đường truyền.
+  2. *Lỗi kẹt vòng lặp sau khi tải xong (không chịu finish)*: Trong code cũ, logic kiểm tra `is_still_uploading` sử dụng chuỗi thô `"upload-progress" in content`. Do trên trang GitHub Release Edit luôn tồn tại sẵn một phần tử template ẩn mang class `upload-progress` trong `<file-attachment>`, chuỗi này luôn có mặt trong DOM thô. Kết quả là điều kiện hoàn tất không bao giờ được thỏa mãn, khiến script chạy vô tận đến hết 180s timeout và liên tục in thông báo *"Đang truyền dữ liệu lên S3..."* mặc dù dữ liệu thực tế đã truyền xong từ giây thứ 15.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Real-time XHR Upload Tracker (`JS Injection`)**:
+     - Tiêm script `JS_UPLOAD_TRACKER` qua `page.add_init_script` ngay khi trang khởi tạo.
+     - Hook trực tiếp vào `XMLHttpRequest.prototype.open` và `XMLHttpRequest.prototype.send`, bắt sự kiện `xhr.upload.addEventListener('progress')` và `load`/`error`/`abort`.
+     - Đo lường chính xác từng byte dữ liệu truyền tải thực tế, tính toán tốc độ trung bình và tốc độ tức thời mỗi giây.
+  2. **Speed Guard (< 20 Mbps Auto-Kill & Retry)**:
+     - Thiết lập ngưỡng tốc độ khắt khe: `MIN_UPLOAD_SPEED_MBPS = 20.0` (~2.5 MB/s) và `MAX_RETRIES = 5`.
+     - Cho phép thời gian ramp-up kết nối ban đầu (`GRACE_PERIOD_SEC = 5`). Từ giây thứ 5 trở đi:
+       + Nếu bị stall mạng (0 byte sau 8s) hoặc tốc độ trung bình `< 20 Mbps`: Lập tức ngắt kết nối socket bằng `page.evaluate("() => window.stop()")`.
+       + Dọn dẹp các asset dở dang qua API GitHub Releases và tự động retry lại từ đầu.
+  3. **Precision Completion Detection**:
+     - Loại bỏ hoàn toàn việc tìm kiếm substring `"upload-progress"` trong `page.content()`.
+     - Sử dụng selector loại trừ thẻ ẩn: `ul.uploaded-files .upload-progress:not(.d-none), ul.uploaded-files .is-uploading, file-attachment.is-uploading`.
+     - Kết hợp đa tầng: Tracker xác nhận 100% dung lượng hoàn tất (`completedCount >= 3` hoặc `totalLoaded >= 99%`), danh sách `ul.uploaded-files` có đủ 3 file mục tiêu, không còn phần tử uploading hiển thị và nút `Update release` ở trạng thái `is_enabled()`.
+     - Lập tức ngắt vòng lặp chờ, bấm nút `Update release` chỉ sau 1 giây kể từ khi truyền xong.
+- **Kiểm Thử Thực Tế & Nghiệm Thu**:
+  - Chạy thực tế `python upload_beta_browser.py`:
+    + **Lần thử 1/5**: Tốc độ trung bình đạt 0.62 Mbps (< 20 Mbps) -> Speed Guard tự động kích hoạt, gọi `window.stop()` và dọn dẹp asset dở dang để retry.
+    + **Lần thử 2/5**: Đường truyền kích hoạt thành công, tốc độ trung bình đạt **66.6 Mbps** (tức thời lên tới **135.5 Mbps**).
+    + Truyền xong toàn bộ 146.24 MB chỉ trong **18.4 giây**.
+    + Hệ thống lập tức nhận diện hoàn tất, tự động nhấn `Update release` và xác nhận cập nhật thành công lên GitHub Release Beta!
 
