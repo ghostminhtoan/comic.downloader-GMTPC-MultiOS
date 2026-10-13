@@ -17,6 +17,7 @@ Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ,
 - Không revert thay đổi của user nếu không yêu cầu.
 - Xong việc: đánh giá, gợi ý file cần sửa/kiểm tra, rà soát EN/VI.
 - Luôn luôn test build 2 bước: bước 1 là tự tải khởi tạo thư viện, bước 2 là app mở lên, có UI hoàn tất thì mới xem như là build thành công.
+- **Quy tắc Tự Động Upload Release Beta**: Sau khi build và kiểm thử khởi động app thành công (`Responding: True`), BẮT BUỘC luôn luôn chạy script upload beta (`upload beta.cmd` hoặc `upload_beta.ps1`) để tự động cập nhật 3 gói cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta`: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`.
 - **Quy tắc Build & Thư mục Publish**:
   - Script build chính thức: `build-avalonia.bat`.
   - Khi build / publish file cho toàn bộ các hệ điều hành (Windows, Linux, Android), toàn bộ file standalone `.exe`, binary Linux, `.tar.gz`, `.deb` và `.apk` **bắt buộc luôn luôn ở chung một folder duy nhất `\Comic Downloader GMTPC AVALONIA\publish\`**, tuyệt đối **không được cho vào các subfolder như `windows`, `linux`, `android`**.
