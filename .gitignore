@@ -453,5 +453,8 @@ $RECYCLE.BIN/
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# Local tokens
+# Local tokens and browser auth
 github_token.txt
+github_auth.json
+github_cookie.txt
+.edge_profile/
