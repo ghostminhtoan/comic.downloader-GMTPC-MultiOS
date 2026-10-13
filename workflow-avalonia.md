@@ -2592,5 +2592,24 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` hoàn tất biên dịch và đóng gói cho Windows, Linux, Android vào thư mục duy nhất `\publish\`.
   - Khởi chạy Desktop EXE đạt `Responding: True` và nạp thành công 304MB bộ nhớ.
 
-
-
+### 15.79 Tự Động Hóa Upload 3 Gói Cài Đặt Lên GitHub Release Beta Qua `upload beta.cmd` (`upload beta.cmd`, `upload_beta.ps1`) (2026-10-13)
+- **Bối Cảnh & Yêu Cầu Từ Người Dùng**:
+  - Người dùng muốn có một file script riêng biệt `upload beta.cmd` để sau khi chạy `build-avalonia.bat` xong, chỉ cần 1 cú nhấp chuột là tự động upload 3 file phát hành:
+    1. `\publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
+    2. `\publish\ComicDownloaderGMTPC.Desktop.exe`
+    3. `\publish\ComicDownloaderGMTPC-linux-x64.tar.gz`
+    lên thẳng trang phát hành beta: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`.
+- **Giải Pháp Kỹ Thuật & Kiến Trúc (`First-Principles Engineering Rigor`)**:
+  1. **Tạo File Script Chuyên Dụng `upload beta.cmd` & `upload_beta.ps1`**:
+     - `upload beta.cmd`: Thiết lập UTF-8 (`chcp 65001`), tiêu đề console trực quan, kích hoạt thực thi PowerShell với quyền Bypass và giữ màn hình (`pause`) để người dùng quan sát kết quả trọn vẹn.
+     - Tạo thêm file shortcut chuyển tiếp `upload beta.cmd` tại thư mục root repo để người dùng có thể kích hoạt ở bất kỳ đâu.
+  2. **Cơ Chế Xác Thực Thông Minh Không Cần Nhập Thủ Công Token**:
+     - Tự động trích xuất GitHub Token từ Windows Git Credential Manager thông qua `git credential fill` (`protocol=https`, `host=github.com`).
+     - Hỗ trợ cơ chế dự phòng qua biến môi trường `$env:GITHUB_TOKEN` hoặc file `github_token.txt` nếu cần tùy biến.
+  3. **Kết Nối GitHub REST API & Cơ Chế Ghi Đè Gói Cũ An Toàn**:
+     - Kiểm tra sự tồn tại của Release tag `beta` (tự động tạo mới nếu chưa có).
+     - Quét danh sách assets hiện tại: Nếu phát hiện file cũ trùng tên, tự động gọi API `DELETE /assets/{asset_id}` để dọn sạch trước khi upload, triệt tiêu 100% lỗi xung đột mã `422 Unprocessable Entity (already_exists)`.
+     - Sử dụng `Invoke-RestMethod -InFile` truyền stream nhị phân trực tiếp (`application/octet-stream`) với cơ chế tự động thử lại tối đa 3 lần (Retry Circuit Breaker) khi mạng gặp sự cố.
+     - Hiển thị thanh đo thời gian upload từng file, dung lượng và link tải trực tiếp.
+- **Nghiệm Thu**:
+  - Chạy thực tế thành công mỹ mãn: Upload trọn vẹn 3 file (APK 55.54MB, Desktop EXE 48.95MB, Linux tar.gz 41.68MB) lên [Release beta · ghostminhtoan/comic.downloader-GMTPC-MultiOS](https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta).
