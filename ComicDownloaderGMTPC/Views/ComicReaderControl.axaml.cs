@@ -19,6 +19,7 @@ public partial class ComicReaderControl : UserControl
     private bool _isPointerTapCandidate;
     private bool _isProgrammaticScroll;
     private bool _isUserDraggingScrubber;
+    private bool _isDoubleTapZooming;
     private int _scrollRequestVersion;
     private long _lastUserScrollInputTick;
 
@@ -599,7 +600,7 @@ public partial class ComicReaderControl : UserControl
 
     private void OnReaderScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_isProgrammaticScroll || _isUserDraggingScrubber) return;
+        if (_isProgrammaticScroll || _isUserDraggingScrubber || _isDoubleTapZooming) return;
         if (DataContext is not ComicReaderViewModel vm || !vm.IsScrollMode || vm.Pages.Count == 0) return;
 
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
@@ -987,25 +988,6 @@ public partial class ComicReaderControl : UserControl
         double dy = releasePoint.Y - _pointerPressPoint.Y;
         double distance = Math.Sqrt(dx * dx + dy * dy);
 
-        // Nếu ở chế độ lật trang (Flip Mode) zoom 1.0 và người dùng vuốt ngang (Swipe) trên trang truyện -> Lật trang!
-        if (vm.IsFlipMode && vm.ZoomLevel <= 1.02 && !vm.IsMarginEditorOpen)
-        {
-            if (Math.Abs(dx) >= 36.0 && Math.Abs(dx) > Math.Abs(dy) * 1.25 && elapsedMs < 650)
-            {
-                if (dx < 0)
-                {
-                    // Vuốt từ phải sang trái
-                    vm.TapRightZone();
-                }
-                else
-                {
-                    // Vuốt từ trái sang phải
-                    vm.TapLeftZone();
-                }
-                return;
-            }
-        }
-
         // Chỉ tính là Tap khi người dùng chạm nhanh và không kéo cuộn trang
         if (distance > 15.0 || elapsedMs > 500) return;
 
@@ -1020,32 +1002,67 @@ public partial class ComicReaderControl : UserControl
             _singleTapTimer.Stop();
             _lastTapTick = 0;
 
+            int savedPageIndex = vm.CurrentPageIndex;
             double oldZoom = vm.ZoomLevel;
             var scrollViewer = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
             Vector oldOffset = scrollViewer?.Offset ?? Vector.Zero;
             Point touchPoint = releasePoint;
 
+            _isDoubleTapZooming = true;
+            _isProgrammaticScroll = true;
+
             // Kích hoạt Double-Tap Zoom in / out trên mọi vùng (true = không phụ thuộc vùng ảnh)
             vm.ExecuteDoubleTapZoom(true);
 
             double newZoom = vm.ZoomLevel;
-            // Nếu là phóng to (Zoom In): neo tâm cuộn quanh đúng tọa độ chạm ngón tay (Pivot Zoom Alignment)
-            if (scrollViewer != null && newZoom > oldZoom && oldZoom > 0.05)
+
+            Dispatcher.UIThread.Post(() =>
             {
-                double ratio = newZoom / oldZoom;
-                Dispatcher.UIThread.Post(() =>
+                var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
+                if (sv != null)
                 {
-                    var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
-                    if (sv != null)
+                    if (newZoom > oldZoom && oldZoom > 0.05)
                     {
+                        // Phóng to (Zoom In): neo tâm cuộn quanh đúng tọa độ chạm ngón tay (Pivot Zoom Alignment)
+                        double ratio = newZoom / oldZoom;
                         double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
                         double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
                         double targetX = (oldOffset.X + touchPoint.X) * ratio - touchPoint.X;
                         double targetY = (oldOffset.Y + touchPoint.Y) * ratio - touchPoint.Y;
                         sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), Math.Clamp(targetY, 0, maxY));
                     }
-                }, DispatcherPriority.Render);
-            }
+                    else if (newZoom < oldZoom)
+                    {
+                        // Thu nhỏ (Zoom Out về 100%): định vị lại ScrollViewer Offset về trang hiện tại đang đọc
+                        if (vm.IsScrollMode)
+                        {
+                            var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
+                            if (listBox != null && savedPageIndex >= 0 && savedPageIndex < vm.Pages.Count)
+                            {
+                                try
+                                {
+                                    listBox.ScrollIntoView(vm.Pages[savedPageIndex]);
+                                }
+                                catch { }
+                            }
+                        }
+                        else if (vm.IsFlipMode)
+                        {
+                            sv.Offset = new Vector(0, 0);
+                        }
+                    }
+                }
+
+                // Bảo toàn tuyệt đối số trang đang đọc, không bị tua trang
+                vm.CurrentPageIndex = savedPageIndex;
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _isDoubleTapZooming = false;
+                    _isProgrammaticScroll = false;
+                }, DispatcherPriority.Background);
+            }, DispatcherPriority.Render);
+
             return;
         }
 

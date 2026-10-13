@@ -2898,3 +2898,30 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Chạy `build-avalonia.bat` đóng gói toàn bộ: Windows Standalone EXE (`48.96 MB`), Linux Portable tar.gz (`41.69 MB`), Android Signed Standalone APK (`55.62 MB`).
   - Chạy `python upload_beta_browser.py`: Tải thành công 100% 3 file (`146.27 MB`) lên GitHub Release Beta tại `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta` với tốc độ trung bình **70.5 Mbps** chỉ trong **17.4 giây**.
 
+### 15.90 Khắc Phục Triệt Để Tua Trang Khi Double-Tap Zoom, Cô Lập Độc Lập Nút Bấm Page Button Area Type 0-3 & Quy Chuẩn Tua Trang Theo Nút - + (2026-10-13)
+- **Bối Cảnh & Yêu Cầu Cốt Lõi**:
+  1. *Lỗi Double-Tap Zoom bị tua trang*: Khi double-tap để phóng to (zoom in) hoặc thu nhỏ (zoom out), ảnh bị nhảy tua trang ngoài ý muốn và không giữ đúng vị trí tiêu cự mong muốn. Khi double-tap ra ngoài để zoom out cũng bị tua trang.
+  2. *Quy định hành vi tua trang*: Việc tua trang CHỈ ĐƯỢC PHÉP diễn ra khi người dùng chủ động bấm vào các nút điều hướng Previous / Next (`-` và `+`). Tuyệt đối không tự ý tua trang khi chạm hay thao tác trên trang truyện.
+  3. *Triệt tiêu xung đột giữa Type 0, 1, 2, 3 của Page Button Area*: Các Type 0, 1, 2, 3 bị conflict với nhau do hitbox vô hình kéo dãn chiếm màn hình và binding RadioButton getter-only. Người dùng yêu cầu khi chọn Type nào thì CHỈ hiển thị và CHỈ tua trang bằng nút của Type đó.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Tách Biệt & Chuẩn Hóa Binding 4 Type Page Button Area (`ComicReaderViewModel.cs`)**:
+     - Bổ sung setter hai chiều (`get`/`set`) cho các thuộc tính `IsPageButtonAreaType0`, `IsPageButtonAreaType1`, `IsPageButtonAreaType2`, `IsPageButtonAreaType3`, và `IsPageButtonAreaTop`.
+     - Tích hợp partial void `OnPageButtonAreaTypeChanged` và `OnIsPageButtonAreaBottomChanged` phát thông báo `PropertyChanged` đồng bộ cho toàn bộ 4 Type, loại bỏ triệt để hiện tượng conflict trạng thái giữa các RadioButton.
+  2. **Loại Bỏ Hoàn Toàn Hitbox Vô Hình Chiếm Màn Hình (`ComicReaderControl.axaml`)**:
+     - Bổ sung Style `Button.pageAreaBtn` dành riêng cho nút bấm điều hướng trang ảo nhỏ gọn, tinh tế.
+     - Tái cấu trúc toàn diện `PageButtonAreaOverlayPanel`:
+       + Bỏ toàn bộ các `Grid ColumnDefinitions="*, *"` và `VerticalAlignment="Stretch"` / `HorizontalAlignment="Stretch"` chiếm 50% - 100% diện tích màn hình.
+       + Mỗi Type (0, 1, 2, 3) hiện tại chỉ chứa đúng 2 nút bấm độc lập bao quanh icon `-` và `+` với kích thước hitbox thực tế (`PageButtonAreaComputedHitWidth` x `PageButtonAreaComputedHitHeight`).
+       + Toàn bộ vùng hiển thị trang truyện (trên 95% diện tích màn hình) hoàn toàn thông thoáng, cho phép mọi cử chỉ chạm, kéo và Double-Tap đi thẳng vào `ReaderViewportPanel`.
+  3. **Khắc Phục Lỗi Double-Tap Zoom Bị Tua Trang (`ComicReaderControl.axaml.cs`)**:
+     - Bổ sung cờ `_isDoubleTapZooming` và `_isProgrammaticScroll`.
+     - Chặn đứng hoàn toàn `OnReaderScrollChanged` khi đang thực hiện Double-Tap Zoom in / out (`if (_isProgrammaticScroll || _isUserDraggingScrubber || _isDoubleTapZooming) return;`).
+     - Lưu trữ `int savedPageIndex = vm.CurrentPageIndex` trước khi zoom, căn chỉnh lại `scrollViewer.Offset` quanh đúng vị trí ngón tay chạm (`touchPoint`), và phục hồi lại chính xác `vm.CurrentPageIndex = savedPageIndex`.
+     - Bỏ toàn bộ các lệnh tự động tua trang khi tap hoặc vuốt trong `OnViewportPointerReleased`, đảm bảo chỉ có nút `-` và `+` mới được tua trang.
+- **Nghiệm Thu, Đóng Gói & Upload Beta**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)**.
+  - Test khởi động app: `Id = 28976, Responding = True, HasExited = False`.
+  - Chạy `build-avalonia.bat` đóng gói toàn bộ: Windows Standalone EXE (`48.96 MB`), Linux Portable tar.gz (`41.69 MB`) & `.deb`, Android Signed Standalone APK (`55.93 MB`).
+  - Chạy `python upload_beta_browser.py`: Tải thành công 100% 3 file (`146.58 MB`) lên GitHub Release Beta tại `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta` với tốc độ trung bình **80.1 Mbps** chỉ trong **15.4 giây**.
+
+

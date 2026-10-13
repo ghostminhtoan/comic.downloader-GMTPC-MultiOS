@@ -1418,16 +1418,52 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsPageButtonAreaType3))]
     private int _pageButtonAreaType = 0; // 0: Bottom Trái Phải, 1: Left Side Top Bot, 2: Horizontal Center Left Right, 3: Vertical Center Top Bot
 
-    public bool IsPageButtonAreaType0 => PageButtonAreaType == 0;
-    public bool IsPageButtonAreaType1 => PageButtonAreaType == 1;
-    public bool IsPageButtonAreaType2 => PageButtonAreaType == 2;
-    public bool IsPageButtonAreaType3 => PageButtonAreaType == 3;
+    public bool IsPageButtonAreaType0
+    {
+        get => PageButtonAreaType == 0;
+        set { if (value) PageButtonAreaType = 0; }
+    }
+
+    public bool IsPageButtonAreaType1
+    {
+        get => PageButtonAreaType == 1;
+        set { if (value) PageButtonAreaType = 1; }
+    }
+
+    public bool IsPageButtonAreaType2
+    {
+        get => PageButtonAreaType == 2;
+        set { if (value) PageButtonAreaType = 2; }
+    }
+
+    public bool IsPageButtonAreaType3
+    {
+        get => PageButtonAreaType == 3;
+        set { if (value) PageButtonAreaType = 3; }
+    }
+
+    partial void OnPageButtonAreaTypeChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsPageButtonAreaType0));
+        OnPropertyChanged(nameof(IsPageButtonAreaType1));
+        OnPropertyChanged(nameof(IsPageButtonAreaType2));
+        OnPropertyChanged(nameof(IsPageButtonAreaType3));
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPageButtonAreaTop))]
     private bool _isPageButtonAreaBottom = true; // true = Bottom, false = Top
 
-    public bool IsPageButtonAreaTop => !IsPageButtonAreaBottom;
+    public bool IsPageButtonAreaTop
+    {
+        get => !IsPageButtonAreaBottom;
+        set { IsPageButtonAreaBottom = !value; }
+    }
+
+    partial void OnIsPageButtonAreaBottomChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsPageButtonAreaTop));
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PageButtonAreaOpacityText))]

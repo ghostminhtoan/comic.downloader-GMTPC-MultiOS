@@ -78,7 +78,22 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
-        <Style Selector="Button.hitboxBtn:pressed /template/ ContentPresenter">
+        <!-- Style chuẩn cho nút bấm Page Button Area (- / +) tinh tế, không chiếm diện tích màn hình -->
+        <Style Selector="Button.pageAreaBtn">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="ClipToBounds" Value="False" />
+        </Style>
+        <Style Selector="Button.pageAreaBtn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.pageAreaBtn:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
@@ -229,22 +244,20 @@
                IsVisible="{Binding IsPageButtonAreaEnabled}"
                ZIndex="1800">
 
-            <!-- Type 0: Bottom Trái Phải (Hitbox chia nửa màn hình dưới đáy hoặc trên đỉnh) -->
+            <!-- Type 0: Bottom Trái Phải hoặc Top Trái Phải (2 góc) -->
             <Panel IsVisible="{Binding IsPageButtonAreaType0}">
                 <!-- Trường hợp Bottom (Mặc định) -->
-                <Grid IsVisible="{Binding IsPageButtonAreaBottom}"
-                      VerticalAlignment="Bottom" HorizontalAlignment="Stretch"
-                      Height="{Binding PageButtonAreaComputedHitHeight}"
-                      ColumnDefinitions="*, *">
-                    <!-- Nửa trái: Lùi trang (-) -->
-                    <Button Grid.Column="0"
+                <Panel IsVisible="{Binding IsPageButtonAreaBottom}">
+                    <!-- Nút Lùi (-) ở góc dưới bên trái -->
+                    <Button HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                            Width="{Binding PageButtonAreaComputedHitWidth}"
+                            Height="{Binding PageButtonAreaComputedHitHeight}"
+                            Margin="16,0,0,16"
                             Command="{Binding PageButtonAreaPrevCommand}"
                             Click="OnPageButtonAreaPrevClick"
                             IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
-                            Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Left" VerticalAlignment="Center"
-                                Margin="24,0,0,0" Padding="8,4"
-                                Background="#40000000" CornerRadius="14"
+                            Classes="pageAreaBtn">
+                        <Border Background="#66000000" CornerRadius="14" Padding="12,6"
                                 Opacity="{Binding PageButtonAreaComputedOpacity}"
                                 IsHitTestVisible="False">
                             <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
@@ -253,14 +266,15 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </Button>
-                    <!-- Nửa phải: Tiến trang (+) -->
-                    <Button Grid.Column="1"
+                    <!-- Nút Tiến (+) ở góc dưới bên phải -->
+                    <Button HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Width="{Binding PageButtonAreaComputedHitWidth}"
+                            Height="{Binding PageButtonAreaComputedHitHeight}"
+                            Margin="0,0,16,16"
                             Command="{Binding PageButtonAreaNextCommand}"
                             Click="OnPageButtonAreaNextClick"
-                            Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Right" VerticalAlignment="Center"
-                                Margin="0,0,24,0" Padding="8,4"
-                                Background="#40000000" CornerRadius="14"
+                            Classes="pageAreaBtn">
+                        <Border Background="#66000000" CornerRadius="14" Padding="12,6"
                                 Opacity="{Binding PageButtonAreaComputedOpacity}"
                                 IsHitTestVisible="False">
                             <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
@@ -269,22 +283,20 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </Button>
-                </Grid>
+                </Panel>
 
                 <!-- Trường hợp Top (Nếu người dùng chọn Top trong Cài Đặt) -->
-                <Grid IsVisible="{Binding IsPageButtonAreaTop}"
-                      VerticalAlignment="Top" HorizontalAlignment="Stretch"
-                      Height="{Binding PageButtonAreaComputedHitHeight}"
-                      ColumnDefinitions="*, *">
-                    <!-- Nửa trái: Lùi trang (-) -->
-                    <Button Grid.Column="0"
+                <Panel IsVisible="{Binding IsPageButtonAreaTop}">
+                    <!-- Nút Lùi (-) ở góc trên bên trái -->
+                    <Button HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Width="{Binding PageButtonAreaComputedHitWidth}"
+                            Height="{Binding PageButtonAreaComputedHitHeight}"
+                            Margin="16,16,0,0"
                             Command="{Binding PageButtonAreaPrevCommand}"
                             Click="OnPageButtonAreaPrevClick"
                             IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
-                            Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Left" VerticalAlignment="Center"
-                                Margin="24,0,0,0" Padding="8,4"
-                                Background="#40000000" CornerRadius="14"
+                            Classes="pageAreaBtn">
+                        <Border Background="#66000000" CornerRadius="14" Padding="12,6"
                                 Opacity="{Binding PageButtonAreaComputedOpacity}"
                                 IsHitTestVisible="False">
                             <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
@@ -293,14 +305,15 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </Button>
-                    <!-- Nửa phải: Tiến trang (+) -->
-                    <Button Grid.Column="1"
+                    <!-- Nút Tiến (+) ở góc trên bên phải -->
+                    <Button HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Width="{Binding PageButtonAreaComputedHitWidth}"
+                            Height="{Binding PageButtonAreaComputedHitHeight}"
+                            Margin="0,16,16,0"
                             Command="{Binding PageButtonAreaNextCommand}"
                             Click="OnPageButtonAreaNextClick"
-                            Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Right" VerticalAlignment="Center"
-                                Margin="0,0,24,0" Padding="8,4"
-                                Background="#40000000" CornerRadius="14"
+                            Classes="pageAreaBtn">
+                        <Border Background="#66000000" CornerRadius="14" Padding="12,6"
                                 Opacity="{Binding PageButtonAreaComputedOpacity}"
                                 IsHitTestVisible="False">
                             <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
@@ -309,136 +322,124 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </Button>
-                </Grid>
+                </Panel>
             </Panel>
 
             <!-- Type 1: Left Side Top Bot (Cạnh bên trái, nửa trên (-) và nửa dưới (+)) -->
             <Panel IsVisible="{Binding IsPageButtonAreaType1}">
-                <Grid HorizontalAlignment="Left" VerticalAlignment="Stretch"
-                      Width="{Binding PageButtonAreaComputedHitWidth}"
-                      RowDefinitions="*, *">
-                    <!-- Nửa trên: Lùi trang (-) -->
-                    <Button Grid.Row="0"
-                            Command="{Binding PageButtonAreaPrevCommand}"
-                            Click="OnPageButtonAreaPrevClick"
-                            IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
-                            Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Center" VerticalAlignment="Top"
-                                Margin="0,32,0,0" Padding="8,4"
-                                Background="#40000000" CornerRadius="14"
-                                Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                IsHitTestVisible="False">
-                            <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
-                                       FontSize="{Binding PageButtonAreaIconFontSize}"
-                                       FontWeight="Bold" Foreground="#FFFFFF"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </Button>
-                    <!-- Nửa dưới: Tiến trang (+) -->
-                    <Button Grid.Row="1"
-                            Command="{Binding PageButtonAreaNextCommand}"
-                            Click="OnPageButtonAreaNextClick"
-                            Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                Margin="0,0,0,32" Padding="8,4"
-                                Background="#40000000" CornerRadius="14"
-                                Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                IsHitTestVisible="False">
-                            <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
-                                       FontSize="{Binding PageButtonAreaIconFontSize}"
-                                       FontWeight="Bold" Foreground="#FFFFFF"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </Button>
-                </Grid>
+                <!-- Nút Lùi (-) ở cạnh trái phía trên -->
+                <Button HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Width="{Binding PageButtonAreaComputedHitWidth}"
+                        Height="{Binding PageButtonAreaComputedHitHeight}"
+                        Margin="6,40,0,0"
+                        Command="{Binding PageButtonAreaPrevCommand}"
+                        Click="OnPageButtonAreaPrevClick"
+                        IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                        Classes="pageAreaBtn">
+                    <Border Background="#66000000" CornerRadius="14" Padding="12,6"
+                            Opacity="{Binding PageButtonAreaComputedOpacity}"
+                            IsHitTestVisible="False">
+                        <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
+                                   FontSize="{Binding PageButtonAreaIconFontSize}"
+                                   FontWeight="Bold" Foreground="#FFFFFF"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </Button>
+                <!-- Nút Tiến (+) ở cạnh trái phía dưới -->
+                <Button HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                        Width="{Binding PageButtonAreaComputedHitWidth}"
+                        Height="{Binding PageButtonAreaComputedHitHeight}"
+                        Margin="6,0,0,40"
+                        Command="{Binding PageButtonAreaNextCommand}"
+                        Click="OnPageButtonAreaNextClick"
+                        Classes="pageAreaBtn">
+                    <Border Background="#66000000" CornerRadius="14" Padding="12,6"
+                            Opacity="{Binding PageButtonAreaComputedOpacity}"
+                            IsHitTestVisible="False">
+                        <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
+                                   FontSize="{Binding PageButtonAreaIconFontSize}"
+                                   FontWeight="Bold" Foreground="#FFFFFF"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </Button>
             </Panel>
 
-            <!-- Type 2: Horizontal Center Left Right (Dải mép trái (-) và dải mép phải (+)) -->
+            <!-- Type 2: Horizontal Center Left Right (Sát mép trái (-) và sát mép phải (+)) -->
             <Panel IsVisible="{Binding IsPageButtonAreaType2}">
-                <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                      ColumnDefinitions="Auto, *, Auto">
-                    <!-- Dải mép trái: Lùi trang (-) -->
-                    <Button Grid.Column="0"
-                            Command="{Binding PageButtonAreaPrevCommand}"
-                            Click="OnPageButtonAreaPrevClick"
-                            IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
-                            Width="{Binding PageButtonAreaComputedHitWidth}"
-                            VerticalAlignment="Stretch"
-                            Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Left" VerticalAlignment="Center"
-                                Margin="2,0,0,0" Padding="8,4"
-                                Background="#40000000" CornerRadius="14"
-                                Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                IsHitTestVisible="False">
-                            <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
-                                       FontSize="{Binding PageButtonAreaIconFontSize}"
-                                       FontWeight="Bold" Foreground="#FFFFFF"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </Button>
-                    <!-- Dải mép phải: Tiến trang (+) -->
-                    <Button Grid.Column="2"
-                            Command="{Binding PageButtonAreaNextCommand}"
-                            Click="OnPageButtonAreaNextClick"
-                            Width="{Binding PageButtonAreaComputedHitWidth}"
-                            VerticalAlignment="Stretch"
-                            Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Right" VerticalAlignment="Center"
-                                Margin="0,0,2,0" Padding="8,4"
-                                Background="#40000000" CornerRadius="14"
-                                Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                IsHitTestVisible="False">
-                            <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
-                                       FontSize="{Binding PageButtonAreaIconFontSize}"
-                                       FontWeight="Bold" Foreground="#FFFFFF"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </Button>
-                </Grid>
+                <!-- Nút Lùi (-) sát mép trái ở giữa màn hình -->
+                <Button HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Width="{Binding PageButtonAreaComputedHitWidth}"
+                        Height="{Binding PageButtonAreaComputedHitHeight}"
+                        Margin="0"
+                        Command="{Binding PageButtonAreaPrevCommand}"
+                        Click="OnPageButtonAreaPrevClick"
+                        IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                        Classes="pageAreaBtn">
+                    <Border Background="#66000000" CornerRadius="14" Padding="12,6"
+                            Opacity="{Binding PageButtonAreaComputedOpacity}"
+                            IsHitTestVisible="False">
+                        <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
+                                   FontSize="{Binding PageButtonAreaIconFontSize}"
+                                   FontWeight="Bold" Foreground="#FFFFFF"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </Button>
+                <!-- Nút Tiến (+) sát mép phải ở giữa màn hình -->
+                <Button HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Width="{Binding PageButtonAreaComputedHitWidth}"
+                        Height="{Binding PageButtonAreaComputedHitHeight}"
+                        Margin="0"
+                        Command="{Binding PageButtonAreaNextCommand}"
+                        Click="OnPageButtonAreaNextClick"
+                        Classes="pageAreaBtn">
+                    <Border Background="#66000000" CornerRadius="14" Padding="12,6"
+                            Opacity="{Binding PageButtonAreaComputedOpacity}"
+                            IsHitTestVisible="False">
+                        <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
+                                   FontSize="{Binding PageButtonAreaIconFontSize}"
+                                   FontWeight="Bold" Foreground="#FFFFFF"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </Button>
             </Panel>
 
-            <!-- Type 3: Vertical Center Top Bot (Dải mép trên (-) và dải mép dưới (+)) -->
+            <!-- Type 3: Vertical Center Top Bot (Sát mép trên (-) và sát mép dưới (+)) -->
             <Panel IsVisible="{Binding IsPageButtonAreaType3}">
-                <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                      RowDefinitions="Auto, *, Auto">
-                    <!-- Dải mép trên: Lùi trang (-) -->
-                    <Button Grid.Row="0"
-                            Command="{Binding PageButtonAreaPrevCommand}"
-                            Click="OnPageButtonAreaPrevClick"
-                            IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
-                            Height="{Binding PageButtonAreaComputedHitHeight}"
-                            HorizontalAlignment="Stretch"
-                            Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Center" VerticalAlignment="Top"
-                                Margin="0,2,0,0" Padding="8,4"
-                                Background="#40000000" CornerRadius="14"
-                                Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                IsHitTestVisible="False">
-                            <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
-                                       FontSize="{Binding PageButtonAreaIconFontSize}"
-                                       FontWeight="Bold" Foreground="#FFFFFF"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </Button>
-                    <!-- Dải mép dưới: Tiến trang (+) -->
-                    <Button Grid.Row="2"
-                            Command="{Binding PageButtonAreaNextCommand}"
-                            Click="OnPageButtonAreaNextClick"
-                            Height="{Binding PageButtonAreaComputedHitHeight}"
-                            HorizontalAlignment="Stretch"
-                            Classes="hitboxBtn">
-                        <Border HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                Margin="0,0,0,2" Padding="8,4"
-                                Background="#40000000" CornerRadius="14"
-                                Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                IsHitTestVisible="False">
-                            <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
-                                       FontSize="{Binding PageButtonAreaIconFontSize}"
-                                       FontWeight="Bold" Foreground="#FFFFFF"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </Button>
-                </Grid>
+                <!-- Nút Lùi (-) sát mép trên ở giữa màn hình -->
+                <Button HorizontalAlignment="Center" VerticalAlignment="Top"
+                        Width="{Binding PageButtonAreaComputedHitWidth}"
+                        Height="{Binding PageButtonAreaComputedHitHeight}"
+                        Margin="0"
+                        Command="{Binding PageButtonAreaPrevCommand}"
+                        Click="OnPageButtonAreaPrevClick"
+                        IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                        Classes="pageAreaBtn">
+                    <Border Background="#66000000" CornerRadius="14" Padding="12,6"
+                            Opacity="{Binding PageButtonAreaComputedOpacity}"
+                            IsHitTestVisible="False">
+                        <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
+                                   FontSize="{Binding PageButtonAreaIconFontSize}"
+                                   FontWeight="Bold" Foreground="#FFFFFF"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </Button>
+                <!-- Nút Tiến (+) sát mép dưới ở giữa màn hình -->
+                <Button HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                        Width="{Binding PageButtonAreaComputedHitWidth}"
+                        Height="{Binding PageButtonAreaComputedHitHeight}"
+                        Margin="0"
+                        Command="{Binding PageButtonAreaNextCommand}"
+                        Click="OnPageButtonAreaNextClick"
+                        Classes="pageAreaBtn">
+                    <Border Background="#66000000" CornerRadius="14" Padding="12,6"
+                            Opacity="{Binding PageButtonAreaComputedOpacity}"
+                            IsHitTestVisible="False">
+                        <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
+                                   FontSize="{Binding PageButtonAreaIconFontSize}"
+                                   FontWeight="Bold" Foreground="#FFFFFF"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </Button>
             </Panel>
         </Panel>
 
