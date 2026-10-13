@@ -816,10 +816,23 @@ public sealed class LibraryScannerService
 
         if (Directory.Exists(targetPath))
         {
+            var directImgs = GetDirectImagesSafe(targetPath);
+            if (directImgs.Count > 0)
+            {
+                var comic = BuildComicItem(
+                    targetPath,
+                    targetPath,
+                    new List<(string, List<string>)> { (targetPath, directImgs) },
+                    new List<string>(),
+                    new List<string>());
+                comic.SourceLocationLabel = BuildShortLocationBadge(comic.RootFolderPath, comic.IsExternalHistoryItem);
+                return comic;
+            }
+
             var tempResults = new List<LibraryComicItem>();
             try
             {
-                ScanDirectoryRecursive(targetPath, targetPath, depth: 0, maxDepth: 2, tempResults, CancellationToken.None);
+                ScanDirectoryRecursive(targetPath, targetPath, depth: 0, maxDepth: 4, tempResults, CancellationToken.None);
             }
             catch { }
 
@@ -833,19 +846,6 @@ public sealed class LibraryScannerService
                            ?? tempResults[0];
                 best.SourceLocationLabel = BuildShortLocationBadge(best.RootFolderPath, best.IsExternalHistoryItem);
                 return best;
-            }
-
-            var directImgs = GetDirectImagesSafe(targetPath);
-            if (directImgs.Count > 0)
-            {
-                var comic = BuildComicItem(
-                    targetPath,
-                    targetPath,
-                    new List<(string, List<string>)> { (targetPath, directImgs) },
-                    new List<string>(),
-                    new List<string>());
-                comic.SourceLocationLabel = BuildShortLocationBadge(comic.RootFolderPath, comic.IsExternalHistoryItem);
-                return comic;
             }
         }
 

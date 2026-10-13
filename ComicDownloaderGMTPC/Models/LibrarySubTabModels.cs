@@ -34,6 +34,10 @@ public partial class DirectoryItemModel : ObservableObject
 {
     public bool IsFolder { get; set; }
 
+    public bool IsImageFile { get; set; }
+
+    public bool CanReadDirectly { get; set; }
+
     public string Name { get; set; } = string.Empty;
 
     public string FullPath { get; set; } = string.Empty;
@@ -50,7 +54,17 @@ public partial class DirectoryItemModel : ObservableObject
 
     public long FileSizeBytes { get; set; }
 
+    public int ImageIndexInFolder { get; set; }
+
     public bool HasItemCountOrSize => !string.IsNullOrWhiteSpace(ItemCountOrSize);
+
+    public bool ShowDirectReadButton => CanReadDirectly && IsFolder && !IsImageFile;
+
+    public bool IsNormalFolder => IsFolder && !ShowDirectReadButton;
+
+    public bool CanReadDirectNormalFolder => IsNormalFolder && CanReadDirectly;
+
+    public bool IsArchiveOrPdfFile => !IsFolder && !IsImageFile;
 }
 
 public partial class HistoryItemModel : ObservableObject

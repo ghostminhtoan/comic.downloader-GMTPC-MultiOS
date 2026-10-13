@@ -2551,5 +2551,46 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `build-avalonia.bat` hoàn tất biên dịch và đóng gói cho Windows, Linux, Android vào thư mục duy nhất `\publish\`.
   - Khởi chạy Desktop EXE đạt `Responding: True`.
 
+### 15.78 Tối Ưu Chiều Cao Subtab Storage & Chống Che Nút FAB (Ảnh 1), Hỗ Trợ Duyệt Danh Sách Ảnh Đơn Lẻ & Mở Đọc Thư Mục Truyện Đa Tầng (Ảnh 2) (`LibraryView.axaml`, `LibraryViewModel.cs`, `LibrarySubTabModels.cs`, `LibraryScannerService.cs`) (2026-10-13)
+- **Bối Cảnh & Yêu Cầu Từ Người Dùng**:
+  1. *Ảnh 1 (Storage height quá ít, che nút - Mobile/Android)*:
+     - Giao diện Subtab Storage trên Android bị quá thấp (chỉ hiện 2 mục Recent, Device).
+     - Nút nổi FAB `📁+` đè lên item/nút "Mở ➔" của Device và bị cắt mép viền bên phải.
+     - Cần tăng chiều cao hiển thị (`MinHeight`), đệm đáy (`Padding bottom`) cho ListBox để khi cuộn không bao giờ bị nút nổi che khuất.
+  2. *Ảnh 2 (Duyệt ảnh đơn lẻ & Xem folder truyện hỗ trợ đa tầng)*:
+     - Trước đây file `.cbz`, `.zip`, `.pdf` xem được nhưng folder chứa ảnh đơn lẻ (như `Chương 1` chứa `001.jpg`, `002.jpg`...) thì bên trong danh sách trống trơn do `LoadDirectory` chỉ lọc file nén và PDF mà bỏ qua file ảnh.
+     - Cần hiển thị danh sách tất cả file ảnh đơn lẻ trong thư mục để người dùng có thể nhấp chọn đọc từ bất kỳ trang ảnh nào.
+     - Bổ sung nút xem/đọc folder truyện để mở ảnh trực tiếp.
+     - Hệ thống duyệt và đọc ảnh phải **hỗ trợ đa tầng (Multi-tier hierarchy)**:
+       + *Tầng Bộ Truyện* (ví dụ `Tôi Thăng Cấp Một Mình` chứa `Chương 1`, `Chương 2`...): Nút "📖 Đọc Toàn Bộ Truyện (XX chương)" nạp toàn bộ các chương con để đọc liền mạch. Trên từng item chương có cả nút "Xem ảnh ➔" và nút "▶ Đọc".
+       + *Tầng Chương Ảnh* (ví dụ `Chương 1` chứa `001.jpg`, `002.jpg`...): Nút "📖 Đọc Chương Này (XX ảnh)" mở đọc từ đầu, bên dưới danh sách hiển thị từng file ảnh.
+       + *Tầng Ảnh Đơn Lẻ*: Bấm vào bất kỳ file ảnh nào (`014.jpg`) -> Mở trình đọc và nhảy chính xác tới trang tương ứng của ảnh đó.
+- **Giải Pháp Kỹ Thuật & Kiến Trúc (`First-Principles Engineering Rigor`)**:
+  1. **Tối Ưu Subtab Storage Trực Quan, Chống Che Đè & Chống Cắt Mép FAB (`LibraryView.axaml`)**:
+     - Thiết lập `MinHeight="450"` cho container Storage và bổ sung `Padding="4,4,4,90"` cho `ListBox` của `StorageItems`. Khi người dùng cuộn danh sách xuống dưới cùng, toàn bộ nội dung item cuối cùng luôn nằm cách nút FAB một khoảng an toàn, không bao giờ bị nút tròn che khuất.
+     - Nút nổi FAB `📁+` căn lề `Margin="0,0,16,16"`, `ClipToBounds="False"`, bo tròn hoàn hảo 56x56 với viền phát sáng `BorderThickness="2"` màu Cyan `#38BDF8`.
+  2. **Quét Danh Sách File Ảnh Đơn Lẻ & Nhận Diện Thư Mục Đa Tầng (`LibraryViewModel.cs`, `LibrarySubTabModels.cs`, `LibraryScannerService.cs`)**:
+     - Trong `LoadDirectory(path)`:
+       + Duyệt thư mục con: Sử dụng `LibraryScannerService.IsImageFile` để phân biệt thư mục chương ảnh (`🖼️`, `Chương (XX ảnh)`) và thư mục bộ truyện (`📚`, `Bộ truyện (XX mục)`).
+       + Duyệt files: Quét đồng thời cả file nén truyện (`📦`), file PDF (`📄`) và file ảnh đơn lẻ (`🖼️`, `.jpg`, `.png`, `.webp`, `.bmp`, `.gif`).
+       + Gán thuộc tính `IsImageFile = true`, `FileSizeBytes`, và chỉ số trang `ImageIndexInFolder` (0-based) theo đúng thứ tự sắp xếp tự nhiên (`NaturalSort`).
+       + Tự động tính toán `CurrentDirectoryReadableStatus` theo ngữ cảnh đa tầng ("📖 ĐỌC CHƯƠNG NÀY (XX ảnh)", "📖 ĐỌC TOÀN BỘ TRUYỆN (XX chương)", "📖 ĐỌC THƯ MỤC TRUYỆN (XX file)").
+  3. **Hỗ Trợ Mở Đọc Trực Tiếp Từ File Ảnh Đơn Lẻ & Đa Tầng (`LibraryViewModel.cs`, `LibraryScannerService.cs`)**:
+     - Bổ sung `OpenPathToReadInternalAsync(string path, int targetPageIndex = -1)`:
+       + Khi người dùng chọn một file ảnh đơn lẻ (ví dụ `014.jpg`): Tự động định vị thư mục cha chứa ảnh, nạp `quickComic` của thư mục đó, tính toán vị trí trang ảnh tương ứng trong danh sách, lưu tiến độ qua `ReadProgressStore.Instance.SaveProgress(targetChap.EffectiveProgressKey, pageToJump)` và khởi chạy trình đọc. Màn hình đọc truyện sẽ mở lên ngay tức thì tại đúng trang ảnh đã chọn!
+       + Khi chọn thư mục chương con bên trong bộ truyện đa tầng: Tìm chính xác `LibraryChapterItem` có đường dẫn trùng khớp để bắt đầu đọc.
+       + Bổ sung command `ReadCurrentDirectoryAsync()` cho Banner đầu trang và `ReadDirectoryItemDirectlyAsync()` cho từng row.
+  4. **Nâng Cấp Giao Diện Trực Quan Chuẩn ComicScreen Cho Subtab Directory (`LibraryView.axaml`, `LibrarySubTabModels.cs`)**:
+     - Bổ sung Banner nổi bật màu xanh ngọc lục bảo `#064E3B` ở đỉnh trang: `📖 {Binding CurrentDirectoryReadableStatus}` kèm nút `MỞ ĐỌC NGAY ➔`.
+     - Phân loại rõ ràng các nút hành động trong `DirectoryItemModel`:
+       + Chương ảnh (`ShowDirectReadButton == true`): Hiển thị nút `Xem ảnh ➔` (vào xem danh sách ảnh) và nút `▶ Đọc` (đọc chương từ đầu).
+       + File ảnh đơn lẻ (`IsImageFile == true`): Hiển thị icon `🖼️`, tên ảnh, dung lượng và nút `▶ Xem` (nhảy thẳng vào trang ảnh).
+       + Thư mục bộ truyện / Thư mục thông thường: Hiển thị nút `Mở ➔` và nút `▶ Đọc` (nếu truyện có nhiều chương con).
+       + File nén truyện / PDF: Hiển thị icon `📦`/`📄`, dung lượng và nút `▶ Đọc`.
+- **Nghiệm Thu**:
+  - `dotnet build` Release đạt `0 Warning(s), 0 Error(s)` cho cả Desktop và Android.
+  - `build-avalonia.bat` hoàn tất biên dịch và đóng gói cho Windows, Linux, Android vào thư mục duy nhất `\publish\`.
+  - Khởi chạy Desktop EXE đạt `Responding: True` và nạp thành công 304MB bộ nhớ.
+
 
 

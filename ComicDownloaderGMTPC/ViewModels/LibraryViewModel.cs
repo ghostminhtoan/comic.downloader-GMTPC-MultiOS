@@ -71,6 +71,12 @@ public partial class LibraryViewModel : ViewModelBase
     private string _currentDirectoryPath = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasReadableCurrentDirectory))]
+    private string _currentDirectoryReadableStatus = string.Empty;
+
+    public bool HasReadableCurrentDirectory => !string.IsNullOrWhiteSpace(CurrentDirectoryReadableStatus);
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DirectoryViewModeIcon))]
     [NotifyPropertyChangedFor(nameof(DirectoryViewModeText))]
     private bool _isDirectoryGridView;
@@ -852,6 +858,9 @@ public partial class LibraryViewModel : ViewModelBase
             ReadProgressStore.Instance.SaveLastLibraryRootPath(dir);
 
             var list = new List<DirectoryItemModel>();
+            int directImagesCount = 0;
+            int chapterFoldersCount = 0;
+            int comicFilesCount = 0;
 
             // 1. Thư mục con
             try
@@ -863,9 +872,12 @@ public partial class LibraryViewModel : ViewModelBase
 
                     var di = new DirectoryInfo(d);
                     bool hasDirectImages = false;
+                    int subImgCount = 0;
                     try
                     {
-                        hasDirectImages = di.EnumerateFiles().Any(f => LibraryScannerService.IsImageFile(f.FullName));
+                        var imgs = di.EnumerateFiles().Where(f => LibraryScannerService.IsImageFile(f.FullName)).ToList();
+                        hasDirectImages = imgs.Count > 0;
+                        subImgCount = imgs.Count;
                     }
                     catch { }
 
@@ -876,23 +888,40 @@ public partial class LibraryViewModel : ViewModelBase
                     }
                     catch { }
 
+                    bool isComicSeriesFolder = false;
+                    if (!hasDirectImages)
+                    {
+                        try
+                        {
+                            isComicSeriesFolder = di.EnumerateDirectories().Any(sub =>
+                                sub.EnumerateFiles().Any(f => LibraryScannerService.IsImageFile(f.FullName)));
+                        }
+                        catch { }
+                    }
+
+                    if (hasDirectImages) chapterFoldersCount++;
+                    else if (isComicSeriesFolder) chapterFoldersCount++;
+
                     list.Add(new DirectoryItemModel
                     {
                         IsFolder = true,
+                        IsImageFile = false,
+                        CanReadDirectly = hasDirectImages || isComicSeriesFolder,
                         Name = name,
                         FullPath = d,
-                        ItemCountOrSize = hasDirectImages ? "Chương ảnh" : $"{count} mục",
-                        IconText = hasDirectImages ? "🖼️" : "📁",
-                        IconColor = hasDirectImages ? "#10B981" : "#A78BFA",
+                        ItemCountOrSize = hasDirectImages ? $"Chương ({subImgCount} ảnh)" : (isComicSeriesFolder ? $"Bộ truyện ({count} mục)" : $"{count} mục"),
+                        IconText = hasDirectImages ? "🖼️" : (isComicSeriesFolder ? "📚" : "📁"),
+                        IconColor = hasDirectImages ? "#10B981" : (isComicSeriesFolder ? "#38BDF8" : "#A78BFA"),
                         LastModified = di.LastWriteTime
                     });
                 }
             }
             catch { }
 
-            // 2. File truyện (.cbz, .zip, .pdf, .cbr, .rar)
+            // 2. File truyện (.cbz, .zip, .pdf, .cbr, .rar) và FILE ẢNH ĐƠN LẺ!
             try
             {
+                int imageIdx = 0;
                 foreach (var f in Directory.GetFiles(dir))
                 {
                     string ext = Path.GetExtension(f);
@@ -900,24 +929,68 @@ public partial class LibraryViewModel : ViewModelBase
 
                     bool isArchive = LibraryScannerService.IsArchiveFile(f);
                     bool isPdf = LibraryScannerService.IsPdfFile(f);
-                    if (!isArchive && !isPdf) continue;
+                    bool isImg = LibraryScannerService.IsImageFile(f);
+                    if (!isArchive && !isPdf && !isImg) continue;
 
                     var fi = new FileInfo(f);
-                    list.Add(new DirectoryItemModel
+                    if (isImg)
                     {
-                        IsFolder = false,
-                        Name = fi.Name,
-                        FullPath = f,
-                        ItemCountOrSize = FormatBytes(fi.Length),
-                        IconText = isPdf ? "📄" : "📦",
-                        IconColor = "#38BDF8",
-                        Extension = ext,
-                        LastModified = fi.LastWriteTime,
-                        FileSizeBytes = fi.Length
-                    });
+                        directImagesCount++;
+                        list.Add(new DirectoryItemModel
+                        {
+                            IsFolder = false,
+                            IsImageFile = true,
+                            CanReadDirectly = true,
+                            Name = fi.Name,
+                            FullPath = f,
+                            ItemCountOrSize = FormatBytes(fi.Length),
+                            IconText = "🖼️",
+                            IconColor = "#38BDF8",
+                            Extension = ext,
+                            LastModified = fi.LastWriteTime,
+                            FileSizeBytes = fi.Length,
+                            ImageIndexInFolder = imageIdx++
+                        });
+                    }
+                    else
+                    {
+                        comicFilesCount++;
+                        list.Add(new DirectoryItemModel
+                        {
+                            IsFolder = false,
+                            IsImageFile = false,
+                            CanReadDirectly = true,
+                            Name = fi.Name,
+                            FullPath = f,
+                            ItemCountOrSize = FormatBytes(fi.Length),
+                            IconText = isPdf ? "📄" : "📦",
+                            IconColor = "#38BDF8",
+                            Extension = ext,
+                            LastModified = fi.LastWriteTime,
+                            FileSizeBytes = fi.Length
+                        });
+                    }
                 }
             }
             catch { }
+
+            // Cập nhật trạng thái có thể đọc của thư mục hiện tại (Đa tầng)
+            if (directImagesCount > 0)
+            {
+                CurrentDirectoryReadableStatus = $"📖 ĐỌC CHƯƠNG NÀY ({directImagesCount} ảnh)";
+            }
+            else if (chapterFoldersCount > 0)
+            {
+                CurrentDirectoryReadableStatus = $"📖 ĐỌC TOÀN BỘ TRUYỆN ({chapterFoldersCount} chương)";
+            }
+            else if (comicFilesCount > 0)
+            {
+                CurrentDirectoryReadableStatus = $"📖 ĐỌC THƯ MỤC TRUYỆN ({comicFilesCount} file)";
+            }
+            else
+            {
+                CurrentDirectoryReadableStatus = string.Empty;
+            }
 
             SortDirectoryInternal(list, DirectorySortMode);
 
@@ -989,6 +1062,20 @@ public partial class LibraryViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task ReadCurrentDirectoryAsync()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentDirectoryPath)) return;
+        await OpenPathToReadInternalAsync(CurrentDirectoryPath);
+    }
+
+    [RelayCommand]
+    public async Task ReadDirectoryItemDirectlyAsync(DirectoryItemModel? item)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(item.FullPath)) return;
+        await OpenPathToReadInternalAsync(item.FullPath, item.IsImageFile ? item.ImageIndexInFolder : -1);
+    }
+
+    [RelayCommand]
     public async Task SelectDirectoryItemAsync(DirectoryItemModel? item)
     {
         if (item == null) return;
@@ -997,9 +1084,13 @@ public partial class LibraryViewModel : ViewModelBase
             CurrentDirectoryPath = item.FullPath;
             LoadDirectory(item.FullPath);
         }
+        else if (item.IsImageFile)
+        {
+            await OpenPathToReadInternalAsync(item.FullPath, item.ImageIndexInFolder);
+        }
         else
         {
-            await OpenPathToReadAsync(item.FullPath);
+            await OpenPathToReadInternalAsync(item.FullPath);
         }
     }
 
@@ -1277,13 +1368,55 @@ public partial class LibraryViewModel : ViewModelBase
     public async Task OpenPathToReadAsync(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
+        await OpenPathToReadInternalAsync(path);
+    }
+
+    private async Task OpenPathToReadInternalAsync(string path, int targetPageIndex = -1)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
         try
         {
-            var quickComic = _scanner.CreateQuickComicFromPath(path);
+            string actualComicPath = path;
+            int pageToJump = targetPageIndex;
+
+            // Nếu path là file ảnh đơn lẻ: chuyển hướng sang thư mục cha chứa ảnh và tìm index của trang
+            if (File.Exists(path) && LibraryScannerService.IsImageFile(path))
+            {
+                actualComicPath = Path.GetDirectoryName(path) ?? path;
+                if (pageToJump < 0)
+                {
+                    try
+                    {
+                        var allImgs = Directory.GetFiles(actualComicPath)
+                            .Where(LibraryScannerService.IsImageFile)
+                            .NaturalSort();
+                        int idx = allImgs.FindIndex(img => string.Equals(img, path, StringComparison.OrdinalIgnoreCase));
+                        if (idx >= 0) pageToJump = idx;
+                    }
+                    catch { }
+                }
+            }
+
+            var quickComic = _scanner.CreateQuickComicFromPath(actualComicPath);
             if (quickComic != null && quickComic.Chapters.Count > 0)
             {
                 ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
-                var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
+
+                LibraryChapterItem? targetChap = null;
+                // Nếu path là thư mục chương con cụ thể bên trong truyện đa tầng
+                if (Directory.Exists(path) && !string.Equals(actualComicPath, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    targetChap = quickComic.Chapters.FirstOrDefault(c =>
+                        string.Equals(c.LocalPath.TrimEnd('\\', '/'), path.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
+                }
+
+                targetChap ??= quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
+
+                if (pageToJump >= 0)
+                {
+                    ReadProgressStore.Instance.SaveProgress(targetChap.EffectiveProgressKey, pageToJump);
+                }
+
                 await OpenChapterInternalAsync(quickComic, targetChap);
                 _ = LoadHistoryItemsAsync();
                 LoadStorageItems();
