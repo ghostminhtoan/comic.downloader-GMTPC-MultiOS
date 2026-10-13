@@ -1365,7 +1365,7 @@ public partial class LibraryViewModel : ViewModelBase
                 {
                     int dispPage = bm.DisplayPageNumber;
                     int tot = bm.TotalPages;
-                    string pageText = tot > 0 ? $"{dispPage} / {tot}" : $"{dispPage}";
+                    string pageText = tot > 0 ? $"Trang {dispPage} / {tot}" : $"Trang {dispPage}";
                     string pctText = tot > 0 ? $"{(dispPage * 100 / tot)}%" : string.Empty;
                     string dateStr = DateTimeOffset.FromUnixTimeSeconds(bm.CreatedAtUnixSeconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 

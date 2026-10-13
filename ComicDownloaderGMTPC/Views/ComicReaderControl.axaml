@@ -220,19 +220,6 @@
                     Background="#FF8F00"
                     Opacity="{Binding BlueLightOverlayOpacity}"
                     IsHitTestVisible="False" />
-
-            <!-- E. BADGE CHỈ SỐ TRANG MINI GÓC DƯỚI PHẢI (HIỆN KHI ẨN OVERLAY) -->
-            <Border IsVisible="{Binding !IsOverlayVisible}"
-                    IsHitTestVisible="False"
-                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Margin="0,0,14,10" Padding="10,4" CornerRadius="10"
-                    Background="#B30B0F19" BorderBrush="#334155" BorderThickness="1">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Text="{Binding ChapterTitle}" Foreground="#94A3B8" FontSize="11" MaxWidth="170" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="•" Foreground="#475569" FontSize="11" />
-                    <TextBlock Text="{Binding ComicScreenPageBadgeText}" Foreground="#4FC3F7" FontSize="11" FontWeight="Bold" />
-                </StackPanel>
-            </Border>
         </Panel>
 
         <!-- ========================================================================= -->
@@ -1444,16 +1431,15 @@
                                  FontSize="13.5"
                                  Padding="6,6" />
 
-                        <Grid ColumnDefinitions="*, Auto">
-                            <TextBlock Grid.Column="0"
-                                       Text="{Binding AddBookmarkLeftInfoText}"
-                                       Foreground="#94A3B8" FontSize="12"
-                                       TextTrimming="CharacterEllipsis"
-                                       Margin="0,0,8,0" />
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding AddBookmarkRightInfoText}"
-                                       Foreground="#CBD5E1" FontSize="12" FontWeight="SemiBold" />
-                        </Grid>
+                        <StackPanel Spacing="5" Margin="0,2,0,0">
+                            <TextBlock Text="{Binding AddBookmarkChapterText}"
+                                       Foreground="#38BDF8" FontSize="12.5" FontWeight="SemiBold"
+                                       TextWrapping="Wrap" />
+                            <Border Background="#1E293B" CornerRadius="4" Padding="6,3" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding AddBookmarkPageText}"
+                                           Foreground="#F8FAFC" FontSize="12" FontWeight="Bold" />
+                            </Border>
+                        </StackPanel>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="16" Margin="0,4,0,0">
                             <Button Command="{Binding CancelAddBookmarkCommand}"
@@ -1501,31 +1487,57 @@
                                 <ItemsControl ItemsSource="{Binding Bookmarks}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:ReaderBookmarkItem">
-                                            <Border BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="2,6">
-                                                <Grid ColumnDefinitions="*, Auto, Auto">
+                                            <Border Background="#161F2E" BorderBrush="#2E3A4D" BorderThickness="1"
+                                                    CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+                                                <Grid ColumnDefinitions="*, Auto">
+                                                    <!-- Khu vực bấm nhảy tới trang: Tên chương Full + Số trang Full + Ngày/Memo -->
                                                     <Button Grid.Column="0"
                                                             Command="{Binding $parent[UserControl].((vm:ComicReaderViewModel)DataContext).JumpToBookmarkCommand}"
                                                             CommandParameter="{Binding}"
                                                             Background="Transparent" BorderThickness="0"
                                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                                            Padding="4,4">
-                                                        <TextBlock Text="{Binding LeftDisplayText}"
-                                                                   Foreground="#4FC3F7" FontSize="13.5" FontWeight="SemiBold"
-                                                                   TextTrimming="CharacterEllipsis" />
+                                                            Padding="0">
+                                                        <StackPanel Spacing="4">
+                                                            <!-- 1. FULL TÊN CHƯƠNG KHÔNG BỊ CẮT CỤT -->
+                                                            <TextBlock Text="{Binding FullChapterTitle}"
+                                                                       Foreground="#38BDF8" FontSize="13.5" FontWeight="Bold"
+                                                                       TextWrapping="Wrap" />
+
+                                                            <!-- 2. FULL SỐ TRANG, PHẦN TRĂM, NGÀY GIỜ -->
+                                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                <Border Background="#0284C7" CornerRadius="4" Padding="6,2">
+                                                                    <TextBlock Text="{Binding FullPageText}"
+                                                                               Foreground="#FFFFFF" FontSize="11.5" FontWeight="Bold" />
+                                                                </Border>
+                                                                <TextBlock Text="{Binding PercentText}"
+                                                                           Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
+                                                                <TextBlock Text="{Binding CreatedDateText}"
+                                                                           Foreground="#64748B" FontSize="10.5" VerticalAlignment="Center" />
+                                                            </StackPanel>
+
+                                                            <!-- 3. MEMO GHI CHÚ NẾU CÓ -->
+                                                            <TextBlock Text="{Binding Memo, StringFormat='📝 {0}'}"
+                                                                       Foreground="#FDE047" FontSize="11" FontStyle="Italic"
+                                                                       IsVisible="{Binding HasMemo}"
+                                                                       TextWrapping="Wrap" />
+                                                        </StackPanel>
                                                     </Button>
 
-                                                    <TextBlock Grid.Column="1"
-                                                               Text="{Binding RightDisplayText}"
-                                                               Foreground="#81D4FA" FontSize="13"
-                                                               VerticalAlignment="Center" Margin="10,0" />
-
-                                                    <Button Grid.Column="2"
-                                                            Command="{Binding $parent[UserControl].((vm:ComicReaderViewModel)DataContext).DeleteBookmarkCommand}"
-                                                            CommandParameter="{Binding}"
-                                                            Background="Transparent" Foreground="#64748B"
-                                                            Padding="6,2" ToolTip.Tip="Xóa dấu trang này">
-                                                        <TextBlock Text="✕" FontSize="12" />
-                                                    </Button>
+                                                    <!-- Cột phải: Cụm nút Nhảy tới & Nút Xóa -->
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                        <Button Command="{Binding $parent[UserControl].((vm:ComicReaderViewModel)DataContext).JumpToBookmarkCommand}"
+                                                                CommandParameter="{Binding}"
+                                                                Background="#0284C7" Foreground="#FFFFFF"
+                                                                CornerRadius="5" Padding="9,5" ToolTip.Tip="Nhảy tới trang này">
+                                                            <TextBlock Text="▶ Nhảy" FontSize="11" FontWeight="Bold" />
+                                                        </Button>
+                                                        <Button Command="{Binding $parent[UserControl].((vm:ComicReaderViewModel)DataContext).DeleteBookmarkCommand}"
+                                                                CommandParameter="{Binding}"
+                                                                Background="#334155" Foreground="#EF4444"
+                                                                CornerRadius="5" Padding="8,5" ToolTip.Tip="Xóa dấu trang này">
+                                                            <TextBlock Text="✕" FontSize="12" FontWeight="Bold" />
+                                                        </Button>
+                                                    </StackPanel>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
@@ -1718,6 +1730,19 @@
                         BorderThickness="0,1,0,0"
                         Padding="12,6">
                     <StackPanel Spacing="4">
+                        <!-- Hàng chỉ số trang & tên chương rõ ràng khi mở thanh công cụ -->
+                        <Grid ColumnDefinitions="*, Auto" Margin="4,0,4,2">
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding ChapterTitle}"
+                                       Foreground="#94A3B8" FontSize="11.5" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            <Border Grid.Column="1" Background="#2638BDF8" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="6" Padding="8,2">
+                                <TextBlock Text="{Binding ComicScreenPageBadgeText}"
+                                           Foreground="#38BDF8" FontSize="12" FontWeight="Bold"
+                                           VerticalAlignment="Center" />
+                            </Border>
+                        </Grid>
+
                         <Grid ColumnDefinitions="Auto, *, Auto" VerticalAlignment="Center">
                             <Button Grid.Column="0"
                                     Command="{Binding PrevChapterCommand}"

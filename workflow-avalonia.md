@@ -2735,6 +2735,37 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Cập nhật `.gitignore` loại trừ an toàn `github_auth.json`, `github_cookie.txt`, `.edge_profile/`.
   - Khởi chạy Desktop EXE: `Responding: True`.
 
+### 15.84 Ẩn Badge Số Trang Góc Dưới Khi Đọc Truyện (Tránh Che Nút - +) & Cải Tiến Hiển Thị Full Tên Chương, Full Số Trang Cho Chức Năng Bookmark (2026-10-13)
+- **Bối Cảnh & Phản Hồi Từ Người Dùng**:
+  1. *Chắn Nút Lật Trang*: Khối badge mini hiển thị chap và số trang (`chap 0001 • 12 / 30`) được cấu hình hiển thị liên tục ở góc dưới bên phải khi đang đọc truyện (`IsVisible="{Binding !IsOverlayVisible}"`), che khuất trực tiếp nút `- +` và cản trở thao tác chạm lật trang của người dùng. Người dùng yêu cầu: Chỉ khi chạm vào giữa mở thanh công cụ thì mới hiển thị thông tin này.
+  2. *Cắt Cụt Tên Chương & Số Trang Trong Bookmark*: Chức năng dấu trang (Bookmark) ở cả Popup Thêm dấu trang, Popup Danh sách dấu trang trong trình đọc lẫn Subtab Bookmark ngoài Thư viện đều sử dụng `TextTrimming="CharacterEllipsis"` và định dạng ghép chuỗi có dấu ba chấm `...` ở đầu, làm cho tên chương và số trang bị cắt ngắn cụt lủn, người dùng không thể thấy đầy đủ thông tin chương và số trang đã đánh dấu.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Ẩn Hoàn Toàn Badge Góc Dưới Khi Đọc Truyện (`ComicReaderControl.axaml`)**:
+     - Xóa bỏ triệt để phần tử `Border` nổi góc dưới bên phải ở dòng 225. Trả lại không gian đọc truyện 100% trong trẻo, không bị bất kỳ khối văn bản nào che lấp nút lật trang `-` và `+`.
+  2. **Đồng Bộ Hiển Thị Chỉ Số Trang & Tên Chương Vào Thanh Công Cụ (`BottomOverlayBar`)**:
+     - Bổ sung hàng hiển thị trực quan ngay trên thanh trượt Seekbar trong `BottomOverlayBar`:
+       + Bên trái: Tên chương hiện tại (`ChapterTitle`) với màu chữ dịu mắt.
+       + Bên phải: Huy hiệu chỉ số trang `ComicScreenPageBadgeText` (ví dụ `12 / 30`) được làm nổi bật với nền bo góc Cyan `#38BDF8`.
+     - Chỉ khi người dùng chạm vào giữa màn hình để mở thanh công cụ (`IsOverlayVisible == true`), thông tin này mới hiện lên cùng thanh trượt. Khi đóng công cụ, toàn bộ biến mất sạch sẽ.
+  3. **Hiển Thị Full 100% Tên Chương & Số Trang Cho Bookmark (`ReaderBookmarkItem.cs`, `ComicReaderViewModel.cs`, `ComicReaderControl.axaml`, `LibraryViewModel.cs`, `LibraryView.axaml`)**:
+     - **Model `ReaderBookmarkItem`**:
+       + Bổ sung thuộc tính `FullChapterTitle`: Ưu tiên `ChapterTitle`, fallback `ComicTitle` đảm bảo luôn có tên chương đầy đủ.
+       + Bổ sung thuộc tính `FullPageText`: Hiển thị rõ ràng định dạng `Trang X / Y` (hoặc `Trang X`).
+       + Bổ sung `PercentText` (tỷ lệ % đã đọc), `CreatedDateText` (ngày giờ tạo), và `HasMemo` (kiểm tra ghi chú memo hợp lệ).
+     - **Popup Thêm Dấu Trang (`AddBookmarkPopup`)**:
+       + Bỏ định dạng chuỗi có dấu ba chấm cũ. Cung cấp `AddBookmarkChapterText` và `AddBookmarkPageText` hiển thị đầy đủ tên chương (`TextWrapping="Wrap"`) và số trang rõ ràng.
+     - **Popup Danh Sách Dấu Trang (`BookmarkListPopup`)**:
+       + Thiết kế lại Card dấu trang 2 tầng thông thoáng: Tầng 1 là Full tên chương (`TextWrapping="Wrap"` màu Cyan đậm), Tầng 2 là Huy hiệu số trang lớn (`Trang 12 / 30`), tỷ lệ %, ngày lưu và memo ghi chú.
+       + Bổ sung nút **"▶ Nhảy"** chuyên biệt và nút **"✕"** xóa dấu trang.
+     - **Subtab Bookmark Ngoài Thư Viện (`LibraryView.axaml`, `LibraryViewModel.cs`)**:
+       + Chuyển `ChapterTitle` sang `TextWrapping="Wrap"` không bị cắt cụt.
+       + Bổ sung tiền tố `Trang {dispPage} / {tot}` rõ ràng và dễ đọc.
+- **Nghiệm Thu**:
+  - `dotnet build` Release đạt **0 Warning(s), 0 Error(s)** cho cả Desktop (`ComicDownloaderGMTPC.Desktop`) và Android (`ComicDownloaderGMTPC.Android`).
+  - Đóng gói đầy đủ 5 gói phát hành sạch sẽ trong `\publish\`: Desktop EXE, Linux Binary, Linux tar.gz, DEB, Android APK Signed.
+  - Khởi chạy Desktop EXE đạt `Responding: True` (ProcessId: 44020).
+
+
 
 
 

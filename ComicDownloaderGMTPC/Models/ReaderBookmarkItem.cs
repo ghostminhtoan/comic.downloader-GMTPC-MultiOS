@@ -47,5 +47,30 @@ public sealed class ReaderBookmarkItem
 
     public string RightDisplayText =>
         TotalPages > 0 ? $"{DisplayPageNumber} / {TotalPages}" : $"{DisplayPageNumber}";
+
+    /// <summary>
+    /// Tên chương đầy đủ (Full Chapter Title) không bị cắt xén.
+    /// </summary>
+    public string FullChapterTitle => !string.IsNullOrWhiteSpace(ChapterTitle) ? ChapterTitle : (!string.IsNullOrWhiteSpace(ComicTitle) ? ComicTitle : "Chương không tên");
+
+    /// <summary>
+    /// Số trang đầy đủ chi tiết (ví dụ: Trang 12 / 30).
+    /// </summary>
+    public string FullPageText => TotalPages > 0 ? $"Trang {DisplayPageNumber} / {TotalPages}" : $"Trang {DisplayPageNumber}";
+
+    /// <summary>
+    /// Tỷ lệ phần trăm đã đọc trong chương (ví dụ: 40%).
+    /// </summary>
+    public string PercentText => TotalPages > 0 ? $"{(DisplayPageNumber * 100 / TotalPages)}%" : string.Empty;
+
+    /// <summary>
+    /// Ngày giờ tạo bookmark định dạng dễ nhìn.
+    /// </summary>
+    public string CreatedDateText => DateTimeOffset.FromUnixTimeSeconds(CreatedAtUnixSeconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+
+    /// <summary>
+    /// Có ghi chú memo hay không.
+    /// </summary>
+    public bool HasMemo => !string.IsNullOrWhiteSpace(Memo);
 }
 

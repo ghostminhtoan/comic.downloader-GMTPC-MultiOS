@@ -513,8 +513,8 @@
                                                         <Grid ColumnDefinitions="*, Auto">
                                                             <!-- Nội dung: Tên chương, Số trang lớn, %, Ngày, Memo -->
                                                             <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
-                                                                <TextBlock Text="{Binding ChapterTitle}" Foreground="#CBD5E1" FontSize="12"
-                                                                           TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Text="{Binding ChapterTitle}" Foreground="#E2E8F0" FontSize="13" FontWeight="SemiBold"
+                                                                           TextWrapping="Wrap" />
 
                                                                 <Grid ColumnDefinitions="Auto, Auto, *">
                                                                     <!-- Số trang lớn chuẩn ảnh 4 (ví dụ 747 / 6558) -->

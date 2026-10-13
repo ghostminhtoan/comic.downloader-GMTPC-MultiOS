@@ -1650,16 +1650,33 @@ public partial class ComicReaderViewModel : ViewModelBase
     [ObservableProperty]
     private string _bookmarkMemoInput = string.Empty;
 
-    public string AddBookmarkLeftInfoText =>
-        $"...{ComicTitle}/{ChapterTitle} {CurrentPageDisplayNumber:D3}";
+    public string AddBookmarkChapterText
+    {
+        get
+        {
+            string chap = !string.IsNullOrWhiteSpace(ChapterTitle) ? ChapterTitle : (!string.IsNullOrWhiteSpace(CurrentChapter?.Title) ? CurrentChapter.Title : string.Empty);
+            string comic = ComicTitle ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(chap) && !string.IsNullOrWhiteSpace(comic) && !chap.Contains(comic, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"{comic} - {chap}";
+            }
+            return !string.IsNullOrWhiteSpace(chap) ? chap : (!string.IsNullOrWhiteSpace(comic) ? comic : "Chương hiện tại");
+        }
+    }
 
-    public string AddBookmarkRightInfoText =>
-        $"{CurrentPageDisplayNumber}/{TotalPages}";
+    public string AddBookmarkPageText =>
+        TotalPages > 0 ? $"Trang {CurrentPageDisplayNumber} / {TotalPages}" : $"Trang {CurrentPageDisplayNumber}";
+
+    public string AddBookmarkLeftInfoText => AddBookmarkChapterText;
+
+    public string AddBookmarkRightInfoText => AddBookmarkPageText;
 
     [RelayCommand]
     public void OpenAddBookmarkPopup()
     {
         BookmarkMemoInput = string.Empty;
+        OnPropertyChanged(nameof(AddBookmarkChapterText));
+        OnPropertyChanged(nameof(AddBookmarkPageText));
         OnPropertyChanged(nameof(AddBookmarkLeftInfoText));
         OnPropertyChanged(nameof(AddBookmarkRightInfoText));
         ActivePopup = "AddBookmark";
@@ -1681,14 +1698,18 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
 
         string rootPath = ParentComic?.RootFolderPath ?? CurrentChapter.LocalPath;
+        string resolvedChapterTitle = !string.IsNullOrWhiteSpace(CurrentChapter.Title)
+            ? CurrentChapter.Title
+            : (!string.IsNullOrWhiteSpace(ChapterTitle) ? ChapterTitle : System.IO.Path.GetFileName(CurrentChapter.LocalPath));
+
         var item = new ReaderBookmarkItem
         {
             ComicRootPath = rootPath,
-            ComicTitle = string.IsNullOrWhiteSpace(ComicTitle) ? CurrentChapter.Title : ComicTitle,
+            ComicTitle = string.IsNullOrWhiteSpace(ComicTitle) ? resolvedChapterTitle : ComicTitle,
             ChapterLocalPath = CurrentChapter.LocalPath,
             ChapterProgressKey = CurrentChapter.EffectiveProgressKey,
             ChapterIndex = CurrentChapter.Index,
-            ChapterTitle = CurrentChapter.Title,
+            ChapterTitle = resolvedChapterTitle,
             PageIndex = CurrentPageIndex,
             TotalPages = TotalPages,
             Memo = (BookmarkMemoInput ?? string.Empty).Trim()
@@ -1697,7 +1718,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         _progressStore.AddOrUpdateBookmark(item);
         RefreshBookmarksList();
         ActivePopup = string.Empty;
-        ShowTransientToast($"🔖 Đã thêm dấu trang: {CurrentChapter.Title} - Trang {CurrentPageDisplayNumber}/{TotalPages}");
+        ShowTransientToast($"🔖 Đã thêm dấu trang: {resolvedChapterTitle} - Trang {CurrentPageDisplayNumber}/{TotalPages}");
     }
 
     [RelayCommand]
