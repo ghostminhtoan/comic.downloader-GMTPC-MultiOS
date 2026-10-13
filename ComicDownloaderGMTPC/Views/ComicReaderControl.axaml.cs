@@ -408,6 +408,24 @@ public partial class ComicReaderControl : UserControl
         }
     }
 
+    private void OnPageButtonAreaPrevClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is ComicReaderViewModel vm)
+        {
+            vm.PageButtonAreaPrev();
+            e.Handled = true;
+        }
+    }
+
+    private void OnPageButtonAreaNextClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is ComicReaderViewModel vm)
+        {
+            vm.PageButtonAreaNext();
+            e.Handled = true;
+        }
+    }
+
     private void OnVmPageButtonAreaScrollRequested(double fraction, bool animated)
     {
         StopKineticScroll();
@@ -420,15 +438,55 @@ public partial class ComicReaderControl : UserControl
         if (vm.IsHorizontalScrollMode)
         {
             double dir = vm.IsRightToLeft ? -1.0 : 1.0;
-            double step = scrollViewer.Viewport.Width * fraction * dir;
-            double newX = Math.Clamp(scrollViewer.Offset.X + step, 0, Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width));
-            scrollViewer.Offset = new Vector(newX, scrollViewer.Offset.Y);
+            double vpWidth = scrollViewer.Viewport.Width > 0 ? scrollViewer.Viewport.Width : Bounds.Width;
+            if (vpWidth <= 0) vpWidth = 800.0;
+            double step = vpWidth * fraction * dir;
+            double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+            double targetX = scrollViewer.Offset.X + step;
+
+            // Xử lý chuyển chương khi cuộn chạm mép ở chế độ Đọc liền mạch
+            if (vm.IsContinuousChaptersMode)
+            {
+                bool atEnd = vm.IsRightToLeft ? targetX <= -10 : targetX >= maxX + 10;
+                bool atStart = vm.IsRightToLeft ? targetX >= maxX + 10 : targetX <= -10;
+                if (atEnd && vm.CanGoNextChapter)
+                {
+                    vm.NextChapter();
+                    return;
+                }
+                if (atStart && vm.CanGoPrevChapter)
+                {
+                    vm.PrevPage();
+                    return;
+                }
+            }
+
+            scrollViewer.Offset = new Vector(Math.Clamp(targetX, 0, maxX), scrollViewer.Offset.Y);
         }
         else
         {
-            double step = scrollViewer.Viewport.Height * fraction;
-            double newY = Math.Clamp(scrollViewer.Offset.Y + step, 0, Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height));
-            scrollViewer.Offset = new Vector(scrollViewer.Offset.X, newY);
+            double vpHeight = scrollViewer.Viewport.Height > 0 ? scrollViewer.Viewport.Height : Bounds.Height;
+            if (vpHeight <= 0) vpHeight = 600.0;
+            double step = vpHeight * fraction;
+            double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+            double targetY = scrollViewer.Offset.Y + step;
+
+            // Xử lý chuyển chương khi cuộn chạm mép ở chế độ Đọc liền mạch
+            if (vm.IsContinuousChaptersMode)
+            {
+                if (targetY >= maxY + 10 && vm.CanGoNextChapter)
+                {
+                    vm.NextChapter();
+                    return;
+                }
+                if (targetY <= -10 && vm.CanGoPrevChapter)
+                {
+                    vm.PrevPage();
+                    return;
+                }
+            }
+
+            scrollViewer.Offset = new Vector(scrollViewer.Offset.X, Math.Clamp(targetY, 0, maxY));
         }
     }
 
@@ -726,8 +784,6 @@ public partial class ComicReaderControl : UserControl
 
     private void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        e.Pointer.Capture(null);
-
         _cumulativeOverscrollX = 0;
         _cumulativeOverscrollY = 0;
 
@@ -740,6 +796,8 @@ public partial class ComicReaderControl : UserControl
             _isPointerTapCandidate = false;
             return;
         }
+
+        e.Pointer.Capture(null);
 
         if (DataContext is not ComicReaderViewModel vm)
         {
