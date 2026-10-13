@@ -41,6 +41,26 @@
         <Style Selector="Button.toolbarBtn:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#334FC3F7" />
         </Style>
+
+        <!-- Style chuẩn cho phím tròn ảo Page Button Area (- / +) kiểu ComicScreen -->
+        <Style Selector="Button.pageAreaCircleBtn">
+            <Setter Property="Background" Value="#D91E293B" />
+            <Setter Property="BorderBrush" Value="#E2E8F0" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="ClipToBounds" Value="False" />
+        </Style>
+        <Style Selector="Button.pageAreaCircleBtn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#F2334155" />
+            <Setter Property="BorderBrush" Value="#38BDF8" />
+        </Style>
+        <Style Selector="Button.pageAreaCircleBtn:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#FF0284C7" />
+            <Setter Property="BorderBrush" Value="#FFFFFF" />
+        </Style>
     </UserControl.Styles>
 
     <Grid x:Name="RootReaderGrid" Background="{Binding ReaderBackgroundColor}">
@@ -193,143 +213,153 @@
                 </StackPanel>
             </Border>
 
-            <!-- G. VÙNG NÚT CHUYỂN TRANG ẢO NỔI PAGE BUTTON AREA (PREV & NEXT) -->
+            <!-- G. VÙNG PHÍM ẢO CHUYỂN TRANG NỔI PAGE BUTTON AREA (- VÀ + CHUẨN COMICSCREEN) -->
             <Panel x:Name="PageButtonAreaOverlayPanel"
                    IsVisible="{Binding IsPageButtonAreaEnabled}"
                    ZIndex="1500">
-                <!-- Type 0: Nằm ngang ở Đáy (hoặc Đỉnh) -->
+
+                <!-- Type 0: Bottom Trái Phải (Hai góc đáy trái và phải chuẩn Panel 0 ảnh chụp) -->
                 <Panel IsVisible="{Binding IsPageButtonAreaType0}">
-                    <!-- Trường hợp Bottom -->
-                    <Border IsVisible="{Binding IsPageButtonAreaBottom}"
-                            VerticalAlignment="Bottom" HorizontalAlignment="Center"
-                            Margin="0,0,0,24">
-                        <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center">
-                            <Button Command="{Binding PageButtonAreaPrevCommand}"
-                                    IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
-                                    Width="{Binding PageButtonAreaComputedWidth}"
-                                    Height="{Binding PageButtonAreaComputedHeight}"
-                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                    Background="#5C7CFA" Foreground="#FFFFFF"
-                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
-                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                                <TextBlock Text="Prev" />
-                            </Button>
-                            <Button Command="{Binding PageButtonAreaNextCommand}"
-                                    Width="{Binding PageButtonAreaComputedWidth}"
-                                    Height="{Binding PageButtonAreaComputedHeight}"
-                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                    Background="#E56B6F" Foreground="#FFFFFF"
-                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
-                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                                <TextBlock Text="Next" />
-                            </Button>
-                        </StackPanel>
-                    </Border>
-                    <!-- Trường hợp Top -->
-                    <Border IsVisible="{Binding IsPageButtonAreaTop}"
-                            VerticalAlignment="Top" HorizontalAlignment="Center"
-                            Margin="0,24,0,0">
-                        <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center">
-                            <Button Command="{Binding PageButtonAreaPrevCommand}"
-                                    IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
-                                    Width="{Binding PageButtonAreaComputedWidth}"
-                                    Height="{Binding PageButtonAreaComputedHeight}"
-                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                    Background="#5C7CFA" Foreground="#FFFFFF"
-                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
-                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                                <TextBlock Text="Prev" />
-                            </Button>
-                            <Button Command="{Binding PageButtonAreaNextCommand}"
-                                    Width="{Binding PageButtonAreaComputedWidth}"
-                                    Height="{Binding PageButtonAreaComputedHeight}"
-                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                    Background="#E56B6F" Foreground="#FFFFFF"
-                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
-                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                                <TextBlock Text="Next" />
-                            </Button>
-                        </StackPanel>
-                    </Border>
+                    <!-- Trường hợp Bottom (Mặc định) -->
+                    <Panel IsVisible="{Binding IsPageButtonAreaBottom}">
+                        <Button Command="{Binding PageButtonAreaPrevCommand}"
+                                IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                                HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                Margin="28,0,0,40"
+                                Width="{Binding PageButtonAreaComputedSize}"
+                                Height="{Binding PageButtonAreaComputedSize}"
+                                Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                Classes="pageAreaCircleBtn">
+                            <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
+                                       FontSize="{Binding PageButtonAreaFontSize}"
+                                       FontWeight="Heavy" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                        </Button>
+                        <Button Command="{Binding PageButtonAreaNextCommand}"
+                                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                Margin="0,0,28,40"
+                                Width="{Binding PageButtonAreaComputedSize}"
+                                Height="{Binding PageButtonAreaComputedSize}"
+                                Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                Classes="pageAreaCircleBtn">
+                            <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
+                                       FontSize="{Binding PageButtonAreaFontSize}"
+                                       FontWeight="Heavy" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                        </Button>
+                    </Panel>
+                    <!-- Trường hợp Top (Nếu người dùng chọn Top trong Cài Đặt) -->
+                    <Panel IsVisible="{Binding IsPageButtonAreaTop}">
+                        <Button Command="{Binding PageButtonAreaPrevCommand}"
+                                IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                                HorizontalAlignment="Left" VerticalAlignment="Top"
+                                Margin="28,40,0,0"
+                                Width="{Binding PageButtonAreaComputedSize}"
+                                Height="{Binding PageButtonAreaComputedSize}"
+                                Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                Classes="pageAreaCircleBtn">
+                            <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
+                                       FontSize="{Binding PageButtonAreaFontSize}"
+                                       FontWeight="Heavy" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                        </Button>
+                        <Button Command="{Binding PageButtonAreaNextCommand}"
+                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Margin="0,40,28,0"
+                                Width="{Binding PageButtonAreaComputedSize}"
+                                Height="{Binding PageButtonAreaComputedSize}"
+                                Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                Classes="pageAreaCircleBtn">
+                            <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
+                                       FontSize="{Binding PageButtonAreaFontSize}"
+                                       FontWeight="Heavy" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                        </Button>
+                    </Panel>
                 </Panel>
 
-                <!-- Type 1: Xếp dọc ở lề trái -->
+                <!-- Type 1: Left Side Top Bot (Cạnh bên trái, nút trên và nút dưới chuẩn Panel 1 ảnh chụp) -->
                 <Panel IsVisible="{Binding IsPageButtonAreaType1}">
-                    <Border HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0">
-                        <StackPanel Orientation="Vertical" Spacing="12">
-                            <Button Command="{Binding PageButtonAreaPrevCommand}"
-                                    IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
-                                    Width="{Binding PageButtonAreaComputedWidth}"
-                                    Height="{Binding PageButtonAreaComputedHeight}"
-                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                    Background="#5C7CFA" Foreground="#FFFFFF"
-                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
-                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                                <TextBlock Text="Prev" />
-                            </Button>
-                            <Button Command="{Binding PageButtonAreaNextCommand}"
-                                    Width="{Binding PageButtonAreaComputedWidth}"
-                                    Height="{Binding PageButtonAreaComputedHeight}"
-                                    Opacity="{Binding PageButtonAreaComputedOpacity}"
-                                    Background="#E56B6F" Foreground="#FFFFFF"
-                                    FontWeight="Bold" FontSize="14" CornerRadius="8"
-                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                                <TextBlock Text="Next" />
-                            </Button>
-                        </StackPanel>
-                    </Border>
+                    <StackPanel Orientation="Vertical" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Margin="24,0,0,0" Spacing="48">
+                        <Button Command="{Binding PageButtonAreaPrevCommand}"
+                                IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                                Width="{Binding PageButtonAreaComputedSize}"
+                                Height="{Binding PageButtonAreaComputedSize}"
+                                Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                Classes="pageAreaCircleBtn">
+                            <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
+                                       FontSize="{Binding PageButtonAreaFontSize}"
+                                       FontWeight="Heavy" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                        </Button>
+                        <Button Command="{Binding PageButtonAreaNextCommand}"
+                                Width="{Binding PageButtonAreaComputedSize}"
+                                Height="{Binding PageButtonAreaComputedSize}"
+                                Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                Classes="pageAreaCircleBtn">
+                            <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
+                                       FontSize="{Binding PageButtonAreaFontSize}"
+                                       FontWeight="Heavy" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                        </Button>
+                    </StackPanel>
                 </Panel>
 
-                <!-- Type 2: Hai bên mép lề màn hình -->
+                <!-- Type 2: Horizontal Center Left Right (Nằm giữa trục ngang, nút trái và nút phải chuẩn Panel 2 ảnh chụp) -->
                 <Panel IsVisible="{Binding IsPageButtonAreaType2}">
-                    <Button Command="{Binding PageButtonAreaPrevCommand}"
-                            IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
-                            HorizontalAlignment="Left" VerticalAlignment="Center"
-                            Margin="10,0,0,0"
-                            Width="{Binding PageButtonAreaComputedWidth}"
-                            Height="{Binding PageButtonAreaComputedHeight}"
-                            Opacity="{Binding PageButtonAreaComputedOpacity}"
-                            Background="#5C7CFA" Foreground="#FFFFFF"
-                            FontWeight="Bold" FontSize="14" CornerRadius="8"
-                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                        <TextBlock Text="Prev" />
-                    </Button>
-                    <Button Command="{Binding PageButtonAreaNextCommand}"
-                            HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Margin="0,0,10,0"
-                            Width="{Binding PageButtonAreaComputedWidth}"
-                            Height="{Binding PageButtonAreaComputedHeight}"
-                            Opacity="{Binding PageButtonAreaComputedOpacity}"
-                            Background="#E56B6F" Foreground="#FFFFFF"
-                            FontWeight="Bold" FontSize="14" CornerRadius="8"
-                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                        <TextBlock Text="Next" />
-                    </Button>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Spacing="64">
+                        <Button Command="{Binding PageButtonAreaPrevCommand}"
+                                IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                                Width="{Binding PageButtonAreaComputedSize}"
+                                Height="{Binding PageButtonAreaComputedSize}"
+                                Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                Classes="pageAreaCircleBtn">
+                            <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
+                                       FontSize="{Binding PageButtonAreaFontSize}"
+                                       FontWeight="Heavy" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                        </Button>
+                        <Button Command="{Binding PageButtonAreaNextCommand}"
+                                Width="{Binding PageButtonAreaComputedSize}"
+                                Height="{Binding PageButtonAreaComputedSize}"
+                                Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                Classes="pageAreaCircleBtn">
+                            <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
+                                       FontSize="{Binding PageButtonAreaFontSize}"
+                                       FontWeight="Heavy" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                        </Button>
+                    </StackPanel>
                 </Panel>
 
-                <!-- Type 3: Đỉnh và Đáy trải dài -->
+                <!-- Type 3: Vertical Center Top Bot (Nằm giữa trục dọc, nút trên và nút dưới chuẩn Panel 3 ảnh chụp) -->
                 <Panel IsVisible="{Binding IsPageButtonAreaType3}">
-                    <Button Command="{Binding PageButtonAreaPrevCommand}"
-                            IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
-                            HorizontalAlignment="Stretch" VerticalAlignment="Top"
-                            Margin="20,16,20,0"
-                            Height="{Binding PageButtonAreaComputedHeight}"
-                            Opacity="{Binding PageButtonAreaComputedOpacity}"
-                            Background="#5C7CFA" Foreground="#FFFFFF"
-                            FontWeight="Bold" FontSize="14" CornerRadius="8"
-                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                        <TextBlock Text="Prev" />
-                    </Button>
-                    <Button Command="{Binding PageButtonAreaNextCommand}"
-                            HorizontalAlignment="Stretch" VerticalAlignment="Bottom"
-                            Margin="20,0,20,16"
-                            Height="{Binding PageButtonAreaComputedHeight}"
-                            Opacity="{Binding PageButtonAreaComputedOpacity}"
-                            Background="#E56B6F" Foreground="#FFFFFF"
-                            FontWeight="Bold" FontSize="14" CornerRadius="8"
-                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
-                        <TextBlock Text="Next" />
-                    </Button>
+                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Spacing="64">
+                        <Button Command="{Binding PageButtonAreaPrevCommand}"
+                                IsVisible="{Binding !IsPageButtonAreaDisablePrev}"
+                                Width="{Binding PageButtonAreaComputedSize}"
+                                Height="{Binding PageButtonAreaComputedSize}"
+                                Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                Classes="pageAreaCircleBtn">
+                            <TextBlock Text="{Binding PageButtonAreaFirstSymbol}"
+                                       FontSize="{Binding PageButtonAreaFontSize}"
+                                       FontWeight="Heavy" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                        </Button>
+                        <Button Command="{Binding PageButtonAreaNextCommand}"
+                                Width="{Binding PageButtonAreaComputedSize}"
+                                Height="{Binding PageButtonAreaComputedSize}"
+                                Opacity="{Binding PageButtonAreaComputedOpacity}"
+                                Classes="pageAreaCircleBtn">
+                            <TextBlock Text="{Binding PageButtonAreaSecondSymbol}"
+                                       FontSize="{Binding PageButtonAreaFontSize}"
+                                       FontWeight="Heavy" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                        </Button>
+                    </StackPanel>
                 </Panel>
             </Panel>
 
@@ -1131,57 +1161,59 @@
                             <!-- Khung Preview thời gian thực trực quan chuẩn Ảnh 3 -->
                             <Border Grid.Column="1" Height="105" Background="#2B313C" BorderBrush="#4A5568" BorderThickness="1.5" CornerRadius="4" Margin="14,0,0,0">
                                 <Panel>
-                                    <!-- Type 0 Preview (Ngang đáy hoặc đỉnh) -->
+                                    <!-- Type 0 Preview (Bottom Trái Phải) -->
                                     <Panel IsVisible="{Binding IsPageButtonAreaType0}">
-                                        <Border VerticalAlignment="{Binding IsPageButtonAreaBottom, Converter={x:Static ObjectConverters.IsNull}}"
-                                                Classes.alignB="{Binding IsPageButtonAreaBottom}"
-                                                Classes.alignT="{Binding IsPageButtonAreaTop}"
-                                                Margin="0,6,0,6">
-                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6" VerticalAlignment="Bottom">
-                                                <Border Width="38" Height="22" Background="#5C7CFA" CornerRadius="2"
-                                                        IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
-                                                    <TextBlock Text="Prev" Foreground="#FFFFFF" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                </Border>
-                                                <Border Width="38" Height="22" Background="#E56B6F" CornerRadius="2">
-                                                    <TextBlock Text="Next" Foreground="#FFFFFF" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                </Border>
-                                            </StackPanel>
-                                        </Border>
+                                        <Panel VerticalAlignment="{Binding IsPageButtonAreaBottom, Converter={x:Static ObjectConverters.IsNull}}"
+                                               Margin="10,8">
+                                            <Border Width="22" Height="22" Background="#D91E293B" BorderBrush="#E2E8F0" BorderThickness="1.2" CornerRadius="999"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                                    IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
+                                                <TextBlock Text="{Binding PageButtonAreaFirstSymbol}" Foreground="#FFFFFF" FontSize="12" FontWeight="Heavy" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
+                                            </Border>
+                                            <Border Width="22" Height="22" Background="#D91E293B" BorderBrush="#E2E8F0" BorderThickness="1.2" CornerRadius="999"
+                                                    HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                                                <TextBlock Text="{Binding PageButtonAreaSecondSymbol}" Foreground="#FFFFFF" FontSize="12" FontWeight="Heavy" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
+                                            </Border>
+                                        </Panel>
                                     </Panel>
 
-                                    <!-- Type 1 Preview (Xếp dọc lề trái) -->
+                                    <!-- Type 1 Preview (Left Side Top Bot) -->
                                     <Panel IsVisible="{Binding IsPageButtonAreaType1}">
-                                        <StackPanel Orientation="Vertical" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0" Spacing="4">
-                                            <Border Width="32" Height="20" Background="#5C7CFA" CornerRadius="2"
+                                        <StackPanel Orientation="Vertical" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" Spacing="16">
+                                            <Border Width="22" Height="22" Background="#D91E293B" BorderBrush="#E2E8F0" BorderThickness="1.2" CornerRadius="999"
                                                     IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
-                                                <TextBlock Text="Prev" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding PageButtonAreaFirstSymbol}" Foreground="#FFFFFF" FontSize="12" FontWeight="Heavy" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
                                             </Border>
-                                            <Border Width="32" Height="20" Background="#E56B6F" CornerRadius="2">
-                                                <TextBlock Text="Next" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <Border Width="22" Height="22" Background="#D91E293B" BorderBrush="#E2E8F0" BorderThickness="1.2" CornerRadius="999">
+                                                <TextBlock Text="{Binding PageButtonAreaSecondSymbol}" Foreground="#FFFFFF" FontSize="12" FontWeight="Heavy" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
                                             </Border>
                                         </StackPanel>
                                     </Panel>
 
-                                    <!-- Type 2 Preview (Hai bên mép lề) -->
+                                    <!-- Type 2 Preview (Horizontal Center Left Right) -->
                                     <Panel IsVisible="{Binding IsPageButtonAreaType2}">
-                                        <Border HorizontalAlignment="Left" VerticalAlignment="Center" Width="20" Height="48" Margin="4,0,0,0" Background="#5C7CFA" CornerRadius="2"
-                                                IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
-                                            <TextBlock Text="P" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <Border HorizontalAlignment="Right" VerticalAlignment="Center" Width="20" Height="48" Margin="0,0,4,0" Background="#E56B6F" CornerRadius="2">
-                                            <TextBlock Text="N" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="24">
+                                            <Border Width="22" Height="22" Background="#D91E293B" BorderBrush="#E2E8F0" BorderThickness="1.2" CornerRadius="999"
+                                                    IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
+                                                <TextBlock Text="{Binding PageButtonAreaFirstSymbol}" Foreground="#FFFFFF" FontSize="12" FontWeight="Heavy" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
+                                            </Border>
+                                            <Border Width="22" Height="22" Background="#D91E293B" BorderBrush="#E2E8F0" BorderThickness="1.2" CornerRadius="999">
+                                                <TextBlock Text="{Binding PageButtonAreaSecondSymbol}" Foreground="#FFFFFF" FontSize="12" FontWeight="Heavy" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
+                                            </Border>
+                                        </StackPanel>
                                     </Panel>
 
-                                    <!-- Type 3 Preview (Đỉnh và Đáy trải dài) -->
+                                    <!-- Type 3 Preview (Vertical Center Top Bot) -->
                                     <Panel IsVisible="{Binding IsPageButtonAreaType3}">
-                                        <Border VerticalAlignment="Top" HorizontalAlignment="Stretch" Height="16" Margin="6,4,6,0" Background="#5C7CFA" CornerRadius="2"
-                                                IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
-                                            <TextBlock Text="Prev" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <Border VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Height="16" Margin="6,0,6,4" Background="#E56B6F" CornerRadius="2">
-                                            <TextBlock Text="Next" Foreground="#FFFFFF" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
+                                        <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+                                            <Border Width="22" Height="22" Background="#D91E293B" BorderBrush="#E2E8F0" BorderThickness="1.2" CornerRadius="999"
+                                                    IsVisible="{Binding !IsPageButtonAreaDisablePrev}">
+                                                <TextBlock Text="{Binding PageButtonAreaFirstSymbol}" Foreground="#FFFFFF" FontSize="12" FontWeight="Heavy" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
+                                            </Border>
+                                            <Border Width="22" Height="22" Background="#D91E293B" BorderBrush="#E2E8F0" BorderThickness="1.2" CornerRadius="999">
+                                                <TextBlock Text="{Binding PageButtonAreaSecondSymbol}" Foreground="#FFFFFF" FontSize="12" FontWeight="Heavy" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
+                                            </Border>
+                                        </StackPanel>
                                     </Panel>
                                 </Panel>
                             </Border>

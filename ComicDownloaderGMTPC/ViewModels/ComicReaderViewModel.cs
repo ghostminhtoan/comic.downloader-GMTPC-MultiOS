@@ -1387,7 +1387,12 @@ public partial class ComicReaderViewModel : ViewModelBase
     private bool _isPageButtonAreaDisablePrev = false;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaFirstSymbol))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaSecondSymbol))]
     private bool _isPageButtonAreaReverse = false;
+
+    public string PageButtonAreaFirstSymbol => IsPageButtonAreaReverse ? "+" : "-";
+    public string PageButtonAreaSecondSymbol => IsPageButtonAreaReverse ? "-" : "+";
 
     [ObservableProperty]
     private bool _isPageButtonAreaFixed = true;
@@ -1397,7 +1402,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsPageButtonAreaType1))]
     [NotifyPropertyChangedFor(nameof(IsPageButtonAreaType2))]
     [NotifyPropertyChangedFor(nameof(IsPageButtonAreaType3))]
-    private int _pageButtonAreaType = 0; // 0: Bottom/Top, 1: Vertical left bar, 2: Both edges, 3: Top and Bottom
+    private int _pageButtonAreaType = 0; // 0: Bottom Trái Phải, 1: Left Side Top Bot, 2: Horizontal Center Left Right, 3: Vertical Center Top Bot
 
     public bool IsPageButtonAreaType0 => PageButtonAreaType == 0;
     public bool IsPageButtonAreaType1 => PageButtonAreaType == 1;
@@ -1420,13 +1425,17 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PageButtonAreaSizeText))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaComputedSize))]
+    [NotifyPropertyChangedFor(nameof(PageButtonAreaFontSize))]
     [NotifyPropertyChangedFor(nameof(PageButtonAreaComputedWidth))]
     [NotifyPropertyChangedFor(nameof(PageButtonAreaComputedHeight))]
     private double _pageButtonAreaSize = 26.0; // 10..100 (Ảnh 3 là 26)
 
     public string PageButtonAreaSizeText => $"{PageButtonAreaSize:0}";
-    public double PageButtonAreaComputedWidth => Math.Round(72.0 + (PageButtonAreaSize - 10.0) * 1.4);
-    public double PageButtonAreaComputedHeight => Math.Round(38.0 + (PageButtonAreaSize - 10.0) * 0.65);
+    public double PageButtonAreaComputedSize => Math.Round(38.0 + (PageButtonAreaSize - 10.0) * 0.52);
+    public double PageButtonAreaFontSize => Math.Round(PageButtonAreaComputedSize * 0.54);
+    public double PageButtonAreaComputedWidth => PageButtonAreaComputedSize;
+    public double PageButtonAreaComputedHeight => PageButtonAreaComputedSize;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PageButtonAreaScrollDistanceText))]

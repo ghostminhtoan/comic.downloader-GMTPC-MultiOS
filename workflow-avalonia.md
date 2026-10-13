@@ -2646,3 +2646,48 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Khởi chạy Desktop EXE đạt `Responding: True` (ProcessId: 41120, RAM 284.45 MB).
   - Tự động chạy script `upload_beta.ps1` upload thành công 100% cả 3 gói cài đặt lên GitHub Release tag `beta` (APK Signed 55.56MB, Desktop EXE 48.96MB, Linux tar.gz 41.68MB).
 
+### 15.81 Cụ Thể Hóa Page Button Area Bằng Nút Tròn `-` & `+` (Tùy Chỉnh Opacity & Size) Theo 4 Type Chuẩn ComicScreen (`ComicReaderControl.axaml`, `ComicReaderViewModel.cs`) (2026-10-13)
+- **Bối Cảnh & Yêu Cầu Từ Người Dùng**:
+  - Người dùng gửi ảnh ghi chú thực tế từ ứng dụng ComicScreen:
+    + "page button area, previous / next chỉ là mô tả thôi, nó phải được cụ thể hoá bằng nút - + (có thể chỉnh opacity và size). Tôi đã mở comic screen và note lại."
+    + Type 0: bottom trái phải
+    + Type 1: left side top bot
+    + Type 2: horizontal center left right
+    + Type 3: vertical center top bot
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Tạo Style Phím Tròn Ảo Đẳng Cấp Chuẩn ComicScreen (`ComicReaderControl.axaml`)**:
+     - Style `Button.pageAreaCircleBtn`: Nút hình tròn hoàn hảo `CornerRadius="999"`, nền tối bán trong suốt `#D91E293B`, viền trắng thanh lịch `#E2E8F0` dày 1.5, căn giữa tuyệt đối, không clip viền.
+     - Ký hiệu `-` và `+` hiển thị to, rõ ràng, nét đậm `FontWeight="Heavy"`, màu trắng sắc nét `#FFFFFF`.
+     - Kích thước đường kính `PageButtonAreaComputedSize` (từ 38px đến 88px) và cỡ chữ `PageButtonAreaFontSize` tự động tính toán đồng bộ theo slider `Size` (10..100).
+     - Độ mờ `PageButtonAreaComputedOpacity` đồng bộ theo slider `Opacity` (10%..100%).
+  2. **Tái Cấu Trúc Toàn Diện 4 Type Bố Cục Theo Đúng Hình Ảnh ComicScreen**:
+     - **Type 0 (Bottom Trái Phải - Panel 0 trong ảnh)**:
+       + Nút `-` đặt ở góc dưới bên trái màn hình (`HorizontalAlignment="Left"`, `VerticalAlignment="Bottom"`).
+       + Nút `+` đặt ở góc dưới bên phải màn hình (`HorizontalAlignment="Right"`, `VerticalAlignment="Bottom"`).
+       + Hỗ trợ chuyển đổi Top Trái Phải nếu người dùng chọn vị trí Top.
+     - **Type 1 (Left Side Top Bot - Panel 1 trong ảnh)**:
+       + Dải nút xếp dọc ở mép bên trái màn hình (`HorizontalAlignment="Left"`, `VerticalAlignment="Center"`).
+       + Nút trên là `-` (lùi trang / cuộn lên), nút dưới là `+` (tiến trang / cuộn xuống), cách nhau 48px.
+     - **Type 2 (Horizontal Center Left Right - Panel 2 trong ảnh)**:
+       + Nằm ở trục giữa theo chiều dọc (`VerticalAlignment="Center"`).
+       + Đối xứng hai bên tâm màn hình theo chiều ngang (`HorizontalAlignment="Center"`, `Spacing="64"`).
+       + Nút bên trái là `-`, nút bên phải là `+`.
+     - **Type 3 (Vertical Center Top Bot - Panel 3 trong ảnh)**:
+       + Nằm ở chính giữa màn hình theo chiều ngang (`HorizontalAlignment="Center"`).
+       + Đối xứng trên dưới theo chiều dọc (`VerticalAlignment="Center"`, `Spacing="64"`).
+       + Nút phía trên là `-`, nút phía dưới là `+`.
+  3. **Đồng Bộ Logic Đảo Chiều & Vô Hiệu Hóa Lùi (`ComicReaderViewModel.cs`)**:
+     - Thuộc tính `PageButtonAreaFirstSymbol` và `PageButtonAreaSecondSymbol`:
+       + Khi `IsPageButtonAreaReverse == false`: Nút 1 mang dấu `-`, nút 2 mang dấu `+`.
+       + Khi `IsPageButtonAreaReverse == true`: Nút 1 mang dấu `+`, nút 2 mang dấu `-`.
+       + Đảm bảo 100% nguyên tắc: **Bấm nút mang dấu `+` luôn là TIẾN/CUỘN XUỐNG**, và **bấm nút mang dấu `-` luôn là LÙI/CUỘN LÊN**!
+     - Tùy chọn `IsPageButtonAreaDisablePrev`: Khi bật sẽ tự động ẩn nút `-`, chỉ giữ lại nút `+`.
+  4. **Cập Nhật Khung Preview Trong Popup Chuẩn Xác 100%**:
+     - Thay thế toàn bộ chữ hình chữ nhật cũ bằng 4 layout mô phỏng vòng tròn nhỏ `-` và `+` chuẩn xác tương ứng cho cả 4 Type.
+- **Nghiệm Thu**:
+  - `dotnet build` Release đạt `0 Warning(s), 0 Error(s)` cho cả Desktop và Android.
+  - `build-avalonia.bat` hoàn tất biên dịch và đóng gói cho Windows, Linux, Android vào thư mục duy nhất `\publish\`.
+  - Khởi chạy Desktop EXE đạt `Responding: True` (ProcessId: 22548, RAM 284.18 MB).
+  - Tự động chạy script `upload_beta.ps1` upload thành công 100% cả 3 gói cài đặt lên GitHub Release tag `beta` (APK Signed 55.57MB, Desktop EXE 48.96MB, Linux tar.gz 41.68MB).
+
+
