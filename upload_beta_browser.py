@@ -129,10 +129,9 @@ def perform_browser_upload(force_login=False):
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as p:
-        # Kiem tra xem profile hien tai da co session hay chua
-        print("[PROFILE] Khoi tao Persistent Profile tai: .edge_profile")
+        print("[PROFILE] Su dung Persistent Profile tai: .edge_profile")
         
-        # Chay thu o che do headless truoc neu khong yeu cau force_login
+        # Khoi chay trinh duyet headless mac dinh (hoac co giao dien neu force_login)
         initial_headless = not force_login
 
         context = p.chromium.launch_persistent_context(
@@ -148,18 +147,17 @@ def perform_browser_upload(force_login=False):
 
         page = context.pages[0] if context.pages else context.new_page()
 
-        # Kiem tra dang nhap
+        # Kiem tra xac thuc
         page.goto("https://github.com", wait_until="domcontentloaded", timeout=45000)
         has_session = is_authenticated_context(context)
 
-        # Neu chua co session ma dang chay headless -> Can mo Edge co giao dien de nguoi dung dang nhap 1 lan duy nhat
+        # Neu chua co session ma dang chay headless -> Mo Edge co giao dien de nguoi dung dang nhap 1 lan duy nhat
         if not has_session:
             if initial_headless:
                 print("\n[LOGIN] Phat hien chua co session dang nhap GitHub trong Profile.")
                 print("[LOGIN] Dang mo Microsoft Edge truc quan de ban dang nhap 1 LAN DUY NHAT...")
                 context.close()
 
-                # Mo Edge co giao dien
                 context = p.chromium.launch_persistent_context(
                     user_data_dir=str(PROFILE_DIR),
                     channel="msedge",
@@ -174,20 +172,17 @@ def perform_browser_upload(force_login=False):
                 page.goto("https://github.com/login", wait_until="domcontentloaded")
 
             print("\n>>> VUI LONG DANG NHAP GITHUB TREN CUA SO MICROSOFT EDGE VUA MO <<<")
-            print(">>> HE THONG SE TU DONG NHAN DIEN NGAY KHI DANG NHAP XONG (KHONG CAN AN PHIM NAO) <<<")
+            print(">>> HE THONG SE TU DONG NHAN DIEN NGAY KHI DANG NHAP XONG <<<")
             print("[LOGIN] Dang cho ban dang nhap...")
 
-            # Vong lap lang nghe cookie user_session xuat hien (kiem tra moi 0.5s)
             logged_in = False
             for sec in range(240):  # Toi da 2 phut
                 time.sleep(0.5)
                 if is_authenticated_context(context):
                     logged_in = True
                     break
-                # Hoac kiem tra neu URL da vao trang chu khong con la /login
                 cur_url = page.url.lower()
                 if "github.com/login" not in cur_url and "session" not in cur_url and "github.com" in cur_url:
-                    # Cho them 1s de cookie ghi hoan tat
                     time.sleep(1)
                     if is_authenticated_context(context) or sec >= 10:
                         logged_in = True
@@ -201,7 +196,7 @@ def perform_browser_upload(force_login=False):
             print("[LOGIN] -> XAC NHAN DANG NHAP THANH CONG!")
             print("[LOGIN] -> Phien lam viec da duoc luu vinh vien vao Profile! Tu gio se khong can dang nhap lai.")
 
-        # Da co session hop le -> Tien hanh upload truc tiep ngay tren page!
+        # Da co session hop le -> Truy cap trang edit release
         print(f"\n[NAVIGATE] Dang truy cap trang Release Edit: {EDIT_URL}...")
         page.goto(EDIT_URL, wait_until="domcontentloaded", timeout=60000)
 
@@ -211,10 +206,18 @@ def perform_browser_upload(force_login=False):
             context.close()
             sys.exit(1)
 
-        print("[WAIT] Dang tim khu vuc tai file tren giao dien Release...")
-        page.wait_for_selector('input[type="file"]', timeout=30000)
+        print("[WAIT] Dang tim khu vuc tai file Releases Upload (#releases-upload)...")
+        # Tim input file chuyen dung cho release assets (co id="releases-upload")
+        # Chu y: Input nay co class sr-only (an khoi man hinh) nen chi dung state="attached", khong dung state="visible"!
+        try:
+            page.wait_for_selector("#releases-upload", state="attached", timeout=15000)
+            file_input = page.locator("#releases-upload")
+        except Exception:
+            # Fallback: Tim input file khong phai release body
+            print("[WAIT] Fallback: Tim input file asset khong thuoc ve release body...")
+            page.wait_for_selector('input[type="file"]:not(#fc-release_body)', state="attached", timeout=15000)
+            file_input = page.locator('input[type="file"]:not(#fc-release_body)').first
 
-        file_input = page.locator('input[type="file"]').first
         file_paths = [str(p) for p in TARGET_FILES]
 
         print(f"[UPLOAD] Bat dau dinh kem {len(file_paths)} file de upload truc tiep len AWS S3...")
@@ -231,19 +234,22 @@ def perform_browser_upload(force_login=False):
             time.sleep(1)
             elapsed = time.time() - start_time
 
-            uploading_elements = page.locator(
-                "text='Uploading your file now', .upload-progress, [aria-label*='Uploading'], [aria-label*='uploading']"
-            ).count()
+            content = page.content()
+            is_still_uploading = (
+                "Uploading your file now" in content
+                or "upload-progress" in content
+                or "is-uploading" in content
+            )
 
             update_btn = page.locator('button:has-text("Update release")').first
             is_btn_visible = update_btn.is_visible()
             is_btn_enabled = update_btn.is_enabled() if is_btn_visible else False
 
             if i % 2 == 0:
-                print(f" [TIEN DO] Da troi qua {elapsed:.1f}s | Cac luong dang tai: {uploading_elements}...")
+                print(f" [TIEN DO] Da troi qua {elapsed:.1f}s | Dang truyen du lieu len S3...")
 
-            if uploading_elements == 0 and is_btn_enabled and elapsed >= 3:
-                content = page.content()
+            if not is_still_uploading and is_btn_enabled and elapsed >= 3:
+                # Kiem tra ca 3 file da co mat tren page
                 all_found = all(p.name in content for p in TARGET_FILES)
                 if all_found or elapsed >= 8:
                     upload_complete = True

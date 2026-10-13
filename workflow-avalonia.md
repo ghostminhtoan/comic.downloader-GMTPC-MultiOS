@@ -2786,6 +2786,23 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Script `upload_beta_browser.py` biên dịch cú pháp sạch sẽ, bảo vệ an toàn profile trong `.gitignore`.
   - Không còn tình trạng đóng băng console hay bắt đăng nhập lại lặp đi lặp lại.
 
+### 15.86 Khắc Phục Lỗi Timeout Input File Bằng Selector `#releases-upload` (`state='attached'`) & Kiểm Thử Tải Lên Thực Tế Thành Công 100% (2026-10-13)
+- **Bối Cảnh & Phân Tích Lỗi**:
+  - Khi script chạy, đã nhận diện đăng nhập thành công 100% và chuyển hướng vào trang `releases/edit/beta`.
+  - Tuy nhiên tiến trình bị dừng với ngoại lệ: `Page.wait_for_selector: Timeout 30000ms exceeded waiting for locator("input[type=\"file\"]") to be visible`.
+  - *Nguyên nhân kỹ thuật*: Trên trang GitHub Release Edit, phần tử tải file asset binaries mang thuộc tính `class="sr-only"` (Screen Reader Only) và bị ẩn về mặt đồ họa để nhường chỗ cho vùng kéo thả. Hàm `wait_for_selector` mặc định của Playwright chờ trạng thái `visible`, dẫn đến timeout vì thẻ input luôn ở trạng thái ẩn. Ngoài ra, trên trang tồn tại 2 thẻ input file (thẻ đầu tiên là `#fc-release_body` dùng cho ô soạn thảo văn bản Markdown).
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  - Định vị chính xác selector của khu vực Release Asset Binaries: `#releases-upload`.
+  - Chuyển điều kiện chờ sang `state="attached"` (phần tử đã tồn tại trong DOM cây phân cấp, không yêu cầu visible).
+  - Tích hợp cơ chế fallback an toàn: `input[type="file"]:not(#fc-release_body)`.
+- **Kiểm Thử Thực Tế & Nghiệm Thu**:
+  - Chạy thực tế `python upload_beta_browser.py`:
+    + Tự động nạp session từ `.edge_profile` (hoàn toàn không cần đăng nhập lại).
+    + Tự động đính kèm 3 file: `.apk` (55.59 MB), `.exe` (48.96 MB), `.tar.gz` (41.69 MB). Tổng dung lượng: 146.24 MB.
+    + Truyền dữ liệu trực tiếp lên AWS S3 và tự động click nút `Update release`.
+    + Đã cập nhật thành công 100% lên GitHub Release Beta tại `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`.
+
+
 
 
 
