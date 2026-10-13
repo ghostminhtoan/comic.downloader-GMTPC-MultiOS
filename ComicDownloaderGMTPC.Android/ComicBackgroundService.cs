@@ -28,6 +28,8 @@ public class ComicBackgroundService : Service
     public const string ExtraAction1Text = "EXTRA_ACTION_1_TEXT";
     public const string ExtraAction2Text = "EXTRA_ACTION_2_TEXT";
 
+    private static ComicBackgroundService? _currentInstance;
+    private readonly object _wakeLockSync = new();
     private PowerManager.WakeLock? _wakeLock;
 
     public override IBinder? OnBind(Intent? intent) => null;
@@ -35,8 +37,9 @@ public class ComicBackgroundService : Service
     public override void OnCreate()
     {
         base.OnCreate();
+        _currentInstance = this;
         CreateNotificationChannel();
-        AcquireWakeLock();
+        // KHÔNG acquire WakeLock ở đây! WakeLock chỉ được kích hoạt khi đang tải truyện thực tế để tránh gây nóng máy.
     }
 
     public static bool IsRunning { get; private set; }
@@ -129,6 +132,7 @@ public class ComicBackgroundService : Service
                 StartForeground(NotificationId, notification);
             }
             IsRunning = true;
+            UpdateWakeLock(taskId, isDownloading, isPaused);
         }
         catch (Java.Lang.Throwable jex)
         {
@@ -146,7 +150,38 @@ public class ComicBackgroundService : Service
     {
         IsRunning = false;
         ReleaseWakeLock();
+        if (_currentInstance == this)
+        {
+            _currentInstance = null;
+        }
         base.OnDestroy();
+    }
+
+    public void UpdateWakeLock(string taskId, bool isDownloading, bool isPaused)
+    {
+        lock (_wakeLockSync)
+        {
+            bool shouldHold;
+            if (taskId == "download_queue")
+            {
+                // Chỉ giữ WakeLock khi ĐANG TẢI THỰC TẾ và KHÔNG BỊ TẠM DỪNG
+                shouldHold = isDownloading && !isPaused;
+            }
+            else
+            {
+                // Các tác vụ nền khác (xử lý ảnh, đóng gói...): chỉ giữ khi đang chạy thực tế
+                shouldHold = isDownloading;
+            }
+
+            if (shouldHold)
+            {
+                AcquireWakeLock();
+            }
+            else
+            {
+                ReleaseWakeLock();
+            }
+        }
     }
 
     private void AcquireWakeLock()
@@ -159,7 +194,8 @@ public class ComicBackgroundService : Service
                 if (pm != null)
                 {
                     _wakeLock = pm.NewWakeLock(WakeLockFlags.Partial, "ComicGMTPC::BackgroundWakeLock");
-                    _wakeLock?.Acquire();
+                    // Đặt timeout an toàn tối đa 15 phút: nếu hệ thống/tác vụ gặp sự cố, Android sẽ tự nhả WakeLock để hạ nhiệt CPU
+                    _wakeLock?.Acquire(15 * 60 * 1000L);
                 }
             }
         }
@@ -310,7 +346,7 @@ public class ComicBackgroundService : Service
         {
             var appContext = context.ApplicationContext ?? context;
 
-            // Nếu Service đã chạy: Cập nhật Notification trực tiếp qua NotificationManager!
+            // Nếu Service đã chạy: Cập nhật Notification trực tiếp qua NotificationManager và đồng bộ WakeLock!
             if (IsRunning)
             {
                 try
@@ -318,6 +354,7 @@ public class ComicBackgroundService : Service
                     var notification = BuildNotification(appContext, taskId, title, text, progress, isDownloading, isPaused, action1Text, action2Text);
                     var nm = NotificationManagerCompat.From(appContext);
                     nm?.Notify(NotificationId, notification);
+                    _currentInstance?.UpdateWakeLock(taskId, isDownloading, isPaused);
                 }
                 catch (Exception ex)
                 {
@@ -333,6 +370,7 @@ public class ComicBackgroundService : Service
                 {
                     var notification = BuildNotification(appContext, taskId, title, text, progress, isDownloading, isPaused, action1Text, action2Text);
                     NotificationManagerCompat.From(appContext)?.Notify(NotificationId, notification);
+                    _currentInstance?.UpdateWakeLock(taskId, isDownloading, isPaused);
                     return;
                 }
 
@@ -372,6 +410,7 @@ public class ComicBackgroundService : Service
         IsRunning = false;
         try
         {
+            _currentInstance?.UpdateWakeLock(string.Empty, false, false);
             var appContext = context.ApplicationContext ?? context;
             var intent = new Intent(appContext, typeof(ComicBackgroundService));
             intent.SetAction(ActionStop);

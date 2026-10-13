@@ -91,7 +91,17 @@ public sealed class ComicReaderService
 
     public ReaderVisualEffectSettings ActiveEffectSettings { get; set; } = new();
 
-    private readonly SemaphoreSlim _decodeSemaphore = new(3, 3);
+    public bool IsReaderActive { get; private set; }
+    public event Action<bool>? ReaderActiveStateChanged;
+
+    public void SetReaderActive(bool isActive)
+    {
+        if (IsReaderActive == isActive) return;
+        IsReaderActive = isActive;
+        ReaderActiveStateChanged?.Invoke(isActive);
+    }
+
+    private readonly SemaphoreSlim _decodeSemaphore = new(OperatingSystem.IsAndroid() ? 1 : 3, OperatingSystem.IsAndroid() ? 1 : 3);
 
     public Task<List<ReaderPageItem>> LoadChapterPagesAsync(LibraryChapterItem chapter, CancellationToken ct = default)
     {
@@ -269,22 +279,25 @@ public sealed class ComicReaderService
         IList<ReaderPageItem> pages,
         int currentIndex,
         bool isScrollMode,
+        bool isEcoMode = false,
         CancellationToken ct = default)
     {
         if (pages == null || pages.Count == 0 || ct.IsCancellationRequested) return;
 
+        bool effectiveEco = isEcoMode || OperatingSystem.IsAndroid();
         int safeCurrent = Math.Clamp(currentIndex, 0, pages.Count - 1);
-        int preloadBehind = isScrollMode ? 3 : 2;
-        int preloadAhead = isScrollMode ? 5 : 3;
-        int keepRadius = isScrollMode ? 14 : 6;
+        int preloadBehind = effectiveEco ? 1 : (isScrollMode ? 3 : 2);
+        int preloadAhead = effectiveEco ? 2 : (isScrollMode ? 5 : 3);
+        int keepRadius = effectiveEco ? 4 : (isScrollMode ? 14 : 6);
 
         int minLoad = Math.Max(0, safeCurrent - preloadBehind);
         int maxLoad = Math.Min(pages.Count - 1, safeCurrent + preloadAhead);
 
-        // 1. Giải phóng các trang nằm xa ngoài vùng nhìn để tiết kiệm RAM (nhưng vẫn giữ nguyên AspectWidth/AspectHeight)
+        // 1. Giải phóng các trang nằm xa ngoài vùng nhìn để tiết kiệm RAM tối đa (vẫn giữ nguyên AspectWidth/AspectHeight để thanh cuộn không nhảy)
         int minKeep = Math.Max(0, safeCurrent - keepRadius);
         int maxKeep = Math.Min(pages.Count - 1, safeCurrent + keepRadius);
 
+        int releasedCount = 0;
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             for (int i = 0; i < pages.Count; i++)
@@ -298,10 +311,16 @@ public sealed class ComicReaderService
                         p.Image = null;
                         p.IsLoaded = false;
                         try { oldImg.Dispose(); } catch { }
+                        releasedCount++;
                     }
                 }
             }
         });
+
+        if (releasedCount > 0 && effectiveEco)
+        {
+            TriggerDebouncedGcCollection();
+        }
 
         // 2. Ưu tiên nạp trang hiện tại trước, sau đó nạp các trang lân cận
         await EnsurePageLoadedAsync(pages[safeCurrent], ct).ConfigureAwait(false);
@@ -317,6 +336,24 @@ public sealed class ComicReaderService
         {
             if (ct.IsCancellationRequested) break;
             await EnsurePageLoadedAsync(pages[idx], ct).ConfigureAwait(false);
+        }
+    }
+
+    private static long _lastGcTick;
+    private static void TriggerDebouncedGcCollection()
+    {
+        long now = Environment.TickCount64;
+        if (now - _lastGcTick > 3500)
+        {
+            _lastGcTick = now;
+            Task.Run(() =>
+            {
+                try
+                {
+                    GC.Collect(0, GCCollectionMode.Optimized);
+                }
+                catch { }
+            });
         }
     }
 

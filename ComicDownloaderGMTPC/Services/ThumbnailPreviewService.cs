@@ -444,7 +444,10 @@ public sealed class ThumbnailPreviewService
 
         // Ưu tiên nạp trước các truyện chưa có ThumbnailBitmap trên giao diện; chạy tuần tự theo nhóm nhỏ để nhường băng thông cho thao tác cuộn (Scroll) và Popup Preview
         var queue = new ConcurrentQueue<ComicBookItem>(validItems.OrderBy(x => x.ThumbnailBitmap != null ? 1 : 0));
-        int workerCount = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
+        bool isReaderActive = ComicReaderService.Instance.IsReaderActive;
+        int workerCount = isReaderActive
+            ? 1
+            : Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 4 : 16);
         var workers = new List<Task>(workerCount);
 
         for (int w = 0; w < workerCount; w++)
@@ -453,6 +456,11 @@ public sealed class ThumbnailPreviewService
             {
                 while (!ct.IsCancellationRequested && queue.TryDequeue(out var nextItem))
                 {
+                    if (ComicReaderService.Instance.IsReaderActive)
+                    {
+                        // Thong thả nghỉ 250ms giữa các item khi đang đọc truyện để không tranh chấp CPU và làm nóng máy
+                        await Task.Delay(250, ct).ConfigureAwait(false);
+                    }
                     if (nextItem.ThumbnailBitmap != null && nextItem.HasThumbnailFile) continue;
                     await EnsureThumbnailCacheAsync(nextItem, ct, isPriority: false).ConfigureAwait(false);
                 }

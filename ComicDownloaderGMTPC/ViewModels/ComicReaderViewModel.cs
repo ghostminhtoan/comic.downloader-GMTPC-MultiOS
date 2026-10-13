@@ -1872,6 +1872,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanGoPrevChapter));
         OnPropertyChanged(nameof(CanGoNextChapter));
 
+        _readerService.SetReaderActive(true);
         await LoadChapterInternalAsync(targetChapter);
     }
 
@@ -2149,6 +2150,21 @@ public partial class ComicReaderViewModel : ViewModelBase
         ParentComic?.RefreshReadStatus();
     }
 
+    [ObservableProperty]
+    private bool _isEcoMode = OperatingSystem.IsAndroid();
+
+    public string EcoModeStatusText => IsEcoMode ? "🍃 BẬT (Mát máy)" : "Tắt (Tiêu chuẩn)";
+
+    partial void OnIsEcoModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(EcoModeStatusText));
+        TriggerPrefetch(CurrentPageIndex);
+        if (value)
+        {
+            ShowTransientToast("🍃 Đã bật Chế độ Mát Máy (Tiết kiệm pin & RAM tối đa)");
+        }
+    }
+
     private void TriggerPrefetch(int centerIndex)
     {
         _prefetchCts?.Cancel();
@@ -2156,12 +2172,13 @@ public partial class ComicReaderViewModel : ViewModelBase
         var ct = _prefetchCts.Token;
         var snapshot = Pages.ToList();
         bool scrollMode = IsScrollMode;
+        bool ecoMode = IsEcoMode;
 
         _ = Task.Run(async () =>
         {
             try
             {
-                await _readerService.UpdatePrefetchWindowAsync(snapshot, centerIndex, scrollMode, ct);
+                await _readerService.UpdatePrefetchWindowAsync(snapshot, centerIndex, scrollMode, ecoMode, ct);
             }
             catch { }
         }, ct);
@@ -2441,6 +2458,14 @@ public partial class ComicReaderViewModel : ViewModelBase
             _effectRefreshCts?.Cancel();
             _progressStore.FlushImmediately();
             DisposeLoadedBitmaps();
+            _readerService.SetReaderActive(false);
+            if (OperatingSystem.IsAndroid() || IsEcoMode)
+            {
+                Task.Run(() =>
+                {
+                    try { GC.Collect(0, GCCollectionMode.Optimized); } catch { }
+                });
+            }
         }
         catch { }
     }

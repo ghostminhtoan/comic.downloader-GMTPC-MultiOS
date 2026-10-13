@@ -1507,6 +1507,22 @@ public partial class MainViewModel : ViewModelBase
         InitializeSearchDomains();
         InitializeQueueAutoBackupAndRestore();
 
+        // Tạm dừng các tác vụ nền không cần thiết (như kiểm tra Clipboard liên tục) khi người dùng mở Trình Đọc Truyện để hạ nhiệt máy
+        ComicReaderService.Instance.ReaderActiveStateChanged += (isActive) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (isActive)
+                {
+                    StopAutoPasteClipboardMonitoring();
+                }
+                else if (IsAutoPasteClipboard)
+                {
+                    StartAutoPasteClipboardMonitoring();
+                }
+            });
+        };
+
         // Lắng nghe lệnh từ Android Foreground Notification & Chat Head
         BackgroundExecutionService.NativeNotificationContextualAction1Requested = () =>
         {

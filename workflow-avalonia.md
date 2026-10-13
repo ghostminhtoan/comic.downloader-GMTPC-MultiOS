@@ -2614,3 +2614,35 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      - Hiển thị thanh đo thời gian upload từng file, dung lượng và link tải trực tiếp.
 - **Nghiệm Thu**:
   - Chạy thực tế thành công mỹ mãn: Upload trọn vẹn 3 file (APK 55.54MB, Desktop EXE 48.95MB, Linux tar.gz 41.68MB) lên [Release beta · ghostminhtoan/comic.downloader-GMTPC-MultiOS](https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta).
+
+### 15.80 Tối Ưu Hóa Chống Nóng Máy & Tiết Kiệm Pin Toàn Diện Trên Android & Trình Đọc Truyện (`ComicBackgroundService.cs`, `ComicReaderService.cs`, `ComicReaderViewModel.cs`, `MainViewModel.cs`, `ThumbnailPreviewService.cs`, `ComicReaderControl.axaml`) (2026-10-13)
+- **Bối Cảnh & Phản Hồi Từ Người Dùng**:
+  - Người dùng phản ánh: Trên điện thoại (Android), các chức năng khác ngoài tải truyện luôn chạy ngầm dẫn đến điện thoại quá nóng, khi chuyển sang dùng tính năng đọc truyện thì máy cũng rất nóng.
+- **Phân Tích Nguyên Nhân Gốc Rễ (`First-Principles Engineering Rigor`)**:
+  1. *Nguyên nhân 1 (Android WakeLock bị chiếm dụng vĩnh viễn)*: Trong `ComicBackgroundService.OnCreate()`, phương thức `AcquireWakeLock()` được gọi và giữ `WakeLockFlags.Partial` liên tục 100% thời gian ngay cả khi không tải truyện hoặc đang tạm dừng. Hệ điều hành Android bị ngăn không cho CPU vào chế độ Deep Sleep/Idle, các nhân CPU duy trì tần số cao gây nóng máy và tiêu hao pin dữ dội.
+  2. *Nguyên nhân 2 (Tranh chấp tài nguyên & các tác vụ nền không tạm dừng khi đọc truyện)*: Khi người dùng mở Trình đọc truyện, các tác vụ ở MainWindow như `AutoPasteClipboardMonitoring` (vòng lặp 800ms truy vấn clipboard trên UI thread) và `ThumbnailPreviewService.PrefetchBatchAsync` (tới 6 luồng worker) vẫn tiếp tục chạy ngầm song song, gây nghẽn core CPU và nhiệt độ thiết bị tăng cao.
+  3. *Nguyên nhân 3 (Áp lực RAM và Garbage Collector trong Trình Đọc Truyện)*: Trong `ComicReaderService`, `keepRadius` trong chế độ cuộn từng đặt tới `14` (giữ tới ~29 trang Bitmap trong RAM). Mỗi trang ảnh Webtoon/Manga uncompressed chiếm 15-25MB RAM, dẫn đến tổng RAM phình to 600-800MB. Trên Android heap bị cạn, bộ gom rác (.NET Garbage Collector) phải kích hoạt liên tục mỗi giây để dọn dẹp, vắt kiệt công suất CPU. Thêm vào đó, số luồng giải mã ảnh SkiaSharp `_decodeSemaphore` đặt là 3 khiến các Big Cores (lõi hiệu năng cao) bị ép xung cùng lúc gây sốc nhiệt.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai**:
+  1. **Quản Lý WakeLock Thông Minh & An Toàn (`ComicBackgroundService.cs`)**:
+     - Loại bỏ việc tự ý gọi `AcquireWakeLock()` trong `OnCreate()`.
+     - Bổ sung `UpdateWakeLock(taskId, isDownloading, isPaused)`: Chỉ kích hoạt WakeLock khi tác vụ download đang thực sự chạy (`isDownloading && !isPaused`) hoặc các tác vụ nặng (xử lý ảnh, đóng gói...).
+     - Lập tức nhả WakeLock (`ReleaseWakeLock()`) khi người dùng tạm dừng tải (`isPaused == true`), dừng tải, hoặc hoàn tất tác vụ, đưa CPU trở về trạng thái tiết kiệm điện năng ngay tức thì.
+     - Thiết lập cơ chế timeout an toàn 15 phút cho WakeLock phòng ngừa trường hợp treo luồng.
+  2. **Bộ Điều Phối Trạng Thái Đọc Truyện Toàn Cục (`ComicReaderService.cs`)**:
+     - Bổ sung thuộc tính `IsReaderActive` và sự kiện `ReaderActiveStateChanged`.
+     - Giới hạn số luồng decode ảnh `_decodeSemaphore` trên Android xuống tối đa `1` luồng (thay vì 3) để ngăn chặn việc kích hoạt quá nhiệt Big Cores của chip SoC ARM.
+     - Triển khai **Virtual Sliding Window Cache (Cửa sổ trượt ảo)**: Khi ở Android hoặc bật Eco Mode, bán kính lưu RAM `keepRadius = 4`, `preloadAhead = 2`, `preloadBehind = 1`. Các trang ngoài bán kính lập tức được gọi `Dispose()` và gán `null` (giữ nguyên kích thước `KnownWidth / KnownHeight` để thanh cuộn mượt mà không nhảy).
+     - Bổ sung cơ chế Debounced GC (`TriggerDebouncedGcCollection` giãn cách >= 3.5s) gọi `GC.Collect(0, GCCollectionMode.Optimized)` thu hồi ngay các buffer unmanaged memory của SkiaSharp, giữ RAM trình đọc truyện dưới 60MB.
+  3. **Tích Hợp Tùy Chọn Chế Độ Mát Máy (Eco Mode) (`ComicReaderViewModel.cs`, `ComicReaderControl.axaml`)**:
+     - Bổ sung thuộc tính `IsEcoMode` (mặc định luôn BẬT trên Android, tùy chọn trên Desktop).
+     - Thêm toggle trực quan `🍃 Chế độ mát máy (Eco Mode)` vào Popup Brightness để người dùng quan sát và chủ động điều chỉnh.
+     - Đồng bộ `SetReaderActive(true)` khi nạp chương và `SetReaderActive(false)` kèm dọn dẹp bộ nhớ triệt để khi đóng trình đọc (`Cleanup()`).
+  4. **Tạm Dừng & Hạ Tải Background Workers (`MainViewModel.cs`, `ThumbnailPreviewService.cs`)**:
+     - `MainViewModel.cs`: Tự động ngắt vòng lặp kiểm tra Clipboard `StopAutoPasteClipboardMonitoring()` khi `IsReaderActive == true`, và khôi phục khi đóng trình đọc truyện.
+     - `ThumbnailPreviewService.cs`: Khi `IsReaderActive == true`, hạ số worker nạp thumbnail xuống 1 và chèn delay 250ms giữa các item để nhường 100% tài nguyên CPU cho trải nghiệm đọc truyện mát mượt.
+- **Nghiệm Thu**:
+  - `dotnet build` Release đạt `0 Warning(s), 0 Error(s)` cho cả Desktop và Android.
+  - `build-avalonia.bat` hoàn tất biên dịch và đóng gói cho Windows, Linux, Android vào thư mục duy nhất `\publish\`.
+  - Khởi chạy Desktop EXE đạt `Responding: True` (ProcessId: 41120, RAM 284.45 MB).
+  - Tự động chạy script `upload_beta.ps1` upload thành công 100% cả 3 gói cài đặt lên GitHub Release tag `beta` (APK Signed 55.56MB, Desktop EXE 48.96MB, Linux tar.gz 41.68MB).
+

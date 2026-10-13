@@ -892,6 +892,18 @@
                                 Minimum="0" Maximum="100"
                                 Value="{Binding BlueLightValue}" />
 
+                        <!-- 6. Eco Mode / Chế độ Mát Máy & Tiết Kiệm Pin -->
+                        <Border Background="#1E293B" CornerRadius="4" Padding="10,6" Margin="0,4,0,2" BorderBrush="#334155" BorderThickness="1">
+                            <Grid ColumnDefinitions="*, Auto">
+                                <CheckBox Grid.Column="0" Classes="comicCheck"
+                                          IsChecked="{Binding IsEcoMode}"
+                                          Content="🍃 Chế độ mát máy (Eco Mode)"
+                                          ToolTip.Tip="Chế độ tiết kiệm pin và làm mát CPU: giải phóng ngay bộ nhớ RAM các trang ở xa và hoãn các tác vụ nền" />
+                                <TextBlock Grid.Column="1" Text="{Binding EcoModeStatusText}"
+                                           Foreground="#34D399" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
                         <!-- Nút DEFAULT -->
                         <Button Command="{Binding ResetBrightnessDefaultsCommand}"
                                 Background="#374151" Foreground="#F8FAFC" FontWeight="Bold"
