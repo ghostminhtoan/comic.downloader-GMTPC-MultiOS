@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Upload Release Beta via Headless Microsoft Edge (Playwright)
+Upload Release Beta via Microsoft Edge (Playwright)
 Direct-to-S3 Multi-part Accelerated Upload (~100+ Mbps)
+Persistent Automation Profile - Tu dong duy tri phien dang nhap vinh vien
 Comic Downloader GMTPC
 """
 
@@ -11,6 +12,7 @@ import sys
 import time
 import argparse
 import requests
+import ctypes
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
@@ -22,7 +24,7 @@ VIEW_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{RELEASE_T
 
 BASE_DIR = Path(__file__).resolve().parent
 PUBLISH_DIR = BASE_DIR / "publish"
-AUTH_FILE = BASE_DIR / "github_auth.json"
+PROFILE_DIR = BASE_DIR / ".edge_profile"
 TOKEN_FILE = BASE_DIR / "github_token.txt"
 
 TARGET_FILES = [
@@ -30,6 +32,21 @@ TARGET_FILES = [
     PUBLISH_DIR / "ComicDownloaderGMTPC.Desktop.exe",
     PUBLISH_DIR / "ComicDownloaderGMTPC-linux-x64.tar.gz",
 ]
+
+
+def disable_quick_edit_mode():
+    """Vo hieu hoa QuickEdit Mode tren Windows Console de tranh viec click chuot lam freeze tien trinh"""
+    try:
+        kernel32 = ctypes.windll.kernel32
+        h_stdin = kernel32.GetStdHandle(-10)  # STD_INPUT_HANDLE = -10
+        mode = ctypes.c_uint32()
+        if kernel32.GetConsoleMode(h_stdin, ctypes.byref(mode)):
+            ENABLE_QUICK_EDIT_MODE = 0x0040
+            ENABLE_EXTENDED_FLAGS = 0x0080
+            new_mode = (mode.value & ~ENABLE_QUICK_EDIT_MODE) | ENABLE_EXTENDED_FLAGS
+            kernel32.SetConsoleMode(h_stdin, new_mode)
+    except Exception:
+        pass
 
 
 def load_github_token():
@@ -44,7 +61,7 @@ def load_github_token():
 def delete_existing_release_assets_via_api(target_names):
     token = load_github_token()
     if not token:
-        print("[API] Khong tim thay GitHub token, bo qua buoc xoa asset truoc.")
+        print("[API] Khong tim thay GitHub token, bo qua buoc don dep asset truoc.")
         return
 
     headers = {
@@ -64,12 +81,12 @@ def delete_existing_release_assets_via_api(target_names):
             a_name = asset.get("name")
             a_id = asset.get("id")
             if a_name in target_names:
-                print(f"[API] Xoa asset cu tren GitHub: '{a_name}' (ID: {a_id})...")
+                print(f"[API] Xoa asset cu tren Release Beta: '{a_name}' (ID: {a_id})...")
                 del_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/assets/{a_id}"
                 requests.delete(del_url, headers=headers, timeout=15)
                 print(f"[API] -> Da xoa '{a_name}' thanh cong.")
     except Exception as ex:
-        print(f"[API] Loi khi xoa asset qua API: {ex}")
+        print(f"[API] Chu y khi don dep asset qua API: {ex}")
 
 
 def verify_files_exist():
@@ -91,114 +108,144 @@ def verify_files_exist():
         sys.exit(1)
 
 
+def is_authenticated_context(context):
+    """Kiem tra xem context da co cookie dang nhap GitHub (user_session) hay chua"""
+    try:
+        for c in context.cookies():
+            if c.get("name") == "user_session" and c.get("value"):
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def perform_browser_upload(force_login=False):
+    disable_quick_edit_mode()
     verify_files_exist()
 
     target_names = [p.name for p in TARGET_FILES]
     delete_existing_release_assets_via_api(target_names)
 
-    has_auth = AUTH_FILE.exists() and not force_login
+    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as p:
-        # Neu chua co session hoac yeu cau force_login thi mo Edge co giao dien
-        if not has_auth:
-            print("\n[LOGIN] Chua co phien dang nhap GitHub hoac co yeu cau dang nhap lai.")
-            print("[LOGIN] Dang mo Microsoft Edge (Giao dien truc quan)...")
-            print(">>> VUI LONG DANG NHAP GITHUB TREN CUA SO TRINH DUYET VUA MO <<<")
+        # Kiem tra xem profile hien tai da co session hay chua
+        print("[PROFILE] Khoi tao Persistent Profile tai: .edge_profile")
+        
+        # Chay thu o che do headless truoc neu khong yeu cau force_login
+        initial_headless = not force_login
 
-            browser = p.chromium.launch(channel="msedge", headless=False)
-            context = browser.new_context()
-            page = context.new_page()
+        context = p.chromium.launch_persistent_context(
+            user_data_dir=str(PROFILE_DIR),
+            channel="msedge",
+            headless=initial_headless,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-first-run",
+                "--no-default-browser-check"
+            ]
+        )
 
-            page.goto("https://github.com/login", wait_until="domcontentloaded")
+        page = context.pages[0] if context.pages else context.new_page()
 
-            # Doi nguoi dung dang nhap toi da 180 giay
-            print("[LOGIN] Dang cho ban dang nhap GitHub...")
+        # Kiem tra dang nhap
+        page.goto("https://github.com", wait_until="domcontentloaded", timeout=45000)
+        has_session = is_authenticated_context(context)
+
+        # Neu chua co session ma dang chay headless -> Can mo Edge co giao dien de nguoi dung dang nhap 1 lan duy nhat
+        if not has_session:
+            if initial_headless:
+                print("\n[LOGIN] Phat hien chua co session dang nhap GitHub trong Profile.")
+                print("[LOGIN] Dang mo Microsoft Edge truc quan de ban dang nhap 1 LAN DUY NHAT...")
+                context.close()
+
+                # Mo Edge co giao dien
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=str(PROFILE_DIR),
+                    channel="msedge",
+                    headless=False,
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--no-first-run",
+                        "--no-default-browser-check"
+                    ]
+                )
+                page = context.pages[0] if context.pages else context.new_page()
+                page.goto("https://github.com/login", wait_until="domcontentloaded")
+
+            print("\n>>> VUI LONG DANG NHAP GITHUB TREN CUA SO MICROSOFT EDGE VUA MO <<<")
+            print(">>> HE THONG SE TU DONG NHAN DIEN NGAY KHI DANG NHAP XONG (KHONG CAN AN PHIM NAO) <<<")
+            print("[LOGIN] Dang cho ban dang nhap...")
+
+            # Vong lap lang nghe cookie user_session xuat hien (kiem tra moi 0.5s)
             logged_in = False
-            for _ in range(180):
-                time.sleep(1)
+            for sec in range(240):  # Toi da 2 phut
+                time.sleep(0.5)
+                if is_authenticated_context(context):
+                    logged_in = True
+                    break
+                # Hoac kiem tra neu URL da vao trang chu khong con la /login
                 cur_url = page.url.lower()
-                if "github.com/login" not in cur_url and "session" not in cur_url:
-                    # Kiem tra avatar hoac nut dang nhap thanh cong
-                    try:
-                        page.wait_for_selector(
-                            "header, summary[aria-label*='user'], button[aria-label*='user']",
-                            timeout=2000,
-                        )
+                if "github.com/login" not in cur_url and "session" not in cur_url and "github.com" in cur_url:
+                    # Cho them 1s de cookie ghi hoan tat
+                    time.sleep(1)
+                    if is_authenticated_context(context) or sec >= 10:
                         logged_in = True
                         break
-                    except Exception:
-                        if "github.com" in cur_url:
-                            logged_in = True
-                            break
 
             if not logged_in:
-                print("[LOI] Het thoi gian cho dang nhap (3 phut). Vui long thu lai.")
-                browser.close()
+                print("[LOI] Het thoi gian cho dang nhap (2 phut). Vui long thu lai.")
+                context.close()
                 sys.exit(1)
 
-            print("[LOGIN] Dang nhap thanh cong! Dang luu phien vao 'github_auth.json'...")
-            context.storage_state(path=str(AUTH_FILE))
-            print("[LOGIN] -> Da luu phien thanh cong! Tu lan sau trinh duyet se chay ngam 100%.")
-            browser.close()
+            print("[LOGIN] -> XAC NHAN DANG NHAP THANH CONG!")
+            print("[LOGIN] -> Phien lam viec da duoc luu vinh vien vao Profile! Tu gio se khong can dang nhap lai.")
 
-        # Chay ngam (Headless = True) su dung session da luu
-        print("\n[HEADLESS] Khoi chay Microsoft Edge chay ngam 100% (Direct-to-S3 Mode)...")
-        browser = p.chromium.launch(channel="msedge", headless=True)
-        context = browser.new_context(storage_state=str(AUTH_FILE))
-        page = context.new_page()
-
-        print(f"[NAVIGATE] Dang truy cap trang edit release: {EDIT_URL}...")
+        # Da co session hop le -> Tien hanh upload truc tiep ngay tren page!
+        print(f"\n[NAVIGATE] Dang truy cap trang Release Edit: {EDIT_URL}...")
         page.goto(EDIT_URL, wait_until="domcontentloaded", timeout=60000)
 
-        # Kiem tra xem co bi da ve login khong
+        # Kiem tra neu bi da ve login
         if "github.com/login" in page.url.lower():
             print("[CANH BAO] Phien dang nhap het han. Vui long chay lai voi tham so --login.")
-            browser.close()
-            AUTH_FILE.unlink(missing_ok=True)
+            context.close()
             sys.exit(1)
 
         print("[WAIT] Dang tim khu vuc tai file tren giao dien Release...")
         page.wait_for_selector('input[type="file"]', timeout=30000)
 
-        # Tim input file cho phep chon nhieu file
         file_input = page.locator('input[type="file"]').first
-
         file_paths = [str(p) for p in TARGET_FILES]
-        print(f"[UPLOAD] Bat dau dinh kem {len(file_paths)} file de upload truc tiep len S3...")
+
+        print(f"[UPLOAD] Bat dau dinh kem {len(file_paths)} file de upload truc tiep len AWS S3...")
         start_time = time.time()
         file_input.set_input_files(file_paths)
 
-        print("[UPLOAD] Dang truyen du lieu truc tiep len AWS S3 CDN (Toc do toi da duong truyen)...")
+        print("[UPLOAD] Dang truyen du lieu truc tiep len AWS S3 CDN (Toc do toi da duong truyen ~100+ Mbps)...")
 
-        # Cho upload hoan tat: Kiem tra khong con phan tu dang upload hoac text "Uploading your file now..."
-        # va tat ca 3 file da xuat hien trong danh sach asset
-        max_upload_wait = 180  # 3 phut (voi toc do 100 Mbps chi mat ~15s)
+        # Cho upload hoan tat
+        max_upload_wait = 180  # 3 phut (voi toc do 100 Mbps chi mat ~12-15s)
         upload_complete = False
 
         for i in range(max_upload_wait):
             time.sleep(1)
             elapsed = time.time() - start_time
 
-            # Kiem tra xem co phan tu progress hoac text upload dang chay khong
             uploading_elements = page.locator(
                 "text='Uploading your file now', .upload-progress, [aria-label*='Uploading'], [aria-label*='uploading']"
             ).count()
 
-            # Kiem tra nut Update release
             update_btn = page.locator('button:has-text("Update release")').first
             is_btn_visible = update_btn.is_visible()
             is_btn_enabled = update_btn.is_enabled() if is_btn_visible else False
 
-            # In thong tin tien do moi 3 giay
-            if i % 3 == 0:
-                print(f" [TIEN DO] Da troi qua {elapsed:.1f}s | Dang tai len: {uploading_elements} luong...")
+            if i % 2 == 0:
+                print(f" [TIEN DO] Da troi qua {elapsed:.1f}s | Cac luong dang tai: {uploading_elements}...")
 
             if uploading_elements == 0 and is_btn_enabled and elapsed >= 3:
-                # Kiem tra them xem cac file da hien thi ten chua
                 content = page.content()
                 all_found = all(p.name in content for p in TARGET_FILES)
-                if all_found or elapsed >= 10:
+                if all_found or elapsed >= 8:
                     upload_complete = True
                     break
 
@@ -213,17 +260,15 @@ def perform_browser_upload(force_login=False):
         update_btn = page.locator('button:has-text("Update release")').first
         update_btn.click()
 
-        # Cho dieu huong sang trang xem release
         print(f"[SUBMIT] Dang cho GitHub luu release ({VIEW_URL})...")
         try:
             page.wait_for_url("**/releases/tag/**", timeout=30000)
             print(f"[THANH CONG] Release Beta da cap nhat hoan tat tai: {page.url}")
         except Exception:
-            # Fallback doi them 5s
-            time.sleep(5)
+            time.sleep(4)
             print("[SUBMIT] Da gui lenh cap nhat thanh cong.")
 
-        browser.close()
+        context.close()
 
     print("\n====================================================================")
     print("  [HOAN TAT 100%] Da upload thanh cong 3 file len Release Beta!")
@@ -233,8 +278,8 @@ def perform_browser_upload(force_login=False):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Upload Release Beta via Headless Microsoft Edge")
-    parser.add_argument("--login", action="store_true", help="Mo trinh duyet co giao dien de dang nhap lai GitHub")
+    parser = argparse.ArgumentParser(description="Upload Release Beta via Persistent Microsoft Edge")
+    parser.add_argument("--login", action="store_true", help="Mo trinh duyet de dang nhap lai GitHub")
     args = parser.parse_args()
 
     try:
@@ -245,4 +290,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n[LOI] Xay ra loi trong qua trinh upload: {e}")
         sys.exit(1)
-

@@ -2765,6 +2765,28 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Đóng gói đầy đủ 5 gói phát hành sạch sẽ trong `\publish\`: Desktop EXE, Linux Binary, Linux tar.gz, DEB, Android APK Signed.
   - Khởi chạy Desktop EXE đạt `Responding: True` (ProcessId: 44020).
 
+### 15.85 Khắc Phục Treo Đăng Nhập ("Chờ Hoài Không Up") & Thiết Lập Persistent Profile Vĩnh Viễn Không Cần Đăng Nhập Lại (`upload_beta_browser.py`, `upload beta.cmd`) (2026-10-13)
+- **Bối Cảnh & Phân Tích Hiện Tượng**:
+  1. *Hiện tượng Treo Tiến Trình ("Chờ hoài không up file")*: Khi mở cửa sổ Edge để đăng nhập, người dùng đã đăng nhập xong hiển thị "Good evening, ghostminhtoan!" nhưng cửa sổ CMD vẫn kẹt cứng ở dòng `[LOGIN] Dang cho ban dang nhap GitHub...`.
+     - *Nguyên nhân 1 (QuickEdit Mode Freeze)*: Khi người dùng click chuột vào cửa sổ CMD, Windows Console tự động bật chế độ bôi đen QuickEdit (hiển thị chữ `Select` ở đầu tiêu đề CMD và vùng chữ nhật trắng quanh text). Ở chế độ này, Windows TẠM DỪNG (FREEZE) 100% luồng thực thi của tiến trình con Python, khiến Python không được chạy vòng lặp kiểm tra.
+     - *Nguyên nhân 2 (Selector Dò Element Bị Lỗi)*: Bộ dò DOM cũ chờ phần tử avatar/header cũ của GitHub bị lỗi trên giao diện mới của GitHub Dashboard.
+  2. *Bị Bắt Đăng Nhập Lại Mỗi Lần*: Do script trước dùng temporary context và vòng lặp bị đóng băng nên file session không được ghi ra đĩa. Mỗi lần chạy lại script tạo context mới tinh khiến người dùng phải đăng nhập lại từ đầu.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Vô Hiệu Hóa QuickEdit Mode Chống Đóng Băng Tiến Trình (`upload_beta_browser.py`, `upload beta.cmd`)**:
+     - Trong Python: Sử dụng `ctypes.windll.kernel32` gọi trực tiếp Win32 API `SetConsoleMode` loại bỏ cờ `ENABLE_QUICK_EDIT_MODE (0x0040)` ngay từ dòng code đầu tiên.
+     - Trong `upload beta.cmd`: Bổ sung lệnh PowerShell vô hiệu hóa QuickEdit mode cho console handle trước khi gọi Python. Đảm bảo người dùng có click chuột vào CMD cũng không bao giờ bị pause tiến trình.
+  2. **Thiết Lập Persistent Automation Profile (`.edge_profile`)**:
+     - Chuyển sang sử dụng `p.chromium.launch_persistent_context` trỏ vào thư mục cố định `.edge_profile`.
+     - Mọi cookie, session, tài khoản đăng nhập được lưu trữ trực tiếp và liên tục vào ổ cứng, giống hệt như một Profile thật của Edge.
+     - Người dùng chỉ cần đăng nhập ĐÚNG 1 LẦN DUY NHẤT. Từ lần chạy sau, script tự động tái sử dụng phiên làm việc có sẵn, hoàn toàn không cần đăng nhập lại!
+  3. **Nhận Diện Đăng Nhập Tức Thời Bằng Cookie `user_session`**:
+     - Thay thế hoàn toàn cơ chế dò tìm thẻ HTML bằng hàm `is_authenticated_context`: Kiểm tra sự xuất hiện của cookie `user_session` trong context mỗi 0.5 giây.
+     - Ngay khi người dùng đăng nhập thành công trên Edge, script phát hiện cookie sau 0.5s và lập tức chuyển tiếp sang trang Release Edit để upload 3 file trên chính cửa sổ đó, hoàn toàn không có độ trễ.
+- **Nghiệm Thu**:
+  - Script `upload_beta_browser.py` biên dịch cú pháp sạch sẽ, bảo vệ an toàn profile trong `.gitignore`.
+  - Không còn tình trạng đóng băng console hay bắt đăng nhập lại lặp đi lặp lại.
+
+
 
 
 
