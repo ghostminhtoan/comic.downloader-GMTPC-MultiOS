@@ -164,7 +164,7 @@ public sealed class ZipArchivePool : IDisposable
 
         try
         {
-            var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536);
+            var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 131072);
             var zip = new ZipArchive(fs, ZipArchiveMode.Read);
             var map = new Dictionary<string, ZipArchiveEntry>(zip.Entries.Count, StringComparer.OrdinalIgnoreCase);
 

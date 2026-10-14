@@ -36,8 +36,43 @@ public class MainActivity : AvaloniaMainActivity
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
-        base.OnCreate(savedInstanceState);
         CurrentInstance = this;
+
+        // Cung cấp danh sách đường dẫn Root của toàn bộ thẻ nhớ ngoài (SD Card)
+        Services.LibraryScannerService.AndroidGetExternalStoragePaths = () =>
+        {
+            var results = new List<string>();
+            try
+            {
+                var ctx = CurrentInstance?.ApplicationContext ?? CurrentInstance;
+                if (ctx != null)
+                {
+                    var filesDirs = ctx.GetExternalFilesDirs(null);
+                    if (filesDirs != null)
+                    {
+                        foreach (var dir in filesDirs)
+                        {
+                            if (dir == null) continue;
+                            string abs = dir.AbsolutePath;
+                            int idx = abs.IndexOf("/Android/data", StringComparison.OrdinalIgnoreCase);
+                            if (idx > 0)
+                            {
+                                string root = abs.Substring(0, idx);
+                                if (!root.Contains("emulated", StringComparison.OrdinalIgnoreCase) &&
+                                    !results.Any(r => string.Equals(r, root, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    results.Add(root);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return results;
+        };
+
+        base.OnCreate(savedInstanceState);
         Window?.SetSoftInputMode(SoftInput.AdjustResize);
 
         // Bảo vệ toàn diện chống crash unhandled khi chạy ngầm hoặc thay đổi focus/cử chỉ screenshot
@@ -128,36 +163,6 @@ public class MainActivity : AvaloniaMainActivity
         Services.AppUpdateService.InstallApkRequested += OnInstallApkRequested;
         Services.ComicReaderService.AndroidLaunchSeparateReaderTask = LaunchComicReaderTask;
 
-        // Cung cấp danh sách đường dẫn Root của toàn bộ thẻ nhớ ngoài (SD Card)
-        Services.LibraryScannerService.AndroidGetExternalStoragePaths = () =>
-        {
-            var results = new List<string>();
-            try
-            {
-                var filesDirs = GetExternalFilesDirs(null);
-                if (filesDirs != null)
-                {
-                    foreach (var dir in filesDirs)
-                    {
-                        if (dir == null) continue;
-                        string abs = dir.AbsolutePath;
-                        int idx = abs.IndexOf("/Android/data", StringComparison.OrdinalIgnoreCase);
-                        if (idx > 0)
-                        {
-                            string root = abs.Substring(0, idx);
-                            if (!root.Contains("emulated", StringComparison.OrdinalIgnoreCase) &&
-                                !results.Any(r => string.Equals(r, root, StringComparison.OrdinalIgnoreCase)))
-                            {
-                                results.Add(root);
-                            }
-                        }
-                    }
-                }
-            }
-            catch { }
-            return results;
-        };
-
         // Đăng ký Native Android Audio Player cho âm thanh thông báo (Startup / DownloadFinish / Error)
         Services.SoundNotificationService.AndroidPlaySoundHandler = (type, filePath) =>
         {
@@ -198,6 +203,16 @@ public class MainActivity : AvaloniaMainActivity
         };
 
         RequestAppStoragePermissions();
+
+        // Tự động làm mới danh mục Storage sau khi khởi động xong để bảo đảm hiện Thẻ SD
+        RunOnUiThread(() =>
+        {
+            try
+            {
+                App.SharedMainViewModel?.LibraryVm?.LoadStorageItems();
+            }
+            catch { }
+        });
     }
 
     private void LaunchComicReaderTask(ViewModels.ComicReaderViewModel readerVm)
@@ -239,6 +254,14 @@ public class MainActivity : AvaloniaMainActivity
     protected override void OnResume()
     {
         base.OnResume();
+        CurrentInstance = this;
+
+        // Tự động làm mới danh sách Thẻ SD & Storage khi người dùng quay lại từ màn hình Cài đặt cấp quyền
+        try
+        {
+            App.SharedMainViewModel?.LibraryVm?.LoadStorageItems();
+        }
+        catch { }
     }
 
     protected override void OnPause()

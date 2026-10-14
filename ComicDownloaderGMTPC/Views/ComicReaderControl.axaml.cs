@@ -1234,45 +1234,12 @@ public partial class ComicReaderControl : UserControl
         var scrollViewer = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
         Vector oldOffset = scrollViewer?.Offset ?? Vector.Zero;
 
-        // Trong Cuộn dọc: Trang mục tiêu luôn luôn là trang hiện tại đang đọc (savedPageIndex),
-        // tuyệt đối KHÔNG cho phép Double-Tap tua hoặc đổi sang trang khác!
-        int targetPageIndex = savedPageIndex;
-        double fractionY = 0.5;
-        double targetContainerHeight = Bounds.Height > 0 ? Bounds.Height : 600.0;
-
         var lb = this.FindControl<ListBox>("ReaderPagesListBox");
         Point touchInLb = releasePoint;
         if (lb != null)
         {
             var ptInLb = this.TranslatePoint(releasePoint, lb);
             if (ptInLb.HasValue) touchInLb = ptInLb.Value;
-        }
-
-        if (vm.IsScrollMode && !vm.IsHorizontalScrollMode && lb != null)
-        {
-            // Tìm container của chính trang hiện tại (savedPageIndex) để tính tỷ lệ chạm cục bộ
-            bool foundCurrentContainer = false;
-            foreach (var child in lb.GetVisualDescendants())
-            {
-                if (child is ListBoxItem container && container.DataContext is ReaderPageItem page && page.Index == savedPageIndex)
-                {
-                    var pos = container.TranslatePoint(new Point(0, 0), lb);
-                    if (pos.HasValue)
-                    {
-                        double top = pos.Value.Y;
-                        targetContainerHeight = Math.Max(100.0, container.Bounds.Height);
-                        fractionY = Math.Clamp((touchInLb.Y - top) / targetContainerHeight, 0.0, 1.0);
-                        foundCurrentContainer = true;
-                    }
-                    break;
-                }
-            }
-
-            // Nếu container trang hiện tại chưa được render hoặc nằm ngoài tầm, fallback theo vị trí viewport
-            if (!foundCurrentContainer && lb.Bounds.Height > 10)
-            {
-                fractionY = Math.Clamp(touchInLb.Y / lb.Bounds.Height, 0.0, 1.0);
-            }
         }
 
         _isDoubleTapZooming = true;
@@ -1283,35 +1250,26 @@ public partial class ComicReaderControl : UserControl
         vm.ExecuteDoubleTapZoom(true);
 
         double newZoom = vm.ZoomLevel;
+        double ratio = (oldZoom > 0.05) ? (newZoom / oldZoom) : 1.0;
 
         if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
         {
-            // Tính toán đỉnh tích lũy tuyệt đối của trang mục tiêu (Cumulative Content Top Offset)
-            double newContentTop = 0;
-            for (int i = 0; i < targetPageIndex && i < vm.Pages.Count; i++)
-            {
-                var p = vm.Pages[i];
-                newContentTop += p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom;
-            }
+            // Nguyên lý Bất biến Điểm chạm Nội dung (Content Anchor Invariance):
+            // Tọa độ Y tuyệt đối trên toàn bộ dải trang trước khi zoom
+            double contentYBefore = oldOffset.Y + touchInLb.Y;
+            // Tọa độ Y tuyệt đối trên dải trang sau khi zoom
+            double contentYAfter = contentYBefore * ratio;
+            // Vị trí cuộn Offset mới để điểm chạm tiếp tục nằm chính xác dưới ngón tay người dùng
+            double targetOffsetY = Math.Max(0, contentYAfter - touchInLb.Y);
 
-            double newPageHeight = (targetPageIndex >= 0 && targetPageIndex < vm.Pages.Count)
-                ? vm.Pages[targetPageIndex].DisplayHeight
-                : targetContainerHeight;
+            // Tương tự cho trục X khi phóng to ngang
+            double contentXBefore = oldOffset.X + touchInLb.X;
+            double contentXAfter = contentXBefore * ratio;
+            double targetOffsetX = Math.Max(0, contentXAfter - touchInLb.X);
 
-            double desiredTopInViewport = touchInLb.Y - fractionY * newPageHeight;
-            double targetOffsetY = Math.Max(0, newContentTop - desiredTopInViewport);
-
-            double targetOffsetX = 0;
-            if (newZoom > 1.02 && targetPageIndex >= 0 && targetPageIndex < vm.Pages.Count && lb != null)
-            {
-                double newPageWidth = vm.Pages[targetPageIndex].DisplayWidth;
-                double vw = lb.Bounds.Width;
-                if (newPageWidth > vw && vw > 10)
-                {
-                    double fx = Math.Clamp(touchInLb.X / vw, 0.0, 1.0);
-                    targetOffsetX = Math.Max(0, fx * newPageWidth - touchInLb.X);
-                }
-            }
+            // Trang mục tiêu luôn luôn là trang hiện tại đang đọc (savedPageIndex),
+            // tuyệt đối KHÔNG cho phép Double-Tap tua hoặc đổi sang trang khác!
+            int targetPageIndex = savedPageIndex;
 
             Dispatcher.UIThread.Post(() =>
             {
@@ -1336,34 +1294,14 @@ public partial class ComicReaderControl : UserControl
                 var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
                 if (sv != null)
                 {
-                    double ratio = (oldZoom > 0.05) ? (newZoom / oldZoom) : 1.0;
                     double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
                     double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
-
-                    if (newZoom > oldZoom && oldZoom > 0.05)
-                    {
-                        double targetX = (oldOffset.X + releasePoint.X) * ratio - releasePoint.X;
-                        double targetY = (oldOffset.Y + releasePoint.Y) * ratio - releasePoint.Y;
-                        sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), Math.Clamp(targetY, 0, maxY));
-                    }
-                    else if (newZoom < oldZoom)
-                    {
-                        if (vm.IsScrollMode)
-                        {
-                            var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
-                            if (listBox != null && targetPageIndex >= 0 && targetPageIndex < vm.Pages.Count)
-                            {
-                                try { listBox.ScrollIntoView(vm.Pages[targetPageIndex]); } catch { }
-                            }
-                        }
-                        else if (vm.IsFlipMode)
-                        {
-                            sv.Offset = new Vector(0, 0);
-                        }
-                    }
+                    double targetX = (oldOffset.X + releasePoint.X) * ratio - releasePoint.X;
+                    double targetY = (oldOffset.Y + releasePoint.Y) * ratio - releasePoint.Y;
+                    sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), Math.Clamp(targetY, 0, maxY));
                 }
 
-                vm.CurrentPageIndex = targetPageIndex;
+                vm.CurrentPageIndex = savedPageIndex;
                 _isDoubleTapZooming = false;
                 _isProgrammaticScroll = false;
                 _suppressScrollChangedUntilTick = Environment.TickCount64 + 250;

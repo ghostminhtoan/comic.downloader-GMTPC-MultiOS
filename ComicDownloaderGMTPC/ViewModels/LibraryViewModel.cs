@@ -438,7 +438,7 @@ public partial class LibraryViewModel : ViewModelBase
                 string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
                 if (!string.IsNullOrWhiteSpace(normalized) && File.Exists(normalized))
                 {
-                    var quickComic = _scanner.CreateQuickComicFromPath(normalized);
+                    var quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(normalized));
                     if (quickComic != null && quickComic.Chapters.Count > 0)
                     {
                         ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
@@ -994,73 +994,33 @@ public partial class LibraryViewModel : ViewModelBase
                             }
 
                             var di = new DirectoryInfo(d);
-                            bool hasDirectImages = false;
+                            string label = "Thư mục";
+                            string icon = "📁";
+                            string iconCol = "#A78BFA";
 
-                            try
-                            {
-                                // Kiểm tra nông cực nhanh: chỉ tìm 1 file ảnh đầu tiên là đủ
-                                hasDirectImages = di.EnumerateFiles("*", enumOptions)
-                                    .Any(f => LibraryScannerService.IsImageFile(f.FullName));
-                            }
-                            catch { }
-
-                            bool isComicSeriesFolder = false;
-                            bool hasComicFiles = false;
-                            if (!hasDirectImages)
+                            // Kiểm tra siêu tốc (Non-blocking): chỉ thử tìm tối đa 1 file ảnh đầu tiên nếu không phải Android hoặc danh sách nhỏ
+                            if (!OperatingSystem.IsAndroid() && list.Count < 30)
                             {
                                 try
                                 {
-                                    // Kiểm tra xem folder có chứa file truyện nén (.cbz, .zip, .pdf) không
-                                    hasComicFiles = di.EnumerateFiles("*", enumOptions)
-                                        .Take(3)
-                                        .Any(f => LibraryScannerService.IsArchiveFile(f.FullName) || LibraryScannerService.IsPdfFile(f.FullName));
-
-                                    // Chỉ kiểm tra 1 subfolder đầu tiên xem có truyện không
-                                    if (!hasComicFiles)
+                                    bool hasDirectImages = di.EnumerateFiles("*", enumOptions)
+                                        .Any(f => LibraryScannerService.IsImageFile(f.FullName));
+                                    if (hasDirectImages)
                                     {
-                                        var firstSub = di.EnumerateDirectories("*", enumOptions).FirstOrDefault();
-                                        if (firstSub != null)
-                                        {
-                                            isComicSeriesFolder = firstSub.EnumerateFiles("*", enumOptions)
-                                                .Take(3)
-                                                .Any(f => LibraryScannerService.IsImageFile(f.FullName) || LibraryScannerService.IsArchiveFile(f.FullName));
-                                        }
+                                        label = "Chương truyện";
+                                        icon = "🖼️";
+                                        iconCol = "#10B981";
+                                        chapterFoldersCount++;
                                     }
                                 }
                                 catch { }
-                            }
-
-                            bool canReadFolder = hasDirectImages || isComicSeriesFolder || hasComicFiles;
-                            if (hasDirectImages) chapterFoldersCount++;
-                            else if (isComicSeriesFolder || hasComicFiles) chapterFoldersCount++;
-
-                            string label;
-                            string icon;
-                            string iconCol;
-                            if (hasDirectImages)
-                            {
-                                label = "Chương truyện";
-                                icon = "🖼️";
-                                iconCol = "#10B981";
-                            }
-                            else if (isComicSeriesFolder || hasComicFiles)
-                            {
-                                label = "Bộ truyện";
-                                icon = "📚";
-                                iconCol = "#38BDF8";
-                            }
-                            else
-                            {
-                                label = "Thư mục";
-                                icon = "📁";
-                                iconCol = "#A78BFA";
                             }
 
                             list.Add(new DirectoryItemModel
                             {
                                 IsFolder = true,
                                 IsImageFile = false,
-                                CanReadDirectly = canReadFolder,
+                                CanReadDirectly = true,
                                 Name = name,
                                 FullPath = d,
                                 ItemCountOrSize = label,
@@ -1497,7 +1457,7 @@ public partial class LibraryViewModel : ViewModelBase
         }
         if (string.IsNullOrWhiteSpace(comicPath)) return;
 
-        var comic = _scanner.CreateQuickComicFromPath(comicPath);
+        var comic = await Task.Run(() => _scanner.CreateQuickComicFromPath(comicPath));
         if (comic == null || comic.Chapters.Count == 0) return;
 
         LibraryChapterItem? targetChapter = null;
@@ -1589,7 +1549,7 @@ public partial class LibraryViewModel : ViewModelBase
                 }
             }
 
-            var quickComic = _scanner.CreateQuickComicFromPath(actualComicPath);
+            var quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(actualComicPath));
             if (quickComic != null && quickComic.Chapters.Count > 0)
             {
                 ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);

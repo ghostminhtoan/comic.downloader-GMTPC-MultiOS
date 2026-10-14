@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
@@ -170,19 +171,32 @@ public class ComicReaderActivity : AvaloniaActivity
 
             if (!string.IsNullOrWhiteSpace(comicRoot))
             {
-                var comic = LibraryScannerService.Instance.CreateQuickComicFromPath(comicRoot);
-                if (comic != null && comic.Chapters.Count > 0)
-                {
-                    var targetChap = (!string.IsNullOrWhiteSpace(chapterPath)
-                        ? comic.Chapters.FirstOrDefault(c => string.Equals(c.LocalPath, chapterPath, StringComparison.OrdinalIgnoreCase))
-                        : null)
-                        ?? comic.GetBestResumeChapter()
-                        ?? comic.Chapters[0];
+                activeVm = new ComicReaderViewModel();
+                ComicReaderService.Instance.ActiveExternalReaderViewModel = activeVm;
+                AttachViewModel(activeVm);
 
-                    activeVm = new ComicReaderViewModel();
-                    ComicReaderService.Instance.ActiveExternalReaderViewModel = activeVm;
-                    _ = activeVm.InitializeAsync(comic, targetChap);
-                }
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var comic = LibraryScannerService.Instance.CreateQuickComicFromPath(comicRoot);
+                        if (comic != null && comic.Chapters.Count > 0)
+                        {
+                            var targetChap = (!string.IsNullOrWhiteSpace(chapterPath)
+                                ? comic.Chapters.FirstOrDefault(c => string.Equals(c.LocalPath, chapterPath, StringComparison.OrdinalIgnoreCase))
+                                : null)
+                                ?? comic.GetBestResumeChapter()
+                                ?? comic.Chapters[0];
+
+                            await activeVm.InitializeAsync(comic, targetChap);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi khôi phục phiên đọc: {ex.Message}");
+                    }
+                });
+                return;
             }
         }
 
