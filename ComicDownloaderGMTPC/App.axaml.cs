@@ -123,7 +123,7 @@ public partial class App : Application
         await Task.Delay(2500);
         Console.WriteLine($"[TEST] Stabilized at CurrentPageIndex = {readerVm.CurrentPageIndex}, ZoomLevel = {readerVm.ZoomLevel * 100:0}%");
 
-        // Thực hiện Double-Tap 10 lần, mỗi lần cách nhau 3 giây
+        // Thực hiện Double-Tap liên tục 10 lần với tốc độ cao (350ms giữa các lần gõ) để chứng minh KHÔNG CÒN DELAY!
         var traceLogs = new List<string>();
         bool allPassed = true;
 
@@ -136,15 +136,18 @@ public partial class App : Application
             Point tapPoint = new Point(window.Bounds.Width / 2.0, window.Bounds.Height / 2.0);
             readerControl.PerformDoubleTapZoom(tapPoint);
 
-            // Chờ đúng 3 giây theo yêu cầu của user
-            await Task.Delay(3000);
+            // Chờ cực ngắn 350ms (Double-Tap liên tục siêu tốc) để kiểm chứng không bị delay!
+            await Task.Delay(350);
 
             double postZoom = readerVm.ZoomLevel;
             int postIndex = readerVm.CurrentPageIndex;
-            bool pass = (postIndex == 2);
+            double expectedZoom = (step % 2 == 1) ? 1.25 : 1.0;
+            bool zoomMatched = Math.Abs(postZoom - expectedZoom) < 0.05;
+            bool pageMatched = (postIndex == 2);
+            bool pass = zoomMatched && pageMatched;
             if (!pass) allPassed = false;
 
-            string logLine = $"[DOUBLETAP TRACE {step:D2}/10] PreZoom={preZoom * 100:0}% -> PostZoom={postZoom * 100:0}% | PrePage={preIndex} -> PostPage={postIndex} (Expected=2) -> {(pass ? "PASS ✅" : "FAIL ❌ LECH TRANG!")}";
+            string logLine = $"[RAPID DOUBLETAP TRACE {step:D2}/10] PreZoom={preZoom * 100:0}% -> PostZoom={postZoom * 100:0}% (Expected={expectedZoom * 100:0}%) | PrePage={preIndex} -> PostPage={postIndex} (Expected=2) -> {(pass ? "PASS ✅ KHÔNG DELAY, KHÔNG LỆCH TRANG" : "FAIL ❌")}";
             Console.WriteLine(logLine);
             traceLogs.Add(logLine);
         }

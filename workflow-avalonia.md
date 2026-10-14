@@ -3094,3 +3094,31 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Chạy `build-avalonia.bat` đóng gói toàn bộ các gói cài đặt.
   - Chạy `python upload_beta_browser.py`: Tự động upload 100% lên GitHub Release Beta.
 
+### 15.96 Triệt Tiêu Hoàn Toàn Độ Trễ (Delay) Khi Double-Tap Liên Tục & Kiểm Thử Tự Động Siêu Tốc 350ms (2026-10-14)
+- **Bối Cảnh & Phân Tích Nguyên Nhân Gốc Rễ (`Root-Cause Analysis`)**:
+  1. *Lỗi Drop Con Trỏ Do Phép Trừ Thời Gian Âm*:
+     - Trước đây, trong `PerformDoubleTapZoom`, code gán `_lastPinchEndTick = Environment.TickCount64 + 2000;` nhằm ngăn chặn sự kiện cuộn.
+     - Tuy nhiên, trong `OnViewportPointerReleased`, có đoạn kiểm tra chống nảy chạm vô ý khi vừa nhấc tay sau cử chỉ Pinch zoom:
+       `if (now - _lastPinchEndTick < 200) { _isPointerTapCandidate = false; return; }`
+     - Khi `_lastPinchEndTick` được gán mốc thời gian trong tương lai (`now + 2000`), phép trừ `now - _lastPinchEndTick` mang giá trị âm (ví dụ: `-1800ms`), và hiển nhiên `-1800 < 200` luôn đúng!
+     - Hệ quả: Toàn bộ các cú chạm ngón tay tiếp theo của người dùng trong suốt 1 đến 2 giây sau đó đều bị DROP ngay lập tức tại đầu hàm `OnViewportPointerReleased`, khiến người dùng cảm thấy bị "đơ/delay" và không thể gõ Double-Tap liên tục được!
+  2. *Độ trễ do Dispatcher lồng nhau Background*:
+     - Việc phân bổ qua `Loaded` rồi lồng thêm `Background` làm tăng độ trễ render, kéo dài thời gian mở khóa cờ `_isDoubleTapZooming`.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Cô Lập Hoàn Toàn Cờ Chống Trôi Cuộn (`_suppressScrollChangedUntilTick`)**:
+     - Tách riêng biến `_suppressScrollChangedUntilTick = Environment.TickCount64 + 400;` dành riêng cho việc bảo vệ `OnReaderScrollChanged`.
+     - Xóa bỏ 100% việc gán `_lastPinchEndTick` trong `PerformDoubleTapZoom`.
+     - Sửa điều kiện nhả tay sau Pinch: `long pinchElapsed = now - _lastPinchEndTick; if (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 200)`, triệt tiêu hoàn toàn lỗi số âm.
+  2. **Tối Ưu Chu Trình Render Không Độ Trễ (Zero-Delay Single-Frame Dispatch)**:
+     - Chuyển việc áp dụng Offset và mở khóa `_isDoubleTapZooming = false; _isProgrammaticScroll = false;` thực thi trực tiếp tại `DispatcherPriority.Render` (~16ms).
+     - Cho phép người dùng chạm đúp liên tục bao nhiêu lần tùy thích (Double-Tap in rồi Double-Tap out ngay tức thì) mà không hề có bất kỳ độ trễ nào.
+  3. **Kiểm Thử Tự Động Siêu Tốc 350ms (`--test-vertical-doubletap`)**:
+     - Kịch bản test chạy trên file ZIP 200 chap `độc thủ vu y chap 001-200.zip` (Chapter 1, 65 trang), cuộn xuống trang 2, thực hiện 10 lần Double-Tap liên tục với khoảng cách chỉ 350ms.
+     - Kết quả kiểm thử: **10/10 lần PASS ✅, chuyển đổi Zoom 100% ↔ 125% tức thì, CurrentPageIndex = 2 bảo toàn tuyệt đối 100%, ZERO DELAY, ZERO DRIFT**!
+- **Nghiệm Thu, Đóng Gói & Upload Beta**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)**.
+  - Test khởi động app: `Responding = True, HasExited = False`.
+  - Chạy `build-avalonia.bat` đóng gói toàn bộ các gói cài đặt.
+  - Chạy `python upload_beta_browser.py`: Tự động upload 100% lên GitHub Release Beta.
+
+

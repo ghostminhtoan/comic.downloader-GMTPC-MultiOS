@@ -24,6 +24,7 @@ public partial class ComicReaderControl : UserControl
     private bool _isDoubleTapZooming;
     private int _scrollRequestVersion;
     private long _lastUserScrollInputTick;
+    private long _suppressScrollChangedUntilTick;
 
     // Trạng thái Hold & Drag để Scroll (Pan-Drag Engine mượt mà mọi vùng)
     private Point _panStartPoint;
@@ -684,7 +685,11 @@ public partial class ComicReaderControl : UserControl
 
     private void OnReaderScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_isProgrammaticScroll || _isUserDraggingScrubber || _isDoubleTapZooming || _isPinching || (Environment.TickCount64 - _lastPinchEndTick < 800)) return;
+        long now = Environment.TickCount64;
+        long pinchElapsed = now - _lastPinchEndTick;
+        if (_isProgrammaticScroll || _isUserDraggingScrubber || _isDoubleTapZooming || _isPinching ||
+            now < _suppressScrollChangedUntilTick ||
+            (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 400)) return;
         if (DataContext is not ComicReaderViewModel vm || !vm.IsScrollMode || vm.Pages.Count == 0) return;
 
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
@@ -1125,8 +1130,9 @@ public partial class ComicReaderControl : UserControl
         }
 
         long now = Environment.TickCount64;
-        // Bỏ qua cú nhả tay nếu vừa kết thúc pinch trong vòng 200ms để chống nảy chạm vô ý
-        if (now - _lastPinchEndTick < 200)
+        long pinchElapsed = now - _lastPinchEndTick;
+        // Bỏ qua cú nhả tay nếu vừa kết thúc pinch 2 ngón tay trong vòng 200ms để chống nảy chạm vô ý
+        if (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 200)
         {
             _isPanHolding = false;
             _isPanDragging = false;
@@ -1271,7 +1277,7 @@ public partial class ComicReaderControl : UserControl
 
         _isDoubleTapZooming = true;
         _isProgrammaticScroll = true;
-        _lastPinchEndTick = Environment.TickCount64 + 2000;
+        _suppressScrollChangedUntilTick = Environment.TickCount64 + 400;
 
         // Kích hoạt Double-Tap Zoom in / out trên mọi vùng (true = không phụ thuộc vùng ảnh)
         vm.ExecuteDoubleTapZoom(true);
@@ -1318,22 +1324,10 @@ public partial class ComicReaderControl : UserControl
                 }
 
                 vm.CurrentPageIndex = targetPageIndex;
-                _lastPinchEndTick = Environment.TickCount64 + 1000;
-
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (sv != null)
-                    {
-                        double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
-                        double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
-                        sv.Offset = new Vector(Math.Clamp(targetOffsetX, 0, maxX), Math.Clamp(targetOffsetY, 0, maxY));
-                    }
-
-                    vm.CurrentPageIndex = targetPageIndex;
-                    _isDoubleTapZooming = false;
-                    _isProgrammaticScroll = false;
-                }, DispatcherPriority.Background);
-            }, DispatcherPriority.Loaded);
+                _isDoubleTapZooming = false;
+                _isProgrammaticScroll = false;
+                _suppressScrollChangedUntilTick = Environment.TickCount64 + 250;
+            }, DispatcherPriority.Render);
         }
         else
         {
@@ -1370,13 +1364,9 @@ public partial class ComicReaderControl : UserControl
                 }
 
                 vm.CurrentPageIndex = targetPageIndex;
-                _lastPinchEndTick = Environment.TickCount64;
-
-                Dispatcher.UIThread.Post(() =>
-                {
-                    _isDoubleTapZooming = false;
-                    _isProgrammaticScroll = false;
-                }, DispatcherPriority.Background);
+                _isDoubleTapZooming = false;
+                _isProgrammaticScroll = false;
+                _suppressScrollChangedUntilTick = Environment.TickCount64 + 250;
             }, DispatcherPriority.Render);
         }
     }
