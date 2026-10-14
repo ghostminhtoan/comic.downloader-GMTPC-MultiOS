@@ -106,123 +106,130 @@
         <!-- ========================================================================= -->
         <Panel x:Name="ReaderViewportPanel" Background="{Binding ReaderBackgroundColor}">
 
-            <!-- A. CHẾ ĐỘ CUỘN (SCROLL MODE - DỌC WEBTOON & NGANG LIÊN TIẾP) -->
-            <ListBox x:Name="ReaderPagesListBox"
-                     IsVisible="{Binding IsScrollMode}"
-                     Classes.horizontalMode="{Binding IsHorizontalScrollMode}"
-                     FlowDirection="{Binding ReaderFlowDirection}"
-                     ItemsSource="{Binding Pages}"
-                     Background="{Binding ReaderBackgroundColor}"
-                     BorderThickness="0"
-                     Padding="0"
-                     Focusable="False"
-                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto">
-                <ListBox.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <VirtualizingStackPanel Orientation="{Binding PageScrollOrientation}" />
-                    </ItemsPanelTemplate>
-                </ListBox.ItemsPanel>
-                <ListBox.Styles>
-                    <Style Selector="ListBox.horizontalMode">
-                        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
-                        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
-                    </Style>
-                    <Style Selector="ListBox.horizontalMode VirtualizingStackPanel">
-                        <Setter Property="Orientation" Value="Horizontal" />
-                    </Style>
-                    <Style Selector="ListBoxItem">
-                        <Setter Property="Padding" Value="0" />
-                        <Setter Property="Margin" Value="0" />
-                        <Setter Property="Background" Value="Transparent" />
-                        <Setter Property="Focusable" Value="False" />
-                        <Setter Property="HorizontalContentAlignment" Value="Center" />
-                        <Setter Property="VerticalContentAlignment" Value="Center" />
-                    </Style>
-                    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                        <Setter Property="Background" Value="Transparent" />
-                    </Style>
-                    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                        <Setter Property="Background" Value="Transparent" />
-                    </Style>
-                </ListBox.Styles>
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="models:ReaderPageItem">
-                        <Panel HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Width="{Binding DisplayWidth}"
-                               Height="{Binding DisplayHeight}"
-                               Margin="{Binding PageMargin}"
-                               MinHeight="240"
-                               Background="Transparent"
-                               ClipToBounds="True"
-                               AttachedToVisualTree="OnPageContainerAttached">
-                            <!-- Khung chờ khi trang đang giải mã -->
-                            <Border Background="#0B1120" BorderBrush="#1E293B" BorderThickness="0,0,0,1"
-                                    HorizontalAlignment="Stretch"
-                                    VerticalAlignment="Stretch"
-                                    IsVisible="{Binding !HasImage}">
-                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
-                                    <TextBlock Text="{Binding DisplayPageNumber, StringFormat='⏳ Đang tải trang {0}...'}"
-                                               Foreground="#4FC3F7" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" />
-                                    <TextBlock Text="{Binding Title}" Foreground="#64748B" FontSize="11" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Border>
+            <!-- Khung chứa nội dung đọc truyện có viền phân cách cố định (Page Dividing Fixed Border chuẩn Comic Screen) -->
+            <Panel x:Name="ReaderContentContainer"
+                   Margin="{Binding FixedDividingPadding}"
+                   ClipToBounds="True">
 
-                            <!-- Ảnh trang truyện -->
-                            <Image Source="{Binding Image}"
-                                   IsVisible="{Binding HasImage}"
-                                   Stretch="{Binding ImageStretch}"
-                                   HorizontalAlignment="Center"
+                <!-- A. CHẾ ĐỘ CUỘN (SCROLL MODE - DỌC WEBTOON & NGANG LIÊN TIẾP) -->
+                <ListBox x:Name="ReaderPagesListBox"
+                         IsVisible="{Binding IsScrollMode}"
+                         Classes.horizontalMode="{Binding IsHorizontalScrollMode}"
+                         FlowDirection="{Binding ReaderFlowDirection}"
+                         ItemsSource="{Binding Pages}"
+                         Background="{Binding ReaderBackgroundColor}"
+                         BorderThickness="0"
+                         Padding="0"
+                         Focusable="False"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel Orientation="{Binding PageScrollOrientation}" />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.Styles>
+                        <Style Selector="ListBox.horizontalMode">
+                            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+                            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+                        </Style>
+                        <Style Selector="ListBox.horizontalMode VirtualizingStackPanel">
+                            <Setter Property="Orientation" Value="Horizontal" />
+                        </Style>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="Focusable" Value="False" />
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                        </Style>
+                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="Transparent" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                            <Setter Property="Background" Value="Transparent" />
+                        </Style>
+                    </ListBox.Styles>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:ReaderPageItem">
+                            <Panel HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
-                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
-                        </Panel>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+                                   Width="{Binding DisplayWidth}"
+                                   Height="{Binding DisplayHeight}"
+                                   Margin="{Binding PageMargin}"
+                                   MinHeight="240"
+                                   Background="Transparent"
+                                   ClipToBounds="True"
+                                   AttachedToVisualTree="OnPageContainerAttached">
+                                <!-- Khung chờ khi trang đang giải mã -->
+                                <Border Background="#0B1120" BorderBrush="#1E293B" BorderThickness="0,0,0,1"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        IsVisible="{Binding !HasImage}">
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
+                                        <TextBlock Text="{Binding DisplayPageNumber, StringFormat='⏳ Đang tải trang {0}...'}"
+                                                   Foreground="#4FC3F7" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" />
+                                        <TextBlock Text="{Binding Title}" Foreground="#64748B" FontSize="11" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
 
-            <!-- B. CHẾ ĐỘ LẬT TRANG (FLIP MODE - HỖ TRỢ 1 TRANG / 2 TRANG & RTL) -->
-            <ScrollViewer x:Name="FlipModeScrollViewer"
-                          IsVisible="{Binding IsFlipMode}"
-                          HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Auto"
-                          Background="{Binding ReaderBackgroundColor}">
-                <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <LayoutTransformControl.LayoutTransform>
-                        <ScaleTransform ScaleX="{Binding ZoomLevel}" ScaleY="{Binding ZoomLevel}" />
-                    </LayoutTransformControl.LayoutTransform>
+                                <!-- Ảnh trang truyện -->
+                                <Image Source="{Binding Image}"
+                                       IsVisible="{Binding HasImage}"
+                                       Stretch="{Binding ImageStretch}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                            </Panel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
 
-                    <UniformGrid Columns="{Binding FlipGridColumns}" Rows="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <!-- Trang Trái (hoặc Trang Đơn) -->
-                        <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}">
-                            <Border Background="#0B1120" MinWidth="260" MinHeight="360" CornerRadius="6"
-                                    IsVisible="{Binding LeftFlipPage.HasImage, Converter={x:Static BoolConverters.Not}, FallbackValue=True}">
-                                <TextBlock Text="⏳ Đang nạp trang..." Foreground="#4FC3F7" FontSize="14" FontWeight="Bold"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <Image Source="{Binding LeftFlipPage.Image}"
-                                   Width="{Binding FlipDisplayWidth}"
-                                   Height="{Binding FlipDisplayHeight}"
-                                   Stretch="{Binding FlipImageStretch}"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
-                        </Panel>
+                <!-- B. CHẾ ĐỘ LẬT TRANG (FLIP MODE - HỖ TRỢ 1 TRANG / 2 TRANG & RTL) -->
+                <ScrollViewer x:Name="FlipModeScrollViewer"
+                              IsVisible="{Binding IsFlipMode}"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              Background="{Binding ReaderBackgroundColor}">
+                    <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <LayoutTransformControl.LayoutTransform>
+                            <ScaleTransform ScaleX="{Binding ZoomLevel}" ScaleY="{Binding ZoomLevel}" />
+                        </LayoutTransformControl.LayoutTransform>
 
-                        <!-- Trang Phải (chỉ hiện khi bật 2 Trang Kép) -->
-                        <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}"
-                               IsVisible="{Binding HasSecondaryPage}">
-                            <Image Source="{Binding RightFlipPage.Image}"
-                                   Width="{Binding FlipDisplayWidth}"
-                                   Height="{Binding FlipDisplayHeight}"
-                                   Stretch="{Binding FlipImageStretch}"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
-                        </Panel>
-                    </UniformGrid>
-                </LayoutTransformControl>
-            </ScrollViewer>
+                        <UniformGrid Columns="{Binding FlipGridColumns}" Rows="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <!-- Trang Trái (hoặc Trang Đơn) -->
+                            <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}">
+                                <Border Background="#0B1120" MinWidth="260" MinHeight="360" CornerRadius="6"
+                                        IsVisible="{Binding LeftFlipPage.HasImage, Converter={x:Static BoolConverters.Not}, FallbackValue=True}">
+                                    <TextBlock Text="⏳ Đang nạp trang..." Foreground="#4FC3F7" FontSize="14" FontWeight="Bold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Image Source="{Binding LeftFlipPage.Image}"
+                                       Width="{Binding FlipDisplayWidth}"
+                                       Height="{Binding FlipDisplayHeight}"
+                                       Stretch="{Binding FlipImageStretch}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                            </Panel>
+
+                            <!-- Trang Phải (chỉ hiện khi bật 2 Trang Kép) -->
+                            <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}"
+                                   IsVisible="{Binding HasSecondaryPage}">
+                                <Image Source="{Binding RightFlipPage.Image}"
+                                       Width="{Binding FlipDisplayWidth}"
+                                       Height="{Binding FlipDisplayHeight}"
+                                       Stretch="{Binding FlipImageStretch}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                            </Panel>
+                        </UniformGrid>
+                    </LayoutTransformControl>
+                </ScrollViewer>
+
+            </Panel>
 
             <!-- C. LỚP PHỦ ĐỘ SÁNG ẢNH (IMAGE BRIGHTNESS OVERLAY) -->
             <Border IsVisible="{Binding IsImageBrightnessOverlayVisible}"
@@ -1198,7 +1205,7 @@
                         </Grid>
 
                         <Slider Classes="comicSlider"
-                                Minimum="-40" Maximum="50"
+                                Minimum="0" Maximum="50"
                                 Value="{Binding PageSpacingPercent}" />
 
                         <Button Command="{Binding OpenPageButtonAreaPopupCommand}"

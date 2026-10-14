@@ -67,6 +67,7 @@ public partial class ComicReaderControl : UserControl
     private double _pinchLastDistance;
     private double _pinchStartZoom;
     private Point _pinchPivot;
+    private long _lastPinchEndTick;
 
     private static double Distance(Point p1, Point p2)
     {
@@ -835,13 +836,14 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
-        // Ngưỡng kéo: 3.5 pixel để đạt độ nhạy tức thì (Zero Lag) và mượt mà tuyệt đối
+        // Ngưỡng kéo (Touch Slop): 12.0 pixel để phân biệt rõ ràng giữa chạm ngón tay (Tap) và kéo rê (Pan)
+        // Tránh tình trạng vi rung lắc của ngón tay trên màn hình cảm ứng nuốt mất sự kiện Single-Tap
         if (!_isPanDragging)
         {
-            if (totalDist >= 3.5)
+            if (totalDist >= 12.0)
             {
                 _isPanDragging = true;
-                _isPointerTapCandidate = false; // Đã kéo thì tuyệt đối không phải là Tap
+                _isPointerTapCandidate = false; // Đã kéo quá ngưỡng slop thì mới hủy Tap
                 var viewport = sender as IInputElement ?? this;
                 e.Pointer.Capture(viewport);
 
@@ -914,6 +916,7 @@ public partial class ComicReaderControl : UserControl
 
         if (_isPinching)
         {
+            _lastPinchEndTick = Environment.TickCount64;
             if (_activePointers.Count < 2)
             {
                 _isPinching = false;
@@ -921,16 +924,28 @@ public partial class ComicReaderControl : UserControl
                 _isPanDragging = false;
                 _isPointerTapCandidate = false;
 
-                if (_activePointers.Count == 1)
+                if (_activePointers.Count == 0)
                 {
-                    var remaining = System.Linq.Enumerable.First(_activePointers.Values);
-                    _panStartPoint = remaining;
-                    _panLastPoint = remaining;
-                    _lastPanMoveTick = Environment.TickCount64;
+                    _activePointers.Clear();
                 }
                 e.Handled = true;
                 return;
             }
+        }
+
+        if (_activePointers.Count == 0)
+        {
+            _isPinching = false;
+        }
+
+        // Bỏ qua cú nhả tay nếu vừa kết thúc pinch trong vòng 250ms để chống nảy chạm vô ý
+        if (Environment.TickCount64 - _lastPinchEndTick < 250)
+        {
+            _isPanHolding = false;
+            _isPanDragging = false;
+            _isPointerTapCandidate = false;
+            e.Handled = true;
+            return;
         }
 
         _cumulativeOverscrollX = 0;

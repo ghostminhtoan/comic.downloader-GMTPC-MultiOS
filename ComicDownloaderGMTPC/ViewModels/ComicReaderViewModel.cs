@@ -607,17 +607,47 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
     }
 
+    public Thickness FixedDividingPadding
+    {
+        get
+        {
+            if (!IsPageSpacingEnabled || PageSpacingPercent <= 0.01)
+                return new Thickness(0);
+
+            double vw = Math.Max(240, _viewportWidth);
+            double vh = Math.Max(240, _viewportHeight);
+
+            if (IsScrollMode && !IsHorizontalScrollMode)
+            {
+                // Vertical Scroll: tăng viền cố định 2 bên Trái / Phải (Ảnh 1)
+                // PageSpacingPercent từ 0% đến 50% -> mỗi bên chiếm tối đa ~22.5% vw (tổng 45% vw)
+                double hPad = Math.Round(vw * (PageSpacingPercent / 100.0) * 0.45);
+                return new Thickness(hPad, 0, hPad, 0);
+            }
+            else
+            {
+                // Horizontal Scroll hoặc Flip Mode: tăng viền cố định Trên / Dưới (Ảnh 2)
+                // PageSpacingPercent từ 0% đến 50% -> trên/dưới mỗi bên chiếm tối đa ~20% vh (tổng 40% vh)
+                double vPad = Math.Round(vh * (PageSpacingPercent / 100.0) * 0.40);
+                return new Thickness(0, vPad, 0, vPad);
+            }
+        }
+    }
+
     public double FlipDisplayWidth
     {
         get
         {
             double vw = Math.Max(240, _viewportWidth);
-            double singlePageVw = (IsDoublePage && SecondaryPage != null) ? Math.Max(120, vw * 0.498) : vw;
-            if (IsPageSpacingEnabled && (IsDoublePage && SecondaryPage != null))
+            if (IsPageSpacingEnabled && PageSpacingPercent > 0.01)
             {
-                double hGap = Math.Round(vw * (Math.Abs(PageSpacingPercent) / 100.0) * 0.25);
-                singlePageVw = Math.Max(120, singlePageVw - hGap);
+                if (IsScrollMode && !IsHorizontalScrollMode)
+                {
+                    double hPad = Math.Round(vw * (PageSpacingPercent / 100.0) * 0.45);
+                    vw = Math.Max(120, vw - 2 * hPad);
+                }
             }
+            double singlePageVw = (IsDoublePage && SecondaryPage != null) ? Math.Max(120, vw * 0.498) : vw;
             if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitWidth)
             {
                 return Math.Round(singlePageVw * ZoomLevel);
@@ -631,10 +661,10 @@ public partial class ComicReaderViewModel : ViewModelBase
         get
         {
             double vh = Math.Max(240, _viewportHeight);
-            if (IsPageSpacingEnabled)
+            if (IsPageSpacingEnabled && PageSpacingPercent > 0.01)
             {
-                double heightRatio = Math.Clamp(1.0 - Math.Abs(PageSpacingPercent) / 100.0 * 0.45, 0.4, 1.0);
-                vh = Math.Round(vh * heightRatio);
+                double vPad = Math.Round(vh * (PageSpacingPercent / 100.0) * 0.40);
+                vh = Math.Max(120, vh - 2 * vPad);
             }
             if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitHeight)
             {
@@ -651,27 +681,25 @@ public partial class ComicReaderViewModel : ViewModelBase
     {
         double vw = Math.Max(240, _viewportWidth);
         double vh = Math.Max(240, _viewportHeight);
-        double singlePageVw = (IsFlipMode && IsDoublePage) ? Math.Max(120, vw * 0.498) : vw;
 
-        // Áp dụng Page Spacing nếu đang bật
-        if (IsPageSpacingEnabled)
+        // Áp dụng Page Dividing cố định nếu đang bật (chỉ giá trị dương)
+        if (IsPageSpacingEnabled && PageSpacingPercent > 0.01)
         {
             if (IsScrollMode && !IsHorizontalScrollMode)
             {
-                // Cuộn dọc: nếu PageSpacingPercent < 0 -> thu hẹp chiều rộng tạo lề đen 2 bên (Ảnh 1)
-                if (PageSpacingPercent < 0)
-                {
-                    double widthRatio = Math.Clamp(1.0 + PageSpacingPercent / 100.0, 0.4, 1.0);
-                    singlePageVw = Math.Round(singlePageVw * widthRatio);
-                }
+                // Cuộn dọc: thu hẹp chiều rộng khả dụng để tạo viền cố định 2 bên trái phải (Ảnh 1)
+                double hPad = Math.Round(vw * (PageSpacingPercent / 100.0) * 0.45);
+                vw = Math.Max(120, vw - 2 * hPad);
             }
-            else if (IsHorizontalScrollMode || IsFlipMode)
+            else
             {
-                // Cuộn ngang hoặc Lật trang: thu hẹp chiều cao tạo lề đen trên/dưới đỉnh đáy (Ảnh 2)
-                double heightRatio = Math.Clamp(1.0 - Math.Abs(PageSpacingPercent) / 100.0 * 0.45, 0.4, 1.0);
-                vh = Math.Round(vh * heightRatio);
+                // Cuộn ngang hoặc Lật trang: thu hẹp chiều cao khả dụng để tạo viền cố định trên dưới (Ảnh 2)
+                double vPad = Math.Round(vh * (PageSpacingPercent / 100.0) * 0.40);
+                vh = Math.Max(120, vh - 2 * vPad);
             }
         }
+
+        double singlePageVw = (IsFlipMode && IsDoublePage) ? Math.Max(120, vw * 0.498) : vw;
 
         foreach (var page in Pages)
         {
@@ -684,6 +712,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         OnPropertyChanged(nameof(FlipDisplayHeight));
         OnPropertyChanged(nameof(FlipImageStretch));
         OnPropertyChanged(nameof(FlipPageMargin));
+        OnPropertyChanged(nameof(FixedDividingPadding));
     }
 
     public void UpdateViewportDimensions(double width, double height)
@@ -1282,27 +1311,26 @@ public partial class ComicReaderViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Button8IconTint))]
     [NotifyPropertyChangedFor(nameof(FlipPageMargin))]
+    [NotifyPropertyChangedFor(nameof(FixedDividingPadding))]
     private bool _isPageSpacingEnabled = false;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PageSpacingFormattedText))]
     [NotifyPropertyChangedFor(nameof(FlipPageMargin))]
+    [NotifyPropertyChangedFor(nameof(FixedDividingPadding))]
     private double _pageSpacingPercent = 0.0;
 
     public string Button8IconTint => IsPageSpacingEnabled ? "#4FC3F7" : "#E2E8F0";
 
-    public string PageSpacingFormattedText =>
-        PageSpacingPercent < -0.05
-            ? $"- {Math.Abs(PageSpacingPercent):0.0} %"
-            : $"{PageSpacingPercent:0.0} %";
+    public string PageSpacingFormattedText => $"{Math.Max(0.0, PageSpacingPercent):0.0} %";
 
     public Thickness FlipPageMargin
     {
         get
         {
-            if (!IsPageSpacingEnabled) return new Thickness(2, 0);
-            double px = Math.Round(PageSpacingPercent * 0.8);
-            return new Thickness(Math.Max(-20, px), 0);
+            if (!IsPageSpacingEnabled || PageSpacingPercent <= 0.01) return new Thickness(2, 0);
+            double px = Math.Round(PageSpacingPercent * 0.5);
+            return new Thickness(Math.Max(0, px), 0);
         }
     }
 
@@ -1312,16 +1340,23 @@ public partial class ComicReaderViewModel : ViewModelBase
     partial void OnIsPageSpacingEnabledChanged(bool value)
     {
         ApplyFitModeLayout();
+        OnPropertyChanged(nameof(FixedDividingPadding));
     }
 
     partial void OnPageSpacingPercentChanged(double value)
     {
-        if (!IsPageSpacingEnabled && Math.Abs(value) > 0.2)
+        if (value < 0.0)
+        {
+            PageSpacingPercent = 0.0;
+            return;
+        }
+        if (!IsPageSpacingEnabled && value > 0.2)
         {
             IsPageSpacingEnabled = true;
             return;
         }
         ApplyFitModeLayout();
+        OnPropertyChanged(nameof(FixedDividingPadding));
     }
 
     private Thickness CalculateCurrentPageItemMargin()
@@ -1334,7 +1369,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
         else
         {
-            double vPx = PageSpacingPercent > 0 ? Math.Round(PageSpacingPercent * 1.5) : 0;
+            double vPx = PageSpacingPercent > 0 ? Math.Round(PageSpacingPercent * 0.5) : 0;
             return new Thickness(0, vPx, 0, vPx);
         }
     }

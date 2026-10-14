@@ -2924,4 +2924,32 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Chạy `build-avalonia.bat` đóng gói toàn bộ: Windows Standalone EXE (`48.96 MB`), Linux Portable tar.gz (`41.69 MB`) & `.deb`, Android Signed Standalone APK (`55.93 MB`).
   - Chạy `python upload_beta_browser.py`: Tải thành công 100% 3 file (`146.58 MB`) lên GitHub Release Beta tại `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta` với tốc độ trung bình **80.1 Mbps** chỉ trong **15.4 giây**.
 
+### 15.91 Chuẩn Hóa Page Dividing Cố Định Đa Chế Độ & Sửa Dứt Điểm Lỗi Nuốt Single-Tap Sau Khi Pinch Zoom (2026-10-14)
+- **Bối Cảnh & Yêu Cầu Cốt Lõi**:
+  1. *Giá trị Page Dividing*: Chỉ được phép có giá trị dương ($\ge 0$), triệt tiêu hoàn toàn giá trị âm phi chuẩn.
+  2. *Cơ chế theo từng chế độ xem chuẩn Comic Screen*:
+     - *Vertical Scroll (Cuộn dọc - Ảnh 1)*: Thu hẹp bề ngang ảnh, tăng viền đen cố định 2 bên trái/phải để hiển thị được nhiều ảnh/khung truyện hơn theo chiều dọc.
+     - *Left/Right Paging & Horizontal Scroll (Lật trang/Cuộn ngang - Ảnh 2)*: Thu hẹp bề cao ảnh, tăng viền đen cố định 2 bên trên/dưới.
+  3. *Bảo toàn viền cố định khi Zoom*: Page Dividing là khung lề cố định của vùng đọc truyện (`Fixed Viewport Border`). Khi dùng 2 ngón tay thu phóng (Pinch-to-zoom), ảnh zoom bên trong vùng đọc mà không làm mất viền cố định này.
+  4. *Khắc phục lỗi Single-Tap sau Pinch Zoom*: Sau khi dùng 2 ngón tay zoom và nhả tay, chạm 1 ngón tay (Single-Tap) bị nuốt và không hiển thị được thanh công cụ (Toolbar/Overlay) do xung đột vòng đời con trỏ và ngưỡng touch slop quá nhỏ ($3.5\text{ px}$).
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Chuẩn Hóa Page Dividing & Khung Viền Cố Định (`ComicReaderViewModel.cs`)**:
+     - Ép biên `PageSpacingPercent` luôn dương: $0\% \to 50\%$.
+     - Bổ sung thuộc tính `FixedDividingPadding` kiểu `Thickness`: tự động tính toán viền cố định 2 bên trái/phải đối với Vertical Scroll hoặc trên/dưới đối với Horizontal Scroll / Flip Mode.
+     - Tái cấu trúc `ApplyFitModeLayout()`, `FlipDisplayWidth`, `FlipDisplayHeight`: Tính toán kích thước khả dụng của trang ảnh theo viewport đã trừ viền cố định, giúp ảnh thu nhỏ cân đối và đọc được nhiều nội dung hơn.
+  2. **Bọc Khung Đọc Với Viền Cố Định & ClipToBounds (`ComicReaderControl.axaml`)**:
+     - Bọc `ReaderPagesListBox` và `FlipModeScrollViewer` vào bên trong `Panel x:Name="ReaderContentContainer"` với `Margin="{Binding FixedDividingPadding}"` và `ClipToBounds="True"`.
+     - Cập nhật Slider Popup Button 8: `Minimum="0"` thay vì `-40`.
+     - Nhờ đó, toàn bộ thao tác cuộn và 2 ngón tay Pinch-to-zoom diễn ra bên trong container, viền phân cách đen ở biên màn hình được bảo toàn cố định 100% không bị mất.
+  3. **Khắc Phục Dứt Điểm Nuốt Single-Tap Sau Pinch Zoom (`ComicReaderControl.axaml.cs`)**:
+     - Bổ sung `_lastPinchEndTick` theo dõi thời điểm kết thúc cử chỉ zoom.
+     - Nâng ngưỡng nhận diện kéo (Touch Slop) từ $3.5\text{ px}$ lên $12.0\text{ px}$ để triệt tiêu hiện tượng rung vi mô da tay trên màn hình cảm ứng nuốt mất trạng thái Tap Candidate.
+     - Trong `OnViewportPointerReleased`: Dọn sạch `_activePointers` khi con trỏ về 0, bỏ qua chạm nảy trong vòng 250ms sau khi pinch kết thúc; các cú chạm mới sau đó kích hoạt chuẩn xác `_singleTapTimer` 500ms để gọi `vm.ToggleOverlay()`.
+- **Nghiệm Thu, Đóng Gói & Upload Beta**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)**.
+  - Test khởi động app: `Id = 30728, Responding = True, HasExited = False`.
+  - Chạy `build-avalonia.bat` đóng gói toàn bộ: Windows Standalone EXE (`48.96 MB`), Linux Portable tar.gz (`41.69 MB`) & `.deb`, Android Signed Standalone APK (`55.62 MB`).
+  - Chạy `python upload_beta_browser.py`: Tải thành công 100% 3 file (`146.27 MB`) lên GitHub Release Beta tại `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta` với tốc độ trung bình **66.7 Mbps** trong **18.4 giây**.
+
+
 
