@@ -49,6 +49,18 @@ public sealed class ReaderBookmarkItem
         TotalPages > 0 ? $"{DisplayPageNumber} / {TotalPages}" : $"{DisplayPageNumber}";
 
     /// <summary>
+    /// Tên bộ truyện rõ ràng để hiển thị trên Bookmark Item.
+    /// </summary>
+    public string DisplayComicTitle => !string.IsNullOrWhiteSpace(ComicTitle) ? ComicTitle : (!string.IsNullOrWhiteSpace(ChapterTitle) ? ChapterTitle : "Bộ truyện");
+
+    /// <summary>
+    /// Kiểm tra xem tên truyện có khác biệt so với tên chương hay không.
+    /// </summary>
+    public bool HasSeparateComicTitle => !string.IsNullOrWhiteSpace(ComicTitle) &&
+                                         !string.IsNullOrWhiteSpace(ChapterTitle) &&
+                                         !string.Equals(ComicTitle.Trim(), ChapterTitle.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Tên chương đầy đủ (Full Chapter Title) không bị cắt xén.
     /// </summary>
     public string FullChapterTitle => !string.IsNullOrWhiteSpace(ChapterTitle) ? ChapterTitle : (!string.IsNullOrWhiteSpace(ComicTitle) ? ComicTitle : "Chương không tên");

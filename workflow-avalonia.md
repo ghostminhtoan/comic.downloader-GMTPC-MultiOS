@@ -2983,8 +2983,43 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)**.
   - Test khởi động app: `Id = 22704, Responding = True, HasExited = False`.
   - Chạy `build-avalonia.bat` đóng gói toàn bộ: Windows Standalone EXE (`48.96 MB`), Linux Portable tar.gz (`41.69 MB`) & `.deb`, Android Signed Standalone APK (`55.93 MB`).
-  - Chạy `python upload_beta_browser.py`: Tải thành công 100% 3 file (`146.58 MB`) lên GitHub Release Beta tại `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta` với tốc độ trung bình **66.9 Mbps** trong **18.4 giây**.
 
-
-
-
+### 15.93 Triệt Tiêu Khung Highlight Khi Single Tap, Khóa Chống Tua Trang Khi Pinch Zoom, Khắc Phục Bug Hold Drag Nhảy Sang Zoom, Bỏ Page Dividing & Hiển Thị Đầy Đủ Bookmark (2026-10-14)
+- **Bối Cảnh & Yêu Cầu Cốt Lõi**:
+  1. *Triệt tiêu khung màu lợt khi Single Tap*: Khi chạm nhẹ vào trang truyện, Avalonia ListBox tự động bôi màu xám lợt (`#38393D`) do kích hoạt hiệu ứng Selection/Focus Highlight của ListBoxItem. Yêu cầu loại bỏ hoàn toàn để nền đen luôn đen tuyền 100%.
+  2. *Single Tap không bao giờ tua trang*: Chạm bất kỳ vị trí nào trên màn hình CHỈ mở/tắt thanh công cụ (`ToggleOverlay()`), tuyệt đối không lùi/tiến trang (`PrevPage`/`NextPage`).
+  3. *Bỏ tính năng Page Dividing*: Bỏ hoàn toàn Page Dividing để ảnh truyện hiển thị trọn vẹn màn hình, không còn viền cố định co hẹp. Chuyển Button 8 trong thanh công cụ sang mở thẳng cấu hình `Page button area`.
+  4. *Bookmark hiển thị đầy đủ thông tin*: Cả hộp thoại Add Bookmark (Button 9) và danh sách Bookmark (Button 10) phải hiển thị rõ ràng: Tên bộ truyện (`ComicTitle`), Tên chapter (`ChapterTitle`) và Số trang (`Trang X / Y`).
+  5. *Khắc phục lỗi tua tua trang khi Pinch to Zoom*: Khi dùng 2 ngón tay thu phóng, ảnh co giãn làm `OnReaderScrollChanged` tự động kích hoạt và tính toán lại trang sai lệch dẫn đến trang bị nhảy loạn xạ.
+  6. *Khắc phục dứt điểm bug 1 ngón tay Hold Drag bị biến thành Pinch Zoom*: Do ngón tay thứ 2 trong cử chỉ Pinch trước đó bị sót lại trong bộ đệm `_activePointers`, lần chạm 1 ngón tay tiếp theo bị cộng dồn thành 2 con trỏ và kích hoạt nhầm Pinch Zoom.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Xóa Sạch Khung Highlight Trên ListBoxItem (`ComicReaderControl.axaml` & `.axaml.cs`)**:
+     - Trong `ListBox.Styles`: Override toàn bộ các pseudo-class `:selected`, `:pointerover`, `:focus`, `:focus-visible`, `:pressed` của `ListBoxItem` với `Background="Transparent"`, `BorderBrush="Transparent"`, `BorderThickness="0"`.
+     - Trong code-behind: Bổ sung event handler tự động deselect `ReaderPagesListBox.SelectionChanged += (s, e) => { if (readerListBox.SelectedItem != null) readerListBox.SelectedItem = null; };`.
+  2. **Bảo Vệ Độc Quyền Thao Tác Chuyển Trang**:
+     - Single Tap ở mọi tọa độ chỉ kích hoạt `_singleTapTimer` 500ms gọi `ToggleOverlay()`, không có bất kỳ lệnh chuyển trang ngầm nào.
+     - Việc chuyển trang được cô lập duy nhất cho các nút bấm điều hướng `-` và `+` của Page Button Area hoặc thanh điều hướng.
+  3. **Loại Bỏ Hoàn Toàn Page Dividing (`ComicReaderViewModel.cs` & `.axaml`)**:
+     - `FixedDividingPadding => new Thickness(0);`.
+     - Gỡ bỏ logic trừ padding co viền trong `ApplyFitModeLayout()`, `FlipDisplayWidth`, `FlipDisplayHeight`.
+     - `ReaderContentContainer`: `Margin="0"`.
+     - Chuyển Button 8 trong thanh công cụ và `OpenPageSpacingPopupCommand` trực tiếp trỏ đến `OpenPageButtonAreaPopupCommand`.
+  4. **Chuẩn Hóa Hiển Thị Đầy Đủ Bookmark 3 Thành Phần (`ReaderBookmarkItem.cs` & `.axaml`)**:
+     - Bổ sung `DisplayComicTitle` và `HasSeparateComicTitle` trong `ReaderBookmarkItem`.
+     - Popup Add Bookmark hiển thị 3 dòng: Tên truyện (`AddBookmarkComicText` - Vàng), Tên chương (`AddBookmarkChapterOnlyText` - Xanh dương), Số trang (`AddBookmarkPageText` - Badge xám/trắng).
+     - Popup Bookmark List hiển thị chi tiết: Tên bộ truyện (`DisplayComicTitle` - Vàng), Tên chương (`FullChapterTitle` - Xanh dương), Số trang (`FullPageText` - Badge xanh đậm), % tiến độ và thời gian tạo.
+  5. **Khóa Cứng Chống Tua Trang Khi Pinch Zoom (`ComicReaderControl.axaml.cs`)**:
+     - Khóa chặn `OnReaderScrollChanged`: `if (_isProgrammaticScroll || _isUserDraggingScrubber || _isDoubleTapZooming || _isPinching || (Environment.TickCount64 - _lastPinchEndTick < 400)) return;`.
+     - Lưu trữ `_pinchStartPageIndex = vm.CurrentPageIndex;` khi pinch bắt đầu và khôi phục chính xác khi kết thúc, loại bỏ triệt để hiện tượng tua trang khi zoom.
+  6. **Dọn Sạch Con Trỏ Mồ Côi & Bảo Vệ Cử Chỉ Hold Drag (Stale Pointer Purging)**:
+     - Bổ sung bảng theo dõi thời gian hoạt động `_pointerLastSeenTicks`.
+     - Trong `OnViewportPointerPressed`: Tự động quét và xóa sạch bất kỳ con trỏ nào không có cập nhật trong vòng `> 200ms`.
+     - Chỉ kích hoạt Pinch Zoom khi có ít nhất 2 con trỏ cùng hoạt động đồng thời trong vòng `150ms`. Nếu không, reset sạch về 1 con trỏ duy nhất.
+     - Trong `OnViewportPointerReleased`: Khi Pinch kết thúc hoặc khi con trỏ $\le 1$, giải phóng sạch `_activePointers.Clear()` và `_pointerLastSeenTicks.Clear()`.
+     - Trong `OnViewportPointerCaptureLost`: Reset sạch toàn bộ con trỏ và tắt `_isPinching`.
+     - Đảm bảo lần chạm 1 ngón tay tiếp theo luôn bắt đầu ở trạng thái chuẩn 1 ngón, hoạt động Hold Drag cuộn trang mượt mà 100% không bao giờ bị biến thành Pinch Zoom.
+- **Nghiệm Thu, Đóng Gói & Upload Beta**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)**.
+  - Test khởi động app: `Id = 22704, Responding = True, HasExited = False`.
+  - Chạy `build-avalonia.bat` đóng gói toàn bộ: Windows Standalone EXE (`48.96 MB`), Linux Portable tar.gz (`41.69 MB`) & `.deb`, Android Signed Standalone APK (`55.93 MB`).
+  - Chạy `python upload_beta_browser.py`: Tải thành công 100% lên GitHub Release Beta.

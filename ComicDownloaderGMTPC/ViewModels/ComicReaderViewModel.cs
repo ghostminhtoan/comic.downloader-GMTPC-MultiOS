@@ -607,46 +607,13 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
     }
 
-    public Thickness FixedDividingPadding
-    {
-        get
-        {
-            if (!IsPageSpacingEnabled || PageSpacingPercent <= 0.01)
-                return new Thickness(0);
-
-            double vw = Math.Max(240, _viewportWidth);
-            double vh = Math.Max(240, _viewportHeight);
-
-            if (IsScrollMode && !IsHorizontalScrollMode)
-            {
-                // Vertical Scroll: tăng viền cố định 2 bên Trái / Phải (Ảnh 1)
-                // PageSpacingPercent từ 0% đến 50% -> mỗi bên chiếm tối đa ~22.5% vw (tổng 45% vw)
-                double hPad = Math.Round(vw * (PageSpacingPercent / 100.0) * 0.45);
-                return new Thickness(hPad, 0, hPad, 0);
-            }
-            else
-            {
-                // Horizontal Scroll hoặc Flip Mode: tăng viền cố định Trên / Dưới (Ảnh 2)
-                // PageSpacingPercent từ 0% đến 50% -> trên/dưới mỗi bên chiếm tối đa ~20% vh (tổng 40% vh)
-                double vPad = Math.Round(vh * (PageSpacingPercent / 100.0) * 0.40);
-                return new Thickness(0, vPad, 0, vPad);
-            }
-        }
-    }
+    public Thickness FixedDividingPadding => new Thickness(0);
 
     public double FlipDisplayWidth
     {
         get
         {
             double vw = Math.Max(240, _viewportWidth);
-            if (IsPageSpacingEnabled && PageSpacingPercent > 0.01)
-            {
-                if (IsScrollMode && !IsHorizontalScrollMode)
-                {
-                    double hPad = Math.Round(vw * (PageSpacingPercent / 100.0) * 0.45);
-                    vw = Math.Max(120, vw - 2 * hPad);
-                }
-            }
             double singlePageVw = (IsDoublePage && SecondaryPage != null) ? Math.Max(120, vw * 0.498) : vw;
             if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitWidth)
             {
@@ -661,11 +628,6 @@ public partial class ComicReaderViewModel : ViewModelBase
         get
         {
             double vh = Math.Max(240, _viewportHeight);
-            if (IsPageSpacingEnabled && PageSpacingPercent > 0.01)
-            {
-                double vPad = Math.Round(vh * (PageSpacingPercent / 100.0) * 0.40);
-                vh = Math.Max(120, vh - 2 * vPad);
-            }
             if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitHeight)
             {
                 return Math.Round(vh * ZoomLevel);
@@ -681,23 +643,6 @@ public partial class ComicReaderViewModel : ViewModelBase
     {
         double vw = Math.Max(240, _viewportWidth);
         double vh = Math.Max(240, _viewportHeight);
-
-        // Áp dụng Page Dividing cố định nếu đang bật (chỉ giá trị dương)
-        if (IsPageSpacingEnabled && PageSpacingPercent > 0.01)
-        {
-            if (IsScrollMode && !IsHorizontalScrollMode)
-            {
-                // Cuộn dọc: thu hẹp chiều rộng khả dụng để tạo viền cố định 2 bên trái phải (Ảnh 1)
-                double hPad = Math.Round(vw * (PageSpacingPercent / 100.0) * 0.45);
-                vw = Math.Max(120, vw - 2 * hPad);
-            }
-            else
-            {
-                // Cuộn ngang hoặc Lật trang: thu hẹp chiều cao khả dụng để tạo viền cố định trên dưới (Ảnh 2)
-                double vPad = Math.Round(vh * (PageSpacingPercent / 100.0) * 0.40);
-                vh = Math.Max(120, vh - 2 * vPad);
-            }
-        }
 
         double singlePageVw = (IsFlipMode && IsDoublePage) ? Math.Max(120, vw * 0.498) : vw;
 
@@ -1335,7 +1280,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    public void OpenPageSpacingPopup() => TogglePopup("PageSpacing");
+    public void OpenPageSpacingPopup() => TogglePopup("PageButtonArea");
 
     partial void OnIsPageSpacingEnabledChanged(bool value)
     {
@@ -1735,6 +1680,12 @@ public partial class ComicReaderViewModel : ViewModelBase
     [ObservableProperty]
     private string _bookmarkMemoInput = string.Empty;
 
+    public string AddBookmarkComicText =>
+        !string.IsNullOrWhiteSpace(ComicTitle) ? ComicTitle : "Bộ truyện";
+
+    public string AddBookmarkChapterOnlyText =>
+        !string.IsNullOrWhiteSpace(ChapterTitle) ? ChapterTitle : (!string.IsNullOrWhiteSpace(CurrentChapter?.Title) ? CurrentChapter.Title : "Chương hiện tại");
+
     public string AddBookmarkChapterText
     {
         get
@@ -1760,6 +1711,8 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void OpenAddBookmarkPopup()
     {
         BookmarkMemoInput = string.Empty;
+        OnPropertyChanged(nameof(AddBookmarkComicText));
+        OnPropertyChanged(nameof(AddBookmarkChapterOnlyText));
         OnPropertyChanged(nameof(AddBookmarkChapterText));
         OnPropertyChanged(nameof(AddBookmarkPageText));
         OnPropertyChanged(nameof(AddBookmarkLeftInfoText));

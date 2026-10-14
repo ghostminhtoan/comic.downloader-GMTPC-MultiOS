@@ -106,9 +106,9 @@
         <!-- ========================================================================= -->
         <Panel x:Name="ReaderViewportPanel" Background="{Binding ReaderBackgroundColor}">
 
-            <!-- Khung chứa nội dung đọc truyện có viền phân cách cố định (Page Dividing Fixed Border chuẩn Comic Screen) -->
+            <!-- Khung chứa nội dung đọc truyện toàn màn hình (Đã bỏ Page Dividing theo yêu cầu) -->
             <Panel x:Name="ReaderContentContainer"
-                   Margin="{Binding FixedDividingPadding}"
+                   Margin="0"
                    ClipToBounds="True">
 
                 <!-- A. CHẾ ĐỘ CUỘN (SCROLL MODE - DỌC WEBTOON & NGANG LIÊN TIẾP) -->
@@ -140,15 +140,46 @@
                             <Setter Property="Padding" Value="0" />
                             <Setter Property="Margin" Value="0" />
                             <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="BorderBrush" Value="Transparent" />
                             <Setter Property="Focusable" Value="False" />
                             <Setter Property="HorizontalContentAlignment" Value="Center" />
                             <Setter Property="VerticalContentAlignment" Value="Center" />
                         </Style>
                         <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
                             <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderBrush" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
                         </Style>
                         <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
                             <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderBrush" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderBrush" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                        </Style>
+                        <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderBrush" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                        </Style>
+                        <Style Selector="ListBoxItem:focus /template/ ContentPresenter">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderBrush" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                        </Style>
+                        <Style Selector="ListBoxItem:focus-visible /template/ ContentPresenter">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderBrush" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                        </Style>
+                        <Style Selector="ListBoxItem:pressed /template/ ContentPresenter">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderBrush" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
                         </Style>
                     </ListBox.Styles>
                     <ListBox.ItemTemplate>
@@ -658,10 +689,10 @@
                                 </StackPanel>
                             </Button>
 
-                            <!-- BUTTON 8: Page spacing (Khoảng cách giữa các trang) -->
+                            <!-- BUTTON 8: Page button area (Cài đặt nút chuyển trang) -->
                             <Button Classes="toolbarBtn"
-                                    Command="{Binding OpenPageSpacingPopupCommand}"
-                                    ToolTip.Tip="Button 8: Page spacing (Điều chỉnh khoảng cách giữa các trang)">
+                                    Command="{Binding OpenPageButtonAreaPopupCommand}"
+                                    ToolTip.Tip="Button 8: Page button area (Cài đặt nút chuyển trang)">
                                 <StackPanel Spacing="1" HorizontalAlignment="Center" VerticalAlignment="Center" Width="28">
                                     <Border Height="2.2" Background="{Binding Button8IconTint}" CornerRadius="1" />
                                     <TextBlock Text="⇕" Foreground="{Binding Button8IconTint}" FontSize="13" FontWeight="ExtraBold"
@@ -1183,40 +1214,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ============================================================= -->
-                <!-- POPUP BUTTON 8: PAGE SPACING (NHƯ ẢNH CHỤP)                   -->
-                <!-- ============================================================= -->
-                <Border IsVisible="{Binding IsPageSpacingPopupOpen}"
-                        HorizontalAlignment="Center" VerticalAlignment="Top"
-                        Margin="0,12,0,0" Width="280"
-                        Background="#F222262E"
-                        BorderBrush="#475569" BorderThickness="1"
-                        CornerRadius="6" Padding="14,10"
-                        BoxShadow="0 10 25 0 #AA000000">
-                    <StackPanel Spacing="6">
-                        <Grid ColumnDefinitions="*, Auto">
-                            <CheckBox Grid.Column="0" Classes="comicCheck"
-                                      IsChecked="{Binding IsPageSpacingEnabled}"
-                                      Content="Page spacing" />
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding PageSpacingFormattedText}"
-                                       Foreground="#FFFFFF" FontSize="13.5" FontWeight="SemiBold"
-                                       VerticalAlignment="Center" />
-                        </Grid>
-
-                        <Slider Classes="comicSlider"
-                                Minimum="0" Maximum="50"
-                                Value="{Binding PageSpacingPercent}" />
-
-                        <Button Command="{Binding OpenPageButtonAreaPopupCommand}"
-                                Background="#1E293B" Foreground="#4FC3F7"
-                                BorderBrush="#334155" BorderThickness="1"
-                                Padding="8,5" CornerRadius="4" Margin="0,4,0,0"
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
-                            <TextBlock Text="🔘 Cài đặt Page button area..." FontSize="11.5" FontWeight="SemiBold" />
-                        </Button>
-                    </StackPanel>
-                </Border>
 
                 <!-- ============================================================= -->
                 <!-- POPUP: PAGE BUTTON AREA (CHUẨN 100% COMICSCREEN ẢNH 3)         -->
@@ -1476,10 +1473,16 @@
                                  FontSize="13.5"
                                  Padding="6,6" />
 
-                        <StackPanel Spacing="5" Margin="0,2,0,0">
-                            <TextBlock Text="{Binding AddBookmarkChapterText}"
+                        <StackPanel Spacing="6" Margin="0,2,0,0">
+                            <!-- 1. TÊN BỘ TRUYỆN -->
+                            <TextBlock Text="{Binding AddBookmarkComicText}"
+                                       Foreground="#FACC15" FontSize="13.5" FontWeight="Bold"
+                                       TextWrapping="Wrap" />
+                            <!-- 2. TÊN CHƯƠNG -->
+                            <TextBlock Text="{Binding AddBookmarkChapterOnlyText}"
                                        Foreground="#38BDF8" FontSize="12.5" FontWeight="SemiBold"
                                        TextWrapping="Wrap" />
+                            <!-- 3. SỐ TRANG -->
                             <Border Background="#1E293B" CornerRadius="4" Padding="6,3" HorizontalAlignment="Left">
                                 <TextBlock Text="{Binding AddBookmarkPageText}"
                                            Foreground="#F8FAFC" FontSize="12" FontWeight="Bold" />
@@ -1543,12 +1546,18 @@
                                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                                             Padding="0">
                                                         <StackPanel Spacing="4">
-                                                            <!-- 1. FULL TÊN CHƯƠNG KHÔNG BỊ CẮT CỤT -->
+                                                            <!-- 1. TÊN BỘ TRUYỆN -->
+                                                            <TextBlock Text="{Binding DisplayComicTitle}"
+                                                                       Foreground="#FACC15" FontSize="13" FontWeight="Bold"
+                                                                       TextWrapping="Wrap"
+                                                                       IsVisible="{Binding HasSeparateComicTitle}" />
+
+                                                            <!-- 2. FULL TÊN CHƯƠNG KHÔNG BỊ CẮT CỤT -->
                                                             <TextBlock Text="{Binding FullChapterTitle}"
-                                                                       Foreground="#38BDF8" FontSize="13.5" FontWeight="Bold"
+                                                                       Foreground="#38BDF8" FontSize="13" FontWeight="SemiBold"
                                                                        TextWrapping="Wrap" />
 
-                                                            <!-- 2. FULL SỐ TRANG, PHẦN TRĂM, NGÀY GIỜ -->
+                                                            <!-- 3. FULL SỐ TRANG, PHẦN TRĂM, NGÀY GIỜ -->
                                                             <StackPanel Orientation="Horizontal" Spacing="8">
                                                                 <Border Background="#0284C7" CornerRadius="4" Padding="6,2">
                                                                     <TextBlock Text="{Binding FullPageText}"

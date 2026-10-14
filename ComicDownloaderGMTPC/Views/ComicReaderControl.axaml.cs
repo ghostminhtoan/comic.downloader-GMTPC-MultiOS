@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -62,12 +64,14 @@ public partial class ComicReaderControl : UserControl
 
     // Theo dõi con trỏ đa điểm chạm (Multi-touch Tracking) cho Pinch-to-zoom chuẩn ComicScreen / MX Player
     private readonly System.Collections.Generic.Dictionary<int, Point> _activePointers = new();
+    private readonly System.Collections.Generic.Dictionary<int, long> _pointerLastSeenTicks = new();
     private bool _isPinching;
     private double _pinchStartDistance;
     private double _pinchLastDistance;
     private double _pinchStartZoom;
     private Point _pinchPivot;
     private long _lastPinchEndTick;
+    private int _pinchStartPageIndex = -1;
 
     private static double Distance(Point p1, Point p2)
     {
@@ -103,6 +107,18 @@ public partial class ComicReaderControl : UserControl
 
         // Lắng nghe sự kiện cuộn trên ListBox để cập nhật trang đang đọc và lưu tiến độ
         AddHandler(ScrollViewer.ScrollChangedEvent, OnReaderScrollChanged, RoutingStrategies.Bubble);
+
+        var readerListBox = this.FindControl<ListBox>("ReaderPagesListBox");
+        if (readerListBox != null)
+        {
+            readerListBox.SelectionChanged += (s, e) =>
+            {
+                if (readerListBox.SelectedItem != null)
+                {
+                    readerListBox.SelectedItem = null;
+                }
+            };
+        }
 
         // Lắng nghe chạm / click / kéo trên vùng đọc truyện để Hold & Drag Scroll hoặc bật/tắt Overlay kiểu ComicScreen
         var viewport = this.FindControl<Panel>("ReaderViewportPanel");
@@ -601,7 +617,7 @@ public partial class ComicReaderControl : UserControl
 
     private void OnReaderScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_isProgrammaticScroll || _isUserDraggingScrubber || _isDoubleTapZooming) return;
+        if (_isProgrammaticScroll || _isUserDraggingScrubber || _isDoubleTapZooming || _isPinching || (Environment.TickCount64 - _lastPinchEndTick < 400)) return;
         if (DataContext is not ComicReaderViewModel vm || !vm.IsScrollMode || vm.Pages.Count == 0) return;
 
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
@@ -708,26 +724,63 @@ public partial class ComicReaderControl : UserControl
         Point pos = e.GetPosition(this);
         long now = Environment.TickCount64;
 
-        _activePointers[e.Pointer.Id] = pos;
+        // Dọn sạch triệt để con trỏ mồ côi (Stale Pointer Purging) không hoạt động trong vòng > 200ms
+        List<int>? staleKeys = null;
+        foreach (var kvp in _pointerLastSeenTicks)
+        {
+            if (now - kvp.Value > 200)
+            {
+                staleKeys ??= new List<int>();
+                staleKeys.Add(kvp.Key);
+            }
+        }
+        if (staleKeys != null)
+        {
+            foreach (var k in staleKeys)
+            {
+                _activePointers.Remove(k);
+                _pointerLastSeenTicks.Remove(k);
+            }
+        }
 
-        // Nếu có từ 2 ngón tay chạm cùng lúc: kích hoạt chế độ Pinch-to-zoom ngay lập tức
+        _activePointers[e.Pointer.Id] = pos;
+        _pointerLastSeenTicks[e.Pointer.Id] = now;
+
+        // Cử chỉ 2 ngón tay Pinch-to-zoom CHỈ kích hoạt khi có từ 2 ngón tay CÙNG hoạt động trong vòng <= 150ms
         if (_activePointers.Count >= 2)
         {
-            _singleTapTimer.Stop();
-            _lastTapTick = 0;
-            _isPointerTapCandidate = false;
-            _isPanHolding = false;
-            _isPanDragging = false;
-            StopKineticScroll();
+            var validPointers = _pointerLastSeenTicks
+                .Where(kvp => now - kvp.Value <= 150 && _activePointers.ContainsKey(kvp.Key))
+                .Select(kvp => _activePointers[kvp.Key])
+                .Take(2)
+                .ToArray();
 
-            var pts = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Take(_activePointers.Values, 2));
-            double dist = Distance(pts[0], pts[1]);
-            _pinchStartDistance = Math.Max(10.0, dist);
-            _pinchLastDistance = _pinchStartDistance;
-            _pinchStartZoom = (DataContext is ComicReaderViewModel vmp) ? vmp.ZoomLevel : 1.0;
-            _pinchPivot = new Point((pts[0].X + pts[1].X) * 0.5, (pts[0].Y + pts[1].Y) * 0.5);
-            _isPinching = true;
-            return;
+            if (validPointers.Length >= 2)
+            {
+                _singleTapTimer.Stop();
+                _lastTapTick = 0;
+                _isPointerTapCandidate = false;
+                _isPanHolding = false;
+                _isPanDragging = false;
+                StopKineticScroll();
+
+                double dist = Distance(validPointers[0], validPointers[1]);
+                _pinchStartDistance = Math.Max(10.0, dist);
+                _pinchLastDistance = _pinchStartDistance;
+                _pinchStartZoom = (DataContext is ComicReaderViewModel vmp) ? vmp.ZoomLevel : 1.0;
+                _pinchPivot = new Point((validPointers[0].X + validPointers[1].X) * 0.5, (validPointers[0].Y + validPointers[1].Y) * 0.5);
+                _pinchStartPageIndex = (DataContext is ComicReaderViewModel vmPg) ? vmPg.CurrentPageIndex : -1;
+                _isPinching = true;
+                return;
+            }
+            else
+            {
+                // Nếu không phải 2 con trỏ đồng thời mới, dọn sạch bộ đệm để chống kẹt con trỏ mồ côi
+                _activePointers.Clear();
+                _pointerLastSeenTicks.Clear();
+                _activePointers[e.Pointer.Id] = pos;
+                _pointerLastSeenTicks[e.Pointer.Id] = now;
+            }
         }
 
         _pointerPressPoint = pos;
@@ -747,7 +800,9 @@ public partial class ComicReaderControl : UserControl
     private void OnViewportPointerMoved(object? sender, PointerEventArgs e)
     {
         Point currentPoint = e.GetPosition(this);
+        long moveNow = Environment.TickCount64;
         _activePointers[e.Pointer.Id] = currentPoint;
+        _pointerLastSeenTicks[e.Pointer.Id] = moveNow;
 
         if (DataContext is not ComicReaderViewModel vm) return;
         if (vm.IsMarginEditorOpen) return;
@@ -755,22 +810,30 @@ public partial class ComicReaderControl : UserControl
         // Xử lý cử chỉ 2 ngón tay Pinch-to-zoom mượt mà chuẩn ComicScreen và MX Player
         if (_activePointers.Count >= 2)
         {
-            var pts = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Take(_activePointers.Values, 2));
-            double currentDist = Distance(pts[0], pts[1]);
-            Point currentPivot = new Point((pts[0].X + pts[1].X) * 0.5, (pts[0].Y + pts[1].Y) * 0.5);
+            var validMovePoints = _pointerLastSeenTicks
+                .Where(kvp => moveNow - kvp.Value <= 150 && _activePointers.ContainsKey(kvp.Key))
+                .Select(kvp => _activePointers[kvp.Key])
+                .Take(2)
+                .ToArray();
 
-            if (!_isPinching)
+            if (validMovePoints.Length >= 2)
             {
-                _isPinching = true;
-                _pinchStartDistance = Math.Max(10.0, currentDist);
-                _pinchLastDistance = _pinchStartDistance;
-                _pinchStartZoom = vm.ZoomLevel;
-                _pinchPivot = currentPivot;
-                _isPanHolding = false;
-                _isPanDragging = false;
-                _isPointerTapCandidate = false;
-                _singleTapTimer.Stop();
-            }
+                double currentDist = Distance(validMovePoints[0], validMovePoints[1]);
+                Point currentPivot = new Point((validMovePoints[0].X + validMovePoints[1].X) * 0.5, (validMovePoints[0].Y + validMovePoints[1].Y) * 0.5);
+
+                if (!_isPinching)
+                {
+                    _isPinching = true;
+                    _pinchStartDistance = Math.Max(10.0, currentDist);
+                    _pinchLastDistance = _pinchStartDistance;
+                    _pinchStartZoom = vm.ZoomLevel;
+                    _pinchPivot = currentPivot;
+                    _pinchStartPageIndex = vm.CurrentPageIndex;
+                    _isPanHolding = false;
+                    _isPanDragging = false;
+                    _isPointerTapCandidate = false;
+                    _singleTapTimer.Stop();
+                }
 
             if (_pinchLastDistance > 5.0 && currentDist > 5.0)
             {
@@ -815,6 +878,7 @@ public partial class ComicReaderControl : UserControl
             e.Handled = true;
             return;
         }
+    }
 
         if (_isPinching)
         {
@@ -922,6 +986,7 @@ public partial class ComicReaderControl : UserControl
         }
 
         _activePointers.Remove(e.Pointer.Id);
+        _pointerLastSeenTicks.Remove(e.Pointer.Id);
 
         // Khi người dùng nhấc tay kết thúc cử chỉ Pinch Zoom:
         if (_isPinching)
@@ -929,15 +994,23 @@ public partial class ComicReaderControl : UserControl
             _isPinching = false;
             _lastPinchEndTick = Environment.TickCount64;
             _activePointers.Clear(); // Giải phóng 100% con trỏ đa điểm, chống kẹt ID trên Android!
+            _pointerLastSeenTicks.Clear();
             _isPanHolding = false;
             _isPanDragging = false;
             _isPointerTapCandidate = false;
+            if (DataContext is ComicReaderViewModel vmRel && _pinchStartPageIndex >= 0 && vmRel.Pages.Count > _pinchStartPageIndex)
+            {
+                vmRel.CurrentPageIndex = _pinchStartPageIndex;
+            }
             e.Handled = true;
             return;
         }
 
-        if (_activePointers.Count == 0)
+        // Nếu chỉ còn 0 hoặc 1 con trỏ, dọn sạch 100% để chống kẹt con trỏ mồ côi của ngón thứ hai
+        if (_activePointers.Count <= 1)
         {
+            _activePointers.Clear();
+            _pointerLastSeenTicks.Clear();
             _isPinching = false;
         }
 
@@ -1112,30 +1185,7 @@ public partial class ComicReaderControl : UserControl
         }
         else if (vm.IsScrollMode)
         {
-            if (vm.IsHorizontalScrollMode)
-            {
-                // Chế độ cuộn ngang: ảnh được căn giữa theo trục Y
-                double imgH = vh;
-                if (vm.IsPageSpacingEnabled)
-                {
-                    double heightRatio = Math.Clamp(1.0 - Math.Abs(vm.PageSpacingPercent) / 100.0 * 0.45, 0.4, 1.0);
-                    imgH = Math.Round(vh * heightRatio);
-                }
-                double top = (vh - imgH) / 2.0;
-                return p.Y >= top && p.Y <= top + imgH;
-            }
-            else
-            {
-                // Chế độ cuộn dọc: ảnh được căn giữa theo trục X
-                double imgW = vw;
-                if (vm.IsPageSpacingEnabled && vm.PageSpacingPercent < 0)
-                {
-                    double widthRatio = Math.Clamp(1.0 + vm.PageSpacingPercent / 100.0, 0.4, 1.0);
-                    imgW = Math.Round(vw * widthRatio);
-                }
-                double left = (vw - imgW) / 2.0;
-                return p.X >= left && p.X <= left + imgW;
-            }
+            return true;
         }
 
         return true;
@@ -1143,22 +1193,14 @@ public partial class ComicReaderControl : UserControl
 
     private void OnViewportPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
+        _activePointers.Clear();
+        _pointerLastSeenTicks.Clear();
+        _isPinching = false;
         if (e.Pointer.Type == PointerType.Mouse)
         {
-            _activePointers.Clear();
-            _isPinching = false;
             _isPanHolding = false;
             _isPanDragging = false;
             _isPointerTapCandidate = false;
-        }
-        else
-        {
-            _activePointers.Remove(e.Pointer.Id);
-            if (_activePointers.Count == 0)
-            {
-                _isPinching = false;
-                _isPanHolding = false;
-            }
         }
     }
 
