@@ -769,9 +769,15 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
-    public void SwitchDualSortMobileTab(int tabIndex)
+    public void SelectDualSortMobileSourceTab()
     {
-        DualSortMobileActiveTab = tabIndex;
+        DualSortMobileActiveTab = 0;
+    }
+
+    [RelayCommand]
+    public void SelectDualSortMobileSortedTab()
+    {
+        DualSortMobileActiveTab = 1;
     }
 
     private static string GetUniqueFilePath(string filePath)

@@ -3550,12 +3550,12 @@
                                         <Grid IsVisible="{Binding IsPortraitMode}" RowDefinitions="Auto, *, Auto" Margin="4">
                                             <!-- Switcher 2 Tab: Gốc vs Đã Lọc -->
                                             <Grid Grid.Row="0" ColumnDefinitions="*, *" Margin="0,0,0,6">
-                                                <Button Grid.Column="0" Command="{Binding SwitchDualSortMobileTabCommand}" CommandParameter="0"
+                                                <Button Grid.Column="0" Command="{Binding SelectDualSortMobileSourceTabCommand}"
                                                         Background="{Binding MobileSourceTabBg}"
                                                         Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Height="36" CornerRadius="4,0,0,4">
                                                     <TextBlock Text="{Binding DualSortSourceCount, StringFormat='{}📁 GỐC ({0})'}" HorizontalAlignment="Center" />
                                                 </Button>
-                                                <Button Grid.Column="1" Command="{Binding SwitchDualSortMobileTabCommand}" CommandParameter="1"
+                                                <Button Grid.Column="1" Command="{Binding SelectDualSortMobileSortedTabCommand}"
                                                         Background="{Binding MobileSortedTabBg}"
                                                         Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Height="36" CornerRadius="0,4,4,0">
                                                     <TextBlock Text="{Binding DualSortSortedCount, StringFormat='{}✨ ĐÃ LỌC ({0})'}" HorizontalAlignment="Center" />
