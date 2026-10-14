@@ -20,5 +20,6 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="SixLabors.ImageSharp" />
     <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SharpCompress" />
   </ItemGroup>
 </Project>

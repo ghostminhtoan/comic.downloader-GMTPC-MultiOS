@@ -49,9 +49,9 @@ public class FilePackerService
         int success = 0;
         int errors = 0;
 
-        if (!Directory.Exists(inputFolder))
+        if (!Directory.Exists(inputFolder) && !File.Exists(inputFolder))
         {
-            LogEmitted?.Invoke("ERROR", $"Thư mục nguồn không tồn tại: {inputFolder}");
+            LogEmitted?.Invoke("ERROR", $"Thư mục hoặc tệp nguồn không tồn tại: {inputFolder}");
             return (0, 1, outputFolder);
         }
 
@@ -61,18 +61,99 @@ public class FilePackerService
         string rawTargetFolder = string.IsNullOrWhiteSpace(outputFolder)
             ? (Directory.GetParent(inputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))?.FullName != null
                 ? Path.Combine(Directory.GetParent(inputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))!.FullName, "packed")
-                : Path.Combine(inputFolder, "packed"))
+                : Path.Combine(Path.GetDirectoryName(inputFolder) ?? inputFolder, "packed"))
             : outputFolder;
 
         // Tự động bảo toàn cấu trúc thư mục gốc bên trong thư mục packed cùng cấp
-        string finalOutputDir = rawTargetFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).EndsWith(inputDirName, StringComparison.OrdinalIgnoreCase)
-            ? rawTargetFolder
-            : Path.Combine(rawTargetFolder, inputDirName);
+        string finalOutputDir = rawTargetFolder;
+        if (Directory.Exists(inputFolder) && !rawTargetFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).EndsWith(inputDirName, StringComparison.OrdinalIgnoreCase))
+        {
+            finalOutputDir = Path.Combine(rawTargetFolder, inputDirName);
+        }
 
         if (!Directory.Exists(finalOutputDir))
         {
             Directory.CreateDirectory(finalOutputDir);
-            LogEmitted?.Invoke("INFO", $"Đã tạo thư mục lưu file đóng gói: {finalOutputDir}");
+            LogEmitted?.Invoke("INFO", $"Đã tạo thư mục lưu file đóng gói / chuyển đổi: {finalOutputDir}");
+        }
+
+        // TRƯỜNG HỢP 1: Nguồn là 1 File đơn lẻ (Convert trực tiếp)
+        if (File.Exists(inputFolder))
+        {
+            if (LibraryScannerService.IsPdfFile(inputFolder))
+            {
+                LogEmitted?.Invoke("INFO", $"Phát hiện file PDF nguồn: {Path.GetFileName(inputFolder)}. Đang chuyển đổi sang CBZ/ZIP...");
+                bool ok = await ConvertSinglePdfToArchiveAsync(inputFolder, finalOutputDir, options, progress, ct);
+                return (ok ? 1 : 0, ok ? 0 : 1, finalOutputDir);
+            }
+
+            if (LibraryScannerService.IsArchiveFile(inputFolder))
+            {
+                if (options.CreatePdf)
+                {
+                    LogEmitted?.Invoke("INFO", $"Phát hiện file nén nguồn: {Path.GetFileName(inputFolder)}. Đang chuyển đổi sang PDF...");
+                    bool ok = await ConvertSingleArchiveToPdfAsync(inputFolder, finalOutputDir, options, progress, ct);
+                    return (ok ? 1 : 0, ok ? 0 : 1, finalOutputDir);
+                }
+                else if ((options.CreateCbz || options.CreateZip) && LibraryScannerService.IsRarFile(inputFolder))
+                {
+                    LogEmitted?.Invoke("INFO", $"Phát hiện file RAR/CBR nguồn: {Path.GetFileName(inputFolder)}. Đang chuyển đổi sang CBZ/ZIP...");
+                    bool ok = await ConvertRarToCbzOrZipAsync(inputFolder, finalOutputDir, options, progress, ct);
+                    return (ok ? 1 : 0, ok ? 0 : 1, finalOutputDir);
+                }
+                else
+                {
+                    LogEmitted?.Invoke("WARN", "Vui lòng tick chọn PDF để chuyển đổi file nén này sang PDF, hoặc chọn CBZ/ZIP nếu là file RAR.");
+                    return (0, 1, finalOutputDir);
+                }
+            }
+        }
+
+        // TRƯỜNG HỢP 2: Thư mục chứa các file PDF cần convert sang CBZ/ZIP
+        if (Directory.Exists(inputFolder) && (options.CreateCbz || options.CreateZip) && !options.CreatePdf)
+        {
+            var pdfFiles = Directory.GetFiles(inputFolder, "*.pdf", SearchOption.TopDirectoryOnly);
+            if (pdfFiles.Length > 0)
+            {
+                LogEmitted?.Invoke("INFO", $"Phát hiện {pdfFiles.Length} file PDF trong thư mục. Bắt đầu chuyển đổi hàng loạt sang CBZ/ZIP...");
+                int pdfSuccess = 0;
+                int pdfErrors = 0;
+                for (int i = 0; i < pdfFiles.Length; i++)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    string pFile = pdfFiles[i];
+                    LogEmitted?.Invoke("INFO", $"[{i + 1}/{pdfFiles.Length}] Đang chuyển đổi {Path.GetFileName(pFile)}...");
+                    bool ok = await ConvertSinglePdfToArchiveAsync(pFile, finalOutputDir, options, progress, ct);
+                    if (ok) pdfSuccess++;
+                    else pdfErrors++;
+                }
+                return (pdfSuccess, pdfErrors, finalOutputDir);
+            }
+        }
+
+        // TRƯỜNG HỢP 3: Thư mục chứa các file archive (ZIP, CBZ, RAR, CBR) cần convert sang PDF
+        if (Directory.Exists(inputFolder) && options.CreatePdf && !options.CreateCbz && !options.CreateZip)
+        {
+            var archFiles = Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly)
+                .Where(LibraryScannerService.IsArchiveFile)
+                .ToArray();
+
+            if (archFiles.Length > 0)
+            {
+                LogEmitted?.Invoke("INFO", $"Phát hiện {archFiles.Length} file nén trong thư mục. Bắt đầu chuyển đổi hàng loạt sang PDF...");
+                int archSuccess = 0;
+                int archErrors = 0;
+                for (int i = 0; i < archFiles.Length; i++)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    string aFile = archFiles[i];
+                    LogEmitted?.Invoke("INFO", $"[{i + 1}/{archFiles.Length}] Đang chuyển đổi {Path.GetFileName(aFile)} sang PDF...");
+                    bool ok = await ConvertSingleArchiveToPdfAsync(aFile, finalOutputDir, options, progress, ct);
+                    if (ok) archSuccess++;
+                    else archErrors++;
+                }
+                return (archSuccess, archErrors, finalOutputDir);
+            }
         }
 
         // Xác định danh sách các thư mục cần đóng gói theo thứ tự số tự nhiên (Chapter 1, Chapter 2, ..., Chapter 10, Chapter 11)
@@ -659,5 +740,307 @@ public class FilePackerService
         }
         sb.Append('>');
         return sb.ToString();
+    }
+
+    public async Task<bool> ConvertSinglePdfToArchiveAsync(
+        string pdfPath,
+        string finalOutputDir,
+        FilePackerOptions options,
+        IProgress<(int current, int total, string currentFile)>? progress,
+        CancellationToken ct)
+    {
+        return await Task.Run(() =>
+        {
+            var meta = PdfComicParser.Instance.InspectPdf(pdfPath);
+            int totalPages = meta.Pages.Count;
+            if (totalPages == 0)
+            {
+                LogEmitted?.Invoke("ERROR", $"Không tìm thấy trang ảnh hợp lệ trong PDF: {Path.GetFileName(pdfPath)}");
+                return false;
+            }
+
+            string baseName = Path.GetFileNameWithoutExtension(pdfPath);
+            int totalUnits = totalPages * ((options.CreateCbz ? 1 : 0) + (options.CreateZip ? 1 : 0));
+            if (totalUnits == 0)
+            {
+                options.CreateCbz = true;
+                totalUnits = totalPages;
+            }
+
+            int cur = 0;
+
+            if (options.CreateCbz)
+            {
+                string cbzPath = Path.Combine(finalOutputDir, $"{baseName}.cbz");
+                if (File.Exists(cbzPath)) File.Delete(cbzPath);
+
+                using (var zipFs = new FileStream(cbzPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 65536))
+                using (var archive = new ZipArchive(zipFs, ZipArchiveMode.Create))
+                {
+                    for (int i = 0; i < totalPages; i++)
+                    {
+                        if (ct.IsCancellationRequested) return false;
+                        byte[]? imgBytes = PdfComicParser.Instance.ExtractPageImageBytes(pdfPath, i, out string ext);
+                        if (imgBytes != null && imgBytes.Length > 0)
+                        {
+                            string entryName = $"page_{i + 1:D4}{ext}";
+                            var entry = archive.CreateEntry(entryName, options.Compression);
+                            using var es = entry.Open();
+                            es.Write(imgBytes, 0, imgBytes.Length);
+                        }
+
+                        cur++;
+                        progress?.Report((cur, totalUnits, $"[PDF ➔ CBZ] {baseName} (Trang {i + 1}/{totalPages})"));
+                    }
+                }
+                LogEmitted?.Invoke("SUCCESS", $"Đã chuyển đổi PDF sang CBZ: {Path.GetFileName(cbzPath)} ({totalPages} trang)");
+            }
+
+            if (options.CreateZip)
+            {
+                string zipPath = Path.Combine(finalOutputDir, $"{baseName}.zip");
+                if (File.Exists(zipPath)) File.Delete(zipPath);
+
+                using (var zipFs = new FileStream(zipPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 65536))
+                using (var archive = new ZipArchive(zipFs, ZipArchiveMode.Create))
+                {
+                    for (int i = 0; i < totalPages; i++)
+                    {
+                        if (ct.IsCancellationRequested) return false;
+                        byte[]? imgBytes = PdfComicParser.Instance.ExtractPageImageBytes(pdfPath, i, out string ext);
+                        if (imgBytes != null && imgBytes.Length > 0)
+                        {
+                            string entryName = $"page_{i + 1:D4}{ext}";
+                            var entry = archive.CreateEntry(entryName, options.Compression);
+                            using var es = entry.Open();
+                            es.Write(imgBytes, 0, imgBytes.Length);
+                        }
+
+                        cur++;
+                        progress?.Report((cur, totalUnits, $"[PDF ➔ ZIP] {baseName} (Trang {i + 1}/{totalPages})"));
+                    }
+                }
+                LogEmitted?.Invoke("SUCCESS", $"Đã chuyển đổi PDF sang ZIP: {Path.GetFileName(zipPath)} ({totalPages} trang)");
+            }
+
+            return true;
+        }, ct);
+    }
+
+    public async Task<bool> ConvertSingleArchiveToPdfAsync(
+        string archivePath,
+        string finalOutputDir,
+        FilePackerOptions options,
+        IProgress<(int current, int total, string currentFile)>? progress,
+        CancellationToken ct)
+    {
+        return await Task.Run(() =>
+        {
+            bool isRar = LibraryScannerService.IsRarFile(archivePath);
+            List<(string FullName, string Name, long Length)> entries;
+
+            if (isRar)
+            {
+                entries = RarArchivePool.Instance.GetImageEntriesInfo(archivePath);
+            }
+            else
+            {
+                entries = ZipArchivePool.Instance.GetImageEntriesInfo(archivePath);
+            }
+
+            if (entries.Count == 0)
+            {
+                LogEmitted?.Invoke("ERROR", $"Không tìm thấy ảnh hợp lệ trong file nén: {Path.GetFileName(archivePath)}");
+                return false;
+            }
+
+            string baseName = Path.GetFileNameWithoutExtension(archivePath);
+            string tempExtractDir = Path.Combine(AppContext.BaseDirectory, ".tmp", "convert", Guid.NewGuid().ToString("N"));
+
+            try
+            {
+                Directory.CreateDirectory(tempExtractDir);
+                var tempImagePaths = new List<string>();
+                var bookmarks = new List<(string Title, int PageIndex)>();
+
+                var folderGroups = new Dictionary<string, List<(string FullName, string Name, long Length)>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var item in entries)
+                {
+                    string fKey = GetArchiveEntryParentFolder(item.FullName);
+                    if (!folderGroups.TryGetValue(fKey, out var gList))
+                    {
+                        gList = new List<(string FullName, string Name, long Length)>();
+                        folderGroups[fKey] = gList;
+                    }
+                    gList.Add(item);
+                }
+
+                int pageCounter = 0;
+                int totalExtractUnits = entries.Count;
+
+                if (folderGroups.Count >= 2)
+                {
+                    var sortedKeys = folderGroups.Keys.OrderBy(k => k, NaturalSortComparer.Instance).ToList();
+                    foreach (var k in sortedKeys)
+                    {
+                        var groupEntries = folderGroups[k].OrderBy(e => e.FullName, NaturalSortComparer.Instance).ToList();
+                        if (groupEntries.Count == 0) continue;
+
+                        string chTitle = ExtractReadableChapterTitleFromArchiveFolder(k, baseName);
+                        bookmarks.Add((chTitle, tempImagePaths.Count));
+
+                        foreach (var e in groupEntries)
+                        {
+                            if (ct.IsCancellationRequested) return false;
+                            byte[]? raw = isRar
+                                ? RarArchivePool.Instance.ReadEntryBytes(archivePath, e.FullName)
+                                : ZipArchivePool.Instance.ReadEntryBytes(archivePath, e.FullName);
+
+                            if (raw != null && raw.Length > 0)
+                            {
+                                string ext = Path.GetExtension(e.Name);
+                                if (string.IsNullOrEmpty(ext)) ext = ".jpg";
+                                string tmpFile = Path.Combine(tempExtractDir, $"{pageCounter:D6}_{Path.GetFileName(e.Name)}");
+                                File.WriteAllBytes(tmpFile, raw);
+                                tempImagePaths.Add(tmpFile);
+                                pageCounter++;
+                            }
+
+                            progress?.Report((pageCounter, totalExtractUnits * 2, $"[Giải nén] {e.Name}"));
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (var e in entries)
+                    {
+                        if (ct.IsCancellationRequested) return false;
+                        byte[]? raw = isRar
+                            ? RarArchivePool.Instance.ReadEntryBytes(archivePath, e.FullName)
+                            : ZipArchivePool.Instance.ReadEntryBytes(archivePath, e.FullName);
+
+                        if (raw != null && raw.Length > 0)
+                        {
+                            string ext = Path.GetExtension(e.Name);
+                            if (string.IsNullOrEmpty(ext)) ext = ".jpg";
+                            string tmpFile = Path.Combine(tempExtractDir, $"{pageCounter:D6}_{Path.GetFileName(e.Name)}");
+                            File.WriteAllBytes(tmpFile, raw);
+                            tempImagePaths.Add(tmpFile);
+                            pageCounter++;
+                        }
+
+                        progress?.Report((pageCounter, totalExtractUnits * 2, $"[Giải nén] {e.Name}"));
+                    }
+                }
+
+                if (tempImagePaths.Count == 0) return false;
+
+                string pdfPath = Path.Combine(finalOutputDir, $"{baseName}.pdf");
+                int currentUnit = totalExtractUnits;
+                int totalPdfUnits = totalExtractUnits * 2;
+
+                CreatePdfFromImages(tempImagePaths, pdfPath, bookmarks, totalPdfUnits, ref currentUnit, progress, ct);
+                LogEmitted?.Invoke("SUCCESS", $"Đã chuyển đổi {(isRar ? "RAR/CBR" : "ZIP/CBZ")} sang PDF: {Path.GetFileName(pdfPath)} ({tempImagePaths.Count} trang)");
+                return true;
+            }
+            finally
+            {
+                try
+                {
+                    if (Directory.Exists(tempExtractDir))
+                    {
+                        Directory.Delete(tempExtractDir, recursive: true);
+                    }
+                }
+                catch { }
+            }
+        }, ct);
+    }
+
+    public async Task<bool> ConvertRarToCbzOrZipAsync(
+        string rarPath,
+        string finalOutputDir,
+        FilePackerOptions options,
+        IProgress<(int current, int total, string currentFile)>? progress,
+        CancellationToken ct)
+    {
+        return await Task.Run(() =>
+        {
+            var entries = RarArchivePool.Instance.GetImageEntriesInfo(rarPath);
+            if (entries.Count == 0) return false;
+
+            string baseName = Path.GetFileNameWithoutExtension(rarPath);
+            int totalUnits = entries.Count * ((options.CreateCbz ? 1 : 0) + (options.CreateZip ? 1 : 0));
+            if (totalUnits == 0) { options.CreateCbz = true; totalUnits = entries.Count; }
+            int cur = 0;
+
+            if (options.CreateCbz)
+            {
+                string cbzPath = Path.Combine(finalOutputDir, $"{baseName}.cbz");
+                if (File.Exists(cbzPath)) File.Delete(cbzPath);
+
+                using (var zipFs = new FileStream(cbzPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 65536))
+                using (var archive = new ZipArchive(zipFs, ZipArchiveMode.Create))
+                {
+                    foreach (var e in entries)
+                    {
+                        if (ct.IsCancellationRequested) return false;
+                        byte[]? raw = RarArchivePool.Instance.ReadEntryBytes(rarPath, e.FullName);
+                        if (raw != null)
+                        {
+                            var entry = archive.CreateEntry(e.FullName, options.Compression);
+                            using var es = entry.Open();
+                            es.Write(raw, 0, raw.Length);
+                        }
+                        cur++;
+                        progress?.Report((cur, totalUnits, $"[RAR ➔ CBZ] {e.Name}"));
+                    }
+                }
+                LogEmitted?.Invoke("SUCCESS", $"Đã chuyển đổi RAR/CBR sang CBZ: {Path.GetFileName(cbzPath)} ({entries.Count} ảnh)");
+            }
+
+            if (options.CreateZip)
+            {
+                string zipPath = Path.Combine(finalOutputDir, $"{baseName}.zip");
+                if (File.Exists(zipPath)) File.Delete(zipPath);
+
+                using (var zipFs = new FileStream(zipPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 65536))
+                using (var archive = new ZipArchive(zipFs, ZipArchiveMode.Create))
+                {
+                    foreach (var e in entries)
+                    {
+                        if (ct.IsCancellationRequested) return false;
+                        byte[]? raw = RarArchivePool.Instance.ReadEntryBytes(rarPath, e.FullName);
+                        if (raw != null)
+                        {
+                            var entry = archive.CreateEntry(e.FullName, options.Compression);
+                            using var es = entry.Open();
+                            es.Write(raw, 0, raw.Length);
+                        }
+                        cur++;
+                        progress?.Report((cur, totalUnits, $"[RAR ➔ ZIP] {e.Name}"));
+                    }
+                }
+                LogEmitted?.Invoke("SUCCESS", $"Đã chuyển đổi RAR/CBR sang ZIP: {Path.GetFileName(zipPath)} ({entries.Count} ảnh)");
+            }
+
+            return true;
+        }, ct);
+    }
+
+    private static string GetArchiveEntryParentFolder(string entryFullName)
+    {
+        if (string.IsNullOrEmpty(entryFullName)) return string.Empty;
+        string normalized = entryFullName.Replace('\\', '/').TrimStart('/');
+        int lastSlash = normalized.LastIndexOf('/');
+        return lastSlash > 0 ? normalized.Substring(0, lastSlash) : string.Empty;
+    }
+
+    private static string ExtractReadableChapterTitleFromArchiveFolder(string folderKey, string archiveBaseName)
+    {
+        if (string.IsNullOrWhiteSpace(folderKey)) return archiveBaseName;
+        string[] parts = folderKey.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return archiveBaseName;
+        return parts[^1];
     }
 }

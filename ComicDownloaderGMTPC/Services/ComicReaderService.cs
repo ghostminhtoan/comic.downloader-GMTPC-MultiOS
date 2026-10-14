@@ -115,7 +115,38 @@ public sealed class ComicReaderService
 
             try
             {
-                if (chapter.IsPdf || LibraryScannerService.IsPdfFile(chapter.LocalPath))
+                if (chapter.IsMobi || LibraryScannerService.IsMobiFile(chapter.LocalPath))
+                {
+                    if (!File.Exists(chapter.LocalPath)) return pages;
+
+                    var mobiMeta = MobiComicParser.Instance.InspectMobi(chapter.LocalPath);
+                    if (mobiMeta.Pages.Count == 0) return pages;
+
+                    int startPage = Math.Clamp(chapter.MobiStartPageIndex, 0, mobiMeta.Pages.Count - 1);
+                    int endPage = chapter.MobiEndPageIndex >= startPage
+                        ? Math.Min(chapter.MobiEndPageIndex, mobiMeta.Pages.Count - 1)
+                        : (mobiMeta.Pages.Count - 1);
+
+                    int localIdx = 0;
+                    for (int pIdx = startPage; pIdx <= endPage; pIdx++)
+                    {
+                        if (ct.IsCancellationRequested) break;
+                        var pInfo = mobiMeta.Pages[pIdx];
+                        var item = new ReaderPageItem
+                        {
+                            Index = localIdx,
+                            Title = $"Trang {localIdx + 1}",
+                            SourcePath = chapter.LocalPath,
+                            ArchiveEntryFullName = string.Empty,
+                            IsMobiEntry = true,
+                            MobiPageIndex = pIdx,
+                            FileSizeBytes = pInfo.StreamLength
+                        };
+                        pages.Add(item);
+                        localIdx++;
+                    }
+                }
+                else if (chapter.IsPdf || LibraryScannerService.IsPdfFile(chapter.LocalPath))
                 {
                     if (!File.Exists(chapter.LocalPath)) return pages;
 
@@ -148,6 +179,45 @@ public sealed class ComicReaderService
                         }
                         pages.Add(item);
                         localIdx++;
+                    }
+                }
+                else if (chapter.IsRar || LibraryScannerService.IsRarFile(chapter.LocalPath))
+                {
+                    if (!File.Exists(chapter.LocalPath)) return pages;
+
+                    if (chapter.ArchiveEntryNames != null && chapter.ArchiveEntryNames.Count > 0)
+                    {
+                        for (int i = 0; i < chapter.ArchiveEntryNames.Count; i++)
+                        {
+                            if (ct.IsCancellationRequested) break;
+                            string entryFullName = chapter.ArchiveEntryNames[i];
+                            pages.Add(new ReaderPageItem
+                            {
+                                Index = i,
+                                Title = Path.GetFileName(entryFullName.Replace('\\', '/')),
+                                SourcePath = chapter.LocalPath,
+                                ArchiveEntryFullName = entryFullName,
+                                IsRarEntry = true
+                            });
+                        }
+                    }
+                    else
+                    {
+                        var imageEntries = RarArchivePool.Instance.GetImageEntriesInfo(chapter.LocalPath);
+                        for (int i = 0; i < imageEntries.Count; i++)
+                        {
+                            if (ct.IsCancellationRequested) break;
+                            var (fullName, name, length) = imageEntries[i];
+                            pages.Add(new ReaderPageItem
+                            {
+                                Index = i,
+                                Title = name,
+                                SourcePath = chapter.LocalPath,
+                                ArchiveEntryFullName = fullName,
+                                IsRarEntry = true,
+                                FileSizeBytes = length
+                            });
+                        }
                     }
                 }
                 else if (chapter.IsCbz || LibraryScannerService.IsArchiveFile(chapter.LocalPath))
@@ -369,7 +439,12 @@ public sealed class ComicReaderService
         {
             byte[]? rawBytes = null;
 
-            if (page.IsPdfEntry)
+            if (page.IsMobiEntry)
+            {
+                if (!File.Exists(page.SourcePath)) return null;
+                rawBytes = MobiComicParser.Instance.ReadPageBytes(page.SourcePath, page.MobiPageIndex);
+            }
+            else if (page.IsPdfEntry)
             {
                 if (!File.Exists(page.SourcePath)) return null;
                 var pdfBmp = PdfComicParser.Instance.DecodePageBitmap(page.SourcePath, page.PdfPageIndex);
@@ -385,6 +460,10 @@ public sealed class ComicReaderService
 #pragma warning restore CS0618
                 pdfBmp.Dispose();
                 rawBytes = pdfMs.ToArray();
+            }
+            else if (page.IsRarEntry)
+            {
+                rawBytes = RarArchivePool.Instance.ReadEntryBytes(page.SourcePath, page.ArchiveEntryFullName);
             }
             else if (page.IsArchiveEntry)
             {

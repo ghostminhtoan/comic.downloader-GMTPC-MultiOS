@@ -5494,6 +5494,72 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task BrowsePackerInputFileAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null)
+            {
+                var options = new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = _langService.CurrentLanguage == "VI"
+                        ? "Chọn file cần chuyển đổi (PDF, ZIP, CBZ, RAR, CBR)"
+                        : "Select file to convert (PDF, ZIP, CBZ, RAR, CBR)",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("Tất cả định dạng hỗ trợ (*.pdf, *.zip, *.cbz, *.rar, *.cbr)")
+                        {
+                            Patterns = new[] { "*.pdf", "*.zip", "*.cbz", "*.rar", "*.cbr" }
+                        },
+                        new Avalonia.Platform.Storage.FilePickerFileType("PDF Document (*.pdf)")
+                        {
+                            Patterns = new[] { "*.pdf" }
+                        },
+                        new Avalonia.Platform.Storage.FilePickerFileType("Comic Archives (*.zip, *.cbz, *.rar, *.cbr)")
+                        {
+                            Patterns = new[] { "*.zip", "*.cbz", "*.rar", "*.cbr" }
+                        }
+                    }
+                };
+
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(options);
+                if (files != null && files.Count > 0)
+                {
+                    var selected = files[0];
+                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                    {
+                        PackerInputFolderPath = normalized;
+                        if (string.IsNullOrWhiteSpace(PackerOutputFolderPath))
+                        {
+                            PackerOutputFolderPath = GetSiblingFolder(normalized, "packed");
+                        }
+
+                        if (LibraryScannerService.IsPdfFile(normalized))
+                        {
+                            IsPackerCbz = true;
+                            IsPackerPdf = false;
+                        }
+                        else if (LibraryScannerService.IsArchiveFile(normalized))
+                        {
+                            IsPackerPdf = true;
+                            IsPackerCbz = false;
+                            IsPackerZip = false;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Lỗi chọn file chuyển đổi: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
     public async Task BrowsePackerOutputFolderAsync()
     {
         try
@@ -5531,13 +5597,17 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void OpenPackerInputFolder()
     {
-        if (string.IsNullOrEmpty(PackerInputFolderPath) || !Directory.Exists(PackerInputFolderPath))
+        if (string.IsNullOrEmpty(PackerInputFolderPath) || (!Directory.Exists(PackerInputFolderPath) && !File.Exists(PackerInputFolderPath)))
         {
-            AddLog("WARN", "[Đóng gói file] Thư mục nguồn không tồn tại hoặc chưa được chọn!");
+            AddLog("WARN", "[Đóng gói file] Thư mục hoặc file nguồn không tồn tại hoặc chưa được chọn!");
             return;
         }
 
-        _downloadEngine.OpenDirectoryInExplorer(PackerInputFolderPath);
+        string target = File.Exists(PackerInputFolderPath)
+            ? (Path.GetDirectoryName(PackerInputFolderPath) ?? PackerInputFolderPath)
+            : PackerInputFolderPath;
+
+        _downloadEngine.OpenDirectoryInExplorer(target);
     }
 
     [RelayCommand]
@@ -5560,9 +5630,9 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task StartPackingAsync()
     {
-        if (string.IsNullOrWhiteSpace(PackerInputFolderPath) || !Directory.Exists(PackerInputFolderPath))
+        if (string.IsNullOrWhiteSpace(PackerInputFolderPath) || (!Directory.Exists(PackerInputFolderPath) && !File.Exists(PackerInputFolderPath)))
         {
-            AddLog("WARN", "[Đóng gói file] Vui lòng chọn một thư mục nguồn hợp lệ!");
+            AddLog("WARN", "[Đóng gói file] Vui lòng chọn một thư mục hoặc tệp nguồn hợp lệ!");
             return;
         }
 

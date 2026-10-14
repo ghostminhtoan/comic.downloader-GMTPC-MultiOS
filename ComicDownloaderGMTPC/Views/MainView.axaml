@@ -2838,39 +2838,40 @@
                                 </Grid>
                             </TabItem>
 
-                            <!-- CHILD TAB 3.4: PACKAGE / ARCHIVE TOOLS (ĐÓNG GÓI FILE ZIP, CBZ, PDF) -->
-                            <TabItem Header="📦 Đóng Gói File" FontSize="12" FontWeight="SemiBold">
+                            <!-- CHILD TAB 3.4: PACKAGE / ARCHIVE & CONVERT TOOLS (ĐÓNG GÓI & CHUYỂN ĐỔI FILE ZIP, CBZ, PDF, RAR) -->
+                            <TabItem Header="📦 Đóng Gói &amp; Convert" FontSize="12" FontWeight="SemiBold">
                                 <Grid RowDefinitions="Auto, *">
                                     <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                                         <StackPanel Spacing="10">
-                                            <!-- Hàng 1: Thư mục nguồn (Bố cục 2 tầng xem Full Path trên Android) -->
+                                            <!-- Hàng 1: Thư mục hoặc tệp nguồn (Bố cục 2 tầng xem Full Path trên Android) -->
                                             <StackPanel Spacing="3">
                                                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="📥 Thư mục nguồn chứa ảnh hoặc các thư mục chapter cần đóng gói:" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                    <Button Command="{Binding BrowsePackerInputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                    <TextBlock Text="📥 Nguồn ảnh / tệp cần đóng gói hoặc chuyển đổi (PDF, ZIP, CBZ, RAR, CBR):" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowsePackerInputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Chọn thư mục chứa ảnh hoặc thư mục chứa các file cần chuyển đổi" />
+                                                    <Button Command="{Binding BrowsePackerInputFileCommand}" Content="📄 Chọn File" Background="#8B5CF6" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Chọn 1 tệp PDF, ZIP, CBZ, RAR, CBR để chuyển đổi trực tiếp" />
                                                     <Button Command="{Binding OpenPackerInputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
                                                 </WrapPanel>
-                                                <TextBox Text="{Binding PackerInputFolderPath}" PlaceholderText="Chọn thư mục chứa ảnh hoặc các thư mục chapter cần đóng gói..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                <TextBox Text="{Binding PackerInputFolderPath}" PlaceholderText="Chọn thư mục chứa ảnh hoặc chọn file PDF / ZIP / CBR / RAR cần chuyển đổi..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
                                             </StackPanel>
 
                                             <!-- Hàng 2: Thư mục lưu (Bố cục 2 tầng xem Full Path trên Android) -->
                                             <StackPanel Spacing="3">
                                                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="📤 Thư mục lưu file đóng gói (Mặc định: thư mục 'packed' cùng cấp với nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <TextBlock Text="📤 Thư mục lưu file (Mặc định: thư mục 'packed' cùng cấp với nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
                                                     <Button Command="{Binding BrowsePackerOutputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
                                                     <Button Command="{Binding OpenPackerOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu file đóng gói trên thiết bị" />
                                                 </WrapPanel>
-                                                <TextBox Text="{Binding PackerOutputFolderPath}" PlaceholderText="Chọn thư mục lưu file đóng gói..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                <TextBox Text="{Binding PackerOutputFolderPath}" PlaceholderText="Chọn thư mục lưu file đóng gói / chuyển đổi..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
                                             </StackPanel>
 
                                             <!-- Hàng 3: Tùy chọn định dạng đóng gói & chế độ quét -->
                                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="10,6" Margin="0,0,8,6" VerticalAlignment="Center">
                                                     <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <TextBlock Text="Định dạng đóng gói:" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                        <CheckBox IsChecked="{Binding IsPackerCbz}" Content="CBZ (.cbz)" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Định dạng Comic Book Zip chuẩn quốc tế tương thích 100% Tachiyomi, Mihon, CDisplayEx" />
-                                                        <CheckBox IsChecked="{Binding IsPackerZip}" Content="ZIP (.zip)" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="File nén zip chuẩn có thể mở bằng bất kỳ ứng dụng nào" />
-                                                        <CheckBox IsChecked="{Binding IsPackerPdf}" Content="PDF (.pdf - kèm mục lục chương)" Foreground="#EC4899" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" ToolTip.Tip="Ghép các trang ảnh thành file PDF chất lượng cao có mục lục chương (bookmarks)" />
+                                                        <TextBlock Text="Định dạng xuất:" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                        <CheckBox IsChecked="{Binding IsPackerCbz}" Content="CBZ (.cbz)" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Định dạng Comic Book Zip chuẩn quốc tế (chuyển đổi từ PDF hoặc nén từ ảnh)" />
+                                                        <CheckBox IsChecked="{Binding IsPackerZip}" Content="ZIP (.zip)" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="File nén zip chuẩn (chuyển đổi từ PDF hoặc nén từ ảnh)" />
+                                                        <CheckBox IsChecked="{Binding IsPackerPdf}" Content="PDF (.pdf)" Foreground="#EC4899" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" ToolTip.Tip="Chuyển đổi từ ZIP/CBZ/RAR/CBR sang PDF hoặc ghép ảnh thành PDF kèm mục lục chương" />
                                                     </WrapPanel>
                                                 </Border>
 
@@ -2883,7 +2884,7 @@
                                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <Button Command="{Binding StartPackingCommand}" IsEnabled="{Binding !IsPacking}"
                                                         Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,6" Height="34" CornerRadius="4" Margin="0,0,8,6">
-                                                    <TextBlock Text="▶ BẮT ĐẦU ĐÓNG GÓI" />
+                                                    <TextBlock Text="▶ BẮT ĐẦU ĐÓNG GÓI / CONVERT" />
                                                 </Button>
 
                                                 <Button Command="{Binding StopPackingCommand}" IsEnabled="{Binding IsPacking}"

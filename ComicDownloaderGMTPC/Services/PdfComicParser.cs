@@ -799,6 +799,58 @@ public sealed class PdfComicParser
         }
     }
 
+    public byte[]? ExtractPageImageBytes(string pdfPath, int pageIndex, out string extension)
+    {
+        extension = ".jpg";
+        try
+        {
+            var meta = InspectPdf(pdfPath);
+            if (pageIndex < 0 || pageIndex >= meta.Pages.Count) return null;
+
+            var pageInfo = meta.Pages[pageIndex];
+            byte[] rawStream;
+
+            using (var fs = new FileStream(pdfPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536))
+            {
+                if (!EnsureImageStreamResolved(fs, pageInfo, meta)) return null;
+                if (pageInfo.StreamLength <= 0 || pageInfo.StreamLength > 120 * 1024 * 1024) return null;
+                if (pageInfo.StreamOffset + pageInfo.StreamLength > fs.Length) return null;
+
+                rawStream = new byte[pageInfo.StreamLength];
+                fs.Seek(pageInfo.StreamOffset, SeekOrigin.Begin);
+                int totalRead = 0;
+                while (totalRead < rawStream.Length)
+                {
+                    int r = fs.Read(rawStream, totalRead, rawStream.Length - totalRead);
+                    if (r <= 0) break;
+                    totalRead += r;
+                }
+                if (totalRead <= 0) return null;
+            }
+
+            if (string.Equals(pageInfo.Filter, "DCTDecode", StringComparison.OrdinalIgnoreCase) ||
+                (rawStream.Length >= 3 && rawStream[0] == 0xFF && rawStream[1] == 0xD8 && rawStream[2] == 0xFF))
+            {
+                extension = ".jpg";
+                return rawStream;
+            }
+
+            var bmp = DecodeStreamBytesToBitmap(pageInfo, rawStream, maxDecodeWidth: 0);
+            if (bmp != null)
+            {
+                using var ms = new MemoryStream();
+#pragma warning disable CS0618
+                bmp.Save(ms);
+#pragma warning restore CS0618
+                bmp.Dispose();
+                extension = ".jpg";
+                return ms.ToArray();
+            }
+        }
+        catch { }
+        return null;
+    }
+
     public Bitmap? DecodeCoverThumbnail(string pdfPath, int targetWidth = 220)
     {
         try

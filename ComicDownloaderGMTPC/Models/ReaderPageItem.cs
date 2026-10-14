@@ -29,15 +29,21 @@ public partial class ReaderPageItem : ObservableObject
     public string SourcePath { get; set; } = string.Empty;
 
     /// <summary>
-    /// Tên entry bên trong file .cbz/.zip (rỗng nếu là file ảnh rời trên đĩa).
+    /// Tên entry bên trong file .cbz/.zip/.rar/.cbr (rỗng nếu là file ảnh rời trên đĩa).
     /// </summary>
     public string ArchiveEntryFullName { get; set; } = string.Empty;
 
     public bool IsArchiveEntry => !string.IsNullOrEmpty(ArchiveEntryFullName);
 
+    public bool IsRarEntry { get; set; }
+
     public bool IsPdfEntry { get; set; }
 
     public int PdfPageIndex { get; set; }
+
+    public bool IsMobiEntry { get; set; }
+
+    public int MobiPageIndex { get; set; }
 
     public long FileSizeBytes { get; set; }
 

@@ -420,13 +420,25 @@ public partial class LibraryViewModel : ViewModelBase
 
             var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "Chọn File Truyện CBZ / ZIP / PDF Để Đọc Ngay",
+                Title = "Chọn File Truyện CBZ / ZIP / CBR / RAR / PDF / MOBI Để Đọc Ngay",
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("Comic Archive & PDF (*.cbz, *.zip, *.pdf)")
+                    new FilePickerFileType("Tất cả định dạng truyện (*.cbz, *.zip, *.cbr, *.rar, *.pdf, *.mobi)")
                     {
-                        Patterns = new[] { "*.cbz", "*.zip", "*.pdf" }
+                        Patterns = new[] { "*.cbz", "*.zip", "*.cbr", "*.rar", "*.pdf", "*.mobi", "*.prc", "*.azw", "*.azw3" }
+                    },
+                    new FilePickerFileType("Comic Archives (*.cbz, *.zip, *.cbr, *.rar)")
+                    {
+                        Patterns = new[] { "*.cbz", "*.zip", "*.cbr", "*.rar" }
+                    },
+                    new FilePickerFileType("PDF Document (*.pdf)")
+                    {
+                        Patterns = new[] { "*.pdf" }
+                    },
+                    new FilePickerFileType("Kindle eBook (*.mobi, *.azw, *.azw3)")
+                    {
+                        Patterns = new[] { "*.mobi", "*.prc", "*.azw", "*.azw3" }
                     }
                 }
             });

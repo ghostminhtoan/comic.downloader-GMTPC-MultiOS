@@ -34,7 +34,11 @@ public partial class LibraryChapterItem : ObservableObject
 
     public bool IsCbz { get; set; }
 
+    public bool IsRar { get; set; }
+
     public bool IsPdf { get; set; }
+
+    public bool IsMobi { get; set; }
 
     /// <summary>
     /// Phạm vi trang (0-based, inclusive) của chương này bên trong file PDF. PdfEndPageIndex = -1 nghĩa là toàn bộ file.
@@ -43,8 +47,12 @@ public partial class LibraryChapterItem : ObservableObject
 
     public int PdfEndPageIndex { get; set; } = -1;
 
+    public int MobiStartPageIndex { get; set; } = 0;
+
+    public int MobiEndPageIndex { get; set; } = -1;
+
     /// <summary>
-    /// Danh sách các entry ảnh thuộc riêng chương này bên trong file .zip/.cbz (nếu file nén chứa nhiều chương con).
+    /// Danh sách các entry ảnh thuộc riêng chương này bên trong file .zip/.cbz/.rar/.cbr (nếu file nén chứa nhiều chương con).
     /// </summary>
     public List<string>? ArchiveEntryNames { get; set; }
 
@@ -71,9 +79,9 @@ public partial class LibraryChapterItem : ObservableObject
 
     public DateTime LastModified { get; set; }
 
-    public string TypeBadgeText => IsPdf ? "PDF" : (IsCbz ? "CBZ" : "FOLDER");
+    public string TypeBadgeText => IsPdf ? "PDF" : (IsMobi ? "MOBI" : (IsRar ? "CBR" : (IsCbz ? "CBZ" : "FOLDER")));
 
-    public string TypeBadgeBackground => IsPdf ? "#E11D48" : (IsCbz ? "#7C3AED" : "#0284C7");
+    public string TypeBadgeBackground => IsPdf ? "#E11D48" : (IsMobi ? "#D97706" : (IsRar ? "#2563EB" : (IsCbz ? "#7C3AED" : "#0284C7")));
 
     public bool HasReadProgress => LastReadPage > 0;
 
