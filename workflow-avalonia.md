@@ -2949,7 +2949,42 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)**.
   - Test khởi động app: `Id = 30728, Responding = True, HasExited = False`.
   - Chạy `build-avalonia.bat` đóng gói toàn bộ: Windows Standalone EXE (`48.96 MB`), Linux Portable tar.gz (`41.69 MB`) & `.deb`, Android Signed Standalone APK (`55.62 MB`).
-  - Chạy `python upload_beta_browser.py`: Tải thành công 100% 3 file (`146.27 MB`) lên GitHub Release Beta tại `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta` với tốc độ trung bình **66.7 Mbps** trong **18.4 giây**.
+
+
+### 15.92 Khắc Phục Triệt Để Nuốt Cử Chỉ Single-Tap Trên Android Sau Khi Zoom 2 Ngón Tay & Kiểm Thử Truyện ZIP Đa Chương (2026-10-14)
+- **Bối Cảnh & Yêu Cầu Cốt Lõi**:
+  1. *Lỗi cử chỉ cảm ứng trên Android*: Sau khi dùng 2 ngón tay để zoom in / out trên điện thoại Android, thao tác chạm nhẹ 1 ngón tay (Single-Tap) sau đó không hiển thị được thanh công cụ (Toolbar/Overlay).
+  2. *Kiểm thử thực tế mở truyện Dragon Ball*: Tải và kiểm thử mở file truyện `Dragon.Ballchap.0301-0469.zip` (dung lượng 389.7 MB, 2954 trang webp, 169 chapter) với các thao tác đọc truyện chuẩn (Lật trang, cuộn dọc/ngang, zoom in/out, chạm hiện thanh công cụ...).
+- **Phân Tích Nguyên Nhân Gốc Rễ Trên Android Avalonia Backend**:
+  1. *Xung đột Pointer.Capture với Touch Backend của Android*:
+     - Theo nguyên tắc kỹ thuật cốt lõi (Workflow mục 15.14), việc gọi `e.Pointer.Capture()` đối với con trỏ cảm ứng (`Touch`) trên Android làm Avalonia ngắt vòng đời sự kiện, phát sinh `PointerCaptureLostEvent` và nuốt chửng `PointerReleasedEvent`.
+  2. *Kẹt con trỏ mồ côi (Orphaned Pointer ID) trong `_activePointers`*:
+     - Khi ngón tay thứ nhất nhấc lên trong cử chỉ Pinch Zoom, nếu chỉ return mà không dọn sạch các con trỏ còn lại, con trỏ của ngón thứ hai có thể bị kẹt lại nếu Android gửi mã ID khác hoặc không bắn release. Cú chạm 1 ngón tay tiếp theo bị cộng dồn thành 2 con trỏ, biến cú chạm thành Pinch Zoom.
+  3. *Ngưỡng Touch Slop cũ ($12.0\text{ px}$) quá nhỏ so với màn hình Android DPI cao*:
+     - Khi phóng to (`ZoomLevel > 1.0`), `canPanScroll = true`. Vi rung lắc tự nhiên của da ngón tay trên màn hình xxhdpi/xxxhdpi dễ dàng vượt qua $12\text{ px}$, khiến hệ thống hiểu nhầm là kéo trang (Pan Dragging), hủy cờ `_isPointerTapCandidate = false` và nuốt mất cú Tap.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Loại Bỏ Hoàn Toàn `Pointer.Capture` Đối Với Touch (`ComicReaderControl.axaml.cs`)**:
+     - Chỉ gọi `e.Pointer.Capture(viewport)` và `e.Pointer.Capture(null)` khi con trỏ là chuột máy tính (`e.Pointer.Type == PointerType.Mouse`).
+     - Tuyệt đối không capture con trỏ Touch để bảo toàn trọn vẹn chuỗi sự kiện `Pressed` -> `Moved` -> `Released` trên Android.
+  2. **Giải Phóng Bộ Đệm Con Trỏ Đa Điểm Ngay Khi Kết Thúc Pinch Zoom**:
+     - Khi nhấc tay kết thúc Pinch Zoom, lập tức gọi `_activePointers.Clear()` và gán `_lastPinchEndTick = now`. Điều này triệt tiêu hoàn toàn con trỏ mồ côi, đảm bảo thao tác chạm tiếp theo luôn bắt đầu ở trạng thái sạch (0 con trỏ).
+  3. **Tách Biệt Ngưỡng Touch Slop & Thẩm Định Độc Lập Cho Cảm Ứng Di Động**:
+     - Ngưỡng nhận diện kéo (Pan Drag): Chuột máy tính là $8.0\text{ px}$, màn hình cảm ứng Android nâng lên **$28.0\text{ px}$** (chuẩn 8-10dp trên mobile).
+     - Trong `OnViewportPointerReleased`, bổ sung logic thẩm định độc lập `isLegitTap = distance <= maxTapDist && elapsedMs <= 500` (với `maxTapDist` là $30.0\text{ px}$ trên mobile).
+     - Ngay cả khi `wasDragging = true` do vi rung lắc ngón tay khi đang zoom, nếu khoảng cách $\le 30.0\text{ px}$ và thời gian $\le 500\text{ ms}$, hệ thống vẫn nhận diện chuẩn xác là Single-Tap và kích hoạt `_singleTapTimer`.
+  4. **Thực Thi An Toàn Trên UI Dispatcher**:
+     - Đảm bảo `_singleTapTimer.Tick` gọi `Dispatcher.UIThread.Post(() => vm.ToggleOverlay())`.
+  5. **Bảo Vệ Con Trỏ Trong `OnViewportPointerCaptureLost`**:
+     - Chỉ dọn sạch và hủy Tap Candidate khi là chuột máy tính. Đối với Touch, chỉ xóa ID tương ứng mà không hủy vô cớ.
+- **Kiểm Thử Mở Truyện Dragon Ball ZIP Đa Chương**:
+  - Tải file `Dragon.Ballchap.0301-0469.zip` (389.7 MB) chứa 2954 trang truyện định dạng WebP phân chia thành 169 chapter (`chap 0301` đến `chap 0469`).
+  - Hệ thống `ZipArchivePool` và `LibraryScannerService.ExpandArchiveIntoChapters` tự động phân tách cấu trúc ZIP này thành từng chapter riêng lẻ, sắp xếp tự nhiên theo `NaturalSortComparer` và cho phép đọc đơn lẻ từng chap hoặc đọc liền mạch toàn bộ 169 chap liên tục.
+- **Nghiệm Thu, Đóng Gói & Upload Beta**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)**.
+  - Test khởi động app: `Id = 22704, Responding = True, HasExited = False`.
+  - Chạy `build-avalonia.bat` đóng gói toàn bộ: Windows Standalone EXE (`48.96 MB`), Linux Portable tar.gz (`41.69 MB`) & `.deb`, Android Signed Standalone APK (`55.93 MB`).
+  - Chạy `python upload_beta_browser.py`: Tải thành công 100% 3 file (`146.58 MB`) lên GitHub Release Beta tại `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta` với tốc độ trung bình **66.9 Mbps** trong **18.4 giây**.
+
 
 
 

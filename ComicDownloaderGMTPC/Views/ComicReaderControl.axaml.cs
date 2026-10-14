@@ -95,7 +95,7 @@ public partial class ComicReaderControl : UserControl
             _singleTapTimer.Stop();
             if (DataContext is ComicReaderViewModel vm)
             {
-                vm.ToggleOverlay();
+                Dispatcher.UIThread.Post(() => vm.ToggleOverlay());
             }
         };
 
@@ -836,16 +836,22 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
-        // Ngưỡng kéo (Touch Slop): 12.0 pixel để phân biệt rõ ràng giữa chạm ngón tay (Tap) và kéo rê (Pan)
-        // Tránh tình trạng vi rung lắc của ngón tay trên màn hình cảm ứng nuốt mất sự kiện Single-Tap
+        // Ngưỡng kéo (Touch Slop): Phân biệt rõ ràng giữa chạm ngón tay (Tap) và kéo rê (Pan)
+        // Trên màn hình cảm ứng Android DPI cao, vi rung lắc da ngón tay đạt tới 20px, do đó ngưỡng là 28.0px
+        double slopThreshold = (e.Pointer.Type == PointerType.Mouse) ? 8.0 : 28.0;
         if (!_isPanDragging)
         {
-            if (totalDist >= 12.0)
+            if (totalDist >= slopThreshold)
             {
                 _isPanDragging = true;
                 _isPointerTapCandidate = false; // Đã kéo quá ngưỡng slop thì mới hủy Tap
-                var viewport = sender as IInputElement ?? this;
-                e.Pointer.Capture(viewport);
+
+                // QUY TẮC WORKFLOW MỤC 15.14: TUYỆT ĐỐI KHÔNG CAPTURE TOUCH TRÊN ANDROID!
+                if (e.Pointer.Type == PointerType.Mouse)
+                {
+                    var viewport = sender as IInputElement ?? this;
+                    e.Pointer.Capture(viewport);
+                }
 
                 // Tự động ẩn thanh overlay nếu đang hiện khi người dùng bắt đầu cuộn trang
                 if (vm.IsOverlayVisible && !vm.HasActivePopup)
@@ -910,27 +916,24 @@ public partial class ComicReaderControl : UserControl
 
     private void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        e.Pointer.Capture(null);
+        if (e.Pointer.Type == PointerType.Mouse)
+        {
+            e.Pointer.Capture(null);
+        }
 
         _activePointers.Remove(e.Pointer.Id);
 
+        // Khi người dùng nhấc tay kết thúc cử chỉ Pinch Zoom:
         if (_isPinching)
         {
+            _isPinching = false;
             _lastPinchEndTick = Environment.TickCount64;
-            if (_activePointers.Count < 2)
-            {
-                _isPinching = false;
-                _isPanHolding = false;
-                _isPanDragging = false;
-                _isPointerTapCandidate = false;
-
-                if (_activePointers.Count == 0)
-                {
-                    _activePointers.Clear();
-                }
-                e.Handled = true;
-                return;
-            }
+            _activePointers.Clear(); // Giải phóng 100% con trỏ đa điểm, chống kẹt ID trên Android!
+            _isPanHolding = false;
+            _isPanDragging = false;
+            _isPointerTapCandidate = false;
+            e.Handled = true;
+            return;
         }
 
         if (_activePointers.Count == 0)
@@ -938,8 +941,9 @@ public partial class ComicReaderControl : UserControl
             _isPinching = false;
         }
 
-        // Bỏ qua cú nhả tay nếu vừa kết thúc pinch trong vòng 250ms để chống nảy chạm vô ý
-        if (Environment.TickCount64 - _lastPinchEndTick < 250)
+        long now = Environment.TickCount64;
+        // Bỏ qua cú nhả tay nếu vừa kết thúc pinch trong vòng 200ms để chống nảy chạm vô ý
+        if (now - _lastPinchEndTick < 200)
         {
             _isPanHolding = false;
             _isPanDragging = false;
@@ -961,15 +965,23 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
-        e.Pointer.Capture(null);
-
         if (DataContext is not ComicReaderViewModel vm)
         {
             _isPointerTapCandidate = false;
             return;
         }
 
-        if (wasDragging)
+        Point releasePoint = e.GetPosition(this);
+        long elapsedMs = now - _pointerPressTick;
+        double dx = releasePoint.X - _pointerPressPoint.X;
+        double dy = releasePoint.Y - _pointerPressPoint.Y;
+        double distance = Math.Sqrt(dx * dx + dy * dy);
+
+        // Đánh giá chuẩn xác cú Tap (Single-Tap) trên thiết bị di động Android:
+        double maxTapDist = (e.Pointer.Type == PointerType.Mouse) ? 15.0 : 30.0;
+        bool isLegitTap = distance <= maxTapDist && elapsedMs <= 500;
+
+        if (wasDragging && !isLegitTap)
         {
             _isPointerTapCandidate = false;
             e.Handled = true;
@@ -994,17 +1006,8 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
-        if (!_isPointerTapCandidate) return;
+        if (!isLegitTap && !_isPointerTapCandidate) return;
         _isPointerTapCandidate = false;
-
-        Point releasePoint = e.GetPosition(this);
-        long elapsedMs = Environment.TickCount64 - _pointerPressTick;
-        double dx = releasePoint.X - _pointerPressPoint.X;
-        double dy = releasePoint.Y - _pointerPressPoint.Y;
-        double distance = Math.Sqrt(dx * dx + dy * dy);
-
-        // Chỉ tính là Tap khi người dùng chạm nhanh và không kéo cuộn trang
-        if (distance > 15.0 || elapsedMs > 500) return;
 
         long tapNow = Environment.TickCount64;
         double tapDx = releasePoint.X - _lastTapPoint.X;
@@ -1140,11 +1143,23 @@ public partial class ComicReaderControl : UserControl
 
     private void OnViewportPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
-        _activePointers.Clear();
-        _isPinching = false;
-        _isPanHolding = false;
-        _isPanDragging = false;
-        _isPointerTapCandidate = false;
+        if (e.Pointer.Type == PointerType.Mouse)
+        {
+            _activePointers.Clear();
+            _isPinching = false;
+            _isPanHolding = false;
+            _isPanDragging = false;
+            _isPointerTapCandidate = false;
+        }
+        else
+        {
+            _activePointers.Remove(e.Pointer.Id);
+            if (_activePointers.Count == 0)
+            {
+                _isPinching = false;
+                _isPanHolding = false;
+            }
+        }
     }
 
     private void OnViewportPointerWheelChanged(object? sender, PointerWheelEventArgs e)
