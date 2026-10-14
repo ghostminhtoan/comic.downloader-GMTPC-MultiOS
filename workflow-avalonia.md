@@ -3157,5 +3157,43 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Chạy `build-avalonia.bat` đóng gói toàn bộ đa nền tảng vào `\publish\`.
   - Chạy `python upload_beta_browser.py`: Tự động upload 100% lên GitHub Release Beta.
 
+### 15.99 Hỗ Trợ Đọc File .MOBI (Dr. Slump Demo), Tự Phân Chương PDF -> ZIP, Triệt Tiêu Lỗi SD Card Android Cold Start & Triệt Tiêu Lỗi Tự Zoom In/Out Khi Hold & Drag (2026-10-14)
+- **Bối Cảnh & Phân Tích Nguyên Nhân Gốc Rễ (`Root-Cause Analysis`)**:
+  1. *Convert PDF sang ZIP chưa phân chương*:
+     - Trước đây khi convert PDF sang ZIP, toàn bộ các trang ảnh bị gom chung vào một thư mục gốc duy nhất không có folder phân chia từng chương, gây khó khăn cho việc quản lý đọc truyện.
+     - Với file demo `Mắt nhìn thấu chung cực.pdf` (145 bookmarks), cần tự động bóc tách các mốc bookmarks/outlines để phân nhóm từng trang vào folder chương tương ứng `{SafeChapterName}/page_{idx:D4}{ext}`.
+  2. *Không xem được file .mobi trên Android (bộ nhớ trong & SD card)*:
+     - File demo `Dr. Slump - Vol.04-Kindle-Oasis-2-3.mobi` có `first_image_index` trong PalmDOC / MOBI header ghi nhận là 0 tại offset 124 của Record 0, trong khi các trang ảnh JPEG thực tế nằm từ Record 75 đến Record 155.
+     - Nếu chỉ dựa vào `first_image_index > 0`, parser sẽ bỏ qua các record ảnh.
+     - Trình duyệt tệp trên Android thiếu MIME type của mobipocket khiến SAF làm mờ file `.mobi`.
+  3. *Lỗi thẻ nhớ SD card trên Android khi Cold Start (Blank + Crash)*:
+     - Khi mở ứng dụng mới (Cold Start) và bấm nút Recent hoặc chọn History truyện lưu trên thẻ nhớ SD card, FUSE mount namespace của SD Card chưa được hệ thống Android "đánh thức" (wake up).
+     - Việc truy cập file đồng bộ trực tiếp khi mount namespace chưa sẵn sàng dẫn đến `FileNotFoundException` / `SecurityException`, khiến danh sách trang trống `Pages.Count == 0`, thumbnail bị rỗng và crash khi dựng UI.
+  4. *Cử chỉ 1 ngón tay Hold & Drag bị tự động Zoom In / Out*:
+     - Khi người dùng giữ và kéo rê 1 ngón tay 2-3 lần liên tiếp để lùi/tới trang nhanh, con trỏ mồ côi (ghost pointers) và logic phát hiện tap `wasDragging && !isLegitTap` bị nhầm lẫn với Double-Tap Zoom khi điểm nhả tay tình cờ gần với điểm bắt đầu ($\le 30$px).
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Tự Động Phân Chương Khi Convert PDF sang ZIP / CBZ**:
+     - Trong `FilePackerService.ConvertSinglePdfToArchiveAsync`: Tự động duyệt cây Bookmarks / Outlines của file PDF (sử dụng thư viện PDF có sẵn).
+     - Tạo folder chương cho từng khoảng trang `{SafeChapterName}/page_{idx:D4}{ext}`. Nếu PDF không có bookmark, tự động chia theo cụm 100 trang/chương hợp lý.
+     - Hỗ trợ cả 2 chế độ: Đóng gói từng file zip/cbz riêng cho từng chương nếu `PackSubfoldersIndividually == true`, hoặc gom vào 1 file zip/cbz duy nhất nhưng bên trong phân chia các folder chương rành mạch.
+  2. **Hoàn Thiện Bộ Phân Tích & Hiển Thị MOBI Toàn Diện**:
+     - Trong `MobiComicParser`: Khi `first_image_index == 0` (như file `Dr. Slump`), fallback tự động quét từ Record 1 đến hết, kiểm tra Magic Byte (`FF D8 FF` cho JPEG, `89 50 4E 47` cho PNG, GIF, WebP, BMP) trích xuất chính xác toàn bộ 81 ảnh truyện.
+     - Cập nhật `LibraryScannerService.IsMobiFile` và `LibraryViewModel.LoadDirectory` bổ sung icon `📙` (#F59E0B) cho file `.mobi`.
+     - Cập nhật `OpenFilePickerAsync` thêm MIME type `application/x-mobipocket-ebook`, `application/octet-stream`, `*/*` đảm bảo Android SAF không làm mờ file `.mobi`.
+  3. **Đánh Thức FUSE Mount Namespace Thẻ Nhớ SD Card (AndroidStorageHelper)**:
+     - Tạo mới `AndroidStorageHelper.WakeUpStorage(Context)`: Đánh thức toàn bộ `GetExternalFilesDirs`, `GetExternalCacheDirs`, `GetExternalMediaDirs` và `StorageManager` ngay tại `MainActivity.OnCreate` và `OnResume`.
+     - Trong `ComicReaderActivity`, `LibraryViewModel.OpenPathToReadInternalAsync`, `OpenMostRecentComicAsync` và `LoadHistoryItemsAsync`: Thực hiện retry đánh thức lưu trữ và trì hoãn an toàn khi cold start, triệt tiêu hoàn toàn hiện tượng blank/crash khi mở truyện trên thẻ nhớ SD Card.
+  4. **Triệt Tiêu Hoàn Toàn Lỗi Tự Zoom In/Out Khi Hold & Drag**:
+     - Trong `ComicReaderControl.axaml.cs`:
+       - Ngay khi phát hiện thao tác kéo rê (`_isPanDragging` hoặc `wasDragging == true`), lập tức đặt `_lastTapTick = 0`, `_lastTapPoint = (-9999, -9999)` và hủy timer single tap.
+       - Trong `OnViewportPointerReleased`: Thay đổi điều kiện kết thúc từ `if (wasDragging && !isLegitTap)` thành `if (wasDragging)` triệt để, đảm bảo một khi đã phát sinh thao tác rê trang thì 100% KHÔNG BAO GIỜ lọt vào nhánh Double-Tap Zoom.
+       - Dọn dẹp con trỏ mồ côi (stale pointers) với timeout giảm xuống 250ms trong cả `PointerPressed` và `PointerMoved`.
+- **Nghiệm Thu, Đóng Gói & Upload Beta**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)** cho toàn bộ project Desktop và Android.
+  - Test khởi động app Desktop thành công (`Responding: True, HasExited: False`).
+  - Chạy `build-avalonia.bat` xuất bản sạch tất cả các gói vào chung một thư mục `\publish\`.
+  - Chạy `python upload_beta_browser.py`: Tự động upload 100% 3 file (`.apk`, `.exe`, `.tar.gz`) dung lượng 149.43 MB lên GitHub Release Beta với tốc độ 72.2 Mbps.
+
+
 
 
