@@ -3130,5 +3130,32 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Chạy `build-avalonia.bat` đóng gói toàn bộ các gói cài đặt vào duy nhất thư mục `\publish\`.
   - Chạy `python upload_beta_browser.py`: Tự động upload 100% lên GitHub Release Beta.
 
+### 15.98 Thu Phóng Hai Chiều Liên Tục (Continuous Bidirectional Pinch Zoom In/Out) Liền Mạch Không Khựng (2026-10-14)
+- **Bối Cảnh & Phân Tích Nguyên Nhân Gốc Rễ (`Root-Cause Analysis`)**:
+  1. *Lỗi Không Thể Zoom Out Liền Mạch Khi Đang Pinch*:
+     - Người dùng dùng 2 ngón tay kéo giãn ra để phóng to (Zoom In), nhưng khi không buông tay mà thu gọn 2 ngón tay lại thì hệ thống không thực hiện thu nhỏ (Zoom Out).
+     - *Nguyên nhân 1 - Hạn Định Thời Gian Ngắn (150ms Expiration Bug)*: Trong `OnViewportPointerMoved`, logic cũ lọc con trỏ bằng biểu thức: `_pointerLastSeenTicks.Where(kvp => moveNow - kvp.Value <= 150)`.
+       Khi người dùng kéo giãn tay xong, họ tự nhiên dừng lại một phần tích tắc để xem hình hoặc chuẩn bị kéo tay lại. Khi bắt đầu kéo vào, một ngón tay đóng vai trò điểm tựa (stationary anchor) hoặc ngón tay kia di chuyển trước, ngón còn lại không phát sinh event mới trong > 150ms.
+       Bộ lọc 150ms lập tức loại bỏ ngón tay neo này, khiến `validMovePoints.Length` tụt xuống 1! Cử chỉ Pinch bị vô hiệu hóa hoàn toàn, và vì `_isPinching = true`, code rơi vào `if (_isPinching) return;` làm màn hình bị đóng băng, không thể thu nhỏ.
+     - *Nguyên nhân 2 - Xóa Nhầm Ngón Tay Khi Chạm (200ms Press Expiration)*: Trong `OnViewportPointerPressed`, bộ lọc `now - kvp.Value > 200` tự động xóa ngón tay thứ nhất nếu ngón tay thứ hai được chạm xuống cách nhau > 200ms, dẫn tới `_activePointers.Clear()` làm mất trạng thái đa điểm.
+     - *Nguyên nhân 3 - Ngưỡng Vi Sai 0.003 Làm Trôi Mất Cử Chỉ Chậm*: Bộ lọc `Math.Abs(scaleFactor - 1.0) > 0.003` làm mất các bước dịch chuyển vi sai cực mịn khi ngón tay thu gọn từ từ.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Bảo Toàn Trạng Thái Đa Điểm Tuyệt Đối Trong Suốt Phiên Pinch (`Pinch Session Invariance`)**:
+     - Trong `OnViewportPointerMoved`: Khi `_activePointers.Count >= 2`, lấy trực tiếp 2 điểm chạm từ bộ nhớ đệm `_activePointers.Values.Take(2)`. Tuyệt đối KHÔNG áp dụng timeout 150ms trong khi cử chỉ Pinch đang diễn ra!
+     - Ngay cả khi một ngón tay đứng yên làm tâm neo và chỉ ngón tay kia di chuyển vào trong, khoảng cách `Distance(p1, p2)` vẫn được cập nhật liên tục và chính xác 100%.
+     - `scaleFactor = currentDist / _pinchLastDistance` phản ánh trực tiếp chiều chuyển động: $> 1.0$ là Zoom In, $< 1.0$ là Zoom Out.
+  2. **Tích Lũy Vi Sai Không Suy Hao (Lossless Accumulation)**:
+     - Hạ ngưỡng phát hiện xuống `0.001` (hoặc pan $> 1.0\text{px}$).
+     - Chỉ cập nhật `_pinchLastDistance = currentDist` khi `zoomChanged` thực sự thay đổi giá trị zoom (`>= 0.001`). Nếu vi sai chuyển động quá nhỏ trong 1 frame, khoảng cách gốc được bảo lưu để cộng dồn cho frame tiếp theo, đảm bảo không một phần trăm pixel nào bị bỏ sót.
+  3. **Khôi Phục Ngưỡng Purge Khi Nhàn Rỗi (Idle Ghost Purge)**:
+     - Trong `OnViewportPointerPressed`: Chỉ dọn dẹp các con trỏ mồ côi nếu `!_isPinching` và con trỏ đó đã không hoạt động trong `> 1500ms` (1.5 giây).
+     - Cho phép người dùng chạm ngón 1 và ngón 2 tự nhiên mà không bị xóa nhầm con trỏ.
+  4. **Bảo Vệ Kết Thúc Cử Chỉ (400ms Post-Pinch Release Guard)**:
+     - Trong `OnViewportPointerReleased`: Nâng bộ đệm chống nảy chạm `pinchElapsed < 400ms` giúp nuốt trọn cú nhả ngón tay thứ hai trễ hơn ngón tay thứ nhất, ngăn ngừa triệt để các cú Single Tap hoặc Drag ngoài ý muốn.
+- **Nghiệm Thu, Đóng Gói & Upload Beta**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)** cho cả Desktop và Android.
+  - Chạy `build-avalonia.bat` đóng gói toàn bộ đa nền tảng vào `\publish\`.
+  - Chạy `python upload_beta_browser.py`: Tự động upload 100% lên GitHub Release Beta.
+
 
 
