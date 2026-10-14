@@ -426,19 +426,23 @@ public partial class LibraryViewModel : ViewModelBase
                 {
                     new FilePickerFileType("Tất cả định dạng truyện (*.cbz, *.zip, *.cbr, *.rar, *.pdf, *.mobi)")
                     {
-                        Patterns = new[] { "*.cbz", "*.zip", "*.cbr", "*.rar", "*.pdf", "*.mobi", "*.prc", "*.azw", "*.azw3" }
+                        Patterns = new[] { "*.cbz", "*.zip", "*.cbr", "*.rar", "*.pdf", "*.mobi", "*.prc", "*.azw", "*.azw3" },
+                        MimeTypes = new[] { "application/x-mobipocket-ebook", "application/octet-stream", "application/zip", "application/x-zip-compressed", "application/x-cbr", "application/x-rar-compressed", "application/pdf", "*/*" }
                     },
                     new FilePickerFileType("Comic Archives (*.cbz, *.zip, *.cbr, *.rar)")
                     {
-                        Patterns = new[] { "*.cbz", "*.zip", "*.cbr", "*.rar" }
+                        Patterns = new[] { "*.cbz", "*.zip", "*.cbr", "*.rar" },
+                        MimeTypes = new[] { "application/zip", "application/x-zip-compressed", "application/x-cbr", "application/x-rar-compressed", "application/octet-stream" }
                     },
                     new FilePickerFileType("PDF Document (*.pdf)")
                     {
-                        Patterns = new[] { "*.pdf" }
+                        Patterns = new[] { "*.pdf" },
+                        MimeTypes = new[] { "application/pdf" }
                     },
                     new FilePickerFileType("Kindle eBook (*.mobi, *.azw, *.azw3)")
                     {
-                        Patterns = new[] { "*.mobi", "*.prc", "*.azw", "*.azw3" }
+                        Patterns = new[] { "*.mobi", "*.prc", "*.azw", "*.azw3" },
+                        MimeTypes = new[] { "application/x-mobipocket-ebook", "application/octet-stream", "*/*" }
                     }
                 }
             });
@@ -1060,8 +1064,9 @@ public partial class LibraryViewModel : ViewModelBase
 
                             bool isArchive = LibraryScannerService.IsArchiveFile(f);
                             bool isPdf = LibraryScannerService.IsPdfFile(f);
+                            bool isMobi = LibraryScannerService.IsMobiFile(f);
                             bool isImg = LibraryScannerService.IsImageFile(f);
-                            if (!isArchive && !isPdf && !isImg) continue;
+                            if (!isArchive && !isPdf && !isMobi && !isImg) continue;
 
                             var fi = new FileInfo(f);
                             if (isImg)
@@ -1094,8 +1099,8 @@ public partial class LibraryViewModel : ViewModelBase
                                     Name = fi.Name,
                                     FullPath = f,
                                     ItemCountOrSize = FormatBytes(fi.Length),
-                                    IconText = isPdf ? "📄" : "📦",
-                                    IconColor = "#38BDF8",
+                                    IconText = isPdf ? "📄" : (isMobi ? "📙" : "📦"),
+                                    IconColor = isMobi ? "#F59E0B" : "#38BDF8",
                                     Extension = ext,
                                     LastModified = fi.LastWriteTime,
                                     FileSizeBytes = fi.Length
@@ -1291,12 +1296,28 @@ public partial class LibraryViewModel : ViewModelBase
     {
         try
         {
+            if (OperatingSystem.IsAndroid())
+            {
+                LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
+            }
+
             var knownPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();
             var items = new List<HistoryItemModel>();
 
             foreach (var path in knownPaths)
             {
-                if (!File.Exists(path) && !Directory.Exists(path)) continue;
+                if (!File.Exists(path) && !Directory.Exists(path))
+                {
+                    if (OperatingSystem.IsAndroid() && path.Contains("/storage/"))
+                    {
+                        LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
+                        if (!File.Exists(path) && !Directory.Exists(path)) continue;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
 
                 string title = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                 string sizeText = string.Empty;
@@ -1517,6 +1538,14 @@ public partial class LibraryViewModel : ViewModelBase
     {
         var recentPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();
         string? latestPath = recentPaths.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && (File.Exists(p) || Directory.Exists(p)));
+
+        if (string.IsNullOrWhiteSpace(latestPath) && OperatingSystem.IsAndroid() && recentPaths.Count > 0)
+        {
+            LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
+            await Task.Delay(100);
+            latestPath = recentPaths.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && (File.Exists(p) || Directory.Exists(p)));
+        }
+
         if (!string.IsNullOrWhiteSpace(latestPath))
         {
             await OpenPathToReadInternalAsync(latestPath);
@@ -1562,6 +1591,13 @@ public partial class LibraryViewModel : ViewModelBase
             }
 
             var quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(actualComicPath));
+            if ((quickComic == null || quickComic.Chapters.Count == 0) && OperatingSystem.IsAndroid() && actualComicPath.Contains("/storage/"))
+            {
+                LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
+                await Task.Delay(150);
+                quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(actualComicPath));
+            }
+
             if (quickComic != null && quickComic.Chapters.Count > 0)
             {
                 ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);

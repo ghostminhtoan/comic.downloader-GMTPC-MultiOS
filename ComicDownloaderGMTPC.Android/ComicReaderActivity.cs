@@ -52,6 +52,9 @@ public class ComicReaderActivity : AvaloniaActivity
         base.OnCreate(savedInstanceState);
         CurrentInstance = this;
 
+        AndroidStorageHelper.WakeUpStorage(this);
+        LibraryScannerService.AndroidGetExternalStoragePaths ??= () => AndroidStorageHelper.GetExternalStoragePaths(this);
+
         ComicReaderService.AndroidSetOrientationMode = ApplyOrientationMode;
         ComicReaderService.AndroidApplyDisplaySettings = ApplyDisplaySettings;
         ComicReaderViewModel.AndroidOverlayVisibilityChanged += OnAndroidOverlayVisibilityChanged;
@@ -82,6 +85,7 @@ public class ComicReaderActivity : AvaloniaActivity
     {
         base.OnResume();
         CurrentInstance = this;
+        AndroidStorageHelper.WakeUpStorage(this);
         ComicReaderService.AndroidSetOrientationMode = ApplyOrientationMode;
         ComicReaderService.AndroidApplyDisplaySettings = ApplyDisplaySettings;
 
@@ -180,6 +184,13 @@ public class ComicReaderActivity : AvaloniaActivity
                     try
                     {
                         var comic = LibraryScannerService.Instance.CreateQuickComicFromPath(comicRoot);
+                        if ((comic == null || comic.Chapters.Count == 0) && comicRoot.Contains("/storage/"))
+                        {
+                            AndroidStorageHelper.WakeUpStorage(CurrentInstance?.ApplicationContext ?? CurrentInstance);
+                            await Task.Delay(150);
+                            comic = LibraryScannerService.Instance.CreateQuickComicFromPath(comicRoot);
+                        }
+
                         if (comic != null && comic.Chapters.Count > 0)
                         {
                             var targetChap = (!string.IsNullOrWhiteSpace(chapterPath)
@@ -189,6 +200,10 @@ public class ComicReaderActivity : AvaloniaActivity
                                 ?? comic.Chapters[0];
 
                             await activeVm.InitializeAsync(comic, targetChap);
+                        }
+                        else
+                        {
+                            activeVm.ShowTransientToast("Không thể nạp tệp truyện từ thẻ nhớ. Vui lòng mở lại từ Thư viện.");
                         }
                     }
                     catch (Exception ex)

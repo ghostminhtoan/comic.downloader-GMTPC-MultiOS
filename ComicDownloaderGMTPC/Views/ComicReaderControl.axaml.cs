@@ -825,13 +825,13 @@ public partial class ComicReaderControl : UserControl
         Point pos = e.GetPosition(this);
         long now = Environment.TickCount64;
 
-        // Dọn sạch triệt để con trỏ mồ côi (Stale Pointer Purging) nếu không phải đang trong phiên Pinch và không hoạt động trong vòng > 1500ms
-        if (!_isPinching && _pointerLastSeenTicks.Count > 0)
+        // Dọn sạch triệt để con trỏ mồ côi (Ghost Pointers) nếu không hoạt động trong vòng > 250ms
+        if (_pointerLastSeenTicks.Count > 0)
         {
             List<int>? staleKeys = null;
             foreach (var kvp in _pointerLastSeenTicks)
             {
-                if (now - kvp.Value > 1500)
+                if (now - kvp.Value > 250)
                 {
                     staleKeys ??= new List<int>();
                     staleKeys.Add(kvp.Key);
@@ -845,6 +845,13 @@ public partial class ComicReaderControl : UserControl
                     _pointerLastSeenTicks.Remove(k);
                 }
             }
+        }
+
+        if (_activePointers.Count == 0)
+        {
+            _isPinching = false;
+            _isPanHolding = false;
+            _isPanDragging = false;
         }
 
         _activePointers[e.Pointer.Id] = pos;
@@ -892,6 +899,28 @@ public partial class ComicReaderControl : UserControl
         long moveNow = Environment.TickCount64;
         _activePointers[e.Pointer.Id] = currentPoint;
         _pointerLastSeenTicks[e.Pointer.Id] = moveNow;
+
+        // Dọn sạch con trỏ mồ côi (Ghost Pointers) từ các lần chạm trước (> 250ms) chống tự động kích hoạt Pinch Zoom
+        if (_pointerLastSeenTicks.Count > 1)
+        {
+            List<int>? staleKeys = null;
+            foreach (var kvp in _pointerLastSeenTicks)
+            {
+                if (kvp.Key != e.Pointer.Id && moveNow - kvp.Value > 250)
+                {
+                    staleKeys ??= new List<int>();
+                    staleKeys.Add(kvp.Key);
+                }
+            }
+            if (staleKeys != null)
+            {
+                foreach (var k in staleKeys)
+                {
+                    _activePointers.Remove(k);
+                    _pointerLastSeenTicks.Remove(k);
+                }
+            }
+        }
 
         if (DataContext is not ComicReaderViewModel vm) return;
         if (vm.IsMarginEditorOpen) return;
@@ -1023,6 +1052,9 @@ public partial class ComicReaderControl : UserControl
             {
                 _isPanDragging = true;
                 _isPointerTapCandidate = false; // Đã kéo quá ngưỡng slop thì mới hủy Tap
+                _lastTapTick = 0;
+                _lastTapPoint = new Point(-9999, -9999);
+                _singleTapTimer.Stop();
 
                 // QUY TẮC WORKFLOW MỤC 15.14: TUYỆT ĐỐI KHÔNG CAPTURE TOUCH TRÊN ANDROID!
                 if (e.Pointer.Type == PointerType.Mouse)
@@ -1169,9 +1201,12 @@ public partial class ComicReaderControl : UserControl
         double maxTapDist = (e.Pointer.Type == PointerType.Mouse) ? 15.0 : 30.0;
         bool isLegitTap = distance <= maxTapDist && elapsedMs <= 500;
 
-        if (wasDragging && !isLegitTap)
+        if (wasDragging)
         {
             _isPointerTapCandidate = false;
+            _lastTapTick = 0;
+            _lastTapPoint = new Point(-9999, -9999);
+            _singleTapTimer.Stop();
             e.Handled = true;
 
             // Kích hoạt Quán tính cuộn mượt mà (Kinetic Momentum)
@@ -1339,12 +1374,12 @@ public partial class ComicReaderControl : UserControl
         _activePointers.Clear();
         _pointerLastSeenTicks.Clear();
         _isPinching = false;
-        if (e.Pointer.Type == PointerType.Mouse)
-        {
-            _isPanHolding = false;
-            _isPanDragging = false;
-            _isPointerTapCandidate = false;
-        }
+        _isPanHolding = false;
+        _isPanDragging = false;
+        _isPointerTapCandidate = false;
+        _lastTapTick = 0;
+        _lastTapPoint = new Point(-9999, -9999);
+        _singleTapTimer.Stop();
     }
 
     private void OnViewportPointerWheelChanged(object? sender, PointerWheelEventArgs e)

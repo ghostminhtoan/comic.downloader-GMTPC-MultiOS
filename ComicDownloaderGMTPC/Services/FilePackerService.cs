@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using ComicDownloaderGMTPC.Models;
 using SkiaSharp;
 
 namespace ComicDownloaderGMTPC.Services;
@@ -742,6 +743,16 @@ public class FilePackerService
         return sb.ToString();
     }
 
+    private static string MakeSafeChapterFolder(string rawTitle, int index)
+    {
+        string safe = DownloadEngineService.MakeSafeFilename(rawTitle ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(safe))
+        {
+            safe = $"Chương {index:D3}";
+        }
+        return safe;
+    }
+
     public async Task<bool> ConvertSinglePdfToArchiveAsync(
         string pdfPath,
         string finalOutputDir,
@@ -760,6 +771,75 @@ public class FilePackerService
             }
 
             string baseName = Path.GetFileNameWithoutExtension(pdfPath);
+
+            // 1. Phân chia các chương (Chapters) dựa theo Bookmarks có sẵn trong PDF
+            var chapters = new List<(string Title, int StartPage, int EndPage)>();
+            if (meta.Bookmarks != null && meta.Bookmarks.Count > 0)
+            {
+                var sortedBookmarks = meta.Bookmarks.OrderBy(b => b.PageIndex).ToList();
+                var validBms = new List<PdfBookmarkItem>();
+                foreach (var bm in sortedBookmarks)
+                {
+                    int clampedPage = Math.Clamp(bm.PageIndex, 0, totalPages - 1);
+                    if (validBms.Count > 0 && validBms[^1].PageIndex == clampedPage)
+                    {
+                        validBms[^1] = new PdfBookmarkItem { Title = bm.Title, PageIndex = clampedPage };
+                    }
+                    else
+                    {
+                        validBms.Add(new PdfBookmarkItem { Title = bm.Title, PageIndex = clampedPage });
+                    }
+                }
+
+                if (validBms.Count >= 2)
+                {
+                    if (validBms[0].PageIndex > 0)
+                    {
+                        chapters.Add(("Mở đầu", 0, validBms[0].PageIndex - 1));
+                    }
+                    for (int i = 0; i < validBms.Count; i++)
+                    {
+                        int start = validBms[i].PageIndex;
+                        int end = (i + 1 < validBms.Count) ? Math.Max(start, validBms[i + 1].PageIndex - 1) : (totalPages - 1);
+                        chapters.Add((validBms[i].Title, start, end));
+                    }
+                }
+                else if (validBms.Count == 1 && validBms[0].PageIndex > 0)
+                {
+                    chapters.Add(("Mở đầu", 0, validBms[0].PageIndex - 1));
+                    chapters.Add((validBms[0].Title, validBms[0].PageIndex, totalPages - 1));
+                }
+            }
+
+            if (chapters.Count == 0)
+            {
+                if (totalPages > 100)
+                {
+                    int chunkSize = 100;
+                    int chapNum = 1;
+                    for (int start = 0; start < totalPages; start += chunkSize)
+                    {
+                        int end = Math.Min(start + chunkSize - 1, totalPages - 1);
+                        chapters.Add(($"Chương {chapNum:D3}", start, end));
+                        chapNum++;
+                    }
+                }
+                else
+                {
+                    chapters.Add(("Chương 1", 0, totalPages - 1));
+                }
+            }
+
+            var pageMapping = new (string Folder, int PageIndex)[totalPages];
+            for (int c = 0; c < chapters.Count; c++)
+            {
+                string safeFolderName = MakeSafeChapterFolder(chapters[c].Title, c + 1);
+                for (int p = chapters[c].StartPage; p <= chapters[c].EndPage && p < totalPages; p++)
+                {
+                    pageMapping[p] = (safeFolderName, p - chapters[c].StartPage + 1);
+                }
+            }
+
             int totalUnits = totalPages * ((options.CreateCbz ? 1 : 0) + (options.CreateZip ? 1 : 0));
             if (totalUnits == 0)
             {
@@ -769,6 +849,84 @@ public class FilePackerService
 
             int cur = 0;
 
+            // Xử lý chế độ đóng gói từng chapter riêng lẻ (nếu có từ 2 chương trở lên và bật PackSubfoldersIndividually)
+            bool batchSeparateChapters = options.PackSubfoldersIndividually && chapters.Count > 1;
+
+            if (batchSeparateChapters)
+            {
+                string targetDir = Path.Combine(finalOutputDir, baseName);
+                if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+
+                if (options.CreateCbz)
+                {
+                    for (int c = 0; c < chapters.Count; c++)
+                    {
+                        if (ct.IsCancellationRequested) return false;
+                        var chap = chapters[c];
+                        string safeFolderName = MakeSafeChapterFolder(chap.Title, c + 1);
+                        string chapCbzPath = Path.Combine(targetDir, $"{safeFolderName}.cbz");
+                        if (File.Exists(chapCbzPath)) File.Delete(chapCbzPath);
+
+                        using (var zipFs = new FileStream(chapCbzPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 65536))
+                        using (var archive = new ZipArchive(zipFs, ZipArchiveMode.Create))
+                        {
+                            for (int p = chap.StartPage; p <= chap.EndPage && p < totalPages; p++)
+                            {
+                                if (ct.IsCancellationRequested) return false;
+                                byte[]? imgBytes = PdfComicParser.Instance.ExtractPageImageBytes(pdfPath, p, out string ext);
+                                if (imgBytes != null && imgBytes.Length > 0)
+                                {
+                                    string entryName = $"page_{p - chap.StartPage + 1:D4}{ext}";
+                                    var entry = archive.CreateEntry(entryName, options.Compression);
+                                    using var es = entry.Open();
+                                    es.Write(imgBytes, 0, imgBytes.Length);
+                                }
+
+                                cur++;
+                                progress?.Report((cur, totalUnits, $"[PDF ➔ CBZ] {safeFolderName} (Trang {p + 1}/{totalPages})"));
+                            }
+                        }
+                    }
+                    LogEmitted?.Invoke("SUCCESS", $"Đã phân chia và đóng gói {chapters.Count} chương CBZ tại: {targetDir}");
+                }
+
+                if (options.CreateZip)
+                {
+                    for (int c = 0; c < chapters.Count; c++)
+                    {
+                        if (ct.IsCancellationRequested) return false;
+                        var chap = chapters[c];
+                        string safeFolderName = MakeSafeChapterFolder(chap.Title, c + 1);
+                        string chapZipPath = Path.Combine(targetDir, $"{safeFolderName}.zip");
+                        if (File.Exists(chapZipPath)) File.Delete(chapZipPath);
+
+                        using (var zipFs = new FileStream(chapZipPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 65536))
+                        using (var archive = new ZipArchive(zipFs, ZipArchiveMode.Create))
+                        {
+                            for (int p = chap.StartPage; p <= chap.EndPage && p < totalPages; p++)
+                            {
+                                if (ct.IsCancellationRequested) return false;
+                                byte[]? imgBytes = PdfComicParser.Instance.ExtractPageImageBytes(pdfPath, p, out string ext);
+                                if (imgBytes != null && imgBytes.Length > 0)
+                                {
+                                    string entryName = $"page_{p - chap.StartPage + 1:D4}{ext}";
+                                    var entry = archive.CreateEntry(entryName, options.Compression);
+                                    using var es = entry.Open();
+                                    es.Write(imgBytes, 0, imgBytes.Length);
+                                }
+
+                                cur++;
+                                progress?.Report((cur, totalUnits, $"[PDF ➔ ZIP] {safeFolderName} (Trang {p + 1}/{totalPages})"));
+                            }
+                        }
+                    }
+                    LogEmitted?.Invoke("SUCCESS", $"Đã phân chia và đóng gói {chapters.Count} chương ZIP tại: {targetDir}");
+                }
+
+                return true;
+            }
+
+            // Chế độ đóng gói 1 file tổng hợp: gom trang vào từng Folder chương riêng bên trong file nén
             if (options.CreateCbz)
             {
                 string cbzPath = Path.Combine(finalOutputDir, $"{baseName}.cbz");
@@ -783,7 +941,10 @@ public class FilePackerService
                         byte[]? imgBytes = PdfComicParser.Instance.ExtractPageImageBytes(pdfPath, i, out string ext);
                         if (imgBytes != null && imgBytes.Length > 0)
                         {
-                            string entryName = $"page_{i + 1:D4}{ext}";
+                            string entryName = chapters.Count > 1
+                                ? $"{pageMapping[i].Folder}/page_{pageMapping[i].PageIndex:D4}{ext}"
+                                : $"page_{i + 1:D4}{ext}";
+
                             var entry = archive.CreateEntry(entryName, options.Compression);
                             using var es = entry.Open();
                             es.Write(imgBytes, 0, imgBytes.Length);
@@ -793,7 +954,7 @@ public class FilePackerService
                         progress?.Report((cur, totalUnits, $"[PDF ➔ CBZ] {baseName} (Trang {i + 1}/{totalPages})"));
                     }
                 }
-                LogEmitted?.Invoke("SUCCESS", $"Đã chuyển đổi PDF sang CBZ: {Path.GetFileName(cbzPath)} ({totalPages} trang)");
+                LogEmitted?.Invoke("SUCCESS", $"Đã chuyển đổi PDF sang CBZ (phân {chapters.Count} thư mục chương): {Path.GetFileName(cbzPath)} ({totalPages} trang)");
             }
 
             if (options.CreateZip)
@@ -810,7 +971,10 @@ public class FilePackerService
                         byte[]? imgBytes = PdfComicParser.Instance.ExtractPageImageBytes(pdfPath, i, out string ext);
                         if (imgBytes != null && imgBytes.Length > 0)
                         {
-                            string entryName = $"page_{i + 1:D4}{ext}";
+                            string entryName = chapters.Count > 1
+                                ? $"{pageMapping[i].Folder}/page_{pageMapping[i].PageIndex:D4}{ext}"
+                                : $"page_{i + 1:D4}{ext}";
+
                             var entry = archive.CreateEntry(entryName, options.Compression);
                             using var es = entry.Open();
                             es.Write(imgBytes, 0, imgBytes.Length);
@@ -820,7 +984,7 @@ public class FilePackerService
                         progress?.Report((cur, totalUnits, $"[PDF ➔ ZIP] {baseName} (Trang {i + 1}/{totalPages})"));
                     }
                 }
-                LogEmitted?.Invoke("SUCCESS", $"Đã chuyển đổi PDF sang ZIP: {Path.GetFileName(zipPath)} ({totalPages} trang)");
+                LogEmitted?.Invoke("SUCCESS", $"Đã chuyển đổi PDF sang ZIP (phân {chapters.Count} thư mục chương): {Path.GetFileName(zipPath)} ({totalPages} trang)");
             }
 
             return true;

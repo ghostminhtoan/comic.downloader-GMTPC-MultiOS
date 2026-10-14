@@ -37,40 +37,11 @@ public class MainActivity : AvaloniaMainActivity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         CurrentInstance = this;
+        AndroidStorageHelper.WakeUpStorage(this);
 
         // Cung cấp danh sách đường dẫn Root của toàn bộ thẻ nhớ ngoài (SD Card)
         Services.LibraryScannerService.AndroidGetExternalStoragePaths = () =>
-        {
-            var results = new List<string>();
-            try
-            {
-                var ctx = CurrentInstance?.ApplicationContext ?? CurrentInstance;
-                if (ctx != null)
-                {
-                    var filesDirs = ctx.GetExternalFilesDirs(null);
-                    if (filesDirs != null)
-                    {
-                        foreach (var dir in filesDirs)
-                        {
-                            if (dir == null) continue;
-                            string abs = dir.AbsolutePath;
-                            int idx = abs.IndexOf("/Android/data", StringComparison.OrdinalIgnoreCase);
-                            if (idx > 0)
-                            {
-                                string root = abs.Substring(0, idx);
-                                if (!root.Contains("emulated", StringComparison.OrdinalIgnoreCase) &&
-                                    !results.Any(r => string.Equals(r, root, StringComparison.OrdinalIgnoreCase)))
-                                {
-                                    results.Add(root);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            catch { }
-            return results;
-        };
+            AndroidStorageHelper.GetExternalStoragePaths(CurrentInstance?.ApplicationContext ?? CurrentInstance);
 
         base.OnCreate(savedInstanceState);
         Window?.SetSoftInputMode(SoftInput.AdjustResize);
@@ -255,6 +226,7 @@ public class MainActivity : AvaloniaMainActivity
     {
         base.OnResume();
         CurrentInstance = this;
+        AndroidStorageHelper.WakeUpStorage(this);
 
         // Tự động làm mới danh sách Thẻ SD & Storage khi người dùng quay lại từ màn hình Cài đặt cấp quyền
         try
