@@ -62,9 +62,23 @@ public partial class DirectoryItemModel : ObservableObject
 
     public bool IsNormalFolder => IsFolder && !ShowDirectReadButton;
 
-    public bool CanReadDirectNormalFolder => IsNormalFolder && CanReadDirectly;
-
     public bool IsArchiveOrPdfFile => !IsFolder && !IsImageFile;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCover))]
+    private Bitmap? _cover;
+
+    public bool HasCover => Cover != null;
+
+    public string LastModifiedDateText => LastModified != DateTime.MinValue ? LastModified.ToString("yyyy-MM-dd") : string.Empty;
+
+    public string FileSizeText { get; set; } = string.Empty;
+
+    public string ReadingProgressText { get; set; } = string.Empty;
+
+    public bool HasReadingProgress => !string.IsNullOrWhiteSpace(ReadingProgressText);
+
+    public double ProgressPercent { get; set; }
 }
 
 public partial class HistoryItemModel : ObservableObject

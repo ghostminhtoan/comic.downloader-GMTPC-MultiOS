@@ -726,6 +726,33 @@ public sealed class LibraryScannerService
             // TRƯỜNG HỢP 1: File .zip/.cbz/.rar/.cbr chứa nhiều thư mục chương con (ví dụ: Chuong 1/, Chuong 2/, ...)
             if (folderGroups.Count >= 2)
             {
+                var flatAllEntries = allImageEntries
+                    .OrderBy(e => e, NaturalSortComparer.Instance)
+                    .ToList();
+                firstCoverEntry ??= flatAllEntries[0];
+
+                string allProgressKey = $"{archivePath}::{scheme}_all_pages";
+                int allSavedPage = ReadProgressStore.Instance.GetLastReadPage(allProgressKey);
+                if (allSavedPage <= 0 && legacyGlobalPage1Based > 0)
+                {
+                    allSavedPage = legacyGlobalPage1Based;
+                }
+
+                // Thêm mục 'Toàn bộ truyện' để người dùng có thể xem trọn vẹn toàn bộ ảnh của file RAR/ZIP giống Comic Screen
+                list.Add(new LibraryChapterItem
+                {
+                    Index = nextIndex++,
+                    Title = $"Toàn bộ truyện (Tất cả {flatAllEntries.Count} trang)",
+                    LocalPath = archivePath,
+                    ProgressKey = allProgressKey,
+                    IsCbz = !isRar,
+                    IsRar = isRar,
+                    ArchiveEntryNames = flatAllEntries,
+                    TotalPages = flatAllEntries.Count,
+                    LastReadPage = allSavedPage,
+                    LastModified = lastMod
+                });
+
                 var sortedFolderKeys = folderGroups.Keys
                     .OrderBy(k => k, NaturalSortComparer.Instance)
                     .ToList();

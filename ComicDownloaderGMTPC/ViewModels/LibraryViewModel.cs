@@ -79,7 +79,13 @@ public partial class LibraryViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DirectoryViewModeIcon))]
     [NotifyPropertyChangedFor(nameof(DirectoryViewModeText))]
+    [NotifyPropertyChangedFor(nameof(IsDirectoryListView))]
     private bool _isDirectoryGridView;
+
+    public bool IsDirectoryListView => !IsDirectoryGridView;
+
+    [ObservableProperty]
+    private int _directoryGridColumns = 3;
 
     public string DirectoryViewModeIcon => IsDirectoryGridView ? "📋" : "⊞";
     public string DirectoryViewModeText => IsDirectoryGridView ? "Danh sách" : "Lưới ô";
@@ -1069,6 +1075,7 @@ public partial class LibraryViewModel : ViewModelBase
                             if (!isArchive && !isPdf && !isMobi && !isImg) continue;
 
                             var fi = new FileInfo(f);
+                            string fileSizeText = FormatBytes(fi.Length);
                             if (isImg)
                             {
                                 directImagesCount++;
@@ -1079,7 +1086,8 @@ public partial class LibraryViewModel : ViewModelBase
                                     CanReadDirectly = true,
                                     Name = fi.Name,
                                     FullPath = f,
-                                    ItemCountOrSize = FormatBytes(fi.Length),
+                                    FileSizeText = fileSizeText,
+                                    ItemCountOrSize = fileSizeText,
                                     IconText = "🖼️",
                                     IconColor = "#38BDF8",
                                     Extension = ext,
@@ -1091,6 +1099,20 @@ public partial class LibraryViewModel : ViewModelBase
                             else
                             {
                                 comicFilesCount++;
+                                int saved = ReadProgressStore.Instance.GetLastReadPage(f);
+                                int total = ReadProgressStore.Instance.GetChapterTotalPages(f);
+                                string progressText = string.Empty;
+                                double progressPercent = 0;
+                                if (saved > 0 && total > 0)
+                                {
+                                    progressPercent = Math.Clamp(Math.Round((double)saved * 100.0 / total), 0, 100);
+                                    progressText = $"{progressPercent:0}%\n{saved}/{total}";
+                                }
+
+                                string summary = !string.IsNullOrEmpty(progressText)
+                                    ? $"{fileSizeText}  {progressPercent:0}%"
+                                    : fileSizeText;
+
                                 list.Add(new DirectoryItemModel
                                 {
                                     IsFolder = false,
@@ -1098,7 +1120,10 @@ public partial class LibraryViewModel : ViewModelBase
                                     CanReadDirectly = true,
                                     Name = fi.Name,
                                     FullPath = f,
-                                    ItemCountOrSize = FormatBytes(fi.Length),
+                                    FileSizeText = fileSizeText,
+                                    ReadingProgressText = progressText,
+                                    ProgressPercent = progressPercent,
+                                    ItemCountOrSize = summary,
                                     IconText = isPdf ? "📄" : (isMobi ? "📙" : "📦"),
                                     IconColor = isMobi ? "#F59E0B" : "#38BDF8",
                                     Extension = ext,
@@ -1141,6 +1166,24 @@ public partial class LibraryViewModel : ViewModelBase
                 {
                     DirectoryItems.Add(item);
                 }
+
+                // Tải Cover Thumbnail ngầm bất đồng bộ cho danh sách tệp/truyện (chuẩn Comic Screen)
+                _ = Task.Run(async () =>
+                {
+                    foreach (var item in list)
+                    {
+                        if (ct.IsCancellationRequested) break;
+                        try
+                        {
+                            var bmp = _scanner.DecodeCoverThumbnailForPath(item.FullPath, 220);
+                            if (bmp != null)
+                            {
+                                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => item.Cover = bmp);
+                            }
+                        }
+                        catch { }
+                    }
+                }, ct);
             }
         }
         catch (Exception ex)

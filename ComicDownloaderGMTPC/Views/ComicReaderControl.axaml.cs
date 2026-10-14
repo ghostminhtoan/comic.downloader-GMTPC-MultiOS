@@ -957,6 +957,12 @@ public partial class ComicReaderControl : UserControl
                     double visibleBottom = Math.Min(vh, bottom);
                     double visibleHeight = Math.Max(0, visibleBottom - visibleTop);
 
+                    // Tự động kích hoạt nạp ảnh tức thì cho bất kỳ trang nào lọt vào viewport mà chưa nạp
+                    if (visibleHeight > 10 && !page.IsLoaded && !page.IsLoading)
+                    {
+                        _ = vm.EnsureSinglePageLoadedAsync(page);
+                    }
+
                     if (visibleHeight > maxVisibleHeight)
                     {
                         maxVisibleHeight = visibleHeight;

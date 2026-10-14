@@ -3232,3 +3232,41 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test khởi động app Desktop thành công (`Responding: True, HasExited: False`).
   - Chạy `build-avalonia.bat` đóng gói toàn bộ gói cài đặt Windows EXE, Linux và Android Signed APK vào `publish\`.
   - Chạy `python upload_beta_browser.py`: Tự động upload toàn bộ gói build mới lên GitHub Release Beta.
+
+### 15.101 Chế Độ Danh Sách Full Tên, Lưới Ô Chuẩn Comic Screen & Hỗ Trợ Đọc Toàn Bộ Ảnh File Archive (.RAR / .CBR / .ZIP / .CBZ) Đa Thư Mục Con (2026-10-14)
+- **Bối Cảnh & Phân Tích Nguyên Nhân Gốc Rễ (`Root-Cause Analysis`)**:
+  1. *Chế độ danh sách (Thumbnail List) tab Directory bị cắt ngắn tên*:
+     - Bản thiết kế cũ dùng `CharacterEllipsis` kèm các nút thao tác xanh lá to choán hết diện tích bên phải, khiến tên file truyện dài bị co cụm thành `...`, không xem được trọn vẹn tên file như Comic Screen.
+     - Thiếu thông tin ngày sửa đổi, dung lượng và tiến độ đọc (`57% 44/77`).
+  2. *Chế độ lưới ô (Grid View) chưa hoạt động*:
+     - Thuộc tính `IsDirectoryGridView` trong ViewModel chưa từng được liên kết và thiết kế panel riêng trên XAML. Khi bấm nút chuyển chế độ lưới thì giao diện không phản hồi.
+  3. *Lỗi mở file .RAR chứa nhiều thư mục con chỉ xem được 1 2 ảnh đầu*:
+     - Với các file archive đóng gói nhiều thư mục con (ví dụ: `buttobi itto.rar` 882 MB gồm 103 folder tương ứng 103 chương, tổng cộng 4736 ảnh), hàm `ExpandArchiveIntoChapters` tách file archive thành 103 chương riêng rẽ.
+     - Khi mở đọc, trình đọc chỉ tải Chương 0 (chỉ có 33 ảnh đầu tiên) thay vì mở toàn bộ 4736 ảnh như người dùng mong đợi (Comic Screen đọc liền mạch `9/1706`).
+     - Ngoài ra, ở chế độ cuộn liên tục, nếu ảnh trong viewport chưa nạp kịp thì không kích hoạt nạp ngầm tức thì, dẫn đến cảm giác chỉ xem được vài ảnh đầu.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Nâng Cấp Data Model `DirectoryItemModel`**:
+     - Thêm thuộc tính nạp ảnh bìa bất đồng bộ: `Bitmap? _cover`, `HasCover`.
+     - Thêm thuộc tính hiển thị thông tin ngày tháng: `LastModifiedDateText => LastModified.ToString("yyyy-MM-dd")`.
+     - Thêm thuộc tính tiến độ đọc và dung lượng: `FileSizeText`, `ReadingProgressText`, `HasReadingProgress`, `ProgressPercent`.
+  2. **Tối Ưu Hóa Scanner & Tự Động Gom Toàn Bộ Ảnh Trong File Archive Đa Thư Mục Con**:
+     - Trong `LibraryScannerService.ExpandArchiveIntoChapters`: Khi file archive (.rar, .cbr, .zip, .cbz) chứa `>= 2` thư mục con, hệ thống tự động chèn ngay chương 0:
+       `Title = "Toàn bộ truyện (Tất cả " + flatAllEntries.Count + " trang)"` với `ArchiveEntryNames = flatAllEntries` (toàn bộ 4736 ảnh được sắp xếp theo NaturalSort).
+       Đồng thời giữ nguyên các chương con bên dưới để người dùng linh hoạt chọn đọc toàn bộ hoặc chọn đọc riêng từng chương.
+  3. **Tái Cấu Trúc View `LibraryView.axaml` Chuẩn Comic Screen**:
+     - **Chế độ Danh Sách (Thumbnail List)**:
+       - Cột 1: Ảnh bìa đứng 50x70px bo góc `CornerRadius="4"`.
+       - Cột 2: Tên file đầy đủ không bao giờ bị cắt ngắn (`TextWrapping="Wrap"`), kèm dòng ngày tháng sửa đổi `yyyy-MM-dd`.
+       - Cột 3: Dung lượng file và tiến độ đọc (`57%  44/77`). Bọc toàn bộ hàng bằng nút bấm mở trực tiếp, lược bỏ hoàn toàn các nút xanh lá cồng kềnh.
+     - **Chế độ Lưới Ô (Grid View)**:
+       - Hiển thị dạng thẻ Card 114x170px trên `ItemsControl` + `WrapPanel`.
+       - Ảnh bìa tràn khung `UniformToFill`, lớp phủ bóng mờ ở chân ảnh hiển thị tên file và dung lượng / tiến độ đọc. Nhấp vào card là mở truyện đọc ngay lập tức.
+  4. **Nạp Ngầm Thumbnail Bất Đồng Bộ Trong Background Task**:
+     - Trong `LibraryViewModel.LoadDirectory`: Chạy tác vụ ngầm giải mã ảnh bìa thumbnail mà không làm block UI thread, tự động cập nhật Cover cho từng `DirectoryItemModel`.
+     - Đọc tiến độ đọc từ `ReadProgressStore` (`savedPage`, `totalPages`) hiển thị trực quan tỷ lệ % và số trang đã đọc.
+  5. **Tự Động Kích Hoạt Nạp Trang Viewport Trong Trình Đọc**:
+     - Trong `ComicReaderControl.OnReaderScrollChanged`: Kích hoạt `EnsureSinglePageLoadedAsync(page)` ngay khi trang xuất hiện trong viewport mà chưa nạp ảnh.
+- **Nghiệm Thu & Đóng Gói**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)** cho cả Desktop và Android Release.
+  - Chạy `build-avalonia.bat` đóng gói toàn bộ gói cài đặt Windows EXE, Linux và Android Signed APK vào `publish\`.
+  - Tự động chạy script `python upload_beta_browser.py` đẩy bản phát hành lên GitHub Release Beta.
