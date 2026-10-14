@@ -613,7 +613,7 @@ public sealed class LibraryScannerService
         return list;
     }
 
-    private static List<LibraryChapterItem> ExpandArchiveIntoChapters(
+    public static List<LibraryChapterItem> ExpandArchiveIntoChapters(
         string archivePath,
         ref int nextIndex,
         out string? firstCoverEntry)

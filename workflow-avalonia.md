@@ -3060,3 +3060,37 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test khởi động app: `Responding = True, HasExited = False`.
   - Chạy `build-avalonia.bat` đóng gói toàn bộ các gói cài đặt.
   - Chạy `python upload_beta_browser.py`: Tự động upload 100% lên GitHub Release Beta.
+
+### 15.95 Khắc Phục Triệt Để Lỗi Double-Tap Bị Lệch/Tua Trang Trong Cuộn Dọc (Vertical Scroll) & Kiểm Thử Tự Động 10/10 PASS Trên File ZIP 200 Chap Độc Thủ Vu Y (2026-10-14)
+- **Bối Cảnh & Phân Tích Nguyên Nhân Gốc Rễ (`Root-Cause Analysis`)**:
+  1. *Lỗi đổi trang ngoài ý muốn khi Double-Tap*: Trong cơ chế cũ, khi người dùng chạm đúp, hệ thống duyệt tìm `ListBoxItem` nằm dưới tọa độ ngón tay. Nếu người dùng vô tình chạm hơi lệch lên trên hoặc xuống dưới mép trang (vào mẩu hiển thị của trang trước/sau), hệ thống vội vã đổi `targetPageIndex` sang trang đó và gán `vm.CurrentPageIndex = targetPageIndex`, khiến người dùng bị tua lùi 1 trang hoặc tua tới 1 trang. Lần chạm đúp tiếp theo lại tiếp tục bị lệch tích luỹ, dẫn tới tua 2 trang trở lên!
+  2. *Lỗi trong công thức tính tọa độ cuộn*: Khi zoom in / out, tất cả các trang phía trước trang hiện tại đều co giãn kích thước. Nếu chỉ dùng vi sai đơn lẻ một trang mà không tính tổng chiều cao tích lũy các trang trước, `targetOffsetY` bị hụt hàng ngàn pixel, rơi ngược về trang trước đó.
+  3. *Lỗi nhận diện trang trong `OnReaderScrollChanged`*: Ở mức zoom 100%, hệ thống trước đây chỉ kiểm tra một đường cắt mỏng manh $vh \times 0.45$. Khi người dùng dừng ở vị trí lửng lơ (trang chiếm tới 40% màn hình nhưng không cắt qua đúng đường 45%), hệ thống vội kết luận trang hiện tại đã mất và tự ý đổi sang trang kế bên.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Khóa Cứng Trang Mục Tiêu Trong Double-Tap Cuộn Dọc (`PerformDoubleTapZoom`)**:
+     - Trong Cuộn dọc (Vertical Scroll): Khóa cố định `targetPageIndex = savedPageIndex = vm.CurrentPageIndex`. Double-Tap chỉ có mục đích duy nhất là Phóng to / Thu nhỏ trang đang đọc, TUYỆT ĐỐI KHÔNG BAO GIỜ tự ý đổi sang trang khác!
+     - Tỷ lệ chạm $fractionY$ được tính tương đối so với chính container của trang hiện tại: $fractionY = \text{Clamp}((touchInLb.Y - top) / pageHeight, 0.0, 1.0)$.
+  2. **Công Thức Vi Sai Đỉnh Tích Lũy Tuyệt Đối (Cumulative Content Top Anchor)**:
+     - Tính chính xác đỉnh mới của trang mục tiêu trong toàn bộ tài liệu:
+       $$\text{newContentTop} = \sum_{i=0}^{K-1} (\text{Pages}[i].\text{DisplayHeight} + \text{Margin})$$
+     - Chiều cao mới của trang $K$: $newPageHeight = \text{Pages}[K].\text{DisplayHeight}$.
+     - Đỉnh mong muốn của trang $K$ trên màn hình: $\text{desiredTopInViewport} = touchInLb.Y - fractionY \times newPageHeight$.
+     - Tọa độ cuộn mới chính xác tuyệt đối:
+       $$\text{targetOffsetY} = \max(0, \text{newContentTop} - \text{desiredTopInViewport})$$
+     - Căn ngang $\text{targetOffsetX}$ theo tỷ lệ ngón tay khi trang rộng hơn màn hình ($Zoom > 1.02$).
+     - Dispatcher hai cấp độ: áp dụng tại `DispatcherPriority.Loaded` và xác nhận lại tại `DispatcherPriority.Background`.
+  3. **Đồng Bộ Đỉnh Chuẩn Xác Trong `OnVmScrollToPageRequested`**:
+     - Khi cuộn tới trang chỉ định trong Cuộn dọc: tính toán trực tiếp đỉnh của trang đó và gán `sv.Offset = new Vector(sv.Offset.X, targetY)` kết hợp `listBox.ScrollIntoView(targetItem)`, đảm bảo trang mục tiêu luôn nằm ngay đỉnh màn hình khi cuộn tới.
+  4. **Bảo Vệ Hysteresis $\ge 25\%$ Viewport & Maximum Overlap Trong `OnReaderScrollChanged`**:
+     - Miễn là trang hiện tại còn hiển thị $\ge 25\%$ chiều cao màn hình HOẶC bao phủ vùng giữa màn hình (50% vh) $\to$ GIỮ NGUYÊN `CurrentPageIndex`, triệt tiêu hoàn toàn hiện tượng nhảy trang lăng xăng.
+     - Khi thực sự đổi trang: chọn trang có diện tích hiển thị lớn nhất trên màn hình (`maxVisibleHeight >= vh * 0.20`).
+  5. **Kịch Bản Kiểm Thử Tự Động (`--test-vertical-doubletap`)**:
+     - Kiểm thử tự động trên file ZIP có thật: `T:\[HDD T]\zfaststone capture\zfinish\độc thủ vu y nettruyenvio\độc thủ vu y chap 001-200.zip` (849 MB, 200 chap).
+     - Nạp Chapter 1 (65 trang), cuộn xuống 2 trang (vào Page Index 2), thực hiện Double-Tap 10 lần liên tiếp (mỗi lần cách nhau 3 giây theo đúng yêu cầu người dùng).
+     - Kết quả kiểm thử: **10/10 lần PASS ✅, CurrentPageIndex = 2 xuyên suốt 100% kịch bản, 0% lệch trang (Zero Page Drift)**! Log trace lưu tại `.tmp\test-vertical-doubletap.log`.
+- **Nghiệm Thu, Đóng Gói & Upload Beta**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)**.
+  - Test khởi động app: `Responding = True, HasExited = False`.
+  - Chạy `build-avalonia.bat` đóng gói toàn bộ các gói cài đặt.
+  - Chạy `python upload_beta_browser.py`: Tự động upload 100% lên GitHub Release Beta.
+

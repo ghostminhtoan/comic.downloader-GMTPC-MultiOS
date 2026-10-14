@@ -2008,7 +2008,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         TriggerPrefetch(clamped);
     }
 
-    private void RequestScrollToPage(int pageIndex)
+    public void RequestScrollToPage(int pageIndex)
     {
         if (!IsScrollMode || _suppressScrollSync || Pages.Count == 0) return;
         int clamped = Math.Clamp(pageIndex, 0, Pages.Count - 1);
