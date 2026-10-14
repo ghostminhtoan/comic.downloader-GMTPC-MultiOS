@@ -1599,7 +1599,7 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DoubleTapZoomScaleText))]
-    private double _doubleTapZoomScale = 193.0; // 100..400% (Ảnh 4 mặc định 193%)
+    private double _doubleTapZoomScale = 125.0; // 100..400% (Mặc định 125%)
 
     public string DoubleTapZoomScaleText => $"{DoubleTapZoomScale:0}%";
 
@@ -1619,7 +1619,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void ResetDoubleTapZoomDefault()
     {
         DoubleTapZoomMode = 3;
-        DoubleTapZoomScale = 193.0;
+        DoubleTapZoomScale = 125.0;
     }
 
     public void ExecuteDoubleTapZoom(bool isInsideImage)

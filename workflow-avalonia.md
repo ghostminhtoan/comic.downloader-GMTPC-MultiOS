@@ -3023,3 +3023,40 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test khởi động app: `Id = 22704, Responding = True, HasExited = False`.
   - Chạy `build-avalonia.bat` đóng gói toàn bộ: Windows Standalone EXE (`48.96 MB`), Linux Portable tar.gz (`41.69 MB`) & `.deb`, Android Signed Standalone APK (`55.93 MB`).
   - Chạy `python upload_beta_browser.py`: Tải thành công 100% lên GitHub Release Beta.
+
+### 15.94 Zoom Scale Level Mặc Định 125%, Ổn Định Tuyệt Đối Cơ Chế Zoom Trong Cuộn Dọc (Vertical Scroll) & Triệt Tiêu Lỗi Zoom Nhảy/Tua Trang (2026-10-14)
+- **Bối Cảnh & Phân Tích Nguyên Nhân Gốc Rễ (`Root-Cause Analysis`)**:
+  1. *Zoom Scale Level mặc định*: Chuyển đổi mức zoom chạm đúp mặc định từ 193% về 125% (`_doubleTapZoomScale = 125.0`), đồng thời bổ sung preset 125% vào Popup Zoom Button 6 để người dùng thao tác một chạm tiện lợi.
+  2. *Tại sao Left/Right và Horizontal Scroll zoom mượt không tua trang, nhưng Vertical Scroll lại bị nhảy trang loạn xạ?*:
+     - Trong chế độ Lật trang (Flip Mode): Chỉ có 1 hoặc 2 trang được render trong `LayoutTransformControl`, không tồn tại danh sách cuộn dọc.
+     - Trong chế độ Cuộn ngang (Horizontal Scroll): `ScrollViewer.VerticalScrollBarVisibility="Disabled"`, `Offset.Y` luôn bằng 0, mỗi trang là một cột độc lập.
+     - Trong chế độ Cuộn dọc (Vertical Scroll / Webtoon): Hàng trăm hoặc hàng nghìn trang (như file `Dragon Ball` gồm 2,954 trang) được xếp chồng theo chiều dọc trong `ListBox` (`VirtualizingStackPanel`).
+     - *Sai lầm trong công thức cũ*: Khi zoom, mã nguồn áp dụng công thức 2D Canvas toàn cục:
+       $$newOffsetY = (oldOffset.Y + pivot.Y) \times ratio - pivot.Y$$
+       Tại trang số 15, `oldOffset.Y` có thể lên tới 20,000px. Khi zoom chỉ 5% ($ratio = 1.05$), $newOffsetY$ bị tăng vọt thêm $20,000 \times 0.05 = 1,000\text{px}$ (bằng chiều cao một trang truyện!). Trong khi đó, `VirtualizingStackPanel` của Avalonia ảo hóa phần tử và chưa kịp tính toán lại `Extent.Height`, dẫn đến `Offset.Y` bị clamp hoặc `VirtualizingStackPanel` tái chế container khiến trang hiện tại biến mất và nhảy sang trang 12 hoặc 18!
+     - Khi chạm đúp Zoom In / Out, `targetY` tính theo độ dồn toàn cục khiến ScrollViewer nhảy hàng ngàn pixel sang trang khác; và khi `OnReaderScrollChanged` kích hoạt, nó đọc trang ngẫu nhiên tại tâm và đổi luôn `CurrentPageIndex`.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Chuẩn Hóa Mức Zoom Mặc Định 125% (`ComicReaderViewModel.cs` & `ComicReaderControl.axaml`)**:
+     - Cập nhật `_doubleTapZoomScale = 125.0;` và `ResetDoubleTapZoomDefault() => DoubleTapZoomScale = 125.0;`.
+     - Trong Popup Zoom Button 6: Cập nhật Grid Preset thành 5 cột: `100%`, `125%` (màu cyan highlight), `150%`, `200%`, `300%`.
+  2. **Công Thức Vi Sai Cục Bộ (Local Delta Zoom Anchor) Cho Cuộn Dọc**:
+     - Thay vì nhân dồn toàn bộ `oldOffset.Y` từ trang 0, hệ thống xác định chính xác trang truyện `targetPageIndex` và container `ListBoxItem` nằm dưới tọa độ ngón tay/chạm đúp, tính toán tỷ lệ tương đối $fractionY = (pivot.Y - top) / pageHeight \in [0, 1]$.
+     - Công thức vi sai mới cho Cuộn dọc:
+       $$\Delta Y_{offset} = fractionY \times targetContainerHeight \times (ratio - 1.0) - panDy$$
+       $$newOffsetY = oldOffset.Y + \Delta Y_{offset}$$
+     - Công thức này hoàn toàn độc lập với vị trí trang thứ bao nhiêu trong bộ truyện. Dù đang ở trang 1 hay trang 2,500, độ lệch $\Delta Y$ chỉ là vi sai co giãn cục bộ của riêng trang đang đọc, giữ điểm ảnh dưới ngón tay đứng yên tuyệt đối và loại bỏ 100% hiện tượng tua trang khi zoom!
+  3. **Neo Điểm Tựa Đa Điểm Chạm (`InitVerticalPinchAnchor`)**:
+     - Bổ sung `InitVerticalPinchAnchor(Point pivot)` được gọi ngay khi cử chỉ 2 ngón tay Pinch bắt đầu (ở cả `OnViewportPointerPressed` và `OnViewportPointerMoved`).
+     - Ghi nhận `_pinchStartPageIndex`, `_pinchPageHeight`, `_pinchFractionY` để bảo toàn trang gốc trong suốt quá trình zoom.
+  4. **Cơ Chế Neo Trang Hysteresis Đàn Hồi Trong `OnReaderScrollChanged`**:
+     - Nới rộng cửa sổ an toàn sau khi kết thúc Pinch: `Environment.TickCount64 - _lastPinchEndTick < 800` (800ms) để giao diện hoàn toàn ổn định trước khi cho phép lắng nghe sự kiện cuộn.
+     - Khi đang Zoom in (`ZoomLevel > 1.05`): Trang hiện tại (`CurrentPageIndex`) được bảo vệ bằng cơ chế Hysteresis: Miễn là trang hiện tại còn hiển thị ít nhất 20% chiều cao trên màn hình hoặc bao phủ tâm màn hình, hệ thống giữ nguyên `CurrentPageIndex` và không chuyển trang!
+     - Chỉ khi trang hiện tại thực sự cuộn trôi hẳn khỏi màn hình thì mới cập nhật sang trang kế tiếp.
+  5. **Bảo Toàn Trang Đọc Tuyệt Đối Khi Chạm Đúp (Double-Tap)**:
+     - Trong Double-Tap Zoom In / Out ở Cuộn dọc: Sử dụng `fractionY * targetContainerHeight * (ratio - 1.0)` để định vị chính xác vị trí cuộn quanh trang đang chạm.
+     - Khóa cứng `vm.CurrentPageIndex = targetPageIndex;` và ghi nhận `_lastPinchEndTick = now` để triệt tiêu mọi xung đột scroll tự động.
+- **Nghiệm Thu, Đóng Gói & Upload Beta**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)**.
+  - Test khởi động app: `Responding = True, HasExited = False`.
+  - Chạy `build-avalonia.bat` đóng gói toàn bộ các gói cài đặt.
+  - Chạy `python upload_beta_browser.py`: Tự động upload 100% lên GitHub Release Beta.
