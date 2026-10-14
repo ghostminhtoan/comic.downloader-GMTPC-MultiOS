@@ -3325,4 +3325,31 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 - **Nghiệm Thu**:
   - Biên dịch đạt tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
 
+### 15.104 Khắc Phục Lỗi Crash Khởi Động (Cold Start) Trên Android Cho Tính Năng Dual Picture Sort (2026-10-15)
+- **Bối Cảnh & Phân Tích Nguyên Nhân Gốc Rễ (`Root-Cause Analysis`)**:
+  - Triệu chứng: Sau khi bổ sung tab Dual Picture Sort, ứng dụng khởi động và hoạt động trơn tru trên Windows Desktop nhưng bị văng ngay khi mở (crash cold start) trên Android.
+  - Phân tích log & mã nguồn:
+    1. **Lỗi Unboxing Cast XAML khi nạp Container Mobile (`System.InvalidCastException`)**:
+       - Trên Android (thiết bị dọc), `IsPortraitMode` tự động nhận giá trị `true` ngay từ thời điểm đo đạc viewport khởi động (`Bounds.Height > Bounds.Width`).
+       - Trong `MainView.axaml`, container giao diện dọc của Dual Picture Sort chứa hai nút tab Switcher Gốc / Đã Lọc: `<Button Command="{Binding SwitchDualSortMobileTabCommand}" CommandParameter="0" />` và `CommandParameter="1"`.
+       - Trong `MainViewModel.DualPictureSort.cs`, lệnh được khai báo dưới dạng `[RelayCommand] public void SwitchDualSortMobileTab(int tabIndex)`. Avalonia XAML engine truyền chuỗi literal `"0"` (kiểu `System.String`) vào lệnh nhận `int`. Khi container được khởi tạo và render trên Android, cơ chế `CanExecute` của Avalonia thực hiện ép kiểu `(int)parameter`, lập tức phát sinh `InvalidCastException: Unable to cast object of type 'System.String' to type 'System.Int32'`, khiến luồng UI sập ngay từ bước cold start.
+    2. **Xung Đột Phím Điều Hướng Hệ Thống Android (`Key.Back`)**:
+       - Trong `MainView.axaml.cs`, sự kiện `KeyDownEvent` lắng nghe `e.Key == Key.Back` để trả ảnh về thư mục gốc. Trên Android OS, phím `Back` phát ra sự kiện phím hệ thống cho Back Navigation; việc chặn và can thiệp không có try-catch gây gián đoạn luồng xử lý của hệ điều hành.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Triệt Tiêu Hoàn Toàn `CommandParameter` Bằng 2 Command Riêng Biệt**:
+     - Trong `MainViewModel.DualPictureSort.cs`: Thay thế `SwitchDualSortMobileTab(int)` bằng hai RelayCommand không tham số độc lập và an toàn tuyệt đối 100%:
+       `[RelayCommand] public void SelectDualSortMobileSourceTab() => DualSortMobileActiveTab = 0;`
+       `[RelayCommand] public void SelectDualSortMobileSortedTab() => DualSortMobileActiveTab = 1;`
+     - Trong `MainView.axaml`: Bỏ hoàn toàn `CommandParameter`, bind trực tiếp vào `SelectDualSortMobileSourceTabCommand` và `SelectDualSortMobileSortedTabCommand`.
+  2. **Vô Hiệu Hóa `Key.Back` Nội Bộ & Bọc Bảo Vệ Toàn Diện Khối Sự Kiện Phím / Chạm**:
+     - Trong `MainView.axaml.cs`: Loại bỏ `e.Key == Key.Back` khỏi phím tắt nội bộ, chỉ dùng phím `Left` hoặc nút UI cho thao tác trả ảnh.
+     - Bọc toàn bộ khối xử lý phím tắt và hai hàm chạm ảnh `OnDualSortSourceItemPointerPressed`, `OnDualSortSortedItemPointerPressed` trong khối `try...catch` để đảm bảo không một ngoại lệ input nào có thể làm sụp ứng dụng.
+- **Nghiệm Thu & Đóng Gói**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)** cho cả `ComicDownloaderGMTPC.Android` và `ComicDownloaderGMTPC.Desktop`.
+  - Đóng gói publish thành công vào `publish\`:
+    - Android Signed APK: `publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`
+    - Windows Desktop Single-file EXE: `publish\ComicDownloaderGMTPC.Desktop.exe`
+  - Đã commit local sạch sẽ với thông điệp Conventional Commit rõ ràng.
+
+
 
