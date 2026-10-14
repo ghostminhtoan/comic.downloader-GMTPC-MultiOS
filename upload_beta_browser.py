@@ -480,7 +480,9 @@ def perform_browser_upload(force_login=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Upload Release Beta via Persistent Microsoft Edge")
     parser.add_argument("--login", action="store_true", help="Mo trinh duyet de dang nhap lai GitHub")
-    args = parser.parse_args()
+    parser.add_argument("--no-pause", action="store_true", help="Khong dung man hinh sau khi upload")
+    parser.add_argument("--skip-pause", action="store_true", help="Khong dung man hinh sau khi upload")
+    args, _ = parser.parse_known_args()
 
     try:
         perform_browser_upload(force_login=args.login)

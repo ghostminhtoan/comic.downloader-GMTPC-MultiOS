@@ -17,9 +17,9 @@ Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ,
 - Không revert thay đổi của user nếu không yêu cầu.
 - Xong việc: đánh giá, gợi ý file cần sửa/kiểm tra, rà soát EN/VI.
 - Luôn luôn test build 2 bước: bước 1 là tự tải khởi tạo thư viện, bước 2 là app mở lên, có UI hoàn tất thì mới xem như là build thành công.
-- **Quy tắc Tự Động Upload Release Beta**: Sau khi build và kiểm thử khởi động app thành công (`Responding: True`), BẮT BUỘC luôn luôn chạy script upload beta (`upload beta.cmd` hoặc `upload_beta.ps1`) để tự động cập nhật 3 gói cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta`: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`.
+- **Quy tắc Tự Động Upload Release Beta**: Script build chính thức `build-avalonia.bat` đã tích hợp tự động bước [4/4] upload beta (`upload beta.cmd` qua Microsoft Edge Direct-to-S3 hoặc fallback PowerShell API) để cập nhật 3 gói cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta`: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`. Khi cần upload độc lập mà không cần biên dịch lại, người dùng có thể chạy trực tiếp script độc lập `upload beta.cmd` hoặc `update beta.cmd`.
 - **Quy tắc Build & Thư mục Publish**:
-  - Script build chính thức: `build-avalonia.bat`.
+  - Script build chính thức: `build-avalonia.bat` (đã tích hợp đóng gói Windows, Linux, Android và tự động upload beta; hỗ trợ cờ `--no-upload` để chỉ build local).
   - Khi build / publish file cho toàn bộ các hệ điều hành (Windows, Linux, Android), toàn bộ file standalone `.exe`, binary Linux, `.tar.gz`, `.deb` và `.apk` **bắt buộc luôn luôn ở chung một folder duy nhất `\Comic Downloader GMTPC AVALONIA\publish\`**, tuyệt đối **không được cho vào các subfolder như `windows`, `linux`, `android`**.
 - Luôn xuất khối trạng thái chuẩn ở cuối câu trả lời:
   - `commit local: <mã hash>`
@@ -3270,3 +3270,26 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)** cho cả Desktop và Android Release.
   - Chạy `build-avalonia.bat` đóng gói toàn bộ gói cài đặt Windows EXE, Linux và Android Signed APK vào `publish\`.
   - Tự động chạy script `python upload_beta_browser.py` đẩy bản phát hành lên GitHub Release Beta.
+
+### 15.102 Tích Hợp Tự Động Upload/Update Release Beta Vào Build-Avalonia Và Bảo Toàn Script Độc Lập (2026-10-14)
+- **Bối Cảnh & Phân Tích Nguyên Nhân Gốc Rễ (`Root-Cause Analysis`)**:
+  - Trước đây, quy trình build và phát hành yêu cầu chạy thủ công 2 lệnh tách biệt: chạy `build-avalonia.bat` để biên dịch 3 nền tảng (Windows, Linux, Android), sau đó mới chạy `upload beta.cmd` (hoặc `update beta`) để đẩy asset lên GitHub Release.
+  - Người dùng yêu cầu gộp tiến trình update beta trực tiếp vào `build-avalonia.bat`, đồng thời bảo toàn khả năng chạy riêng `update beta.cmd` / `upload beta.cmd` độc lập khi chỉ muốn upload lại mà không cần compile lại từ đầu.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Nâng Cấp `build-avalonia.bat` (Bước [4/4] Tự Động Upload)**:
+     - Thêm bước `[4/4] Uploading Release Beta to GitHub Release (tag beta)...` ngay sau khi đóng gói Android APK thành công.
+     - Tự động gọi `call "%~dp0upload beta.cmd" --no-pause` để đẩy 3 gói cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta`.
+     - Hỗ trợ tham số `--no-upload` hoặc `--skip-upload` để bỏ qua bước upload khi dev chỉ muốn biên dịch local.
+  2. **Hỗ Trợ Cờ `--no-pause` Trong `upload beta.cmd` & `upload_beta_browser.py`**:
+     - `upload beta.cmd` nhận diện `--no-pause` để không dừng màn hình chờ bấm phím khi được gọi từ batch build tự động.
+     - Khi người dùng nhấp đúp chạy trực tiếp `upload beta.cmd` / `update beta.cmd`, lệnh vẫn giữ nguyên `pause` để người dùng theo dõi kết quả.
+     - `upload_beta_browser.py` hỗ trợ `--no-pause`, `--skip-pause` và dùng `parse_known_args()` chống lỗi đối số lạ.
+  3. **Tạo Script Alias Độc Lập `update beta.cmd`**:
+     - Tạo file `update beta.cmd` (chuyển tiếp tới `upload beta.cmd %*`) ở cả thư mục root và `Comic Downloader GMTPC AVALONIA`.
+     - Tạo file `build-avalonia.bat` và `build-avalonia.cmd` ở root workspace để có thể chạy build từ bất cứ đâu.
+- **Nghiệm Thu & Đóng Gói**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)** cho cả Desktop và Android Release.
+  - Test khởi động app Desktop thành công (`Id = 30952, Responding = True, HasExited = False`).
+  - Kiểm thử `build-avalonia.bat --no-upload`: Thành công 100%, tự động nhận diện cờ bỏ qua upload.
+  - Kiểm thử `update beta.cmd`: Hoạt động trơn tru cả ở chế độ tương tác và chế độ `--no-pause`.
+

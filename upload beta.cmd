@@ -15,6 +15,12 @@ echo   Release Tag: beta
 echo ========================================================
 echo.
 
+set "NO_PAUSE="
+for %%I in (%*) do (
+    if /I "%%~I"=="--no-pause" set "NO_PAUSE=1"
+    if /I "%%~I"=="--skip-pause" set "NO_PAUSE=1"
+)
+
 if "%1"=="--legacy" goto USE_POWERSHELL
 if "%1"=="--api" goto USE_POWERSHELL
 
@@ -35,5 +41,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0upload_beta.ps1" -
 
 :FINISHED
 echo.
+if defined NO_PAUSE goto END_OF_SCRIPT
 echo Nhan phim bat ky de dong cua so nay...
 pause >nul
+
+:END_OF_SCRIPT
