@@ -142,10 +142,22 @@ public partial class ComicReaderViewModel : ViewModelBase
         ChapterList.IndexOf(CurrentChapter) < ChapterList.Count - 1;
 
     public bool ShowBoundaryNextChapterButton =>
-        !IsContinuousChaptersMode && CanGoNextChapter && TotalPages > 0 && CurrentPageIndex >= TotalPages - 1;
+        !IsContinuousChaptersMode && CanGoNextChapter && TotalPages > 0 &&
+        (CurrentPageIndex >= TotalPages - 1 || IsScrollAtEnd);
 
     public bool ShowBoundaryPrevChapterButton =>
-        !IsContinuousChaptersMode && CanGoPrevChapter && TotalPages > 0 && CurrentPageIndex <= 0;
+        !IsContinuousChaptersMode && CanGoPrevChapter && TotalPages > 0 &&
+        (CurrentPageIndex <= 0 || IsScrollAtStart);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryNextChapterButton))]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryPrevChapterButton))]
+    private bool _isScrollAtEnd;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryNextChapterButton))]
+    [NotifyPropertyChangedFor(nameof(ShowBoundaryPrevChapterButton))]
+    private bool _isScrollAtStart;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LeftFlipPage))]
@@ -2002,6 +2014,9 @@ public partial class ComicReaderViewModel : ViewModelBase
             _currentPageIndex = clamped;
         }
 
+        IsScrollAtStart = (clamped <= 0);
+        IsScrollAtEnd = (clamped >= Pages.Count - 1);
+
         UpdateCurrentFlipPages();
         SyncActivePdfBookmark(clamped);
         RecordReadingProgress(clamped);
@@ -2134,6 +2149,9 @@ public partial class ComicReaderViewModel : ViewModelBase
                 : _progressStore.GetLastPageIndex(chapter.EffectiveProgressKey, TotalPages);
             _isNavigatingToPreviousChapter = false;
             int startIndex = Math.Clamp(savedPageIndex, 0, Math.Max(0, TotalPages - 1));
+
+            IsScrollAtStart = (startIndex <= 0);
+            IsScrollAtEnd = (startIndex >= TotalPages - 1 && TotalPages > 0);
 
             _suppressScrollSync = true;
             CurrentPageIndex = startIndex;
@@ -2379,14 +2397,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
         else if (CanGoNextChapter)
         {
-            if (IsContinuousChaptersMode)
-            {
-                NextChapter();
-            }
-            else
-            {
-                ShowTransientToast("🏁 Đã đến cuối chương. Bấm [⏭ Next Chap] để sang chương tiếp theo.");
-            }
+            NextChapter();
         }
     }
 
@@ -2407,15 +2418,8 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
         else if (CanGoPrevChapter)
         {
-            if (IsContinuousChaptersMode)
-            {
-                _isNavigatingToPreviousChapter = true;
-                PrevChapter();
-            }
-            else
-            {
-                ShowTransientToast("🏁 Đã đến đầu chương. Bấm [⏮ Prev Chap] để về chương trước.");
-            }
+            _isNavigatingToPreviousChapter = true;
+            PrevChapter();
         }
     }
 
@@ -2493,6 +2497,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         int idx = ChapterList.IndexOf(CurrentChapter);
         if (idx >= 0 && idx < ChapterList.Count - 1)
         {
+            _isNavigatingToPreviousChapter = false;
             CurrentChapter = ChapterList[idx + 1];
             ShowTransientToast($"⏭ Chuyển sang: {CurrentChapter.Title}");
         }
@@ -2506,6 +2511,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         int idx = ChapterList.IndexOf(CurrentChapter);
         if (idx > 0)
         {
+            _isNavigatingToPreviousChapter = true;
             CurrentChapter = ChapterList[idx - 1];
             ShowTransientToast($"⏮ Quay lại: {CurrentChapter.Title}");
         }

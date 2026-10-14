@@ -484,6 +484,7 @@
         <!-- NÚT NỔI CHUYỂN CHƯƠNG KHI Ở BIÊN CHẾ ĐỘ PHÂN CHƯƠNG (CHUẨN ẢNH 2) -->
         <!-- 1. Nút mép phải: Chuyển sang chương tiếp theo khi ở trang cuối -->
         <Button Command="{Binding NextChapterCommand}"
+                Click="OnBoundaryNextChapterClick"
                 IsVisible="{Binding ShowBoundaryNextChapterButton}"
                 HorizontalAlignment="Right" VerticalAlignment="Center"
                 Width="56" Height="56" Margin="0"
@@ -498,6 +499,7 @@
 
         <!-- 2. Nút mép trái: Chuyển về chương trước khi ở trang đầu -->
         <Button Command="{Binding PrevChapterCommand}"
+                Click="OnBoundaryPrevChapterClick"
                 IsVisible="{Binding ShowBoundaryPrevChapterButton}"
                 HorizontalAlignment="Left" VerticalAlignment="Center"
                 Width="56" Height="56" Margin="0"

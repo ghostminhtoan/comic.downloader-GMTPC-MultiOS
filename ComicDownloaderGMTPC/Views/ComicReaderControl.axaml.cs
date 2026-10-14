@@ -508,6 +508,24 @@ public partial class ComicReaderControl : UserControl
         }
     }
 
+    private void OnBoundaryNextChapterClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is ComicReaderViewModel vm && vm.CanGoNextChapter)
+        {
+            vm.NextChapter();
+            e.Handled = true;
+        }
+    }
+
+    private void OnBoundaryPrevChapterClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is ComicReaderViewModel vm && vm.CanGoPrevChapter)
+        {
+            vm.PrevChapter();
+            e.Handled = true;
+        }
+    }
+
     private void OnVmPageButtonAreaScrollRequested(double fraction, bool animated)
     {
         StopKineticScroll();
@@ -526,6 +544,65 @@ public partial class ComicReaderControl : UserControl
             double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
             double targetX = scrollViewer.Offset.X + step;
 
+            if (fraction > 0)
+            {
+                // Nút Tiến (+): Chuyển chương nếu đã ở cuối, hoặc neo tới cuối trang
+                bool atEnd = vm.IsRightToLeft
+                    ? (scrollViewer.Offset.X <= 4 || vm.CurrentPageIndex >= vm.Pages.Count - 1 || vm.IsScrollAtEnd)
+                    : (scrollViewer.Offset.X >= maxX - 4 || vm.CurrentPageIndex >= vm.Pages.Count - 1 || vm.IsScrollAtEnd);
+
+                if (atEnd)
+                {
+                    if (vm.CanGoNextChapter)
+                    {
+                        vm.NextChapter();
+                        return;
+                    }
+                }
+                else
+                {
+                    bool reachingEnd = vm.IsRightToLeft ? targetX <= 4 : targetX >= maxX - 4;
+                    if (reachingEnd)
+                    {
+                        double finalX = vm.IsRightToLeft ? 0 : maxX;
+                        scrollViewer.Offset = new Vector(finalX, scrollViewer.Offset.Y);
+                        vm.IsScrollAtEnd = true;
+                        vm.IsScrollAtStart = false;
+                        vm.UpdatePageIndexFromScroll(vm.Pages.Count - 1);
+                        return;
+                    }
+                }
+            }
+            else if (fraction < 0)
+            {
+                // Nút Lùi (-): Chuyển chương nếu đã ở đầu, hoặc neo về đầu trang
+                bool atStart = vm.IsRightToLeft
+                    ? (scrollViewer.Offset.X >= maxX - 4 || vm.CurrentPageIndex <= 0 || vm.IsScrollAtStart)
+                    : (scrollViewer.Offset.X <= 4 || vm.CurrentPageIndex <= 0 || vm.IsScrollAtStart);
+
+                if (atStart)
+                {
+                    if (vm.CanGoPrevChapter)
+                    {
+                        vm.PrevChapter();
+                        return;
+                    }
+                }
+                else
+                {
+                    bool reachingStart = vm.IsRightToLeft ? targetX >= maxX - 4 : targetX <= 4;
+                    if (reachingStart)
+                    {
+                        double finalX = vm.IsRightToLeft ? maxX : 0;
+                        scrollViewer.Offset = new Vector(finalX, scrollViewer.Offset.Y);
+                        vm.IsScrollAtStart = true;
+                        vm.IsScrollAtEnd = false;
+                        vm.UpdatePageIndexFromScroll(0);
+                        return;
+                    }
+                }
+            }
+
             // Xử lý chuyển chương khi cuộn chạm mép ở chế độ Đọc liền mạch
             if (vm.IsContinuousChaptersMode)
             {
@@ -538,7 +615,7 @@ public partial class ComicReaderControl : UserControl
                 }
                 if (atStart && vm.CanGoPrevChapter)
                 {
-                    vm.PrevPage();
+                    vm.PrevChapter();
                     return;
                 }
             }
@@ -553,6 +630,47 @@ public partial class ComicReaderControl : UserControl
             double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
             double targetY = scrollViewer.Offset.Y + step;
 
+            if (fraction > 0)
+            {
+                // Nút Tiến (+): Chuyển chương nếu đã ở đáy hoặc đang hiện nút chuyển chap tiếp theo
+                if (scrollViewer.Offset.Y >= maxY - 4 || vm.CurrentPageIndex >= vm.Pages.Count - 1 || vm.IsScrollAtEnd)
+                {
+                    if (vm.CanGoNextChapter)
+                    {
+                        vm.NextChapter();
+                        return;
+                    }
+                }
+                else if (targetY >= maxY - 4)
+                {
+                    scrollViewer.Offset = new Vector(scrollViewer.Offset.X, maxY);
+                    vm.IsScrollAtEnd = true;
+                    vm.IsScrollAtStart = false;
+                    vm.UpdatePageIndexFromScroll(vm.Pages.Count - 1);
+                    return;
+                }
+            }
+            else if (fraction < 0)
+            {
+                // Nút Lùi (-): Chuyển chương nếu đã ở đỉnh hoặc đang hiện nút chuyển chap trước
+                if (scrollViewer.Offset.Y <= 4 || vm.CurrentPageIndex <= 0 || vm.IsScrollAtStart)
+                {
+                    if (vm.CanGoPrevChapter)
+                    {
+                        vm.PrevChapter();
+                        return;
+                    }
+                }
+                else if (targetY <= 4)
+                {
+                    scrollViewer.Offset = new Vector(scrollViewer.Offset.X, 0);
+                    vm.IsScrollAtStart = true;
+                    vm.IsScrollAtEnd = false;
+                    vm.UpdatePageIndexFromScroll(0);
+                    return;
+                }
+            }
+
             // Xử lý chuyển chương khi cuộn chạm mép ở chế độ Đọc liền mạch
             if (vm.IsContinuousChaptersMode)
             {
@@ -563,7 +681,7 @@ public partial class ComicReaderControl : UserControl
                 }
                 if (targetY <= -10 && vm.CanGoPrevChapter)
                 {
-                    vm.PrevPage();
+                    vm.PrevChapter();
                     return;
                 }
             }
@@ -694,6 +812,60 @@ public partial class ComicReaderControl : UserControl
 
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
         if (listBox == null) return;
+
+        var scrollViewer = GetReaderScrollViewer();
+        if (scrollViewer != null)
+        {
+            if (vm.IsHorizontalScrollMode)
+            {
+                double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+                bool isAtEnd = vm.IsRightToLeft ? scrollViewer.Offset.X <= 6 : scrollViewer.Offset.X >= maxX - 6;
+                bool isAtStart = vm.IsRightToLeft ? scrollViewer.Offset.X >= maxX - 6 : scrollViewer.Offset.X <= 6;
+
+                if (isAtStart)
+                {
+                    vm.IsScrollAtStart = true;
+                    vm.IsScrollAtEnd = false;
+                    vm.UpdatePageIndexFromScroll(0);
+                    return;
+                }
+                else if (isAtEnd && maxX > 0)
+                {
+                    vm.IsScrollAtStart = false;
+                    vm.IsScrollAtEnd = true;
+                    vm.UpdatePageIndexFromScroll(vm.Pages.Count - 1);
+                    return;
+                }
+                else
+                {
+                    vm.IsScrollAtStart = false;
+                    vm.IsScrollAtEnd = false;
+                }
+            }
+            else
+            {
+                double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+                if (scrollViewer.Offset.Y <= 6)
+                {
+                    vm.IsScrollAtStart = true;
+                    vm.IsScrollAtEnd = false;
+                    vm.UpdatePageIndexFromScroll(0);
+                    return;
+                }
+                else if (scrollViewer.Offset.Y >= maxY - 6 && maxY > 0)
+                {
+                    vm.IsScrollAtStart = false;
+                    vm.IsScrollAtEnd = true;
+                    vm.UpdatePageIndexFromScroll(vm.Pages.Count - 1);
+                    return;
+                }
+                else
+                {
+                    vm.IsScrollAtStart = false;
+                    vm.IsScrollAtEnd = false;
+                }
+            }
+        }
 
         if (vm.IsHorizontalScrollMode)
         {
@@ -1479,25 +1651,31 @@ public partial class ComicReaderControl : UserControl
     /// </summary>
     private void CheckContinuousOverscroll(ComicReaderViewModel vm, ScrollViewer scrollViewer, double deltaX, double deltaY, double maxX, double maxY)
     {
-        if (!vm.IsContinuousChaptersMode || vm.IsLoadingChapter) return;
+        if (vm.IsLoadingChapter) return;
         long now = Environment.TickCount64;
         if (now - _lastAutoChapterTransitionTick < 1400) return;
+
+        double threshold = vm.IsContinuousChaptersMode ? 50.0 : 75.0;
 
         if (vm.IsHorizontalScrollMode)
         {
             bool isAtEnd = vm.IsRightToLeft
-                ? scrollViewer.Offset.X <= 2
-                : scrollViewer.Offset.X >= maxX - 2;
+                ? scrollViewer.Offset.X <= 4
+                : scrollViewer.Offset.X >= maxX - 4;
             bool isAtStart = vm.IsRightToLeft
-                ? scrollViewer.Offset.X >= maxX - 2
-                : scrollViewer.Offset.X <= 2;
+                ? scrollViewer.Offset.X >= maxX - 4
+                : scrollViewer.Offset.X <= 4;
 
             double pullDelta = vm.IsRightToLeft ? deltaX : -deltaX;
 
             if (isAtEnd && pullDelta > 0)
             {
+                vm.IsScrollAtEnd = true;
+                vm.IsScrollAtStart = false;
+                vm.UpdatePageIndexFromScroll(vm.Pages.Count - 1);
+
                 _cumulativeOverscrollX += pullDelta;
-                if (_cumulativeOverscrollX > 60 && vm.CanGoNextChapter)
+                if (_cumulativeOverscrollX > threshold && vm.CanGoNextChapter)
                 {
                     _cumulativeOverscrollX = 0;
                     _lastAutoChapterTransitionTick = now;
@@ -1507,13 +1685,17 @@ public partial class ComicReaderControl : UserControl
             }
             else if (isAtStart && pullDelta < 0)
             {
+                vm.IsScrollAtStart = true;
+                vm.IsScrollAtEnd = false;
+                vm.UpdatePageIndexFromScroll(0);
+
                 _cumulativeOverscrollX += pullDelta;
-                if (_cumulativeOverscrollX < -60 && vm.CanGoPrevChapter)
+                if (_cumulativeOverscrollX < -threshold && vm.CanGoPrevChapter)
                 {
                     _cumulativeOverscrollX = 0;
                     _lastAutoChapterTransitionTick = now;
                     StopKineticScroll();
-                    vm.PrevPage();
+                    vm.PrevChapter();
                 }
             }
             else
@@ -1523,13 +1705,17 @@ public partial class ComicReaderControl : UserControl
         }
         else
         {
-            bool isAtBottom = scrollViewer.Offset.Y >= maxY - 2;
-            bool isAtTop = scrollViewer.Offset.Y <= 2;
+            bool isAtBottom = scrollViewer.Offset.Y >= maxY - 4;
+            bool isAtTop = scrollViewer.Offset.Y <= 4;
 
             if (isAtBottom && deltaY < 0)
             {
+                vm.IsScrollAtEnd = true;
+                vm.IsScrollAtStart = false;
+                vm.UpdatePageIndexFromScroll(vm.Pages.Count - 1);
+
                 _cumulativeOverscrollY += Math.Abs(deltaY);
-                if (_cumulativeOverscrollY > 60 && vm.CanGoNextChapter)
+                if (_cumulativeOverscrollY > threshold && vm.CanGoNextChapter)
                 {
                     _cumulativeOverscrollY = 0;
                     _lastAutoChapterTransitionTick = now;
@@ -1539,13 +1725,17 @@ public partial class ComicReaderControl : UserControl
             }
             else if (isAtTop && deltaY > 0)
             {
+                vm.IsScrollAtStart = true;
+                vm.IsScrollAtEnd = false;
+                vm.UpdatePageIndexFromScroll(0);
+
                 _cumulativeOverscrollY -= Math.Abs(deltaY);
-                if (_cumulativeOverscrollY < -60 && vm.CanGoPrevChapter)
+                if (_cumulativeOverscrollY < -threshold && vm.CanGoPrevChapter)
                 {
                     _cumulativeOverscrollY = 0;
                     _lastAutoChapterTransitionTick = now;
                     StopKineticScroll();
-                    vm.PrevPage();
+                    vm.PrevChapter();
                 }
             }
             else

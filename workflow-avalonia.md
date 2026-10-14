@@ -3197,3 +3197,38 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 
 
 
+
+### 15.100 Khắc Phục Triệt Để Lỗi Hiển Thị Nút Chuyển Chương Ở Biên Khi Bấm Nút - / + Và Cuộn Scroll Trong Chế Độ Phân Chương (2026-10-14)
+- **Bối Cảnh & Phân Tích Nguyên Nhân Gốc Rễ (`Root-Cause Analysis`)**:
+  1. *Lỗi Hysteresis chặn cập nhật CurrentPageIndex khi cuộn đến biên*:
+     - Trong `OnReaderScrollChanged`, logic chống nhảy trang khi zoom giữ nguyên `CurrentPageIndex` nếu trang hiện tại còn hiển thị >= 25% chiều cao viewport.
+     - Khi người dùng cuộn chạm đáy chương (trang cuối), trang áp chót vẫn chiếm >= 25% viewport khiến `CurrentPageIndex` không bao giờ đạt `TotalPages - 1`. Do đó `ShowBoundaryNextChapterButton` luôn trả về `false`, 2 nút tím `⏮` và `⏭` không bao giờ hiện ra.
+  2. *Nút - / + chỉ cuộn viewport mà không đồng bộ biên chương*:
+     - Khi nhấn nút `-` hoặc `+` (PageButtonArea), `OnVmPageButtonAreaScrollRequested` chỉ dịch chuyển `scrollViewer.Offset` rồi kẹp (clamp) lại mà không cập nhật `CurrentPageIndex` khi chạm biên, và không kích hoạt chuyển chương khi nhấn tiếp ở biên.
+  3. *Trải nghiệm lật ngược chương trước chưa đưa về trang cuối*:
+     - Khi bấm nút lùi chương `⏮` từ chương hiện tại về chương trước, người dùng mong muốn đọc tiếp từ trang cuối của chương trước, nhưng trình đọc lại nạp về trang 0.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Bổ Sung Biến Cờ Trạng Thái Biên Độc Lập Trong ViewModel**:
+     - Trong `ComicReaderViewModel`: Thêm 2 thuộc tính observable `_isScrollAtStart` và `_isScrollAtEnd`.
+     - Cập nhật logic hiển thị nút biên:
+       `ShowBoundaryNextChapterButton => !IsContinuousChaptersMode && CanGoNextChapter && TotalPages > 0 && (CurrentPageIndex >= TotalPages - 1 || IsScrollAtEnd);`
+       `ShowBoundaryPrevChapterButton => !IsContinuousChaptersMode && CanGoPrevChapter && TotalPages > 0 && (CurrentPageIndex <= 0 || IsScrollAtStart);`
+     - Đồng bộ lại `IsScrollAtStart` và `IsScrollAtEnd` mỗi khi nạp chương hoặc thay đổi trang (`OnCurrentPageIndexChanged`).
+  2. **Bắt Biên Trực Tiếp Trong View Scroll & Xử Lý Nhấn Nút Biên Nhạy Bén**:
+     - Trong `ComicReaderControl.axaml.cs` (`OnReaderScrollChanged`):
+       - Kiểm tra tọa độ pixel thực tế của ScrollViewer: Nếu `Offset.Y <= 6` -> gán ngay `IsScrollAtStart = true`, `UpdatePageIndexFromScroll(0)`.
+       - Nếu `Offset.Y >= maxY - 6` -> gán ngay `IsScrollAtEnd = true`, `UpdatePageIndexFromScroll(TotalPages - 1)`.
+       - Xử lý biên trước khi rơi vào cơ chế lọc Hysteresis, triệt tiêu hoàn toàn việc bị kẹt trang áp chót.
+     - Trong `OnVmPageButtonAreaScrollRequested`:
+       - Khi bấm `+` đưa scroll chạm đáy (`targetY >= maxY - 4`), gán `IsScrollAtEnd = true` và `UpdatePageIndexFromScroll(TotalPages - 1)` giúp nút tím `⏭` hiện tức thì. Nếu bấm tiếp `+` khi đã ở đáy thì gọi trực tiếp `vm.NextChapter()`.
+       - Tương tự với nút `-` tại đỉnh chương: nếu bấm tiếp `-` khi đã ở đỉnh thì gọi `vm.PrevChapter()`.
+  3. **Hỗ Trợ Click Trực Tiếp Trên Nút Tím & Chuyển Về Trang Cuối Khi Lùi Chương**:
+     - Thêm sự kiện `Click="OnBoundaryNextChapterClick"` và `Click="OnBoundaryPrevChapterClick"` trực tiếp trên XAML để bắt click mượt mà trên cả cảm ứng Android lẫn Desktop chuột.
+     - Trong `ComicReaderViewModel.PrevChapter()`: Đặt cờ `_isNavigatingToPreviousChapter = true` để khi nạp xong chương trước, tự động scroll đến trang cuối cùng `TotalPages - 1`.
+  4. **Kéo Quá Biên (Overscroll) Chuyển Chương**:
+     - Trong `CheckContinuousOverscroll`: Hỗ trợ kéo quá biên (overscroll > 75px) chuyển chương ở cả chế độ phân chương lẫn chế độ đọc liền mạch.
+- **Nghiệm Thu, Đóng Gói & Upload Beta**:
+  - `dotnet build`: Đạt tuyệt đối **0 Warning(s), 0 Error(s)** cho cả Desktop và Android.
+  - Test khởi động app Desktop thành công (`Responding: True, HasExited: False`).
+  - Chạy `build-avalonia.bat` đóng gói toàn bộ gói cài đặt Windows EXE, Linux và Android Signed APK vào `publish\`.
+  - Chạy `python upload_beta_browser.py`: Tự động upload toàn bộ gói build mới lên GitHub Release Beta.
