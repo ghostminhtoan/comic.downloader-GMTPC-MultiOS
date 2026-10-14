@@ -3332,6 +3332,338 @@
                                 </Grid>
                             </TabItem>
 
+                            <!-- CHILD TAB 3.7: DUAL PICTURE SORT (LỌC ẢNH SONG SONG) -->
+                            <TabItem Header="🖼️ Dual Picture Sort" FontSize="12" FontWeight="SemiBold">
+                                <Grid RowDefinitions="Auto, *">
+                                    <!-- Header & Cấu hình thư mục -->
+                                    <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                                        <StackPanel Spacing="10">
+                                            <!-- Hàng 0: Header Bar phong cách chuyên nghiệp -->
+                                            <Grid ColumnDefinitions="Auto, *, Auto">
+                                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                    <TextBlock Text="Dual Picture Sort - GMTPC" FontSize="15" FontWeight="Bold" Foreground="#38BDF8" VerticalAlignment="Center" />
+                                                    <Border Background="#1E293B" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                                                        <TextBlock Text="v1.0 • Avalonia Multiplatform" FontSize="10" Foreground="#94A3B8" FontWeight="SemiBold" />
+                                                    </Border>
+                                                </StackPanel>
+
+                                                <WrapPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button Command="{Binding UndoLastSortCommand}" IsEnabled="{Binding CanUndoSort}"
+                                                            Background="#334155" Foreground="#F8FAFC" FontWeight="SemiBold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,2"
+                                                            ToolTip.Tip="Hoàn tác thao tác di chuyển/sao chép ảnh vừa thực hiện (Ctrl+Z)">
+                                                        <TextBlock Text="↩ Hoàn tác (Ctrl+Z)" />
+                                                    </Button>
+                                                    <Button Command="{Binding RefreshDualSortFoldersCommand}"
+                                                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,0,2"
+                                                            ToolTip.Tip="Làm mới lại danh sách ảnh từ cả 2 thư mục">
+                                                        <TextBlock Text="🔄 Làm mới tất cả" />
+                                                    </Button>
+                                                </WrapPanel>
+                                            </Grid>
+
+                                            <!-- Hàng 1: Thư mục gốc -->
+                                            <StackPanel Spacing="3">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="📁 Thư mục gốc:" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowseDualSortSourceFolderCommand}" Content="📁 Chọn..." Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                    <Button Command="{Binding OpenDualSortSourceFolderCommand}" Content="🔍 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục gốc trong trình quản lý tệp" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding DualSortSourcePath}" PlaceholderText="Chọn thư mục chứa ảnh gốc cần lọc (ví dụ: comic\ranma fanart)..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#F59E0B" BorderThickness="1" FontSize="10.5" VerticalContentAlignment="Center" Padding="8,2" />
+                                            </StackPanel>
+
+                                            <!-- Hàng 2: Thư mục đã lọc -->
+                                            <StackPanel Spacing="3">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="✨ Thư mục đã lọc:" Foreground="#10B981" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowseDualSortSortedFolderCommand}" Content="📁 Chọn..." Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                    <Button Command="{Binding OpenDualSortSortedFolderCommand}" Content="🔍 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục đã lọc trong trình quản lý tệp" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding DualSortSortedPath}" PlaceholderText="Chọn hoặc tự động tạo thư mục đã lọc (ví dụ: comic\ranma fanart\ranma fanart-sorted)..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10.5" VerticalContentAlignment="Center" Padding="8,2" />
+                                            </StackPanel>
+
+                                            <!-- Hàng 3: Tùy chọn (WrapPanel thích ứng) -->
+                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <CheckBox IsChecked="{Binding IsAutoCreateSortedFolder}" Content="⚡ Tự động tạo thư mục con '...-sorted'" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8" Margin="0,0,16,4" />
+                                                <RadioButton IsChecked="{Binding IsSortMoveMode}" GroupName="DualSortModeGroup" Content="🔘 Di chuyển ảnh (Move)" FontSize="11" Foreground="#E2E8F0" Margin="0,0,14,4" />
+                                                <RadioButton IsChecked="{Binding IsSortCopyMode}" GroupName="DualSortModeGroup" Content="⚪ Sao chép ảnh (Copy)" FontSize="11" Foreground="#E2E8F0" Margin="0,0,16,4" />
+                                                <CheckBox IsChecked="{Binding IsOneClickFastSort}" Content="🚀 Chuyển ngay khi Click (1-Click Fast Sort)" FontSize="11" FontWeight="Bold" Foreground="#F59E0B" Margin="0,0,8,4" ToolTip.Tip="Bật chế độ phân loại siêu tốc: Click vào ảnh là chuyển ngay lập tức!" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Thân chính: Danh sách 2 bên + Xem trước chi tiết -->
+                                    <Grid Grid.Row="1">
+                                        <!-- PHẦN 1: GIAO DIỆN DESKTOP / TABLET NGANG (!IsPortraitMode) -->
+                                        <Grid IsVisible="{Binding !IsPortraitMode}" ColumnDefinitions="*, 4, *, 4, 330" Margin="6">
+                                            <!-- PANEL 1: THƯ MỤC GỐC -->
+                                            <Border Grid.Column="0" Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8">
+                                                <Grid RowDefinitions="Auto, Auto, *">
+                                                    <!-- Header Panel Gốc -->
+                                                    <Grid Grid.Row="0" ColumnDefinitions="Auto, *, Auto" Margin="0,0,0,6">
+                                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                            <TextBlock Text="THƯ MỤC GỐC" FontWeight="Bold" Foreground="#F59E0B" FontSize="12" VerticalAlignment="Center" />
+                                                            <Border Background="#1E293B" CornerRadius="10" Padding="6,1" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding DualSortSourceCount, StringFormat='{}{0} ảnh'}" FontSize="10" Foreground="#CBD5E1" FontWeight="SemiBold" />
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2" Command="{Binding SortSelectedForwardCommand}"
+                                                                Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,4" CornerRadius="4"
+                                                                ToolTip.Tip="Chuyển ảnh đang chọn sang thư mục Sorted (Phím Enter / Phím →)">
+                                                            <TextBlock Text="➡️ Chuyển sang Sorted" />
+                                                        </Button>
+                                                    </Grid>
+
+                                                    <!-- Ô tìm kiếm -->
+                                                    <TextBox Grid.Row="1" Text="{Binding DualSortSearchSource}" PlaceholderText="🔍 Tìm tên file..." Height="28" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" BorderThickness="1" FontSize="10.5" Padding="6,2" Margin="0,0,0,6" VerticalContentAlignment="Center" />
+
+                                                    <!-- Danh sách ảnh gốc -->
+                                                    <ScrollViewer Grid.Row="2" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                                        <ItemsControl ItemsSource="{Binding FilteredDualSortSourceItems}">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel Orientation="Horizontal" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Width="116" Height="192" Margin="4" CornerRadius="5" Padding="4"
+                                                                            PointerPressed="OnDualSortSourceItemPointerPressed"
+                                                                            Background="{Binding ItemBgBrush}"
+                                                                            BorderBrush="{Binding ItemBorderBrush}"
+                                                                            BorderThickness="1.5" Cursor="Hand">
+                                                                        <Grid RowDefinitions="138, Auto, Auto">
+                                                                            <!-- Thumbnail -->
+                                                                            <Border Grid.Row="0" CornerRadius="4" ClipToBounds="True" Background="#060913">
+                                                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                            </Border>
+                                                                            <!-- Tên file -->
+                                                                            <TextBlock Grid.Row="1" Text="{Binding FileName}" FontSize="10.5" FontWeight="SemiBold" Foreground="#F1F5F9" TextTrimming="CharacterEllipsis" Margin="0,4,0,2" ToolTip.Tip="{Binding FileName}" />
+                                                                            <!-- Metadata: Độ phân giải & Dung lượng -->
+                                                                            <Grid Grid.Row="2" ColumnDefinitions="*, Auto">
+                                                                                <TextBlock Grid.Column="0" Text="{Binding ResolutionText}" FontSize="9" Foreground="#64748B" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="1" Text="{Binding FileSizeText}" FontSize="9.5" FontWeight="SemiBold" Foreground="#38BDF8" VerticalAlignment="Center" />
+                                                                            </Grid>
+                                                                        </Grid>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </ScrollViewer>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Splitter 1 -->
+                                            <GridSplitter Grid.Column="1" Width="4" Background="#1E293B" ResizeDirection="Columns" />
+
+                                            <!-- PANEL 2: ĐÃ LỌC (SORTED) -->
+                                            <Border Grid.Column="2" Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8">
+                                                <Grid RowDefinitions="Auto, Auto, *">
+                                                    <!-- Header Panel Sorted -->
+                                                    <Grid Grid.Row="0" ColumnDefinitions="Auto, *, Auto" Margin="0,0,0,6">
+                                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                            <TextBlock Text="ĐÃ LỌC (SORTED)" FontWeight="Bold" Foreground="#10B981" FontSize="12" VerticalAlignment="Center" />
+                                                            <Border Background="#1E293B" CornerRadius="10" Padding="6,1" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding DualSortSortedCount, StringFormat='{}{0} ảnh'}" FontSize="10" Foreground="#CBD5E1" FontWeight="SemiBold" />
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2" Command="{Binding SortSelectedBackwardCommand}"
+                                                                Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,4" CornerRadius="4"
+                                                                ToolTip.Tip="Trả ảnh đang chọn về thư mục gốc (Phím Backspace / Phím ←)">
+                                                            <TextBlock Text="⬅️ Trả lại Gốc" />
+                                                        </Button>
+                                                    </Grid>
+
+                                                    <!-- Ô tìm kiếm -->
+                                                    <TextBox Grid.Row="1" Text="{Binding DualSortSearchSorted}" PlaceholderText="🔍 Tìm tên file..." Height="28" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" BorderThickness="1" FontSize="10.5" Padding="6,2" Margin="0,0,0,6" VerticalContentAlignment="Center" />
+
+                                                    <!-- Danh sách ảnh đã lọc -->
+                                                    <ScrollViewer Grid.Row="2" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                                        <ItemsControl ItemsSource="{Binding FilteredDualSortSortedItems}">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel Orientation="Horizontal" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Width="116" Height="192" Margin="4" CornerRadius="5" Padding="4"
+                                                                            PointerPressed="OnDualSortSortedItemPointerPressed"
+                                                                            Background="{Binding ItemBgBrush}"
+                                                                            BorderBrush="{Binding ItemBorderBrush}"
+                                                                            BorderThickness="1.5" Cursor="Hand">
+                                                                        <Grid RowDefinitions="138, Auto, Auto">
+                                                                            <!-- Thumbnail -->
+                                                                            <Border Grid.Row="0" CornerRadius="4" ClipToBounds="True" Background="#060913">
+                                                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                            </Border>
+                                                                            <!-- Tên file -->
+                                                                            <TextBlock Grid.Row="1" Text="{Binding FileName}" FontSize="10.5" FontWeight="SemiBold" Foreground="#F1F5F9" TextTrimming="CharacterEllipsis" Margin="0,4,0,2" ToolTip.Tip="{Binding FileName}" />
+                                                                            <!-- Metadata: Độ phân giải & Dung lượng -->
+                                                                            <Grid Grid.Row="2" ColumnDefinitions="*, Auto">
+                                                                                <TextBlock Grid.Column="0" Text="{Binding ResolutionText}" FontSize="9" Foreground="#64748B" VerticalAlignment="Center" />
+                                                                                <TextBlock Grid.Column="1" Text="{Binding FileSizeText}" FontSize="9.5" FontWeight="SemiBold" Foreground="#38BDF8" VerticalAlignment="Center" />
+                                                                            </Grid>
+                                                                        </Grid>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </ScrollViewer>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Splitter 2 -->
+                                            <GridSplitter Grid.Column="3" Width="4" Background="#1E293B" ResizeDirection="Columns" />
+
+                                            <!-- PANEL 3: XEM TRƯỚC CHI TIẾT -->
+                                            <Border Grid.Column="4" Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10">
+                                                <Grid RowDefinitions="Auto, *, Auto">
+                                                    <!-- Header Preview -->
+                                                    <TextBlock Grid.Row="0" Text="🔍 XEM TRƯỚC CHI TIẾT" FontWeight="Bold" Foreground="#38BDF8" FontSize="12" Margin="0,0,0,8" />
+
+                                                    <!-- Khung ảnh lớn -->
+                                                    <Border Grid.Row="1" Background="#060913" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" ClipToBounds="True">
+                                                        <Image Source="{Binding DualSortPreviewBitmap}" Stretch="Uniform" />
+                                                    </Border>
+
+                                                    <!-- Thông tin chi tiết ảnh -->
+                                                    <Border Grid.Row="2" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,6" Margin="0,8,0,0">
+                                                        <StackPanel Spacing="3">
+                                                            <TextBlock Text="{Binding DualSortSelectedPreview.FileName, FallbackValue='(Chưa chọn ảnh)'}" FontWeight="Bold" Foreground="#F59E0B" FontSize="13" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DualSortSelectedPreview.FileName}" />
+                                                            <WrapPanel Orientation="Horizontal">
+                                                                <TextBlock Text="Độ phân giải: " FontSize="10" Foreground="#94A3B8" />
+                                                                <TextBlock Text="{Binding DualSortSelectedPreview.ResolutionText, FallbackValue='---'}" FontSize="10" FontWeight="SemiBold" Foreground="#E2E8F0" Margin="0,0,10,0" />
+                                                                <TextBlock Text="Kích thước: " FontSize="10" Foreground="#94A3B8" />
+                                                                <TextBlock Text="{Binding DualSortSelectedPreview.FileSizeText, FallbackValue='---'}" FontSize="10" FontWeight="SemiBold" Foreground="#38BDF8" />
+                                                            </WrapPanel>
+                                                            <WrapPanel Orientation="Horizontal">
+                                                                <TextBlock Text="Ngày sửa: " FontSize="10" Foreground="#94A3B8" />
+                                                                <TextBlock Text="{Binding DualSortSelectedPreview.LastModifiedText, FallbackValue='---'}" FontSize="10" Foreground="#CBD5E1" />
+                                                            </WrapPanel>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- PHẦN 2: GIAO DIỆN MOBILE / ANDROID DỌC (IsPortraitMode) -->
+                                        <Grid IsVisible="{Binding IsPortraitMode}" RowDefinitions="Auto, *, Auto" Margin="4">
+                                            <!-- Switcher 2 Tab: Gốc vs Đã Lọc -->
+                                            <Grid Grid.Row="0" ColumnDefinitions="*, *" Margin="0,0,0,6">
+                                                <Button Grid.Column="0" Command="{Binding SwitchDualSortMobileTabCommand}" CommandParameter="0"
+                                                        Background="{Binding MobileSourceTabBg}"
+                                                        Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Height="36" CornerRadius="4,0,0,4">
+                                                    <TextBlock Text="{Binding DualSortSourceCount, StringFormat='{}📁 GỐC ({0})'}" HorizontalAlignment="Center" />
+                                                </Button>
+                                                <Button Grid.Column="1" Command="{Binding SwitchDualSortMobileTabCommand}" CommandParameter="1"
+                                                        Background="{Binding MobileSortedTabBg}"
+                                                        Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Height="36" CornerRadius="0,4,4,0">
+                                                    <TextBlock Text="{Binding DualSortSortedCount, StringFormat='{}✨ ĐÃ LỌC ({0})'}" HorizontalAlignment="Center" />
+                                                </Button>
+                                            </Grid>
+
+                                            <!-- Nội dung tab đang chọn trên Mobile -->
+                                            <Border Grid.Row="1" Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="6">
+                                                <Grid>
+                                                    <!-- Tab 0: Gốc -->
+                                                    <Grid RowDefinitions="Auto, *" IsVisible="{Binding IsMobileSourceTabVisible}">
+                                                        <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,6">
+                                                            <TextBox Grid.Column="0" Text="{Binding DualSortSearchSource}" PlaceholderText="🔍 Tìm file..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" />
+                                                            <Button Grid.Column="1" Command="{Binding SortSelectedForwardCommand}" Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10.5" Height="30" Padding="10,0" CornerRadius="4">
+                                                                <TextBlock Text="➡️ Sang Sorted" VerticalAlignment="Center" />
+                                                            </Button>
+                                                        </Grid>
+
+                                                        <ScrollViewer Grid.Row="1" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                                            <ItemsControl ItemsSource="{Binding FilteredDualSortSourceItems}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <WrapPanel Orientation="Horizontal" />
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border Width="110" Height="185" Margin="4" CornerRadius="5" Padding="4"
+                                                                                PointerPressed="OnDualSortSourceItemPointerPressed"
+                                                                                Background="{Binding ItemBgBrush}"
+                                                                                BorderBrush="{Binding ItemBorderBrush}"
+                                                                                BorderThickness="1.5">
+                                                                            <Grid RowDefinitions="132, Auto, Auto">
+                                                                                <Border Grid.Row="0" CornerRadius="4" ClipToBounds="True" Background="#060913">
+                                                                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                                </Border>
+                                                                                <TextBlock Grid.Row="1" Text="{Binding FileName}" FontSize="10" FontWeight="SemiBold" Foreground="#F1F5F9" TextTrimming="CharacterEllipsis" Margin="0,3,0,1" />
+                                                                                <Grid Grid.Row="2" ColumnDefinitions="*, Auto">
+                                                                                    <TextBlock Grid.Column="0" Text="{Binding ResolutionText}" FontSize="8.5" Foreground="#64748B" />
+                                                                                    <TextBlock Grid.Column="1" Text="{Binding FileSizeText}" FontSize="9" FontWeight="SemiBold" Foreground="#38BDF8" />
+                                                                                </Grid>
+                                                                            </Grid>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </ScrollViewer>
+                                                    </Grid>
+
+                                                    <!-- Tab 1: Đã lọc -->
+                                                    <Grid RowDefinitions="Auto, *" IsVisible="{Binding IsMobileSortedTabVisible}">
+                                                        <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,6">
+                                                            <TextBox Grid.Column="0" Text="{Binding DualSortSearchSorted}" PlaceholderText="🔍 Tìm file..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="11" Margin="0,0,6,0" VerticalContentAlignment="Center" />
+                                                            <Button Grid.Column="1" Command="{Binding SortSelectedBackwardCommand}" Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10.5" Height="30" Padding="10,0" CornerRadius="4">
+                                                                <TextBlock Text="⬅️ Về Gốc" VerticalAlignment="Center" />
+                                                            </Button>
+                                                        </Grid>
+
+                                                        <ScrollViewer Grid.Row="1" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                                            <ItemsControl ItemsSource="{Binding FilteredDualSortSortedItems}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <WrapPanel Orientation="Horizontal" />
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border Width="110" Height="185" Margin="4" CornerRadius="5" Padding="4"
+                                                                                PointerPressed="OnDualSortSortedItemPointerPressed"
+                                                                                Background="{Binding ItemBgBrush}"
+                                                                                BorderBrush="{Binding ItemBorderBrush}"
+                                                                                BorderThickness="1.5">
+                                                                            <Grid RowDefinitions="132, Auto, Auto">
+                                                                                <Border Grid.Row="0" CornerRadius="4" ClipToBounds="True" Background="#060913">
+                                                                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                                </Border>
+                                                                                <TextBlock Grid.Row="1" Text="{Binding FileName}" FontSize="10" FontWeight="SemiBold" Foreground="#F1F5F9" TextTrimming="CharacterEllipsis" Margin="0,3,0,1" />
+                                                                                <Grid Grid.Row="2" ColumnDefinitions="*, Auto">
+                                                                                    <TextBlock Grid.Column="0" Text="{Binding ResolutionText}" FontSize="8.5" Foreground="#64748B" />
+                                                                                    <TextBlock Grid.Column="1" Text="{Binding FileSizeText}" FontSize="9" FontWeight="SemiBold" Foreground="#38BDF8" />
+                                                                                </Grid>
+                                                                            </Grid>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </ScrollViewer>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Bottom Bar trên Mobile: Xem trước chi tiết thu gọn hoặc mở rộng -->
+                                            <Border Grid.Row="2" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
+                                                <Grid ColumnDefinitions="*, Auto">
+                                                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding DualSortSelectedPreview.FileName, FallbackValue='(Chưa chọn ảnh)'}" FontWeight="Bold" Foreground="#F59E0B" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding DualSortSelectedPreview.ResolutionText, StringFormat='{}Kích thước: {0}'}" FontSize="9.5" Foreground="#94A3B8" />
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Command="{Binding ToggleDualSortMobilePreviewCommand}" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10.5" Padding="8,4" CornerRadius="4">
+                                                        <TextBlock Text="🔍 Phóng to" />
+                                                    </Button>
+                                                </Grid>
+                                            </Border>
+                                        </Grid>
+                                    </Grid>
+                                </Grid>
+                            </TabItem>
+
                         </TabControl>
                     </Border>
                 </TabItem>

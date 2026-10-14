@@ -782,3 +782,25 @@
 | Windowed | Cửa sổ |
 | Exit Reader | Thoát |
 
+## 18. Dual Picture Sort (Lọc Ảnh Song Song)
+
+| English | Vietnamese |
+| :--- | :--- |
+| Dual Picture Sort | Lọc ảnh song song |
+| Source Folder | Thư mục gốc |
+| Sorted Folder | Thư mục đã lọc |
+| Auto create '...-sorted' subfolder | Tự động tạo thư mục con '...-sorted' |
+| Move | Di chuyển ảnh (Move) |
+| Copy | Sao chép ảnh (Copy) |
+| 1-Click Fast Sort | Chuyển ngay khi Click (1-Click Fast Sort) |
+| SOURCE FOLDER | THƯ MỤC GỐC |
+| SORTED | ĐÃ LỌC (SORTED) |
+| DETAILS PREVIEW | XEM TRƯỚC CHI TIẾT |
+| Move to Sorted | Chuyển sang Sorted |
+| Return to Source | Trả lại Gốc |
+| Undo (Ctrl+Z) | Hoàn tác (Ctrl+Z) |
+| Refresh All | Làm mới tất cả |
+| Search file name... | Tìm tên file... |
+| Ready. Select source folder to start sorting. | Sẵn sàng. Hãy chọn thư mục nguồn để bắt đầu lọc ảnh. |
+
+

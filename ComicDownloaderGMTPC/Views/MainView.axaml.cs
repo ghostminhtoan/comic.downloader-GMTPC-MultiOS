@@ -49,6 +49,33 @@ public partial class MainView : UserControl
                 {
                     vm.IsEnhanceFullscreenVisible = false;
                     e.Handled = true;
+                    return;
+                }
+
+                // Phím tắt cho Dual Picture Sort
+                if (e.Key == Key.Z && (e.KeyModifiers & KeyModifiers.Control) != 0 && vm.CanUndoSort)
+                {
+                    vm.UndoLastSortCommand.Execute(null);
+                    e.Handled = true;
+                    return;
+                }
+                if (e.Key == Key.Enter || e.Key == Key.Right)
+                {
+                    if (vm.DualSortSourceItems.Any(x => x.IsSelected))
+                    {
+                        vm.SortSelectedForwardCommand.Execute(null);
+                        e.Handled = true;
+                        return;
+                    }
+                }
+                if (e.Key == Key.Back || e.Key == Key.Left)
+                {
+                    if (vm.DualSortSortedItems.Any(x => x.IsSelected))
+                    {
+                        vm.SortSelectedBackwardCommand.Execute(null);
+                        e.Handled = true;
+                        return;
+                    }
                 }
             }
         }, RoutingStrategies.Tunnel);
@@ -1326,6 +1353,36 @@ public partial class MainView : UserControl
         if (DataContext is MainViewModel vm)
         {
             vm.HideHoverPreview();
+        }
+    }
+
+    private void OnDualSortSourceItemPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Control control && control.DataContext is PictureSortItem item && DataContext is MainViewModel vm)
+        {
+            if (e.ClickCount == 2)
+            {
+                vm.SortItemForward(item);
+            }
+            else
+            {
+                vm.OnSourceItemClicked(item);
+            }
+        }
+    }
+
+    private void OnDualSortSortedItemPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Control control && control.DataContext is PictureSortItem item && DataContext is MainViewModel vm)
+        {
+            if (e.ClickCount == 2)
+            {
+                vm.SortItemBackward(item);
+            }
+            else
+            {
+                vm.OnSortedItemClicked(item);
+            }
         }
     }
 }
