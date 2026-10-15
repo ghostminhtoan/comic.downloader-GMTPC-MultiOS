@@ -52,6 +52,35 @@ public partial class MainViewModel
     [ObservableProperty]
     private bool _canRedoSort = false;
 
+    // ==========================================
+    // FLOATING BATCH TOOLBAR ẨN / HIỆN
+    // ==========================================
+    [ObservableProperty]
+    private bool _isDualSortBatchToolbarVisible = true;
+
+    public bool IsDualSortBatchToolbarRealVisible =>
+        SelectedRootTabIndex == 3 && SelectedToolsTabIndex == 6 && IsDualSortBatchToolbarVisible;
+
+    public string DualSortBatchToggleBtnText => IsDualSortBatchToolbarVisible ? "⚡ BATCH TOOL: BẬT" : "⚡ BATCH TOOL: TẮT";
+    public string DualSortBatchToggleBtnBg => IsDualSortBatchToolbarVisible ? "#0284C7" : "#1E293B";
+    public string DualSortBatchToggleBtnBorder => IsDualSortBatchToolbarVisible ? "#38BDF8" : "#475569";
+    public string DualSortBatchToggleBtnFg => IsDualSortBatchToolbarVisible ? "#FFFFFF" : "#94A3B8";
+
+    partial void OnIsDualSortBatchToolbarVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsDualSortBatchToolbarRealVisible));
+        OnPropertyChanged(nameof(DualSortBatchToggleBtnText));
+        OnPropertyChanged(nameof(DualSortBatchToggleBtnBg));
+        OnPropertyChanged(nameof(DualSortBatchToggleBtnBorder));
+        OnPropertyChanged(nameof(DualSortBatchToggleBtnFg));
+    }
+
+    [RelayCommand]
+    public void ToggleDualSortBatchToolbarVisible()
+    {
+        IsDualSortBatchToolbarVisible = !IsDualSortBatchToolbarVisible;
+    }
+
     public string DualSortBatchButtonText
     {
         get

@@ -3489,6 +3489,32 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 - **Nghiệm Thu**:
   - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
 
+### 15.109 Khắc Phục Triệt Để Lỗi Float Tool Bị Trôi Khi Nạp Folder Nhiều Ảnh & Thêm Nút Bật/Tắt Floating Batch Toolbar Cho Dual Picture Sort (2026-10-15)
+- **Bối Cảnh & Vấn Đề Kỹ Thuật Từ Người Dùng**:
+  1. **Float Tool Bị Mất Khi Chọn Folder**:
+     - Khi chọn thư mục chứa nhiều ảnh (hàng chục đến hàng trăm ảnh) trong tab Dual Picture Sort, thanh công cụ nổi (Floating Batch Toolbar) bị biến mất hoàn toàn khỏi màn hình.
+     - **Nguyên nhân gốc rễ (Root Cause)**: Toolbar trước đây nằm bên trong `<TabItem Header="🖼️ Dual Picture Sort">` thuộc `MainRootScrollViewer`. Khi nạp nhiều ảnh, `WrapPanel` nội dung nở rộng lên hàng chục ngàn pixel khiến `VerticalAlignment="Bottom"` đẩy Toolbar tụt xuống tận đáy trang (ngoài viewport của người dùng).
+  2. **Nhu Cầu Bật / Tắt Linh Hoạt Floating Toolbar**:
+     - Người dùng cần có nút mở / tắt chủ động thanh công cụ float tool để khi cần thao tác batch thì bật lên, khi muốn nhìn thoáng màn hình thì có thể tắt đi.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Di Dời Toolbar Ra Grid Ngoài Cùng Neo Trực Tiếp Theo Viewport Màn Hình (`MainView.axaml`)**:
+     - Chuyển `DualSortFloatingBatchToolbar` ra `<Grid>` ngoài cùng của `MainView.axaml` (cùng cấp với `FloatingQuickControlBorder` và `DualSortPreviewPopupBorder`), neo cố định góc dưới bên phải viewport (`Margin="0,0,24,35"`).
+     - Dù danh sách ảnh có hàng chục ngàn tấm, Toolbar luôn luôn nổi cố định trên màn hình, không bao giờ bị trôi hay mất tích.
+     - Đồng bộ điều khiển hiển thị qua binding `IsVisible="{Binding IsDualSortBatchToolbarRealVisible}"`.
+  2. **Quản Lý Trạng Thái Tab Đa Cấp Không Rò Rỉ (`MainViewModel.cs` & `MainViewModel.DualPictureSort.cs`)**:
+     - Gán `SelectedIndex="{Binding SelectedToolsTabIndex}"` cho TabControl con của Tab Tool.
+     - Thuộc tính `IsDualSortBatchToolbarRealVisible`:
+       `SelectedRootTabIndex == 3 && SelectedToolsTabIndex == 6 && IsDualSortBatchToolbarVisible`
+       Bảo đảm Floating Toolbar chỉ xuất hiện duy nhất khi người dùng đang ở tab Dual Picture Sort, tự động ẩn hoàn toàn khi chuyển sang Tab Download, Manga Source, Search hay Thư viện.
+  3. **Bổ Sung 2 Vị Trí Bật / Tắt Thanh Công Cụ Nổi Trực Quan**:
+     - **Nút trên Header Bar**: Thêm nút `⚡ BATCH TOOL: BẬT / TẮT` trên thanh tiêu đề của Dual Picture Sort với màu sắc trạng thái (Xanh Cyan `#0284C7` khi BẬT, Xám đen `#1E293B` khi TẮT).
+     - **Nút Đóng Nhanh (✕) Trên Floating Toolbar**: Tích hợp nút `✕` nhỏ gọn ngay cạnh grip bar `⋮⋮ BATCH TOOL ⋮⋮`, cho phép người dùng click 1 chạm để đóng ngay thanh công cụ khi cảm thấy vướng tầm nhìn.
+- **Nghiệm Thu**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** cho cả Desktop và Android Release.
+  - Test khởi động app Desktop 2 bước: STEP 2 PASSED hoàn hảo.
+  - Tự động đóng gói và upload 3 nền tảng (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta`.
+
+
 
 
 

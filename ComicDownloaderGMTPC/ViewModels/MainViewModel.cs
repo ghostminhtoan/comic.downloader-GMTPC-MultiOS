@@ -52,6 +52,9 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private int _selectedRootTabIndex = 0;
 
+    [ObservableProperty]
+    private int _selectedToolsTabIndex = 0;
+
     public LibraryViewModel LibraryVm { get; } = new();
 
     partial void OnSelectedRootTabIndexChanged(int value)
@@ -60,6 +63,12 @@ public partial class MainViewModel : ViewModelBase
         {
             _ = LibraryVm.ScanLibraryAsync();
         }
+        OnPropertyChanged(nameof(IsDualSortBatchToolbarRealVisible));
+    }
+
+    partial void OnSelectedToolsTabIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsDualSortBatchToolbarRealVisible));
     }
 
     [ObservableProperty]
