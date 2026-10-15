@@ -3338,47 +3338,45 @@
                                     <!-- Header & Cấu hình thư mục -->
                                     <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                                         <StackPanel Spacing="10">
-                                            <!-- Hàng 0: Header Bar phong cách chuyên nghiệp -->
-                                            <Grid ColumnDefinitions="Auto, *, Auto">
-                                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <!-- Hàng 0: Header Bar phong cách chuyên nghiệp (WrapPanel tự động xuống hàng trên mọi kích thước màn hình) -->
+                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,14,6">
                                                     <TextBlock Text="Dual Picture Sort - GMTPC" FontSize="15" FontWeight="Bold" Foreground="#38BDF8" VerticalAlignment="Center" />
                                                     <Border Background="#1E293B" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
                                                         <TextBlock Text="v1.0 • Avalonia Multiplatform" FontSize="10" Foreground="#94A3B8" FontWeight="SemiBold" />
                                                     </Border>
                                                 </StackPanel>
 
-                                                <WrapPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Button Command="{Binding ToggleDualSortPreviewEnabledCommand}"
-                                                            Background="{Binding DualSortPreviewButtonBg}"
-                                                            BorderBrush="{Binding DualSortPreviewButtonBorder}"
-                                                            BorderThickness="1"
-                                                            Foreground="{Binding DualSortPreviewButtonFg}"
-                                                            FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,2"
-                                                            ToolTip.Tip="Bật/Tắt tính năng xem trước ảnh (Preview)">
-                                                        <TextBlock Text="{Binding DualSortPreviewButtonText}" />
-                                                    </Button>
-                                                    <Button Command="{Binding UndoLastSortCommand}" IsEnabled="{Binding CanUndoSort}"
-                                                            Background="#334155" Foreground="#F8FAFC" FontWeight="SemiBold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,2"
-                                                            ToolTip.Tip="Hoàn tác thao tác di chuyển/sao chép ảnh vừa thực hiện (Ctrl+Z)">
-                                                        <TextBlock Text="↩ Hoàn tác (Ctrl+Z)" />
-                                                    </Button>
-                                                    <Button Command="{Binding KeepParentCommand}"
-                                                            Background="#D97706" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,2"
-                                                            ToolTip.Tip="Keep Parent: Xóa hoàn toàn thư mục Đã Lọc (Child), chỉ giữ lại thư mục Gốc">
-                                                        <TextBlock Text="🛡️ Giữ Gốc (Keep Parent)" />
-                                                    </Button>
-                                                    <Button Command="{Binding KeepChildCommand}"
-                                                            Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,2"
-                                                            ToolTip.Tip="Keep Child: Xóa file ở Gốc, chuyển toàn bộ ảnh Đã Lọc (Child) sang Gốc và xóa thư mục Child">
-                                                        <TextBlock Text="✨ Giữ Đã Lọc (Keep Child)" />
-                                                    </Button>
-                                                    <Button Command="{Binding RefreshDualSortFoldersCommand}"
-                                                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,0,2"
-                                                            ToolTip.Tip="Làm mới lại danh sách ảnh từ cả 2 thư mục">
-                                                        <TextBlock Text="🔄 Làm mới tất cả" />
-                                                    </Button>
-                                                </WrapPanel>
-                                            </Grid>
+                                                <Button Command="{Binding ToggleDualSortPreviewEnabledCommand}"
+                                                        Background="{Binding DualSortPreviewButtonBg}"
+                                                        BorderBrush="{Binding DualSortPreviewButtonBorder}"
+                                                        BorderThickness="1"
+                                                        Foreground="{Binding DualSortPreviewButtonFg}"
+                                                        FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,6"
+                                                        ToolTip.Tip="Bật/Tắt tính năng xem trước ảnh (Preview)">
+                                                    <TextBlock Text="{Binding DualSortPreviewButtonText}" />
+                                                </Button>
+                                                <Button Command="{Binding UndoLastSortCommand}" IsEnabled="{Binding CanUndoSort}"
+                                                        Background="#334155" Foreground="#F8FAFC" FontWeight="SemiBold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,6"
+                                                        ToolTip.Tip="Hoàn tác thao tác di chuyển/sao chép ảnh vừa thực hiện (Ctrl+Z)">
+                                                    <TextBlock Text="↩ Hoàn tác (Ctrl+Z)" />
+                                                </Button>
+                                                <Button Command="{Binding KeepParentCommand}"
+                                                        Background="#D97706" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,6"
+                                                        ToolTip.Tip="Keep Parent: Xóa hoàn toàn thư mục Đã Lọc (Child), chỉ giữ lại thư mục Gốc">
+                                                    <TextBlock Text="🛡️ Giữ Gốc (Keep Parent)" />
+                                                </Button>
+                                                <Button Command="{Binding KeepChildCommand}"
+                                                        Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,6"
+                                                        ToolTip.Tip="Keep Child: Xóa file ở Gốc, chuyển toàn bộ ảnh Đã Lọc (Child) sang Gốc và xóa thư mục Child">
+                                                    <TextBlock Text="✨ Giữ Đã Lọc (Keep Child)" />
+                                                </Button>
+                                                <Button Command="{Binding RefreshDualSortFoldersCommand}"
+                                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,0,6"
+                                                        ToolTip.Tip="Làm mới lại danh sách ảnh từ cả 2 thư mục">
+                                                    <TextBlock Text="🔄 Làm mới tất cả" />
+                                                </Button>
+                                            </WrapPanel>
 
                                             <!-- Hàng 1: Thư mục gốc -->
                                             <StackPanel Spacing="3">

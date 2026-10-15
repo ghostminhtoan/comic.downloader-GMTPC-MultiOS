@@ -185,6 +185,9 @@ public sealed class ComicReaderService
                 {
                     if (!File.Exists(chapter.LocalPath)) return pages;
 
+                    // Kích hoạt giải nén tuần tự siêu tốc ngầm (Warm Up Cache) cho toàn bộ chapter RAR
+                    RarArchivePool.Instance.WarmUpArchive(chapter.LocalPath);
+
                     if (chapter.ArchiveEntryNames != null && chapter.ArchiveEntryNames.Count > 0)
                     {
                         for (int i = 0; i < chapter.ArchiveEntryNames.Count; i++)
