@@ -806,6 +806,11 @@
 | Refresh All | Làm mới tất cả |
 | Search file name... | Tìm tên file... |
 | Ready. Select source folder to start sorting. | Sẵn sàng. Hãy chọn thư mục nguồn để bắt đầu lọc ảnh. |
+| Keep Parent | Giữ Gốc (Keep Parent) |
+| Keep Child | Giữ Đã Lọc (Keep Child) |
+| Keep Selected Only | Chỉ Giữ Đã Chọn |
+| Previous Folder | Thư mục trước |
+| Next Folder | Thư mục tiếp theo |
 
 ## 19. File Association & Context Menu (Liên Kết Tệp & Menu Ngữ Cảnh)
 

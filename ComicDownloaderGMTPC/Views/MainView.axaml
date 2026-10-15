@@ -3400,6 +3400,11 @@
                                                         ToolTip.Tip="Keep Child: Xóa file ở Gốc, chuyển toàn bộ ảnh Đã Lọc (Child) sang Gốc và xóa thư mục Child">
                                                     <TextBlock Text="✨ Giữ Đã Lọc (Keep Child)" />
                                                 </Button>
+                                                <Button Command="{Binding KeepSelectedOnlyCommand}"
+                                                        Background="#BE185D" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,6"
+                                                        ToolTip.Tip="Chỉ giữ đã chọn: Xóa các file không được chọn ở cả 2 thư mục và xóa luôn cả thư mục Đã Lọc (Child)">
+                                                    <TextBlock Text="🎯 Chỉ Giữ Đã Chọn" />
+                                                </Button>
                                                 <Button Command="{Binding RefreshDualSortFoldersCommand}"
                                                         Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,0,6"
                                                         ToolTip.Tip="Làm mới lại danh sách ảnh từ cả 2 thư mục">
@@ -4739,6 +4744,17 @@
                     <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="✨" FontSize="9.5" VerticalAlignment="Center" />
                         <TextBlock Text="Giữ Đã Lọc" FontSize="9" FontWeight="Bold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <!-- 5b. Chỉ giữ đã chọn (Keep Selected Only) -->
+                <Button Command="{Binding KeepSelectedOnlyCommand}"
+                        Background="#BE185D" Foreground="#FFFFFF" FontWeight="Bold"
+                        CornerRadius="12" Padding="4,3" Width="92" Height="26"
+                        ToolTip.Tip="Chỉ giữ đã chọn: Xóa các file không được chọn ở cả 2 thư mục và xóa luôn cả thư mục Đã Lọc (Child)">
+                    <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="🎯" FontSize="9.5" VerticalAlignment="Center" />
+                        <TextBlock Text="Giữ Đã Chọn" FontSize="9" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 

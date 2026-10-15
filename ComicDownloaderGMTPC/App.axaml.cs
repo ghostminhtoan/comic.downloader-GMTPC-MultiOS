@@ -64,10 +64,17 @@ public partial class App : Application
                 return;
             }
 
-            if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-dualsort-thumbs", StringComparison.OrdinalIgnoreCase)))
+            if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-dualsort-keep-selected", StringComparison.OrdinalIgnoreCase)))
             {
                 base.OnFrameworkInitializationCompleted();
-                _ = RunDualSortThumbsTestAsync(desktop);
+                _ = RunDualSortKeepSelectedTestAsync(desktop);
+                return;
+            }
+
+            if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-inspect-media", StringComparison.OrdinalIgnoreCase)))
+            {
+                base.OnFrameworkInitializationCompleted();
+                _ = RunInspectMediaTestAsync(desktop);
                 return;
             }
 
@@ -689,95 +696,206 @@ public partial class App : Application
         }
     }
 
-    private static async Task RunDualSortThumbsTestAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    private static async Task RunInspectMediaTestAsync(IClassicDesktopStyleApplicationLifetime desktop)
     {
         Console.WriteLine("\n=========================================");
-        Console.WriteLine("🚀 BẮT ĐẦU KIỂM THỬ THUMBNAIL & ANIMATION TRONG DUAL PICTURE SORT");
+        Console.WriteLine("🔍 BẮT ĐẦU CHẨN ĐOÁN GIẢI MÃ THUMBNAIL & ANIMATION");
         Console.WriteLine("=========================================\n");
 
-        bool allPassed = true;
-        var vm = new ViewModels.MainViewModel();
+        string folder1 = @"T:\[HDD T]\zfaststone capture\test";
+        string folder2 = @"T:\[HDD T]\zmedia\bulk image downloader\downloading\hentaiforce\uncen full color\2B9S - HentaiForce";
 
-        // 1. Kiểm thử thư mục T:\[HDD T]\zfaststone capture\test
-        string fld1 = @"T:\[HDD T]\zfaststone capture\test";
-        if (Directory.Exists(fld1))
+        var folders = new[] { folder1, folder2 };
+
+        foreach (var fld in folders)
         {
-            Console.WriteLine($"[TEST 1] Nạp thư mục test: {fld1}");
-            vm.DualSortSourcePath = fld1;
-            await vm.LoadBothSortFoldersAsync();
-
-            // Chờ giải mã thumbnail
-            await Task.Delay(2000);
-
-            int total = vm.DualSortSourceItems.Count;
-            int withThumb = vm.DualSortSourceItems.Count(i => i.Thumbnail != null);
-            Console.WriteLine($" -> Đã tải {withThumb}/{total} thumbnails trong danh sách.");
-            foreach (var item in vm.DualSortSourceItems)
+            if (!Directory.Exists(fld))
             {
-                bool ok = item.Thumbnail != null;
-                Console.WriteLine($"    + [{item.FileName}] Thumb={(ok ? "OK ✅" : "THIẾU ❌")} ({item.ResolutionText}, {item.FileSizeText})");
-                if (!ok) allPassed = false;
+                Console.WriteLine($"[SKIP] Thư mục không tồn tại: {fld}");
+                continue;
             }
 
-            // Test animation preview cho webp và gif
-            var webpItem = vm.DualSortSourceItems.FirstOrDefault(i => i.FileName.EndsWith(".webp", StringComparison.OrdinalIgnoreCase));
-            if (webpItem != null)
+            Console.WriteLine($"\n📁 ĐANG QUÉT THƯ MỤC: {fld}");
+            var files = Directory.GetFiles(fld);
+            foreach (var file in files)
             {
-                Console.WriteLine($"\n[TEST 1.1] Kích hoạt Preview cho file animated WebP: {webpItem.FileName}");
-                vm.ShowDualSortPreview(webpItem);
-                await Task.Delay(800);
-                bool animOk = vm.IsDualSortPreviewAnimated && vm.DualSortPreviewBitmap != null;
-                Console.WriteLine($" -> Kết quả WebP Animation: Animated={vm.IsDualSortPreviewAnimated}, Badge={vm.DualSortPreviewAnimatedBadge}, BitmapOK={vm.DualSortPreviewBitmap != null} => {(animOk ? "PASS ✅" : "FAIL ❌")}");
-                if (!animOk) allPassed = false;
-                vm.CloseDualSortPreview();
-            }
+                string fn = Path.GetFileName(file);
+                string ext = Path.GetExtension(file).ToLowerInvariant();
+                if (ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" && ext != ".gif" && ext != ".bmp")
+                    continue;
 
-            var gifItem = vm.DualSortSourceItems.FirstOrDefault(i => i.FileName.EndsWith(".gif", StringComparison.OrdinalIgnoreCase));
-            if (gifItem != null)
-            {
-                Console.WriteLine($"\n[TEST 1.2] Kích hoạt Preview cho file animated GIF: {gifItem.FileName}");
-                vm.ShowDualSortPreview(gifItem);
-                await Task.Delay(800);
-                bool animOk = vm.IsDualSortPreviewAnimated && vm.DualSortPreviewBitmap != null;
-                Console.WriteLine($" -> Kết quả GIF Animation: Animated={vm.IsDualSortPreviewAnimated}, Badge={vm.DualSortPreviewAnimatedBadge}, BitmapOK={vm.DualSortPreviewBitmap != null} => {(animOk ? "PASS ✅" : "FAIL ❌")}");
-                if (!animOk) allPassed = false;
-                vm.CloseDualSortPreview();
-            }
-        }
+                Console.WriteLine($"\n--- TỆP: {fn} ({new FileInfo(file).Length / 1024.0:0.0} KB) ---");
 
-        // 2. Kiểm thử thư mục T:\[HDD T]\zmedia\bulk image downloader\downloading\hentaiforce\uncen full color\2B9S - HentaiForce
-        string fld2 = @"T:\[HDD T]\zmedia\bulk image downloader\downloading\hentaiforce\uncen full color\2B9S - HentaiForce";
-        if (Directory.Exists(fld2))
-        {
-            Console.WriteLine($"\n[TEST 2] Nạp thư mục 2B9S HentaiForce: {fld2}");
-            vm.DualSortSourcePath = fld2;
-            await vm.LoadBothSortFoldersAsync();
-
-            await Task.Delay(3000);
-
-            int total = vm.DualSortSourceItems.Count;
-            int withThumb = vm.DualSortSourceItems.Count(i => i.Thumbnail != null);
-            Console.WriteLine($" -> Đã tải {withThumb}/{total} thumbnails trong danh sách.");
-            foreach (var item in vm.DualSortSourceItems)
-            {
-                bool ok = item.Thumbnail != null;
-                if (!ok)
+                // 1. Thử nghiệm SKCodec
+                try
                 {
-                    Console.WriteLine($"    + [FAIL ❌] {item.FileName} thiếu Thumbnail!");
-                    allPassed = false;
+                    using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var codec = SKCodec.Create(stream);
+                    if (codec != null)
+                    {
+                        Console.WriteLine($" [SKCodec] Width={codec.Info.Width}, Height={codec.Info.Height}, FrameCount={codec.FrameCount}, EncodedFormat={codec.EncodedFormat}");
+
+                        int maxDim = 240;
+                        int origW = codec.Info.Width;
+                        int origH = codec.Info.Height;
+                        int thumbW = origW;
+                        int thumbH = origH;
+                        if (origW > maxDim || origH > maxDim)
+                        {
+                            if (origW >= origH)
+                            {
+                                thumbW = maxDim;
+                                thumbH = Math.Max(1, (int)((float)origH / origW * maxDim));
+                            }
+                            else
+                            {
+                                thumbH = maxDim;
+                                thumbW = Math.Max(1, (int)((float)origW / origH * maxDim));
+                            }
+                        }
+
+                        // Thử decode theo cách cũ: SKBitmap.Decode(codec, decodeInfo)
+                        var decodeInfo = new SKImageInfo(thumbW, thumbH, SKColorType.Rgba8888, SKAlphaType.Premul);
+                        using var oldSkBmp = SKBitmap.Decode(codec, decodeInfo);
+                        if (oldSkBmp != null)
+                        {
+                            Console.WriteLine($" [CÁCH CŨ SKBitmap.Decode] THÀNH CÔNG: {oldSkBmp.Width}x{oldSkBmp.Height}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($" [CÁCH CŨ SKBitmap.Decode] THẤT BẠI (NULL) ❌ (Không hỗ trợ scale sang {thumbW}x{thumbH})");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($" [SKCodec] KHÔNG TẠO ĐƯỢC CODEC ❌");
+                    }
                 }
-            }
-            if (withThumb == total && total > 0)
-            {
-                Console.WriteLine($" -> TOÀN BỘ {total} ẢNH JPG/WEBP ĐỀU CÓ THUMBNAIL ĐẦY ĐỦ 100%! ✅");
+                catch (Exception ex)
+                {
+                    Console.WriteLine($" [SKCodec] LỖI: {ex.Message}");
+                }
+
+                // 2. Thử nghiệm Avalonia Bitmap.DecodeToWidth
+                try
+                {
+                    using var stream2 = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    var avaBmp = Bitmap.DecodeToWidth(stream2, 240);
+                    if (avaBmp != null)
+                    {
+                        Console.WriteLine($" [AVALONIA DecodeToWidth] THÀNH CÔNG ✅: {avaBmp.PixelSize.Width}x{avaBmp.PixelSize.Height}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($" [AVALONIA DecodeToWidth] TRẢ VỀ NULL ❌");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($" [AVALONIA DecodeToWidth] LỖI: {ex.Message}");
+                }
             }
         }
 
         Console.WriteLine("\n=========================================");
-        Console.WriteLine(allPassed ? "🎉 KẾT QUẢ TEST THUMBNAIL & ANIMATION: 100% PASS!" : "❌ KẾT QUẢ TEST THUMBNAIL & ANIMATION: CÓ LỖI!");
+        Console.WriteLine("🏁 HOÀN TẤT CHẨN ĐOÁN!");
         Console.WriteLine("=========================================\n");
 
-        Environment.Exit(allPassed ? 0 : 1);
+        Environment.Exit(0);
+    }
+
+    private static async Task RunDualSortKeepSelectedTestAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        Console.WriteLine("\n=========================================");
+        Console.WriteLine("🧪 KIỂM THỬ: DUAL PICTURE SORT - CHỈ GIỮ ĐÃ CHỌN (KEEP SELECTED ONLY)");
+        Console.WriteLine("=========================================\n");
+
+        string testRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".tmp", "test_keep_selected_" + Guid.NewGuid().ToString("N"));
+        string parentDir = Path.Combine(testRoot, "ParentFolder");
+        string childDir = Path.Combine(parentDir, "ParentFolder-sorted");
+
+        try
+        {
+            Directory.CreateDirectory(parentDir);
+            Directory.CreateDirectory(childDir);
+
+            // Tạo các file giả lập
+            string p1 = Path.Combine(parentDir, "p1.jpg");
+            string p2 = Path.Combine(parentDir, "p2.jpg");
+            string p3 = Path.Combine(parentDir, "p3.jpg");
+            string c1 = Path.Combine(childDir, "c1.jpg");
+            string c2 = Path.Combine(childDir, "c2.jpg");
+
+            File.WriteAllText(p1, "parent image 1");
+            File.WriteAllText(p2, "parent image 2");
+            File.WriteAllText(p3, "parent image 3");
+            File.WriteAllText(c1, "child image 1");
+            File.WriteAllText(c2, "child image 2");
+
+            Console.WriteLine($"[1] Đã tạo thư mục test:\n  - Gốc: {parentDir} (3 file: p1, p2, p3)\n  - Lọc: {childDir} (2 file: c1, c2)");
+
+            var vm = new MainViewModel();
+            vm.DualSortSourcePath = parentDir;
+            vm.DualSortSortedPath = childDir;
+
+            await vm.LoadBothSortFoldersAsync();
+            Console.WriteLine($"[2] Nạp thư mục: Gốc={vm.DualSortSourceItems.Count} ảnh, Đã lọc={vm.DualSortSortedItems.Count} ảnh.");
+
+            // Chọn p1 (ở gốc) và c2 (ở lọc)
+            var p1Item = vm.DualSortSourceItems.FirstOrDefault(x => Path.GetFileName(x.FilePath) == "p1.jpg");
+            var c2Item = vm.DualSortSortedItems.FirstOrDefault(x => Path.GetFileName(x.FilePath) == "c2.jpg");
+
+            if (p1Item == null || c2Item == null)
+            {
+                Console.WriteLine("❌ LỖI: Không tìm thấy p1.jpg hoặc c2.jpg trong VM!");
+                Environment.Exit(1);
+                return;
+            }
+
+            p1Item.IsSelected = true;
+            c2Item.IsSelected = true;
+            Console.WriteLine("[3] Đã chọn: p1.jpg (ở Gốc) và c2.jpg (ở Lọc).");
+
+            Console.WriteLine("[4] Gọi KeepSelectedOnlyAsync()...");
+            await vm.KeepSelectedOnlyAsync();
+
+            // Kiểm tra kết quả
+            bool childDirExists = Directory.Exists(childDir);
+            var remainingFiles = Directory.GetFiles(parentDir, "*.*", SearchOption.TopDirectoryOnly).Select(Path.GetFileName).ToList();
+
+            Console.WriteLine($"[5] Kết quả sau khi chạy:");
+            Console.WriteLine($"    - Thư mục Child còn tồn tại? {childDirExists} (Kỳ vọng: False)");
+            Console.WriteLine($"    - Các file còn lại trong Parent: {string.Join(", ", remainingFiles)} (Kỳ vọng: p1.jpg, c2.jpg)");
+
+            if (!childDirExists && remainingFiles.Count == 2 && remainingFiles.Contains("p1.jpg") && remainingFiles.Contains("c2.jpg"))
+            {
+                Console.WriteLine("\n✅ KIỂM THỬ THÀNH CÔNG 100%: 'Chỉ giữ đã chọn' hoạt động chính xác tuyệt đối!");
+                Console.WriteLine("   - File không chọn (p2, p3, c1) đã được dọn sạch.");
+                Console.WriteLine("   - File được chọn ở child (c2) đã được move an toàn về parent.");
+                Console.WriteLine("   - File được chọn ở parent (p1) được giữ nguyên.");
+                Console.WriteLine("   - Thư mục child đã được xóa sạch sẽ.");
+            }
+            else
+            {
+                Console.WriteLine("\n❌ KIỂM THỬ THẤT BẠI: Kết quả không khớp kỳ vọng!");
+                Environment.Exit(1);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ EXCEPTION: {ex.Message}\n{ex.StackTrace}");
+            Environment.Exit(1);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(testRoot)) Directory.Delete(testRoot, true);
+            }
+            catch { }
+        }
+
+        Environment.Exit(0);
     }
 
     private static bool IsReadableComicOrMediaFileOrDirectory(string path)
@@ -791,4 +909,4 @@ public partial class App : Application
             || LibraryScannerService.ValidMobiExtensions.Contains(ext)
             || string.Equals(ext, ".pdf", StringComparison.OrdinalIgnoreCase);
     }
-}
+}

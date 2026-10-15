@@ -1748,6 +1748,113 @@ public partial class MainViewModel
         }
     }
 
+    [RelayCommand]
+    public async Task KeepSelectedOnlyAsync()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(DualSortSourcePath) || !Directory.Exists(DualSortSourcePath))
+            {
+                DualSortStatusText = "Không tìm thấy thư mục Gốc (Parent).";
+                return;
+            }
+
+            string fullSource = Path.GetFullPath(DualSortSourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string? fullSorted = (!string.IsNullOrWhiteSpace(DualSortSortedPath) && Directory.Exists(DualSortSortedPath))
+                ? Path.GetFullPath(DualSortSortedPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                : null;
+
+            if (fullSorted != null && string.Equals(fullSource, fullSorted, StringComparison.OrdinalIgnoreCase))
+            {
+                DualSortStatusText = "Lỗi an toàn: Thư mục Gốc và Thư mục Đã Lọc trùng nhau!";
+                return;
+            }
+
+            if (fullSorted != null && fullSource.StartsWith(fullSorted + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                DualSortStatusText = "Lỗi an toàn: Thư mục Đã Lọc không được là thư mục cha của Thư mục Gốc!";
+                return;
+            }
+
+            // Lấy danh sách ảnh được chọn ở cả Thư mục Gốc và Thư mục Đã Lọc
+            var selectedSourceFiles = DualSortSourceItems.Where(x => x.IsSelected).Select(x => x.FilePath).Where(File.Exists).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var selectedSortedFiles = DualSortSortedItems.Where(x => x.IsSelected).Select(x => x.FilePath).Where(File.Exists).ToList();
+
+            int totalSelected = selectedSourceFiles.Count + selectedSortedFiles.Count;
+            if (totalSelected == 0)
+            {
+                DualSortStatusText = "⚠️ Chưa có ảnh nào được chọn! Hãy tick chọn ít nhất một ảnh muốn giữ lại.";
+                return;
+            }
+
+            IsDualSortLoading = true;
+            DualSortStatusText = $"Đang thực hiện 'Chỉ giữ đã chọn' (Giữ {totalSelected} ảnh, chuyển các ảnh không chọn và thư mục child vào Thùng rác)...";
+
+            await Task.Run(() =>
+            {
+                // 1. Chuyển các file ở Thư mục Gốc KHÔNG ĐƯỢC CHỌN vào Thùng rác
+                var allSourceDiskFiles = Directory.EnumerateFiles(fullSource, "*.*", SearchOption.TopDirectoryOnly).ToList();
+                foreach (var file in allSourceDiskFiles)
+                {
+                    if (!selectedSourceFiles.Contains(file))
+                    {
+                        try
+                        {
+                            RecycleBinService.DeleteToRecycleBin(file);
+                        }
+                        catch { }
+                    }
+                }
+
+                // 2. Chuyển các file ĐƯỢC CHỌN ở Child Folder về Gốc (Parent)
+                foreach (var file in selectedSortedFiles)
+                {
+                    try
+                    {
+                        string fileName = Path.GetFileName(file);
+                        string destPath = Path.Combine(fullSource, fileName);
+                        if (File.Exists(destPath))
+                        {
+                            RecycleBinService.DeleteToRecycleBin(destPath);
+                        }
+                        File.Move(file, destPath);
+                    }
+                    catch { }
+                }
+
+                // 3. Xóa luôn cả child folder sort (chuyển vào Thùng rác an toàn)
+                if (fullSorted != null && Directory.Exists(fullSorted))
+                {
+                    try
+                    {
+                        RecycleBinService.DeleteToRecycleBin(fullSorted);
+                    }
+                    catch { }
+                }
+            });
+
+            // 4. Xóa undo/redo stack vì cấu trúc thư mục đã thay đổi triệt để
+            _dualSortUndoBatches.Clear();
+            _dualSortRedoBatches.Clear();
+            CanUndoSort = false;
+            CanRedoSort = false;
+
+            // 5. Nạp lại cả 2 thư mục (parent sẽ chỉ có các file được giữ, child đã biến mất)
+            await LoadBothSortFoldersAsync();
+
+            DualSortStatusText = $"✅ Hoàn tất 'Chỉ giữ đã chọn': Đã giữ lại {totalSelected} ảnh tại thư mục gốc, xóa các file không chọn và dọn sạch thư mục Đã Lọc.";
+            AddLog("INFO", $"[DualSort] Chỉ Giữ Đã Chọn: Đã giữ lại {totalSelected} ảnh trong '{fullSource}', xóa các file thừa và dọn child folder '{fullSorted}' vào Thùng rác.");
+        }
+        catch (Exception ex)
+        {
+            DualSortStatusText = $"Lỗi Chỉ Giữ Đã Chọn: {ex.Message}";
+        }
+        finally
+        {
+            IsDualSortLoading = false;
+        }
+    }
+
     private static string GetUniqueFilePath(string filePath)
     {
         if (!File.Exists(filePath)) return filePath;

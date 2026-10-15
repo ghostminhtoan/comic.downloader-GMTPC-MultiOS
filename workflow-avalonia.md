@@ -3759,6 +3759,31 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test CLI hồi quy `--test-dualsort-nav`: **100% PASS**.
   - Test CLI hồi quy `--test-vertical-doubletap`: **100% PASS (10/10 lần)**.
 
+---
+
+## 27. Cập Nhật: Dual Picture Sort - Tính Năng "Chỉ Giữ Đã Chọn" (Keep Selected Only)
+
+- **Yêu cầu của người dùng**:
+  - Tại thanh công cụ nổi `Float Batch Tool` (`DualSortFloatingBatchToolbar`), phía dưới nút "Giữ Đã Lọc" (`Keep Child`), thêm nút "Chỉ Giữ Đã Chọn": Khi bấm nút này sẽ xóa những file không được chọn và xóa luôn cả child folder sort.
+- **Thiết kế Giao diện (UI/UX)**:
+  1. **Thanh công cụ nổi (`DualSortFloatingBatchToolbar`)**:
+     - Thêm nút `🎯 Giữ Đã Chọn` ngay dưới nút `✨ Giữ Đã Lọc`.
+     - Màu nền: `#BE185D` (Rose-700 sang trọng, nổi bật), bo góc `CornerRadius=12`, kích thước chuẩn 92x26px.
+     - ToolTip: `Chỉ giữ đã chọn: Xóa các file không được chọn ở cả 2 thư mục và xóa luôn cả thư mục Đã Lọc (Child)`.
+  2. **Thanh công cụ đỉnh (`Top Header Toolbar`)**:
+     - Đồng bộ thêm nút `🎯 Chỉ Giữ Đã Chọn` ngay sau nút `✨ Giữ Đã Lọc (Keep Child)` trong `WrapPanel` để thuận tiện thao tác trên màn hình lớn.
+- **Logic Nghiệp Vụ & An Toàn Dữ Liệu (`KeepSelectedOnlyAsync`)**:
+  1. Kiểm tra an toàn: Kiểm tra đường dẫn thư mục Gốc và Đã Lọc, chặn thực thi nếu 2 đường dẫn trùng nhau hoặc child là cha của parent.
+  2. Kiểm tra điều kiện chọn: Nếu không có file nào được tick chọn ở cả 2 thư mục (`totalSelected == 0`), dừng lại và cảnh báo an toàn trên thanh trạng thái, không để xảy ra trường hợp xóa trắng vô tình.
+  3. Xóa các file không được chọn ở thư mục Gốc: Toàn bộ file ở root parent không nằm trong danh sách được chọn sẽ được chuyển an toàn vào Thùng rác (`RecycleBinService.DeleteToRecycleBin`).
+  4. Chuyển các file được chọn ở Child về Gốc: Các file được chọn ở child sẽ được di chuyển (`File.Move`) về thư mục Gốc (xử lý an toàn nếu trùng tên).
+  5. Xóa hoàn toàn thư mục Child: Chuyển thư mục `fullSorted` vào Thùng rác an toàn.
+  6. Xóa Undo/Redo stack để bảo đảm tính toàn vẹn trạng thái.
+  7. Tự động nạp lại danh sách cả 2 thư mục (`LoadBothSortFoldersAsync`), thông báo hoàn tất trên thanh trạng thái.
+- **Nghiệm Thu**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)**.
+  - Test CLI tự động `--test-dualsort-keep-selected`: **100% PASS** (Xóa sạch file không chọn, chuyển file chọn ở child về parent, xóa sạch child folder).
+
 
 
 
