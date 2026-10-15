@@ -35,9 +35,9 @@ TARGET_FILES = [
 ]
 
 # Cau hinh giam sat toc do va retry
-MIN_UPLOAD_SPEED_MBPS = 20.0  # Nguong toc do toi thieu bat buoc (20 Mbps ~ 2.5 MB/s)
-MAX_RETRIES = 5              # So lan thu lai neu toc do < 20 Mbps hoac bi stall
-GRACE_PERIOD_SEC = 5         # Thoi gian khoi tao ban dau (cho handshake S3) truoc khi kiem tra toc do
+MIN_UPLOAD_SPEED_MBPS = 0.0  # Dat 0.0 de khong tu dong huy upload khi toc do mang thap, chi huy khi bi treo (stall)
+MAX_RETRIES = 5              # So lan thu lai neu bi stall
+GRACE_PERIOD_SEC = 25        # Thoi gian khoi tao ban dau (cho handshake S3) truoc khi kiem tra stall
 
 
 def disable_quick_edit_mode():
@@ -233,7 +233,7 @@ JS_UPLOAD_TRACKER = """
 """
 
 
-def perform_browser_upload(force_login=False):
+def perform_browser_upload(force_login=False, min_speed_mbps=0.0, max_wait_sec=900):
     disable_quick_edit_mode()
     verify_files_exist()
 
@@ -364,7 +364,7 @@ def perform_browser_upload(force_login=False):
             start_time = time.time()
             prev_loaded = 0
             retry_needed = False
-            max_upload_wait = 180  # Toi da 3 phut cho moi lan thu
+            max_upload_wait = max_wait_sec  # Mac dinh 900s (15 phut)
 
             for sec in range(1, max_upload_wait + 1):
                 time.sleep(1.0)
@@ -411,14 +411,16 @@ def perform_browser_upload(force_login=False):
                 print(f" [TIEN DO] {status_desc}")
 
                 # -------------------------------------------------------------
-                # 1. SPEED GUARD: Kiem tra toc do, neu < 20 Mbps -> KILL & RETRY
+                # 1. SPEED GUARD: Kiem tra toc do, neu bi stall hoac < min_speed_mbps -> KILL & RETRY
                 # -------------------------------------------------------------
+                effective_min_speed = min_speed_mbps if min_speed_mbps is not None else MIN_UPLOAD_SPEED_MBPS
                 if elapsed >= GRACE_PERIOD_SEC:
-                    is_stalled = (elapsed >= 8 and total_loaded == 0)
-                    is_below_threshold = (avg_mbps < MIN_UPLOAD_SPEED_MBPS and total_loaded > 0)
+                    is_stalled = (elapsed >= 30 and total_loaded == 0)
+                    is_below_threshold = (effective_min_speed > 0 and avg_mbps < effective_min_speed and total_loaded > 0)
 
                     if is_stalled or is_below_threshold:
-                        print(f"\n[CANH BAO TOC DO] Toc do upload trung binh dat {avg_mbps:.2f} Mbps (< nguong yeu cau {MIN_UPLOAD_SPEED_MBPS} Mbps)!")
+                        threshold_label = f"{effective_min_speed} Mbps" if effective_min_speed > 0 else "stalled (0 bytes)"
+                        print(f"\n[CANH BAO TOC DO] Toc do upload trung binh dat {avg_mbps:.2f} Mbps (< nguong yeu cau {threshold_label})!")
                         print(f"[KILL & RETRY] Tu dong huy upload (window.stop) va chuan bi thu lai lan {attempt + 1}/{MAX_RETRIES}...")
                         try:
                             page.evaluate("() => window.stop()")
@@ -482,10 +484,12 @@ if __name__ == "__main__":
     parser.add_argument("--login", action="store_true", help="Mo trinh duyet de dang nhap lai GitHub")
     parser.add_argument("--no-pause", action="store_true", help="Khong dung man hinh sau khi upload")
     parser.add_argument("--skip-pause", action="store_true", help="Khong dung man hinh sau khi upload")
+    parser.add_argument("--min-speed", "--min-speed-mbps", type=float, default=0.0, help="Nguong toc do toi thieu (Mbps), mac dinh 0 = khong huy vi toc do thap")
+    parser.add_argument("--max-wait", type=int, default=900, help="Thoi gian cho toi da (giay), mac dinh 900s")
     args, _ = parser.parse_known_args()
 
     try:
-        perform_browser_upload(force_login=args.login)
+        perform_browser_upload(force_login=args.login, min_speed_mbps=args.min_speed, max_wait_sec=args.max_wait)
     except KeyboardInterrupt:
         print("\n[HUY] Nguoi dung da huy thao tac.")
         sys.exit(1)
