@@ -3698,6 +3698,36 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test CLI hồi quy `--test-vertical-doubletap`: **100% PASS (10/10 lần)**.
   - Đóng gói toàn bộ nền tảng qua `build-avalonia.bat` và tự động cập nhật 3 tệp cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta`.
 
+---
+
+## 25. Cập Nhật: Dual Picture Sort - Bổ Sung Nút Previous Folder & Next Folder Trên Floating Batch Toolbar & Thanh Thư Mục Gốc
+
+- **Bối cảnh & Yêu cầu người dùng**:
+  1. Trong tính năng **Dual Picture Sort** (Tab Công cụ -> Child Tab 3.7 Lọc ảnh đôi), người dùng cần chuyển nhanh qua lại giữa các tập/thư mục anh em liền kề trong cùng thư mục cha (ví dụ đang lọc `Chap 02`, muốn chuyển lùi sang `Chap 01` hoặc tiến tới `Chap 03`).
+  2. Người dùng yêu cầu bổ sung 2 nút điều hướng trên thanh công cụ nổi **Float Batch Tool** (`DualSortFloatingBatchToolbar`):
+     - **Previous Folder (Thư mục Trước)**: Chuyển sang thư mục anh em liền trước.
+     - **Next Folder (Thư mục Tiếp)**: Chuyển sang thư mục anh em liền tiếp theo.
+- **Giải pháp Kỹ thuật & Cải tiến**:
+  1. **Thuật toán Duyệt Thư mục Anh em An toàn (`GetDualSortSiblingFolders`)**:
+     - Lấy thư mục cha từ `DualSortSourcePath`: `parent = Path.GetDirectoryName(cleanSource)`.
+     - Quét toàn bộ thư mục con, tự động lọc bỏ các thư mục ẩn/hệ thống (`.` hoặc `$`) và các thư mục kết thúc bằng `-sorted` (thư mục output).
+     - Sắp xếp tự nhiên (Natural / Alphanumeric Sort) qua `NaturalSortComparer.Instance`, bảo đảm `Chap 2` luôn đứng trước `Chap 10`.
+  2. **Bộ Điều hướng & Chuyển Đổi An toàn (`SwitchDualSortSourceFolderAsync`)**:
+     - Cập nhật `DualSortSourcePath = targetDir;`.
+     - Nếu `IsAutoCreateSortedFolder == true`: tự động trỏ và tạo thư mục con `-sorted` tương ứng: `targetDir\targetDir-sorted`.
+     - Xóa sạch stack `_dualSortUndoBatches` và `_dualSortRedoBatches`, đặt `CanUndoSort = false`, `CanRedoSort = false` để ngăn chặn undo nhầm vào file thuộc thư mục trước đó.
+     - Hủy trạng thái `Batch Part` đang chọn dở dang, reset về Part 1.
+     - Tự động đóng popup preview đang mở (`CloseDualSortPreview()`).
+     - Tự động kích hoạt `LoadBothSortFoldersAsync()` nạp lại toàn bộ ảnh và thumbnail của cả 2 panel.
+     - Cập nhật thanh trạng thái: `DualSortStatusText = $"[{humanIndex}/{totalCount}] Đã chuyển sang: {folderName}"`.
+  3. **Thiết Kế Giao Diện Tinh Gọn Trên Floating Batch Toolbar & Header Bar**:
+     - Bổ sung cụm Grid 2 cột `[⏮️ Prev] [Next ⏭️]` với kích thước nhỏ gọn chuẩn 92px, viền Cyberpunk `#0284C7`, nền `#1E293B`, chữ `#38BDF8` nổi bật ngay dưới thanh di chuyển `DualSortBatchGripBar`.
+     - Đồng thời bổ sung 2 nút `[⏮️ Trước]` và `[Tiếp ⏭️]` trên hàng chọn `Thư mục gốc` ở Header Bar để tiện thao tác bằng chuột hoặc bàn phím.
+- **Nghiệm Thu Toàn Diện**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
+  - Test CLI `--test-dualsort-nav`: **100% PASS (5/5 kịch bản: Prev từ Chap 02->Chap 01; Prev chặn đầu; Next Chap 01->02; Next bỏ qua -sorted chuyển sang Chap 03; Next chặn cuối)**.
+  - Test CLI hồi quy `--test-vertical-doubletap`: **100% PASS (10/10 lần)**.
+
 
 
 

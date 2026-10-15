@@ -467,6 +467,164 @@ public partial class MainViewModel
         }
     }
 
+    // ==========================================
+    // ĐIỀU HƯỚNG THƯ MỤC ANH EM (PREVIOUS / NEXT FOLDER)
+    // ==========================================
+    private List<string> GetDualSortSiblingFolders()
+    {
+        if (string.IsNullOrWhiteSpace(DualSortSourcePath))
+            return new List<string>();
+
+        try
+        {
+            string cleanSource = DualSortSourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (!Directory.Exists(cleanSource))
+                return new List<string>();
+
+            string? parent = Path.GetDirectoryName(cleanSource);
+            if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent))
+                return new List<string>();
+
+            // Lấy toàn bộ thư mục con, bỏ qua thư mục ẩn, thư mục hệ thống và thư mục output "-sorted"
+            var dirs = Directory.GetDirectories(parent)
+                .Where(d =>
+                {
+                    string name = Path.GetFileName(d.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    if (string.IsNullOrWhiteSpace(name)) return false;
+                    if (name.StartsWith(".") || name.StartsWith("$")) return false;
+                    if (name.EndsWith("-sorted", StringComparison.OrdinalIgnoreCase)) return false;
+                    return true;
+                })
+                .OrderBy(d => d, NaturalSortComparer.Instance)
+                .ToList();
+
+            return dirs;
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"[DualSort] Lỗi khi quét thư mục anh em: {ex.Message}");
+            return new List<string>();
+        }
+    }
+
+    [RelayCommand]
+    public async Task DualSortPreviousFolderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(DualSortSourcePath))
+        {
+            DualSortStatusText = "Chưa chọn Thư mục gốc!";
+            return;
+        }
+
+        var dirs = GetDualSortSiblingFolders();
+        if (dirs.Count == 0)
+        {
+            DualSortStatusText = "Không tìm thấy thư mục nào trong thư mục cha!";
+            return;
+        }
+
+        string cleanCurrent = Path.GetFullPath(DualSortSourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        int currentIndex = dirs.FindIndex(d => string.Equals(Path.GetFullPath(d).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), cleanCurrent, StringComparison.OrdinalIgnoreCase));
+
+        if (currentIndex < 0)
+        {
+            // Nếu folder hiện tại không nằm trong danh sách (hoặc vừa tạo mới), nạp folder đầu tiên
+            await SwitchDualSortSourceFolderAsync(dirs[0], 1, dirs.Count);
+            return;
+        }
+
+        if (currentIndex == 0)
+        {
+            DualSortStatusText = $"Đã ở thư mục đầu tiên! (1/{dirs.Count})";
+            return;
+        }
+
+        string targetDir = dirs[currentIndex - 1];
+        await SwitchDualSortSourceFolderAsync(targetDir, currentIndex, dirs.Count);
+    }
+
+    [RelayCommand]
+    public async Task DualSortNextFolderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(DualSortSourcePath))
+        {
+            DualSortStatusText = "Chưa chọn Thư mục gốc!";
+            return;
+        }
+
+        var dirs = GetDualSortSiblingFolders();
+        if (dirs.Count == 0)
+        {
+            DualSortStatusText = "Không tìm thấy thư mục nào trong thư mục cha!";
+            return;
+        }
+
+        string cleanCurrent = Path.GetFullPath(DualSortSourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        int currentIndex = dirs.FindIndex(d => string.Equals(Path.GetFullPath(d).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), cleanCurrent, StringComparison.OrdinalIgnoreCase));
+
+        if (currentIndex < 0)
+        {
+            // Nếu folder hiện tại không nằm trong danh sách, nạp folder đầu tiên
+            await SwitchDualSortSourceFolderAsync(dirs[0], 1, dirs.Count);
+            return;
+        }
+
+        if (currentIndex >= dirs.Count - 1)
+        {
+            DualSortStatusText = $"Đã ở thư mục cuối cùng! ({dirs.Count}/{dirs.Count})";
+            return;
+        }
+
+        string targetDir = dirs[currentIndex + 1];
+        await SwitchDualSortSourceFolderAsync(targetDir, currentIndex + 2, dirs.Count);
+    }
+
+    private async Task SwitchDualSortSourceFolderAsync(string targetDir, int humanIndex, int totalCount)
+    {
+        try
+        {
+            CloseDualSortPreview();
+
+            DualSortSourcePath = targetDir;
+            if (IsAutoCreateSortedFolder)
+            {
+                string dirName = Path.GetFileName(targetDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                DualSortSortedPath = Path.Combine(targetDir, $"{dirName}-sorted");
+                try
+                {
+                    if (!Directory.Exists(DualSortSortedPath))
+                    {
+                        Directory.CreateDirectory(DualSortSortedPath);
+                    }
+                }
+                catch { }
+            }
+
+            // Xóa Undo / Redo để bảo toàn an toàn dữ liệu file giữa các folder
+            _dualSortUndoBatches.Clear();
+            _dualSortRedoBatches.Clear();
+            CanUndoSort = false;
+            CanRedoSort = false;
+
+            // Đặt lại chế độ Batch Part
+            IsBatchModeActive = false;
+            BatchStartItem = null;
+            BatchPartNumber = 1;
+            RefreshBatchProperties();
+
+            await LoadBothSortFoldersAsync();
+
+            string folderName = Path.GetFileName(targetDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            DualSortStatusText = $"[{humanIndex}/{totalCount}] Đã chuyển sang: {folderName}";
+            AddLog("INFO", $"[DualSort] Chuyển thư mục ({humanIndex}/{totalCount}): {targetDir}");
+        }
+        catch (Exception ex)
+        {
+            DualSortStatusText = $"Lỗi khi chuyển thư mục: {ex.Message}";
+            AddLog("WARN", $"[DualSort] Lỗi khi chuyển thư mục: {ex.Message}");
+        }
+    }
+
     [RelayCommand]
     public async Task RefreshDualSortFoldersAsync()
     {

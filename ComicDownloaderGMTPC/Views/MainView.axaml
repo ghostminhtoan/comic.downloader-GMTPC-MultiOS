@@ -3412,7 +3412,9 @@
                                                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                     <TextBlock Text="📁 Thư mục gốc:" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
                                                     <Button Command="{Binding BrowseDualSortSourceFolderCommand}" Content="📁 Chọn..." Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
-                                                    <Button Command="{Binding OpenDualSortSourceFolderCommand}" Content="🔍 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục gốc trong trình quản lý tệp" />
+                                                    <Button Command="{Binding OpenDualSortSourceFolderCommand}" Content="🔍 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Mở thư mục gốc trong trình quản lý tệp" />
+                                                    <Button Command="{Binding DualSortPreviousFolderCommand}" Content="⏮️ Trước" Background="#1E293B" Foreground="#38BDF8" BorderBrush="#0284C7" BorderThickness="1" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Previous Folder: Chuyển sang thư mục anh em liền trước" />
+                                                    <Button Command="{Binding DualSortNextFolderCommand}" Content="Tiếp ⏭️" Background="#1E293B" Foreground="#38BDF8" BorderBrush="#0284C7" BorderThickness="1" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" ToolTip.Tip="Next Folder: Chuyển sang thư mục anh em tiếp theo" />
                                                 </WrapPanel>
                                                 <TextBox Text="{Binding DualSortSourcePath}" PlaceholderText="Chọn thư mục chứa ảnh gốc cần lọc (ví dụ: comic\ranma fanart)..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#F59E0B" BorderThickness="1" FontSize="10.5" VerticalContentAlignment="Center" Padding="8,2" />
                                             </StackPanel>
@@ -4660,6 +4662,30 @@
                         <TextBlock Text="✕" FontSize="8.5" FontWeight="ExtraBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Button>
                 </Grid>
+
+                <!-- Điều hướng Thư mục: Previous Folder (Trước) & Next Folder (Tiếp) -->
+                <Grid ColumnDefinitions="*, 4, *" Width="92" Margin="0,1,0,1">
+                    <Button Grid.Column="0" Command="{Binding DualSortPreviousFolderCommand}"
+                            Background="#1E293B" Foreground="#38BDF8" BorderBrush="#0284C7" BorderThickness="1"
+                            FontWeight="Bold" CornerRadius="10" Padding="2,2" Height="26"
+                            ToolTip.Tip="Previous Folder (⏮️ Thư mục trước trong cùng thư mục cha)">
+                        <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="⏮️" FontSize="8.5" VerticalAlignment="Center" />
+                            <TextBlock Text="Prev" FontSize="8.5" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="2" Command="{Binding DualSortNextFolderCommand}"
+                            Background="#1E293B" Foreground="#38BDF8" BorderBrush="#0284C7" BorderThickness="1"
+                            FontWeight="Bold" CornerRadius="10" Padding="2,2" Height="26"
+                            ToolTip.Tip="Next Folder (Next ⏭️ Thư mục tiếp theo trong cùng thư mục cha)">
+                        <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="Next" FontSize="8.5" FontWeight="Bold" VerticalAlignment="Center" />
+                            <TextBlock Text="⏭️" FontSize="8.5" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <Border Height="1" Width="76" Background="#334155" HorizontalAlignment="Center" Margin="0,1" />
 
                 <!-- 1. Start batch (Part X) -->
                 <Button Command="{Binding ToggleBatchSelectModeCommand}"

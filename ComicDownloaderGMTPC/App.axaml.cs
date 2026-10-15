@@ -55,6 +55,13 @@ public partial class App : Application
                 return;
             }
 
+            if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-dualsort-nav", StringComparison.OrdinalIgnoreCase)))
+            {
+                base.OnFrameworkInitializationCompleted();
+                _ = RunDualSortNavTestAsync(desktop);
+                return;
+            }
+
             // 2. Kiểm tra nếu mở tệp trực tiếp từ hệ điều hành (Double-click file hoặc Context Menu)
             // Khởi động trực tiếp TRÌNH ĐỌC TRUYỆN ĐỘC LẬP SIÊU NHẸ (STANDALONE READER MODE),
             // TUYỆT ĐỐI KHÔNG khởi tạo MainWindow / MainViewModel (không nạp Scraper, WebView, Database)!
@@ -582,6 +589,95 @@ public partial class App : Application
 
         await Task.Delay(1000);
         desktop.Shutdown(allPassed ? 0 : 2);
+    }
+
+    private static async Task RunDualSortNavTestAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        Console.WriteLine("\n=========================================");
+        Console.WriteLine("🚀 BẮT ĐẦU KIỂM THỬ CLI DUAL SORT FOLDER NAVIGATION (PREV & NEXT)");
+        Console.WriteLine("=========================================\n");
+
+        string testRoot = Path.Combine(AppContext.BaseDirectory, ".tmp", "test-dualsort-" + Guid.NewGuid().ToString("N")[..6]);
+        try
+        {
+            Directory.CreateDirectory(testRoot);
+            string chap1 = Path.Combine(testRoot, "Chap 01");
+            string chap2 = Path.Combine(testRoot, "Chap 02");
+            string chap2Sorted = Path.Combine(testRoot, "Chap 02-sorted");
+            string chap3 = Path.Combine(testRoot, "Chap 03");
+
+            Directory.CreateDirectory(chap1);
+            Directory.CreateDirectory(chap2);
+            Directory.CreateDirectory(chap2Sorted);
+            Directory.CreateDirectory(chap3);
+
+            File.WriteAllText(Path.Combine(chap1, "001.jpg"), "dummy1");
+            File.WriteAllText(Path.Combine(chap2, "001.jpg"), "dummy2");
+            File.WriteAllText(Path.Combine(chap2Sorted, "001.jpg"), "dummy2sorted");
+            File.WriteAllText(Path.Combine(chap3, "001.jpg"), "dummy3");
+
+            var vm = new ViewModels.MainViewModel();
+            vm.DualSortSourcePath = chap2;
+            vm.IsAutoCreateSortedFolder = true;
+            await vm.LoadBothSortFoldersAsync();
+
+            bool allPassed = true;
+
+            // 1. Test Previous từ Chap 02 -> Chap 01
+            Console.WriteLine("[TEST 1] Thử nghiệm Previous Folder từ Chap 02...");
+            await vm.DualSortPreviousFolderAsync();
+            bool test1Ok = string.Equals(Path.GetFullPath(vm.DualSortSourcePath).TrimEnd('\\', '/'), Path.GetFullPath(chap1).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            Console.WriteLine($" -> Kết quả: {Path.GetFileName(vm.DualSortSourcePath)} (Kỳ vọng: Chap 01) => {(test1Ok ? "PASS ✅" : "FAIL ❌")}");
+            if (!test1Ok) allPassed = false;
+
+            // 2. Test Previous tiếp từ Chap 01 (ở đầu danh sách)
+            Console.WriteLine("[TEST 2] Thử nghiệm Previous Folder khi đang ở đầu danh sách (Chap 01)...");
+            await vm.DualSortPreviousFolderAsync();
+            bool test2Ok = string.Equals(Path.GetFullPath(vm.DualSortSourcePath).TrimEnd('\\', '/'), Path.GetFullPath(chap1).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            Console.WriteLine($" -> Kết quả: {Path.GetFileName(vm.DualSortSourcePath)} | Status: {vm.DualSortStatusText} => {(test2Ok ? "PASS ✅" : "FAIL ❌")}");
+            if (!test2Ok) allPassed = false;
+
+            // 3. Test Next từ Chap 01 -> Chap 02
+            Console.WriteLine("[TEST 3] Thử nghiệm Next Folder từ Chap 01...");
+            await vm.DualSortNextFolderAsync();
+            bool test3Ok = string.Equals(Path.GetFullPath(vm.DualSortSourcePath).TrimEnd('\\', '/'), Path.GetFullPath(chap2).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            Console.WriteLine($" -> Kết quả: {Path.GetFileName(vm.DualSortSourcePath)} (Kỳ vọng: Chap 02) => {(test3Ok ? "PASS ✅" : "FAIL ❌")}");
+            if (!test3Ok) allPassed = false;
+
+            // 4. Test Next từ Chap 02 -> Chap 03 (phải bỏ qua Chap 02-sorted!)
+            Console.WriteLine("[TEST 4] Thử nghiệm Next Folder từ Chap 02 (Phải bỏ qua Chap 02-sorted)...");
+            await vm.DualSortNextFolderAsync();
+            bool test4Ok = string.Equals(Path.GetFullPath(vm.DualSortSourcePath).TrimEnd('\\', '/'), Path.GetFullPath(chap3).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            Console.WriteLine($" -> Kết quả: {Path.GetFileName(vm.DualSortSourcePath)} (Kỳ vọng: Chap 03) => {(test4Ok ? "PASS ✅" : "FAIL ❌")}");
+            if (!test4Ok) allPassed = false;
+
+            // 5. Test Next tiếp từ Chap 03 (ở cuối danh sách)
+            Console.WriteLine("[TEST 5] Thử nghiệm Next Folder khi đang ở cuối danh sách (Chap 03)...");
+            await vm.DualSortNextFolderAsync();
+            bool test5Ok = string.Equals(Path.GetFullPath(vm.DualSortSourcePath).TrimEnd('\\', '/'), Path.GetFullPath(chap3).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            Console.WriteLine($" -> Kết quả: {Path.GetFileName(vm.DualSortSourcePath)} | Status: {vm.DualSortStatusText} => {(test5Ok ? "PASS ✅" : "FAIL ❌")}");
+            if (!test5Ok) allPassed = false;
+
+            Console.WriteLine("\n=========================================");
+            Console.WriteLine(allPassed ? "🎉 KẾT QUẢ TEST DUAL SORT NAVIGATION: 100% PASS!" : "❌ KẾT QUẢ TEST DUAL SORT NAVIGATION: CÓ LỖI!");
+            Console.WriteLine("=========================================\n");
+
+            Environment.Exit(allPassed ? 0 : 1);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ EXCEPTION TRONG TEST: {ex.Message}");
+            Environment.Exit(1);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(testRoot))
+                    Directory.Delete(testRoot, true);
+            }
+            catch { }
+        }
     }
 
     private static bool IsReadableComicOrMediaFileOrDirectory(string path)

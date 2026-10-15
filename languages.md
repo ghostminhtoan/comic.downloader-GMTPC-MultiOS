@@ -32,6 +32,10 @@
 | Save default | Lưu mặc định |
 | SAVE LIST | Lưu danh sách |
 | SUBFOLDER NAME | TÊN THƯ MỤC CON |
+| Previous Folder | Thư mục trước |
+| Next Folder | Thư mục tiếp theo |
+| Prev | Trước |
+| Next | Tiếp |
 | The system is currently downloading comics! Getting new links (Get Link) will clear the current download list.\n\nIf you want to add more comics, please use the 'Get More' button instead. Are you sure you want to proceed and clear the list? | Hệ thống đang tải truyện! Việc lấy link mới (Get Link) sẽ xóa hết danh sách đang tải hiện tại. |
 
 ## 3. Download & Queue Controls
