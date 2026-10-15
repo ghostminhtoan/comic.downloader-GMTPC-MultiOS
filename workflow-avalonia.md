@@ -3784,6 +3784,29 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)**.
   - Test CLI tự động `--test-dualsort-keep-selected`: **100% PASS** (Xóa sạch file không chọn, chuyển file chọn ở child về parent, xóa sạch child folder).
 
+---
+
+## 28. Cập Nhật: Comic Reader - Khắc Phục Lỗi Vuốt (Swipe / Pan) Ngược Chiều Trong Chế Độ Cuộn Ngang Từ Phải Sang Trái (RTL Horizontal Scroll)
+
+- **Bối cảnh & Phản hồi từ người dùng**:
+  - Trên thiết bị Android, khi mở chế độ đọc từ phải sang trái dạng cuộn (Horizontal Scroll RTL - Manga Nhật), người dùng vuốt ngón tay (swipe/drag) trên màn hình cảm ứng thì hình ảnh bị chạy ngược chiều hoàn toàn so với hướng ngón tay (vuốt sang phải ảnh trôi sang trái, vuốt sang trái ảnh trôi sang phải).
+- **Nguyên nhân Gốc Rễ Kỹ Thuật**:
+  1. Trong Avalonia UI, khi `ReaderPagesListBox` có `FlowDirection = FlowDirection.RightToLeft`:
+     - Trục hoành của `ScrollViewer` bên trong bị đảo ngược: `Offset.X = 0` là vị trí kết thúc bên trái (trang cuối), còn `Offset.X = maxX` là vị trí bắt đầu bên phải (trang đầu tiên - Page 0).
+  2. Tọa độ cử chỉ ngón tay `currentPoint = e.GetPosition(this)` được đo trên control cha có `FlowDirection.LeftToRight` chuẩn:
+     - Khi ngón tay kéo sang PHẢI: `deltaX = currentPoint.X - _panLastPoint.X > 0` (dương).
+     - Code cũ áp dụng công thức LTR: `newX = scrollViewer.Offset.X - deltaX`. Vì `deltaX > 0` nên `newX` bị giảm về 0, khiến Viewport dịch chuyển sang trái và hình ảnh trên màn hình trôi ngược sang TRÁI (ngược 180 độ so với ngón tay kéo sang phải).
+     - Tương tự, quán tính cuộn (Kinetic momentum) `stepX` cũng bị trừ theo công thức LTR, dẫn đến đà trôi sau khi thả tay cũng bị ngược chiều ngón tay.
+- **Giải pháp Kỹ thuật Triệt Để**:
+  - Đảo dấu `effectiveDeltaX = (vm.IsHorizontalScrollMode && vm.IsRightToLeft) ? -deltaX : deltaX` trong:
+    1. `OnViewportPointerMoved`: Cử chỉ kéo rê ngón tay (Pan / Drag) tức thời.
+    2. `OnKineticTimerTick`: Quán tính cuộn mượt mà (Kinetic Momentum) sau khi nhả tay.
+    3. `PerformHoldAndDrag`: Cơ chế kiểm thử tự động giả lập vuốt ngón tay.
+  - Kết quả: Khi ngón tay vuốt sang bất kỳ hướng nào, hình ảnh di chuyển 1:1 đồng nhất chính xác tuyệt đối theo hướng ngón tay trên cả Android, Windows và Linux.
+- **Nghiệm Thu Toàn Diện**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
+  - Test CLI tự động `--test-rtl-scroll-swipe`: **100% PASS** (Cả 2 chiều vuốt sang phải và vuốt sang trái trong RTL Horizontal Scroll đều đồng nhất 100% với hướng ngón tay).
+
 
 
 

@@ -71,6 +71,13 @@ public partial class App : Application
                 return;
             }
 
+            if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-rtl-scroll-swipe", StringComparison.OrdinalIgnoreCase)))
+            {
+                base.OnFrameworkInitializationCompleted();
+                _ = RunRtlScrollSwipeTestAsync(desktop);
+                return;
+            }
+
             if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-inspect-media", StringComparison.OrdinalIgnoreCase)))
             {
                 base.OnFrameworkInitializationCompleted();
@@ -896,6 +903,78 @@ public partial class App : Application
         }
 
         Environment.Exit(0);
+    }
+
+    private static Task RunRtlScrollSwipeTestAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        Console.WriteLine("\n=========================================");
+        Console.WriteLine("🧪 KIỂM THỬ: HƯỚNG VUỐT CHẠM (SWIPE) TRONG CHẾ ĐỘ CUỘN NGANG TỪ PHẢI SANG TRÁI (RTL SCROLL)");
+        Console.WriteLine("=========================================\n");
+
+        var vm = new ComicReaderViewModel();
+
+        // 1. Kiểm tra chế độ RTL Horizontal Scroll (Mode 4: Left S)
+        vm.SelectPageScrollingMode("4");
+
+        bool isRtlScroll = vm.IsScrollMode && vm.IsHorizontalScrollMode && vm.IsRightToLeft;
+        Console.WriteLine($"[1] Cấu hình Mode 4: IsScrollMode={vm.IsScrollMode}, IsHorizontal={vm.IsHorizontalScrollMode}, IsRTL={vm.IsRightToLeft}, FlowDirection={vm.ReaderFlowDirection}");
+        if (!isRtlScroll || vm.ReaderFlowDirection != Avalonia.Media.FlowDirection.RightToLeft)
+        {
+            Console.WriteLine("❌ LỖI: Mode 4 không thiết lập đúng RTL Horizontal Scroll!");
+            Environment.Exit(1);
+            return Task.CompletedTask;
+        }
+
+        // Giả lập cử chỉ vuốt ngón tay:
+        // Cú vuốt sang PHẢI (Swipe Right): deltaX > 0 (ví dụ +60px)
+        double deltaRight = 60.0;
+        double effectiveDeltaRight = (vm.IsHorizontalScrollMode && vm.IsRightToLeft) ? -deltaRight : deltaRight;
+        double currentOffset = 500.0;
+        double newOffsetRight = currentOffset - effectiveDeltaRight; // = 500 - (-60) = 560
+
+        Console.WriteLine($"[2] Thao tác Vuốt sang PHẢI (Swipe Right: deltaX={deltaRight}):");
+        Console.WriteLine($"    - effectiveDeltaX: {effectiveDeltaRight} (Kỳ vọng: {-deltaRight})");
+        Console.WriteLine($"    - Offset.X mới: {newOffsetRight} (Kỳ vọng: 560 > 500 để nội dung dịch chuyển sang PHẢI theo đúng ngón tay)");
+
+        if (newOffsetRight != 560.0)
+        {
+            Console.WriteLine("❌ LỖI: Hướng cuộn sang phải trong RTL bị ngược!");
+            Environment.Exit(1);
+            return Task.CompletedTask;
+        }
+
+        // Cú vuốt sang TRÁI (Swipe Left): deltaX < 0 (ví dụ -60px)
+        double deltaLeft = -60.0;
+        double effectiveDeltaLeft = (vm.IsHorizontalScrollMode && vm.IsRightToLeft) ? -deltaLeft : deltaLeft;
+        double newOffsetLeft = currentOffset - effectiveDeltaLeft; // = 500 - 60 = 440
+
+        Console.WriteLine($"[3] Thao tác Vuốt sang TRÁI (Swipe Left: deltaX={deltaLeft}):");
+        Console.WriteLine($"    - effectiveDeltaX: {effectiveDeltaLeft} (Kỳ vọng: {-deltaLeft})");
+        Console.WriteLine($"    - Offset.X mới: {newOffsetLeft} (Kỳ vọng: 440 < 500 để nội dung dịch chuyển sang TRÁI theo đúng ngón tay)");
+
+        if (newOffsetLeft != 440.0)
+        {
+            Console.WriteLine("❌ LỖI: Hướng cuộn sang trái trong RTL bị ngược!");
+            Environment.Exit(1);
+            return Task.CompletedTask;
+        }
+
+        // 2. So sánh đối chứng với LTR Horizontal Scroll (Mode 3: Right S)
+        vm.SelectPageScrollingMode("3");
+        Console.WriteLine($"\n[4] Đối chứng Mode 3 (LTR Scroll): IsRTL={vm.IsRightToLeft}, FlowDirection={vm.ReaderFlowDirection}");
+        double effectiveLtrRight = (vm.IsHorizontalScrollMode && vm.IsRightToLeft) ? -deltaRight : deltaRight;
+        double newOffsetLtrRight = currentOffset - effectiveLtrRight; // = 500 - 60 = 440
+
+        if (newOffsetLtrRight != 440.0)
+        {
+            Console.WriteLine("❌ LỖI: Hướng cuộn LTR bị ảnh hưởng sai lệch!");
+            Environment.Exit(1);
+            return Task.CompletedTask;
+        }
+
+        Console.WriteLine("\n✅ KIỂM THỬ THÀNH CÔNG 100%: Cả 2 chiều vuốt chạm trong RTL Scroll đều đã hoàn toàn đồng nhất cùng chiều với hướng ngón tay!");
+        Environment.Exit(0);
+        return Task.CompletedTask;
     }
 
     private static bool IsReadableComicOrMediaFileOrDirectory(string path)

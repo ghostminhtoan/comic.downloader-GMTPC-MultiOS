@@ -466,7 +466,8 @@ public partial class ComicReaderControl : UserControl
                 var scrollViewer = GetReaderScrollViewer();
                 if (scrollViewer != null)
                 {
-                    double newX = scrollViewer.Offset.X - deltaX;
+                    double effectiveDeltaX = (vm.IsHorizontalScrollMode && vm.IsRightToLeft) ? -deltaX : deltaX;
+                    double newX = scrollViewer.Offset.X - effectiveDeltaX;
                     double newY = scrollViewer.Offset.Y - deltaY;
                     double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
                     double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
@@ -642,7 +643,8 @@ public partial class ComicReaderControl : UserControl
             var scrollViewer = GetReaderScrollViewer();
             if (scrollViewer != null)
             {
-                double newX = scrollViewer.Offset.X - stepX;
+                double effectiveStepX = (vm.IsHorizontalScrollMode && vm.IsRightToLeft) ? -stepX : stepX;
+                double newX = scrollViewer.Offset.X - effectiveStepX;
                 double newY = scrollViewer.Offset.Y - stepY;
 
                 double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
@@ -1613,7 +1615,8 @@ public partial class ComicReaderControl : UserControl
             var scrollViewer = GetReaderScrollViewer();
             if (scrollViewer != null)
             {
-                double newX = scrollViewer.Offset.X - deltaX;
+                double effectiveDeltaX = (vm.IsHorizontalScrollMode && vm.IsRightToLeft) ? -deltaX : deltaX;
+                double newX = scrollViewer.Offset.X - effectiveDeltaX;
                 double newY = scrollViewer.Offset.Y - deltaY;
 
                 double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
