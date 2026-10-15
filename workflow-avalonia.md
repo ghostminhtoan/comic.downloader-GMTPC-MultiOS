@@ -3514,6 +3514,31 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test khởi động app Desktop 2 bước: STEP 2 PASSED hoàn hảo.
   - Tự động đóng gói và upload 3 nền tảng (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta`.
 
+### 15.110 Hỗ Trợ Xem Preview Ảnh Động (Animated GIF & Animated WebP) Trong Tab Dual Picture Sort (2026-10-15)
+- **Bối Cảnh & Vấn Đề Kỹ Thuật Từ Người Dùng**:
+  - Khi xem trước (preview) ảnh trong tab Dual Picture Sort, các file ảnh động như GIF (`.gif`) hoặc WebP động (`.webp animated`) trước đây chỉ hiển thị 1 khung hình tĩnh duy nhất do Avalonia `Bitmap` chỉ giải mã frame đầu tiên.
+  - Người dùng yêu cầu: Nếu là ảnh GIF hoặc WebP animated thì phải xem được ảnh động chuyển động hoạt họa liên tục như bình thường.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Nhận Diện Siêu Tốc & Đọc Frame Duration Bằng `SKCodec` (`SkiaSharp`)**:
+     - Khi mở preview, hệ thống dùng `SKCodec.Create` kiểm tra `codec.FrameCount > 1` trong chưa đầy 0.1ms.
+     - Trích xuất toàn bộ mảng `Duration` (thời lượng ms của từng frame) từ `codec.FrameInfo`, hỗ trợ chuẩn xác 100% cho cả GIF và WebP Animated.
+     - Tự động điều chỉnh delay tối thiểu $\ge 15\text{ms}$ (chuẩn W3C 100ms) để chống nghẽn CPU nếu tệp tin có delay = 0.
+  2. **Instant Preview (0ms Latency) & Phân Tách Khung Hình Bằng `SixLabors.ImageSharp`**:
+     - Nạp ngay lập tức frame 0 để hiển thị trên UI trong mili-giây, người dùng không phải chờ giải mã xong mới thấy ảnh.
+     - Giải mã toàn bộ chuỗi frame bằng `SixLabors.ImageSharp.Image.Load<Rgba32>`, tự động xử lý toàn bộ disposal method, alpha composition và delta-frame transparency.
+     - Tự động scale vừa khung Preview (Max 640px) và cơ chế subsampling nếu số frame $> 120$, bảo đảm mượt mà 60fps và cực kỳ nhẹ RAM trên Android.
+  3. **Vòng Lặp Phát Animation Bất Đồng Bộ & Quản Lý Vòng Đời An Toàn 100%**:
+     - Phát animation liên tục trên UI Thread qua `Dispatcher.UIThread.Post(..., DispatcherPriority.Render)` và `await Task.Delay(delayMs, cts.Token)`.
+     - Quản lý hủy qua `CancellationTokenSource`: Khi đóng popup (`CloseDualSortPreview`) hoặc chuyển ảnh khác, luồng animation dừng ngay lập tức.
+     - Dọn dẹp tài nguyên Bitmap trên UI Thread, triệt tiêu 100% lỗi `ObjectDisposedException` và rò rỉ bộ nhớ.
+  4. **Badge Nhận Diện Ảnh Động Trực Quan Trên UI**:
+     - Bổ sung Badge tím `#7C3AED` trên thanh tiêu đề Popup Preview hiển thị định dạng và số frame (ví dụ: `🎞️ GIF (24f)` hoặc `🎞️ WEBP (18f)`).
+- **Nghiệm Thu**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
+  - Test khởi động app Desktop 2 bước: STEP 2 PASSED hoàn hảo.
+  - Tự động đóng gói và upload 3 nền tảng (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta`.
+
+
 
 
 

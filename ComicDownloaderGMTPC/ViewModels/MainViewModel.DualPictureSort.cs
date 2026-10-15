@@ -14,6 +14,11 @@ using CommunityToolkit.Mvvm.Input;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.Services;
 using SkiaSharp;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Gif;
+using SixLabors.ImageSharp.Formats.Webp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace ComicDownloaderGMTPC.ViewModels;
 
@@ -269,6 +274,14 @@ public partial class MainViewModel
 
     [ObservableProperty]
     private PictureSortItem? _dualSortPreviewItem;
+
+    private CancellationTokenSource? _dualSortAnimationCts;
+
+    [ObservableProperty]
+    private bool _isDualSortPreviewAnimated = false;
+
+    [ObservableProperty]
+    private string _dualSortPreviewAnimatedBadge = string.Empty;
 
     public string DualSortPreviewButtonText => IsDualSortPreviewEnabled ? "👁️ PREVIEW: BẬT" : "👁️ PREVIEW: TẮT";
     public string DualSortPreviewButtonBg => IsDualSortPreviewEnabled ? "#064E3B" : "#1E293B";
@@ -1248,41 +1261,198 @@ public partial class MainViewModel
     }
 
     // ==========================================
-    // POPUP PREVIEW TRÊN DESKTOP & ANDROID
+    // POPUP PREVIEW TRÊN DESKTOP & ANDROID (HỖ TRỢ ẢNH ĐỘNG GIF & WEBP ANIMATED)
     // ==========================================
     public void ShowDualSortPreview(PictureSortItem? item)
     {
         if (!IsDualSortPreviewEnabled || item == null) return;
+
+        // 1. Huỷ luồng animation trước đó nếu đang chạy
+        _dualSortAnimationCts?.Cancel();
+        _dualSortAnimationCts?.Dispose();
+        _dualSortAnimationCts = null;
+
         DualSortPreviewItem = item;
         IsDualSortPreviewVisible = true;
+        IsDualSortPreviewAnimated = false;
+        DualSortPreviewAnimatedBadge = string.Empty;
 
-        Task.Run(() =>
+        var cts = new CancellationTokenSource();
+        _dualSortAnimationCts = cts;
+
+        Task.Run(async () =>
         {
             try
             {
-                if (File.Exists(item.FilePath))
+                if (!File.Exists(item.FilePath)) return;
+
+                string ext = Path.GetExtension(item.FilePath).ToLowerInvariant();
+                bool isAnimated = false;
+                int detectedFrameCount = 1;
+
+                var durations = new List<int>();
+
+                // 2. Nhận diện siêu tốc (0.1ms) bằng SKCodec xem có phải ảnh động (GIF hoặc WebP Animated)
+                if (ext == ".gif" || ext == ".webp")
+                {
+                    try
+                    {
+                        using var stream = File.OpenRead(item.FilePath);
+                        using var codec = SKCodec.Create(stream);
+                        if (codec != null && codec.FrameCount > 1)
+                        {
+                            isAnimated = true;
+                            detectedFrameCount = codec.FrameCount;
+                            var infos = codec.FrameInfo;
+                            if (infos != null)
+                            {
+                                foreach (var fi in infos)
+                                {
+                                    int d = fi.Duration;
+                                    if (d <= 15) d = 100;
+                                    durations.Add(d);
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                // 3. Nạp nhanh frame đầu tiên để người dùng thấy ảnh ngay lập tức (0ms latency)
+                try
                 {
                     using var fs = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    var fullBmp = new Bitmap(fs);
+                    var initialBmp = new Bitmap(fs);
                     Dispatcher.UIThread.Post(() =>
                     {
-                        if (DualSortPreviewItem == item && IsDualSortPreviewVisible)
+                        if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
                         {
-                            DualSortPreviewBitmap = fullBmp;
+                            DualSortPreviewBitmap = initialBmp;
+                        }
+                        else
+                        {
+                            initialBmp.Dispose();
+                        }
+                    });
+                }
+                catch { }
+
+                // Nếu là ảnh tĩnh, không cần giải mã animation
+                if (!isAnimated || cts.IsCancellationRequested) return;
+
+                // 4. Nếu là ảnh động: Hiển thị badge 🎞️ GIF / 🎞️ WEBP
+                string badge = ext == ".gif" ? $"🎞️ GIF ({detectedFrameCount}f)" : $"🎞️ WEBP ({detectedFrameCount}f)";
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
+                    {
+                        IsDualSortPreviewAnimated = true;
+                        DualSortPreviewAnimatedBadge = badge;
+                    }
+                });
+
+                // 5. Giải mã toàn bộ chuỗi khung hình bằng SixLabors.ImageSharp (Bảo đảm 100% composition & delay)
+                var frameList = new List<(Bitmap Bitmap, int DelayMs)>();
+                try
+                {
+                    using var animatedImg = SixLabors.ImageSharp.Image.Load<Rgba32>(item.FilePath);
+                    int totalFrames = animatedImg.Frames.Count;
+                    if (totalFrames <= 1) return;
+
+                    // Nếu quá nhiều frames (>120), nhảy bước step để tối ưu RAM tối đa cho mobile
+                    int step = totalFrames > 120 ? (int)Math.Ceiling(totalFrames / 120.0) : 1;
+
+                    for (int f = 0; f < totalFrames; f += step)
+                    {
+                        if (cts.IsCancellationRequested || !IsDualSortPreviewVisible || DualSortPreviewItem != item)
+                            break;
+
+                        var frame = animatedImg.Frames[f];
+                        int delayMs = 100;
+                        if (f < durations.Count)
+                        {
+                            delayMs = durations[f] * step;
+                        }
+                        else if (ext == ".gif")
+                        {
+                            var gifMeta = frame.Metadata.GetGifMetadata();
+                            int delayHundredths = gifMeta?.FrameDelay ?? 10;
+                            delayMs = delayHundredths * 10 * step;
+                        }
+                        if (delayMs <= 15) delayMs = 100; // Tránh delay = 0 hoặc quá thấp gây nghẽn CPU
+
+                        using var frameImg = animatedImg.Frames.CloneFrame(f);
+                        // Scale vừa khung Preview (Max 640px) để mượt mà và siêu nhẹ RAM
+                        if (frameImg.Width > 640 || frameImg.Height > 640)
+                        {
+                            float scale = Math.Min(640f / frameImg.Width, 640f / frameImg.Height);
+                            frameImg.Mutate(x => x.Resize((int)(frameImg.Width * scale), (int)(frameImg.Height * scale)));
+                        }
+
+                        using var ms = new MemoryStream();
+                        frameImg.SaveAsPng(ms);
+                        ms.Position = 0;
+                        var frameBmp = new Bitmap(ms);
+                        frameList.Add((frameBmp, delayMs));
+                    }
+
+                    if (cts.IsCancellationRequested || frameList.Count <= 1 || !IsDualSortPreviewVisible || DualSortPreviewItem != item)
+                    {
+                        foreach (var fl in frameList) fl.Bitmap.Dispose();
+                        return;
+                    }
+
+                    // 6. Phát animation liên tục trên UI Thread
+                    int currentIdx = 0;
+                    while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                    {
+                        var cur = frameList[currentIdx];
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                            {
+                                DualSortPreviewBitmap = cur.Bitmap;
+                            }
+                        }, DispatcherPriority.Render);
+
+                        await Task.Delay(cur.DelayMs, cts.Token);
+                        currentIdx = (currentIdx + 1) % frameList.Count;
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch { }
+                finally
+                {
+                    // 7. Giải phóng bộ nhớ sạch sẽ, an toàn 100%
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (DualSortPreviewBitmap != null && frameList.Any(fl => fl.Bitmap == DualSortPreviewBitmap))
+                        {
+                            DualSortPreviewBitmap = null;
+                        }
+                        foreach (var fl in frameList)
+                        {
+                            fl.Bitmap.Dispose();
                         }
                     });
                 }
             }
-            catch { }
-        });
+            catch (Exception) { }
+        }, cts.Token);
     }
 
     [RelayCommand]
     public void CloseDualSortPreview()
     {
+        _dualSortAnimationCts?.Cancel();
+        _dualSortAnimationCts?.Dispose();
+        _dualSortAnimationCts = null;
+
         IsDualSortPreviewVisible = false;
         DualSortPreviewItem = null;
         DualSortPreviewBitmap = null;
+        IsDualSortPreviewAnimated = false;
+        DualSortPreviewAnimatedBadge = string.Empty;
     }
 
     // ==========================================
