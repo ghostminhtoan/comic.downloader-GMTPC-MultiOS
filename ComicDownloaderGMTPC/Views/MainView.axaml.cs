@@ -180,6 +180,7 @@ public partial class MainView : UserControl
         ScheduleVisibleThumbnailScan(delayMs: 120);
 
         SetupFloatingBarDraggable();
+        SetupDualSortBatchFloatingDraggable();
 
         // Khi bất kỳ ô nhập liệu nào (TextBox, NumericUpDown, ComboBox) nhận focus trên Android / Desktop:
         // Tự động cuộn khung nhìn để không bao giờ bị bàn phím ảo che khuất ô cần nhập
@@ -269,6 +270,91 @@ public partial class MainView : UserControl
         void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
         {
             _isFloatingBarDragging = false;
+        }
+
+        if (gripBar != null)
+        {
+            gripBar.PointerPressed += OnPointerPressed;
+            gripBar.PointerMoved += OnPointerMoved;
+            gripBar.PointerReleased += OnPointerReleased;
+            gripBar.PointerCaptureLost += OnPointerCaptureLost;
+        }
+
+        border.PointerPressed += OnPointerPressed;
+        border.PointerMoved += OnPointerMoved;
+        border.PointerReleased += OnPointerReleased;
+        border.PointerCaptureLost += OnPointerCaptureLost;
+    }
+
+    private bool _isDualSortBatchDragging = false;
+    private Point _dualSortBatchDragStartPointer;
+    private double _dualSortBatchStartTransformX = 0;
+    private double _dualSortBatchStartTransformY = 0;
+
+    /// <summary>
+    /// Kéo thả di chuyển tự do Floating Batch Toolbar trong tab Dual Picture Sort
+    /// </summary>
+    private void SetupDualSortBatchFloatingDraggable()
+    {
+        var gripBar = this.FindControl<Border>("DualSortBatchGripBar");
+        var border = this.FindControl<Border>("DualSortFloatingBatchToolbar");
+        if (border == null) return;
+
+        var transform = border.RenderTransform as TranslateTransform;
+        if (transform == null)
+        {
+            transform = new TranslateTransform();
+            border.RenderTransform = transform;
+        }
+
+        void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (e.Source is Button || (e.Source is Visual v && v.FindAncestorOfType<Button>() != null) || e.Source is CheckBox || (e.Source is Visual v2 && v2.FindAncestorOfType<CheckBox>() != null))
+                return;
+
+            var prop = e.GetCurrentPoint(this).Properties;
+            if (prop.IsLeftButtonPressed)
+            {
+                _isDualSortBatchDragging = true;
+                _dualSortBatchDragStartPointer = e.GetPosition(this);
+                _dualSortBatchStartTransformX = transform.X;
+                _dualSortBatchStartTransformY = transform.Y;
+                e.Pointer.Capture(sender as IInputElement ?? border);
+                e.Handled = true;
+            }
+        }
+
+        void OnPointerMoved(object? sender, PointerEventArgs e)
+        {
+            if (!_isDualSortBatchDragging) return;
+
+            var currentPoint = e.GetPosition(this);
+            double deltaX = currentPoint.X - _dualSortBatchDragStartPointer.X;
+            double deltaY = currentPoint.Y - _dualSortBatchDragStartPointer.Y;
+
+            double minX = -Math.Max(0, Bounds.Width - 95);
+            double maxX = 20;
+            double minY = -Math.Max(0, Bounds.Height - 120);
+            double maxY = 20;
+
+            transform.X = Math.Clamp(_dualSortBatchStartTransformX + deltaX, minX, maxX);
+            transform.Y = Math.Clamp(_dualSortBatchStartTransformY + deltaY, minY, maxY);
+            e.Handled = true;
+        }
+
+        void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (_isDualSortBatchDragging)
+            {
+                _isDualSortBatchDragging = false;
+                e.Pointer.Capture(null);
+                e.Handled = true;
+            }
+        }
+
+        void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+        {
+            _isDualSortBatchDragging = false;
         }
 
         if (gripBar != null)
@@ -1642,6 +1728,14 @@ public partial class MainView : UserControl
                 {
                     if (DataContext is MainViewModel vm)
                     {
+                        if (vm.IsBatchModeActive)
+                        {
+                            vm.HandleBatchItemClick(item, isSource: true);
+                            _dualSortTouchIsDragging = false;
+                            _touchedDualSortItem = null;
+                            return;
+                        }
+
                         if (vm.IsOneClickFastSort)
                         {
                             _dualSortTapPreviewDelayCts?.Cancel();
@@ -1800,6 +1894,14 @@ public partial class MainView : UserControl
                 {
                     if (DataContext is MainViewModel vm)
                     {
+                        if (vm.IsBatchModeActive)
+                        {
+                            vm.HandleBatchItemClick(item, isSource: false);
+                            _dualSortTouchIsDragging = false;
+                            _touchedDualSortItem = null;
+                            return;
+                        }
+
                         if (vm.IsOneClickFastSort)
                         {
                             _dualSortTapPreviewDelayCts?.Cancel();

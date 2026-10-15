@@ -27,11 +27,150 @@ public record PictureSortHistoryEntry(
 public partial class MainViewModel
 {
     private CancellationTokenSource? _dualSortThumbCts;
-    private readonly Stack<PictureSortHistoryEntry> _dualSortHistory = new();
+    private readonly Stack<List<PictureSortHistoryEntry>> _dualSortUndoBatches = new();
+    private readonly Stack<List<PictureSortHistoryEntry>> _dualSortRedoBatches = new();
     private static readonly HashSet<string> _validImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".avif", ".jfif"
     };
+
+    // ==========================================
+    // CHỌN ẢNH BATCH THEO PART X
+    // ==========================================
+    [ObservableProperty]
+    private bool _isBatchModeActive = false;
+
+    [ObservableProperty]
+    private int _batchPartNumber = 1;
+
+    [ObservableProperty]
+    private PictureSortItem? _batchStartItem;
+
+    [ObservableProperty]
+    private bool _isDualSortSelectAllActive = false;
+
+    [ObservableProperty]
+    private bool _canRedoSort = false;
+
+    public string DualSortBatchButtonText
+    {
+        get
+        {
+            if (!IsBatchModeActive)
+                return $"⚡ Start (Part {BatchPartNumber})";
+            if (BatchStartItem == null)
+                return $"📍 Part {BatchPartNumber}: Đầu";
+            return $"🏁 Part {BatchPartNumber}: Cuối";
+        }
+    }
+
+    public string DualSortBatchButtonBg => IsBatchModeActive ? "#D97706" : "#1E293B";
+    public string DualSortBatchButtonBorder => IsBatchModeActive ? "#F59E0B" : "#475569";
+    public string DualSortBatchButtonFg => IsBatchModeActive ? "#FFFFFF" : "#38BDF8";
+    public string DualSortPreviewButtonShortText => IsDualSortPreviewEnabled ? "👁️ PREVIEW: BẬT" : "👁️ PREVIEW: TẮT";
+
+    public void RefreshBatchProperties()
+    {
+        OnPropertyChanged(nameof(DualSortBatchButtonText));
+        OnPropertyChanged(nameof(DualSortBatchButtonBg));
+        OnPropertyChanged(nameof(DualSortBatchButtonBorder));
+        OnPropertyChanged(nameof(DualSortBatchButtonFg));
+    }
+
+    [RelayCommand]
+    public void ToggleBatchSelectMode()
+    {
+        if (IsBatchModeActive)
+        {
+            // Bấm lại khi đang chờ -> Hủy part dở dang nhưng giữ nguyên các ảnh đã chọn
+            IsBatchModeActive = false;
+            BatchStartItem = null;
+            DualSortStatusText = $"Đã hủy Part {BatchPartNumber}. Giữ nguyên các ảnh đã chọn trước đó.";
+        }
+        else
+        {
+            IsBatchModeActive = true;
+            BatchStartItem = null;
+            DualSortStatusText = $"Bắt đầu Part {BatchPartNumber}: Hãy chạm/click vào ảnh BẮT ĐẦU.";
+        }
+        RefreshBatchProperties();
+    }
+
+    [RelayCommand]
+    public void ToggleSelectAll()
+    {
+        ObservableCollection<PictureSortItem> targetCollection;
+        if (IsPortraitMode)
+        {
+            targetCollection = DualSortMobileActiveTab == 0 ? DualSortSourceItems : DualSortSortedItems;
+        }
+        else
+        {
+            bool hasSortedSelected = DualSortSortedItems.Any(x => x.IsSelected);
+            targetCollection = hasSortedSelected ? DualSortSortedItems : DualSortSourceItems;
+        }
+
+        if (targetCollection.Count == 0) return;
+
+        bool allSelected = targetCollection.All(x => x.IsSelected);
+        bool newState = !allSelected;
+
+        foreach (var it in targetCollection)
+        {
+            it.IsSelected = newState;
+        }
+
+        IsDualSortSelectAllActive = newState;
+        DualSortStatusText = newState ? $"Đã chọn tất cả {targetCollection.Count} ảnh." : "Đã bỏ chọn tất cả ảnh.";
+    }
+
+    public void HandleBatchItemClick(PictureSortItem item, bool isSource)
+    {
+        if (!IsBatchModeActive) return;
+
+        if (BatchStartItem == null)
+        {
+            // Chạm lần 1: Chọn ảnh bắt đầu Part X
+            BatchStartItem = item;
+            item.IsSelected = true;
+            DualSortStatusText = $"Part {BatchPartNumber}: Đã chọn ảnh BẮT ĐẦU ('{item.FileName}'). Hãy chọn ảnh KẾT THÚC.";
+            RefreshBatchProperties();
+        }
+        else
+        {
+            // Chạm lần 2: Chọn ảnh kết thúc Part X
+            var targetList = isSource ? DualSortSourceItems : DualSortSortedItems;
+            int idxStart = targetList.IndexOf(BatchStartItem);
+            int idxEnd = targetList.IndexOf(item);
+
+            if (idxStart >= 0 && idxEnd >= 0)
+            {
+                int minIdx = Math.Min(idxStart, idxEnd);
+                int maxIdx = Math.Max(idxStart, idxEnd);
+
+                for (int i = minIdx; i <= maxIdx; i++)
+                {
+                    targetList[i].IsSelected = true;
+                }
+
+                int countAdded = maxIdx - minIdx + 1;
+                DualSortStatusText = $"Part {BatchPartNumber} xong! Đã chọn dải {countAdded} ảnh (tổng cộng {targetList.Count(x => x.IsSelected)} ảnh đã chọn).";
+
+                // Kết thúc Part X: tăng Part, quay lại single mode, không làm mất selection
+                BatchPartNumber++;
+                BatchStartItem = null;
+                IsBatchModeActive = false;
+                RefreshBatchProperties();
+            }
+            else
+            {
+                BatchStartItem = item;
+                item.IsSelected = true;
+                DualSortStatusText = $"Đã đổi panel. Đã chọn ảnh BẮT ĐẦU ('{item.FileName}'). Hãy chọn ảnh KẾT THÚC.";
+                RefreshBatchProperties();
+            }
+        }
+    }
 
     // ==========================================
     // CẤU HÌNH THƯ MỤC
@@ -477,11 +616,7 @@ public partial class MainViewModel
     {
         if (item == null) return;
 
-        // Bỏ chọn các item khác
-        foreach (var it in DualSortSourceItems) it.IsSelected = false;
-        foreach (var it in DualSortSortedItems) it.IsSelected = false;
         item.IsSelected = true;
-
         DualSortSelectedPreview = item;
 
         // Tải ảnh xem trước chi tiết (Full size)
@@ -514,7 +649,15 @@ public partial class MainViewModel
     {
         if (item == null) return;
 
-        SelectDualSortItem(item);
+        if (IsBatchModeActive)
+        {
+            HandleBatchItemClick(item, isSource: true);
+            return;
+        }
+
+        // Single Mode: Đổi trạng thái chọn (giữ nguyên các ảnh đã chọn khác)
+        item.IsSelected = !item.IsSelected;
+        DualSortSelectedPreview = item;
 
         if (IsOneClickFastSort)
         {
@@ -527,7 +670,14 @@ public partial class MainViewModel
     {
         if (item == null) return;
 
-        SelectDualSortItem(item);
+        if (IsBatchModeActive)
+        {
+            HandleBatchItemClick(item, isSource: false);
+            return;
+        }
+
+        item.IsSelected = !item.IsSelected;
+        DualSortSelectedPreview = item;
 
         if (IsOneClickFastSort)
         {
@@ -550,25 +700,185 @@ public partial class MainViewModel
     }
 
     // ==========================================
-    // CHUYỂN ẢNH SANG SORTED & TRẢ LẠI GỐC
+    // CHUYỂN ẢNH SANG SORTED & TRẢ LẠI GỐC (HỖ TRỢ CẢ SINGLE & BATCH)
     // ==========================================
     [RelayCommand]
     public void SortSelectedForward()
     {
-        var selected = DualSortSourceItems.FirstOrDefault(x => x.IsSelected) ?? DualSortSelectedPreview;
-        if (selected != null && DualSortSourceItems.Contains(selected))
+        var selectedList = DualSortSourceItems.Where(x => x.IsSelected).ToList();
+        if (selectedList.Count == 0 && DualSortSelectedPreview != null && DualSortSourceItems.Contains(DualSortSelectedPreview))
         {
-            SortItemForward(selected);
+            selectedList.Add(DualSortSelectedPreview);
+        }
+
+        if (selectedList.Count == 0)
+        {
+            DualSortStatusText = "Chưa chọn ảnh nào bên Thư mục gốc để chuyển!";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(DualSortSortedPath))
+        {
+            DualSortStatusText = "Vui lòng chọn Thư mục đã lọc trước!";
+            return;
+        }
+
+        try
+        {
+            if (!Directory.Exists(DualSortSortedPath))
+            {
+                Directory.CreateDirectory(DualSortSortedPath);
+            }
+
+            var batchHistory = new List<PictureSortHistoryEntry>();
+
+            foreach (var item in selectedList)
+            {
+                try
+                {
+                    string sourceFile = item.FilePath;
+                    string destFile = Path.Combine(DualSortSortedPath, item.FileName);
+                    destFile = GetUniqueFilePath(destFile);
+
+                    if (IsSortMoveMode)
+                    {
+                        File.Move(sourceFile, destFile, overwrite: true);
+                        batchHistory.Add(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: true));
+                    }
+                    else
+                    {
+                        File.Copy(sourceFile, destFile, overwrite: true);
+                        batchHistory.Add(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: false, WasFromSourceToSorted: true));
+                    }
+
+                    DualSortSourceItems.Remove(item);
+
+                    var newItem = new PictureSortItem(destFile)
+                    {
+                        Thumbnail = item.Thumbnail,
+                        Width = item.Width,
+                        Height = item.Height,
+                        ResolutionText = item.ResolutionText,
+                        IsSelected = false
+                    };
+                    DualSortSortedItems.Insert(0, newItem);
+                }
+                catch (Exception ex)
+                {
+                    DualSortStatusText = $"Lỗi khi chuyển '{item.FileName}': {ex.Message}";
+                }
+            }
+
+            if (batchHistory.Count > 0)
+            {
+                _dualSortUndoBatches.Push(batchHistory);
+                _dualSortRedoBatches.Clear();
+                CanUndoSort = true;
+                CanRedoSort = false;
+            }
+
+            DualSortSourceCount = DualSortSourceItems.Count;
+            DualSortSortedCount = DualSortSortedItems.Count;
+            UpdateDualSortStatusText();
+
+            OnPropertyChanged(nameof(FilteredDualSortSourceItems));
+            OnPropertyChanged(nameof(FilteredDualSortSortedItems));
+
+            DualSortStatusText = $"Đã chuyển {batchHistory.Count} ảnh sang Thư mục đã lọc.";
+        }
+        catch (Exception ex)
+        {
+            DualSortStatusText = $"Lỗi khi chuyển hàng loạt: {ex.Message}";
         }
     }
 
     [RelayCommand]
     public void SortSelectedBackward()
     {
-        var selected = DualSortSortedItems.FirstOrDefault(x => x.IsSelected) ?? DualSortSelectedPreview;
-        if (selected != null && DualSortSortedItems.Contains(selected))
+        var selectedList = DualSortSortedItems.Where(x => x.IsSelected).ToList();
+        if (selectedList.Count == 0 && DualSortSelectedPreview != null && DualSortSortedItems.Contains(DualSortSelectedPreview))
         {
-            SortItemBackward(selected);
+            selectedList.Add(DualSortSelectedPreview);
+        }
+
+        if (selectedList.Count == 0)
+        {
+            DualSortStatusText = "Chưa chọn ảnh nào bên Thư mục đã lọc để trả lại!";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(DualSortSourcePath))
+        {
+            DualSortStatusText = "Vui lòng chọn Thư mục gốc trước!";
+            return;
+        }
+
+        try
+        {
+            if (!Directory.Exists(DualSortSourcePath))
+            {
+                Directory.CreateDirectory(DualSortSourcePath);
+            }
+
+            var batchHistory = new List<PictureSortHistoryEntry>();
+
+            foreach (var item in selectedList)
+            {
+                try
+                {
+                    string sourceFile = item.FilePath;
+                    string destFile = Path.Combine(DualSortSourcePath, item.FileName);
+                    destFile = GetUniqueFilePath(destFile);
+
+                    if (IsSortMoveMode)
+                    {
+                        File.Move(sourceFile, destFile, overwrite: true);
+                        batchHistory.Add(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: false));
+                    }
+                    else
+                    {
+                        File.Delete(sourceFile);
+                        batchHistory.Add(new PictureSortHistoryEntry(destFile, sourceFile, IsMove: false, WasFromSourceToSorted: false));
+                    }
+
+                    DualSortSortedItems.Remove(item);
+
+                    var newItem = new PictureSortItem(destFile)
+                    {
+                        Thumbnail = item.Thumbnail,
+                        Width = item.Width,
+                        Height = item.Height,
+                        ResolutionText = item.ResolutionText,
+                        IsSelected = false
+                    };
+                    DualSortSourceItems.Add(newItem);
+                }
+                catch (Exception ex)
+                {
+                    DualSortStatusText = $"Lỗi khi trả '{item.FileName}': {ex.Message}";
+                }
+            }
+
+            if (batchHistory.Count > 0)
+            {
+                _dualSortUndoBatches.Push(batchHistory);
+                _dualSortRedoBatches.Clear();
+                CanUndoSort = true;
+                CanRedoSort = false;
+            }
+
+            DualSortSourceCount = DualSortSourceItems.Count;
+            DualSortSortedCount = DualSortSortedItems.Count;
+            UpdateDualSortStatusText();
+
+            OnPropertyChanged(nameof(FilteredDualSortSourceItems));
+            OnPropertyChanged(nameof(FilteredDualSortSortedItems));
+
+            DualSortStatusText = $"Đã trả {batchHistory.Count} ảnh về Thư mục gốc.";
+        }
+        catch (Exception ex)
+        {
+            DualSortStatusText = $"Lỗi khi trả hàng loạt: {ex.Message}";
         }
     }
 
@@ -589,24 +899,25 @@ public partial class MainViewModel
 
             string sourceFile = item.FilePath;
             string destFile = Path.Combine(DualSortSortedPath, item.FileName);
-
-            // Xử lý trùng file
             destFile = GetUniqueFilePath(destFile);
 
+            PictureSortHistoryEntry historyEntry;
             if (IsSortMoveMode)
             {
                 File.Move(sourceFile, destFile, overwrite: true);
-                _dualSortHistory.Push(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: true));
+                historyEntry = new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: true);
             }
             else
             {
                 File.Copy(sourceFile, destFile, overwrite: true);
-                _dualSortHistory.Push(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: false, WasFromSourceToSorted: true));
+                historyEntry = new PictureSortHistoryEntry(sourceFile, destFile, IsMove: false, WasFromSourceToSorted: true);
             }
 
+            _dualSortUndoBatches.Push(new List<PictureSortHistoryEntry> { historyEntry });
+            _dualSortRedoBatches.Clear();
             CanUndoSort = true;
+            CanRedoSort = false;
 
-            // Chuyển item sang collection sorted
             int oldIndex = DualSortSourceItems.IndexOf(item);
             DualSortSourceItems.Remove(item);
 
@@ -626,7 +937,6 @@ public partial class MainViewModel
             OnPropertyChanged(nameof(FilteredDualSortSourceItems));
             OnPropertyChanged(nameof(FilteredDualSortSortedItems));
 
-            // Tự động chọn ảnh tiếp theo trong danh sách gốc để người dùng thao tác liên tục
             if (DualSortSourceItems.Count > 0)
             {
                 int nextIndex = Math.Clamp(oldIndex, 0, DualSortSourceItems.Count - 1);
@@ -660,21 +970,24 @@ public partial class MainViewModel
 
             string sourceFile = item.FilePath;
             string destFile = Path.Combine(DualSortSourcePath, item.FileName);
-
             destFile = GetUniqueFilePath(destFile);
 
+            PictureSortHistoryEntry historyEntry;
             if (IsSortMoveMode)
             {
                 File.Move(sourceFile, destFile, overwrite: true);
-                _dualSortHistory.Push(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: false));
+                historyEntry = new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: false);
             }
             else
             {
-                File.Delete(sourceFile); // Nếu là copy mode thì trả về gốc đồng nghĩa xóa bản copy ở sorted
-                _dualSortHistory.Push(new PictureSortHistoryEntry(destFile, sourceFile, IsMove: false, WasFromSourceToSorted: false));
+                File.Delete(sourceFile);
+                historyEntry = new PictureSortHistoryEntry(destFile, sourceFile, IsMove: false, WasFromSourceToSorted: false);
             }
 
+            _dualSortUndoBatches.Push(new List<PictureSortHistoryEntry> { historyEntry });
+            _dualSortRedoBatches.Clear();
             CanUndoSort = true;
+            CanRedoSort = false;
 
             int oldIndex = DualSortSortedItems.IndexOf(item);
             DualSortSortedItems.Remove(item);
@@ -712,68 +1025,75 @@ public partial class MainViewModel
     }
 
     // ==========================================
-    // HOÀN TÁC (UNDO)
+    // HOÀN TÁC (UNDO) & LÀM LẠI (REDO) HỖ TRỢ BATCH
     // ==========================================
     [RelayCommand]
     public void UndoLastSort()
     {
-        if (_dualSortHistory.Count == 0) return;
+        if (_dualSortUndoBatches.Count == 0) return;
 
-        var entry = _dualSortHistory.Pop();
-        CanUndoSort = _dualSortHistory.Count > 0;
+        var batch = _dualSortUndoBatches.Pop();
+        CanUndoSort = _dualSortUndoBatches.Count > 0;
+
+        var redoList = new List<PictureSortHistoryEntry>();
 
         try
         {
-            if (entry.WasFromSourceToSorted)
+            foreach (var entry in batch)
             {
-                // Hành động trước: Gốc -> Sorted (dest)
-                if (entry.IsMove)
+                if (entry.WasFromSourceToSorted)
                 {
-                    if (File.Exists(entry.DestinationFilePath))
+                    // Hành động trước: Gốc -> Sorted (dest)
+                    if (entry.IsMove)
                     {
-                        File.Move(entry.DestinationFilePath, entry.SourceFilePath, overwrite: true);
+                        if (File.Exists(entry.DestinationFilePath))
+                        {
+                            File.Move(entry.DestinationFilePath, entry.SourceFilePath, overwrite: true);
+                        }
                     }
+                    else
+                    {
+                        if (File.Exists(entry.DestinationFilePath))
+                        {
+                            File.Delete(entry.DestinationFilePath);
+                        }
+                    }
+
+                    var itemInSorted = DualSortSortedItems.FirstOrDefault(x => x.FilePath.Equals(entry.DestinationFilePath, StringComparison.OrdinalIgnoreCase));
+                    if (itemInSorted != null)
+                    {
+                        DualSortSortedItems.Remove(itemInSorted);
+                    }
+
+                    var restoredItem = new PictureSortItem(entry.SourceFilePath);
+                    DualSortSourceItems.Add(restoredItem);
                 }
                 else
                 {
-                    if (File.Exists(entry.DestinationFilePath))
+                    // Hành động trước: Sorted -> Gốc (dest)
+                    if (entry.IsMove)
                     {
-                        File.Delete(entry.DestinationFilePath);
+                        if (File.Exists(entry.DestinationFilePath))
+                        {
+                            File.Move(entry.DestinationFilePath, entry.SourceFilePath, overwrite: true);
+                        }
                     }
-                }
 
-                // Cập nhật collection
-                var itemInSorted = DualSortSortedItems.FirstOrDefault(x => x.FilePath.Equals(entry.DestinationFilePath, StringComparison.OrdinalIgnoreCase));
-                if (itemInSorted != null)
-                {
-                    DualSortSortedItems.Remove(itemInSorted);
-                }
-
-                var restoredItem = new PictureSortItem(entry.SourceFilePath);
-                DualSortSourceItems.Add(restoredItem);
-                SelectDualSortItem(restoredItem);
-            }
-            else
-            {
-                // Hành động trước: Sorted -> Gốc (dest)
-                if (entry.IsMove)
-                {
-                    if (File.Exists(entry.DestinationFilePath))
+                    var itemInSource = DualSortSourceItems.FirstOrDefault(x => x.FilePath.Equals(entry.DestinationFilePath, StringComparison.OrdinalIgnoreCase));
+                    if (itemInSource != null)
                     {
-                        File.Move(entry.DestinationFilePath, entry.SourceFilePath, overwrite: true);
+                        DualSortSourceItems.Remove(itemInSource);
                     }
+
+                    var restoredItem = new PictureSortItem(entry.SourceFilePath);
+                    DualSortSortedItems.Add(restoredItem);
                 }
 
-                var itemInSource = DualSortSourceItems.FirstOrDefault(x => x.FilePath.Equals(entry.DestinationFilePath, StringComparison.OrdinalIgnoreCase));
-                if (itemInSource != null)
-                {
-                    DualSortSourceItems.Remove(itemInSource);
-                }
-
-                var restoredItem = new PictureSortItem(entry.SourceFilePath);
-                DualSortSortedItems.Add(restoredItem);
-                SelectDualSortItem(restoredItem);
+                redoList.Add(entry);
             }
+
+            _dualSortRedoBatches.Push(redoList);
+            CanRedoSort = true;
 
             DualSortSourceCount = DualSortSourceItems.Count;
             DualSortSortedCount = DualSortSortedItems.Count;
@@ -782,11 +1102,101 @@ public partial class MainViewModel
             OnPropertyChanged(nameof(FilteredDualSortSourceItems));
             OnPropertyChanged(nameof(FilteredDualSortSortedItems));
 
-            DualSortStatusText = $"Đã hoàn tác thao tác với file '{Path.GetFileName(entry.SourceFilePath)}'.";
+            DualSortStatusText = $"Đã hoàn tác (Undo) {batch.Count} ảnh thành công.";
         }
         catch (Exception ex)
         {
             DualSortStatusText = $"Lỗi khi hoàn tác: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public void RedoLastSort()
+    {
+        if (_dualSortRedoBatches.Count == 0) return;
+
+        var batch = _dualSortRedoBatches.Pop();
+        CanRedoSort = _dualSortRedoBatches.Count > 0;
+
+        var undoList = new List<PictureSortHistoryEntry>();
+
+        try
+        {
+            foreach (var entry in batch)
+            {
+                if (entry.WasFromSourceToSorted)
+                {
+                    // Làm lại: Gốc -> Sorted
+                    if (entry.IsMove)
+                    {
+                        if (File.Exists(entry.SourceFilePath))
+                        {
+                            File.Move(entry.SourceFilePath, entry.DestinationFilePath, overwrite: true);
+                        }
+                    }
+                    else
+                    {
+                        if (File.Exists(entry.SourceFilePath))
+                        {
+                            File.Copy(entry.SourceFilePath, entry.DestinationFilePath, overwrite: true);
+                        }
+                    }
+
+                    var itemInSource = DualSortSourceItems.FirstOrDefault(x => x.FilePath.Equals(entry.SourceFilePath, StringComparison.OrdinalIgnoreCase));
+                    if (itemInSource != null)
+                    {
+                        DualSortSourceItems.Remove(itemInSource);
+                    }
+
+                    var newItem = new PictureSortItem(entry.DestinationFilePath);
+                    DualSortSortedItems.Insert(0, newItem);
+                }
+                else
+                {
+                    // Làm lại: Sorted -> Gốc
+                    if (entry.IsMove)
+                    {
+                        if (File.Exists(entry.SourceFilePath))
+                        {
+                            File.Move(entry.SourceFilePath, entry.DestinationFilePath, overwrite: true);
+                        }
+                    }
+                    else
+                    {
+                        if (File.Exists(entry.SourceFilePath))
+                        {
+                            File.Delete(entry.SourceFilePath);
+                        }
+                    }
+
+                    var itemInSorted = DualSortSortedItems.FirstOrDefault(x => x.FilePath.Equals(entry.SourceFilePath, StringComparison.OrdinalIgnoreCase));
+                    if (itemInSorted != null)
+                    {
+                        DualSortSortedItems.Remove(itemInSorted);
+                    }
+
+                    var newItem = new PictureSortItem(entry.DestinationFilePath);
+                    DualSortSourceItems.Add(newItem);
+                }
+
+                undoList.Add(entry);
+            }
+
+            _dualSortUndoBatches.Push(undoList);
+            CanUndoSort = true;
+
+            DualSortSourceCount = DualSortSourceItems.Count;
+            DualSortSortedCount = DualSortSortedItems.Count;
+            UpdateDualSortStatusText();
+
+            OnPropertyChanged(nameof(FilteredDualSortSourceItems));
+            OnPropertyChanged(nameof(FilteredDualSortSortedItems));
+
+            DualSortStatusText = $"Đã làm lại (Redo) {batch.Count} ảnh thành công.";
+        }
+        catch (Exception ex)
+        {
+            DualSortStatusText = $"Lỗi khi làm lại (Redo): {ex.Message}";
         }
     }
 

@@ -3445,6 +3445,51 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test khởi động app Desktop 2 bước thành công hoàn hảo.
   - Tự động đóng gói và upload thành công 100% 3 gói cài đặt (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta` (tốc độ 81.7 Mbps).
 
+### 15.108 Tối Ưu ScrollBar To Bản Chạm Vuốt Cảm Ứng, Card Thumbnail Variable Aspect Ratio & Floating Batch Toolbar (9 Nút) Cho Dual Picture Sort (2026-10-15)
+- **Bối Cảnh & Vấn Đề Kỹ Thuật Từ Người Dùng**:
+  1. **Tua Truyện Hàng Ngàn Trang & Danh Sách Hàng Ngàn Ảnh Quá Lâu (Khó Thao Tác Cảm Ứng)**:
+     - Mặc định ScrollBar của Avalonia FluentTheme tự động thu nhỏ lại cực mảnh (~2-4px), khiến người dùng dùng ngón tay trên màn hình cảm ứng Android / Tablet hay chuột trên Windows rất khó bắt trúng thanh cuộn để kéo lướt nhanh.
+     - Yêu cầu: Thanh cuộn dọc (Vertical ScrollBar) phải to bản rõ ràng (Width 28px, Thumb tối thiểu 60px, màu Cyan #38BDF8) và hỗ trợ chạm kéo lướt bằng ngón tay trực tiếp trên cả Reader (`ComicReaderControl.axaml`) và Dual Picture Sort (`MainView.axaml`).
+  2. **Card Ảnh Hardcode Tỉ Lệ 4:3 Gây Cắt Xén Hình Ảnh**:
+     - Trước đây thumbnail trong danh sách Dual Picture Sort được đặt cố định khung 138×116 với `Stretch="UniformToFill"`. Với các ảnh khổ dọc (9:16) hoặc khổ ngang (16:9), ảnh bị cắt mất viền trên/dưới hoặc 2 bên mép.
+     - Yêu cầu: Chuyển sang cơ chế Variable Aspect Ratio để hiển thị trọn vẹn 100% mọi tỷ lệ ảnh, kèm CheckBox chọn nhanh trực quan trên từng ảnh.
+  3. **Cơ Chế Chọn Batch Part X Mới & Floating Batch Toolbar (9 Nút Chuẩn)**:
+     - Trước đây người dùng chỉ chọn được từng ảnh đơn lẻ. Cần hỗ trợ song song cả chọn Single và chọn Batch theo từng Part.
+     - Floating Toolbar phải nổi dạng float (có grip kéo thả di chuyển tự do quanh màn hình giống toolbar tải ảnh), nhưng **chỉ hoạt động trong tab Dual Picture Sort**.
+     - Đầy đủ 9 nút chức năng: `Chuyển sang sort`, `Trả lại gốc`, `Giữ gốc`, `Giữ đã lọc`, `checkbox select all`, `Preview`, `Start batch`, `Undo`, `Redo`.
+     - Quy tắc Batch Part X: Bấm `Start batch` để bắt đầu chọn nhiều ảnh:
+       - Chạm ảnh 1: Chọn ảnh bắt đầu của Part X (`start part x`).
+       - Chạm ảnh 2: Chọn ảnh kết thúc của Part X (`end part x`) -> Tự động chọn tất cả ảnh trong dải từ Start đến End.
+       - Sau khi `end part x`, **tuyệt đối không làm mất các ảnh đã select trước đó** (giữ nguyên selection tích lũy).
+       - Khi bấm `start part x mới` (ví dụ Part 2), chọn đầu Part 2 và cuối Part 2 -> Tiếp tục cộng dồn các ảnh được chọn.
+       - Khi `end part x` xong thì tự động quay trở lại cơ chế Single như cũ cho đến khi bấm `Start batch` tiếp theo.
+       - Khi người dùng đã chọn xong toàn bộ thì bấm `Chuyển sang sort` hoặc `Trả lại gốc` để di chuyển đồng loạt.
+       - Hỗ trợ Undo & Redo theo từng mẻ Batch.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Style Vertical ScrollBar To Bản Chạm Kéo Cực Nhạy (`ComicReaderControl.axaml` & `MainView.axaml`)**:
+     - Trong `ComicReaderControl.axaml`: Thêm style tường minh cho `ListBox#ReaderPagesListBox ScrollBar:vertical` với `Width="28"`, `MinWidth="28"`, `Opacity="0.9"`. Thumb có `MinHeight="60"`, `Width="22"`, `Background="#38BDF8"`, `CornerRadius="11"`. Khi hover/kéo đổi màu `#0284C7`. Giúp tua truyện hàng ngàn trang bằng ngón tay hoặc chuột siêu tốc, nhạy bén.
+     - Trong `MainView.axaml`: Tạo class `dualSortScroll` cho 4 `ScrollViewer` (Desktop Source/Sorted và Mobile Source/Sorted) với cùng kích thước 28px và Thumb Cyan to bản.
+  2. **Variable Aspect Ratio Cho Thumbnail Dual Picture Sort**:
+     - Thay thế `Stretch="UniformToFill"` bằng `Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"`.
+     - Khung ảnh nền tối `#060913` đệm viền tự nhiên, bảo đảm mọi ảnh ngang 16:9, ảnh vuông 1:1, ảnh dọc 9:16 đều hiển thị trọn vẹn 100% chi tiết không bao giờ bị cắt xén.
+     - Bổ sung CheckBox `IsChecked="{Binding IsSelected, Mode=TwoWay}"` ở góc trên bên trái từng Card ảnh, hỗ trợ chọn lẻ bằng cả click checkbox lẫn chạm ảnh.
+  3. **Kiến Trúc Floating Batch Toolbar & Bộ Xử Lý Part X Đa Tầng (`MainViewModel.DualPictureSort.cs` & `MainView.axaml.cs`)**:
+     - **Scope Boundary Hoàn Hảo**: `DualSortFloatingBatchToolbar` được đặt trực tiếp bên trong `<TabItem Header="🖼️ Dual Picture Sort">`. Khi chuyển sang Tab Download, Tab Thư viện hay các Tab khác, Toolbar này tự động biến mất, chỉ xuất hiện khi tab Dual Picture Sort được mở.
+     - **Cơ Chế Kéo Thả Di Chuyển Tự Do**: Triển khai `SetupDualSortBatchFloatingDraggable()` bắt sự kiện Pointer trên Grip Bar `⋮⋮ BATCH TOOL ⋮⋮`, hỗ trợ kéo rê tự do quanh 4 góc màn hình mà không che khuất nút chức năng bên dưới.
+     - **Logic Batch Part X**:
+       - `_batchPartNumber` bắt đầu từ 1, `IsBatchModeActive` quản lý trạng thái.
+       - Chạm lần 1: Đánh dấu Start Item của Part X, đổi nút thành `🏁 Part X: Cuối`.
+       - Chạm lần 2: Đánh dấu End Item, duyệt dải `[minIdx..maxIdx]` và đặt `IsSelected = true` cho toàn bộ dải, giữ nguyên các ảnh đã chọn trước đó. Tự động tăng `_batchPartNumber++`, tắt `IsBatchModeActive`, đưa nút về `⚡ Start (Part {X+1})` và quay về cơ chế Single bình thường.
+     - **Batch Move / Copy & Multi-Item Undo/Redo**:
+       - `SortSelectedForward` & `SortSelectedBackward`: Thu thập toàn bộ ảnh `IsSelected == true`, di chuyển đồng loạt, gom toàn bộ lịch sử thành 1 batch và đẩy vào `_dualSortUndoBatches`.
+       - `UndoLastSort` & `RedoLastSort`: Hoàn tác hoặc làm lại toàn bộ mẻ Batch chỉ trong 1 lần nhấn.
+     - **Select All & Preview**:
+       - Checkbox `Select All`: Đảo trạng thái chọn tất cả ảnh của panel đang thao tác.
+       - Nút `Preview`: Bật/Tắt chế độ xem trước ảnh tức thì.
+- **Nghiệm Thu**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
+
+
 
 
 

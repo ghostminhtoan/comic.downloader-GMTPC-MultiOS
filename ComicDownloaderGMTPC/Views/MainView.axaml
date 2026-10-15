@@ -11,6 +11,24 @@
              x:DataType="vm:MainViewModel"
              Background="#0B0F19">
 
+    <UserControl.Styles>
+        <!-- Style ScrollBar dọc to bản cho Dual Picture Sort hỗ trợ chạm vuốt cảm ứng ngón tay -->
+        <Style Selector="ScrollViewer.dualSortScroll ScrollBar:vertical">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="Opacity" Value="0.9" />
+        </Style>
+        <Style Selector="ScrollViewer.dualSortScroll ScrollBar:vertical /template/ Thumb">
+            <Setter Property="MinHeight" Value="60" />
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Background" Value="#38BDF8" />
+            <Setter Property="CornerRadius" Value="11" />
+        </Style>
+        <Style Selector="ScrollViewer.dualSortScroll ScrollBar:vertical /template/ Thumb:pointerover">
+            <Setter Property="Background" Value="#0284C7" />
+        </Style>
+    </UserControl.Styles>
+
     <Grid>
         <!-- GIAO DIỆN CHÍNH -->
         <Panel>
@@ -3334,7 +3352,8 @@
 
                             <!-- CHILD TAB 3.7: DUAL PICTURE SORT (LỌC ẢNH SONG SONG) -->
                             <TabItem Header="🖼️ Dual Picture Sort" FontSize="12" FontWeight="SemiBold">
-                                <Grid RowDefinitions="Auto, *">
+                                <Panel>
+                                    <Grid RowDefinitions="Auto, *">
                                     <!-- Header & Cấu hình thư mục -->
                                     <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                                         <StackPanel Spacing="10">
@@ -3434,7 +3453,7 @@
                                                     <TextBox Grid.Row="1" Text="{Binding DualSortSearchSource}" PlaceholderText="🔍 Tìm tên file..." Height="28" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" BorderThickness="1" FontSize="10.5" Padding="6,2" Margin="0,0,0,6" VerticalContentAlignment="Center" />
 
                                                     <!-- Danh sách ảnh gốc -->
-                                                    <ScrollViewer Grid.Row="2" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                                    <ScrollViewer Grid.Row="2" Classes="dualSortScroll" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                                                         <ItemsControl ItemsSource="{Binding FilteredDualSortSourceItems}">
                                                             <ItemsControl.ItemsPanel>
                                                                 <ItemsPanelTemplate>
@@ -3453,9 +3472,14 @@
                                                                             BorderBrush="{Binding ItemBorderBrush}"
                                                                             BorderThickness="1.5" Cursor="Hand">
                                                                         <Grid RowDefinitions="138, Auto, Auto">
-                                                                            <!-- Thumbnail -->
+                                                                            <!-- Thumbnail Variable Aspect Ratio (Fit trọn vẹn mọi tỷ lệ ảnh) -->
                                                                             <Border Grid.Row="0" CornerRadius="4" ClipToBounds="True" Background="#060913">
-                                                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                                <Panel>
+                                                                                    <Image Source="{Binding Thumbnail}" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                                              HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                                                              Margin="2,2,0,0" ZIndex="10" />
+                                                                                </Panel>
                                                                             </Border>
                                                                             <!-- Tên file -->
                                                                             <TextBlock Grid.Row="1" Text="{Binding FileName}" FontSize="10.5" FontWeight="SemiBold" Foreground="#F1F5F9" TextTrimming="CharacterEllipsis" Margin="0,4,0,2" ToolTip.Tip="{Binding FileName}" />
@@ -3498,7 +3522,7 @@
                                                     <TextBox Grid.Row="1" Text="{Binding DualSortSearchSorted}" PlaceholderText="🔍 Tìm tên file..." Height="28" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" BorderThickness="1" FontSize="10.5" Padding="6,2" Margin="0,0,0,6" VerticalContentAlignment="Center" />
 
                                                     <!-- Danh sách ảnh đã lọc -->
-                                                    <ScrollViewer Grid.Row="2" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                                    <ScrollViewer Grid.Row="2" Classes="dualSortScroll" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                                                         <ItemsControl ItemsSource="{Binding FilteredDualSortSortedItems}">
                                                             <ItemsControl.ItemsPanel>
                                                                 <ItemsPanelTemplate>
@@ -3517,9 +3541,14 @@
                                                                             BorderBrush="{Binding ItemBorderBrush}"
                                                                             BorderThickness="1.5" Cursor="Hand">
                                                                         <Grid RowDefinitions="138, Auto, Auto">
-                                                                            <!-- Thumbnail -->
+                                                                            <!-- Thumbnail Variable Aspect Ratio (Fit trọn vẹn mọi tỷ lệ ảnh) -->
                                                                             <Border Grid.Row="0" CornerRadius="4" ClipToBounds="True" Background="#060913">
-                                                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                                <Panel>
+                                                                                    <Image Source="{Binding Thumbnail}" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                                              HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                                                              Margin="2,2,0,0" ZIndex="10" />
+                                                                                </Panel>
                                                                             </Border>
                                                                             <!-- Tên file -->
                                                                             <TextBlock Grid.Row="1" Text="{Binding FileName}" FontSize="10.5" FontWeight="SemiBold" Foreground="#F1F5F9" TextTrimming="CharacterEllipsis" Margin="0,4,0,2" ToolTip.Tip="{Binding FileName}" />
@@ -3566,7 +3595,7 @@
                                                             </Button>
                                                         </Grid>
 
-                                                        <ScrollViewer Grid.Row="1" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                                        <ScrollViewer Grid.Row="1" Classes="dualSortScroll" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                                                             <ItemsControl ItemsSource="{Binding FilteredDualSortSourceItems}">
                                                                 <ItemsControl.ItemsPanel>
                                                                     <ItemsPanelTemplate>
@@ -3585,8 +3614,14 @@
                                                                                 BorderBrush="{Binding ItemBorderBrush}"
                                                                                 BorderThickness="1.5">
                                                                             <Grid RowDefinitions="132, Auto, Auto">
+                                                                                <!-- Thumbnail Variable Aspect Ratio (Fit trọn vẹn mọi tỷ lệ ảnh) -->
                                                                                 <Border Grid.Row="0" CornerRadius="4" ClipToBounds="True" Background="#060913">
-                                                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                                    <Panel>
+                                                                                        <Image Source="{Binding Thumbnail}" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                                                  HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                                                                  Margin="2,2,0,0" ZIndex="10" />
+                                                                                    </Panel>
                                                                                 </Border>
                                                                                 <TextBlock Grid.Row="1" Text="{Binding FileName}" FontSize="10" FontWeight="SemiBold" Foreground="#F1F5F9" TextTrimming="CharacterEllipsis" Margin="0,3,0,1" />
                                                                                 <Grid Grid.Row="2" ColumnDefinitions="*, Auto">
@@ -3610,7 +3645,7 @@
                                                             </Button>
                                                         </Grid>
 
-                                                        <ScrollViewer Grid.Row="1" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                                        <ScrollViewer Grid.Row="1" Classes="dualSortScroll" BringIntoViewOnFocusChange="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                                                             <ItemsControl ItemsSource="{Binding FilteredDualSortSortedItems}">
                                                                 <ItemsControl.ItemsPanel>
                                                                     <ItemsPanelTemplate>
@@ -3629,8 +3664,14 @@
                                                                                 BorderBrush="{Binding ItemBorderBrush}"
                                                                                 BorderThickness="1.5">
                                                                             <Grid RowDefinitions="132, Auto, Auto">
+                                                                                <!-- Thumbnail Variable Aspect Ratio (Fit trọn vẹn mọi tỷ lệ ảnh) -->
                                                                                 <Border Grid.Row="0" CornerRadius="4" ClipToBounds="True" Background="#060913">
-                                                                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                                    <Panel>
+                                                                                        <Image Source="{Binding Thumbnail}" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                                                  HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                                                                  Margin="2,2,0,0" ZIndex="10" />
+                                                                                    </Panel>
                                                                                 </Border>
                                                                                 <TextBlock Grid.Row="1" Text="{Binding FileName}" FontSize="10" FontWeight="SemiBold" Foreground="#F1F5F9" TextTrimming="CharacterEllipsis" Margin="0,3,0,1" />
                                                                                 <Grid Grid.Row="2" ColumnDefinitions="*, Auto">
@@ -3649,7 +3690,131 @@
                                         </Grid>
                                     </Grid>
                                 </Grid>
-                            </TabItem>
+
+                                <!-- FLOATING BATCH TOOLBAR CHO DUAL PICTURE SORT (CHỈ HIỂN THỊ TRONG TAB NÀY, KÉO THẢ TỰ DO ĐỔI VỊ TRÍ) -->
+                                <Border x:Name="DualSortFloatingBatchToolbar"
+                                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                        Margin="0,0,20,30" CornerRadius="16"
+                                        Background="#F00B0F19" BorderBrush="#38BDF8" BorderThickness="1.5"
+                                        Padding="4,5" ZIndex="1600" IsHitTestVisible="True"
+                                        BoxShadow="0 8 28 0 #B0000000">
+                                    <Border.RenderTransform>
+                                        <TranslateTransform X="0" Y="0" />
+                                    </Border.RenderTransform>
+                                    <StackPanel Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
+                                        <!-- Thanh Grip kéo thả di chuyển vị trí (Move Handle) -->
+                                        <Border x:Name="DualSortBatchGripBar"
+                                                Background="#1E293B" CornerRadius="8"
+                                                Width="82" Height="15" Margin="0,1,0,2"
+                                                Cursor="SizeAll"
+                                                ToolTip.Tip="Chạm giữ &amp; kéo để di chuyển vị trí thanh công cụ Batch">
+                                            <TextBlock Text="⋮⋮ BATCH TOOL ⋮⋮" Foreground="#38BDF8" FontSize="8.5" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
+                                        </Border>
+
+                                        <!-- 1. Start batch (Part X) -->
+                                        <Button Command="{Binding ToggleBatchSelectModeCommand}"
+                                                Background="{Binding DualSortBatchButtonBg}" Foreground="{Binding DualSortBatchButtonFg}"
+                                                BorderBrush="{Binding DualSortBatchButtonBorder}" BorderThickness="1"
+                                                FontWeight="Bold" CornerRadius="12" Padding="4,4" Width="92" Height="28"
+                                                ToolTip.Tip="Start batch: Bắt đầu chọn dải ảnh theo Part X">
+                                            <TextBlock Text="{Binding DualSortBatchButtonText}" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Button>
+
+                                        <!-- 2. Chuyển sang sort -->
+                                        <Button Command="{Binding SortSelectedForwardCommand}"
+                                                Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
+                                                CornerRadius="12" Padding="4,4" Width="92" Height="28"
+                                                ToolTip.Tip="Chuyển tất cả ảnh đang chọn sang thư mục Đã lọc (Sorted)">
+                                            <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="➡️" FontSize="10" VerticalAlignment="Center" />
+                                                <TextBlock Text="Sang Sort" FontSize="9.5" FontWeight="Bold" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <!-- 3. Trả lại gốc -->
+                                        <Button Command="{Binding SortSelectedBackwardCommand}"
+                                                Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold"
+                                                CornerRadius="12" Padding="4,4" Width="92" Height="28"
+                                                ToolTip.Tip="Trả tất cả ảnh đang chọn về thư mục Gốc">
+                                            <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="⬅️" FontSize="10" VerticalAlignment="Center" />
+                                                <TextBlock Text="Về Gốc" FontSize="9.5" FontWeight="Bold" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <Border Height="1" Width="76" Background="#334155" HorizontalAlignment="Center" Margin="0,1" />
+
+                                        <!-- 4. Giữ gốc (Keep Parent) -->
+                                        <Button Command="{Binding KeepParentCommand}"
+                                                Background="#D97706" Foreground="#FFFFFF" FontWeight="Bold"
+                                                CornerRadius="12" Padding="4,3" Width="92" Height="26"
+                                                ToolTip.Tip="Keep Parent: Xóa hoàn toàn thư mục Đã Lọc, chỉ giữ lại thư mục Gốc">
+                                            <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="🛡️" FontSize="9.5" VerticalAlignment="Center" />
+                                                <TextBlock Text="Giữ Gốc" FontSize="9" FontWeight="Bold" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <!-- 5. Giữ đã lọc (Keep Child) -->
+                                        <Button Command="{Binding KeepChildCommand}"
+                                                Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold"
+                                                CornerRadius="12" Padding="4,3" Width="92" Height="26"
+                                                ToolTip.Tip="Keep Child: Xóa file ở Gốc, chuyển toàn bộ ảnh Đã Lọc sang Gốc và xóa thư mục Child">
+                                            <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="✨" FontSize="9.5" VerticalAlignment="Center" />
+                                                <TextBlock Text="Giữ Đã Lọc" FontSize="9" FontWeight="Bold" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <Border Height="1" Width="76" Background="#334155" HorizontalAlignment="Center" Margin="0,1" />
+
+                                        <!-- 6. Checkbox select all -->
+                                        <CheckBox IsChecked="{Binding IsDualSortSelectAllActive, Mode=TwoWay}"
+                                                  Command="{Binding ToggleSelectAllCommand}"
+                                                  HorizontalAlignment="Center" Margin="0,1"
+                                                  ToolTip.Tip="Chọn tất cả / Bỏ chọn tất cả ảnh">
+                                            <TextBlock Text="Select All" FontSize="9.5" FontWeight="SemiBold" Foreground="#38BDF8" VerticalAlignment="Center" />
+                                        </CheckBox>
+
+                                        <!-- 7. Preview Button -->
+                                        <Button Command="{Binding ToggleDualSortPreviewEnabledCommand}"
+                                                Background="{Binding DualSortPreviewButtonBg}" Foreground="{Binding DualSortPreviewButtonFg}"
+                                                BorderBrush="{Binding DualSortPreviewButtonBorder}" BorderThickness="1"
+                                                CornerRadius="12" Padding="4,3" Width="92" Height="26"
+                                                ToolTip.Tip="Bật / Tắt tính năng xem trước ảnh (Preview)">
+                                            <TextBlock Text="{Binding DualSortPreviewButtonShortText}" FontSize="8.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Button>
+
+                                        <Border Height="1" Width="76" Background="#334155" HorizontalAlignment="Center" Margin="0,1" />
+
+                                        <!-- 8. Undo -->
+                                        <Button Command="{Binding UndoLastSortCommand}" IsEnabled="{Binding CanUndoSort}"
+                                                Background="#1E293B" Foreground="#F8FAFC" FontWeight="SemiBold"
+                                                BorderBrush="#475569" BorderThickness="1"
+                                                CornerRadius="12" Padding="4,3" Width="92" Height="25"
+                                                ToolTip.Tip="Hoàn tác thao tác vừa thực hiện (Ctrl+Z)">
+                                            <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="↩️" FontSize="9" VerticalAlignment="Center" />
+                                                <TextBlock Text="Undo" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <!-- 9. Redo -->
+                                        <Button Command="{Binding RedoLastSortCommand}" IsEnabled="{Binding CanRedoSort}"
+                                                Background="#1E293B" Foreground="#F8FAFC" FontWeight="SemiBold"
+                                                BorderBrush="#475569" BorderThickness="1"
+                                                CornerRadius="12" Padding="4,3" Width="92" Height="25"
+                                                ToolTip.Tip="Làm lại thao tác vừa hoàn tác (Ctrl+Y)">
+                                            <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="↪️" FontSize="9" VerticalAlignment="Center" />
+                                                <TextBlock Text="Redo" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+                            </Panel>
+                        </TabItem>
 
                         </TabControl>
                     </Border>

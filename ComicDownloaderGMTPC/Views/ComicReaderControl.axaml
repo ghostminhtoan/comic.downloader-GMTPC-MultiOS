@@ -129,6 +129,21 @@
                         </ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
                     <ListBox.Styles>
+                        <!-- Style ScrollBar dọc to bản hỗ trợ cảm ứng ngón tay và tua nhanh truyện hàng ngàn trang -->
+                        <Style Selector="ListBox#ReaderPagesListBox ScrollBar:vertical">
+                            <Setter Property="Width" Value="28" />
+                            <Setter Property="MinWidth" Value="28" />
+                            <Setter Property="Opacity" Value="0.9" />
+                        </Style>
+                        <Style Selector="ListBox#ReaderPagesListBox ScrollBar:vertical /template/ Thumb">
+                            <Setter Property="MinHeight" Value="60" />
+                            <Setter Property="Width" Value="22" />
+                            <Setter Property="Background" Value="#38BDF8" />
+                            <Setter Property="CornerRadius" Value="11" />
+                        </Style>
+                        <Style Selector="ListBox#ReaderPagesListBox ScrollBar:vertical /template/ Thumb:pointerover">
+                            <Setter Property="Background" Value="#0284C7" />
+                        </Style>
                         <Style Selector="ListBox.horizontalMode">
                             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
                             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
