@@ -47,6 +47,20 @@ public partial class MainViewModel
     [ObservableProperty]
     private bool _isAssociationPlatformSupported;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MultiInstanceStatusText))]
+    private bool _isMultiInstanceEnabled = InstanceConfigService.Instance.IsMultiInstanceEnabled;
+
+    public string MultiInstanceStatusText =>
+        IsMultiInstanceEnabled
+            ? "⚡ Đang BẬT: Cho phép mở nhiều cửa sổ App chính song song"
+            : "🔒 Đang TẮT (Khuyên dùng): Chỉ chạy 1 cửa sổ App chính để tránh xung đột tải và bảo vệ dữ liệu";
+
+    partial void OnIsMultiInstanceEnabledChanged(bool value)
+    {
+        InstanceConfigService.Instance.IsMultiInstanceEnabled = value;
+    }
+
     /// <summary>
     /// Khởi tạo và quét trạng thái liên kết tệp hiện tại từ hệ điều hành.
     /// </summary>

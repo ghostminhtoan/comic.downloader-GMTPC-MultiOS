@@ -819,4 +819,15 @@
 | Remove All Associations | Gỡ bỏ tất cả |
 | Refresh Association Status | Làm mới trạng thái |
 
+## 20. Multi-Instance & Standalone Reader Setting (Chế Độ Đa Phiên Bản & Trình Đọc Độc Lập)
+
+| English | Vietnamese |
+| :--- | :--- |
+| Multi-instance Setting | Cài đặt đa phiên bản app chính |
+| Allow multiple main app windows (Multi-instance) | Cho phép mở nhiều cửa sổ App chính (Multi-instance) |
+| Multi-instance enabled: Multiple main app windows allowed | Đang BẬT: Cho phép mở nhiều cửa sổ App chính song song |
+| Multi-instance disabled (Recommended): Single main app window only | Đang TẮT (Khuyên dùng): Chỉ chạy 1 cửa sổ App chính để tránh xung đột tải và bảo vệ dữ liệu |
+| Standalone Reader Mode | Chế độ đọc truyện độc lập siêu nhẹ |
+
+
 

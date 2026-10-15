@@ -16,7 +16,10 @@ namespace ComicDownloaderGMTPC;
 
 public partial class App : Application
 {
-    public static MainViewModel SharedMainViewModel { get; } = new MainViewModel();
+    private static MainViewModel? _sharedMainViewModel;
+    public static MainViewModel SharedMainViewModel => _sharedMainViewModel ??= new MainViewModel();
+
+    private static System.Threading.Mutex? _singleInstanceMutex;
 
     public override void Initialize()
     {
@@ -30,6 +33,7 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // 1. Kiểm tra cờ kiểm thử tự động CLI
             if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-vertical-doubletap", StringComparison.OrdinalIgnoreCase)))
             {
                 base.OnFrameworkInitializationCompleted();
@@ -37,23 +41,16 @@ public partial class App : Application
                 return;
             }
 
-            desktop.ShutdownRequested += (_, _) =>
+            if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-pinch-thumuc", StringComparison.OrdinalIgnoreCase)))
             {
-                try { SharedMainViewModel.FlushAutoSaveImmediately(); } catch { }
-            };
-            desktop.Exit += (_, _) =>
-            {
-                try { SharedMainViewModel.FlushAutoSaveImmediately(); } catch { }
-            };
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = SharedMainViewModel
-            };
+                base.OnFrameworkInitializationCompleted();
+                _ = RunPinchThuMucTestAsync(desktop);
+                return;
+            }
 
-            // Khởi tạo và quét trạng thái liên kết tệp hệ thống trên Desktop
-            SharedMainViewModel.InitFileAssociation();
-
-            // Mở tệp trực tiếp nếu được kích hoạt qua dòng lệnh (double-click hoặc context menu)
+            // 2. Kiểm tra nếu mở tệp trực tiếp từ hệ điều hành (Double-click file hoặc Context Menu)
+            // Khởi động trực tiếp TRÌNH ĐỌC TRUYỆN ĐỘC LẬP SIÊU NHẸ (STANDALONE READER MODE),
+            // TUYỆT ĐỐI KHÔNG khởi tạo MainWindow / MainViewModel (không nạp Scraper, WebView, Database)!
             if (desktop.Args != null && desktop.Args.Length > 0)
             {
                 string? candidate = desktop.Args.FirstOrDefault(a =>
@@ -63,17 +60,58 @@ public partial class App : Application
                 if (!string.IsNullOrEmpty(candidate))
                 {
                     string cleanPath = candidate.Trim('\"', '\'');
-                    if (File.Exists(cleanPath) && IsReadableComicOrMediaFile(cleanPath))
+                    if (IsReadableComicOrMediaFileOrDirectory(cleanPath))
                     {
-                        _ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+                        var scanner = new LibraryScannerService();
+                        var quickComic = scanner.CreateQuickComicFromPath(cleanPath);
+                        if (quickComic != null && quickComic.Chapters.Count > 0)
                         {
-                            await Task.Delay(400);
-                            SharedMainViewModel.SelectedRootTabIndex = 4;
-                            await SharedMainViewModel.LibraryVm.OpenStandaloneFileDirectlyAsync(cleanPath);
-                        });
+                            var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
+                            var readerVm = new ComicReaderViewModel();
+                            var readerWin = new ComicReaderWindow
+                            {
+                                DataContext = readerVm
+                            };
+                            desktop.MainWindow = readerWin;
+                            readerWin.Show();
+                            _ = readerVm.InitializeAsync(quickComic, targetChap);
+                            base.OnFrameworkInitializationCompleted();
+                            return;
+                        }
                     }
                 }
             }
+
+            // 3. Khởi động Ứng dụng chính (Comic Downloader GMTPC):
+            // Kiểm tra cấu hình Đa tiến trình (Multi-instance Setting)
+            if (!InstanceConfigService.Instance.IsMultiInstanceEnabled)
+            {
+                bool isFirst = CheckOrCreateSingleInstanceMutex();
+                if (!isFirst)
+                {
+                    // Đã có instance app chính khác đang chạy: đưa cửa sổ cũ lên trước và thoát instance mới
+                    BringExistingWindowToFront();
+                    desktop.Shutdown(0);
+                    return;
+                }
+            }
+
+            desktop.ShutdownRequested += (_, _) =>
+            {
+                try { _sharedMainViewModel?.FlushAutoSaveImmediately(); } catch { }
+            };
+            desktop.Exit += (_, _) =>
+            {
+                try { _sharedMainViewModel?.FlushAutoSaveImmediately(); } catch { }
+                try { _singleInstanceMutex?.ReleaseMutex(); } catch { }
+            };
+            desktop.MainWindow = new MainWindow
+            {
+                DataContext = SharedMainViewModel
+            };
+
+            // Khởi tạo và quét trạng thái liên kết tệp hệ thống trên Desktop
+            SharedMainViewModel.InitFileAssociation();
         }
         else if (ApplicationLifetime is IActivityApplicationLifetime singleViewFactoryApplicationLifetime)
         {
@@ -89,6 +127,48 @@ public partial class App : Application
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    private static bool CheckOrCreateSingleInstanceMutex()
+    {
+        try
+        {
+            string appKey = "ComicDownloaderGMTPC_SingleInstance_" + Math.Abs(AppContext.BaseDirectory.ToLowerInvariant().GetHashCode()).ToString("X8");
+            _singleInstanceMutex = new System.Threading.Mutex(true, appKey, out bool createdNew);
+            return createdNew;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static void BringExistingWindowToFront()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                var procList = System.Diagnostics.Process.GetProcessesByName(System.Diagnostics.Process.GetCurrentProcess().ProcessName);
+                int currentId = System.Diagnostics.Process.GetCurrentProcess().Id;
+                foreach (var proc in procList)
+                {
+                    if (proc.Id != currentId && proc.MainWindowHandle != IntPtr.Zero)
+                    {
+                        ShowWindow(proc.MainWindowHandle, 9); // SW_RESTORE
+                        SetForegroundWindow(proc.MainWindowHandle);
+                        break;
+                    }
+                }
+            }
+            catch { }
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     private static async Task RunVerticalDoubleTapTestAsync(IClassicDesktopStyleApplicationLifetime desktop)
     {
@@ -193,8 +273,136 @@ public partial class App : Application
         desktop.Shutdown(allPassed ? 0 : 2);
     }
 
-    private static bool IsReadableComicOrMediaFile(string path)
+    private static async Task RunPinchThuMucTestAsync(IClassicDesktopStyleApplicationLifetime desktop)
     {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+        string dirPath = @"T:\[HDD T]\zfaststone capture\Thư mục";
+        if (!Directory.Exists(dirPath))
+        {
+            Console.WriteLine($"[TEST ERROR] Directory not found: {dirPath}");
+            desktop.Shutdown(1);
+            return;
+        }
+
+        Console.WriteLine($"[TEST START] Loading folder images: {dirPath}");
+        var scanner = new LibraryScannerService();
+        var quickComic = scanner.CreateQuickComicFromPath(dirPath);
+        if (quickComic == null || quickComic.Chapters.Count == 0)
+        {
+            Console.WriteLine("[TEST ERROR] No chapters or images found in directory!");
+            desktop.Shutdown(1);
+            return;
+        }
+
+        var targetChapter = quickComic.Chapters[0];
+        Console.WriteLine($"[TEST] Selected Chapter: '{targetChapter.Title}' with {targetChapter.TotalPages} pages.");
+
+        var readerVm = new ComicReaderViewModel();
+        readerVm.PageLayoutMode = 0; // Chế độ Cuộn dọc (Vertical Scroll / Webtoon)
+        readerVm.ZoomLevel = 1.0;
+
+        var readerControl = new ComicReaderControl
+        {
+            DataContext = readerVm
+        };
+
+        var window = new Window
+        {
+            Title = "TEST PINCH ZOOM - Thư mục T",
+            Width = 480,
+            Height = 854,
+            Content = readerControl
+        };
+
+        desktop.MainWindow = window;
+        window.Show();
+
+        await readerVm.InitializeAsync(quickComic, targetChapter);
+        Console.WriteLine($"[TEST] Reader initialized with {readerVm.Pages.Count} pages. CurrentPageIndex = {readerVm.CurrentPageIndex}");
+
+        // Chờ layout và nạp ảnh hoàn tất
+        await Task.Delay(2500);
+
+        // Cuộn xuống trang 2 (Index 2)
+        Console.WriteLine("[TEST] Scrolling to target Page Index 2...");
+        readerVm.CurrentPageIndex = 2;
+        readerVm.RequestScrollToPage(2);
+        await Task.Delay(2500);
+
+        int targetIndex = 2;
+        Console.WriteLine($"[TEST] Stabilized at CurrentPageIndex = {readerVm.CurrentPageIndex}, ZoomLevel = {readerVm.ZoomLevel * 100:0}%");
+
+        // Mô phỏng cử chỉ 2 ngón tay Pinch-to-zoom 10 lần liên tục ở các khoảng cách và tỉ lệ zoom khác nhau
+        var traceLogs = new List<string>();
+        bool allPassed = true;
+
+        // Bắt đầu pinch ở vị trí giữa màn hình
+        double centerX = window.Bounds.Width > 0 ? window.Bounds.Width / 2.0 : 240;
+        double centerY = window.Bounds.Height > 0 ? window.Bounds.Height / 2.0 : 427;
+
+        // Các tỉ lệ khoảng cách 2 ngón tay mô phỏng (tương ứng zoom in/out)
+        double[] distanceMultipliers = new double[] { 1.25, 1.5, 1.8, 2.2, 1.6, 1.0, 0.75, 1.3, 2.0, 1.0 };
+
+        readerControl.PerformPinchZoomStep(new Point(centerX - 100, centerY), new Point(centerX + 100, centerY));
+        await Task.Delay(100);
+
+        for (int step = 0; step < distanceMultipliers.Length; step++)
+        {
+            double mult = distanceMultipliers[step];
+            double halfDist = 100.0 * mult;
+            Point p1 = new Point(centerX - halfDist, centerY);
+            Point p2 = new Point(centerX + halfDist, centerY);
+
+            double preZoom = readerVm.ZoomLevel;
+            int preIndex = readerVm.CurrentPageIndex;
+
+            readerControl.PerformPinchZoomStep(p1, p2);
+            await Task.Delay(250);
+
+            double postZoom = readerVm.ZoomLevel;
+            int postIndex = readerVm.CurrentPageIndex;
+
+            bool pageMatched = (postIndex == targetIndex);
+            if (!pageMatched) allPassed = false;
+
+            string logLine = $"[PINCH TRACE STEP {step + 1:D2}/10] Mult={mult:0.00} | PreZoom={preZoom * 100:0}% -> PostZoom={postZoom * 100:0}% | Page={postIndex} (Expected={targetIndex}) -> {(pageMatched ? "PASS ✅ KHÔNG TUA TRANG" : "FAIL ❌ BỊ LỆCH TRANG!")}";
+            Console.WriteLine(logLine);
+            traceLogs.Add(logLine);
+        }
+
+        // Kết thúc cử chỉ pinch zoom (buông tay)
+        readerControl.EndPinchZoom();
+        await Task.Delay(500);
+
+        // Kiểm tra sau khi buông tay xem có bị tua trang không
+        int finalIndex = readerVm.CurrentPageIndex;
+        bool finalMatched = (finalIndex == targetIndex);
+        if (!finalMatched) allPassed = false;
+
+        string finalLog = $"[PINCH RELEASE TEST] FinalPage={finalIndex} (Expected={targetIndex}) -> {(finalMatched ? "PASS ✅ GIỮ NGUYÊN TRANG" : "FAIL ❌ BỊ TUA KHI NHẤC TAY!")}";
+        Console.WriteLine(finalLog);
+        traceLogs.Add(finalLog);
+
+        string resultSummary = allPassed
+            ? "\n=========================================\n🎉 KẾT QUẢ TEST PINCH: 100% PASS! KHÔNG HỀ BỊ TUA HAY NHẢY TRANG!\n========================================="
+            : "\n=========================================\n⚠️ KẾT QUẢ TEST PINCH: BỊ LỆCH HOẶC TUA TRANG!\n=========================================";
+        Console.WriteLine(resultSummary);
+
+        // Ghi log ra file
+        string logDir = Path.Combine(AppContext.BaseDirectory, ".tmp");
+        Directory.CreateDirectory(logDir);
+        string logFile = Path.Combine(logDir, "test-pinch-thumuc.log");
+        File.WriteAllLines(logFile, traceLogs.Concat(new[] { resultSummary }), System.Text.Encoding.UTF8);
+        Console.WriteLine($"[TEST LOG SAVED] {logFile}");
+
+        await Task.Delay(1000);
+        desktop.Shutdown(allPassed ? 0 : 2);
+    }
+
+    private static bool IsReadableComicOrMediaFileOrDirectory(string path)
+    {
+        if (Directory.Exists(path)) return true;
+        if (!File.Exists(path)) return false;
         string ext = Path.GetExtension(path);
         if (string.IsNullOrEmpty(ext)) return false;
         return LibraryScannerService.ValidImageExtensions.Contains(ext)

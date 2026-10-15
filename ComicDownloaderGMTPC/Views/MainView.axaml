@@ -3815,7 +3815,28 @@
                                                 </StackPanel>
                                             </Border>
 
-                                            <!-- KHỐI 4: NHẬT KÝ THAO TÁC & THÔNG BÁO -->
+                                            <!-- KHỐI 4: QUẢN LÝ ĐA TIẾN TRÌNH APP CHÍNH (MULTI-INSTANCE SETTING) -->
+                                            <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                                <Grid RowDefinitions="Auto, Auto, Auto">
+                                                    <WrapPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="4. Chế Độ Đa Phiên Bản App Chính (Multi-instance Setting)" FontWeight="Bold" Foreground="#F8FAFC" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,4" />
+                                                    </WrapPanel>
+
+                                                    <TextBlock Grid.Row="1" Margin="0,4,0,12" Text="Kiểm soát khả năng mở nhiều cửa sổ App chính (giao diện tải truyện). Khi tắt (mặc định), hệ thống sẽ chỉ giữ duy nhất một cửa sổ ứng dụng tải truyện để bảo vệ cơ sở dữ liệu và tránh xung đột tải trùng lặp. Trình đọc truyện độc lập siêu nhẹ khi double-click file ngoài Desktop sẽ luôn chạy riêng biệt không ảnh hưởng app chính."
+                                                               Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap" />
+
+                                                    <Border Grid.Row="2" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12,10">
+                                                        <StackPanel Spacing="6" VerticalAlignment="Center">
+                                                            <CheckBox IsChecked="{Binding IsMultiInstanceEnabled, Mode=TwoWay}"
+                                                                      Content="Cho phép mở nhiều cửa sổ App chính (Multi-instance)"
+                                                                      FontWeight="Bold" FontSize="12" Foreground="#F8FAFC" />
+                                                            <TextBlock Text="{Binding MultiInstanceStatusText}" Foreground="#10B981" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- KHỐI 5: NHẬT KÝ THAO TÁC & THÔNG BÁO -->
                                             <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="12,10">
                                                 <StackPanel Spacing="4">
                                                     <TextBlock Text="📋 Thông báo &amp; Trạng thái xử lý:" Foreground="#64748B" FontSize="11" FontWeight="SemiBold" />

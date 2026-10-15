@@ -3572,6 +3572,38 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test khởi động app Desktop 2 bước: STEP 2 PASSED hoàn hảo.
   - Tự động đóng gói và upload 3 nền tảng (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta`.
 
+---
+
+## 21. Cập Nhật: Standalone Reader Siêu Nhẹ, Tùy Chọn Multi-Instance, Phím Tắt Bandiview/Honeyview & Triệt Tiêu Lỗi Tua Trang Khi Pinch Zoom (Content Anchor Invariance)
+
+- **Bối cảnh & Yêu cầu**:
+  1. Khi mở file ảnh hoặc sách truyện/tệp nén ngoài OS (double-click hoặc context menu), ứng dụng phải mở trực tiếp cửa sổ đọc truyện độc lập siêu nhẹ (`ComicReaderWindow`), tuyệt đối không khởi tạo App chính cồng kềnh (không nạp Scraper, WebView, Download engine, Database).
+  2. Bổ sung Checkbox tùy chọn bật/tắt Multi-instance cho App chính trong Child Tab 3.7 (mặc định TẮT - Single-instance, tự động focus cửa sổ đang chạy lên trên).
+  3. Bổ sung trọn bộ phím tắt đọc truyện chuẩn Bandiview và Honeyview cho Windows và Linux (Right/Left, Down/Up, Space, Backspace, Home, End, Shift+Right/Left, Ctrl+0, Phím 1/2/3/9 Fit Modes, F11/Enter Fullscreen, Tab Overlay, C Drawer...). Không áp dụng trên Android.
+  4. Triệt tiêu hoàn toàn lỗi tua trang/nhảy trang khi Pinch & Zoom trên Android và các file archive (zip, cbz, rar, cbr, pdf) theo nguyên lý Content Anchor Invariance. Viết CLI test tự động `--test-pinch-thumuc` trên thư mục `"T:\[HDD T]\zfaststone capture\Thư mục"`.
+- **Giải pháp Kỹ thuật & Cải tiến**:
+  1. **Khởi Động Trình Đọc Truyện Độc Lập Siêu Nhẹ (`App.axaml.cs`)**:
+     - Chuyển `SharedMainViewModel` sang cơ chế Lazy Loading (`private static MainViewModel? _sharedMainViewModel`). Khi mở file arg, `MainViewModel` hoàn toàn không bị khởi tạo!
+     - Mở trực tiếp `desktop.MainWindow = new ComicReaderWindow { DataContext = readerVm }`, nạp nhanh truyện qua `LibraryScannerService.CreateQuickComicFromPath(cleanPath)`.
+     - Single-Instance Mutex theo hash AppRoot: khi `!IsMultiInstanceEnabled`, kiểm tra Mutex `ComicDownloaderGMTPC_SingleInstance_AppRoot`, nếu trùng thì gọi Win32 `SetForegroundWindow` / `ShowWindow` đưa app cũ lên và thoát `desktop.Shutdown(0)`.
+  2. **Quản Lý Cấu Hình Multi-Instance (`InstanceConfigService.cs` & `MainViewModel.FileAssociation.cs` & `MainView.axaml`)**:
+     - Lưu trữ trạng thái `IsMultiInstanceEnabled` vào `.portable/instance_config.json` (mặc định `false`).
+     - Bổ sung Khối 4 trong Child Tab 3.7 (`MainView.axaml`) với CheckBox và TextBlock trạng thái song ngữ rõ ràng.
+  3. **Bộ Phím Tắt Đọc Truyện Bandiview / Honeyview (`ComicReaderControl.axaml.cs`)**:
+     - Tích hợp đầy đủ trong `OnControlKeyDown`, chỉ kích hoạt trên Windows & Linux (`!OperatingSystem.IsAndroid()`).
+     - Hỗ trợ đầy đủ phím chuyển chương (`[` / `]`, `Ctrl+Left/Right`), chuyển trang mượt mà (`Space`, `Backspace`, `PageUp/Down`, `Up/Down`), các chế độ Fit (`1` = Fit Width, `2` = Fit Height, `3` = Fit Screen, `9` = Stretch Full), Fullscreen (`F11`, `Enter`, `F`), Overlay (`Tab`), Chapter Drawer (`C`).
+  4. **Thuật Toán Bất Biến Điểm Chạm Nội Dung (Content Anchor Invariance) Khi Pinch & Zoom (`ComicReaderControl.axaml.cs`)**:
+     - `StartPinchGesture`: Lưu `_pinchStartOffset`, `_pinchPivotInLb`, khóa cứng `_pinchStartPageIndex`.
+     - `UpdatePinchGesture`: Tọa độ bù trừ chuẩn `newOffsetY = (_pinchStartOffset.Y + _pinchPivotInLb.Y) * ratio - _pinchPivotInLb.Y - panDy`. Giữ nguyên `vm.CurrentPageIndex = _pinchStartPageIndex` và trì hoãn `_suppressScrollChangedUntilTick = Environment.TickCount64 + 600`.
+     - `EndPinchZoom`: Giải phóng sạch 100% con trỏ đa điểm, giữ nguyên trang hiện tại.
+     - CLI `--test-pinch-thumuc`: Kiểm thử tự động 10 bước pinch zoom trên thư mục `"T:\[HDD T]\zfaststone capture\Thư mục"` đạt 100% PASS, không hề bị tua hay lệch trang nào.
+- **Nghiệm Thu**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên cả Desktop và Android.
+  - Test CLI `--test-pinch-thumuc`: 100% PASS (10/10 lần pass + 1 lần pinch release pass).
+  - Test CLI `--test-vertical-doubletap`: 100% PASS (10/10 lần pass không delay, không lệch trang).
+  - Đóng gói và upload 3 nền tảng (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta`.
+
+
 
 
 

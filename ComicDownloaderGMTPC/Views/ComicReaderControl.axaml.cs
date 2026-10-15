@@ -64,48 +64,115 @@ public partial class ComicReaderControl : UserControl
     private readonly DispatcherTimer _singleTapTimer;
 
     // Theo dõi con trỏ đa điểm chạm (Multi-touch Tracking) cho Pinch-to-zoom chuẩn ComicScreen / MX Player
+    // Theo dõi con trỏ đa điểm chạm (Multi-touch Tracking) cho Pinch-to-zoom chuẩn ComicScreen / MX Player
     private readonly System.Collections.Generic.Dictionary<int, Point> _activePointers = new();
     private readonly System.Collections.Generic.Dictionary<int, long> _pointerLastSeenTicks = new();
     private bool _isPinching;
     private double _pinchStartDistance;
-    private double _pinchLastDistance;
     private double _pinchStartZoom;
-    private Point _pinchPivot;
+    private Vector _pinchStartOffset;
+    private Point _pinchStartPivot;
+    private Point _pinchPivotInLb;
     private long _lastPinchEndTick;
     private int _pinchStartPageIndex = -1;
-    private double _pinchFractionY = 0.5;
-    private double _pinchPageHeight = 600.0;
 
-    private void InitVerticalPinchAnchor(Point pivot)
+    private void StartPinchGesture(Point p1, Point p2)
     {
-        _pinchFractionY = 0.5;
-        _pinchPageHeight = Bounds.Height > 0 ? Bounds.Height : 600.0;
+        if (DataContext is not ComicReaderViewModel vm) return;
 
-        if (DataContext is not ComicReaderViewModel vm || !vm.IsScrollMode || vm.IsHorizontalScrollMode)
-            return;
+        double dist = Distance(p1, p2);
+        _pinchStartDistance = Math.Max(10.0, dist);
+        _pinchStartZoom = vm.ZoomLevel;
 
+        var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
+        _pinchStartOffset = sv?.Offset ?? Vector.Zero;
+
+        Point currentPivot = new Point((p1.X + p2.X) * 0.5, (p1.Y + p2.Y) * 0.5);
+        _pinchStartPivot = currentPivot;
+
+        Point inLb = currentPivot;
         var lb = this.FindControl<ListBox>("ReaderPagesListBox");
-        if (lb == null) return;
-
-        foreach (var child in lb.GetVisualDescendants())
+        if (lb != null)
         {
-            if (child is ListBoxItem container && container.DataContext is ReaderPageItem page)
-            {
-                var pos = container.TranslatePoint(new Point(0, 0), lb);
-                if (pos.HasValue)
-                {
-                    double top = pos.Value.Y;
-                    double bottom = top + container.Bounds.Height;
-                    if (pivot.Y >= top && pivot.Y <= bottom)
-                    {
-                        _pinchStartPageIndex = page.Index;
-                        _pinchPageHeight = Math.Max(100.0, container.Bounds.Height);
-                        _pinchFractionY = Math.Clamp((pivot.Y - top) / _pinchPageHeight, 0.0, 1.0);
-                        return;
-                    }
-                }
-            }
+            var pt = this.TranslatePoint(currentPivot, lb);
+            if (pt.HasValue) inLb = pt.Value;
         }
+        _pinchPivotInLb = inLb;
+
+        _pinchStartPageIndex = vm.CurrentPageIndex;
+        _isPinching = true;
+        _isPanHolding = false;
+        _isPanDragging = false;
+        _isPointerTapCandidate = false;
+        _singleTapTimer.Stop();
+        _lastTapTick = 0;
+        _suppressScrollChangedUntilTick = Environment.TickCount64 + 600;
+    }
+
+    private void UpdatePinchGesture(Point p1, Point p2)
+    {
+        if (DataContext is not ComicReaderViewModel vm || !_isPinching) return;
+
+        double currentDist = Distance(p1, p2);
+        Point currentPivot = new Point((p1.X + p2.X) * 0.5, (p1.Y + p2.Y) * 0.5);
+
+        if (_pinchStartDistance > 5.0 && currentDist > 5.0)
+        {
+            double scale = currentDist / _pinchStartDistance;
+            double newZoom = Math.Clamp(Math.Round(_pinchStartZoom * scale, 3), 0.4, 4.0);
+            double ratio = (_pinchStartZoom > 0.05) ? (newZoom / _pinchStartZoom) : 1.0;
+
+            vm.ZoomLevel = newZoom;
+
+            var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
+            if (sv != null)
+            {
+                double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
+                double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
+
+                // Neo tuyệt đối điểm chạm nội dung (Content Anchor Invariance):
+                // Vị trí nội dung dải trang = (offset ban đầu + pivot trong ListBox) * tỉ lệ zoom
+                double contentXAfter = (_pinchStartOffset.X + _pinchPivotInLb.X) * ratio;
+                double contentYAfter = (_pinchStartOffset.Y + _pinchPivotInLb.Y) * ratio;
+
+                // Độ trôi ngón tay người dùng từ lúc bắt đầu pinch
+                double panDx = currentPivot.X - _pinchStartPivot.X;
+                double panDy = currentPivot.Y - _pinchStartPivot.Y;
+
+                double newOffsetX = contentXAfter - _pinchPivotInLb.X - panDx;
+                double newOffsetY = contentYAfter - _pinchPivotInLb.Y - panDy;
+
+                sv.Offset = new Vector(Math.Clamp(newOffsetX, 0, maxX), Math.Clamp(newOffsetY, 0, maxY));
+            }
+
+            // Khóa cứng trang đọc hiện tại, chống tua trang trong suốt cử chỉ Pinch
+            if (_pinchStartPageIndex >= 0 && _pinchStartPageIndex < vm.Pages.Count)
+            {
+                vm.CurrentPageIndex = _pinchStartPageIndex;
+            }
+            _suppressScrollChangedUntilTick = Environment.TickCount64 + 600;
+        }
+    }
+
+    public void PerformPinchZoomStep(Point p1, Point p2)
+    {
+        if (!_isPinching)
+        {
+            StartPinchGesture(p1, p2);
+        }
+        else
+        {
+            UpdatePinchGesture(p1, p2);
+        }
+    }
+
+    public void EndPinchZoom()
+    {
+        _isPinching = false;
+        _lastPinchEndTick = Environment.TickCount64;
+        _suppressScrollChangedUntilTick = Environment.TickCount64 + 600;
+        _activePointers.Clear();
+        _pointerLastSeenTicks.Clear();
     }
 
     private static double Distance(Point p1, Point p2)
@@ -1039,21 +1106,7 @@ public partial class ComicReaderControl : UserControl
         if (_activePointers.Count >= 2)
         {
             var points = _activePointers.Values.Take(2).ToArray();
-            _singleTapTimer.Stop();
-            _lastTapTick = 0;
-            _isPointerTapCandidate = false;
-            _isPanHolding = false;
-            _isPanDragging = false;
-            StopKineticScroll();
-
-            double dist = Distance(points[0], points[1]);
-            _pinchStartDistance = Math.Max(10.0, dist);
-            _pinchLastDistance = _pinchStartDistance;
-            _pinchStartZoom = (DataContext is ComicReaderViewModel vmp) ? vmp.ZoomLevel : 1.0;
-            _pinchPivot = new Point((points[0].X + points[1].X) * 0.5, (points[0].Y + points[1].Y) * 0.5);
-            _pinchStartPageIndex = (DataContext is ComicReaderViewModel vmPg) ? vmPg.CurrentPageIndex : -1;
-            _isPinching = true;
-            InitVerticalPinchAnchor(_pinchPivot);
+            StartPinchGesture(points[0], points[1]);
             return;
         }
 
@@ -1108,95 +1161,7 @@ public partial class ComicReaderControl : UserControl
         if (_activePointers.Count >= 2)
         {
             var points = _activePointers.Values.Take(2).ToArray();
-            double currentDist = Distance(points[0], points[1]);
-            Point currentPivot = new Point((points[0].X + points[1].X) * 0.5, (points[0].Y + points[1].Y) * 0.5);
-
-            if (!_isPinching)
-            {
-                _isPinching = true;
-                _pinchStartDistance = Math.Max(10.0, currentDist);
-                _pinchLastDistance = _pinchStartDistance;
-                _pinchStartZoom = vm.ZoomLevel;
-                _pinchPivot = currentPivot;
-                _pinchStartPageIndex = vm.CurrentPageIndex;
-                _isPanHolding = false;
-                _isPanDragging = false;
-                _isPointerTapCandidate = false;
-                _singleTapTimer.Stop();
-                InitVerticalPinchAnchor(currentPivot);
-            }
-
-            if (_pinchLastDistance > 5.0 && currentDist > 5.0)
-            {
-                double scaleFactor = currentDist / _pinchLastDistance;
-                double panDist = Distance(currentPivot, _pinchPivot);
-
-                // Cho phép thu phóng mượt mà ở mọi vi sai di chuyển của cả 2 chiều phóng to và thu nhỏ
-                if (Math.Abs(scaleFactor - 1.0) > 0.001 || panDist > 1.0)
-                {
-                    double oldZoom = vm.ZoomLevel;
-                    double newZoom = Math.Clamp(oldZoom * scaleFactor, 0.4, 4.0);
-                    newZoom = Math.Round(newZoom, 3);
-
-                    bool zoomChanged = Math.Abs(newZoom - oldZoom) >= 0.001;
-                    bool pivotMoved = panDist > 1.0;
-
-                    if (zoomChanged || pivotMoved)
-                    {
-                        var scrollViewer = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
-                        Vector? oldOffset = scrollViewer?.Offset;
-
-                        if (zoomChanged)
-                        {
-                            vm.ZoomLevel = newZoom;
-                        }
-
-                        // Neo tâm thu phóng (Pivot Zoom Alignment) để điểm ảnh dưới ngón tay không bị trôi lệch
-                        if (scrollViewer != null && oldOffset.HasValue)
-                        {
-                            double ratio = zoomChanged ? (newZoom / oldZoom) : 1.0;
-                            double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
-                            double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
-
-                            double panDx = currentPivot.X - _pinchPivot.X;
-                            double panDy = currentPivot.Y - _pinchPivot.Y;
-
-                            double newOffsetX = (oldOffset.Value.X + currentPivot.X) * ratio - currentPivot.X - panDx;
-                            double newOffsetY;
-
-                            if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
-                            {
-                                // CHẾ ĐỘ CUỘN DỌC (VERTICAL SCROLL):
-                                // Tuyệt đối KHÔNG nhân dồn Offset.Y của tất cả các trang trước!
-                                // Bù trừ vi sai Y neo theo chiều cao trang đang đọc để triệt tiêu hiện tượng nhảy/tua trang
-                                double pageH = _pinchPageHeight > 0 ? _pinchPageHeight : (Bounds.Height > 0 ? Bounds.Height : 600.0);
-                                double pinchDeltaY = _pinchFractionY * pageH * (ratio - 1.0);
-                                newOffsetY = oldOffset.Value.Y + pinchDeltaY - panDy;
-                                if (zoomChanged)
-                                {
-                                    _pinchPageHeight = pageH * ratio; // Cập nhật chiều cao ước lượng cho frame tiếp theo
-                                }
-                            }
-                            else
-                            {
-                                newOffsetY = (oldOffset.Value.Y + currentPivot.Y) * ratio - currentPivot.Y - panDy;
-                            }
-
-                            scrollViewer.Offset = new Vector(Math.Clamp(newOffsetX, 0, maxX), Math.Clamp(newOffsetY, 0, maxY));
-                        }
-
-                        if (zoomChanged)
-                        {
-                            _pinchLastDistance = currentDist;
-                        }
-                        if (pivotMoved)
-                        {
-                            _pinchPivot = currentPivot;
-                        }
-                    }
-                }
-            }
-
+            PerformPinchZoomStep(points[0], points[1]);
             e.Handled = true;
             return;
         }
@@ -1315,10 +1280,7 @@ public partial class ComicReaderControl : UserControl
         // Khi người dùng nhấc tay kết thúc cử chỉ Pinch Zoom:
         if (_isPinching)
         {
-            _isPinching = false;
-            _lastPinchEndTick = Environment.TickCount64;
-            _activePointers.Clear(); // Giải phóng 100% con trỏ đa điểm, chống kẹt ID trên Android!
-            _pointerLastSeenTicks.Clear();
+            EndPinchZoom();
             _isPanHolding = false;
             _isPanDragging = false;
             _isPointerTapCandidate = false;
@@ -1771,7 +1733,29 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        // Trên Android: không xử lý bộ phím tắt Honeyview/Bandiview theo yêu cầu
+        if (OperatingSystem.IsAndroid())
+        {
+            if (e.Key == Key.Back || e.Key == Key.Escape)
+            {
+                if (vm.HandleBackNavigation())
+                {
+                    e.Handled = true;
+                    return;
+                }
+                if (vm.IsFullScreen) vm.ToggleFullScreen();
+                else vm.CloseReader();
+                e.Handled = true;
+            }
+            return;
+        }
+
+        // =========================================================================
+        // BỘ PHÍM TẮT ĐỌC TRUYỆN CHUẨN HONEYVIEW & BANDIVIEW (WINDOWS & LINUX)
+        // =========================================================================
+
+        // 1. Tổ hợp phím Chuyển chương: Ctrl/Shift + Left/Right hoặc [ / ]
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             if (e.Key == Key.Right)
             {
@@ -1787,10 +1771,37 @@ public partial class ComicReaderControl : UserControl
             }
         }
 
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            if (e.Key == Key.D0 || e.Key == Key.NumPad0)
+            {
+                vm.ResetZoom();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.F)
+            {
+                vm.ToggleChapterDrawer();
+                e.Handled = true;
+                return;
+            }
+        }
+
         switch (e.Key)
         {
+            // Phím [ / ]: Chuyển chương trước / sau (Honeyview / Bandiview)
+            case Key.OemOpenBrackets:
+                vm.PrevChapter();
+                e.Handled = true;
+                break;
+
+            case Key.OemCloseBrackets:
+                vm.NextChapter();
+                e.Handled = true;
+                break;
+
+            // Phím Escape: Thoát Popup/Drawer -> Thoát Fullscreen -> Đóng Reader
             case Key.Escape:
-            case Key.Back:
                 if (vm.HandleBackNavigation())
                 {
                     e.Handled = true;
@@ -1807,17 +1818,36 @@ public partial class ComicReaderControl : UserControl
                 e.Handled = true;
                 break;
 
+            // Phím Backspace: Lùi trang / Cuộn lên (Honeyview)
+            case Key.Back:
+                if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
+                    vm.PageButtonAreaPrev();
+                else
+                    vm.PrevPage();
+                e.Handled = true;
+                break;
+
+            // Phím F11 / Enter / F: Bật/Tắt Toàn màn hình (Honeyview / Bandiview)
             case Key.F:
             case Key.F11:
+            case Key.Enter:
                 vm.ToggleFullScreen();
                 e.Handled = true;
                 break;
 
+            // Phím Tab: Ẩn/Hiện thanh công cụ & thông tin Overlay (Honeyview)
+            case Key.Tab:
+                vm.ToggleOverlay();
+                e.Handled = true;
+                break;
+
+            // Phím M: Chuyển đổi chế độ Cuộn (Vertical Webtoon) / Lật trang (Flip)
             case Key.M:
                 vm.ToggleMode();
                 e.Handled = true;
                 break;
 
+            // Phím R: Đổi hướng đọc Phải sang Trái (RTL) / Trái sang Phải (LTR)
             case Key.R:
                 if (vm.IsFlipMode)
                 {
@@ -1826,6 +1856,7 @@ public partial class ComicReaderControl : UserControl
                 }
                 break;
 
+            // Phím P: Bật/Tắt chế độ 2 trang song song (Double Page)
             case Key.P:
                 if (vm.IsFlipMode)
                 {
@@ -1834,35 +1865,72 @@ public partial class ComicReaderControl : UserControl
                 }
                 break;
 
+            // Phím Home / End: Về trang đầu tiên / Đến trang cuối cùng (Bandiview / Honeyview)
+            case Key.Home:
+                vm.ScrubToPage(0);
+                e.Handled = true;
+                break;
+
+            case Key.End:
+                if (vm.Pages.Count > 0)
+                {
+                    vm.ScrubToPage(vm.Pages.Count - 1);
+                }
+                e.Handled = true;
+                break;
+
+            // Phím Left / A / PageUp / Up: Trang trước hoặc cuộn lên 1 phân đoạn trang
             case Key.Left:
             case Key.A:
-                if (vm.IsFlipMode || vm.IsHorizontalScrollMode)
+            case Key.PageUp:
+            case Key.Up:
+                if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
                 {
-                    vm.TapLeftZone();
-                    e.Handled = true;
+                    vm.PageButtonAreaPrev();
                 }
+                else
+                {
+                    vm.PrevPage();
+                }
+                e.Handled = true;
                 break;
 
+            // Phím Right / D / PageDown / Down: Trang sau hoặc cuộn xuống 1 phân đoạn trang
             case Key.Right:
             case Key.D:
-                if (vm.IsFlipMode || vm.IsHorizontalScrollMode)
+            case Key.PageDown:
+            case Key.Down:
+                if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
                 {
-                    vm.TapRightZone();
-                    e.Handled = true;
+                    vm.PageButtonAreaNext();
                 }
+                else
+                {
+                    vm.NextPage();
+                }
+                e.Handled = true;
                 break;
 
+            // Phím Space: Tiến trang sau (hoặc Shift+Space lùi trang trước)
             case Key.Space:
-                if (vm.IsFlipMode)
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
                 {
-                    if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                    if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
+                        vm.PageButtonAreaPrev();
+                    else
                         vm.PrevPage();
+                }
+                else
+                {
+                    if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
+                        vm.PageButtonAreaNext();
                     else
                         vm.NextPage();
-                    e.Handled = true;
                 }
+                e.Handled = true;
                 break;
 
+            // Phím Thu Phóng (Zoom): +, -, 0
             case Key.OemPlus:
             case Key.Add:
                 vm.ZoomIn();
@@ -1877,37 +1945,49 @@ public partial class ComicReaderControl : UserControl
 
             case Key.D0:
             case Key.NumPad0:
+            case Key.Z:
                 vm.ResetZoom();
                 e.Handled = true;
                 break;
 
+            // Phím Tỉ lệ xem (Fit Modes) theo Honeyview / Bandiview (1=Width, 2=Height, 3=Screen, 9=Stretch)
+            case Key.D1:
+            case Key.NumPad1:
             case Key.W:
                 vm.SetFitMode("FitWidth");
                 e.Handled = true;
                 break;
 
+            case Key.D2:
+            case Key.NumPad2:
             case Key.H:
                 vm.SetFitMode("FitHeight");
                 e.Handled = true;
                 break;
 
-            case Key.S:
-                vm.SetFitMode("StretchFull");
-                e.Handled = true;
-                break;
-
+            case Key.D3:
+            case Key.NumPad3:
             case Key.B:
                 vm.SetFitMode("FitScreen");
                 e.Handled = true;
                 break;
 
-            case Key.Z:
-                vm.OpenZoomPopup();
+            case Key.D9:
+            case Key.NumPad9:
+            case Key.S:
+                vm.SetFitMode("StretchFull");
                 e.Handled = true;
                 break;
 
+            // Phím V: Tự động cuộn (Auto Scroll)
             case Key.V:
                 vm.ToggleAutoScroll();
+                e.Handled = true;
+                break;
+
+            // Phím C: Mở danh sách chương (Chapter Drawer)
+            case Key.C:
+                vm.ToggleChapterDrawer();
                 e.Handled = true;
                 break;
         }
