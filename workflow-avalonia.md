@@ -3351,5 +3351,41 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
     - Windows Desktop Single-file EXE: `publish\ComicDownloaderGMTPC.Desktop.exe`
   - Đã commit local sạch sẽ với thông điệp Conventional Commit rõ ràng.
 
+### 15.105 Tối Ưu Hóa Dual Picture Sort (Keep Parent, Keep Child, 2-Panel Layout & Intelligent Hover / Tap Preview) Và Debounce Popup Preview Tab Download (2026-10-15)
+- **Bối Cảnh & Yêu Cầu Cải Tiến Từ Người Dùng**:
+  1. **Thao Tác Quản Lý Thư Mục Nhanh (`Keep Parent` & `Keep Child`)**:
+     - `Keep Parent`: Sau khi lọc xong hoặc hủy phân loại, xóa sạch toàn bộ thư mục Đã Lọc (`Child` / `...-sorted`), giữ lại thư mục Gốc ban đầu.
+     - `Keep Child`: Xóa toàn bộ file ảnh cũ ở thư mục Gốc (`Parent`), di chuyển toàn bộ file ảnh đã lọc từ `Child` vào `Parent`, sau đó xóa bỏ thư mục `Child`.
+  2. **Giải Phóng Tối Đa Không Gian Hiển Thị (Xóa Panel Chi Tiết)**:
+     - Lược bỏ hoàn toàn Panel 3 (Xem trước chi tiết cố định ở bên phải) và Bottom bar trên Mobile để mở rộng tối đa không gian cho 2 panel song song (Gốc và Đã Lọc).
+  3. **Cơ Chế Xem Trước Thông Minh (Intelligent Preview) Cho Dual Picture Sort**:
+     - Trên Windows / Desktop: Khi rê chuột vào ảnh và dừng 0.5 giây (500ms debounce), tự động hiển thị Popup Preview sắc nét nổi bật cạnh con trỏ chuột. Rời chuột lập tức ẩn popup.
+     - Trên Android / Mobile: Trong khi vuốt hoặc cuộn danh sách (drag/scroll), tuyệt đối không mở popup preview. Chỉ khi người dùng chạm và nhấc ngón tay ra (Single Tap hoàn tất mà không bị kéo rê), lúc này mới mở Popup Preview lớn giữa màn hình.
+  4. **Triệt Tiêu Popup Gây Khó Chịu Ở Tab Download**:
+     - Khi rê chuột qua danh sách truyện ở Tab Download (Queue list & Thumbnail list), popup không được hiện ngay lập tức như trước. Chỉ khi chuột dừng lại trên truyện đủ 0.5 giây (500ms debounce) thì mới hiển thị Popup Preview.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Nghiệp Vụ `KeepParentCommand` & `KeepChildCommand` Trong `MainViewModel.DualPictureSort.cs`**:
+     - Kiểm tra an toàn đường dẫn nghiêm ngặt: Chặn xóa nếu 2 thư mục trùng nhau hoặc `Child` là thư mục cha của `Parent`.
+     - `KeepParentAsync`: Xóa đệ quy thư mục child `Directory.Delete(fullSorted, true)`, làm sạch `DualSortSortedItems`, cập nhật UI.
+     - `KeepChildAsync`: Xóa toàn bộ file cấp 1 tại `Parent` (`TopDirectoryOnly`), di chuyển toàn bộ file từ `Child` sang `Parent`, xóa thư mục `Child`, tự động nạp lại danh sách ảnh `LoadBothSortFoldersAsync()`.
+  2. **Tái Cấu Trúc Giao Diện 2 Panel Song Song Siêu Rộng Trong `MainView.axaml`**:
+     - Desktop layout chuyển từ 5 cột (`*, 4, *, 4, 330`) sang 2 cột song song (`*, 4, *`), loại bỏ Splitter 2 và Panel 3.
+     - Mobile layout loại bỏ Bottom Bar preview cố định, dành trọn vẹn màn hình cho Grid danh sách ảnh.
+     - Bổ sung 2 nút điều khiển `🛡️ Giữ Gốc (Keep Parent)` (màu cam hổ phách `#D97706`) và `✨ Giữ Đã Lọc (Keep Child)` (màu tím hoàng gia `#7C3AED`) trên Header Bar.
+  3. **Cơ Chế Hover Debounce 500ms Cho Tab Download & Dual Picture Sort**:
+     - Triển khai `TriggerDelayedQueueHoverPreview` và `TriggerDelayedDualSortHoverPreview` dùng `CancellationTokenSource` và `Task.Delay(500)`.
+     - Khi chuột di chuyển nhanh qua các dòng (> 15px), timer liên tục được reset, triệt tiêu hoàn toàn hiện tượng popup nhảy ra đột ngột làm phiền người dùng. Chỉ khi dừng chuột đủ 0.5s trên 1 item thì `ShowHoverPreview` / `ShowDualSortPreview` mới được kích hoạt.
+  4. **Nhận Diện Single Tap & Ngăn Chặn Mở Preview Khi Cuộn Trên Android**:
+     - Trong `OnDualSort...PointerPressed`: Ghi nhận vị trí bắt đầu chạm `_dualSortTouchStartPos`, đặt cờ `_dualSortTouchIsDragging = false`.
+     - Trong `OnDualSort...PointerMoved`: Nếu khoảng cách di chuyển `dx, dy > 12px`, lập tức đánh dấu `_dualSortTouchIsDragging = true` (đang cuộn danh sách) và chặn hoàn toàn việc mở popup preview.
+     - Trong `OnDualSort...PointerReleased`: Chỉ khi `!_dualSortTouchIsDragging` (người dùng single tap thực sự và nhấc tay ra), popup preview mới được hiển thị.
+  5. **Tự Động Đóng Gói & Upload Release Beta**:
+     - Đóng gói toàn bộ file exe và apk vào `publish\`.
+     - Tự động chạy `upload beta.cmd --no-pause` đẩy 3 gói cài đặt lên GitHub Release tag `beta`.
+- **Nghiệm Thu**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** cho cả Desktop và Android Release.
+  - Test khởi động app Desktop thành công (PID 27184, RAM ~245 MB).
+  - Đã upload thành công 100% 3 gói cài đặt lên GitHub Release tag `beta` (tốc độ 72.2 Mbps qua Microsoft Edge Direct-to-S3).
+
 
 

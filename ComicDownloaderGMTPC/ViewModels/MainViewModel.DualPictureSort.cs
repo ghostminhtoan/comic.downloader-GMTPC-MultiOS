@@ -94,6 +94,12 @@ public partial class MainViewModel
     private Bitmap? _dualSortPreviewBitmap;
 
     [ObservableProperty]
+    private bool _isDualSortPreviewVisible = false;
+
+    [ObservableProperty]
+    private PictureSortItem? _dualSortPreviewItem;
+
+    [ObservableProperty]
     private bool _isDualSortLoading = false;
 
     // ==========================================
@@ -778,6 +784,196 @@ public partial class MainViewModel
     public void SelectDualSortMobileSortedTab()
     {
         DualSortMobileActiveTab = 1;
+    }
+
+    // ==========================================
+    // POPUP PREVIEW TRÊN DESKTOP & ANDROID
+    // ==========================================
+    public void ShowDualSortPreview(PictureSortItem? item)
+    {
+        if (item == null) return;
+        DualSortPreviewItem = item;
+        IsDualSortPreviewVisible = true;
+
+        Task.Run(() =>
+        {
+            try
+            {
+                if (File.Exists(item.FilePath))
+                {
+                    using var fs = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    var fullBmp = new Bitmap(fs);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (DualSortPreviewItem == item && IsDualSortPreviewVisible)
+                        {
+                            DualSortPreviewBitmap = fullBmp;
+                        }
+                    });
+                }
+            }
+            catch { }
+        });
+    }
+
+    [RelayCommand]
+    public void CloseDualSortPreview()
+    {
+        IsDualSortPreviewVisible = false;
+        DualSortPreviewItem = null;
+        DualSortPreviewBitmap = null;
+    }
+
+    // ==========================================
+    // KEEP PARENT & KEEP CHILD ACTIONS
+    // ==========================================
+    [RelayCommand]
+    public async Task KeepParentAsync()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(DualSortSortedPath) || !Directory.Exists(DualSortSortedPath))
+            {
+                DualSortStatusText = "Không tìm thấy thư mục Đã Lọc (Child) để thực hiện Keep Parent.";
+                return;
+            }
+
+            string fullSource = Path.GetFullPath(DualSortSourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string fullSorted = Path.GetFullPath(DualSortSortedPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            if (string.Equals(fullSource, fullSorted, StringComparison.OrdinalIgnoreCase))
+            {
+                DualSortStatusText = "Lỗi an toàn: Thư mục Gốc và Thư mục Đã Lọc trùng nhau!";
+                return;
+            }
+
+            if (fullSource.StartsWith(fullSorted + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                DualSortStatusText = "Lỗi an toàn: Thư mục Đã Lọc không được là thư mục cha của Thư mục Gốc!";
+                return;
+            }
+
+            IsDualSortLoading = true;
+            DualSortStatusText = "Đang thực hiện Keep Parent (Xóa thư mục child)...";
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    Directory.Delete(fullSorted, true);
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        DualSortStatusText = $"Lỗi khi xóa thư mục child: {ex.Message}";
+                    });
+                }
+            });
+
+            DualSortSortedItems.Clear();
+            DualSortSortedCount = 0;
+            OnPropertyChanged(nameof(FilteredDualSortSortedItems));
+
+            DualSortStatusText = "✅ Keep Parent hoàn tất: Đã giữ lại thư mục Gốc và xóa sạch thư mục Đã Lọc (Child).";
+            AddLog("INFO", $"[DualSort] Keep Parent: Đã xóa thư mục child '{fullSorted}'");
+        }
+        catch (Exception ex)
+        {
+            DualSortStatusText = $"Lỗi Keep Parent: {ex.Message}";
+        }
+        finally
+        {
+            IsDualSortLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task KeepChildAsync()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(DualSortSourcePath) || !Directory.Exists(DualSortSourcePath))
+            {
+                DualSortStatusText = "Không tìm thấy thư mục Gốc (Parent).";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(DualSortSortedPath) || !Directory.Exists(DualSortSortedPath))
+            {
+                DualSortStatusText = "Không tìm thấy thư mục Đã Lọc (Child).";
+                return;
+            }
+
+            string fullSource = Path.GetFullPath(DualSortSourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string fullSorted = Path.GetFullPath(DualSortSortedPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            if (string.Equals(fullSource, fullSorted, StringComparison.OrdinalIgnoreCase))
+            {
+                DualSortStatusText = "Lỗi an toàn: Thư mục Gốc và Thư mục Đã Lọc trùng nhau!";
+                return;
+            }
+
+            if (fullSource.StartsWith(fullSorted + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                DualSortStatusText = "Lỗi an toàn: Thư mục Đã Lọc không được là thư mục cha của Thư mục Gốc!";
+                return;
+            }
+
+            IsDualSortLoading = true;
+            DualSortStatusText = "Đang thực hiện Keep Child (Dọn file gốc, chuyển toàn bộ ảnh lọc về gốc và xóa child)...";
+
+            await Task.Run(() =>
+            {
+                // 1. Xóa toàn bộ file ở parent (chỉ file ở cấp 1, không xóa folder con)
+                var sourceFiles = Directory.EnumerateFiles(fullSource, "*.*", SearchOption.TopDirectoryOnly).ToList();
+                foreach (var file in sourceFiles)
+                {
+                    try { File.Delete(file); } catch { }
+                }
+
+                // 2. Move toàn bộ file ở child vào parent
+                if (Directory.Exists(fullSorted))
+                {
+                    var childFiles = Directory.EnumerateFiles(fullSorted, "*.*", SearchOption.TopDirectoryOnly).ToList();
+                    foreach (var file in childFiles)
+                    {
+                        try
+                        {
+                            string fileName = Path.GetFileName(file);
+                            string destPath = Path.Combine(fullSource, fileName);
+                            if (File.Exists(destPath))
+                            {
+                                File.Delete(destPath);
+                            }
+                            File.Move(file, destPath);
+                        }
+                        catch { }
+                    }
+
+                    // 3. Xóa folder child
+                    try
+                    {
+                        Directory.Delete(fullSorted, true);
+                    }
+                    catch { }
+                }
+            });
+
+            // Nạp lại danh sách parent, child sẽ trống
+            await LoadBothSortFoldersAsync();
+
+            DualSortStatusText = "✅ Keep Child hoàn tất: Đã xóa file gốc, chuyển toàn bộ ảnh lọc vào thư mục gốc và xóa thư mục child.";
+            AddLog("INFO", $"[DualSort] Keep Child: Đã dọn '{fullSource}', chuyển file từ child sang và xóa child '{fullSorted}'");
+        }
+        catch (Exception ex)
+        {
+            DualSortStatusText = $"Lỗi Keep Child: {ex.Message}";
+        }
+        finally
+        {
+            IsDualSortLoading = false;
+        }
     }
 
     private static string GetUniqueFilePath(string filePath)

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -1058,6 +1060,53 @@ public partial class MainView : UserControl
         }
     }
 
+    private CancellationTokenSource? _queueHoverDelayCts;
+    private ComicBookItem? _pendingQueueHoverItem;
+    private Point _lastQueueHoverPoint;
+
+    private void TriggerDelayedQueueHoverPreview(ComicBookItem item, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        if (DataContext is not MainViewModel vm || !vm.IsPopupPreview) return;
+
+        if (vm.IsHoverPreviewVisible && vm.ActiveHoverItem == item)
+        {
+            UpdateHoverPreviewPosition(e);
+            return;
+        }
+
+        var pos = e.GetCurrentPoint(this).Position;
+        _lastQueueHoverPoint = pos;
+        _pendingQueueHoverItem = item;
+
+        _queueHoverDelayCts?.Cancel();
+        _queueHoverDelayCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _queueHoverDelayCts = cts;
+
+        Task.Delay(500, cts.Token).ContinueWith(t =>
+        {
+            if (t.IsCanceled) return;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (cts.IsCancellationRequested) return;
+                if (DataContext is MainViewModel currentVm && currentVm.IsPopupPreview && _pendingQueueHoverItem == item)
+                {
+                    currentVm.ShowHoverPreview(item);
+                    UpdateHoverPreviewPositionManual(pos);
+                }
+            });
+        }, TaskContinuationOptions.OnlyOnRanToCompletion);
+    }
+
+    private void CancelQueueHoverPreview()
+    {
+        _queueHoverDelayCts?.Cancel();
+        _queueHoverDelayCts?.Dispose();
+        _queueHoverDelayCts = null;
+        _pendingQueueHoverItem = null;
+    }
+
     private void OnQueueItemPointerEntered(object? sender, PointerEventArgs e)
     {
         if (e.Pointer.Type == PointerType.Touch) return;
@@ -1067,17 +1116,14 @@ public partial class MainView : UserControl
         }
         if (sender is Control control && control.DataContext is ComicBookItem item)
         {
-            if (DataContext is MainViewModel vm && vm.IsPopupPreview)
-            {
-                vm.ShowHoverPreview(item);
-                UpdateHoverPreviewPosition(e);
-            }
+            TriggerDelayedQueueHoverPreview(item, e);
         }
     }
 
     private void OnQueueItemPointerExited(object? sender, PointerEventArgs e)
     {
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        CancelQueueHoverPreview();
         if (sender is Border border)
         {
             border.BorderBrush = Avalonia.Media.Brush.Parse("#1E293B");
@@ -1112,11 +1158,20 @@ public partial class MainView : UserControl
         {
             if (vm.IsPopupPreview)
             {
-                if (vm.ActiveHoverItem != item || !vm.IsHoverPreviewVisible)
+                if (vm.IsHoverPreviewVisible && vm.ActiveHoverItem == item)
                 {
-                    vm.ShowHoverPreview(item);
+                    UpdateHoverPreviewPosition(e);
                 }
-                UpdateHoverPreviewPosition(e);
+                else
+                {
+                    var pos = e.GetCurrentPoint(this).Position;
+                    double dx = pos.X - _lastQueueHoverPoint.X;
+                    double dy = pos.Y - _lastQueueHoverPoint.Y;
+                    if (Math.Sqrt(dx * dx + dy * dy) > 15 || _pendingQueueHoverItem != item)
+                    {
+                        TriggerDelayedQueueHoverPreview(item, e);
+                    }
+                }
             }
         }
     }
@@ -1227,11 +1282,7 @@ public partial class MainView : UserControl
         }
         if (sender is Control control && control.DataContext is ComicBookItem item)
         {
-            if (DataContext is MainViewModel vm && vm.IsPopupPreview)
-            {
-                vm.ShowHoverPreview(item);
-                UpdateHoverPreviewPosition(e);
-            }
+            TriggerDelayedQueueHoverPreview(item, e);
         }
     }
 
@@ -1242,11 +1293,20 @@ public partial class MainView : UserControl
         {
             if (vm.IsPopupPreview)
             {
-                if (vm.ActiveHoverItem != item || !vm.IsHoverPreviewVisible)
+                if (vm.IsHoverPreviewVisible && vm.ActiveHoverItem == item)
                 {
-                    vm.ShowHoverPreview(item);
+                    UpdateHoverPreviewPosition(e);
                 }
-                UpdateHoverPreviewPosition(e);
+                else
+                {
+                    var pos = e.GetCurrentPoint(this).Position;
+                    double dx = pos.X - _lastQueueHoverPoint.X;
+                    double dy = pos.Y - _lastQueueHoverPoint.Y;
+                    if (Math.Sqrt(dx * dx + dy * dy) > 15 || _pendingQueueHoverItem != item)
+                    {
+                        TriggerDelayedQueueHoverPreview(item, e);
+                    }
+                }
             }
         }
     }
@@ -1254,6 +1314,7 @@ public partial class MainView : UserControl
     private void OnThumbnailItemPointerExited(object? sender, PointerEventArgs e)
     {
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        CancelQueueHoverPreview();
         if (sender is Border border)
         {
             border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");
@@ -1324,7 +1385,6 @@ public partial class MainView : UserControl
 
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
         {
-            // Trên Android / Touch: căn giữa ngang màn hình và đặt ở vùng nhìn thấy rõ để nút ✕ ĐÓNG luôn dễ bấm
             double touchLeft = Math.Max(12, (viewW - popupW) / 2.0);
             var touchPos = e.GetPosition(this);
             double touchTop = Math.Clamp(touchPos.Y - 120, 16, Math.Max(16, viewH - popupH - 24));
@@ -1332,7 +1392,28 @@ public partial class MainView : UserControl
             return;
         }
 
-        var pos = e.GetPosition(this);
+        UpdateHoverPreviewPositionManual(e.GetPosition(this));
+    }
+
+    private void UpdateHoverPreviewPositionManual(Point pos)
+    {
+        var popup = this.FindControl<Border>("HoverPreviewPopupBorder");
+        if (popup == null) return;
+
+        double viewW = this.Bounds.Width > 0 ? this.Bounds.Width : 1200;
+        double viewH = this.Bounds.Height > 0 ? this.Bounds.Height : 850;
+        double popupW = Math.Min(340, Math.Max(260, viewW - 24));
+        popup.Width = popupW;
+        double popupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 480;
+
+        if (OperatingSystem.IsAndroid())
+        {
+            double touchLeft = Math.Max(12, (viewW - popupW) / 2.0);
+            double touchTop = Math.Clamp(pos.Y - 120, 16, Math.Max(16, viewH - popupH - 24));
+            popup.Margin = new Thickness(touchLeft, touchTop, 0, 0);
+            return;
+        }
+
         double left = pos.X + 24;
         if (left + popupW + 16 > viewW)
         {
@@ -1360,23 +1441,267 @@ public partial class MainView : UserControl
         }
     }
 
+    // =========================================================================
+    // DUAL PICTURE SORT: HOVER 0.5S (DESKTOP) & TOUCH DRAG / SINGLE TAP (ANDROID)
+    // =========================================================================
+    private CancellationTokenSource? _dualSortHoverDelayCts;
+    private PictureSortItem? _pendingDualSortHoverItem;
+    private Point _lastDualSortHoverPoint;
+    private Point _dualSortTouchStartPos;
+    private bool _dualSortTouchIsDragging;
+    private PictureSortItem? _touchedDualSortItem;
+
+    private void TriggerDelayedDualSortHoverPreview(PictureSortItem item, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        if (DataContext is not MainViewModel vm) return;
+
+        if (vm.IsDualSortPreviewVisible && vm.DualSortPreviewItem == item)
+        {
+            return;
+        }
+
+        var pos = e.GetCurrentPoint(this).Position;
+        _lastDualSortHoverPoint = pos;
+        _pendingDualSortHoverItem = item;
+
+        _dualSortHoverDelayCts?.Cancel();
+        _dualSortHoverDelayCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _dualSortHoverDelayCts = cts;
+
+        Task.Delay(500, cts.Token).ContinueWith(t =>
+        {
+            if (t.IsCanceled) return;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (cts.IsCancellationRequested) return;
+                if (DataContext is MainViewModel currentVm && _pendingDualSortHoverItem == item)
+                {
+                    currentVm.ShowDualSortPreview(item);
+                    UpdateDualSortPopupPosition(pos);
+                }
+            });
+        }, TaskContinuationOptions.OnlyOnRanToCompletion);
+    }
+
+    private void CancelDualSortHoverPreview()
+    {
+        _dualSortHoverDelayCts?.Cancel();
+        _dualSortHoverDelayCts?.Dispose();
+        _dualSortHoverDelayCts = null;
+        _pendingDualSortHoverItem = null;
+    }
+
+    private void UpdateDualSortPopupPosition(Point pos)
+    {
+        var popup = this.FindControl<Border>("DualSortPreviewPopupBorder");
+        if (popup == null) return;
+
+        double viewW = this.Bounds.Width > 0 ? this.Bounds.Width : 1200;
+        double viewH = this.Bounds.Height > 0 ? this.Bounds.Height : 850;
+        double popupW = Math.Min(380, Math.Max(280, viewW - 24));
+        popup.Width = popupW;
+        double popupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 480;
+
+        if (OperatingSystem.IsAndroid())
+        {
+            double touchLeft = Math.Max(12, (viewW - popupW) / 2.0);
+            double touchTop = Math.Clamp(pos.Y - 120, 16, Math.Max(16, viewH - popupH - 24));
+            popup.Margin = new Thickness(touchLeft, touchTop, 0, 0);
+            return;
+        }
+
+        double left = pos.X + 24;
+        if (left + popupW + 16 > viewW)
+        {
+            left = Math.Max(12, pos.X - popupW - 24);
+        }
+
+        double top = pos.Y - 40;
+        if (top + popupH + 16 > viewH)
+        {
+            top = Math.Max(12, viewH - popupH - 16);
+        }
+        if (top < 12)
+        {
+            top = 12;
+        }
+
+        popup.Margin = new Thickness(left, top, 0, 0);
+    }
+
+    private void OnDualSortPreviewPopupPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        if (DataContext is MainViewModel vm)
+        {
+            vm.CloseDualSortPreview();
+        }
+    }
+
+    // --- Xử lý sự kiện cho Source Items ---
+    private void OnDualSortSourceItemPointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        if (sender is Control control && control.DataContext is PictureSortItem item)
+        {
+            TriggerDelayedDualSortHoverPreview(item, e);
+        }
+    }
+
+    private void OnDualSortSourceItemPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
+        {
+            var currentPos = e.GetCurrentPoint(this).Position;
+            double dx = currentPos.X - _dualSortTouchStartPos.X;
+            double dy = currentPos.Y - _dualSortTouchStartPos.Y;
+            if (Math.Sqrt(dx * dx + dy * dy) > 12)
+            {
+                // Đang cuộn danh sách (scroll) hoặc vuốt ngón tay: Tuyệt đối không show ảnh!
+                _dualSortTouchIsDragging = true;
+            }
+            return;
+        }
+
+        if (sender is Control control && control.DataContext is PictureSortItem item)
+        {
+            var pos = e.GetCurrentPoint(this).Position;
+            double dx = pos.X - _lastDualSortHoverPoint.X;
+            double dy = pos.Y - _lastDualSortHoverPoint.Y;
+            if (Math.Sqrt(dx * dx + dy * dy) > 15 || _pendingDualSortHoverItem != item)
+            {
+                TriggerDelayedDualSortHoverPreview(item, e);
+            }
+        }
+    }
+
+    private void OnDualSortSourceItemPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        CancelDualSortHoverPreview();
+        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible)
+        {
+            var popup = this.FindControl<Border>("DualSortPreviewPopupBorder");
+            if (popup != null)
+            {
+                var posInPopup = e.GetPosition(popup);
+                if (posInPopup.X >= 0 && posInPopup.X <= popup.Bounds.Width &&
+                    posInPopup.Y >= 0 && posInPopup.Y <= popup.Bounds.Height)
+                {
+                    return;
+                }
+            }
+            vm.CloseDualSortPreview();
+        }
+    }
+
     private void OnDualSortSourceItemPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         try
         {
             if (sender is Control control && control.DataContext is PictureSortItem item && DataContext is MainViewModel vm)
             {
-                if (e.ClickCount == 2)
+                if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
                 {
-                    vm.SortItemForward(item);
+                    _dualSortTouchStartPos = e.GetCurrentPoint(this).Position;
+                    _dualSortTouchIsDragging = false;
+                    _touchedDualSortItem = item;
                 }
                 else
                 {
-                    vm.OnSourceItemClicked(item);
+                    if (e.ClickCount == 2)
+                    {
+                        vm.SortItemForward(item);
+                    }
+                    else
+                    {
+                        vm.OnSourceItemClicked(item);
+                    }
                 }
             }
         }
         catch { }
+    }
+
+    private void OnDualSortSourceItemPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        try
+        {
+            if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
+            {
+                if (!_dualSortTouchIsDragging && sender is Control control && control.DataContext is PictureSortItem item && _touchedDualSortItem == item)
+                {
+                    // Single tap đã nhấc ngón tay ra -> Show ảnh preview!
+                    if (DataContext is MainViewModel vm)
+                    {
+                        vm.SelectDualSortItem(item);
+                        vm.ShowDualSortPreview(item);
+                        UpdateDualSortPopupPosition(_dualSortTouchStartPos);
+                    }
+                }
+                _dualSortTouchIsDragging = false;
+                _touchedDualSortItem = null;
+            }
+        }
+        catch { }
+    }
+
+    // --- Xử lý sự kiện cho Sorted Items ---
+    private void OnDualSortSortedItemPointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        if (sender is Control control && control.DataContext is PictureSortItem item)
+        {
+            TriggerDelayedDualSortHoverPreview(item, e);
+        }
+    }
+
+    private void OnDualSortSortedItemPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
+        {
+            var currentPos = e.GetCurrentPoint(this).Position;
+            double dx = currentPos.X - _dualSortTouchStartPos.X;
+            double dy = currentPos.Y - _dualSortTouchStartPos.Y;
+            if (Math.Sqrt(dx * dx + dy * dy) > 12)
+            {
+                _dualSortTouchIsDragging = true;
+            }
+            return;
+        }
+
+        if (sender is Control control && control.DataContext is PictureSortItem item)
+        {
+            var pos = e.GetCurrentPoint(this).Position;
+            double dx = pos.X - _lastDualSortHoverPoint.X;
+            double dy = pos.Y - _lastDualSortHoverPoint.Y;
+            if (Math.Sqrt(dx * dx + dy * dy) > 15 || _pendingDualSortHoverItem != item)
+            {
+                TriggerDelayedDualSortHoverPreview(item, e);
+            }
+        }
+    }
+
+    private void OnDualSortSortedItemPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        CancelDualSortHoverPreview();
+        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible)
+        {
+            var popup = this.FindControl<Border>("DualSortPreviewPopupBorder");
+            if (popup != null)
+            {
+                var posInPopup = e.GetPosition(popup);
+                if (posInPopup.X >= 0 && posInPopup.X <= popup.Bounds.Width &&
+                    posInPopup.Y >= 0 && posInPopup.Y <= popup.Bounds.Height)
+                {
+                    return;
+                }
+            }
+            vm.CloseDualSortPreview();
+        }
     }
 
     private void OnDualSortSortedItemPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -1385,14 +1710,45 @@ public partial class MainView : UserControl
         {
             if (sender is Control control && control.DataContext is PictureSortItem item && DataContext is MainViewModel vm)
             {
-                if (e.ClickCount == 2)
+                if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
                 {
-                    vm.SortItemBackward(item);
+                    _dualSortTouchStartPos = e.GetCurrentPoint(this).Position;
+                    _dualSortTouchIsDragging = false;
+                    _touchedDualSortItem = item;
                 }
                 else
                 {
-                    vm.OnSortedItemClicked(item);
+                    if (e.ClickCount == 2)
+                    {
+                        vm.SortItemBackward(item);
+                    }
+                    else
+                    {
+                        vm.OnSortedItemClicked(item);
+                    }
                 }
+            }
+        }
+        catch { }
+    }
+
+    private void OnDualSortSortedItemPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        try
+        {
+            if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
+            {
+                if (!_dualSortTouchIsDragging && sender is Control control && control.DataContext is PictureSortItem item && _touchedDualSortItem == item)
+                {
+                    if (DataContext is MainViewModel vm)
+                    {
+                        vm.SelectDualSortItem(item);
+                        vm.ShowDualSortPreview(item);
+                        UpdateDualSortPopupPosition(_dualSortTouchStartPos);
+                    }
+                }
+                _dualSortTouchIsDragging = false;
+                _touchedDualSortItem = null;
             }
         }
         catch { }
