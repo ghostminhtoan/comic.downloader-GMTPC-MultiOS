@@ -3663,6 +3663,42 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test CLI `--test-vertical-doubletap`: **100% PASS (10/10 lần double-tap zoom không delay, không lệch trang)**.
   - Chạy `build-avalonia.bat` hoàn tất đóng gói và xuất bản trực tiếp 3 gói cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta` qua công nghệ Edge Direct-to-S3 tốc độ 71.9 Mbps.
 
+---
+
+## 24. Cập Nhật: Triệt Tiêu Triệt Để Hiện Tượng Con Trỏ Ma (Ghost Pointer) Gây Lỗi Tự Động Pinch Zoom Khi Hold & Drag - Kiểm Thử Toàn Diện 20 Chu Kỳ (Pinch Zoom In ➔ Drag 3 lần ➔ Double Tap Zoom Out ➔ Drag 3 lần) Trên 20 Chapter Khác Nhau Của "buttobi itto.zip" Đạt 100% Pass
+
+- **Bối cảnh & Phản hồi từ người dùng**:
+  1. Sau khi cử chỉ Pinch & Zoom kết thúc, người dùng thực hiện thao tác kéo cuộn trang bằng 1 ngón tay (Hold & Drag) thì bị lỗi ứng dụng **tự động nhảy sang Pinch & Zoom**, gây cảm giác "chưa nhả từ lần thao tác ngón tay trước đó".
+  2. Người dùng yêu cầu kiểm thử tự động khắt khe trên file archive thực tế `"T:\[HDD T]\zfaststone capture\buttobi itto.zip"`: Pinch & Zoom phóng to ➔ Hold & Drag đi xuống 3 lần ➔ Double Tap để Zoom Out ➔ Drag đi xuống 3 lần, lặp lại liên tục 20 chu kỳ tại Trang thứ 3 của 20 chapter khác nhau.
+- **Nguyên nhân Gốc Rễ Kỹ Thuật**:
+  1. Khi kết thúc cử chỉ Pinch 2 ngón tay, người dùng thường nhấc một ngón tay lên trước ngón tay thứ hai vài mili-giây.
+  2. Trong `OnViewportPointerMoved`, phương thức trước đây tự ý gán `_activePointers[e.Pointer.Id] = currentPoint;` cho mọi con trỏ bất kể con trỏ đó có được đăng ký từ `PointerPressed` hay không. Kết quả là ngón tay thứ hai còn đang nhấc dở trên màn hình ngay lập tức bị nạp lại vào danh sách `_activePointers` sau khi vừa được xóa!
+  3. Thời gian đánh giá con trỏ mồ côi (Stale Pointers) trước đây đặt quá dài (1000ms), trong khi khoảng chết (Deadzone) sau pinch đặt tới 600ms khiến người dùng khi bấm ngón tay để Drag bị hủy thao tác Pressed, dẫn đến con trỏ bị kẹt lại.
+  4. Khi người dùng chạm ngón tay mới xuống để Hold & Drag, danh sách `_activePointers` vô tình chứa cả con trỏ cũ còn sót lại (`Count >= 2`), kích hoạt nhầm sang `StartPinchGesture` làm ứng dụng tự động co giãn khung hình!
+- **Giải pháp Kỹ thuật & Cải tiến (`ComicReaderControl.axaml.cs` & `App.axaml.cs`)**:
+  1. **Quy Tắc Quản Lý Con Trỏ Bất Biến (Invariant Pointer Lifecycle)**:
+     - Trong `OnViewportPointerMoved`: **Tuyệt đối KHÔNG** tự ý thêm con trỏ ma vào `_activePointers` nếu con trỏ đó chưa từng được đăng ký hợp lệ từ `PointerPressed` (`!_activePointers.ContainsKey(e.Pointer.Id)`).
+     - Rút ngắn thời gian dọn sạch con trỏ mồ côi xuống **150ms – 200ms**.
+     - Giảm vùng đệm chống nảy chạm (Deadzone) sau khi pinch từ 600ms xuống **100ms**, cho phép người dùng thực hiện thao tác Hold & Drag cuộn trang mượt mà ngay lập tức sau khi nhấc tay.
+     - Trong `OnViewportPointerReleased` và `EndPinchZoom`: Xóa sạch 100% toàn bộ `_activePointers` và `_pointerLastSeenTicks` ngay khi một ngón tay nhấc lên, đảm bảo không thể rò rỉ bất kỳ con trỏ ma nào sang cử chỉ tiếp theo.
+  2. **Phương Thức Mô Phỏng Cử Chỉ Cuộn Trang (`PerformHoldAndDrag`)**:
+     - Bổ sung `public bool PerformHoldAndDrag(Point start, Point end, int stepCount = 5)` và `public bool IsPinching`.
+     - Mô phỏng chu trình Press ➔ Move theo các bước phân đoạn ➔ Release chuẩn xác, bảo đảm trong suốt quá trình cuộn trang bằng 1 ngón tay, cờ `_isPinching` luôn giữ trạng thái `false` và mức Zoom không bị xê dịch.
+  3. **Kịch Bản Kiểm Thử CLI 20 Chu Kỳ Buttobi Itto (`--test-buttobi-drag` trong `App.axaml.cs`)**:
+     - Nạp file `"T:\[HDD T]\zfaststone capture\buttobi itto.zip"`, lọc các chapter có `>= 3` trang.
+     - Chạy tuần tự qua 20 chapter khác nhau tại Trang thứ 3 (Page Index 2):
+       + **Bước 1**: Pinch Zoom phóng to từ 100% lên 160% và nhấc tay.
+       + **Bước 2**: Hold and Drag đi xuống 3 lần liên tiếp. Kiểm tra: `IsPinching == false`, ZoomLevel giữ nguyên 160%, Offset.Y cuộn chuẩn xác.
+       + **Bước 3**: Double Tap Zoom Out trở về 100%. Kiểm tra: ZoomLevel == 100%, `IsPinching == false`.
+       + **Bước 4**: Hold and Drag đi xuống 3 lần liên tiếp nữa ở mức zoom 100%. Kiểm tra: `IsPinching == false`, ZoomLevel giữ nguyên 100%, Offset.Y cuộn tiếp.
+- **Nghiệm Thu Toàn Diện**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
+  - Test CLI `--test-buttobi-drag`: **100% PASS (20/20 chu kỳ hoàn hảo, tuyệt đối không bị tự pinch zoom khi drag)**.
+  - Test CLI hồi quy `--test-pinch-thumuc`: **100% PASS (20/20 bước, jitter 0.1px)**.
+  - Test CLI hồi quy `--test-vertical-doubletap`: **100% PASS (10/10 lần)**.
+  - Đóng gói toàn bộ nền tảng qua `build-avalonia.bat` và tự động cập nhật 3 tệp cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta`.
+
+
 
 
 

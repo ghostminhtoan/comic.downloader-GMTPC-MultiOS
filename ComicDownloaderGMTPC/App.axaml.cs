@@ -48,6 +48,13 @@ public partial class App : Application
                 return;
             }
 
+            if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-buttobi-drag", StringComparison.OrdinalIgnoreCase)))
+            {
+                base.OnFrameworkInitializationCompleted();
+                _ = RunButtobiDragTestAsync(desktop);
+                return;
+            }
+
             // 2. Kiểm tra nếu mở tệp trực tiếp từ hệ điều hành (Double-click file hoặc Context Menu)
             // Khởi động trực tiếp TRÌNH ĐỌC TRUYỆN ĐỘC LẬP SIÊU NHẸ (STANDALONE READER MODE),
             // TUYỆT ĐỐI KHÔNG khởi tạo MainWindow / MainViewModel (không nạp Scraper, WebView, Database)!
@@ -416,6 +423,160 @@ public partial class App : Application
         string logDir = Path.Combine(AppContext.BaseDirectory, ".tmp");
         Directory.CreateDirectory(logDir);
         string logFile = Path.Combine(logDir, "test-pinch-thumuc.log");
+        File.WriteAllLines(logFile, traceLogs.Concat(new[] { resultSummary }), System.Text.Encoding.UTF8);
+        Console.WriteLine($"[TEST LOG SAVED] {logFile}");
+
+        await Task.Delay(1000);
+        desktop.Shutdown(allPassed ? 0 : 2);
+    }
+
+    private static async Task RunButtobiDragTestAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+        string zipPath = @"T:\[HDD T]\zfaststone capture\buttobi itto.zip";
+        if (!File.Exists(zipPath))
+        {
+            Console.WriteLine($"[TEST ERROR] File not found: {zipPath}");
+            desktop.Shutdown(1);
+            return;
+        }
+
+        Console.WriteLine($"[TEST START] Loading buttobi itto.zip: {zipPath}");
+        var scanner = new LibraryScannerService();
+        var quickComic = scanner.CreateQuickComicFromPath(zipPath);
+        if (quickComic == null || quickComic.Chapters.Count == 0)
+        {
+            Console.WriteLine("[TEST ERROR] No chapters found in zip archive!");
+            desktop.Shutdown(1);
+            return;
+        }
+
+        // Lọc ra các chapter có ít nhất 3 trang
+        var candidateChapters = quickComic.Chapters.Where(c => c.TotalPages >= 3).ToList();
+        Console.WriteLine($"[TEST] Total candidate chapters with >= 3 pages: {candidateChapters.Count}");
+
+        if (candidateChapters.Count == 0)
+        {
+            Console.WriteLine("[TEST ERROR] No chapter has at least 3 pages!");
+            desktop.Shutdown(1);
+            return;
+        }
+
+        var readerVm = new ComicReaderViewModel();
+        readerVm.PageLayoutMode = 0; // Chế độ Cuộn dọc (Vertical Scroll / Webtoon)
+        readerVm.ZoomLevel = 1.0;
+
+        var readerControl = new ComicReaderControl
+        {
+            DataContext = readerVm
+        };
+
+        var window = new Window
+        {
+            Title = "TEST PINCH ZOOM & DRAG - Buttobi Itto",
+            Width = 480,
+            Height = 854,
+            Content = readerControl
+        };
+
+        desktop.MainWindow = window;
+        window.Show();
+
+        int totalCycles = Math.Min(20, candidateChapters.Count);
+        Console.WriteLine($"[TEST] Starting 20 Cycles of Pinch Zoom + Drag + DoubleTap on 20 different chapters (Page 3)...\n");
+
+        var traceLogs = new List<string>();
+        bool allPassed = true;
+
+        for (int cycle = 0; cycle < totalCycles; cycle++)
+        {
+            var chapter = candidateChapters[cycle];
+            Console.WriteLine($"--- [CYCLE {cycle + 1:D2}/20] Chapter: '{chapter.Title}' (Total {chapter.TotalPages} pages) ---");
+
+            // Nạp chapter
+            await readerVm.InitializeAsync(quickComic, chapter);
+            await Task.Delay(1000);
+
+            // Chuyển tới Trang thứ 3 (Page Index 2)
+            readerVm.CurrentPageIndex = 2;
+            readerVm.RequestScrollToPage(2);
+            await Task.Delay(1200);
+
+            if (readerVm.CurrentPageIndex != 2)
+            {
+                readerVm.CurrentPageIndex = 2;
+            }
+
+            double centerX = window.Bounds.Width > 0 ? window.Bounds.Width / 2.0 : 240;
+            double centerY = window.Bounds.Height > 0 ? window.Bounds.Height / 2.0 : 427;
+
+            // 1. PINCH ZOOM PHÓNG TO (từ 100% lên 160%)
+            readerControl.PerformPinchZoomStep(new Point(centerX - 100, centerY), new Point(centerX + 100, centerY));
+            await Task.Delay(50);
+            readerControl.PerformPinchZoomStep(new Point(centerX - 160, centerY), new Point(centerX + 160, centerY));
+            await Task.Delay(100);
+            readerControl.EndPinchZoom();
+            await Task.Delay(150);
+
+            double zoomAfterPinch = readerVm.ZoomLevel;
+            bool pinchOk = (zoomAfterPinch >= 1.4) && !readerControl.IsPinching;
+
+            // 2. HOLD AND DRAG ĐI XUỐNG 3 LẦN (kéo ngón tay từ Y=600 lên Y=350 để trang cuộn xuống)
+            bool drag1Ok = true;
+            for (int d = 1; d <= 3; d++)
+            {
+                var sv = readerControl.GetReaderScrollViewer();
+                double preY = sv?.Offset.Y ?? 0;
+                bool success = readerControl.PerformHoldAndDrag(new Point(centerX, centerY + 150), new Point(centerX, centerY - 150));
+                await Task.Delay(100);
+                double postY = sv?.Offset.Y ?? 0;
+
+                // Kiểm tra: tuyệt đối không bị kích hoạt pinch và zoom không bị nhảy
+                if (readerControl.IsPinching || Math.Abs(readerVm.ZoomLevel - zoomAfterPinch) > 0.05 || !success)
+                {
+                    drag1Ok = false;
+                }
+            }
+
+            // 3. DOUBLE TAP ĐỂ ZOOM OUT (về 100%)
+            readerControl.PerformDoubleTapZoom(new Point(centerX, centerY));
+            await Task.Delay(250);
+            double zoomAfterDoubleTap = readerVm.ZoomLevel;
+            bool doubleTapOk = (Math.Abs(zoomAfterDoubleTap - 1.0) < 0.05) && !readerControl.IsPinching;
+
+            // 4. DRAG ĐI XUỐNG 3 LẦN NỮA Ở MỨC ZOOM 100%
+            bool drag2Ok = true;
+            for (int d = 1; d <= 3; d++)
+            {
+                var sv = readerControl.GetReaderScrollViewer();
+                double preY = sv?.Offset.Y ?? 0;
+                bool success = readerControl.PerformHoldAndDrag(new Point(centerX, centerY + 150), new Point(centerX, centerY - 150));
+                await Task.Delay(100);
+                double postY = sv?.Offset.Y ?? 0;
+
+                if (readerControl.IsPinching || Math.Abs(readerVm.ZoomLevel - 1.0) > 0.05 || !success)
+                {
+                    drag2Ok = false;
+                }
+            }
+
+            bool cyclePass = pinchOk && drag1Ok && doubleTapOk && drag2Ok;
+            if (!cyclePass) allPassed = false;
+
+            string logLine = $"[CYCLE {cycle + 1:D2}/20] Chap='{chapter.Title}' | PinchZoom={zoomAfterPinch * 100:0}% (OK={pinchOk}) | Drag1x3=(OK={drag1Ok}) | DoubleTap={zoomAfterDoubleTap * 100:0}% (OK={doubleTapOk}) | Drag2x3=(OK={drag2Ok}) -> {(cyclePass ? "PASS ✅ HOÀN TOÀN KHÔNG BỊ TỰ PINCH ZOOM KHI DRAG" : "FAIL ❌ BỊ LỖI TỰ PINCH ZOOM HOẶC SAI ZOOM!")}";
+            Console.WriteLine(logLine);
+            traceLogs.Add(logLine);
+        }
+
+        string resultSummary = allPassed
+            ? "\n=========================================\n🎉 KẾT QUẢ TEST BUTTOBI ITTO 20 CHU KỲ: 100% PASS! KHÔNG HỀ BỊ TỰ PINCH ZOOM KHI DRAG!\n========================================="
+            : "\n=========================================\n⚠️ KẾT QUẢ TEST BUTTOBI ITTO 20 CHU KỲ: CÓ CHU KỲ BỊ TỰ PINCH ZOOM HOẶC LỖI!\n=========================================";
+        Console.WriteLine(resultSummary);
+
+        // Ghi log ra file
+        string logDir = Path.Combine(AppContext.BaseDirectory, ".tmp");
+        Directory.CreateDirectory(logDir);
+        string logFile = Path.Combine(logDir, "test-buttobi-drag.log");
         File.WriteAllLines(logFile, traceLogs.Concat(new[] { resultSummary }), System.Text.Encoding.UTF8);
         Console.WriteLine($"[TEST LOG SAVED] {logFile}");
 

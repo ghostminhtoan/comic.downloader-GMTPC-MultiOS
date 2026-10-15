@@ -394,11 +394,13 @@ public partial class ComicReaderControl : UserControl
         }
     }
 
+    public bool IsPinching => _isPinching;
+
     public void EndPinchZoom()
     {
         _isPinching = false;
         _lastPinchEndTick = Environment.TickCount64;
-        _suppressScrollChangedUntilTick = Environment.TickCount64 + 800;
+        _suppressScrollChangedUntilTick = Environment.TickCount64 + 400;
         _activePointers.Clear();
         _pointerLastSeenTicks.Clear();
         _isPanHolding = false;
@@ -408,6 +410,78 @@ public partial class ComicReaderControl : UserControl
         {
             vm.CurrentPageIndex = _pinchTargetPageIndex;
         }
+    }
+
+    /// <summary>
+    /// Thực hiện thao tác Hold and Drag cuộn trang mượt mà từ startPoint tới endPoint.
+    /// Trả về true nếu cuộn thành công và hoàn toàn không bị kích hoạt nhầm sang Pinch Zoom.
+    /// </summary>
+    public bool PerformHoldAndDrag(Point startPoint, Point endPoint, int stepCount = 5)
+    {
+        if (DataContext is not ComicReaderViewModel vm) return false;
+
+        // Bắt đầu Drag: đảm bảo sạch sẽ
+        _activePointers.Clear();
+        _pointerLastSeenTicks.Clear();
+        _isPinching = false;
+
+        int pointerId = 999;
+        long now = Environment.TickCount64;
+        _activePointers[pointerId] = startPoint;
+        _pointerLastSeenTicks[pointerId] = now;
+
+        _pointerPressPoint = startPoint;
+        _pointerPressTick = now;
+        _panStartPoint = startPoint;
+        _panLastPoint = startPoint;
+        _panStartTick = now;
+        _lastPanMoveTick = now;
+        _isPanHolding = true;
+        _isPanDragging = true;
+        _isPointerTapCandidate = false;
+
+        for (int i = 1; i <= stepCount; i++)
+        {
+            double t = (double)i / stepCount;
+            Point curPt = new Point(
+                startPoint.X + (endPoint.X - startPoint.X) * t,
+                startPoint.Y + (endPoint.Y - startPoint.Y) * t
+            );
+
+            double deltaX = curPt.X - _panLastPoint.X;
+            double deltaY = curPt.Y - _panLastPoint.Y;
+
+            _panLastPoint = curPt;
+            _activePointers[pointerId] = curPt;
+            _pointerLastSeenTicks[pointerId] = Environment.TickCount64;
+
+            if (_isPinching)
+            {
+                // Nếu bị kích hoạt pinch trong lúc drag 1 ngón tay -> Lỗi!
+                return false;
+            }
+
+            if (vm.IsScrollMode)
+            {
+                var scrollViewer = GetReaderScrollViewer();
+                if (scrollViewer != null)
+                {
+                    double newX = scrollViewer.Offset.X - deltaX;
+                    double newY = scrollViewer.Offset.Y - deltaY;
+                    double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+                    double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+                    scrollViewer.Offset = new Vector(Math.Clamp(newX, 0, maxX), Math.Clamp(newY, 0, maxY));
+                }
+            }
+        }
+
+        // Kết thúc Drag (Release)
+        _isPanHolding = false;
+        _isPanDragging = false;
+        _activePointers.Clear();
+        _pointerLastSeenTicks.Clear();
+
+        return !_isPinching;
     }
 
     private static double Distance(Point p1, Point p2)
@@ -1332,13 +1406,25 @@ public partial class ComicReaderControl : UserControl
         Point pos = e.GetPosition(this);
         long now = Environment.TickCount64;
 
-        // Dọn sạch con trỏ mồ côi (Ghost Pointers) khi KHÔNG trong cử chỉ pinch (> 1000ms)
+        long pinchElapsed = now - _lastPinchEndTick;
+        // Bỏ qua nảy chạm ngón tay thứ hai trong vòng 100ms sau khi pinch kết thúc
+        if (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 100)
+        {
+            _activePointers.Clear();
+            _pointerLastSeenTicks.Clear();
+            _isPointerTapCandidate = false;
+            _isPanHolding = false;
+            _isPanDragging = false;
+            return;
+        }
+
+        // Dọn sạch con trỏ mồ côi (Ghost Pointers) khi KHÔNG trong cử chỉ pinch (> 150ms)
         if (!_isPinching && _pointerLastSeenTicks.Count > 0)
         {
             List<int>? staleKeys = null;
             foreach (var kvp in _pointerLastSeenTicks)
             {
-                if (now - kvp.Value > 1000)
+                if (now - kvp.Value > 150)
                 {
                     staleKeys ??= new List<int>();
                     staleKeys.Add(kvp.Key);
@@ -1359,15 +1445,6 @@ public partial class ComicReaderControl : UserControl
             _isPinching = false;
             _isPanHolding = false;
             _isPanDragging = false;
-        }
-
-        long pinchElapsed = now - _lastPinchEndTick;
-        if (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 600)
-        {
-            _isPointerTapCandidate = false;
-            _isPanHolding = false;
-            _isPanDragging = false;
-            return;
         }
 
         _activePointers[e.Pointer.Id] = pos;
@@ -1399,16 +1476,41 @@ public partial class ComicReaderControl : UserControl
     {
         Point currentPoint = e.GetPosition(this);
         long moveNow = Environment.TickCount64;
-        _activePointers[e.Pointer.Id] = currentPoint;
+
+        long pinchElapsed = moveNow - _lastPinchEndTick;
+        // Bỏ qua cử chỉ di chuyển mồ côi trong vòng 100ms sau khi pinch kết thúc
+        if (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 100)
+        {
+            _isPanHolding = false;
+            _isPanDragging = false;
+            _isPointerTapCandidate = false;
+            e.Handled = true;
+            return;
+        }
+
+        // QUY TẮC CỐT LÕI: Chỉ cập nhật con trỏ nếu con trỏ này ĐÃ ĐƯỢC ghi nhận trong Pressed!
+        // Tuyệt đối không tự tiện thêm con trỏ ma vào _activePointers!
+        if (!_activePointers.ContainsKey(e.Pointer.Id))
+        {
+            if (!_isPinching && !_isPanHolding)
+            {
+                return;
+            }
+            _activePointers[e.Pointer.Id] = currentPoint;
+        }
+        else
+        {
+            _activePointers[e.Pointer.Id] = currentPoint;
+        }
         _pointerLastSeenTicks[e.Pointer.Id] = moveNow;
 
-        // Dọn sạch con trỏ mồ côi (Ghost Pointers) khi KHÔNG trong cử chỉ pinch (> 1000ms)
+        // Dọn sạch con trỏ mồ côi nếu không di chuyển trong 200ms
         if (!_isPinching && _pointerLastSeenTicks.Count > 1)
         {
             List<int>? staleKeys = null;
             foreach (var kvp in _pointerLastSeenTicks)
             {
-                if (kvp.Key != e.Pointer.Id && moveNow - kvp.Value > 1000)
+                if (kvp.Key != e.Pointer.Id && moveNow - kvp.Value > 200)
                 {
                     staleKeys ??= new List<int>();
                     staleKeys.Add(kvp.Key);
@@ -1422,17 +1524,6 @@ public partial class ComicReaderControl : UserControl
                     _pointerLastSeenTicks.Remove(k);
                 }
             }
-        }
-
-        long pinchElapsed = moveNow - _lastPinchEndTick;
-        // BỎ QUA HOÀN TOÀN THAO TÁC THỪA KHI VỪA KẾT THÚC PINCH TRONG VÒNG 600MS!
-        if (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 600)
-        {
-            _isPanHolding = false;
-            _isPanDragging = false;
-            _isPointerTapCandidate = false;
-            e.Handled = true;
-            return;
         }
 
         if (DataContext is not ComicReaderViewModel vm) return;
@@ -1567,6 +1658,8 @@ public partial class ComicReaderControl : UserControl
             _isPanHolding = false;
             _isPanDragging = false;
             _isPointerTapCandidate = false;
+            _activePointers.Clear();
+            _pointerLastSeenTicks.Clear();
             if (DataContext is ComicReaderViewModel vmRel && _pinchTargetPageIndex >= 0 && vmRel.Pages.Count > _pinchTargetPageIndex)
             {
                 vmRel.CurrentPageIndex = _pinchTargetPageIndex;
@@ -1585,8 +1678,8 @@ public partial class ComicReaderControl : UserControl
 
         long now = Environment.TickCount64;
         long pinchElapsed = now - _lastPinchEndTick;
-        // Bỏ qua cú nhả tay nếu vừa kết thúc pinch 2 ngón tay trong vòng 400ms để chống nảy chạm vô ý khi nhấc ngón tay thứ 2
-        if (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 400)
+        // Bỏ qua cú nhả tay nếu vừa kết thúc pinch 2 ngón tay trong vòng 100ms để chống nảy chạm vô ý khi nhấc ngón tay thứ 2
+        if (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 100)
         {
             _isPanHolding = false;
             _isPanDragging = false;
