@@ -1450,6 +1450,9 @@ public partial class MainView : UserControl
     private Point _dualSortTouchStartPos;
     private bool _dualSortTouchIsDragging;
     private PictureSortItem? _touchedDualSortItem;
+    private DateTime _dualSortLastTapTime = DateTime.MinValue;
+    private PictureSortItem? _dualSortLastTappedItem;
+    private CancellationTokenSource? _dualSortTapPreviewDelayCts;
 
     private void TriggerDelayedDualSortHoverPreview(PictureSortItem item, PointerEventArgs e)
     {
@@ -1491,6 +1494,10 @@ public partial class MainView : UserControl
         _dualSortHoverDelayCts?.Dispose();
         _dualSortHoverDelayCts = null;
         _pendingDualSortHoverItem = null;
+
+        _dualSortTapPreviewDelayCts?.Cancel();
+        _dualSortTapPreviewDelayCts?.Dispose();
+        _dualSortTapPreviewDelayCts = null;
     }
 
     private void UpdateDualSortPopupPosition(Point pos)
@@ -1633,12 +1640,63 @@ public partial class MainView : UserControl
             {
                 if (!_dualSortTouchIsDragging && sender is Control control && control.DataContext is PictureSortItem item && _touchedDualSortItem == item)
                 {
-                    // Single tap đã nhấc ngón tay ra -> Show ảnh preview!
                     if (DataContext is MainViewModel vm)
                     {
-                        vm.SelectDualSortItem(item);
-                        vm.ShowDualSortPreview(item);
-                        UpdateDualSortPopupPosition(_dualSortTouchStartPos);
+                        if (vm.IsOneClickFastSort)
+                        {
+                            _dualSortTapPreviewDelayCts?.Cancel();
+                            _dualSortTapPreviewDelayCts?.Dispose();
+                            _dualSortTapPreviewDelayCts = null;
+                            _dualSortLastTapTime = DateTime.MinValue;
+                            _dualSortLastTappedItem = null;
+                            vm.SortItemForward(item);
+                        }
+                        else
+                        {
+                            var now = DateTime.UtcNow;
+                            double elapsed = (now - _dualSortLastTapTime).TotalMilliseconds;
+
+                            if (elapsed < 500 && _dualSortLastTappedItem == item)
+                            {
+                                // DOUBLE TAP TRÊN ANDROID: Hủy ngay delay preview và chuyển ảnh sang thư mục lọc!
+                                _dualSortTapPreviewDelayCts?.Cancel();
+                                _dualSortTapPreviewDelayCts?.Dispose();
+                                _dualSortTapPreviewDelayCts = null;
+                                _dualSortLastTapTime = DateTime.MinValue;
+                                _dualSortLastTappedItem = null;
+
+                                vm.CloseDualSortPreview();
+                                vm.SortItemForward(item);
+                            }
+                            else
+                            {
+                                // SINGLE TAP TRÊN ANDROID: Lưu thời gian tap, chọn item, và hoãn 500ms kiểm tra không có double tap mới preview
+                                _dualSortLastTapTime = now;
+                                _dualSortLastTappedItem = item;
+                                var tapPos = _dualSortTouchStartPos;
+
+                                vm.SelectDualSortItem(item);
+
+                                _dualSortTapPreviewDelayCts?.Cancel();
+                                _dualSortTapPreviewDelayCts?.Dispose();
+                                var cts = new CancellationTokenSource();
+                                _dualSortTapPreviewDelayCts = cts;
+
+                                Task.Delay(500, cts.Token).ContinueWith(t =>
+                                {
+                                    if (t.IsCanceled) return;
+                                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                    {
+                                        if (cts.IsCancellationRequested) return;
+                                        if (DataContext is MainViewModel currentVm && currentVm.IsDualSortPreviewEnabled && _dualSortLastTappedItem == item)
+                                        {
+                                            currentVm.ShowDualSortPreview(item);
+                                            UpdateDualSortPopupPosition(tapPos);
+                                        }
+                                    });
+                                }, TaskContinuationOptions.OnlyOnRanToCompletion);
+                            }
+                        }
                     }
                 }
                 _dualSortTouchIsDragging = false;
@@ -1742,9 +1800,61 @@ public partial class MainView : UserControl
                 {
                     if (DataContext is MainViewModel vm)
                     {
-                        vm.SelectDualSortItem(item);
-                        vm.ShowDualSortPreview(item);
-                        UpdateDualSortPopupPosition(_dualSortTouchStartPos);
+                        if (vm.IsOneClickFastSort)
+                        {
+                            _dualSortTapPreviewDelayCts?.Cancel();
+                            _dualSortTapPreviewDelayCts?.Dispose();
+                            _dualSortTapPreviewDelayCts = null;
+                            _dualSortLastTapTime = DateTime.MinValue;
+                            _dualSortLastTappedItem = null;
+                            vm.SortItemBackward(item);
+                        }
+                        else
+                        {
+                            var now = DateTime.UtcNow;
+                            double elapsed = (now - _dualSortLastTapTime).TotalMilliseconds;
+
+                            if (elapsed < 500 && _dualSortLastTappedItem == item)
+                            {
+                                // DOUBLE TAP TRÊN ANDROID: Hủy ngay delay preview và chuyển ảnh ngược lại thư mục gốc!
+                                _dualSortTapPreviewDelayCts?.Cancel();
+                                _dualSortTapPreviewDelayCts?.Dispose();
+                                _dualSortTapPreviewDelayCts = null;
+                                _dualSortLastTapTime = DateTime.MinValue;
+                                _dualSortLastTappedItem = null;
+
+                                vm.CloseDualSortPreview();
+                                vm.SortItemBackward(item);
+                            }
+                            else
+                            {
+                                // SINGLE TAP TRÊN ANDROID: Lưu thời gian tap, chọn item, và hoãn 500ms kiểm tra không có double tap mới preview
+                                _dualSortLastTapTime = now;
+                                _dualSortLastTappedItem = item;
+                                var tapPos = _dualSortTouchStartPos;
+
+                                vm.SelectDualSortItem(item);
+
+                                _dualSortTapPreviewDelayCts?.Cancel();
+                                _dualSortTapPreviewDelayCts?.Dispose();
+                                var cts = new CancellationTokenSource();
+                                _dualSortTapPreviewDelayCts = cts;
+
+                                Task.Delay(500, cts.Token).ContinueWith(t =>
+                                {
+                                    if (t.IsCanceled) return;
+                                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                    {
+                                        if (cts.IsCancellationRequested) return;
+                                        if (DataContext is MainViewModel currentVm && currentVm.IsDualSortPreviewEnabled && _dualSortLastTappedItem == item)
+                                        {
+                                            currentVm.ShowDualSortPreview(item);
+                                            UpdateDualSortPopupPosition(tapPos);
+                                        }
+                                    });
+                                }, TaskContinuationOptions.OnlyOnRanToCompletion);
+                            }
+                        }
                     }
                 }
                 _dualSortTouchIsDragging = false;

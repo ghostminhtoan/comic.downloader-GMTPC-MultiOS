@@ -3348,6 +3348,15 @@
                                                 </StackPanel>
 
                                                 <WrapPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button Command="{Binding ToggleDualSortPreviewEnabledCommand}"
+                                                            Background="{Binding DualSortPreviewButtonBg}"
+                                                            BorderBrush="{Binding DualSortPreviewButtonBorder}"
+                                                            BorderThickness="1"
+                                                            Foreground="{Binding DualSortPreviewButtonFg}"
+                                                            FontWeight="Bold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,2"
+                                                            ToolTip.Tip="Bật/Tắt tính năng xem trước ảnh (Preview)">
+                                                        <TextBlock Text="{Binding DualSortPreviewButtonText}" />
+                                                    </Button>
                                                     <Button Command="{Binding UndoLastSortCommand}" IsEnabled="{Binding CanUndoSort}"
                                                             Background="#334155" Foreground="#F8FAFC" FontWeight="SemiBold" FontSize="11" Padding="10,5" CornerRadius="4" Margin="0,0,6,2"
                                                             ToolTip.Tip="Hoàn tác thao tác di chuyển/sao chép ảnh vừa thực hiện (Ctrl+Z)">

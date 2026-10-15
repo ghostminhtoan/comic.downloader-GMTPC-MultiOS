@@ -94,10 +94,32 @@ public partial class MainViewModel
     private Bitmap? _dualSortPreviewBitmap;
 
     [ObservableProperty]
+    private bool _isDualSortPreviewEnabled = true;
+
+    [ObservableProperty]
     private bool _isDualSortPreviewVisible = false;
 
     [ObservableProperty]
     private PictureSortItem? _dualSortPreviewItem;
+
+    public string DualSortPreviewButtonText => IsDualSortPreviewEnabled ? "👁️ PREVIEW: BẬT" : "👁️ PREVIEW: TẮT";
+    public string DualSortPreviewButtonBg => IsDualSortPreviewEnabled ? "#064E3B" : "#1E293B";
+    public string DualSortPreviewButtonBorder => IsDualSortPreviewEnabled ? "#10B981" : "#475569";
+    public string DualSortPreviewButtonFg => IsDualSortPreviewEnabled ? "#FDE047" : "#94A3B8";
+
+    [RelayCommand]
+    public void ToggleDualSortPreviewEnabled()
+    {
+        IsDualSortPreviewEnabled = !IsDualSortPreviewEnabled;
+        if (!IsDualSortPreviewEnabled)
+        {
+            CloseDualSortPreview();
+        }
+        OnPropertyChanged(nameof(DualSortPreviewButtonText));
+        OnPropertyChanged(nameof(DualSortPreviewButtonBg));
+        OnPropertyChanged(nameof(DualSortPreviewButtonBorder));
+        OnPropertyChanged(nameof(DualSortPreviewButtonFg));
+    }
 
     [ObservableProperty]
     private bool _isDualSortLoading = false;
@@ -791,7 +813,7 @@ public partial class MainViewModel
     // ==========================================
     public void ShowDualSortPreview(PictureSortItem? item)
     {
-        if (item == null) return;
+        if (!IsDualSortPreviewEnabled || item == null) return;
         DualSortPreviewItem = item;
         IsDualSortPreviewVisible = true;
 
@@ -854,19 +876,20 @@ public partial class MainViewModel
             }
 
             IsDualSortLoading = true;
-            DualSortStatusText = "Đang thực hiện Keep Parent (Xóa thư mục child)...";
+            DualSortStatusText = "Đang thực hiện Keep Parent (Chuyển thư mục child vào Thùng rác)...";
 
             await Task.Run(() =>
             {
                 try
                 {
-                    Directory.Delete(fullSorted, true);
+                    // Chuyển vào thùng rác (Recycle Bin / Trash) an toàn cho Windows & Linux
+                    RecycleBinService.DeleteToRecycleBin(fullSorted);
                 }
                 catch (Exception ex)
                 {
                     Dispatcher.UIThread.Post(() =>
                     {
-                        DualSortStatusText = $"Lỗi khi xóa thư mục child: {ex.Message}";
+                        DualSortStatusText = $"Lỗi khi chuyển thư mục child vào Thùng rác: {ex.Message}";
                     });
                 }
             });
@@ -875,8 +898,8 @@ public partial class MainViewModel
             DualSortSortedCount = 0;
             OnPropertyChanged(nameof(FilteredDualSortSortedItems));
 
-            DualSortStatusText = "✅ Keep Parent hoàn tất: Đã giữ lại thư mục Gốc và xóa sạch thư mục Đã Lọc (Child).";
-            AddLog("INFO", $"[DualSort] Keep Parent: Đã xóa thư mục child '{fullSorted}'");
+            DualSortStatusText = "✅ Keep Parent hoàn tất: Đã giữ lại thư mục Gốc và chuyển thư mục Đã Lọc (Child) vào Thùng rác.";
+            AddLog("INFO", $"[DualSort] Keep Parent: Đã chuyển thư mục child '{fullSorted}' vào Thùng rác.");
         }
         catch (Exception ex)
         {
@@ -921,15 +944,19 @@ public partial class MainViewModel
             }
 
             IsDualSortLoading = true;
-            DualSortStatusText = "Đang thực hiện Keep Child (Dọn file gốc, chuyển toàn bộ ảnh lọc về gốc và xóa child)...";
+            DualSortStatusText = "Đang thực hiện Keep Child (Chuyển file gốc vào Thùng rác, chuyển ảnh lọc về gốc và dọn child)...";
 
             await Task.Run(() =>
             {
-                // 1. Xóa toàn bộ file ở parent (chỉ file ở cấp 1, không xóa folder con)
+                // 1. Chuyển toàn bộ file ảnh cũ ở parent vào Thùng rác (Recycle Bin / Trash)
                 var sourceFiles = Directory.EnumerateFiles(fullSource, "*.*", SearchOption.TopDirectoryOnly).ToList();
                 foreach (var file in sourceFiles)
                 {
-                    try { File.Delete(file); } catch { }
+                    try
+                    {
+                        RecycleBinService.DeleteToRecycleBin(file);
+                    }
+                    catch { }
                 }
 
                 // 2. Move toàn bộ file ở child vào parent
@@ -944,17 +971,17 @@ public partial class MainViewModel
                             string destPath = Path.Combine(fullSource, fileName);
                             if (File.Exists(destPath))
                             {
-                                File.Delete(destPath);
+                                RecycleBinService.DeleteToRecycleBin(destPath);
                             }
                             File.Move(file, destPath);
                         }
                         catch { }
                     }
 
-                    // 3. Xóa folder child
+                    // 3. Chuyển thư mục child vào Thùng rác
                     try
                     {
-                        Directory.Delete(fullSorted, true);
+                        RecycleBinService.DeleteToRecycleBin(fullSorted);
                     }
                     catch { }
                 }
@@ -963,8 +990,8 @@ public partial class MainViewModel
             // Nạp lại danh sách parent, child sẽ trống
             await LoadBothSortFoldersAsync();
 
-            DualSortStatusText = "✅ Keep Child hoàn tất: Đã xóa file gốc, chuyển toàn bộ ảnh lọc vào thư mục gốc và xóa thư mục child.";
-            AddLog("INFO", $"[DualSort] Keep Child: Đã dọn '{fullSource}', chuyển file từ child sang và xóa child '{fullSorted}'");
+            DualSortStatusText = "✅ Keep Child hoàn tất: Đã chuyển file gốc cũ vào Thùng rác, chuyển toàn bộ ảnh lọc vào thư mục gốc và dọn thư mục child.";
+            AddLog("INFO", $"[DualSort] Keep Child: Đã dọn '{fullSource}', chuyển file từ child sang và dọn child '{fullSorted}' vào Thùng rác.");
         }
         catch (Exception ex)
         {

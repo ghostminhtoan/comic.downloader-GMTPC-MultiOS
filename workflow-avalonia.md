@@ -3387,5 +3387,33 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test khởi động app Desktop thành công (PID 27184, RAM ~245 MB).
   - Đã upload thành công 100% 3 gói cài đặt lên GitHub Release tag `beta` (tốc độ 72.2 Mbps qua Microsoft Edge Direct-to-S3).
 
+### 15.106 Tích Hợp Thùng Rác (Recycle Bin / Trash) Windows & Linux, Nút Bật/Tắt Preview Và Khắc Phục Nuốt Double Tap Trên Android (2026-10-15)
+- **Bối Cảnh & Vấn Đề Kỹ Thuật**:
+  1. **Xóa Không Thể Khôi Phục (Permanent Delete)**:
+     - Trước đây, `Keep Parent` và `Keep Child` xóa trực tiếp bằng `Directory.Delete(..., true)` hoặc `File.Delete(...)`, khiến tệp và thư mục bị mất vĩnh viễn, không thể khôi phục từ Thùng rác (Recycle Bin / Trash) của Windows và Linux.
+  2. **Thiếu Nút Kiểm Soát Preview Chủ Động**:
+     - Người dùng cần có nút trên Header Bar để chủ động BẬT hoặc TẮT tính năng xem trước ảnh (Preview) trong Dual Picture Sort khi cần tập trung thao tác phân loại nhanh.
+  3. **Android Bị Nuốt Double Tap Do Single Tap Kích Hoạt Preview Ngay Lập Tức**:
+     - Trên Android, thao tác Double Tap (để chuyển ảnh nhanh vào thư mục lọc) thực chất là 2 cú tap liên tiếp. Khi người dùng vừa tap lần 1 (Single Tap), app đã mở ngay Popup Preview che khuất giao diện, dẫn đến cú tap thứ 2 rơi vào Popup hoặc bị hủy, không thể thực hiện lệnh Sort được.
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Dịch Vụ `RecycleBinService.cs` Chuyển File Vào Thùng Rác Đa Nền Tảng**:
+     - **Windows (`OperatingSystem.IsWindows()`)**: Gọi Win32 Shell API `SHFileOperation` từ thư viện `shell32.dll` với struct `SHFILEOPSTRUCT`, cờ `FO_DELETE` và `FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI`. Đường dẫn kết thúc bằng 2 ký tự null `\0\0` theo đúng đặc tả Win32 Shell.
+     - **Linux (`OperatingSystem.IsLinux()`)**: Thử gọi `gio trash` qua Process execution; nếu không có thì thử `trash-put`; fallback theo chuẩn FreeDesktop.org Trash Specification (`~/.local/share/Trash/files/` và `.trashinfo`).
+     - **Fallback An Toàn**: Nếu nền tảng không hỗ trợ thùng rác (như Android) hoặc có ngoại lệ, tự động fallback về xóa thông thường.
+     - **Tích Hợp Vào ViewModel**: Cập nhật `KeepParentAsync` và `KeepChildAsync` trong `MainViewModel.DualPictureSort.cs` để toàn bộ file gốc cũ và thư mục child đều được đưa vào Thùng rác an toàn.
+  2. **Nút Bật / Tắt Preview (`ToggleDualSortPreviewEnabledCommand`)**:
+     - Thêm thuộc tính `IsDualSortPreviewEnabled` (mặc định `true`), lệnh `ToggleDualSortPreviewEnabledCommand`, và các thuộc tính giao diện: `DualSortPreviewButtonText` ("👁️ PREVIEW: BẬT" / "👁️ PREVIEW: TẮT"), `DualSortPreviewButtonBg`, `DualSortPreviewButtonBorder`, `DualSortPreviewButtonFg`.
+     - Đặt nút bấm trực quan trên Header Bar của `MainView.axaml` (cạnh nút Undo). Khi tắt, tự động gọi `CloseDualSortPreview()` và chặn mọi thao tác hover hoặc tap mở preview.
+  3. **Cơ Chế Phân Biệt Single Tap (Hoãn 0.5s) & Double Tap (Sort Ngay) Cho Android**:
+     - Trong `MainView.axaml.cs`, bổ sung `_dualSortLastTapTime`, `_dualSortLastTappedItem` và `_dualSortTapPreviewDelayCts`.
+     - Khi `PointerReleased` trên Android/Touch (mà không phải vuốt cuộn):
+       - Nếu khoảng thời gian từ cú tap trước `< 500ms` và cùng một ảnh: Xác định là **Double Tap** -> Hủy ngay lập tức `_dualSortTapPreviewDelayCts`, đóng preview nếu đang mở, reset tap tracker, và gọi ngay `vm.SortItemForward(item)` (hoặc `Backward`).
+       - Nếu khoảng thời gian `>= 500ms` hoặc khác ảnh: Xác định là **Single Tap** -> Đánh dấu tap tracker, chọn item, và khởi tạo timer `Task.Delay(500, cts.Token)`. Sau 500ms nếu không bị hủy bởi cú tap thứ 2 và `IsDualSortPreviewEnabled == true`, mới tiến hành hiển thị Popup Preview.
+- **Nghiệm Thu**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** cho cả Desktop và Android Release.
+  - Test khởi động app Desktop 2 bước thành công hoàn hảo.
+  - Tự động đóng gói và upload thành công 100% 3 gói cài đặt (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta` (tốc độ 72.1 Mbps).
+
+
 
 
