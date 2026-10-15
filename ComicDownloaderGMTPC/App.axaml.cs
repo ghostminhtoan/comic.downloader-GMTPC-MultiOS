@@ -7,10 +7,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media.Imaging;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.Services;
 using ComicDownloaderGMTPC.ViewModels;
 using ComicDownloaderGMTPC.Views;
+using SkiaSharp;
 
 namespace ComicDownloaderGMTPC;
 
@@ -59,6 +61,13 @@ public partial class App : Application
             {
                 base.OnFrameworkInitializationCompleted();
                 _ = RunDualSortNavTestAsync(desktop);
+                return;
+            }
+
+            if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-dualsort-thumbs", StringComparison.OrdinalIgnoreCase)))
+            {
+                base.OnFrameworkInitializationCompleted();
+                _ = RunDualSortThumbsTestAsync(desktop);
                 return;
             }
 
@@ -678,6 +687,97 @@ public partial class App : Application
             }
             catch { }
         }
+    }
+
+    private static async Task RunDualSortThumbsTestAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        Console.WriteLine("\n=========================================");
+        Console.WriteLine("🚀 BẮT ĐẦU KIỂM THỬ THUMBNAIL & ANIMATION TRONG DUAL PICTURE SORT");
+        Console.WriteLine("=========================================\n");
+
+        bool allPassed = true;
+        var vm = new ViewModels.MainViewModel();
+
+        // 1. Kiểm thử thư mục T:\[HDD T]\zfaststone capture\test
+        string fld1 = @"T:\[HDD T]\zfaststone capture\test";
+        if (Directory.Exists(fld1))
+        {
+            Console.WriteLine($"[TEST 1] Nạp thư mục test: {fld1}");
+            vm.DualSortSourcePath = fld1;
+            await vm.LoadBothSortFoldersAsync();
+
+            // Chờ giải mã thumbnail
+            await Task.Delay(2000);
+
+            int total = vm.DualSortSourceItems.Count;
+            int withThumb = vm.DualSortSourceItems.Count(i => i.Thumbnail != null);
+            Console.WriteLine($" -> Đã tải {withThumb}/{total} thumbnails trong danh sách.");
+            foreach (var item in vm.DualSortSourceItems)
+            {
+                bool ok = item.Thumbnail != null;
+                Console.WriteLine($"    + [{item.FileName}] Thumb={(ok ? "OK ✅" : "THIẾU ❌")} ({item.ResolutionText}, {item.FileSizeText})");
+                if (!ok) allPassed = false;
+            }
+
+            // Test animation preview cho webp và gif
+            var webpItem = vm.DualSortSourceItems.FirstOrDefault(i => i.FileName.EndsWith(".webp", StringComparison.OrdinalIgnoreCase));
+            if (webpItem != null)
+            {
+                Console.WriteLine($"\n[TEST 1.1] Kích hoạt Preview cho file animated WebP: {webpItem.FileName}");
+                vm.ShowDualSortPreview(webpItem);
+                await Task.Delay(800);
+                bool animOk = vm.IsDualSortPreviewAnimated && vm.DualSortPreviewBitmap != null;
+                Console.WriteLine($" -> Kết quả WebP Animation: Animated={vm.IsDualSortPreviewAnimated}, Badge={vm.DualSortPreviewAnimatedBadge}, BitmapOK={vm.DualSortPreviewBitmap != null} => {(animOk ? "PASS ✅" : "FAIL ❌")}");
+                if (!animOk) allPassed = false;
+                vm.CloseDualSortPreview();
+            }
+
+            var gifItem = vm.DualSortSourceItems.FirstOrDefault(i => i.FileName.EndsWith(".gif", StringComparison.OrdinalIgnoreCase));
+            if (gifItem != null)
+            {
+                Console.WriteLine($"\n[TEST 1.2] Kích hoạt Preview cho file animated GIF: {gifItem.FileName}");
+                vm.ShowDualSortPreview(gifItem);
+                await Task.Delay(800);
+                bool animOk = vm.IsDualSortPreviewAnimated && vm.DualSortPreviewBitmap != null;
+                Console.WriteLine($" -> Kết quả GIF Animation: Animated={vm.IsDualSortPreviewAnimated}, Badge={vm.DualSortPreviewAnimatedBadge}, BitmapOK={vm.DualSortPreviewBitmap != null} => {(animOk ? "PASS ✅" : "FAIL ❌")}");
+                if (!animOk) allPassed = false;
+                vm.CloseDualSortPreview();
+            }
+        }
+
+        // 2. Kiểm thử thư mục T:\[HDD T]\zmedia\bulk image downloader\downloading\hentaiforce\uncen full color\2B9S - HentaiForce
+        string fld2 = @"T:\[HDD T]\zmedia\bulk image downloader\downloading\hentaiforce\uncen full color\2B9S - HentaiForce";
+        if (Directory.Exists(fld2))
+        {
+            Console.WriteLine($"\n[TEST 2] Nạp thư mục 2B9S HentaiForce: {fld2}");
+            vm.DualSortSourcePath = fld2;
+            await vm.LoadBothSortFoldersAsync();
+
+            await Task.Delay(3000);
+
+            int total = vm.DualSortSourceItems.Count;
+            int withThumb = vm.DualSortSourceItems.Count(i => i.Thumbnail != null);
+            Console.WriteLine($" -> Đã tải {withThumb}/{total} thumbnails trong danh sách.");
+            foreach (var item in vm.DualSortSourceItems)
+            {
+                bool ok = item.Thumbnail != null;
+                if (!ok)
+                {
+                    Console.WriteLine($"    + [FAIL ❌] {item.FileName} thiếu Thumbnail!");
+                    allPassed = false;
+                }
+            }
+            if (withThumb == total && total > 0)
+            {
+                Console.WriteLine($" -> TOÀN BỘ {total} ẢNH JPG/WEBP ĐỀU CÓ THUMBNAIL ĐẦY ĐỦ 100%! ✅");
+            }
+        }
+
+        Console.WriteLine("\n=========================================");
+        Console.WriteLine(allPassed ? "🎉 KẾT QUẢ TEST THUMBNAIL & ANIMATION: 100% PASS!" : "❌ KẾT QUẢ TEST THUMBNAIL & ANIMATION: CÓ LỖI!");
+        Console.WriteLine("=========================================\n");
+
+        Environment.Exit(allPassed ? 0 : 1);
     }
 
     private static bool IsReadableComicOrMediaFileOrDirectory(string path)

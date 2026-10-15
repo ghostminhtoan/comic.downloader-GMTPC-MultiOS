@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -751,49 +752,51 @@ public partial class MainViewModel
 
                 try
                 {
-                    // Đọc metadata và decode thumbnail bằng SkiaSharp tiết kiệm RAM
-                    using var stream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    using var codec = SKCodec.Create(stream);
-                    if (codec != null)
+                    // 1. Đọc metadata kích thước ảnh gốc siêu tốc bằng SKCodec (chỉ đọc header, không nạp toàn bộ ảnh)
+                    int origW = 0;
+                    int origH = 0;
+                    try
                     {
-                        int origW = codec.Info.Width;
-                        int origH = codec.Info.Height;
-
-                        // Tính kích thước thumbnail (tối đa cạnh dài 240px)
-                        int maxDim = 240;
-                        int thumbW = origW;
-                        int thumbH = origH;
-                        if (origW > maxDim || origH > maxDim)
+                        using var headerStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        using var codec = SKCodec.Create(headerStream);
+                        if (codec != null)
                         {
-                            if (origW >= origH)
-                            {
-                                thumbW = maxDim;
-                                thumbH = Math.Max(1, (int)((float)origH / origW * maxDim));
-                            }
-                            else
-                            {
-                                thumbH = maxDim;
-                                thumbW = Math.Max(1, (int)((float)origW / origH * maxDim));
-                            }
+                            origW = codec.Info.Width;
+                            origH = codec.Info.Height;
+                        }
+                    }
+                    catch { }
+
+                    // 2. Tạo thumbnail trực tiếp bằng Avalonia Bitmap.DecodeToWidth (chuẩn 100% mọi định dạng JPG, PNG, WEBP, GIF, BMP)
+                    Bitmap? thumbBmp = null;
+                    try
+                    {
+                        using var imgStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        thumbBmp = Bitmap.DecodeToWidth(imgStream, 240);
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            using var fallbackStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                            thumbBmp = new Bitmap(fallbackStream);
+                        }
+                        catch { }
+                    }
+
+                    if (thumbBmp != null)
+                    {
+                        if (origW <= 0 || origH <= 0)
+                        {
+                            origW = thumbBmp.PixelSize.Width;
+                            origH = thumbBmp.PixelSize.Height;
                         }
 
-                        var decodeInfo = new SKImageInfo(thumbW, thumbH, SKColorType.Rgba8888, SKAlphaType.Premul);
-                        using var skBmp = SKBitmap.Decode(codec, decodeInfo);
-                        if (skBmp != null)
+                        Dispatcher.UIThread.Post(() =>
                         {
-                            using var skImg = SKImage.FromBitmap(skBmp);
-                            using var data = skImg.Encode(SKEncodedImageFormat.Jpeg, 75);
-                            using var ms = new MemoryStream();
-                            data.SaveTo(ms);
-                            ms.Position = 0;
-                            var avaloniaBmp = new Bitmap(ms);
-
-                            Dispatcher.UIThread.Post(() =>
-                            {
-                                item.UpdateDimensions(origW, origH);
-                                item.Thumbnail = avaloniaBmp;
-                            }, DispatcherPriority.Background);
-                        }
+                            item.UpdateDimensions(origW, origH);
+                            item.Thumbnail = thumbBmp;
+                        }, DispatcherPriority.Background);
                     }
                 }
                 catch { }
@@ -1444,39 +1447,7 @@ public partial class MainViewModel
             {
                 if (!File.Exists(item.FilePath)) return;
 
-                string ext = Path.GetExtension(item.FilePath).ToLowerInvariant();
-                bool isAnimated = false;
-                int detectedFrameCount = 1;
-
-                var durations = new List<int>();
-
-                // 2. Nhận diện siêu tốc (0.1ms) bằng SKCodec xem có phải ảnh động (GIF hoặc WebP Animated)
-                if (ext == ".gif" || ext == ".webp")
-                {
-                    try
-                    {
-                        using var stream = File.OpenRead(item.FilePath);
-                        using var codec = SKCodec.Create(stream);
-                        if (codec != null && codec.FrameCount > 1)
-                        {
-                            isAnimated = true;
-                            detectedFrameCount = codec.FrameCount;
-                            var infos = codec.FrameInfo;
-                            if (infos != null)
-                            {
-                                foreach (var fi in infos)
-                                {
-                                    int d = fi.Duration;
-                                    if (d <= 15) d = 100;
-                                    durations.Add(d);
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-                }
-
-                // 3. Nạp nhanh frame đầu tiên để người dùng thấy ảnh ngay lập tức (0ms latency)
+                // 1. Nạp nhanh ảnh gốc tĩnh ban đầu để người dùng xem ngay lập tức (0ms latency)
                 try
                 {
                     using var fs = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -1495,11 +1466,24 @@ public partial class MainViewModel
                 }
                 catch { }
 
-                // Nếu là ảnh tĩnh, không cần giải mã animation
-                if (!isAnimated || cts.IsCancellationRequested) return;
+                if (cts.IsCancellationRequested || !IsDualSortPreviewVisible || DualSortPreviewItem != item)
+                    return;
 
-                // 4. Nếu là ảnh động: Hiển thị badge 🎞️ GIF / 🎞️ WEBP
-                string badge = ext == ".gif" ? $"🎞️ GIF ({detectedFrameCount}f)" : $"🎞️ WEBP ({detectedFrameCount}f)";
+                string ext = Path.GetExtension(item.FilePath).ToLowerInvariant();
+                if (ext != ".gif" && ext != ".webp") return;
+
+                // 2. Mở SKCodec C++ native siêu tốc để kiểm tra frame động (hỗ trợ 100% cả GIF lẫn WebP Animation)
+                using var codecStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var codec = SKCodec.Create(codecStream);
+                if (codec == null || codec.FrameCount <= 1) return;
+
+                int totalFrames = codec.FrameCount;
+                int origW = codec.Info.Width;
+                int origH = codec.Info.Height;
+                if (origW <= 0 || origH <= 0) return;
+
+                // 3. Hiển thị badge 🎞️ GIF / 🎞️ WEBP
+                string badge = ext == ".gif" ? $"🎞️ GIF ({totalFrames}f)" : $"🎞️ WEBP ({totalFrames}f)";
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
@@ -1509,93 +1493,87 @@ public partial class MainViewModel
                     }
                 });
 
-                // 5. Giải mã toàn bộ chuỗi khung hình bằng SixLabors.ImageSharp (Bảo đảm 100% composition & delay)
-                var frameList = new List<(Bitmap Bitmap, int DelayMs)>();
+                // 4. Tính kích thước render tối ưu (Max 640px để cực kỳ nhẹ RAM và siêu mượt 60fps)
+                int targetW = origW;
+                int targetH = origH;
+                if (targetW > 640 || targetH > 640)
+                {
+                    float scale = Math.Min(640f / targetW, 640f / targetH);
+                    targetW = Math.Max(1, (int)(targetW * scale));
+                    targetH = Math.Max(1, (int)(targetH * scale));
+                }
+
+                // 5. Đọc danh sách thời gian trễ của từng frame
+                var frameInfos = codec.FrameInfo;
+                var durations = new int[totalFrames];
+                for (int i = 0; i < totalFrames; i++)
+                {
+                    int d = frameInfos != null && i < frameInfos.Length ? frameInfos[i].Duration : 100;
+                    if (d <= 15) d = 100; // Tránh delay = 0 hoặc quá thấp gây nghẽn CPU
+                    durations[i] = d;
+                }
+
+                // 6. Khởi tạo Double Buffering WriteableBitmap để streaming render mượt mà, không tốn RAM
+                var wbA = new WriteableBitmap(new PixelSize(targetW, targetH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+                var wbB = new WriteableBitmap(new PixelSize(targetW, targetH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+
+                var origInfo = new SKImageInfo(origW, origH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                var targetInfo = new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                using var baseBitmap = new SKBitmap(origInfo);
+                IntPtr pixelsPtr = baseBitmap.GetPixels();
+
                 try
                 {
-                    using var animatedImg = SixLabors.ImageSharp.Image.Load<Rgba32>(item.FilePath);
-                    int totalFrames = animatedImg.Frames.Count;
-                    if (totalFrames <= 1) return;
+                    int currentFrame = 0;
+                    bool useA = true;
 
-                    // Nếu quá nhiều frames (>120), nhảy bước step để tối ưu RAM tối đa cho mobile
-                    int step = totalFrames > 120 ? (int)Math.Ceiling(totalFrames / 120.0) : 1;
-
-                    for (int f = 0; f < totalFrames; f += step)
-                    {
-                        if (cts.IsCancellationRequested || !IsDualSortPreviewVisible || DualSortPreviewItem != item)
-                            break;
-
-                        var frame = animatedImg.Frames[f];
-                        int delayMs = 100;
-                        if (f < durations.Count)
-                        {
-                            delayMs = durations[f] * step;
-                        }
-                        else if (ext == ".gif")
-                        {
-                            var gifMeta = frame.Metadata.GetGifMetadata();
-                            int delayHundredths = gifMeta?.FrameDelay ?? 10;
-                            delayMs = delayHundredths * 10 * step;
-                        }
-                        if (delayMs <= 15) delayMs = 100; // Tránh delay = 0 hoặc quá thấp gây nghẽn CPU
-
-                        using var frameImg = animatedImg.Frames.CloneFrame(f);
-                        // Scale vừa khung Preview (Max 640px) để mượt mà và siêu nhẹ RAM
-                        if (frameImg.Width > 640 || frameImg.Height > 640)
-                        {
-                            float scale = Math.Min(640f / frameImg.Width, 640f / frameImg.Height);
-                            frameImg.Mutate(x => x.Resize((int)(frameImg.Width * scale), (int)(frameImg.Height * scale)));
-                        }
-
-                        using var ms = new MemoryStream();
-                        frameImg.SaveAsPng(ms);
-                        ms.Position = 0;
-                        var frameBmp = new Bitmap(ms);
-                        frameList.Add((frameBmp, delayMs));
-                    }
-
-                    if (cts.IsCancellationRequested || frameList.Count <= 1 || !IsDualSortPreviewVisible || DualSortPreviewItem != item)
-                    {
-                        foreach (var fl in frameList) fl.Bitmap.Dispose();
-                        return;
-                    }
-
-                    // 6. Phát animation liên tục trên UI Thread
-                    int currentIdx = 0;
+                    // 7. Vòng lặp phát animation thời gian thực (Streaming Realtime Decode) với O(N) priorFrame
                     while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                     {
-                        var cur = frameList[currentIdx];
-                        Dispatcher.UIThread.Post(() =>
+                        var codecOptions = currentFrame == 0 ? new SKCodecOptions(0) : new SKCodecOptions(currentFrame, currentFrame - 1);
+                        var res = codec.GetPixels(origInfo, pixelsPtr, codecOptions);
+                        if (res == SKCodecResult.Success)
                         {
-                            if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                            var curWb = useA ? wbA : wbB;
+                            using (var locked = curWb.Lock())
                             {
-                                DualSortPreviewBitmap = cur.Bitmap;
+                                using var surface = SKSurface.Create(targetInfo, locked.Address, locked.RowBytes);
+                                var canvas = surface.Canvas;
+                                canvas.Clear(SKColors.Transparent);
+                                canvas.DrawBitmap(baseBitmap, new SKRect(0, 0, targetW, targetH));
                             }
-                        }, DispatcherPriority.Render);
 
-                        await Task.Delay(cur.DelayMs, cts.Token);
-                        currentIdx = (currentIdx + 1) % frameList.Count;
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                {
+                                    DualSortPreviewBitmap = curWb;
+                                }
+                            }, DispatcherPriority.Render);
+
+                            useA = !useA;
+                        }
+
+                        int delay = durations[currentFrame];
+                        await Task.Delay(delay, cts.Token);
+                        currentFrame = (currentFrame + 1) % totalFrames;
                     }
                 }
-                catch (OperationCanceledException) { }
-                catch { }
                 finally
                 {
-                    // 7. Giải phóng bộ nhớ sạch sẽ, an toàn 100%
                     Dispatcher.UIThread.Post(() =>
                     {
-                        if (DualSortPreviewBitmap != null && frameList.Any(fl => fl.Bitmap == DualSortPreviewBitmap))
+                        if (DualSortPreviewBitmap == wbA || DualSortPreviewBitmap == wbB)
                         {
                             DualSortPreviewBitmap = null;
                         }
-                        foreach (var fl in frameList)
-                        {
-                            fl.Bitmap.Dispose();
-                        }
+                        wbA.Dispose();
+                        wbB.Dispose();
                     });
                 }
             }
-            catch (Exception) { }
+            catch (OperationCanceledException) { }
+            catch { }
         }, cts.Token);
     }
 
