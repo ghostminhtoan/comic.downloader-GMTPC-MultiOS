@@ -3603,6 +3603,38 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test CLI `--test-vertical-doubletap`: 100% PASS (10/10 lần pass không delay, không lệch trang).
   - Đóng gói và upload 3 nền tảng (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta`.
 
+---
+
+## 22. Cập Nhật: Khắc Phục Triệt Để Lỗi Pinch & Zoom Trên Android - Nhận Diện Trang Mục Tiêu (Target Page Focus) & Loại Bỏ Thao Tác Thừa Cuộn Dọc
+
+- **Bối cảnh & Phản hồi từ người dùng**:
+  1. Khi người dùng thực hiện thao tác 2 ngón tay Pinch & Zoom trên Android (đặc biệt khi mở file nén `.zip`, `.cbz`, `.rar`, `.cbr`, `.pdf`), trang đọc truyện vẫn bị tua/nhảy trang loạn xạ.
+  2. Nguyên nhân cốt lõi:
+     - Trong khi 2 ngón tay pinch-zoom, chuyển động tự nhiên của bàn tay luôn có độ dịch dọc không mong muốn (`panDy`). Ở phiên bản trước, thuật toán trừ bù trừ `panDy` vào `newOffsetY` khiến `ScrollViewer` cuộn trượt giật cục theo ngón tay (thao tác thừa).
+     - Khi một ngón tay chạm xuống trước ngón thứ hai một vài mili-giây, hoặc khi nhấc một ngón tay lên trước, con trỏ đơn lẻ kích hoạt cơ chế Pan Drag cuộn trang làm trôi mất vị trí trang đang đọc.
+     - Hệ thống chưa đọc được ngón tay đang chạm lên trang nào trong danh sách trang dài hàng trăm/hàng nghìn trang để tập trung (focus) zoom riêng vào trang đó.
+- **Giải pháp Kỹ thuật & Cải tiến (`ComicReaderControl.axaml.cs`)**:
+  1. **Hàm Nhận Diện Trang Mục Tiêu Dưới Ngón Tay (`FindPageIndexAtPoint`)**:
+     - Quét cây thị giác `VisualDescendants` của `ReaderPagesListBox`, dịch chuyển tọa độ vùng hiển thị `TranslatePoint` của từng `ListBoxItem` container.
+     - Xác định chuẩn xác 100% chỉ số trang (`page.Index`) mà điểm trọng tâm giữa 2 ngón tay (`_pinchPivotInLb`) đang chạm lên, đồng thời lấy tọa độ đỉnh `pageTopInLb` và chiều cao của trang đó.
+     - Khóa cứng `_pinchTargetPageIndex = FindPageIndexAtPoint(...)`.
+  2. **Neo Điểm Chạm Tuyệt Đối & Loại Bỏ Hoàn Toàn `panDy`**:
+     - Lưu tọa độ neo tuyệt đối trong Document: `_pinchAnchorInDocX = _pinchStartOffset.X + _pinchPivotInLb.X` và `_pinchAnchorInDocY = _pinchStartOffset.Y + _pinchPivotInLb.Y`.
+     - Trong suốt quá trình co giãn 2 ngón tay (`UpdatePinchGesture`):
+       + `newOffsetX = (_pinchAnchorInDocX * ratio) - _pinchPivotInLb.X`.
+       + `newOffsetY = (_pinchAnchorInDocY * ratio) - _pinchPivotInLb.Y`.
+       + **Tuyệt đối KHÔNG cộng trừ `panDy`**: Ngón tay dịch chuyển lên xuống không làm cuộn ScrollViewer, điểm chạm trên chính trang đó luôn nằm cố định tại tọa độ con trỏ trên màn hình.
+  3. **Bộ Khóa Cứng Trang Hiện Tại (Target Page Lock) & Ngăn Tua Trang (`OnReaderScrollChanged`)**:
+     - Trong suốt cử chỉ pinch và trong vòng 800ms sau khi kết thúc: cưỡng chế `vm.CurrentPageIndex = _pinchTargetPageIndex`.
+     - Thêm vùng trễ bảo vệ (Deadzone 600ms) trong `OnViewportPointerMoved` và `OnViewportPointerPressed` sau khi pinch: bỏ qua hoàn toàn các chạm/kéo mồ côi khi người dùng nhấc ngón tay thứ 2 chậm hơn ngón tay thứ nhất.
+     - Trong `OnViewportPointerReleased`: đồng bộ chuẩn xác `vmRel.CurrentPageIndex = _pinchTargetPageIndex`.
+- **Nghiệm Thu Toàn Diện**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
+  - Test CLI `--test-pinch-thumuc`: 100% PASS (10/10 bước zoom in/out + release giữ nguyên đúng Page 2).
+  - Test CLI `--test-vertical-doubletap`: 100% PASS (10/10 lần double-tap zoom không delay, không lệch trang).
+  - Tự động đóng gói và xuất bản 3 nền tảng (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta`.
+
+
 
 
 
