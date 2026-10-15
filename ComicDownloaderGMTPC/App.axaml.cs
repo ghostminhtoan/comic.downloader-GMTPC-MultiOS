@@ -332,7 +332,7 @@ public partial class App : Application
         int targetIndex = 2;
         Console.WriteLine($"[TEST] Stabilized at CurrentPageIndex = {readerVm.CurrentPageIndex}, ZoomLevel = {readerVm.ZoomLevel * 100:0}%");
 
-        // Mô phỏng cử chỉ 2 ngón tay Pinch-to-zoom 10 lần liên tục ở các khoảng cách và tỉ lệ zoom khác nhau
+        // Mô phỏng cử chỉ 2 ngón tay Pinch-to-zoom 20 lần liên tục (10 lần Zoom In + 10 lần Zoom Out)
         var traceLogs = new List<string>();
         bool allPassed = true;
 
@@ -340,8 +340,12 @@ public partial class App : Application
         double centerX = window.Bounds.Width > 0 ? window.Bounds.Width / 2.0 : 240;
         double centerY = window.Bounds.Height > 0 ? window.Bounds.Height / 2.0 : 427;
 
-        // Các tỉ lệ khoảng cách 2 ngón tay mô phỏng (tương ứng zoom in/out)
-        double[] distanceMultipliers = new double[] { 1.25, 1.5, 1.8, 2.2, 1.6, 1.0, 0.75, 1.3, 2.0, 1.0 };
+        // 20 tỉ lệ khoảng cách 2 ngón tay mô phỏng (10 bước phóng to + 10 bước thu nhỏ)
+        double[] distanceMultipliers = new double[]
+        {
+            1.06, 1.15, 1.25, 1.40, 1.60, 1.80, 2.05, 2.30, 2.60, 3.00, // 10 bước Zoom In
+            2.70, 2.40, 2.10, 1.80, 1.55, 1.35, 1.20, 1.10, 0.95, 1.00  // 10 bước Zoom Out
+        };
 
         readerControl.PerformPinchZoomStep(new Point(centerX - 100, centerY), new Point(centerX + 100, centerY));
         await Task.Delay(100);
@@ -362,10 +366,30 @@ public partial class App : Application
             double postZoom = readerVm.ZoomLevel;
             int postIndex = readerVm.CurrentPageIndex;
 
+            // Kiểm tra trang mục tiêu giữ nguyên không bị tua
             bool pageMatched = (postIndex == targetIndex);
-            if (!pageMatched) allPassed = false;
 
-            string logLine = $"[PINCH TRACE STEP {step + 1:D2}/10] Mult={mult:0.00} | PreZoom={preZoom * 100:0}% -> PostZoom={postZoom * 100:0}% | Page={postIndex} (Expected={targetIndex}) -> {(pageMatched ? "PASS ✅ KHÔNG TUA TRANG" : "FAIL ❌ BỊ LỆCH TRANG!")}";
+            // Kiểm tra điểm neo nội dung trên trang mục tiêu: không bị giật nhảy lên xuống
+            var sv = readerControl.GetReaderScrollViewer();
+            double curOffsetY = sv?.Offset.Y ?? 0;
+            double targetPageDocY = 0;
+            for (int i = 0; i < targetIndex && i < readerVm.Pages.Count; i++)
+            {
+                var p = readerVm.Pages[i];
+                targetPageDocY += p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom;
+            }
+            double targetPageHeight = readerVm.Pages[targetIndex].DisplayHeight;
+            double normY = readerControl.PinchTargetNormY;
+            double anchorDocY = targetPageDocY + (normY * targetPageHeight);
+            double anchorScreenY = anchorDocY - curOffsetY;
+            double jitter = Math.Abs(anchorScreenY - centerY);
+            bool jitterOk = jitter <= 5.0; // Độ lệch điểm chạm dưới ngón tay <= 5.0px (ổn định tuyệt đối)
+
+            bool pass = pageMatched && jitterOk;
+            if (!pass) allPassed = false;
+
+            string direction = step < 10 ? "ZoomIn" : "ZoomOut";
+            string logLine = $"[PINCH 20-STEPS TRACE {step + 1:D2}/20 | {direction}] Mult={mult:0.00} | Zoom={postZoom * 100:0}% | Page={postIndex} (Exp={targetIndex}) | OffsetY={curOffsetY:0.0} | Jitter={jitter:0.1}px -> {(pass ? "PASS ✅ ỔN ĐỊNH, KHÔNG GIẬT NHẢY" : "FAIL ❌ BỊ LỆCH HOẶC GIẬT NHẢY!")}";
             Console.WriteLine(logLine);
             traceLogs.Add(logLine);
         }
@@ -384,8 +408,8 @@ public partial class App : Application
         traceLogs.Add(finalLog);
 
         string resultSummary = allPassed
-            ? "\n=========================================\n🎉 KẾT QUẢ TEST PINCH: 100% PASS! KHÔNG HỀ BỊ TUA HAY NHẢY TRANG!\n========================================="
-            : "\n=========================================\n⚠️ KẾT QUẢ TEST PINCH: BỊ LỆCH HOẶC TUA TRANG!\n=========================================";
+            ? "\n=========================================\n🎉 KẾT QUẢ TEST PINCH 20 LẦN: 100% PASS! KHÔNG HỀ GIẬT NHẢY HAY TUA TRANG!\n========================================="
+            : "\n=========================================\n⚠️ KẾT QUẢ TEST PINCH 20 LẦN: CÓ BƯỚC BỊ GIẬT NHẢY HOẶC TUA TRANG!\n=========================================";
         Console.WriteLine(resultSummary);
 
         // Ghi log ra file

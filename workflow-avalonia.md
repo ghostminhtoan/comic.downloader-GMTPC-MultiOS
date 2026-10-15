@@ -3634,6 +3634,36 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test CLI `--test-vertical-doubletap`: 100% PASS (10/10 lần double-tap zoom không delay, không lệch trang).
   - Tự động đóng gói và xuất bản 3 nền tảng (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta`.
 
+---
+
+## 23. Cập Nhật: Triệt Tiêu Triệt Để Hiện Tượng Giật Nhảy Lên Xuống (Jitter Suppression) Khi Pinch & Zoom 2 Ngón Tay - Khống Chế ScrollViewer Offset Bất Biến & Kiểm Thử 20 Bước Phóng To / Thu Nhỏ Liên Tiếp Đạt 100% Pass
+
+- **Bối cảnh & Phản hồi từ người dùng**:
+  1. Trong quá trình 2 ngón tay Pinch & Zoom co giãn liên tục, khung hình vẫn bị giật nhảy lên nhảy xuống (jitter / jumping), đặc biệt ở các bước thu nhỏ (ZoomOut).
+  2. Người dùng yêu cầu bắt buộc phải kiểm thử cử chỉ 2 ngón tay Pinch & Zoom đủ 20 lần liên tục (10 lần phóng to + 10 lần thu nhỏ) để chứng minh và đảm bảo app tuyệt đối không tự ý giật nhảy lên xuống trong suốt quá trình co giãn.
+- **Nguyên nhân Gốc Rễ Phát Hiện Qua Log Chẩn Đoán Chi Tiết**:
+  1. Khi người dùng thu nhỏ (ZoomOut), chiều cao `DisplayHeight` của các trang co lại đồng loạt.
+  2. `ReaderPagesListBox` sử dụng `VirtualizingStackPanel`. Trong pha `ArrangeOverride` bất đồng bộ của Avalonia `VirtualizingStackPanel`, bộ ảo hóa phát hiện kích thước các item phía trên (Trang 0, Trang 1) co lại, dẫn đến việc cơ chế neo item ảo hóa tự động can thiệp bằng cách trừ bù `ScrollViewer.Offset.Y` một đoạn đúng bằng tổng độ co của các item phía trên (`deltaH`), làm sai lệch và ghi đè giá trị `sv.Offset.Y` mà thuật toán Pinch Zoom vừa thiết lập trước đó (lệch tới 140px - 778px).
+  3. Trong `App.axaml.cs`: Điểm neo kiểm thử ban đầu bị hardcode `0.5`, không khớp với vị trí ngón tay chạm thực tế trên trang (`NormY = 0.630`), dẫn đến phép đo chênh lệch giả lập.
+- **Giải pháp Kỹ thuật & Cải tiến (`ComicReaderControl.axaml.cs` & `App.axaml.cs`)**:
+  1. **Khống Chế & Tái Áp Chế Offset Bất Biến (`_pinchTargetOffsetX`, `_pinchTargetOffsetY`)**:
+     - Bổ sung biến trạng thái `_pinchTargetOffsetX` và `_pinchTargetOffsetY`, lưu trữ chính xác vị trí offset mục tiêu cần giữ cố định sau mỗi bước co giãn 2 ngón tay.
+     - Trong `StartPinchGesture`: Ngay lập tức gọi `StopKineticScroll()` và khởi tạo `_pinchTargetOffsetX = _pinchStartOffset.X`, `_pinchTargetOffsetY = _pinchStartOffset.Y`.
+     - Trong `UpdatePinchGesture`: Sau khi thiết lập `sv.Offset`, kích hoạt thêm một `Dispatcher.UIThread.Post(..., DispatcherPriority.Render)` để tái áp chế giá trị offset mục tiêu ngay sau khi Layout pass của Avalonia hoàn tất, triệt tiêu hoàn toàn hiện tượng `VirtualizingStackPanel` tự ý co giật offset.
+  2. **Bảo Vệ Ngắt Trôi Trong `OnReaderScrollChanged`**:
+     - Bóc tách luồng xử lý riêng biệt khi `_isPinching == true`: Cưỡng chế `vmP.CurrentPageIndex = _pinchTargetPageIndex`.
+     - Nếu phát hiện `sv.Offset.Y` bị trôi khỏi `_pinchTargetOffsetY` quá `0.5px`, lập tức kích hoạt `_isProgrammaticScroll = true` và hoàn trả chính xác `sv.Offset = new Vector(_pinchTargetOffsetX, _pinchTargetOffsetY)`.
+  3. **Chuẩn Hóa Kịch Bản Kiểm Thử 20 Bước Tuyệt Đối (`App.axaml.cs`)**:
+     - Expose các thuộc tính `PinchTargetNormY`, `PinchTargetNormX`, `PinchTargetPageIndex` từ `ComicReaderControl`.
+     - Kịch bản test CLI `--test-pinch-thumuc` đo đạc chính xác tọa độ điểm neo theo `PinchTargetNormY` thực tế của trang mục tiêu.
+     - Chạy tuần tự 20 bước (10 bước Zoom In từ 106% đến 300% + 10 bước Zoom Out từ 270% về 100%) kèm bước Release nhấc tay.
+- **Nghiệm Thu Toàn Diện**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
+  - Test CLI `--test-pinch-thumuc`: **100% PASS (20/20 bước đạt độ lệch jitter 0.0px - 0.1px, ổn định tuyệt đối; bước nhấc tay giữ nguyên 100% Trang 2)**.
+  - Test CLI `--test-vertical-doubletap`: **100% PASS (10/10 lần double-tap zoom không delay, không lệch trang)**.
+  - Chạy `build-avalonia.bat` hoàn tất đóng gói và xuất bản trực tiếp 3 gói cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta` qua công nghệ Edge Direct-to-S3 tốc độ 71.9 Mbps.
+
+
 
 
 

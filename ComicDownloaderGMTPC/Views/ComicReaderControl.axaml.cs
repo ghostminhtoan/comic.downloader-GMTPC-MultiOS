@@ -75,8 +75,13 @@ public partial class ComicReaderControl : UserControl
     private Point _pinchPivotInLb;
     private long _lastPinchEndTick;
     private int _pinchTargetPageIndex = -1;
-    private double _pinchAnchorInDocX;
-    private double _pinchAnchorInDocY;
+    private double _pinchTargetNormX = 0.5;
+    private double _pinchTargetNormY = 0.5;
+    public int PinchTargetPageIndex => _pinchTargetPageIndex;
+    public double PinchTargetNormX => _pinchTargetNormX;
+    public double PinchTargetNormY => _pinchTargetNormY;
+    private double _pinchTargetOffsetX;
+    private double _pinchTargetOffsetY;
 
     /// <summary>
     /// Tìm chính xác trang mà điểm chạm (ngón tay) đang nằm lên trong ListBox chế độ cuộn dọc.
@@ -140,6 +145,7 @@ public partial class ComicReaderControl : UserControl
 
     private void StartPinchGesture(Point p1, Point p2)
     {
+        StopKineticScroll();
         if (DataContext is not ComicReaderViewModel vm) return;
 
         double dist = Distance(p1, p2);
@@ -148,6 +154,8 @@ public partial class ComicReaderControl : UserControl
 
         var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
         _pinchStartOffset = sv?.Offset ?? Vector.Zero;
+        _pinchTargetOffsetX = _pinchStartOffset.X;
+        _pinchTargetOffsetY = _pinchStartOffset.Y;
 
         Point currentPivot = new Point((p1.X + p2.X) * 0.5, (p1.Y + p2.Y) * 0.5);
         _pinchStartPivot = currentPivot;
@@ -161,19 +169,54 @@ public partial class ComicReaderControl : UserControl
         }
         _pinchPivotInLb = inLb;
 
-        // ĐỌC CHÍNH XÁC NGÓN TAY ĐANG Ở TRANG NÀO:
+        double pageTopInLb = 0;
+        double pageHeight = 0;
+
+        // ĐỌC CHÍNH XÁC NGÓN TAY ĐANG Ở TRANG NÀO VÀ TỌA ĐỘ TƯƠNG ĐỐI TRONG TRANG ĐÓ:
         if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
         {
-            _pinchTargetPageIndex = FindPageIndexAtPoint(_pinchPivotInLb, out _, out _);
+            _pinchTargetPageIndex = FindPageIndexAtPoint(_pinchPivotInLb, out pageTopInLb, out pageHeight);
+            if (pageHeight > 1.0)
+            {
+                _pinchTargetNormY = Math.Clamp((_pinchPivotInLb.Y - pageTopInLb) / pageHeight, 0.0, 1.0);
+            }
+            else
+            {
+                _pinchTargetNormY = 0.5;
+            }
+
+            double pageWidth = lb?.Bounds.Width ?? Bounds.Width;
+            double pageLeftInLb = 0;
+            if (lb != null)
+            {
+                foreach (var child in lb.GetVisualDescendants())
+                {
+                    if (child is ListBoxItem container && container.DataContext is ReaderPageItem page && page.Index == _pinchTargetPageIndex)
+                    {
+                        var pos = container.TranslatePoint(new Point(0, 0), lb);
+                        if (pos.HasValue)
+                        {
+                            pageLeftInLb = pos.Value.X;
+                            pageWidth = Math.Max(1.0, container.Bounds.Width);
+                        }
+                        break;
+                    }
+                }
+            }
+            _pinchTargetNormX = Math.Clamp((_pinchPivotInLb.X - pageLeftInLb) / Math.Max(1.0, pageWidth), 0.0, 1.0);
+        }
+        else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
+        {
+            _pinchTargetPageIndex = vm.CurrentPageIndex;
+            _pinchTargetNormX = 0.5;
+            _pinchTargetNormY = 0.5;
         }
         else
         {
             _pinchTargetPageIndex = vm.CurrentPageIndex;
+            _pinchTargetNormX = 0.5;
+            _pinchTargetNormY = 0.5;
         }
-
-        // Tọa độ điểm neo tuyệt đối trong Document Content lúc bắt đầu:
-        _pinchAnchorInDocX = _pinchStartOffset.X + _pinchPivotInLb.X;
-        _pinchAnchorInDocY = _pinchStartOffset.Y + _pinchPivotInLb.Y;
 
         // Khóa cứng trang đang đọc vào chính trang mà ngón tay đang chạm lên:
         if (_pinchTargetPageIndex >= 0 && _pinchTargetPageIndex < vm.Pages.Count)
@@ -181,13 +224,14 @@ public partial class ComicReaderControl : UserControl
             vm.CurrentPageIndex = _pinchTargetPageIndex;
         }
 
+        Console.WriteLine($"[DEBUG PINCH START] TargetPage={_pinchTargetPageIndex}, PageTop={pageTopInLb}, PageH={pageHeight}, NormY={_pinchTargetNormY:0.000}, NormX={_pinchTargetNormX:0.000}, PivotInLb={_pinchPivotInLb}");
         _isPinching = true;
         _isPanHolding = false;
         _isPanDragging = false;
         _isPointerTapCandidate = false;
         _singleTapTimer.Stop();
         _lastTapTick = 0;
-        _suppressScrollChangedUntilTick = Environment.TickCount64 + 800;
+        _suppressScrollChangedUntilTick = Environment.TickCount64 + 1000;
     }
 
     private void UpdatePinchGesture(Point p1, Point p2)
@@ -195,31 +239,88 @@ public partial class ComicReaderControl : UserControl
         if (DataContext is not ComicReaderViewModel vm || !_isPinching) return;
 
         double currentDist = Distance(p1, p2);
+        if (_pinchStartDistance <= 5.0 || currentDist <= 5.0) return;
 
-        if (_pinchStartDistance > 5.0 && currentDist > 5.0)
+        double scale = currentDist / _pinchStartDistance;
+        double newZoom = Math.Clamp(Math.Round(_pinchStartZoom * scale, 3), 0.4, 4.0);
+
+        // Cập nhật mức Zoom (kích hoạt ApplyFitModeLayout tính lại DisplayWidth / DisplayHeight cho mọi trang)
+        vm.ZoomLevel = newZoom;
+
+        Point currentPivot = new Point((p1.X + p2.X) * 0.5, (p1.Y + p2.Y) * 0.5);
+        Point currentPivotInLb = currentPivot;
+        var lb = this.FindControl<ListBox>("ReaderPagesListBox");
+        if (lb != null)
         {
-            double scale = currentDist / _pinchStartDistance;
-            double newZoom = Math.Clamp(Math.Round(_pinchStartZoom * scale, 3), 0.4, 4.0);
-            double ratio = (_pinchStartZoom > 0.05) ? (newZoom / _pinchStartZoom) : 1.0;
+            var pt = this.TranslatePoint(currentPivot, lb);
+            if (pt.HasValue) currentPivotInLb = pt.Value;
+        }
 
-            vm.ZoomLevel = newZoom;
-
-            var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
-            if (sv != null)
+        if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
+        {
+            var sv = GetReaderScrollViewer();
+            if (sv != null && _pinchTargetPageIndex >= 0 && _pinchTargetPageIndex < vm.Pages.Count)
             {
-                double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
-                double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
+                // 1. Tọa độ Document Y tuyệt đối của đỉnh trang mục tiêu ở mức zoom mới
+                double targetPageDocY = 0;
+                for (int i = 0; i < _pinchTargetPageIndex; i++)
+                {
+                    var p = vm.Pages[i];
+                    targetPageDocY += p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom;
+                }
 
-                // FOCUS 100% VÀO PINCH ZOOM Ở RIÊNG TRANG ĐÓ:
-                // TUYỆT ĐỐI KHÔNG CỘNG TRỪ panDy (không đọc thao tác thừa ngón tay lên xuống và không scroll theo ngón tay)!
-                // Neo điểm chạm trên chính trang đó luôn nằm cố định tại tọa độ _pinchPivotInLb trên màn hình:
-                double newAnchorInDocX = _pinchAnchorInDocX * ratio;
-                double newAnchorInDocY = _pinchAnchorInDocY * ratio;
+                var targetPage = vm.Pages[_pinchTargetPageIndex];
+                double targetPageHeight = targetPage.DisplayHeight;
 
-                double newOffsetX = newAnchorInDocX - _pinchPivotInLb.X;
-                double newOffsetY = newAnchorInDocY - _pinchPivotInLb.Y;
+                // 2. Tọa độ điểm neo bên trong trang mục tiêu
+                double anchorPointInDocY = targetPageDocY + (_pinchTargetNormY * targetPageHeight);
 
-                sv.Offset = new Vector(Math.Clamp(newOffsetX, 0, maxX), Math.Clamp(newOffsetY, 0, maxY));
+                // 3. Offset Y mới để điểm neo trên trang luôn nằm chính xác dưới vị trí ngón tay (currentPivotInLb.Y)
+                double newOffsetY = anchorPointInDocY - currentPivotInLb.Y;
+
+                // 4. Tính toán Extent thực tế của toàn bộ truyện ở mức zoom mới (tránh bị kẹp vào Extent cũ chưa kịp cập nhật)
+                double totalDocHeight = 0;
+                for (int i = 0; i < vm.Pages.Count; i++)
+                {
+                    var p = vm.Pages[i];
+                    totalDocHeight += p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom;
+                }
+                double maxOffsetY = Math.Max(0, totalDocHeight - sv.Viewport.Height);
+                newOffsetY = Math.Clamp(newOffsetY, 0, maxOffsetY);
+
+                // 5. Tính toán Offset X
+                double targetPageWidth = targetPage.DisplayWidth;
+                double newOffsetX = 0;
+                if (targetPageWidth > sv.Viewport.Width)
+                {
+                    double anchorPointInDocX = _pinchTargetNormX * targetPageWidth;
+                    newOffsetX = anchorPointInDocX - currentPivotInLb.X;
+                    double maxOffsetX = Math.Max(0, targetPageWidth - sv.Viewport.Width);
+                    newOffsetX = Math.Clamp(newOffsetX, 0, maxOffsetX);
+                }
+
+                _pinchTargetOffsetX = newOffsetX;
+                _pinchTargetOffsetY = newOffsetY;
+
+                _isProgrammaticScroll = true;
+                sv.Offset = new Vector(newOffsetX, newOffsetY);
+                _isProgrammaticScroll = false;
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_isPinching && vm.IsScrollMode && !vm.IsHorizontalScrollMode)
+                    {
+                        var curSv = GetReaderScrollViewer();
+                        if (curSv != null)
+                        {
+                            _isProgrammaticScroll = true;
+                            curSv.Offset = new Vector(_pinchTargetOffsetX, _pinchTargetOffsetY);
+                            _isProgrammaticScroll = false;
+                        }
+                    }
+                }, DispatcherPriority.Render);
+
+                Console.WriteLine($"[DEBUG PINCH STEP] Zoom={newZoom:0.00}, DocY={targetPageDocY:0.0}, PageH={targetPageHeight:0.0}, AnchorDocY={anchorPointInDocY:0.0}, OffsetY={newOffsetY:0.0}, PivotLbY={currentPivotInLb.Y:0.0}, ScreenAnchor={anchorPointInDocY - newOffsetY:0.0}");
             }
 
             // Khóa cứng trang đọc hiện tại, chống tua trang trong suốt cử chỉ Pinch
@@ -227,7 +328,57 @@ public partial class ComicReaderControl : UserControl
             {
                 vm.CurrentPageIndex = _pinchTargetPageIndex;
             }
-            _suppressScrollChangedUntilTick = Environment.TickCount64 + 800;
+            _suppressScrollChangedUntilTick = Environment.TickCount64 + 1000;
+        }
+        else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
+        {
+            var sv = GetReaderScrollViewer();
+            if (sv != null && _pinchTargetPageIndex >= 0 && _pinchTargetPageIndex < vm.Pages.Count)
+            {
+                double targetPageDocX = 0;
+                for (int i = 0; i < _pinchTargetPageIndex; i++)
+                {
+                    var p = vm.Pages[i];
+                    targetPageDocX += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
+                }
+
+                var targetPage = vm.Pages[_pinchTargetPageIndex];
+                double targetPageWidth = targetPage.DisplayWidth;
+                double anchorPointInDocX = targetPageDocX + (_pinchTargetNormX * targetPageWidth);
+                double newOffsetX = anchorPointInDocX - currentPivotInLb.X;
+
+                double totalDocWidth = 0;
+                for (int i = 0; i < vm.Pages.Count; i++)
+                {
+                    var p = vm.Pages[i];
+                    totalDocWidth += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
+                }
+                double maxOffsetX = Math.Max(0, totalDocWidth - sv.Viewport.Width);
+                newOffsetX = Math.Clamp(newOffsetX, 0, maxOffsetX);
+
+                _isProgrammaticScroll = true;
+                sv.Offset = new Vector(newOffsetX, sv.Offset.Y);
+                _isProgrammaticScroll = false;
+            }
+
+            if (_pinchTargetPageIndex >= 0 && _pinchTargetPageIndex < vm.Pages.Count)
+            {
+                vm.CurrentPageIndex = _pinchTargetPageIndex;
+            }
+            _suppressScrollChangedUntilTick = Environment.TickCount64 + 1000;
+        }
+        else
+        {
+            var flipSv = GetFlipScrollViewer();
+            if (flipSv != null)
+            {
+                double ratio = (_pinchStartZoom > 0.05) ? (newZoom / _pinchStartZoom) : 1.0;
+                double newTargetX = (_pinchStartOffset.X + currentPivot.X) * ratio - currentPivot.X;
+                double newTargetY = (_pinchStartOffset.Y + currentPivot.Y) * ratio - currentPivot.Y;
+                double maxX = Math.Max(0, flipSv.Extent.Width - flipSv.Viewport.Width);
+                double maxY = Math.Max(0, flipSv.Extent.Height - flipSv.Viewport.Height);
+                flipSv.Offset = new Vector(Math.Clamp(newTargetX, 0, maxX), Math.Clamp(newTargetY, 0, maxY));
+            }
         }
     }
 
@@ -956,7 +1107,27 @@ public partial class ComicReaderControl : UserControl
     {
         long now = Environment.TickCount64;
         long pinchElapsed = now - _lastPinchEndTick;
-        if (_isProgrammaticScroll || _isUserDraggingScrubber || _isDoubleTapZooming || _isPinching ||
+
+        if (_isPinching)
+        {
+            if (DataContext is ComicReaderViewModel vmP && _pinchTargetPageIndex >= 0 && vmP.Pages.Count > _pinchTargetPageIndex)
+            {
+                vmP.CurrentPageIndex = _pinchTargetPageIndex;
+            }
+            if (!_isProgrammaticScroll && DataContext is ComicReaderViewModel vmScroll && vmScroll.IsScrollMode && !vmScroll.IsHorizontalScrollMode)
+            {
+                var curSv = GetReaderScrollViewer();
+                if (curSv != null && Math.Abs(curSv.Offset.Y - _pinchTargetOffsetY) > 0.5)
+                {
+                    _isProgrammaticScroll = true;
+                    curSv.Offset = new Vector(_pinchTargetOffsetX, _pinchTargetOffsetY);
+                    _isProgrammaticScroll = false;
+                }
+            }
+            return;
+        }
+
+        if (_isProgrammaticScroll || _isUserDraggingScrubber || _isDoubleTapZooming ||
             now < _suppressScrollChangedUntilTick ||
             (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 800))
         {
@@ -1161,13 +1332,13 @@ public partial class ComicReaderControl : UserControl
         Point pos = e.GetPosition(this);
         long now = Environment.TickCount64;
 
-        // Dọn sạch triệt để con trỏ mồ côi (Ghost Pointers) nếu không hoạt động trong vòng > 250ms
-        if (_pointerLastSeenTicks.Count > 0)
+        // Dọn sạch con trỏ mồ côi (Ghost Pointers) khi KHÔNG trong cử chỉ pinch (> 1000ms)
+        if (!_isPinching && _pointerLastSeenTicks.Count > 0)
         {
             List<int>? staleKeys = null;
             foreach (var kvp in _pointerLastSeenTicks)
             {
-                if (now - kvp.Value > 250)
+                if (now - kvp.Value > 1000)
                 {
                     staleKeys ??= new List<int>();
                     staleKeys.Add(kvp.Key);
@@ -1231,13 +1402,13 @@ public partial class ComicReaderControl : UserControl
         _activePointers[e.Pointer.Id] = currentPoint;
         _pointerLastSeenTicks[e.Pointer.Id] = moveNow;
 
-        // Dọn sạch con trỏ mồ côi (Ghost Pointers) từ các lần chạm trước (> 250ms) chống tự động kích hoạt Pinch Zoom
-        if (_pointerLastSeenTicks.Count > 1)
+        // Dọn sạch con trỏ mồ côi (Ghost Pointers) khi KHÔNG trong cử chỉ pinch (> 1000ms)
+        if (!_isPinching && _pointerLastSeenTicks.Count > 1)
         {
             List<int>? staleKeys = null;
             foreach (var kvp in _pointerLastSeenTicks)
             {
-                if (kvp.Key != e.Pointer.Id && moveNow - kvp.Value > 250)
+                if (kvp.Key != e.Pointer.Id && moveNow - kvp.Value > 1000)
                 {
                     staleKeys ??= new List<int>();
                     staleKeys.Add(kvp.Key);
