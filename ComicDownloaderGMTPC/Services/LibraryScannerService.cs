@@ -933,6 +933,45 @@ public sealed class LibraryScannerService
                 comic.SourceLocationLabel = BuildShortLocationBadge(comic.RootFolderPath, comic.IsExternalHistoryItem);
                 return comic;
             }
+
+            if (IsImageFile(targetPath))
+            {
+                string? dir = Path.GetDirectoryName(targetPath);
+                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                {
+                    var siblingImgs = GetDirectImagesSafe(dir);
+                    if (siblingImgs.Count > 0)
+                    {
+                        int targetIdx = siblingImgs.FindIndex(f => string.Equals(f, targetPath, StringComparison.OrdinalIgnoreCase));
+                        int initialPage = targetIdx >= 0 ? targetIdx + 1 : 1;
+
+                        var comic = BuildComicItem(
+                            dir,
+                            dir,
+                            new List<(string, List<string>)> { (dir, siblingImgs) },
+                            new List<string>(),
+                            new List<string>());
+                        comic.SourceLocationLabel = BuildShortLocationBadge(comic.RootFolderPath, comic.IsExternalHistoryItem);
+                        if (comic.Chapters.Count > 0)
+                        {
+                            comic.Chapters[0].LastReadPage = initialPage;
+                        }
+                        return comic;
+                    }
+                }
+
+                var singleList = new List<string> { targetPath };
+                string parent = Path.GetDirectoryName(targetPath) ?? targetPath;
+                var singleComic = BuildComicItem(
+                    parent,
+                    parent,
+                    new List<(string, List<string>)> { (parent, singleList) },
+                    new List<string>(),
+                    new List<string>());
+                singleComic.Title = Path.GetFileName(targetPath);
+                singleComic.SourceLocationLabel = BuildShortLocationBadge(targetPath, isExternal: true);
+                return singleComic;
+            }
         }
 
         if (Directory.Exists(targetPath))

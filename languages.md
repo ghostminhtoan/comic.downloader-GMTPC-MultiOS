@@ -803,4 +803,20 @@
 | Search file name... | Tìm tên file... |
 | Ready. Select source folder to start sorting. | Sẵn sàng. Hãy chọn thư mục nguồn để bắt đầu lọc ảnh. |
 
+## 19. File Association & Context Menu (Liên Kết Tệp & Menu Ngữ Cảnh)
+
+| English | Vietnamese |
+| :--- | :--- |
+| File Association & Context Menu | Liên kết tệp & Menu ngữ cảnh |
+| Default File Opener | Mở mặc định tệp hình ảnh & sách truyện |
+| Archive Context Menu | Menu chuột phải cho tệp nén |
+| Read with Comic Downloader GMTPC | Đọc truyện bằng Comic Downloader GMTPC |
+| Turn On Default | BẬT MẶC ĐỊNH |
+| Turn Off Default | TẮT MẶC ĐỊNH |
+| Turn On Context Menu | BẬT MENU PHẢI |
+| Turn Off Context Menu | TẮT MENU PHẢI |
+| Apply All Associations | Kích hoạt tất cả |
+| Remove All Associations | Gỡ bỏ tất cả |
+| Refresh Association Status | Làm mới trạng thái |
+
 

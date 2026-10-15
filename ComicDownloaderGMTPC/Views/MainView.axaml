@@ -3702,6 +3702,132 @@
                                 </Grid>
                             </TabItem>
 
+                            <!-- CHILD TAB 3.7: FILE ASSOCIATION & CONTEXT MENU (WINDOWS & LINUX) -->
+                            <TabItem Header="🔗 Liên Kết Tệp (File Association)" FontSize="12" FontWeight="SemiBold">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <Border Background="#0F172A" Padding="14,12">
+                                        <StackPanel Spacing="16" MaxWidth="1050" HorizontalAlignment="Stretch">
+
+                                            <!-- TIÊU ĐỀ & MÔ TẢ TỔNG QUAN -->
+                                            <Border Background="#161F30" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                                <Grid RowDefinitions="Auto, Auto">
+                                                    <StackPanel Grid.Row="0" Spacing="4">
+                                                        <TextBlock Text="🔗 THIẾT LẬP LIÊN KẾT TỆP &amp; MENU NGỮ CẢNH (FILE ASSOCIATION &amp; CONTEXT MENU)"
+                                                                   FontWeight="Bold" FontSize="14" Foreground="#38BDF8" />
+                                                        <TextBlock Text="Cấu hình mở file ảnh/sách truyện mặc định bằng app và menu chuột phải cho file nén (User Scope: 100% an toàn, không cần quyền Admin hay Root). Hỗ trợ Windows &amp; Linux (tuyệt đối không áp dụng trên Android)."
+                                                                   Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap" />
+                                                    </StackPanel>
+
+                                                    <Border Grid.Row="1" Margin="0,10,0,0" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,6">
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="Hệ điều hành hiện tại: " Foreground="#64748B" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                            <TextBlock Text="{Binding AssociationPlatformText}" Foreground="#10B981" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="4,0,12,0" />
+                                                            <Button Command="{Binding RefreshAssociationStatusCommand}" Content="🔄 Làm Mới Trạng Thái"
+                                                                    Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="8,3" CornerRadius="4" ToolTip.Tip="Kiểm tra lại cấu hình từ Registry / MIME" />
+                                                        </WrapPanel>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- KHỐI 1: MỞ MẶC ĐỊNH (DEFAULT ASSOCIATION) - ẢNH & SÁCH TRUYỆN -->
+                                            <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                                <Grid RowDefinitions="Auto, Auto, Auto">
+                                                    <WrapPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="1. Mở Mặc Định Tệp Hình Ảnh &amp; Sách Truyện (Default File Opener)" FontWeight="Bold" Foreground="#F8FAFC" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,4" />
+                                                    </WrapPanel>
+
+                                                    <TextBlock Grid.Row="1" Margin="0,4,0,12" Text="Khi kích hoạt, double-click vào bất kỳ tệp ảnh (.png, .bmp, .jpg, .jpeg, .webp) hoặc sách (.pdf, .mobi) sẽ tự động mở thẳng vào trình đọc truyện của app. App tự động nhận diện toàn bộ ảnh trong cùng thư mục và lật trang mượt mà."
+                                                               Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap" />
+
+                                                    <!-- Thẻ điều khiển & Nút Bật/Tắt -->
+                                                    <Border Grid.Row="2" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12,10">
+                                                        <Grid ColumnDefinitions="*, Auto">
+                                                            <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <TextBlock Text="Định dạng áp dụng: " Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" />
+                                                                    <TextBlock Text=".png, .jpg, .jpeg, .bmp, .webp, .pdf, .mobi" Foreground="#38BDF8" FontSize="11" FontWeight="Bold" />
+                                                                </WrapPanel>
+                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <TextBlock Text="Trạng thái: " Foreground="#64748B" FontSize="11" VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding DefaultImageBookStatusText}" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                </WrapPanel>
+                                                            </StackPanel>
+
+                                                            <!-- Nút Bật / Tắt -->
+                                                            <Button Grid.Column="1" Command="{Binding ToggleDefaultImageBookAssociationCommand}"
+                                                                    Content="{Binding DefaultImageBookButtonText}"
+                                                                    Background="{Binding DefaultImageBookButtonBackground}"
+                                                                    Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,8" CornerRadius="6"
+                                                                    VerticalAlignment="Center" />
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- KHỐI 2: MENU CHUỘT PHẢI CHO FILE NÉN (CONTEXT MENU - KHÔNG MẶC ĐỊNH) -->
+                                            <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                                <Grid RowDefinitions="Auto, Auto, Auto">
+                                                    <WrapPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="2. Menu Chuột Phải Cho Tệp Nén (Archive Context Menu - Không Chiếm Mặc Định)" FontWeight="Bold" Foreground="#F8FAFC" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,4" />
+                                                    </WrapPanel>
+
+                                                    <TextBlock Grid.Row="1" Margin="0,4,0,12" Text="TUYỆT ĐỐI KHÔNG chiếm quyền mở mặc định (để giữ nguyên trình giải nén như WinRAR/7-Zip). Chỉ bổ sung thêm mục ngữ cảnh khi click chuột phải: '📖 Đọc truyện bằng Comic Downloader GMTPC' để mở đọc tức thì khi cần."
+                                                               Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap" />
+
+                                                    <!-- Thẻ điều khiển & Nút Bật/Tắt -->
+                                                    <Border Grid.Row="2" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12,10">
+                                                        <Grid ColumnDefinitions="*, Auto">
+                                                            <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <TextBlock Text="Định dạng áp dụng: " Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" />
+                                                                    <TextBlock Text=".zip, .rar, .cbz, .cbr" Foreground="#10B981" FontSize="11" FontWeight="Bold" />
+                                                                </WrapPanel>
+                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <TextBlock Text="Mục ngữ cảnh: " Foreground="#64748B" FontSize="11" VerticalAlignment="Center" />
+                                                                    <TextBlock Text="📖 Đọc truyện bằng Comic Downloader GMTPC" Foreground="#CBD5E1" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                                                    <TextBlock Text="{Binding ArchiveContextMenuStatusText}" Foreground="#10B981" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                </WrapPanel>
+                                                            </StackPanel>
+
+                                                            <!-- Nút Bật / Tắt -->
+                                                            <Button Grid.Column="1" Command="{Binding ToggleArchiveContextMenuCommand}"
+                                                                    Content="{Binding ArchiveContextMenuButtonText}"
+                                                                    Background="{Binding ArchiveContextMenuButtonBackground}"
+                                                                    Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,8" CornerRadius="6"
+                                                                    VerticalAlignment="Center" />
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- KHỐI 3: THAO TÁC NHANH (QUICK BATCH ACTIONS) -->
+                                            <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                                <StackPanel Spacing="10">
+                                                    <TextBlock Text="3. Thao Tác Nhanh (Batch Controls)" FontWeight="Bold" Foreground="#F8FAFC" FontSize="13" />
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding RegisterAllAssociationsCommand}" Content="🚀 KÍCH HOẠT TẤT CẢ (MẶC ĐỊNH + MENU PHẢI)"
+                                                                Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,8" CornerRadius="6" Margin="0,0,10,6" />
+                                                        <Button Command="{Binding UnregisterAllAssociationsCommand}" Content="🧹 GỠ BỎ TẤT CẢ (KHÔI PHỤC HỆ THỐNG GỐC)"
+                                                                Background="#EF4444" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,8" CornerRadius="6" Margin="0,0,10,6" />
+                                                        <Button Command="{Binding RefreshAssociationStatusCommand}" Content="🔄 LÀM MỚI TRẠNG THÁI"
+                                                                Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" Padding="14,8" CornerRadius="6" Margin="0,0,10,6" />
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- KHỐI 4: NHẬT KÝ THAO TÁC & THÔNG BÁO -->
+                                            <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="12,10">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="📋 Thông báo &amp; Trạng thái xử lý:" Foreground="#64748B" FontSize="11" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding AssociationStatusMessage}" Foreground="#38BDF8" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Border>
+
+                                        </StackPanel>
+                                    </Border>
+                                </ScrollViewer>
+                            </TabItem>
+
                         </TabControl>
                     </Border>
                 </TabItem>

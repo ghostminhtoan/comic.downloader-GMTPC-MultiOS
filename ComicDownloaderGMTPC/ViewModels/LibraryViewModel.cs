@@ -492,6 +492,44 @@ public partial class LibraryViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Mở tệp truyện hoặc hình ảnh trực tiếp từ đường dẫn tệp (khi double-click hoặc mở từ Context Menu hệ điều hành).
+    /// </summary>
+    public async Task OpenStandaloneFileDirectlyAsync(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return;
+        try
+        {
+            var quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(filePath));
+            if (quickComic != null && quickComic.Chapters.Count > 0)
+            {
+                ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
+                var existing = AllComics.FirstOrDefault(c =>
+                    string.Equals(c.RootFolderPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
+                if (existing == null)
+                {
+                    AllComics.Insert(0, quickComic);
+                    _ = _scanner.LoadCoversAsync(new[] { quickComic }, CancellationToken.None);
+                }
+                else
+                {
+                    quickComic = existing;
+                }
+
+                ApplyFilter();
+                SelectedComic = quickComic;
+
+                var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
+                StatusMessage = $"📖 Đã nạp '{quickComic.Title}' ({quickComic.TotalChapters} chương). Đang mở: {targetChap.Title}";
+                await OpenChapterInternalAsync(quickComic, targetChap);
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi mở file: {ex.Message}";
+        }
+    }
+
     [RelayCommand]
     public void ToggleSeparateReaderWindow()
     {

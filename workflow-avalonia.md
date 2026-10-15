@@ -3538,6 +3538,41 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - Test khởi động app Desktop 2 bước: STEP 2 PASSED hoàn hảo.
   - Tự động đóng gói và upload 3 nền tảng (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta`.
 
+### 15.111 Triển Khai Tính Năng File Association & Context Menu Cho Windows & Linux (2026-10-15)
+- **Bối Cảnh & Yêu Cầu Từ Người Dùng**:
+  1. **Mở Mặc Định (Default Association)**: Mở các định dạng ảnh và sách truyện (`.png`, `.bmp`, `.jpg`, `.jpeg`, `.webp`, `.pdf`, `.mobi`) mặc định bằng ứng dụng khi double-click từ hệ điều hành.
+  2. **Context Menu Chuột Phải Cho Tệp Nén**: Các định dạng file nén (`.zip`, `.rar`, `.cbz`, `.cbr`) **tuyệt đối không chiếm quyền mở mặc định** (để giữ nguyên các công cụ giải nén như WinRAR/7-Zip), nhưng có mục ngữ cảnh khi click chuột phải: *"📖 Đọc truyện bằng Comic Downloader GMTPC"*.
+  3. **Bật / Tắt Tùy Ý (Toggle UI)**: Cung cấp giao diện trực quan trong Tab Tool cho phép người dùng Bật / Tắt các liên kết này bất cứ lúc nào; khi Tắt thì xóa sạch sẽ Registry / Desktop MIME, khôi phục nguyên bản hệ thống.
+  4. **Phạm Vi Nền Tảng**: Chỉ hỗ trợ trên **Windows** và **Linux**, **tuyệt đối không can thiệp trên Android**.
+  5. **An Toàn Tuyệt Đối**: 100% User Scope, không yêu cầu quyền Administrator (Windows) hay Root (Linux).
+- **Giải Pháp Kỹ Thuật Đã Triển Khai (`First-Principles Engineering Rigor`)**:
+  1. **Kiến Trúc Dịch Vụ Hệ Thống Độc Lập `FileAssociationService.cs`**:
+     - **Windows HKCU Registry P/Invoke**:
+       - Sử dụng `advapi32.dll` (`RegCreateKeyEx`, `RegOpenKeyEx`, `RegSetValueEx`, `RegDeleteTree`, `RegDeleteValue`) thao tác trực tiếp trên `HKEY_CURRENT_USER\Software\Classes`, không cần quyền Admin hay UAC.
+       - Tạo ProgID `ComicDownloaderGMTPC.Doc`, đăng ký mở mặc định cho `.png`, `.jpg`, `.jpeg`, `.bmp`, `.webp`, `.pdf`, `.mobi`.
+       - Đăng ký Context Menu cho `.zip`, `.rar`, `.cbz`, `.cbr` vào `HKCU\Software\Classes\SystemFileAssociations\{ext}\shell\ComicDownloaderGMTPC` và `HKCU\Software\Classes\{ext}\shell\ComicDownloaderGMTPC` với tiêu đề `"📖 Đọc truyện bằng Comic Downloader GMTPC"` và icon app.
+       - Phát thông điệp `SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero)` qua `shell32.dll` để Windows Explorer cập nhật icon và liên kết tệp ngay lập tức mà không cần khởi động lại Explorer.
+     - **Linux XDG Desktop & MIME Specification**:
+       - Sinh file `.desktop` tại `~/.local/share/applications/comicdownloadergmtpc.desktop` kèm icon trong `~/.local/share/icons/hicolor/256x256/apps/`.
+       - Mở mặc định: Ghi nhận vào mục `[Default Applications]` trong `~/.config/mimeapps.list` cho MIME ảnh và PDF/MOBI.
+       - Context Menu: Ghi nhận vào mục `[Added Associations]` trong `~/.config/mimeapps.list` cho `application/zip`, `application/vnd.rar`, `application/x-cbr`, `application/x-cbz` (xuất hiện trong "Open With...", không chiếm mặc định).
+       - Chạy `update-desktop-database` làm mới cơ sở dữ liệu MIME của môi trường desktop Linux (GNOME, KDE, XFCE).
+  2. **Bộ Nhận Diện Và Mở Tệp Siêu Tốc (`LibraryScannerService.cs`, `LibraryViewModel.cs`, `App.axaml.cs`)**:
+     - Nâng cấp `LibraryScannerService.CreateQuickComicFromPath`: Bổ sung xử lý tệp ảnh đơn lẻ (`IsImageFile`), tự động gom tất cả ảnh cùng thư mục thành 1 chương hoàn chỉnh và nhảy thẳng đến trang ảnh được mở.
+     - Bổ sung `LibraryViewModel.OpenStandaloneFileDirectlyAsync(string filePath)`: Mở trực tiếp file vào ComicReader.
+     - `App.axaml.cs`: Bắt tham số dòng lệnh `desktop.Args` khi mở app qua double-click hoặc context menu, tự động chuyển sang Tab Thư viện và mở truyện tức thì.
+  3. **Giao Diện Điều Khiển Trực Quan Trong Tab Tool (`MainView.axaml` & `MainViewModel.FileAssociation.cs`)**:
+     - Thêm Child Tab 3.7: `🔗 Liên Kết Tệp (File Association)` trong Tab Tool (Tab 3) với bố cục Cyberpunk Card bo góc `#131B2E`.
+     - Thẻ thông tin hệ điều hành và trạng thái tương thích trực quan.
+     - Các nút Bật / Tắt độc lập cho Mở Mặc Định và Context Menu Chuột Phải kèm màu sắc trạng thái.
+     - Nút Batch: `🚀 KÍCH HOẠT TẤT CẢ`, `🧹 GỠ BỎ TẤT CẢ`, `🔄 LÀM MỚI TRẠNG THÁI`.
+     - Khung nhật ký trạng thái chi tiết theo thời gian thực.
+- **Nghiệm Thu**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
+  - Test khởi động app Desktop 2 bước: STEP 2 PASSED hoàn hảo.
+  - Tự động đóng gói và upload 3 nền tảng (`.exe`, `.tar.gz`, `.apk`) lên GitHub Release tag `beta`.
+
+
 
 
 

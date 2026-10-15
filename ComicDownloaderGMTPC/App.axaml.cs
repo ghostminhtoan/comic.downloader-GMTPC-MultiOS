@@ -49,6 +49,31 @@ public partial class App : Application
             {
                 DataContext = SharedMainViewModel
             };
+
+            // Khởi tạo và quét trạng thái liên kết tệp hệ thống trên Desktop
+            SharedMainViewModel.InitFileAssociation();
+
+            // Mở tệp trực tiếp nếu được kích hoạt qua dòng lệnh (double-click hoặc context menu)
+            if (desktop.Args != null && desktop.Args.Length > 0)
+            {
+                string? candidate = desktop.Args.FirstOrDefault(a =>
+                    !a.StartsWith("--") &&
+                    !string.IsNullOrWhiteSpace(a));
+
+                if (!string.IsNullOrEmpty(candidate))
+                {
+                    string cleanPath = candidate.Trim('\"', '\'');
+                    if (File.Exists(cleanPath) && IsReadableComicOrMediaFile(cleanPath))
+                    {
+                        _ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+                        {
+                            await Task.Delay(400);
+                            SharedMainViewModel.SelectedRootTabIndex = 4;
+                            await SharedMainViewModel.LibraryVm.OpenStandaloneFileDirectlyAsync(cleanPath);
+                        });
+                    }
+                }
+            }
         }
         else if (ApplicationLifetime is IActivityApplicationLifetime singleViewFactoryApplicationLifetime)
         {
@@ -166,5 +191,15 @@ public partial class App : Application
 
         await Task.Delay(1000);
         desktop.Shutdown(allPassed ? 0 : 2);
+    }
+
+    private static bool IsReadableComicOrMediaFile(string path)
+    {
+        string ext = Path.GetExtension(path);
+        if (string.IsNullOrEmpty(ext)) return false;
+        return LibraryScannerService.ValidImageExtensions.Contains(ext)
+            || LibraryScannerService.ValidArchiveExtensions.Contains(ext)
+            || LibraryScannerService.ValidMobiExtensions.Contains(ext)
+            || string.Equals(ext, ".pdf", StringComparison.OrdinalIgnoreCase);
     }
 }
