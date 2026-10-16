@@ -22,6 +22,7 @@ public static class DomainRoutingService
 
             if (host.Contains("truyenqq")) return "truyenqq";
             if (host.Contains("mangadex")) return "mangadex.org";
+            if (host.Contains("suicaodex")) return "suicaodex.com";
             if (host.Contains("loppytoonn")) return "loppytoonn.com";
             if (host.Contains("nettruyenviet10")) return "nettruyenviet10.com";
             if (host.Contains("nettruyen")) return "nettruyen";
@@ -60,6 +61,7 @@ public static class DomainRoutingService
         if (key.Contains("daomeoden")) return "daomeoden";
         if (key.Contains("damconuong") || key.Contains("mbpro")) return "damconuong";
         if (key.Contains("mangadex")) return "mangadex";
+        if (key.Contains("suicaodex")) return "suicaodex";
         if (key.Contains("sayhentai") || key.Contains("truyengg")) return "sayhentai";
         if (key.Contains("vi-hentai") || key.Contains("vihentai")) return "vi-hentai";
         if (key.Contains("hentaiforce")) return "hentaiforce";

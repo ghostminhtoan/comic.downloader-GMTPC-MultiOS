@@ -26,6 +26,9 @@ public partial class MainViewModel
     private string _domainMangadexTagUrl = "https://mangadex.org/tag/391b0423-d847-456f-b01e-d6cf80f62ff8/action";
 
     [ObservableProperty]
+    private string _domainSuicaodexTagUrl = "https://suicaodex.com/tag/01a0de90-31e4-7083-b4f7-fad23df13d9d/comedy";
+
+    [ObservableProperty]
     private string _domainLoppyTagUrl = "https://loppytoonn.com/the-loai/lang-man";
 
     [ObservableProperty]
@@ -560,6 +563,7 @@ public partial class MainViewModel
         if (domain.Contains("truyenqq")) return DomainTruyenqqTagUrl;
         if (domain.Contains("nettruyen")) return DomainNettruyenTagUrl;
         if (domain.Contains("mangadex")) return DomainMangadexTagUrl;
+        if (domain.Contains("suicaodex")) return DomainSuicaodexTagUrl;
         if (domain.Contains("loppy")) return DomainLoppyTagUrl;
         if (domain.Contains("thuviensach") || domain.Contains("dilib")) return DomainThuviensachTagUrl;
         if (domain.Contains("daomeoden")) return DomainDaomeodenTagUrl;
@@ -579,6 +583,7 @@ public partial class MainViewModel
         if (domain.Contains("truyenqq")) DomainTruyenqqTagUrl = value;
         else if (domain.Contains("nettruyen")) DomainNettruyenTagUrl = value;
         else if (domain.Contains("mangadex")) DomainMangadexTagUrl = value;
+        else if (domain.Contains("suicaodex")) DomainSuicaodexTagUrl = value;
         else if (domain.Contains("loppy")) DomainLoppyTagUrl = value;
         else if (domain.Contains("thuviensach") || domain.Contains("dilib")) DomainThuviensachTagUrl = value;
         else if (domain.Contains("daomeoden")) DomainDaomeodenTagUrl = value;
@@ -598,6 +603,7 @@ public partial class MainViewModel
         if (domain.Contains("truyenqq")) return "https://truyenqqko.com/";
         if (domain.Contains("nettruyen")) return "https://nettruyenviet10.com/";
         if (domain.Contains("mangadex")) return "https://mangadex.org/";
+        if (domain.Contains("suicaodex")) return "https://suicaodex.com/";
         if (domain.Contains("loppy")) return "https://loppytoonn.com/";
         if (domain.Contains("thuviensach") || domain.Contains("dilib")) return "https://thuviensach.vn/";
         if (domain.Contains("daomeoden")) return "https://daomeoden.net/";
@@ -617,6 +623,7 @@ public partial class MainViewModel
         if (domain.Contains("truyenqq")) return "https://truyenqqko.com/the-loai/action-26";
         if (domain.Contains("nettruyen")) return "https://nettruyenviet10.com/tim-truyen/adventure";
         if (domain.Contains("mangadex")) return "https://mangadex.org/tag/391b0423-d847-456f-b01e-d6cf80f62ff8/action";
+        if (domain.Contains("suicaodex")) return "https://suicaodex.com/tag/01a0de90-31e4-7083-b4f7-fad23df13d9d/comedy";
         if (domain.Contains("loppy")) return "https://loppytoonn.com/the-loai/lang-man";
         if (domain.Contains("thuviensach") || domain.Contains("dilib")) return "https://thuviensach.vn/truyen-tranh/shounen/";
         if (domain.Contains("daomeoden")) return "https://daomeoden.net/the-loai/romance.html";

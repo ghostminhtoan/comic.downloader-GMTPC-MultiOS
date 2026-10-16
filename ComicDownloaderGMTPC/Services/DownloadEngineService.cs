@@ -1203,6 +1203,11 @@ public class DownloadEngineService
                     {
                         effectiveReferer = "https://mangadex.org/";
                     }
+                    else if (targetUrl.Contains("suicaodex", StringComparison.OrdinalIgnoreCase) ||
+                             (refererUrl != null && refererUrl.Contains("suicaodex", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        effectiveReferer = "https://suicaodex.com/";
+                    }
                     else if (isNettruyen)
                     {
                         effectiveReferer = !string.IsNullOrEmpty(refererUrl) ? refererUrl : "https://nettruyenviet10.com/";

@@ -399,6 +399,11 @@ public class ComicScraperService
                 return await ScrapeMangaDexBookAsync(url, index, mangadexLang, mangadexFallback, ct).ConfigureAwait(false);
             }
 
+            if (domain.Contains("suicaodex"))
+            {
+                return await ScrapeSuicaodexBookAsync(url, index, domain, ct).ConfigureAwait(false);
+            }
+
             if (domain.Contains("loppytoonn"))
             {
                 return await ScrapeLoppyBookAsync(url, index, domain, ct).ConfigureAwait(false);
@@ -504,6 +509,11 @@ public class ComicScraperService
             if (domain.Contains("mangadex"))
             {
                 return await ExtractMangaDexChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
+            }
+
+            if (domain.Contains("suicaodex"))
+            {
+                return await ExtractSuicaodexChapterImageUrlsAsync(chapterUrl, ct).ConfigureAwait(false);
             }
 
             if (domain.Contains("e-hentai") || domain.Contains("exhentai"))
@@ -1417,6 +1427,250 @@ public class ComicScraperService
         item.StatusMessage = $"Extracted {item.TotalChapters} chapters";
 
         return item;
+    }
+
+    private async Task<ComicBookItem> ScrapeSuicaodexBookAsync(string url, int index, string domain, CancellationToken ct)
+    {
+        var item = new ComicBookItem
+        {
+            Index = index,
+            Url = url,
+            Domain = domain,
+            Status = "Extracting...",
+            StatusMessage = "Fetching suicaodex manga page..."
+        };
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+            req.Headers.TryAddWithoutValidation("Referer", "https://suicaodex.com/");
+            req.Headers.TryAddWithoutValidation("Cookie", "reader_mode=classic; ui_mode=classic");
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                item.Status = "Error";
+                item.StatusMessage = $"HTTP error {(int)res.StatusCode}";
+                return item;
+            }
+
+            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            // 1. Trích xuất Title
+            string title = string.Empty;
+            var h1Match = Regex.Match(html, @"<h1[^>]*>(?<title>.*?)</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (h1Match.Success)
+            {
+                title = WebUtility.HtmlDecode(Regex.Replace(h1Match.Groups["title"].Value, @"<[^>]+>", " ")).Trim();
+            }
+            if (string.IsNullOrWhiteSpace(title) || title.Equals("Facebook", StringComparison.OrdinalIgnoreCase))
+            {
+                var ogMatch = Regex.Match(html, @"<meta\s+property=""og:title""\s+content=""(?<title>[^""]+)""", RegexOptions.IgnoreCase);
+                if (ogMatch.Success)
+                {
+                    title = WebUtility.HtmlDecode(ogMatch.Groups["title"].Value).Trim();
+                }
+            }
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                var altMatch = Regex.Match(html, @"alt=""Bìa truyện (?<title>[^""]+)""", RegexOptions.IgnoreCase);
+                if (altMatch.Success)
+                {
+                    title = WebUtility.HtmlDecode(altMatch.Groups["title"].Value).Trim();
+                }
+            }
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                title = ExtractFallbackTitleFromUrl(url);
+            }
+            item.Title = CleanTitle(title);
+
+            // 2. Trích xuất Thumbnail / Cover Url
+            string coverUrl = string.Empty;
+            var coverMatch = Regex.Match(html, @"\[grid-area:cover\][^>]*>.*?<img[^>]+src=""(?<url>[^""]+)""", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (coverMatch.Success)
+            {
+                coverUrl = coverMatch.Groups["url"].Value.Trim();
+            }
+            else
+            {
+                var directCover = Regex.Match(html, @"https?://i\.suicaodex\.com/covers/[a-zA-Z0-9_\-\./]+", RegexOptions.IgnoreCase);
+                if (directCover.Success)
+                {
+                    coverUrl = directCover.Value.Trim();
+                }
+                else
+                {
+                    var ogImg = Regex.Match(html, @"<meta\s+property=""og:image""\s+content=""(?<url>[^""]+)""", RegexOptions.IgnoreCase);
+                    if (ogImg.Success) coverUrl = ogImg.Groups["url"].Value.Trim();
+                }
+            }
+            item.CoverUrl = coverUrl;
+
+            // 3. Phân tích tổng số page chapter của Book
+            int maxChapterPages = 1;
+            var pageMatches = Regex.Matches(html, @"[?&]page=(?<num>\d+)", RegexOptions.IgnoreCase);
+            foreach (Match pm in pageMatches)
+            {
+                if (int.TryParse(pm.Groups["num"].Value, out int cp) && cp > maxChapterPages && cp < 1000)
+                {
+                    maxChapterPages = cp;
+                }
+            }
+
+            var allChapters = new Dictionary<string, ChapterItem>(StringComparer.OrdinalIgnoreCase);
+
+            // Parse chapters trang 1
+            ParseSuicaodexChaptersFromHtml(html, allChapters);
+
+            // Parse các trang 2..maxChapterPages
+            for (int p = 2; p <= maxChapterPages; p++)
+            {
+                if (ct.IsCancellationRequested) break;
+                string pageUrl = $"{url}{(url.Contains('?') ? '&' : '?')}page={p}";
+                try
+                {
+                    using var pReq = new HttpRequestMessage(HttpMethod.Get, pageUrl);
+                    pReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+                    pReq.Headers.TryAddWithoutValidation("Referer", "https://suicaodex.com/");
+                    using var pRes = await _httpClient.SendAsync(pReq, ct).ConfigureAwait(false);
+                    if (pRes.IsSuccessStatusCode)
+                    {
+                        string pHtml = await pRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                        ParseSuicaodexChaptersFromHtml(pHtml, allChapters);
+                    }
+                }
+                catch { }
+            }
+
+            if (allChapters.Count > 0)
+            {
+                item.Chapters = allChapters.Values.OrderBy(c => c.ChapterNumber).ToList();
+            }
+            else
+            {
+                item.Chapters.Add(new ChapterItem { ChapterNumber = 1, Title = "Chapter 1", Url = url, Status = "Waiting" });
+            }
+
+            item.TotalChapters = item.Chapters.Count;
+            item.LatestChapter = item.Chapters.Count > 0 ? item.Chapters[^1].Title : "N/A";
+            item.Status = "Ready";
+            item.StatusMessage = $"Extracted {item.TotalChapters} chapters";
+            return item;
+        }
+        catch (Exception ex)
+        {
+            item.Status = "Error";
+            item.StatusMessage = ex.Message;
+            return item;
+        }
+    }
+
+    private void ParseSuicaodexChaptersFromHtml(string html, Dictionary<string, ChapterItem> chapters)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return;
+
+        // Pattern 1: aria-label="Đọc Ch. 221 - ..." href="/chapter/..."
+        var matches = Regex.Matches(html, @"<a[^>]+aria-label=""(?:Đọc\s+)?(?<title>[^""]+)""[^>]+href=""(?<url>/chapter/[0-9a-f\-]+)""", RegexOptions.IgnoreCase);
+        foreach (Match m in matches)
+        {
+            string chapRelUrl = m.Groups["url"].Value.Trim();
+            string title = WebUtility.HtmlDecode(m.Groups["title"].Value).Trim();
+            string fullUrl = "https://suicaodex.com" + chapRelUrl;
+
+            if (!chapters.ContainsKey(fullUrl))
+            {
+                double chapNum = ExtractChapterNumber(title, chapters.Count + 1);
+                chapters[fullUrl] = new ChapterItem
+                {
+                    ChapterNumber = chapNum,
+                    Title = title,
+                    Url = fullUrl,
+                    Status = "Waiting"
+                };
+            }
+        }
+
+        // Pattern 2: href="/chapter/..." ... <span class="...break-all...">title</span>
+        if (matches.Count == 0)
+        {
+            var matchesSpan = Regex.Matches(html, @"href=""(?<url>/chapter/[0-9a-f\-]+)""[^>]*>.*?<span[^>]*class=""[^""]*break-all[^""]*""[^>]*>(?<title>[^<]+)</span>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            foreach (Match m in matchesSpan)
+            {
+                string chapRelUrl = m.Groups["url"].Value.Trim();
+                string title = WebUtility.HtmlDecode(Regex.Replace(m.Groups["title"].Value, @"<[^>]+>", " ")).Trim();
+                string fullUrl = "https://suicaodex.com" + chapRelUrl;
+
+                if (!chapters.ContainsKey(fullUrl))
+                {
+                    double chapNum = ExtractChapterNumber(title, chapters.Count + 1);
+                    chapters[fullUrl] = new ChapterItem
+                    {
+                        ChapterNumber = chapNum,
+                        Title = title,
+                        Url = fullUrl,
+                        Status = "Waiting"
+                    };
+                }
+            }
+        }
+
+        // Fallback: mọi thẻ a có href /chapter/
+        if (chapters.Count == 0)
+        {
+            var fallbackMatches = Regex.Matches(html, @"href=""(?<url>/chapter/[0-9a-f\-]+)""", RegexOptions.IgnoreCase);
+            foreach (Match m in fallbackMatches)
+            {
+                string chapRelUrl = m.Groups["url"].Value.Trim();
+                string fullUrl = "https://suicaodex.com" + chapRelUrl;
+                if (!chapters.ContainsKey(fullUrl))
+                {
+                    int seq = chapters.Count + 1;
+                    chapters[fullUrl] = new ChapterItem
+                    {
+                        ChapterNumber = seq,
+                        Title = $"Chapter {seq}",
+                        Url = fullUrl,
+                        Status = "Waiting"
+                    };
+                }
+            }
+        }
+    }
+
+    private async Task<List<string>> ExtractSuicaodexChapterImageUrlsAsync(string chapterUrl, CancellationToken ct)
+    {
+        var images = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string cleanUrl = chapterUrl;
+        int hashIdx = cleanUrl.IndexOf('#');
+        if (hashIdx >= 0) cleanUrl = cleanUrl.Substring(0, hashIdx);
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, cleanUrl);
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+            req.Headers.TryAddWithoutValidation("Referer", "https://suicaodex.com/");
+            req.Headers.TryAddWithoutValidation("Cookie", "reader_mode=classic; ui_mode=classic");
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode) return new List<string>();
+
+            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            var matches = Regex.Matches(html, @"https?://i\.suicaodex\.com/data/[0-9a-f\-]+/(?<file>\d+[a-zA-Z0-9_\-]*\.(?:webp|gif|jpg|jpeg|png|bmp))(?:\?[^""'\s\\]*)?", RegexOptions.IgnoreCase);
+            foreach (Match m in matches)
+            {
+                string rawUrl = m.Value.Trim();
+                int qIdx = rawUrl.IndexOf('?');
+                string finalUrl = qIdx >= 0 ? rawUrl.Substring(0, qIdx) : rawUrl;
+                images.Add(finalUrl);
+            }
+
+            return images.OrderBy(u => Path.GetFileName(u), StringComparer.OrdinalIgnoreCase).ToList();
+        }
+        catch
+        {
+            return new List<string>();
+        }
     }
 
     #endregion
@@ -2880,6 +3134,7 @@ public class ComicScraperService
             {
                 string rawT = titleMatch.Groups["title"].Value;
                 rawT = Regex.Replace(rawT, @"\s*-\s*E-Hentai Galleries\s*$", "", RegexOptions.IgnoreCase);
+                rawT = Regex.Replace(rawT, @"\s*[-·|]\s*SuicaoDex.*$", "", RegexOptions.IgnoreCase);
                 result.TagTitle = CleanTitle(rawT);
             }
             if (string.IsNullOrWhiteSpace(result.TagTitle))
@@ -3292,6 +3547,11 @@ public class ComicScraperService
             return $"{baseUrl}{sep}page={page - 1}";
         }
 
+        if (domain.Contains("suicaodex"))
+        {
+            return $"{baseUrl}{(baseUrl.Contains('?') ? '&' : '?')}page={page}";
+        }
+
         if (baseUrl.Contains("?") || baseUrl.Contains("page=") || baseUrl.Contains("&page="))
         {
             if (Regex.IsMatch(baseUrl, @"[?&]page=\d+"))
@@ -3447,6 +3707,7 @@ public class ComicScraperService
             else if (domain.Contains("hentaiforce") && link.Contains("/view/")) isComicLink = true;
             else if (domain.Contains("hitomi") && (link.Contains("/galleries/") || link.Contains("/reader/") || link.Contains("/manga/") || link.Contains("/doujinshi/") || link.Contains("/cg/") || link.Contains("/gamecg/"))) isComicLink = true;
             else if ((domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) && (link.Contains("/g/") || link.Contains("/mpv/"))) isComicLink = true;
+            else if (domain.Contains("suicaodex") && link.Contains("/manga/")) isComicLink = true;
 
             if (isComicLink)
             {
