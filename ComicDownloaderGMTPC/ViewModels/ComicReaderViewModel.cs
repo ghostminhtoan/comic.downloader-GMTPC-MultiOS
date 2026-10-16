@@ -2350,6 +2350,7 @@ public partial class ComicReaderViewModel : ViewModelBase
             }
 
             TriggerPrefetch(startIndex);
+            _readerService.StartBackgroundChapterPrecaching(Pages, startIndex);
 
             if (startIndex > 0)
             {
@@ -2846,6 +2847,9 @@ public partial class ComicReaderViewModel : ViewModelBase
     private string _retentionPeriodSummaryText = "4 days";
 
     [ObservableProperty]
+    private string _zipCacheStorageSummaryText = string.Empty;
+
+    [ObservableProperty]
     private string _totalCacheSummaryText = "0 B";
 
     [ObservableProperty]
@@ -2853,6 +2857,12 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     [ObservableProperty]
     private int _selectedThumbnailQuotaMb = 1000;
+
+    [ObservableProperty]
+    private bool _isZipQuotaDialogOpen = false;
+
+    [ObservableProperty]
+    private int _selectedZipQuotaMb = 1000;
 
     [ObservableProperty]
     private bool _isRetentionDialogOpen = false;
@@ -2863,11 +2873,44 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void RefreshCacheSummary()
     {
         ThumbnailStorageSummaryText = ComicDiskCacheService.Instance.GetThumbnailsStorageSummaryText();
+        ZipCacheStorageSummaryText = ComicDiskCacheService.Instance.GetZipCacheStorageSummaryText();
         ArchiveCacheSummaryText = ComicDiskCacheService.Instance.GetArchiveCacheSummaryText();
         RetentionPeriodSummaryText = ComicDiskCacheService.Instance.GetRetentionPeriodSummaryText();
         TotalCacheSummaryText = ComicDiskCacheService.FormatBytes(ComicDiskCacheService.Instance.GetTotalCacheSizeBytes());
         SelectedThumbnailQuotaMb = ComicDiskCacheService.Instance.ThumbnailQuotaMb;
+        SelectedZipQuotaMb = ComicDiskCacheService.Instance.ZipCacheQuotaMb;
         SelectedRetentionDays = ComicDiskCacheService.Instance.RetentionDays;
+    }
+
+    [RelayCommand]
+    public void OpenZipQuotaDialog()
+    {
+        SelectedZipQuotaMb = ComicDiskCacheService.Instance.ZipCacheQuotaMb;
+        IsZipQuotaDialogOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseZipQuotaDialog()
+    {
+        IsZipQuotaDialogOpen = false;
+    }
+
+    [RelayCommand]
+    public void SelectZipQuota(object? quotaObj)
+    {
+        if (quotaObj != null && int.TryParse(quotaObj.ToString(), out int mb))
+        {
+            SelectedZipQuotaMb = mb;
+        }
+    }
+
+    [RelayCommand]
+    public void ConfirmZipQuota()
+    {
+        ComicDiskCacheService.Instance.ZipCacheQuotaMb = SelectedZipQuotaMb;
+        IsZipQuotaDialogOpen = false;
+        RefreshCacheSummary();
+        ShowTransientToast($"✓ Đã lưu dung lượng zip cache: {SelectedZipQuotaMb} MB");
     }
 
     [RelayCommand]
@@ -3040,6 +3083,9 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void CloseSettingsPopup()
     {
         CancelAssignKey();
+        IsThumbnailQuotaDialogOpen = false;
+        IsZipQuotaDialogOpen = false;
+        IsRetentionDialogOpen = false;
         if (ActivePopup == "Settings")
         {
             ActivePopup = string.Empty;

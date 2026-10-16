@@ -1754,10 +1754,19 @@ public partial class LibraryViewModel : ViewModelBase
     private string _totalCacheSummaryText = "0 B";
 
     [ObservableProperty]
+    private string _zipCacheStorageSummaryText = string.Empty;
+
+    [ObservableProperty]
     private bool _isThumbnailQuotaDialogOpen = false;
 
     [ObservableProperty]
     private int _selectedThumbnailQuotaMb = 1000;
+
+    [ObservableProperty]
+    private bool _isZipQuotaDialogOpen = false;
+
+    [ObservableProperty]
+    private int _selectedZipQuotaMb = 1000;
 
     [ObservableProperty]
     private bool _isRetentionDialogOpen = false;
@@ -1768,10 +1777,12 @@ public partial class LibraryViewModel : ViewModelBase
     public void RefreshCacheSummary()
     {
         ThumbnailStorageSummaryText = ComicDiskCacheService.Instance.GetThumbnailsStorageSummaryText();
+        ZipCacheStorageSummaryText = ComicDiskCacheService.Instance.GetZipCacheStorageSummaryText();
         ArchiveCacheSummaryText = ComicDiskCacheService.Instance.GetArchiveCacheSummaryText();
         RetentionPeriodSummaryText = ComicDiskCacheService.Instance.GetRetentionPeriodSummaryText();
         TotalCacheSummaryText = ComicDiskCacheService.FormatBytes(ComicDiskCacheService.Instance.GetTotalCacheSizeBytes());
         SelectedThumbnailQuotaMb = ComicDiskCacheService.Instance.ThumbnailQuotaMb;
+        SelectedZipQuotaMb = ComicDiskCacheService.Instance.ZipCacheQuotaMb;
         SelectedRetentionDays = ComicDiskCacheService.Instance.RetentionDays;
     }
 
@@ -1787,7 +1798,39 @@ public partial class LibraryViewModel : ViewModelBase
     {
         IsCacheDataModalOpen = false;
         IsThumbnailQuotaDialogOpen = false;
+        IsZipQuotaDialogOpen = false;
         IsRetentionDialogOpen = false;
+    }
+
+    [RelayCommand]
+    public void OpenZipQuotaDialog()
+    {
+        SelectedZipQuotaMb = ComicDiskCacheService.Instance.ZipCacheQuotaMb;
+        IsZipQuotaDialogOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseZipQuotaDialog()
+    {
+        IsZipQuotaDialogOpen = false;
+    }
+
+    [RelayCommand]
+    public void SelectZipQuota(object? quotaObj)
+    {
+        if (quotaObj != null && int.TryParse(quotaObj.ToString(), out int mb))
+        {
+            SelectedZipQuotaMb = mb;
+        }
+    }
+
+    [RelayCommand]
+    public void ConfirmZipQuota()
+    {
+        ComicDiskCacheService.Instance.ZipCacheQuotaMb = SelectedZipQuotaMb;
+        IsZipQuotaDialogOpen = false;
+        RefreshCacheSummary();
+        StatusMessage = $"✓ Đã lưu dung lượng zip cache: {SelectedZipQuotaMb} MB";
     }
 
     [RelayCommand]

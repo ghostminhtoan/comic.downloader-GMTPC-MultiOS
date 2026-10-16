@@ -724,7 +724,38 @@
                                     </Grid>
                                 </Border>
 
-                                <!-- ITEM 3: SET ZIP-FILE CACHE RETENTION PERIOD -->
+                                <!-- ITEM 3: SET ZIP-FILE CACHE STORAGE (CHỌN DUNG LƯỢNG ZIP CACHE) -->
+                                <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="7" Padding="12,9">
+                                    <Grid ColumnDefinitions="Auto, *, Auto">
+                                        <TextBlock Grid.Column="0" Text="🗜️" FontSize="18" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="Set zip-file cache storage" Foreground="#F8FAFC" FontSize="12.5" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding ZipCacheStorageSummaryText}" Foreground="#38BDF8" FontSize="11" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Command="{Binding OpenZipQuotaDialogCommand}"
+                                                Background="#1E293B" Foreground="#38BDF8" BorderBrush="#38BDF8" BorderThickness="1"
+                                                CornerRadius="6" Padding="10,5" FontWeight="SemiBold" FontSize="11"
+                                                Content="Đổi dung lượng ⚙" />
+                                    </Grid>
+                                </Border>
+
+                                <!-- ITEM 4: CLEAR ZIP-FILE CACHE (XÓA DUNG LƯỢNG ZIP CACHE) -->
+                                <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="7" Padding="12,9">
+                                    <Grid ColumnDefinitions="Auto, *, Auto">
+                                        <TextBlock Grid.Column="0" Text="📦" FontSize="18" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="Clear zip-file cache" Foreground="#F8FAFC" FontSize="12.5" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding ArchiveCacheSummaryText, StringFormat='Xóa toàn bộ bộ nhớ đệm tệp nén &amp; tài liệu: {0} (.zip, .cbz, .rar, .cbr, .pdf, .mobi)'}"
+                                                       Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Command="{Binding ClearArchiveCacheCommand}"
+                                                Background="#1E293B" Foreground="#F59E0B" BorderBrush="#F59E0B" BorderThickness="1"
+                                                CornerRadius="6" Padding="10,5" FontWeight="SemiBold" FontSize="11"
+                                                Content="Xóa" />
+                                    </Grid>
+                                </Border>
+
+                                <!-- ITEM 5: SET ZIP-FILE CACHE RETENTION PERIOD -->
                                 <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="7" Padding="12,9">
                                     <Grid ColumnDefinitions="Auto, *, Auto">
                                         <TextBlock Grid.Column="0" Text="⏳" FontSize="18" VerticalAlignment="Center" Margin="0,0,10,0" />
@@ -736,22 +767,6 @@
                                                 Background="#1E293B" Foreground="#38BDF8" BorderBrush="#38BDF8" BorderThickness="1"
                                                 CornerRadius="6" Padding="10,5" FontWeight="SemiBold" FontSize="11"
                                                 Content="Đổi thời hạn ⚙" />
-                                    </Grid>
-                                </Border>
-
-                                <!-- ITEM 4: CLEAR ZIP-FILE CACHE -->
-                                <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="7" Padding="12,9">
-                                    <Grid ColumnDefinitions="Auto, *, Auto">
-                                        <TextBlock Grid.Column="0" Text="📦" FontSize="18" VerticalAlignment="Center" Margin="0,0,10,0" />
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Clear zip-file cache" Foreground="#F8FAFC" FontSize="12.5" FontWeight="SemiBold" />
-                                            <TextBlock Text="{Binding ArchiveCacheSummaryText, StringFormat='Dung lượng đệm tệp nén &amp; tài liệu: {0} (.zip, .cbz, .rar, .cbr, .pdf, .mobi)'}"
-                                                       Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap" />
-                                        </StackPanel>
-                                        <Button Grid.Column="2" Command="{Binding ClearArchiveCacheCommand}"
-                                                Background="#1E293B" Foreground="#F59E0B" BorderBrush="#F59E0B" BorderThickness="1"
-                                                CornerRadius="6" Padding="10,5" FontWeight="SemiBold" FontSize="11"
-                                                Content="Xóa" />
                                     </Grid>
                                 </Border>
 
@@ -867,6 +882,52 @@
                                     Background="#1E293B" Foreground="#94A3B8" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                     Padding="0,8" CornerRadius="6" Content="Hủy" />
                             <Button Grid.Column="1" Command="{Binding ConfirmThumbnailQuotaCommand}"
+                                    Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    Padding="0,8" CornerRadius="6" Content="Lưu hạn mức" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Border>
+
+            <!-- DIALOG MODAL CHỌN DUNG LƯỢNG ZIP CACHE -->
+            <Border IsVisible="{Binding IsZipQuotaDialogOpen}"
+                    Background="#D005080F" ZIndex="5000"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                <Border Width="380" Background="#111827" BorderBrush="#38BDF8" BorderThickness="1.5"
+                        CornerRadius="10" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        BoxShadow="0 10 30 0 #AA000000">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="⚙ Hạn mức bộ nhớ đệm tệp nén (Zip Cache)" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" />
+                        <TextBlock Text="Chọn dung lượng tối đa cho bộ nhớ đệm giải nén tệp zip, cbz, rar, pdf... Khi vượt quá hạn mức, hệ thống tự động dọn bớt trang cũ nhất (LRU):"
+                                   Foreground="#94A3B8" FontSize="11.5" TextWrapping="Wrap" />
+
+                        <Border Background="#1E293B" CornerRadius="6" Padding="10,6">
+                            <TextBlock Text="{Binding SelectedZipQuotaMb, StringFormat='Đang chọn: {0} MB'}"
+                                       Foreground="#F8FAFC" FontSize="12.5" FontWeight="Bold" HorizontalAlignment="Center" />
+                        </Border>
+
+                        <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button Content="500 MB" Command="{Binding SelectZipQuotaCommand}" CommandParameter="500"
+                                    Background="#1E293B" Foreground="#E2E8F0" Margin="0,0,6,6" Padding="12,6" CornerRadius="5" />
+                            <Button Content="1.0 GB (1000 MB - Mặc định)" Command="{Binding SelectZipQuotaCommand}" CommandParameter="1000"
+                                    Background="#1E293B" Foreground="#E2E8F0" Margin="0,0,6,6" Padding="12,6" CornerRadius="5" />
+                            <Button Content="2.0 GB (2000 MB)" Command="{Binding SelectZipQuotaCommand}" CommandParameter="2000"
+                                    Background="#1E293B" Foreground="#E2E8F0" Margin="0,0,6,6" Padding="12,6" CornerRadius="5" />
+                            <Button Content="4.0 GB (4000 MB)" Command="{Binding SelectZipQuotaCommand}" CommandParameter="4000"
+                                    Background="#1E293B" Foreground="#E2E8F0" Margin="0,0,6,6" Padding="12,6" CornerRadius="5" />
+                            <Button Content="8.0 GB (8000 MB)" Command="{Binding SelectZipQuotaCommand}" CommandParameter="8000"
+                                    Background="#1E293B" Foreground="#E2E8F0" Margin="0,0,6,6" Padding="12,6" CornerRadius="5" />
+                            <Button Content="16.0 GB (16000 MB)" Command="{Binding SelectZipQuotaCommand}" CommandParameter="16000"
+                                    Background="#1E293B" Foreground="#E2E8F0" Margin="0,0,6,6" Padding="12,6" CornerRadius="5" />
+                            <Button Content="32.0 GB (32000 MB)" Command="{Binding SelectZipQuotaCommand}" CommandParameter="32000"
+                                    Background="#1E293B" Foreground="#E2E8F0" Margin="0,0,6,6" Padding="12,6" CornerRadius="5" />
+                        </WrapPanel>
+
+                        <Grid ColumnDefinitions="*, *" ColumnSpacing="10" Margin="0,6,0,0">
+                            <Button Grid.Column="0" Command="{Binding CloseZipQuotaDialogCommand}"
+                                    Background="#1E293B" Foreground="#94A3B8" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    Padding="0,8" CornerRadius="6" Content="Hủy" />
+                            <Button Grid.Column="1" Command="{Binding ConfirmZipQuotaCommand}"
                                     Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                     Padding="0,8" CornerRadius="6" Content="Lưu hạn mức" />
                         </Grid>

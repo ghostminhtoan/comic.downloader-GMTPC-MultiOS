@@ -107,6 +107,91 @@ public sealed class ComicReaderService
     public bool IsReaderActive { get; private set; }
     public event Action<bool>? ReaderActiveStateChanged;
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> _l1RawPageBytesCache = new();
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<string> _l1CacheKeysQueue = new();
+    private const int MaxL1CachedPages = 60;
+
+    private static void PutL1Cache(string key, byte[] data)
+    {
+        if (string.IsNullOrEmpty(key) || data == null || data.Length == 0) return;
+        _l1RawPageBytesCache[key] = data;
+        _l1CacheKeysQueue.Enqueue(key);
+        while (_l1CacheKeysQueue.Count > MaxL1CachedPages)
+        {
+            if (_l1CacheKeysQueue.TryDequeue(out var oldKey))
+            {
+                _l1RawPageBytesCache.TryRemove(oldKey, out _);
+            }
+        }
+    }
+
+    private CancellationTokenSource? _chapterPrecacheCts;
+
+    public void StartBackgroundChapterPrecaching(IList<ReaderPageItem> pages, int startIndex = 0)
+    {
+        if (pages == null || pages.Count == 0) return;
+
+        try
+        {
+            _chapterPrecacheCts?.Cancel();
+            _chapterPrecacheCts?.Dispose();
+        }
+        catch { }
+        _chapterPrecacheCts = new CancellationTokenSource();
+        var ct = _chapterPrecacheCts.Token;
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(250, ct).ConfigureAwait(false);
+
+                int count = pages.Count;
+                int current = Math.Clamp(startIndex, 0, count - 1);
+
+                var order = new List<int> { current };
+                for (int offset = 1; offset < count; offset++)
+                {
+                    if (current + offset < count) order.Add(current + offset);
+                    if (current - offset >= 0) order.Add(current - offset);
+                }
+
+                foreach (int idx in order)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    if (idx < 0 || idx >= pages.Count) continue;
+                    var page = pages[idx];
+
+                    if (page.IsArchiveEntry || page.IsRarEntry || page.IsMobiEntry || page.IsPdfEntry)
+                    {
+                        string subKey = page.IsMobiEntry ? $"mobi_p_{page.MobiPageIndex}"
+                                      : page.IsPdfEntry ? $"pdf_p_{page.PdfPageIndex}"
+                                      : !string.IsNullOrEmpty(page.ArchiveEntryFullName) ? page.ArchiveEntryFullName
+                                      : Path.GetFileName(page.SourcePath);
+
+                        string cacheKey = ComicDiskCacheService.BuildPageCacheKey(page.SourcePath, subKey);
+                        if (!string.IsNullOrEmpty(cacheKey))
+                        {
+                            if (_l1RawPageBytesCache.ContainsKey(cacheKey)) continue;
+
+                            string targetFile = Path.Combine(ComicDiskCacheService.Instance.ArchivePagesDirectory, cacheKey + ".pagecache");
+                            if (File.Exists(targetFile)) continue;
+
+                            byte[]? raw = ReadRawPageBytes(page);
+                            if (raw != null && raw.Length > 0)
+                            {
+                                PutL1Cache(cacheKey, raw);
+                            }
+
+                            await Task.Delay(10, ct).ConfigureAwait(false);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }, ct);
+    }
+
     public void SetReaderActive(bool isActive)
     {
         if (IsReaderActive == isActive) return;
@@ -413,9 +498,9 @@ public sealed class ComicReaderService
 
         bool effectiveEco = isEcoMode || OperatingSystem.IsAndroid();
         int safeCurrent = Math.Clamp(currentIndex, 0, pages.Count - 1);
-        int preloadBehind = effectiveEco ? 1 : (isScrollMode ? 3 : 2);
-        int preloadAhead = effectiveEco ? 2 : (isScrollMode ? 5 : 3);
-        int keepRadius = effectiveEco ? 4 : (isScrollMode ? 14 : 6);
+        int preloadBehind = effectiveEco ? 3 : (isScrollMode ? 6 : 4);
+        int preloadAhead = effectiveEco ? 6 : (isScrollMode ? 14 : 8);
+        int keepRadius = effectiveEco ? 16 : (isScrollMode ? 35 : 20);
 
         int minLoad = Math.Max(0, safeCurrent - preloadBehind);
         int maxLoad = Math.Min(pages.Count - 1, safeCurrent + preloadAhead);
@@ -509,12 +594,18 @@ public sealed class ComicReaderService
 
             string cacheKey = ComicDiskCacheService.BuildPageCacheKey(page.SourcePath, subKey);
 
-            // 2. Kiểm tra tầng L2 Disk Cache trước: nếu đã có thì đọc tức thì trong 0.1ms (Zero decompress overhead!)
+            // 2. Kiểm tra bộ nhớ đệm L1 RAM và L2 Disk Cache trước (0ms siêu tốc)
             if (!string.IsNullOrEmpty(cacheKey))
             {
+                if (_l1RawPageBytesCache.TryGetValue(cacheKey, out var memBytes) && memBytes != null && memBytes.Length > 0)
+                {
+                    return memBytes;
+                }
+
                 var cachedBytes = ComicDiskCacheService.Instance.TryGetCachedPageBytes(cacheKey);
                 if (cachedBytes != null && cachedBytes.Length > 0)
                 {
+                    PutL1Cache(cacheKey, cachedBytes);
                     return cachedBytes;
                 }
             }
@@ -552,9 +643,10 @@ public sealed class ComicReaderService
                 rawBytes = File.ReadAllBytes(page.SourcePath);
             }
 
-            // 4. Lưu ngay vào L2 Disk Cache để các lần cuộn lướt tiếp theo đạt tốc độ tức thì
+            // 4. Lưu ngay vào L1 RAM và L2 Disk Cache để các lần cuộn lướt tiếp theo đạt tốc độ tức thì
             if (rawBytes != null && rawBytes.Length > 0 && !string.IsNullOrEmpty(cacheKey))
             {
+                PutL1Cache(cacheKey, rawBytes);
                 ComicDiskCacheService.Instance.SaveCachedPageBytes(cacheKey, rawBytes);
             }
 

@@ -35,6 +35,7 @@ public sealed class ComicDiskCacheService
     public sealed class CacheSettingsData
     {
         public int ThumbnailQuotaMb { get; set; } = 1000; // Mặc định 1.0 GB
+        public int ZipCacheQuotaMb { get; set; } = 1000;  // Mặc định 1.0 GB
         public int RetentionDays { get; set; } = 4;        // Mặc định 4 ngày
     }
 
@@ -51,6 +52,20 @@ public sealed class ComicDiskCacheService
                 SaveSettings();
             }
             _ = Task.Run(PruneThumbnailsIfOverQuota);
+        }
+    }
+
+    public int ZipCacheQuotaMb
+    {
+        get { lock (_settingsLock) return _settings.ZipCacheQuotaMb; }
+        set
+        {
+            lock (_settingsLock)
+            {
+                _settings.ZipCacheQuotaMb = Math.Clamp(value, 100, 200000);
+                SaveSettings();
+            }
+            _ = Task.Run(PruneArchivePagesIfOverQuota);
         }
     }
 
@@ -84,6 +99,7 @@ public sealed class ComicDiskCacheService
         {
             PruneExpiredArchiveCache();
             PruneThumbnailsIfOverQuota();
+            PruneArchivePagesIfOverQuota();
         });
     }
 
@@ -192,6 +208,7 @@ public sealed class ComicDiskCacheService
                 File.WriteAllBytes(tmpFile, data);
                 File.Move(tmpFile, targetFile, overwrite: true);
                 File.SetLastAccessTimeUtc(targetFile, DateTime.UtcNow);
+                PruneArchivePagesIfOverQuota();
             }
             catch { }
         });
@@ -299,6 +316,15 @@ public sealed class ComicDiskCacheService
         return $"Thumbnails {usedText} / {quotaText}";
     }
 
+    public string GetZipCacheStorageSummaryText()
+    {
+        long bytes = GetArchiveCacheSizeBytes();
+        string usedText = FormatBytes(bytes);
+        double quotaGb = ZipCacheQuotaMb / 1000.0;
+        string quotaText = quotaGb >= 1.0 ? $"{quotaGb:0.0} GB" : $"{ZipCacheQuotaMb} MB";
+        return $"Zip cache {usedText} / {quotaText}";
+    }
+
     public string GetArchiveCacheSummaryText()
     {
         long bytes = GetArchiveCacheSizeBytes();
@@ -394,6 +420,44 @@ public sealed class ComicDiskCacheService
                 })
                 .Where(fi => fi != null && fi.Exists)
                 .OrderBy(fi => fi!.LastAccessTimeUtc) // Cũ nhất trước
+                .ToList();
+
+            long currentTotal = files.Sum(f => f!.Length);
+            long targetBytes = (long)(maxBytes * 0.85); // Xả về 85% hạn mức
+
+            if (currentTotal > maxBytes)
+            {
+                foreach (var fi in files)
+                {
+                    if (currentTotal <= targetBytes) break;
+                    try
+                    {
+                        long len = fi!.Length;
+                        fi.Delete();
+                        currentTotal -= len;
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+    }
+
+    public void PruneArchivePagesIfOverQuota()
+    {
+        if (!Directory.Exists(_archivePagesDir)) return;
+        long maxBytes = (long)ZipCacheQuotaMb * 1024L * 1024L;
+
+        try
+        {
+            var enumOptions = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
+            var files = Directory.EnumerateFiles(_archivePagesDir, "*.pagecache", enumOptions)
+                .Select(f =>
+                {
+                    try { return new FileInfo(f); } catch { return null; }
+                })
+                .Where(fi => fi != null && fi.Exists)
+                .OrderBy(fi => fi!.LastAccessTimeUtc) // Cũ nhất trước (LRU)
                 .ToList();
 
             long currentTotal = files.Sum(f => f!.Length);
