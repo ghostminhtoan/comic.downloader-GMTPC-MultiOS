@@ -93,10 +93,10 @@ public sealed class ReaderShortcutService
             new[] { "Tab" });
 
         AddEntry("ZoomIn", "Hiển thị (View)", "Phóng to (Zoom In)", "Phóng to trang truyện",
-            new[] { "OemPlus", "Add", "Ctrl+OemPlus" });
+            new[] { "OemPlus", "Add", "Ctrl+OemPlus", "Ctrl+Add", "Ctrl+Shift+OemPlus", "Shift+OemPlus" });
 
         AddEntry("ZoomOut", "Hiển thị (View)", "Thu nhỏ (Zoom Out)", "Thu nhỏ trang truyện",
-            new[] { "OemMinus", "Subtract", "Ctrl+OemMinus" });
+            new[] { "OemMinus", "Subtract", "Ctrl+OemMinus", "Ctrl+Subtract", "Shift+OemMinus" });
 
         AddEntry("ResetZoom", "Hiển thị (View)", "Đặt lại thu phóng (Reset Zoom)", "Khôi phục độ phóng to về mặc định",
             new[] { "Alt+D0", "Z" });

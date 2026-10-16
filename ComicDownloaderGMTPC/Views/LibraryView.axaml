@@ -14,62 +14,63 @@
         <!-- ========================================================================= -->
         <!-- 1. GIAO DIỆN HỆ THỐNG SUBTAB CHUẨN COMICSCREEN (STORAGE, DIR, HIST, BM)    -->
         <!-- ========================================================================= -->
-        <Grid RowDefinitions="Auto, Auto, *" Margin="4,4,4,4">
+        <Grid RowDefinitions="Auto, Auto, Auto, *" Margin="4,4,4,4">
 
-            <!-- THANH ĐIỀU KHIỂN TRÊN CÙNG: TIỆN ÍCH & TRẠNG THÁI -->
+            <!-- THANH TIÊU ĐỀ TRÊN CÙNG: TÊN VÀ TRẠNG THÁI -->
             <Border Grid.Row="0" Background="#111827" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,0,0,4">
-                <Grid ColumnDefinitions="Auto, *">
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
-                        <TextBlock Text="📚 THƯ VIỆN" Foreground="#38BDF8" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding StatusMessage}" Foreground="#10B981" FontSize="11" VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis" MaxWidth="380" />
-                    </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                    <TextBlock Text="📚 THƯ VIỆN" Foreground="#38BDF8" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="#10B981" FontSize="11" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Border>
 
-                    <WrapPanel Grid.Column="1" HorizontalAlignment="Right" Orientation="Horizontal">
-                        <Button Command="{Binding AddStorageFolderCommand}"
-                                Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
-                                Foreground="#38BDF8" FontWeight="SemiBold"
-                                Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,5,2"
-                                ToolTip.Tip="Ghim thêm thư mục mới vào Subtab Storage">
-                            <TextBlock Text="➕ Thêm Thư Mục" FontSize="10.5" VerticalAlignment="Center" />
-                        </Button>
+            <!-- KHUNG 1: CỤM NÚT TIỆN ÍCH NẰM BÊN TRÊN HÀNG STORAGE, DIRECTORY... -->
+            <Border Grid.Row="1" Background="#111827" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="8,4" Margin="0,0,0,4">
+                <WrapPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                    <Button Command="{Binding AddStorageFolderCommand}"
+                            Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                            Foreground="#38BDF8" FontWeight="SemiBold"
+                            Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,5,2"
+                            ToolTip.Tip="Ghim thêm thư mục mới vào Subtab Storage">
+                        <TextBlock Text="➕ Thêm Thư Mục" FontSize="10.5" VerticalAlignment="Center" />
+                    </Button>
 
-                        <Button Command="{Binding OpenCbzFileDirectCommand}"
-                                Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold"
-                                Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,5,2"
-                                ToolTip.Tip="Mở nhanh 1 file .cbz, .zip hoặc .pdf bất kỳ để đọc ngay">
-                            <TextBlock Text="📦 Mở File CBZ/ZIP/PDF" FontSize="10.5" VerticalAlignment="Center" />
-                        </Button>
+                    <Button Command="{Binding OpenCbzFileDirectCommand}"
+                            Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold"
+                            Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,5,2"
+                            ToolTip.Tip="Mở nhanh 1 file .cbz, .zip hoặc .pdf bất kỳ để đọc ngay">
+                        <TextBlock Text="📦 Mở File CBZ/ZIP/PDF" FontSize="10.5" VerticalAlignment="Center" />
+                    </Button>
 
-                        <Button Command="{Binding ToggleSeparateReaderWindowCommand}"
-                                Background="{Binding SeparateWindowModeBackground}"
-                                BorderBrush="#10B981" BorderThickness="1"
-                                Foreground="#FFFFFF" Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,5,2"
-                                ToolTip.Tip="Bật để mở trình đọc ở Cửa sổ FullScreen độc lập (trên Android sẽ tách thành thẻ riêng trong Recents)">
-                            <TextBlock Text="{Binding SeparateWindowModeText}" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center" />
-                        </Button>
+                    <Button Command="{Binding ToggleSeparateReaderWindowCommand}"
+                            Background="{Binding SeparateWindowModeBackground}"
+                            BorderBrush="#10B981" BorderThickness="1"
+                            Foreground="#FFFFFF" Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,5,2"
+                            ToolTip.Tip="Bật để mở trình đọc ở Cửa sổ FullScreen độc lập (trên Android sẽ tách thành thẻ riêng trong Recents)">
+                        <TextBlock Text="{Binding SeparateWindowModeText}" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center" />
+                    </Button>
 
-                        <Button Command="{Binding OpenCacheDataModalCommand}"
-                                Background="#1E293B" BorderBrush="#06B6D4" BorderThickness="1"
-                                Foreground="#06B6D4" FontWeight="SemiBold"
-                                Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,5,2"
-                                ToolTip.Tip="Quản lý và dọn dẹp bộ nhớ đệm đa tầng (Thumbnails, Zip/Document cache, vị trí đọc dở, bookmark, lịch sử) chuẩn 100% Comic Screen">
-                            <TextBlock Text="💾 Bộ nhớ đệm" FontSize="10.5" VerticalAlignment="Center" />
-                        </Button>
+                    <Button Command="{Binding OpenCacheDataModalCommand}"
+                            Background="#1E293B" BorderBrush="#06B6D4" BorderThickness="1"
+                            Foreground="#06B6D4" FontWeight="SemiBold"
+                            Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,5,2"
+                            ToolTip.Tip="Quản lý và dọn dẹp bộ nhớ đệm đa tầng (Thumbnails, Zip/Document cache, vị trí đọc dở, bookmark, lịch sử) chuẩn 100% Comic Screen">
+                        <TextBlock Text="💾 Bộ nhớ đệm" FontSize="10.5" VerticalAlignment="Center" />
+                    </Button>
 
-                        <Button Command="{Binding ScanLibraryCommand}"
-                                IsEnabled="{Binding !IsScanning}"
-                                Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
-                                Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,0,2"
-                                ToolTip.Tip="Quét lại thư viện truyện">
-                            <TextBlock Text="🔄 Quét" FontSize="10.5" VerticalAlignment="Center" />
-                        </Button>
-                    </WrapPanel>
-                </Grid>
+                    <Button Command="{Binding ScanLibraryCommand}"
+                            IsEnabled="{Binding !IsScanning}"
+                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
+                            Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,0,2"
+                            ToolTip.Tip="Quét lại thư viện truyện">
+                        <TextBlock Text="🔄 Quét" FontSize="10.5" VerticalAlignment="Center" />
+                    </Button>
+                </WrapPanel>
             </Border>
 
             <!-- THANH SUBTAB 4 MỤC CHUẨN 100% COMICSCREEN: Storage, Directory, History, Bookmark -->
-            <Border Grid.Row="1" Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Margin="0,0,0,6" Height="44">
+            <Border Grid.Row="2" Background="#161F30" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Margin="0,0,0,6" Height="44">
                 <Grid ColumnDefinitions="*, *, *, *">
                     <!-- 1. STORAGE TAB -->
                     <Button Grid.Column="0" Command="{Binding SelectSubTabCommand}" CommandParameter="Storage"
@@ -114,7 +115,7 @@
             </Border>
 
             <!-- NỘI DUNG 4 SUBTAB -->
-            <Panel Grid.Row="2">
+            <Panel Grid.Row="3">
 
                 <!-- ========================================================================= -->
                 <!-- SUBTAB 1: STORAGE (VỊ TRÍ LƯU TRỮ - CHUẨN ẢNH 1)                          -->
@@ -186,10 +187,65 @@
                 <!-- ========================================================================= -->
                 <!-- SUBTAB 2: DIRECTORY (DUYỆT THƯ MỤC TRỰC QUAN - CHUẨN ẢNH 2)               -->
                 <!-- ========================================================================= -->
-                <Grid IsVisible="{Binding IsDirectoryTabActive}" RowDefinitions="Auto, Auto, *, Auto">
+                <Grid IsVisible="{Binding IsDirectoryTabActive}" RowDefinitions="Auto, Auto, Auto, *">
+
+                    <!-- KHUNG 2: THANH CÔNG CỤ TÁC VỤ (EDIT, RECENT, VIEW, SORT) LUÔN GHIM BÊN DƯỚI HÀNG STORAGE, DIRECTORY -->
+                    <Border Grid.Row="0" Background="#111827" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="6,4" Margin="0,0,0,6" Height="42">
+                        <Grid ColumnDefinitions="*, *, *, *">
+                            <!-- EDIT: Ghim / Đặt thư viện -->
+                            <Button Grid.Column="0" Background="Transparent" BorderThickness="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                <Button.Flyout>
+                                    <MenuFlyout Placement="Bottom">
+                                        <MenuItem Header="📌 Ghim thư mục này vào Storage"
+                                                  Command="{Binding PinCurrentDirectoryToStorageCommand}" />
+                                        <MenuItem Header="📁 Đặt làm Thư viện chính"
+                                                  Command="{Binding SetCurrentDirectoryAsLibraryRootCommand}" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="⚙️" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="Edit" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- RECENT: Về truyện đọc gần nhất -->
+                            <Button Grid.Column="1" Command="{Binding SelectSubTabCommand}" CommandParameter="History"
+                                    Background="Transparent" BorderThickness="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="🕒" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="Recent" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- VIEW: Chế độ hiển thị -->
+                            <Button Grid.Column="2" Command="{Binding ToggleDirectoryViewModeCommand}"
+                                    Background="Transparent" BorderThickness="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="{Binding DirectoryViewModeIcon}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding DirectoryViewModeText}" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- SORT: Sắp xếp -->
+                            <Button Grid.Column="3" Background="Transparent" BorderThickness="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                <Button.Flyout>
+                                    <MenuFlyout Placement="Bottom">
+                                        <MenuItem Header="Tên (A ➔ Z)" Command="{Binding SortDirectoryCommand}" CommandParameter="NameAsc" />
+                                        <MenuItem Header="Tên (Z ➔ A)" Command="{Binding SortDirectoryCommand}" CommandParameter="NameDesc" />
+                                        <MenuItem Header="Ngày mới nhất" Command="{Binding SortDirectoryCommand}" CommandParameter="DateDesc" />
+                                        <MenuItem Header="Dung lượng lớn nhất" Command="{Binding SortDirectoryCommand}" CommandParameter="SizeDesc" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="🔀" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="Sort" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </Border>
 
                     <!-- BREADCRUMB THANH ĐIỀU HƯỚNG TRÊN CÙNG -->
-                    <Border Grid.Row="0" Background="#131C31" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,0,0,6">
+                    <Border Grid.Row="1" Background="#131C31" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,0,0,6">
                         <Grid ColumnDefinitions="Auto, *, Auto">
                             <Button Grid.Column="0" Command="{Binding NavigateUpDirectoryCommand}"
                                     Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
@@ -211,7 +267,7 @@
                     </Border>
 
                     <!-- BANNER / NÚT MỞ ĐỌC THƯ MỤC TRUYỆN ĐA TẦNG (CHƯƠNG / BỘ TRUYỆN / FILE TRUYỆN) -->
-                    <Border Grid.Row="1" IsVisible="{Binding HasReadableCurrentDirectory}"
+                    <Border Grid.Row="2" IsVisible="{Binding HasReadableCurrentDirectory}"
                             Background="#064E3B" BorderBrush="#10B981" BorderThickness="1.5" CornerRadius="6"
                             Padding="10,6" Margin="0,0,0,6">
                         <Grid ColumnDefinitions="*, Auto">
@@ -228,7 +284,7 @@
                     </Border>
 
                     <!-- DANH SÁCH ITEMS THƯ MỤC, FILE TRUYỆN VÀ FILE ẢNH ĐƠN LẺ ĐA TẦNG (HỖ TRỢ CẢ THUMBNAIL LIST VÀ GRID VIEW CHUẨN COMIC SCREEN) -->
-                    <Border Grid.Row="2" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="4">
+                    <Border Grid.Row="3" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="4">
                         <Panel>
                             <!-- 1. CHẾ ĐỘ DANH SÁCH (THUMBNAIL LIST - CHUẨN ẢNH 1 COMIC SCREEN, XEM TRỌN VẸN FULL TÊN) -->
                             <ListBox ItemsSource="{Binding DirectoryItems}"
@@ -358,61 +414,6 @@
                                 </StackPanel>
                             </Border>
                         </Panel>
-                    </Border>
-
-                    <!-- THANH ĐÁY ĐIỀU HƯỚNG VÀ TÁC VỤ (EDIT, RECENT, VIEW, SORT - CHUẨN ẢNH 2) -->
-                    <Border Grid.Row="3" Background="#111827" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="6,4" Margin="0,6,0,0" Height="44">
-                        <Grid ColumnDefinitions="*, *, *, *">
-                            <!-- EDIT: Ghim / Đặt thư viện -->
-                            <Button Grid.Column="0" Background="Transparent" BorderThickness="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                                <Button.Flyout>
-                                    <MenuFlyout Placement="Top">
-                                        <MenuItem Header="📌 Ghim thư mục này vào Storage"
-                                                  Command="{Binding PinCurrentDirectoryToStorageCommand}" />
-                                        <MenuItem Header="📁 Đặt làm Thư viện chính"
-                                                  Command="{Binding SetCurrentDirectoryAsLibraryRootCommand}" />
-                                    </MenuFlyout>
-                                </Button.Flyout>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
-                                    <TextBlock Text="⚙️" FontSize="12" VerticalAlignment="Center" />
-                                    <TextBlock Text="Edit" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-
-                            <!-- RECENT: Về truyện đọc gần nhất -->
-                            <Button Grid.Column="1" Command="{Binding SelectSubTabCommand}" CommandParameter="History"
-                                    Background="Transparent" BorderThickness="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
-                                    <TextBlock Text="🕒" FontSize="12" VerticalAlignment="Center" />
-                                    <TextBlock Text="Recent" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-
-                            <!-- VIEW: Chế độ hiển thị -->
-                            <Button Grid.Column="2" Command="{Binding ToggleDirectoryViewModeCommand}"
-                                    Background="Transparent" BorderThickness="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
-                                    <TextBlock Text="{Binding DirectoryViewModeIcon}" FontSize="12" VerticalAlignment="Center" />
-                                    <TextBlock Text="{Binding DirectoryViewModeText}" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-
-                            <!-- SORT: Sắp xếp -->
-                            <Button Grid.Column="3" Background="Transparent" BorderThickness="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                                <Button.Flyout>
-                                    <MenuFlyout Placement="Top">
-                                        <MenuItem Header="Tên (A ➔ Z)" Command="{Binding SortDirectoryCommand}" CommandParameter="NameAsc" />
-                                        <MenuItem Header="Tên (Z ➔ A)" Command="{Binding SortDirectoryCommand}" CommandParameter="NameDesc" />
-                                        <MenuItem Header="Ngày mới nhất" Command="{Binding SortDirectoryCommand}" CommandParameter="DateDesc" />
-                                        <MenuItem Header="Dung lượng lớn nhất" Command="{Binding SortDirectoryCommand}" CommandParameter="SizeDesc" />
-                                    </MenuFlyout>
-                                </Button.Flyout>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
-                                    <TextBlock Text="🔀" FontSize="12" VerticalAlignment="Center" />
-                                    <TextBlock Text="Sort" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                        </Grid>
                     </Border>
                 </Grid>
 

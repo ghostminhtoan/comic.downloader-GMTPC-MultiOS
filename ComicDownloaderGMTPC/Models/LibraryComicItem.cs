@@ -74,7 +74,13 @@ public partial class LibraryComicItem : ObservableObject
             var savedCh = Chapters.FirstOrDefault(c => c.Index == savedActiveIdx);
             if (savedCh != null)
             {
-                return savedCh;
+                // Nếu savedCh là mục 'Toàn bộ' nhưng chưa từng đọc thật sự (trang <= 1)
+                // và có folder con phía sau, ưu tiên mở folder đầu tiên
+                bool isAllPages = IsAllPagesChapter(savedCh);
+                if (!isAllPages || savedCh.LastReadPage > 1)
+                {
+                    return savedCh;
+                }
             }
         }
 
@@ -88,15 +94,39 @@ public partial class LibraryComicItem : ObservableObject
                 var savedCh = Chapters.FirstOrDefault(c => c.Index == savedFileIdx);
                 if (savedCh != null)
                 {
-                    return savedCh;
+                    bool isAllPages = IsAllPagesChapter(savedCh);
+                    if (!isAllPages || savedCh.LastReadPage > 1)
+                    {
+                        return savedCh;
+                    }
                 }
             }
         }
 
-        return Chapters.LastOrDefault(c => c.LastReadPage > 0 && !c.IsCompletedRead)
+        var reading = Chapters.LastOrDefault(c => c.LastReadPage > 0 && !c.IsCompletedRead)
                ?? (Chapters.Any(c => c.LastReadPage > 0) ? Chapters.FirstOrDefault(c => !c.IsCompletedRead) : null)
-               ?? Chapters.LastOrDefault(c => c.LastReadPage > 0)
-               ?? Chapters[0];
+               ?? Chapters.LastOrDefault(c => c.LastReadPage > 0);
+
+        if (reading != null)
+        {
+            return reading;
+        }
+
+        // Mở lần đầu: nếu có mục 'Toàn bộ truyện' ở đầu và có các folder chương con thực sự phía sau,
+        // ưu tiên mở folder chương đầu tiên trước thay vì mở toàn bộ!
+        if (Chapters.Count > 1 && IsAllPagesChapter(Chapters[0]))
+        {
+            return Chapters[1];
+        }
+
+        return Chapters[0];
+    }
+
+    private static bool IsAllPagesChapter(LibraryChapterItem ch)
+    {
+        if (ch == null) return false;
+        return (ch.Title != null && ch.Title.StartsWith("Toàn bộ", StringComparison.OrdinalIgnoreCase)) ||
+               (ch.ProgressKey != null && ch.ProgressKey.Contains("_all_pages", StringComparison.OrdinalIgnoreCase));
     }
 
     public void RefreshReadStatus()
