@@ -354,7 +354,7 @@ public sealed class ReadProgressStore
 
     public void ClearAllHistory()
     {
-        foreach (var key in _progressMap.Keys.Where(k => k.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase)).ToList())
+        foreach (var key in _progressMap.Keys.Where(k => k.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase) || k.StartsWith(FolderHistoryPrefix, StringComparison.OrdinalIgnoreCase)).ToList())
         {
             _progressMap.TryRemove(key, out _);
         }
@@ -680,6 +680,20 @@ public sealed class ReadProgressStore
             }
         }
         catch { }
+    }
+
+    public void ClearAllProgress()
+    {
+        var keysToRemove = _progressMap.Keys
+            .Where(k => !k.StartsWith(PinnedFolderPrefix, StringComparison.Ordinal) &&
+                        !k.StartsWith(LastRootPrefix, StringComparison.Ordinal))
+            .ToList();
+
+        foreach (var k in keysToRemove)
+        {
+            _progressMap.TryRemove(k, out _);
+        }
+        FlushImmediately();
     }
 }
 

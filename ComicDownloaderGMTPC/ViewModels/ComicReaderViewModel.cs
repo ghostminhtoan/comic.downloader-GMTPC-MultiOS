@@ -2825,11 +2825,161 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsShortcutTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsAnimationTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsReadingModeTabSelected))]
-    private int _settingsTabIndex = 0; // 0 = Phím tắt, 1 = Hoạt ảnh, 2 = Chế độ đọc
+    [NotifyPropertyChangedFor(nameof(IsCacheDataTabSelected))]
+    private int _settingsTabIndex = 0; // 0 = Phím tắt, 1 = Hoạt ảnh, 2 = Chế độ đọc, 3 = Bộ nhớ đệm (Cache data)
 
     public bool IsShortcutTabSelected => SettingsTabIndex == 0;
     public bool IsAnimationTabSelected => SettingsTabIndex == 1;
     public bool IsReadingModeTabSelected => SettingsTabIndex == 2;
+    public bool IsCacheDataTabSelected => SettingsTabIndex == 3;
+
+    // =========================================================================
+    // DỮ LIỆU BỘ NHỚ ĐỆM (CACHE DATA) CHUẨN COMIC SCREEN
+    // =========================================================================
+    [ObservableProperty]
+    private string _thumbnailStorageSummaryText = "Thumbnails 0 B / 1.0 GB";
+
+    [ObservableProperty]
+    private string _archiveCacheSummaryText = "0 B";
+
+    [ObservableProperty]
+    private string _retentionPeriodSummaryText = "4 days";
+
+    [ObservableProperty]
+    private string _totalCacheSummaryText = "0 B";
+
+    [ObservableProperty]
+    private bool _isThumbnailQuotaDialogOpen = false;
+
+    [ObservableProperty]
+    private int _selectedThumbnailQuotaMb = 1000;
+
+    [ObservableProperty]
+    private bool _isRetentionDialogOpen = false;
+
+    [ObservableProperty]
+    private int _selectedRetentionDays = 4;
+
+    public void RefreshCacheSummary()
+    {
+        ThumbnailStorageSummaryText = ComicDiskCacheService.Instance.GetThumbnailsStorageSummaryText();
+        ArchiveCacheSummaryText = ComicDiskCacheService.Instance.GetArchiveCacheSummaryText();
+        RetentionPeriodSummaryText = ComicDiskCacheService.Instance.GetRetentionPeriodSummaryText();
+        TotalCacheSummaryText = ComicDiskCacheService.FormatBytes(ComicDiskCacheService.Instance.GetTotalCacheSizeBytes());
+        SelectedThumbnailQuotaMb = ComicDiskCacheService.Instance.ThumbnailQuotaMb;
+        SelectedRetentionDays = ComicDiskCacheService.Instance.RetentionDays;
+    }
+
+    [RelayCommand]
+    public void OpenThumbnailQuotaDialog()
+    {
+        SelectedThumbnailQuotaMb = ComicDiskCacheService.Instance.ThumbnailQuotaMb;
+        IsThumbnailQuotaDialogOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseThumbnailQuotaDialog()
+    {
+        IsThumbnailQuotaDialogOpen = false;
+    }
+
+    [RelayCommand]
+    public void SelectThumbnailQuota(object? quotaObj)
+    {
+        if (quotaObj != null && int.TryParse(quotaObj.ToString(), out int mb))
+        {
+            SelectedThumbnailQuotaMb = mb;
+        }
+    }
+
+    [RelayCommand]
+    public void ConfirmThumbnailQuota()
+    {
+        ComicDiskCacheService.Instance.ThumbnailQuotaMb = SelectedThumbnailQuotaMb;
+        IsThumbnailQuotaDialogOpen = false;
+        RefreshCacheSummary();
+        ShowTransientToast($"✓ Đã lưu hạn mức bộ nhớ ảnh bìa: {SelectedThumbnailQuotaMb} MB");
+    }
+
+    [RelayCommand]
+    public void OpenRetentionDialog()
+    {
+        SelectedRetentionDays = ComicDiskCacheService.Instance.RetentionDays;
+        IsRetentionDialogOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseRetentionDialog()
+    {
+        IsRetentionDialogOpen = false;
+    }
+
+    [RelayCommand]
+    public void SelectRetentionDays(object? daysObj)
+    {
+        if (daysObj != null && int.TryParse(daysObj.ToString(), out int days))
+        {
+            SelectedRetentionDays = days;
+        }
+    }
+
+    [RelayCommand]
+    public void ConfirmRetentionDays()
+    {
+        ComicDiskCacheService.Instance.RetentionDays = SelectedRetentionDays;
+        IsRetentionDialogOpen = false;
+        RefreshCacheSummary();
+        string text = SelectedRetentionDays <= 0 ? "Vĩnh viễn (Không bao giờ xóa)" : $"{SelectedRetentionDays} ngày";
+        ShowTransientToast($"✓ Đã lưu thời hạn lưu trữ tệp nén: {text}");
+    }
+
+    [RelayCommand]
+    public void ClearThumbnails()
+    {
+        ComicDiskCacheService.Instance.ClearThumbnails();
+        RefreshCacheSummary();
+        ShowTransientToast("✓ Đã dọn dẹp sạch bộ nhớ đệm ảnh bìa (Thumbnails)");
+    }
+
+    [RelayCommand]
+    public void ClearArchiveCache()
+    {
+        ComicDiskCacheService.Instance.ClearArchiveCache();
+        RefreshCacheSummary();
+        ShowTransientToast("✓ Đã dọn dẹp bộ nhớ đệm tệp nén & tài liệu (.zip, .cbz, .rar, .cbr, .pdf, .mobi)");
+    }
+
+    [RelayCommand]
+    public void ClearResumeCache()
+    {
+        ComicDiskCacheService.Instance.ClearResumeCache();
+        RefreshCacheSummary();
+        ShowTransientToast("✓ Đã xóa dữ liệu vị trí trang đang đọc dở (Resume cache)");
+    }
+
+    [RelayCommand]
+    public void ClearBookmarks()
+    {
+        ComicDiskCacheService.Instance.ClearBookmarks();
+        RefreshCacheSummary();
+        ShowTransientToast("✓ Đã xóa toàn bộ dấu trang (Bookmarks)");
+    }
+
+    [RelayCommand]
+    public void ClearHistory()
+    {
+        ComicDiskCacheService.Instance.ClearHistory();
+        RefreshCacheSummary();
+        ShowTransientToast("✓ Đã xóa toàn bộ lịch sử đọc truyện (History)");
+    }
+
+    [RelayCommand]
+    public void ClearAllCache()
+    {
+        ComicDiskCacheService.Instance.ClearAllCache();
+        RefreshCacheSummary();
+        ShowTransientToast("✓ Đã dọn dẹp toàn bộ 100% bộ nhớ đệm và dữ liệu đọc");
+    }
 
     [RelayCommand]
     public void SelectSettingsTab(string? tabStr)
@@ -2882,6 +3032,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         SettingsTabIndex = tabIndex;
         CancelAssignKey();
         LoadShortcuts();
+        RefreshCacheSummary();
         ActivePopup = "Settings";
     }
 

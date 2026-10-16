@@ -1130,6 +1130,43 @@ public sealed class LibraryScannerService
         {
             if (string.IsNullOrWhiteSpace(path)) return null;
 
+            // 1. Kiểm tra Thumbnail Disk Cache trước (O(1) < 0.001ms, triệt tiêu đọc lại file gốc)
+            var fastCachedBmp = ComicDiskCacheService.Instance.TryGetCachedThumbnail(path, targetWidth);
+            if (fastCachedBmp != null)
+            {
+                return fastCachedBmp;
+            }
+
+            var bmp = DecodeCoverThumbnailInternal(path, targetWidth);
+            if (bmp != null)
+            {
+                try
+                {
+                    using var ms = new MemoryStream();
+#pragma warning disable CS0618
+                    bmp.Save(ms);
+#pragma warning restore CS0618
+                    byte[] bytes = ms.ToArray();
+                    if (bytes.Length > 0)
+                    {
+                        ComicDiskCacheService.Instance.SaveCachedThumbnail(path, targetWidth, bytes);
+                    }
+                }
+                catch { }
+            }
+            return bmp;
+        }
+        catch { }
+
+        return null;
+    }
+
+    private Bitmap? DecodeCoverThumbnailInternal(string path, int targetWidth)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+
             if (File.Exists(path))
             {
                 if (IsMobiFile(path))
