@@ -3807,15 +3807,41 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
   - Test CLI tự động `--test-rtl-scroll-swipe`: **100% PASS** (Cả 2 chiều vuốt sang phải và vuốt sang trái trong RTL Horizontal Scroll đều đồng nhất 100% với hướng ngón tay).
 
+---
 
+## 29. Cập Nhật: Comic Reader - Hỗ Trợ Ảnh GIF & Animated WebP, Phím Tắt Điều Khiển, Focus FullScreen & Damped Pinch Zoom
 
-
-
-
-
-
-
-
-
-
-
+- **Bối cảnh & Yêu cầu từ người dùng**:
+  1. Hỗ trợ hiển thị ảnh GIF và WebP hoạt ảnh động mượt mà đúng tốc độ frame trên cả Windows và Android (thay vì ảnh tĩnh trước đây).
+  2. Bổ sung định dạng `.gif` vào liên kết mở mặc định File Association trên Windows và Linux.
+  3. Bổ sung tổ hợp phím tắt đọc truyện chuẩn trên Windows và Linux:
+     - Phím `8`: Vừa chiều rộng (Fit Width).
+     - Phím `9`: Vừa chiều cao (Fit Height).
+     - Phím `5`: Kiểu đọc Webtoon (Cuộn dọc).
+     - Phím `6`: Kiểu đọc Manga Right to Left (Lật trang Phải → Trái).
+     - Phím `Ctrl + 6`: Kiểu đọc Right to Left Scroll (Cuộn ngang Phải → Trái).
+     - Phím `7`: Kiểu đọc Manga Left to Right (Lật trang Trái → Phải).
+     - Phím `Ctrl + 7`: Kiểu đọc Left to Right Scroll (Cuộn ngang Trái → Phải).
+  4. Khắc phục lỗi phím tắt khi mở Toàn màn hình (FullScreen): Cho phép bắt phím ngay lập tức mà không cần click chuột vào giữa màn hình.
+  5. Giảm tốc độ Pinch & Zoom cử chỉ 2 ngón tay (tránh phóng to/thu nhỏ quá nhanh, giật nhảy). Kiểm thử 20 lần trên 20 chương của bộ truyện `T:\[HDD T]\zfaststone capture\diệu thủ cuồng y chap 101-200`.
+  6. Luôn luôn tự động đóng gói và upload bản Beta lên GitHub Release tag `beta`.
+- **Giải pháp Kỹ thuật Triệt Để**:
+  1. **Trình phát hoạt ảnh `AnimatedPagePlayer`**:
+     - Tận dụng native Google Skia `SKCodec` phân tích FrameInfo và giải mã tuần tự trên luồng nền (`Task.Run`).
+     - Áp dụng kiến trúc Double-Buffering với cặp `WriteableBitmap` (`wb1` & `wb2`), ghi pixel siêu tốc bằng `Buffer.MemoryCopy` (0 byte GC allocation/frame).
+     - Swap luồng hiển thị qua UI Thread đúng frame duration (chuẩn Web/GIF delay min 15ms -> 100ms).
+  2. **File Association `.gif`**:
+     - Bổ sung `.gif` vào `DefaultImageBookExtensions`, HKCU Windows Registry và XDG MIME `image/gif` trên Linux.
+  3. **Phím tắt & Focus FullScreen**:
+     - Gán `Focusable = true` trên cả `ComicReaderControl` và `ComicReaderWindow`.
+     - `ComicReaderWindow` đăng ký `Tunnel KeyDown` chuyển tiếp trực tiếp xuống `InnerReaderControl.HandleKeyDownFromHost(e)`.
+     - Tự động gọi `InnerReaderControl.Focus()` khi `Loaded` và `Activated`.
+     - Bổ sung đầy đủ các phím `8, 9, 5, 6, 7, Ctrl+6, Ctrl+7` trong `OnControlKeyDown`.
+  4. **Damped Pinch Zoom (Làm chậm độ nhạy thu phóng)**:
+     - Thay đổi công thức tuyến tính 1:1 sang hàm mũ `dampedScale = Math.Pow(currentDist / _pinchStartDistance, 0.45)`.
+     - Giảm độ nhạy thu phóng ~55%, mang lại cảm giác zoom đầm chắc, kiểm soát vi điểm giống ComicScreen và Google Photos.
+- **Nghiệm Thu Toàn Diện**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
+  - Test CLI tự động 20 chương `--test-pinch-dieuthu`: **20/20 PASS 100%** (DampedZoomIn = 137%, DampedZoomOut = 73%, Jitter < 1px, neo điểm chạm ổn định tuyệt đối).
+  - Test giải mã hoạt ảnh `--test-inspect-media`: Đọc mượt mà 100% các file WebP (121 frames) và GIF (55 và 106 frames) tại `T:\[HDD T]\zfaststone capture\test\`.
+  - Đóng gói và phát hành tự động qua Microsoft Edge Direct-to-S3 lên GitHub Release tag `beta` thành công 100% (150.20 MB).
