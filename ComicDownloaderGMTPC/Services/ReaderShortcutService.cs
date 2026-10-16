@@ -146,8 +146,7 @@ public sealed class ReaderShortcutService
             new[] { "Shift+D" });
 
         AddEntry("ImageProperties", "Hiển thị (View)", "Thuộc tính hình ảnh (Image Properties)", "Bật/Tắt bảng thông tin chi tiết độ phân giải, dung lượng, codec, container (Phím `)",
-            new[] { "OemTilde", "Oem3" });
-
+            new[] { "OemTilde", "Grave" });
 
         AddEntry("ChapterDrawer", "Thao tác (Action)", "Danh sách chương (Chapter Drawer)", "Mở danh sách các chương của truyện",
             new[] { "C", "F" });

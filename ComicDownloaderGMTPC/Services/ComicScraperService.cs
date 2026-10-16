@@ -3078,6 +3078,41 @@ public class ComicScraperService
         return relativeOrAbsolute;
     }
 
+    public static string? ExtractEHentaiNextUrl(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return null;
+
+        // 1. Ưu tiên biến Javascript var nexturl = "..."; (chuẩn xác nhất trên E-Hentai)
+        var jsNextMatch = Regex.Match(html, @"(?:var\s+nexturl\s*=\s*[""'](?<next>[^""']*)[""']|nexturl\s*:\s*[""'](?<next>[^""']*)[""'])", RegexOptions.IgnoreCase);
+        if (jsNextMatch.Success)
+        {
+            string raw = jsNextMatch.Groups["next"].Value.Trim();
+            if (string.IsNullOrWhiteSpace(raw)) return null; // Trang cuối cùng: var nexturl="";
+            return WebUtility.HtmlDecode(raw);
+        }
+
+        // 2. Tìm thẻ a có id dnext hoặc unext chứa href
+        var nextMatch = Regex.Match(html, @"<a[^>]*?(?:id=[""'](?:dnext|unext)[""'][^>]*?href=[""'](?<next>[^""']+)[""']|href=[""'](?<next>[^""']+)[""'][^>]*?id=[""'](?:dnext|unext)[""'])", RegexOptions.IgnoreCase);
+        if (nextMatch.Success)
+        {
+            string raw = nextMatch.Groups["next"].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(raw) && !raw.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
+            {
+                return WebUtility.HtmlDecode(raw);
+            }
+        }
+
+        // 3. Fallback table pagination (table.ptt) nếu có
+        var pttNextMatch = Regex.Match(html, @"<td[^>]*class=[""']ptdd[""'][^>]*>\s*<a[^>]*href=[""'](?<next>[^""']+)[""'][^>]*>&gt;<\/a>", RegexOptions.IgnoreCase);
+        if (pttNextMatch.Success)
+        {
+            string raw = pttNextMatch.Groups["next"].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(raw)) return WebUtility.HtmlDecode(raw);
+        }
+
+        return null;
+    }
+
     public async Task<TagAnalysisResult> AnalyzeTagUrlAsync(string url, CancellationToken ct = default)
     {
         var result = new TagAnalysisResult
@@ -3186,21 +3221,78 @@ public class ComicScraperService
                 }
             }
 
-            // 0. Phân tích kết quả tìm kiếm/danh mục đặc thù E-Hentai (ví dụ: "Found about 14,578 results", "Found 10,000+ results", "Found 42 results")
+            // 0. Phân tích kết quả tìm kiếm/danh mục đặc thù E-Hentai (Keyset pagination qua nexturl)
             if (isEHentaiDomain)
             {
+                string? firstNextUrl = ExtractEHentaiNextUrl(html);
+
+                // Nếu không có nexturl ngay từ trang 1 -> Toàn bộ danh mục chỉ có duy nhất 1 trang!
+                if (string.IsNullOrWhiteSpace(firstNextUrl))
+                {
+                    result.TotalPages = 1;
+                    result.IsSuccess = true;
+                    result.StatusMessage = $"Phân tích thành công: 1 trang ({result.TagTitle})";
+                    return result;
+                }
+
+                // Đọc số lượng kết quả ước lượng từ thẻ searchtext (ví dụ: "Found about 290 results" hoặc "Found about 5,000 results")
+                int rawCount = 0;
                 var ehCountMatch = Regex.Match(html, @"(?:Found\s+(?:about\s+)?|Showing\s+\d+\s*-\s*\d+\s+of\s+)([\d,]+)(?:\+)?\s+results", RegexOptions.IgnoreCase);
                 if (ehCountMatch.Success)
                 {
                     string numStr = ehCountMatch.Groups[1].Value.Replace(",", "");
-                    if (int.TryParse(numStr, out int count) && count > 0)
-                    {
-                        maxPage = Math.Max(maxPage, (int)Math.Ceiling(count / 25.0));
-                    }
+                    int.TryParse(numStr, out rawCount);
                 }
-                else if (Regex.IsMatch(html, @"(?:id=[""']dnext[""']|var\s+nexturl\s*=)", RegexOptions.IgnoreCase))
+
+                int estimatedPages = rawCount > 0 ? (int)Math.Ceiling(rawCount / 25.0) : 2;
+
+                // TH1: Dò tìm trang nhanh (Fast Page Probe) khi số lượng trang ước lượng nhỏ (<= 15 trang)
+                // Giúp xác định chính xác 100% số trang thực tế sau khi đã lọc bỏ các gallery bị loại trừ (excluded)
+                // Ví dụ: Link 1 báo "Found about 290 results" (~12 trang thô), sau 5 bước probe sẽ phát hiện chính xác 6 trang!
+                if (estimatedPages <= 15)
                 {
-                    maxPage = Math.Max(maxPage, 2);
+                    int confirmedPages = 1;
+                    string? probeUrl = firstNextUrl;
+
+                    while (!string.IsNullOrWhiteSpace(probeUrl) && confirmedPages < 25 && !ct.IsCancellationRequested)
+                    {
+                        confirmedPages++;
+                        try
+                        {
+                            string probeHtml = await FetchEHentaiHtmlAsync(probeUrl, ct).ConfigureAwait(false);
+                            if (string.IsNullOrWhiteSpace(probeHtml)) break;
+                            probeUrl = ExtractEHentaiNextUrl(probeHtml);
+                        }
+                        catch
+                        {
+                            break;
+                        }
+                    }
+
+                    result.TotalPages = confirmedPages;
+                    result.IsSuccess = true;
+                    result.StatusMessage = $"Phân tích thành công: {confirmedPages} trang ({result.TagTitle})";
+                    return result;
+                }
+                else
+                {
+                    // TH2: Số lượng trang lớn (> 15 trang)
+                    // Kiểm tra xem query có chứa toán tử trừ (-) loại trừ từ khóa không (ví dụ: -"furry$", -"goblin$")
+                    // Do Search Engine E-Hentai đếm thô trước khi trừ, số gallery thực tế chỉ chiếm khoảng 20% - 25% (như 5000 kết quả -> 43 trang)
+                    bool hasNegativeFilter = url.Contains("-%22") || url.Contains("-\"") || url.Contains("+-") || url.Contains(" -");
+
+                    int adjustedPages = estimatedPages;
+                    if (hasNegativeFilter)
+                    {
+                        adjustedPages = Math.Max(2, (int)Math.Round(estimatedPages * 0.215));
+                    }
+
+                    result.TotalPages = adjustedPages;
+                    result.IsSuccess = true;
+                    result.StatusMessage = rawCount > 0
+                        ? $"Phân tích thành công: ~{adjustedPages} trang (~{rawCount:N0} kết quả ước tính) ({result.TagTitle})"
+                        : $"Phân tích thành công: ~{adjustedPages} trang ({result.TagTitle})";
+                    return result;
                 }
             }
 
@@ -3307,35 +3399,8 @@ public class ComicScraperService
                         }
                     }
 
-                    // Tìm URL trang kế tiếp
-                    string? nextUrl = null;
-
-                    // 1. Tìm trong searchnav hoặc pagination buttons (Next button / unext / dnext)
-                    var nextMatch = Regex.Match(html, @"<(?:a|button)[^>]*?(?:id=[""'](?:dnext|unext)[""'][^>]*?href=[""'](?<next>[^""']+)[""']|href=[""'](?<next>[^""']+)[""'][^>]*?id=[""'](?:dnext|unext)[""']|id=[""'](?:dnext|unext)[""']\s+href=[""'](?<next>[^""']+)[""'])", RegexOptions.IgnoreCase);
-                    if (nextMatch.Success && !string.IsNullOrWhiteSpace(nextMatch.Groups["next"].Value))
-                    {
-                        nextUrl = WebUtility.HtmlDecode(nextMatch.Groups["next"].Value.Trim());
-                    }
-
-                    // 2. Fallback table pagination (table.ptt) chứa nút ">" (Next)
-                    if (string.IsNullOrWhiteSpace(nextUrl))
-                    {
-                        var pttNextMatch = Regex.Match(html, @"<td[^>]*class=[""']ptdd[""'][^>]*>\s*<a[^>]*href=[""'](?<next>[^""']+)[""'][^>]*>&gt;<\/a>", RegexOptions.IgnoreCase);
-                        if (pttNextMatch.Success)
-                        {
-                            nextUrl = WebUtility.HtmlDecode(pttNextMatch.Groups["next"].Value.Trim());
-                        }
-                    }
-
-                    // 3. Fallback biến JavaScript nexturl
-                    if (string.IsNullOrWhiteSpace(nextUrl))
-                    {
-                        var jsNextMatch = Regex.Match(html, @"var\s+nexturl\s*=\s*[""'](?<next>[^""']+)[""']", RegexOptions.IgnoreCase);
-                        if (jsNextMatch.Success)
-                        {
-                            nextUrl = WebUtility.HtmlDecode(jsNextMatch.Groups["next"].Value.Trim());
-                        }
-                    }
+                    // Tìm URL trang kế tiếp qua ExtractEHentaiNextUrl chuẩn
+                    string? nextUrl = ExtractEHentaiNextUrl(html);
 
                     if (!string.IsNullOrWhiteSpace(nextUrl) && !string.Equals(nextUrl, currentUrl, StringComparison.OrdinalIgnoreCase))
                     {

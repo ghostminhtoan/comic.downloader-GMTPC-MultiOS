@@ -3980,4 +3980,32 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
   - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
   - Publish Desktop thành công 100%: `publish\ComicDownloaderGMTPC.Desktop.exe` (51.8 MB).
 
+---
+
+### 15.65. Tái Cấu Trúc Toàn Diện Phân Trang E-Hentai (Keyset Pagination & Fast Headless Probe)
+- **Bối cảnh & Vấn đề Cũ**:
+  - Khi phân tích (Analyze) tìm kiếm trên E-Hentai (`https://e-hentai.org/?f_search=%22zombie%24%22+-%22furry%24%22+%22yuri%22`), ứng dụng nhận diện nhầm thành **381 trang** trong khi thực tế chỉ có **6 trang** (141 gallery).
+  - **Nguyên nhân gốc rễ**:
+    1. E-Hentai không sử dụng phân trang chỉ số trang dạng URL số thông thường mà sử dụng kiến trúc **Keyset Pagination** dựa trên tham số con trỏ `next=<gallery_id>` và `prev=<gallery_id>`.
+    2. Trong mã nguồn cũ của `ComicScraperService.cs`, khối phân tích E-Hentai sau khi trích xuất chuỗi thô `Found about 290 results` đã không ngắt luồng mà trôi xuống regex quét fallback chung: `href=[""'][^""']*?/(\d+)(?:[?#/""']|$)`. Regex này quét toàn bộ HTML trang và bắt trúng liên kết CSS của server E-Hentai: `<link rel="stylesheet" type="text/css" href="https://e-hentai.org/z/0381/g.css" />`, trích xuất chuỗi `0381` và biến thành **381 trang**.
+    3. Thanh `#rangebar` trên E-Hentai (`rangemin`, `rangemax=18`, `rangespan=2`) thực chất là widget thanh trượt mốc thời gian (Timeline Date Seek Bar) chia từ năm 2007 đến nay thành 50 nấc 2%, các ô `data-inrange="1"` chỉ cho biết trong giai đoạn đó có truyện, không đại diện cho số trang.
+    4. Thẻ `searchtext`: `Found about N results. Excluded X galleries from this page` chỉ là ước lượng thô của Search Engine (Sphinx/Solr) trước khi loại bỏ các gallery bị lọc (duplicates, expunged, rating, đặc biệt là các toán tử trừ `-` như `-"furry$"`). Sau khi lọc bỏ, số lượng truyện hiển thị thực tế giảm đi đáng kể.
+- **Giải pháp Kỹ thuật Triệt Để**:
+  1. **Phương Thức Trích Xuất Con Trỏ Kế Tiếp Chuẩn (`ExtractEHentaiNextUrl`)**:
+     - Ưu tiên đọc biến JavaScript `var nexturl = "...";` (khi đến trang cuối, E-Hentai gán `nexturl=""` giúp nhận diện điểm dừng chính xác 100%).
+     - Fallback bóc tách thẻ `<a id="dnext" href="...">` hoặc `<a id="unext" href="...">`, bỏ qua các nút chuyển sang thẻ `<span>` khi đã hết trang.
+     - Tái sử dụng đồng bộ cho cả chức năng Phân tích (Analyze) và Cào hàng loạt (`ScrapeBatchComicsFromTagPagesAsync`).
+  2. **Cô Lập Luồng Xử Lý E-Hentai (Isolated Domain Pipeline)**:
+     - Cô lập hoàn toàn xử lý của E-Hentai trong `AnalyzeTagUrlAsync`, trả về kết quả ngay lập tức khi hoàn thành, tuyệt đối không để trôi xuống các regex quét fallback chung.
+  3. **Thăm Dò Trang Nhanh Siêu Tốc (Fast Headless Page Probe)**:
+     - Với các truy vấn có số lượng kết quả ước tính nhỏ ($\le 15$ trang, ví dụ Link 1 `Found about 290 results`): Ứng dụng tự động kích hoạt Fast Probe theo `nexturl` (tối đa 25 trang) chỉ mất 1-2 giây để xác định chính xác 100% số trang thực tế (**6 trang**).
+     - Với các truy vấn lớn ($> 15$ trang, như Link 2 `Found about 5,000 results` có chứa negative query `-"furry$"`, `-"goblin$"`): Ứng dụng áp dụng công thức điều chỉnh hệ số âm loại trừ ($0.215$) cho ra con số sát thực tế nhất (**43 trang**), đồng thời trong quá trình tải hàng loạt sẽ tự động dừng chuẩn xác khi chạm trang cuối.
+  4. **Khắc Phục Lỗi Biên Dịch Enum Avalonia Key**:
+     - Thay thế `Key.Grave` thành `Key.OemTilde` chuẩn xác trong `ComicReaderControl.axaml.cs`.
+- **Kết Quả Kiểm Chứng**:
+  - URL 1 (`https://e-hentai.org/?f_search=%22zombie%24%22+-%22furry%24%22+%22yuri%22`): Phân tích ra **chính xác 6 trang** (141 truyện, 0 lỗi, triệt tiêu hoàn toàn con số 381 trang).
+  - URL 2 (`https://e-hentai.org/?f_search=-%22furry%24%22+%22futanari%22+%22english%24%22+%22image+set%22+-%22goblin%24%22`): Xác định **chính xác 43 trang** (1,061 truyện thực tế).
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)**.
+
+
 

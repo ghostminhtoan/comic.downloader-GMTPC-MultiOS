@@ -2496,12 +2496,9 @@ public partial class ComicReaderControl : UserControl
 
             // Phím ` / ~: Bật/Tắt HUD hiển thị chi tiết thuộc tính ảnh (Độ phân giải, dung lượng, codec, container)
             case Key.OemTilde:
-            case Key.Oem8:
                 vm.ToggleImagePropertiesHud();
                 e.Handled = true;
                 break;
-
-
 
 
             // Phím số 2: Chuyển đổi bố cục trang (Toggle Page Layout: Off -> Single -> Dual -> Auto)
