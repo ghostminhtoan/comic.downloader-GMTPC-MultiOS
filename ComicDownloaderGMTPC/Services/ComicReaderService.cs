@@ -24,6 +24,7 @@ public sealed class ReaderVisualEffectSettings
     public bool IsGrayScale { get; set; }
     public bool IsAutoContrast { get; set; }
     public bool IsSharpenFilter { get; set; }
+    public double SharpenStrength { get; set; } = 50.0;
     public bool IsInvertColor { get; set; }
     public bool IsSaturationEnabled { get; set; }
     public double SaturationValue { get; set; } = 100.0;
@@ -54,6 +55,7 @@ public sealed class ReaderVisualEffectSettings
             IsGrayScale = IsGrayScale,
             IsAutoContrast = IsAutoContrast,
             IsSharpenFilter = IsSharpenFilter,
+            SharpenStrength = SharpenStrength,
             IsInvertColor = IsInvertColor,
             IsSaturationEnabled = IsSaturationEnabled,
             SaturationValue = SaturationValue
@@ -573,11 +575,14 @@ public sealed class ComicReaderService
                 if (effects.IsSharpenFilter)
                 {
                     using var paint = new SKPaint();
+                    float strength = (float)Math.Clamp(effects.SharpenStrength, 0.0, 100.0);
+                    float k = (strength / 100.0f) * 1.5f;
+                    float center = 1.0f + 4.0f * k;
                     float[] kernel =
                     {
-                        0f, -0.85f, 0f,
-                        -0.85f, 4.4f, -0.85f,
-                        0f, -0.85f, 0f
+                        0f, -k, 0f,
+                        -k, center, -k,
+                        0f, -k, 0f
                     };
                     using var conv = SKImageFilter.CreateMatrixConvolution(
                         new SKSizeI(3, 3),

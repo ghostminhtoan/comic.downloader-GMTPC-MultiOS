@@ -422,39 +422,39 @@ public partial class ComicReaderViewModel : ViewModelBase
                 IsScrollMode = false;
                 IsHorizontalScrollMode = false;
                 IsRightToLeft = false;
-                ShowTransientToast("📄 Page scrolling: Right (Lật trang Trái → Phải)");
+                ShowTransientToast("📄 Lật trang: trái (☞ﾟヮﾟ)☞ phải");
                 break;
             case 1: // Left (Flip RTL)
                 IsScrollMode = false;
                 IsHorizontalScrollMode = false;
                 IsRightToLeft = true;
-                ShowTransientToast("📄 Page scrolling: Left (Lật trang Phải → Trái)");
+                ShowTransientToast("📖 Lật trang: phải ☜(ﾟヮﾟ☜) trái");
                 break;
             case 2: // Right + Vertical (Cuộn dọc RTL)
                 IsScrollMode = true;
                 IsHorizontalScrollMode = false;
                 IsRightToLeft = true;
-                ShowTransientToast("📜 Page scrolling: Right + Vertical (Cuộn dọc RTL)");
+                ShowTransientToast("📜 Cuộn dọc RTL: phải ☜(ﾟヮﾟ☜) trái");
                 break;
             case 3: // Right S (Horizontal Scroll LTR - Cuộn ngang liên tục Trái → Phải)
                 IsScrollMode = true;
                 IsHorizontalScrollMode = true;
                 IsRightToLeft = false;
                 FitMode = ImageFitMode.FitHeight; // Bắt buộc Fit Height để trang khớp chiều cao và cuộn ngang liên tiếp
-                ShowTransientToast("↔ Page scrolling: Right S (Cuộn ngang liên tục Trái → Phải)");
+                ShowTransientToast("↔ Cuộn ngang: trái (☞ﾟヮﾟ)☞ phải");
                 break;
             case 4: // Left S (Horizontal Scroll RTL - Cuộn ngang liên tục Phải → Trái)
                 IsScrollMode = true;
                 IsHorizontalScrollMode = true;
                 IsRightToLeft = true;
                 FitMode = ImageFitMode.FitHeight; // Bắt buộc Fit Height để trang khớp chiều cao và cuộn ngang liên tiếp
-                ShowTransientToast("↔ Page scrolling: Left S (Cuộn ngang liên tục Phải → Trái)");
+                ShowTransientToast("↔ Cuộn ngang: phải ☜(ﾟヮﾟ☜) trái");
                 break;
             default: // 5 = Left + Vertical (Webtoon Scroll LTR)
                 IsScrollMode = true;
                 IsHorizontalScrollMode = false;
                 IsRightToLeft = false;
-                ShowTransientToast("📜 Page scrolling: Left + Vertical (Cuộn dọc Webtoon)");
+                ShowTransientToast("📜 Cuộn dọc: trái (☞ﾟヮﾟ)☞ phải (Webtoon)");
                 break;
         }
 
@@ -583,6 +583,24 @@ public partial class ComicReaderViewModel : ViewModelBase
         ActivePopup = string.Empty;
     }
 
+    [RelayCommand]
+    public void TogglePageLayout()
+    {
+        // Phím 2: Chuyển đổi tuần tự các chế độ bố cục: 0 (Off) -> 1 (Single) -> 2 (Dual) -> 3 (Auto) -> 0 (Off)
+        int nextMode = (PageLayoutMode + 1) % 4;
+        SelectPageLayoutMode(nextMode.ToString());
+    }
+
+    [RelayCommand]
+    public void SetOriginalSizeImage()
+    {
+        // Phím 1: Hiển thị kích thước gốc 1:1 của ảnh (Original size)
+        FitMode = ImageFitMode.Original;
+        ZoomLevel = 1.0;
+        ApplyFitModeLayout();
+        ShowTransientToast("🔍 1:1 Kích thước gốc (Original size)");
+    }
+
     // =========================================================================
     // CHẾ ĐỘ VỪA KHUNG HÌNH (IMAGE FIT MODE: FIT WIDTH / FIT HEIGHT / STRETCH FULL / FIT SCREEN / ORIGINAL)
     // =========================================================================
@@ -647,7 +665,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         {
             double vw = Math.Max(240, _viewportWidth);
             double singlePageVw = (IsDoublePage && SecondaryPage != null) ? Math.Max(120, vw * 0.498) : vw;
-            if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitWidth)
+            if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitWidth || FitMode == ImageFitMode.FitScreen)
             {
                 return Math.Round(singlePageVw * ZoomLevel);
             }
@@ -660,7 +678,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         get
         {
             double vh = Math.Max(240, _viewportHeight);
-            if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitHeight)
+            if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitHeight || FitMode == ImageFitMode.FitScreen)
             {
                 return Math.Round(vh * ZoomLevel);
             }
@@ -1205,6 +1223,12 @@ public partial class ComicReaderViewModel : ViewModelBase
     private bool _isSharpenFilter = false;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SharpenStrengthText))]
+    private double _sharpenStrength = 50.0;
+
+    public string SharpenStrengthText => $"{Math.Round(SharpenStrength):0}%";
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Button7IconTint))]
     private bool _isInvertColor = false;
 
@@ -1219,6 +1243,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     partial void OnIsGrayScaleChanged(bool value) => SyncAndRefreshVisualEffects();
     partial void OnIsAutoContrastChanged(bool value) => SyncAndRefreshVisualEffects();
     partial void OnIsSharpenFilterChanged(bool value) => SyncAndRefreshVisualEffects();
+    partial void OnSharpenStrengthChanged(double value) => SyncAndRefreshVisualEffects(debounced: true);
     partial void OnIsInvertColorChanged(bool value) => SyncAndRefreshVisualEffects();
 
     partial void OnIsUpscalingChanged(bool value)
@@ -1240,6 +1265,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         settings.IsGrayScale = IsGrayScale;
         settings.IsAutoContrast = IsAutoContrast;
         settings.IsSharpenFilter = IsSharpenFilter;
+        settings.SharpenStrength = SharpenStrength;
         settings.IsInvertColor = IsInvertColor;
         settings.IsSaturationEnabled = IsSaturationEnabled;
         settings.SaturationValue = SaturationValue;
@@ -2177,8 +2203,13 @@ public partial class ComicReaderViewModel : ViewModelBase
 
             if (TotalPages > 0)
             {
+                var loadTask1 = _readerService.EnsurePageLoadedAsync(Pages[startIndex], ct);
+                var loadTask2 = (IsDoublePage && startIndex + 1 < TotalPages)
+                    ? _readerService.EnsurePageLoadedAsync(Pages[startIndex + 1], ct)
+                    : Task.CompletedTask;
+                await Task.WhenAll(loadTask1, loadTask2);
+
                 var firstTarget = Pages[startIndex];
-                await _readerService.EnsurePageLoadedAsync(firstTarget, ct);
                 if (firstTarget.AspectWidth > 0 && firstTarget.AspectHeight > 0)
                 {
                     int w = firstTarget.AspectWidth;
@@ -2191,11 +2222,6 @@ public partial class ComicReaderViewModel : ViewModelBase
                         }
                     }
                     ApplyFitModeLayout();
-                }
-
-                if (IsDoublePage && startIndex + 1 < TotalPages)
-                {
-                    await _readerService.EnsurePageLoadedAsync(Pages[startIndex + 1], ct);
                 }
             }
 
@@ -2229,6 +2255,7 @@ public partial class ComicReaderViewModel : ViewModelBase
             CurrentPage = null;
             SecondaryPage = null;
             OnPropertyChanged(nameof(FlipGridColumns));
+            OnPropertyChanged(nameof(HasSecondaryPage));
             OnPropertyChanged(nameof(ComicScreenPageBadgeText));
             OnPropertyChanged(nameof(FlipDisplayWidth));
             OnPropertyChanged(nameof(FlipDisplayHeight));
@@ -2248,6 +2275,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
 
         OnPropertyChanged(nameof(FlipGridColumns));
+        OnPropertyChanged(nameof(HasSecondaryPage));
         OnPropertyChanged(nameof(LeftFlipPage));
         OnPropertyChanged(nameof(RightFlipPage));
         OnPropertyChanged(nameof(ComicScreenPageBadgeText));
@@ -2378,8 +2406,8 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
         UpdateCurrentFlipPages();
         ShowTransientToast(IsRightToLeft
-            ? "◀ Đã bật chế độ đọc Manga (Phải → Trái)"
-            : "▶ Đã bật chế độ đọc chuẩn (Trái → Phải)");
+            ? "📖 Đọc Manga: phải ☜(ﾟヮﾟ☜) trái"
+            : "📄 Đọc chuẩn: trái (☞ﾟヮﾟ)☞ phải");
     }
 
     [RelayCommand]
@@ -2620,7 +2648,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     }
 
     // =========================================================================
-    // HOẠT ẢNH & TỐC ĐỘ (ANIMATION SPEED: GIF / WEBP ĐỘNG TỪ 0.1x ĐẾN 4.0x)
+    // HOẠT ẢNH & TỐC ĐỘ (ANIMATION SPEED: GIF / WEBP ĐỘNG TỪ 0.1x ĐẾN 8.0x)
     // =========================================================================
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AnimationSpeedText))]
@@ -2630,7 +2658,7 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     partial void OnAnimationSpeedChanged(double value)
     {
-        double clamped = Math.Clamp(Math.Round(value, 1), 0.1, 4.0);
+        double clamped = Math.Clamp(Math.Round(value, 1), 0.1, 8.0);
         ComicReaderService.GlobalAnimationSpeed = clamped;
         foreach (var page in Pages)
         {
@@ -2643,7 +2671,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void IncreaseAnimationSpeed()
     {
-        SetAnimationSpeed(Math.Min(4.0, Math.Round(AnimationSpeed + 0.1, 1)));
+        SetAnimationSpeed(Math.Min(8.0, Math.Round(AnimationSpeed + 0.1, 1)));
     }
 
     [RelayCommand]
@@ -2660,7 +2688,7 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public void SetAnimationSpeed(double speed)
     {
-        double clamped = Math.Clamp(Math.Round(speed, 1), 0.1, 4.0);
+        double clamped = Math.Clamp(Math.Round(speed, 1), 0.1, 8.0);
         AnimationSpeed = clamped;
     }
 

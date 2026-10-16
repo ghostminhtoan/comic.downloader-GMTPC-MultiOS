@@ -3885,3 +3885,41 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
     - `ComicDownloaderGMTPC.Desktop.exe` (49.43 MB)
     - `ComicDownloaderGMTPC-linux-x64.tar.gz` (42.15 MB)
 
+---
+
+## 31. Cập Nhật: Khắc Phục Lỗi Dual Page Giữa Các Chương, Slider Sharpen Filter (0-100), Đảo Chiều Lăn Chuột RTL Windows, Phím Tắt 1 & 2, Emotion Hướng Đọc & Max Tốc Độ Ảnh Động (8.0x)
+
+- **Bối cảnh & Yêu cầu từ người dùng**:
+  1. Khi bật Dual Page (2 trang kép), chuyển từ trang cuối chap này sang trang đầu chap sau bị lệch sang mép phải và kẹt tải trang bên trái.
+  2. Bổ sung Slider điều chỉnh cường độ làm nét (Sharpen Filter) từ 0 đến 100.
+  3. Sửa lỗi chuột cuộn (mouse wheel) trên Windows khi đọc Right to Left: Scroll down phải là tua tới (tiến trang), Scroll up phải là tua lui (lùi trang).
+  4. Phím tắt trên Windows: Phím số 2 chuyển đổi bố cục trang (Toggle Page Layout: Off -> Single -> Dual -> Auto), Phím số 1 hiển thị kích thước gốc của ảnh (Original size 1:1).
+  5. Thông báo hướng đọc bằng emotion đúng chiều mũi tên: Left to Right là `trái (☞ﾟヮﾟ)☞ phải`, Right to Left là `phải ☜(ﾟヮﾟ☜) trái`.
+  6. Tăng tốc độ tối đa phát ảnh GIF/WebP động từ 4.0x lên 8.0x.
+- **Giải pháp Kỹ thuật Triệt Để**:
+  1. **Khắc phục lỗi Dual Page (`ComicReaderViewModel.cs` & `ComicReaderControl.axaml`)**:
+     - `FlipDisplayWidth` và `FlipDisplayHeight` khi `FitMode == ImageFitMode.FitScreen` được tính toán giới hạn rõ ràng theo `singlePageVw * ZoomLevel` và `vh * ZoomLevel` (thay vì `NaN` khiến Image phình to theo pixel bitmap 2000px đẩy UniformGrid ra ngoài mép màn hình).
+     - Bổ sung `OnPropertyChanged(nameof(HasSecondaryPage))` trong `UpdateCurrentFlipPages()`.
+     - Bổ sung Border nạp trang `⏳ Đang nạp trang...` cho Panel `RightFlipPage` tương tự `LeftFlipPage`.
+     - Nạp song song cả 2 trang đầu tiên bằng `Task.WhenAll` trong `LoadChapterPagesAsync`.
+     - Reset `FlipModeScrollViewer.Offset = Vector.Zero` khi chuyển trang hoặc nạp chapter mới trong Flip mode.
+  2. **Slider Sharpen Filter từ 0 đến 100 (`ComicReaderService.cs`, `ComicReaderViewModel.cs`, `ComicReaderControl.axaml`)**:
+     - Thêm `SharpenStrength` (0-100) vào `ReaderVisualEffectSettings` và ViewModel.
+     - Cập nhật convolution kernel Skia: hệ số cạnh $k = \frac{\text{strength}}{100.0} \times 1.5f$, tâm $1.0f + 4.0f \times k$, bảo toàn độ sáng ảnh.
+     - Thêm Slider và Text hiển thị % ngay dưới CheckBox `Sharpen Filter` trong Filter Popup.
+  3. **Chuẩn hóa chuột cuộn RTL trên Windows (`ComicReaderControl.axaml.cs`)**:
+     - Loại bỏ hệ số đảo dấu `dir` sai lệch trong `OnViewportPointerWheelChanged`: Cuộn xuống (`e.Delta.Y < 0`) luôn luôn là TUA TỚI (tiến trang), Cuộn lên (`e.Delta.Y > 0`) luôn luôn là TUA LUI (lùi trang).
+  4. **Hệ thống phím tắt số 1 và số 2 (`ReaderShortcutService.cs`, `ComicReaderControl.axaml.cs`, `ComicReaderViewModel.cs`)**:
+     - Phím 1 / NumPad 1: Gọi `SetOriginalSizeImage()` (FitMode = Original, 100% zoom).
+     - Phím 2 / NumPad 2: Gọi `TogglePageLayout()` (chuyển đổi Off -> Single -> Dual -> Auto).
+     - Phím 8 / W: Vừa chiều rộng (Fit Width); Phím 9 / H: Vừa chiều cao (Fit Height).
+  5. **Chuẩn hóa emotion thông báo hướng đọc**:
+     - Left to Right: `trái (☞ﾟヮﾟ)☞ phải`
+     - Right to Left: `phải ☜(ﾟヮﾟ☜) trái`
+  6. **Nâng giới hạn tốc độ Animation Speed từ 4.0x lên 8.0x**:
+     - Cập nhật Slider `Maximum="8.0"`, clamp trong ViewModel và Skia `0.1 .. 8.0`.
+- **Nghiệm Thu Toàn Diện**:
+  - `dotnet build`: Đạt chuẩn tuyệt đối **0 Warning(s), 0 Error(s)** trên toàn bộ dự án.
+  - Publish Desktop thành công 100%: `publish\ComicDownloaderGMTPC.Desktop.exe` (51.8 MB).
+  - Kiểm thử khởi động ứng dụng: `Responding = True`.
+

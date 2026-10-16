@@ -101,15 +101,18 @@ public sealed class ReaderShortcutService
         AddEntry("ResetZoom", "Hiển thị (View)", "Đặt lại thu phóng (Reset Zoom)", "Khôi phục độ phóng to về mặc định",
             new[] { "Alt+D0", "Z" });
 
-        AddEntry("Zoom100", "Hiển thị (View)", "Thu phóng 100% (Original 100%)", "Hiển thị kích thước gốc 100%",
-            new[] { "D0", "NumPad0" });
+        AddEntry("Zoom100", "Hiển thị (View)", "Kích thước gốc 100% (Original 1:1)", "Hiển thị kích thước gốc 100% của ảnh (Phím 1/0)",
+            new[] { "D1", "NumPad1", "D0", "NumPad0" });
 
         // 3. NHÓM CHẾ ĐỘ ĐỌC (VIEW MODE) - Chuẩn BandiView
-        AddEntry("FitWidth", "Kiểu đọc (View Mode)", "Vừa chiều rộng (Fit to Width)", "Tỉ lệ vừa khít chiều ngang màn hình (Phím 8/1/W)",
-            new[] { "D8", "NumPad8", "D1", "NumPad1", "W" });
+        AddEntry("TogglePageLayout", "Kiểu đọc (View Mode)", "Bố cục trang (Toggle Page Layout)", "Chuyển đổi bố cục trang: Tắt / 1 Trang / 2 Trang / Tự động (Phím 2)",
+            new[] { "D2", "NumPad2" });
 
-        AddEntry("FitHeight", "Kiểu đọc (View Mode)", "Vừa chiều cao (Fit to Height/Window)", "Tỉ lệ vừa khít chiều dọc màn hình (Phím 9/2/H)",
-            new[] { "D9", "NumPad9", "D2", "NumPad2", "H" });
+        AddEntry("FitWidth", "Kiểu đọc (View Mode)", "Vừa chiều rộng (Fit to Width)", "Tỉ lệ vừa khít chiều ngang màn hình (Phím 8/W)",
+            new[] { "D8", "NumPad8", "W" });
+
+        AddEntry("FitHeight", "Kiểu đọc (View Mode)", "Vừa chiều cao (Fit to Height/Window)", "Tỉ lệ vừa khít chiều dọc màn hình (Phím 9/H)",
+            new[] { "D9", "NumPad9", "H" });
 
         AddEntry("FitScreen", "Kiểu đọc (View Mode)", "Vừa màn hình (Fit to Screen)", "Hiển thị toàn bộ trang trong khung nhìn",
             new[] { "D3", "NumPad3", "B" });

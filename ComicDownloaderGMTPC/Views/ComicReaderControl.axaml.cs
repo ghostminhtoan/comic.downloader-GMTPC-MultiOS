@@ -1128,6 +1128,14 @@ public partial class ComicReaderControl : UserControl
                 sv.Offset = new Vector(sv.Offset.X, Math.Clamp(targetY, 0, maxY));
             }
         }
+        else if (vm.IsFlipMode)
+        {
+            var flipSv = GetFlipScrollViewer();
+            if (flipSv != null)
+            {
+                flipSv.Offset = Vector.Zero;
+            }
+        }
 
         try
         {
@@ -1937,18 +1945,19 @@ public partial class ComicReaderControl : UserControl
             var scrollViewer = GetReaderScrollViewer();
             if (scrollViewer != null)
             {
+                // Lăn chuột xuống (e.Delta.Y < 0): step > 0 -> tiến tới (tua tới)
+                // Lăn chuột lên (e.Delta.Y > 0): step < 0 -> lùi lại (tua lui)
                 double step = (e.Delta.Y != 0 ? -e.Delta.Y : e.Delta.X) * 140.0;
-                double dir = vm.IsRightToLeft ? -1.0 : 1.0;
                 double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
-                double targetX = scrollViewer.Offset.X + step * dir;
+                double targetX = scrollViewer.Offset.X + step;
 
                 if (vm.IsContinuousChaptersMode)
                 {
                     long now = Environment.TickCount64;
                     if (now - _lastAutoChapterTransitionTick > 1200)
                     {
-                        bool atEnd = vm.IsRightToLeft ? targetX <= -10 : targetX >= maxX + 10;
-                        bool atStart = vm.IsRightToLeft ? targetX >= maxX + 10 : targetX <= -10;
+                        bool atEnd = targetX >= maxX + 10;
+                        bool atStart = targetX <= -10;
                         if (atEnd && vm.CanGoNextChapter)
                         {
                             _lastAutoChapterTransitionTick = now;
@@ -2433,8 +2442,21 @@ public partial class ComicReaderControl : UserControl
             // Phím Tỉ lệ xem (Fit Modes) & Kiểu đọc (Reading Modes) theo yêu cầu:
             // 8 là fit width, 9 là fit height
             // 5 là kiểu đọc webtoon, 6 là kiểu đọc manga right to left, 7 là kiểu đọc manga left to right
+            // Phím số 1: Kích thước gốc ảnh (Original size 1:1)
             case Key.D1:
             case Key.NumPad1:
+                vm.SetOriginalSizeImage();
+                e.Handled = true;
+                break;
+
+            // Phím số 2: Chuyển đổi bố cục trang (Toggle Page Layout: Off -> Single -> Dual -> Auto)
+            case Key.D2:
+            case Key.NumPad2:
+                vm.TogglePageLayout();
+                e.Handled = true;
+                break;
+
+            // Phím 8 hoặc W: Vừa chiều rộng (Fit Width)
             case Key.W:
             case Key.D8:
             case Key.NumPad8:
@@ -2442,8 +2464,7 @@ public partial class ComicReaderControl : UserControl
                 e.Handled = true;
                 break;
 
-            case Key.D2:
-            case Key.NumPad2:
+            // Phím 9 hoặc H: Vừa chiều cao (Fit Height)
             case Key.H:
             case Key.D9:
             case Key.NumPad9:
@@ -2549,8 +2570,16 @@ public partial class ComicReaderControl : UserControl
                 break;
 
             case "ResetZoom":
-            case "Zoom100":
                 vm.ResetZoom();
+                break;
+
+            case "OriginalSize":
+            case "Zoom100":
+                vm.SetOriginalSizeImage();
+                break;
+
+            case "TogglePageLayout":
+                vm.TogglePageLayout();
                 break;
 
             case "FitWidth":

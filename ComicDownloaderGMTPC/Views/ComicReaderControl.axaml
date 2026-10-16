@@ -258,6 +258,8 @@
                                 <Image Source="{Binding LeftFlipPage.Image}"
                                        Width="{Binding FlipDisplayWidth}"
                                        Height="{Binding FlipDisplayHeight}"
+                                       MaxWidth="{Binding FlipDisplayWidth}"
+                                       MaxHeight="{Binding FlipDisplayHeight}"
                                        Stretch="{Binding FlipImageStretch}"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
@@ -267,9 +269,16 @@
                             <!-- Trang Phải (chỉ hiện khi bật 2 Trang Kép) -->
                             <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}"
                                    IsVisible="{Binding HasSecondaryPage}">
+                                <Border Background="#0B1120" MinWidth="260" MinHeight="360" CornerRadius="6"
+                                        IsVisible="{Binding RightFlipPage.HasImage, Converter={x:Static BoolConverters.Not}, FallbackValue=True}">
+                                    <TextBlock Text="⏳ Đang nạp trang..." Foreground="#4FC3F7" FontSize="14" FontWeight="Bold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
                                 <Image Source="{Binding RightFlipPage.Image}"
                                        Width="{Binding FlipDisplayWidth}"
                                        Height="{Binding FlipDisplayHeight}"
+                                       MaxWidth="{Binding FlipDisplayWidth}"
+                                       MaxHeight="{Binding FlipDisplayHeight}"
                                        Stretch="{Binding FlipImageStretch}"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
@@ -1234,6 +1243,16 @@
                         <CheckBox Classes="comicCheck" IsChecked="{Binding IsAutoContrast}" Content="Auto Contrast" />
                         <CheckBox Classes="comicCheck" IsChecked="{Binding IsUpscaling}" Content="Upscaling" />
                         <CheckBox Classes="comicCheck" IsChecked="{Binding IsSharpenFilter}" Content="Sharpen Filter" />
+                        <!-- Thanh trượt độ nét Sharpen từ 0 đến 100 -->
+                        <StackPanel IsVisible="{Binding IsSharpenFilter}" Margin="20,2,0,4" Spacing="2">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="Độ nét (0-100):" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding SharpenStrengthText}" FontSize="11" FontWeight="Bold" Foreground="#4FC3F7" />
+                            </Grid>
+                            <Slider Minimum="0" Maximum="100" Value="{Binding SharpenStrength}"
+                                    SmallChange="1" LargeChange="10" TickFrequency="5"
+                                    Height="24" Margin="0" />
+                        </StackPanel>
                         <CheckBox Classes="comicCheck" IsChecked="{Binding IsInvertColor}" Content="Invert Color" />
                         <CheckBox Classes="comicCheck" IsChecked="{Binding IsBlueLightEnabled}" Content="Blue Light" />
                     </StackPanel>
@@ -1745,7 +1764,7 @@
                             <TextBlock Text="{Binding FullScreenButtonText}" FontSize="11.5" />
                         </Button>
 
-                        <!-- ĐIỀU CHỈNH TỐC ĐỘ ẢNH ĐỘNG (GIF & WEBP ĐỘNG): 0.1x - 4.0x -->
+                        <!-- ĐIỀU CHỈNH TỐC ĐỘ ẢNH ĐỘNG (GIF & WEBP ĐỘNG): 0.1x - 8.0x -->
                         <Border Height="1" Background="#334155" Margin="0,2" />
                         <StackPanel Spacing="4">
                             <Grid ColumnDefinitions="*, Auto">
@@ -1761,7 +1780,7 @@
                                     <TextBlock Text="➖" FontSize="11" />
                                 </Button>
                                 <Slider Grid.Column="1"
-                                        Minimum="0.1" Maximum="4.0"
+                                        Minimum="0.1" Maximum="8.0"
                                         Value="{Binding AnimationSpeed}"
                                         TickFrequency="0.1" IsSnapToTickEnabled="True"
                                         SmallChange="0.1" LargeChange="0.5"
@@ -2213,7 +2232,7 @@
                                                 </Button>
 
                                                 <Slider Grid.Column="1"
-                                                        Minimum="0.1" Maximum="4.0"
+                                                        Minimum="0.1" Maximum="8.0"
                                                         Value="{Binding AnimationSpeed}"
                                                         TickFrequency="0.1" IsSnapToTickEnabled="True"
                                                         SmallChange="0.1" LargeChange="0.5"
