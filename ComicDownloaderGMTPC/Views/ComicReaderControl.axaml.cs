@@ -9,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ComicDownloaderGMTPC.Models;
+using ComicDownloaderGMTPC.Services;
 using ComicDownloaderGMTPC.ViewModels;
 
 namespace ComicDownloaderGMTPC.Views;
@@ -2109,9 +2110,19 @@ public partial class ComicReaderControl : UserControl
     {
         if (DataContext is not ComicReaderViewModel vm) return;
 
-        // Nếu đang gõ Memo trong hộp thoại Add Bookmark thì chỉ bắt phím Esc / Enter
+        // Nếu đang trong ô TextBox (tìm kiếm phím tắt hoặc ghi chú memo)
         if (e.Source is TextBox)
         {
+            if (vm.IsSettingsPopupOpen)
+            {
+                if (e.Key == Key.Escape || e.Key == Key.F5)
+                {
+                    vm.CloseSettingsPopup();
+                    e.Handled = true;
+                }
+                return;
+            }
+
             if (e.Key == Key.Escape)
             {
                 vm.CancelAddBookmark();
@@ -2143,10 +2154,71 @@ public partial class ComicReaderControl : UserControl
         }
 
         // =========================================================================
-        // BỘ PHÍM TẮT ĐỌC TRUYỆN CHUẨN HONEYVIEW & BANDIVIEW (WINDOWS & LINUX)
+        // 1. CHẾ ĐỘ LẮNG NGHE GÁN PHÍM TẮT MỚI (SHORTCUT LISTENING MODE)
+        // =========================================================================
+        if (vm.IsListeningForShortcutKey)
+        {
+            if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None)
+            {
+                vm.CancelAssignKey();
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.LeftCtrl || e.Key == Key.RightCtrl ||
+                e.Key == Key.LeftAlt || e.Key == Key.RightAlt ||
+                e.Key == Key.LeftShift || e.Key == Key.RightShift)
+            {
+                // Đang nhấn giữ phím bổ trợ, chờ phím chính
+                return;
+            }
+
+            vm.AssignKeyToEditingShortcut(e.Key, e.KeyModifiers);
+            e.Handled = true;
+            return;
+        }
+
+        // =========================================================================
+        // 2. KHI HỘP THOẠI CÀI ĐẶT (F5 SETTINGS MODAL) ĐANG MỞ
+        // =========================================================================
+        if (vm.IsSettingsPopupOpen)
+        {
+            if (e.Key == Key.Escape || e.Key == Key.F5)
+            {
+                vm.CloseSettingsPopup();
+                e.Handled = true;
+                return;
+            }
+            // Không thực hiện các lệnh đọc truyện khi đang mở Settings
+            return;
+        }
+
+        // =========================================================================
+        // 3. MỞ HỘP THOẠI CÀI ĐẶT & PHÍM TẮT BẰNG PHÍM F5 (BANDIVIEW STANDARD)
+        // =========================================================================
+        if (e.Key == Key.F5)
+        {
+            vm.OpenSettingsPopup(0);
+            e.Handled = true;
+            return;
+        }
+
+        // =========================================================================
+        // 4. TRA CỨU & THỰC THI PHÍM TẮT TÙY BIẾN HOẶC MẶC ĐỊNH BANDIVIEW
+        // =========================================================================
+        string? action = ReaderShortcutService.Instance.MatchAction(e.Key, e.KeyModifiers);
+        if (!string.IsNullOrEmpty(action))
+        {
+            ExecuteShortcutAction(action, vm);
+            e.Handled = true;
+            return;
+        }
+
+        // =========================================================================
+        // 5. BỘ DỰ PHÒNG PHÍM TẮT CŨ (FALLBACK NẾU KHÔNG CÓ ACTION NÀO MATCH)
         // =========================================================================
 
-        // 1. Tổ hợp phím Chuyển chương: Ctrl/Shift + Left/Right hoặc [ / ]
+        // Chuyển chương: Ctrl/Shift + Left/Right hoặc [ / ]
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             if (e.Key == Key.Right)
@@ -2419,6 +2491,120 @@ public partial class ComicReaderControl : UserControl
             case Key.C:
                 vm.ToggleChapterDrawer();
                 e.Handled = true;
+                break;
+        }
+    }
+
+    private void ExecuteShortcutAction(string action, ComicReaderViewModel vm)
+    {
+        switch (action)
+        {
+            case "PageNext":
+                if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
+                    vm.PageButtonAreaNext();
+                else
+                    vm.NextPage();
+                break;
+
+            case "PagePrev":
+                if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
+                    vm.PageButtonAreaPrev();
+                else
+                    vm.PrevPage();
+                break;
+
+            case "PageFirst":
+                vm.ScrubToPage(0);
+                break;
+
+            case "PageLast":
+                if (vm.Pages.Count > 0)
+                {
+                    vm.ScrubToPage(vm.Pages.Count - 1);
+                }
+                break;
+
+            case "ChapterNext":
+                vm.NextChapter();
+                break;
+
+            case "ChapterPrev":
+                vm.PrevChapter();
+                break;
+
+            case "FullScreen":
+                vm.ToggleFullScreen();
+                break;
+
+            case "ToggleOverlay":
+                vm.ToggleOverlay();
+                break;
+
+            case "ZoomIn":
+                vm.ZoomIn();
+                break;
+
+            case "ZoomOut":
+                vm.ZoomOut();
+                break;
+
+            case "ResetZoom":
+            case "Zoom100":
+                vm.ResetZoom();
+                break;
+
+            case "FitWidth":
+                vm.SetFitMode("FitWidth");
+                break;
+
+            case "FitHeight":
+                vm.SetFitMode("FitHeight");
+                break;
+
+            case "FitScreen":
+                vm.SetFitMode("FitScreen");
+                break;
+
+            case "StretchFull":
+                vm.SetFitMode("StretchFull");
+                break;
+
+            case "WebtoonMode":
+                vm.SelectPageScrollingMode("5");
+                break;
+
+            case "MangaRtlMode":
+                vm.SelectPageScrollingMode("1");
+                break;
+
+            case "MangaLtrMode":
+                vm.SelectPageScrollingMode("0");
+                break;
+
+            case "RtlScrollMode":
+                vm.SelectPageScrollingMode("4");
+                break;
+
+            case "LtrScrollMode":
+                vm.SelectPageScrollingMode("3");
+                break;
+
+            case "ChapterDrawer":
+                vm.ToggleChapterDrawer();
+                break;
+
+            case "AutoScroll":
+                vm.ToggleAutoScroll();
+                break;
+
+            case "OpenSettings":
+                vm.OpenSettingsPopup(0);
+                break;
+
+            case "CloseReader":
+                if (vm.HandleBackNavigation()) return;
+                if (vm.IsFullScreen) vm.ToggleFullScreen();
+                else vm.CloseReader();
                 break;
         }
     }

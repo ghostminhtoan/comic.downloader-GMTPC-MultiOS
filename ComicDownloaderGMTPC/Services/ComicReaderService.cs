@@ -85,6 +85,11 @@ public sealed class ComicReaderService
 
     public static bool IsAndroidSeparateReaderSupported => AndroidLaunchSeparateReaderTask != null;
 
+    /// <summary>
+    /// Tốc độ phát ảnh động toàn cục (0.1x đến 4.0x, mặc định 1.0x).
+    /// </summary>
+    public static double GlobalAnimationSpeed { get; set; } = 1.0;
+
     public ComicReaderViewModel? ActiveExternalReaderViewModel { get; set; }
 
     public Action? ActiveExternalReaderClosedCallback { get; set; }
@@ -340,7 +345,7 @@ public sealed class ComicReaderService
                     }
                 });
 
-                var player = new AnimatedPagePlayer(page, rawBytes, effects);
+                var player = new AnimatedPagePlayer(page, rawBytes, effects, GlobalAnimationSpeed);
                 page.AnimationPlayer?.Dispose();
                 page.AnimationPlayer = player;
                 player.Start();

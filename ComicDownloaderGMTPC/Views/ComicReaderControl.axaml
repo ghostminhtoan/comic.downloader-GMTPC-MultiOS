@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:ComicDownloaderGMTPC.ViewModels"
              xmlns:models="using:ComicDownloaderGMTPC.Models"
+             xmlns:services="using:ComicDownloaderGMTPC.Services"
              mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="1920"
              x:Class="ComicDownloaderGMTPC.Views.ComicReaderControl"
              x:DataType="vm:ComicReaderViewModel"
@@ -223,6 +224,8 @@
 
                                 <!-- Ảnh trang truyện -->
                                 <Image Source="{Binding Image}"
+                                       Width="{Binding DisplayWidth}"
+                                       Height="{Binding DisplayHeight}"
                                        IsVisible="{Binding HasImage}"
                                        Stretch="{Binding ImageStretch}"
                                        HorizontalAlignment="Center"
@@ -1696,7 +1699,7 @@
                 <!-- ============================================================= -->
                 <Border IsVisible="{Binding IsMoreMenuOpen}"
                         HorizontalAlignment="Right" VerticalAlignment="Top"
-                        Margin="0,6,8,0" Width="230"
+                        Margin="0,6,8,0" Width="260"
                         Background="#F5181C22"
                         BorderBrush="#475569" BorderThickness="1"
                         CornerRadius="6" Padding="12"
@@ -1742,6 +1745,37 @@
                             <TextBlock Text="{Binding FullScreenButtonText}" FontSize="11.5" />
                         </Button>
 
+                        <!-- ĐIỀU CHỈNH TỐC ĐỘ ẢNH ĐỘNG (GIF & WEBP ĐỘNG): 0.1x - 4.0x -->
+                        <Border Height="1" Background="#334155" Margin="0,2" />
+                        <StackPanel Spacing="4">
+                            <Grid ColumnDefinitions="*, Auto">
+                                <TextBlock Grid.Column="0" Text="🎬 Tốc độ ảnh động (GIF/WebP)" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding AnimationSpeedText}" Foreground="#38BDF8" FontSize="11.5" FontWeight="Bold" VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto, *, Auto" ColumnSpacing="6" VerticalAlignment="Center">
+                                <Button Grid.Column="0" Command="{Binding DecreaseAnimationSpeedCommand}"
+                                        Width="28" Height="28" Padding="0" CornerRadius="4"
+                                        Background="#1E293B" Foreground="#E2E8F0"
+                                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                        ToolTip.Tip="Giảm 0.1x (10%)">
+                                    <TextBlock Text="➖" FontSize="11" />
+                                </Button>
+                                <Slider Grid.Column="1"
+                                        Minimum="0.1" Maximum="4.0"
+                                        Value="{Binding AnimationSpeed}"
+                                        TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                        SmallChange="0.1" LargeChange="0.5"
+                                        VerticalAlignment="Center" />
+                                <Button Grid.Column="2" Command="{Binding IncreaseAnimationSpeedCommand}"
+                                        Width="28" Height="28" Padding="0" CornerRadius="4"
+                                        Background="#1E293B" Foreground="#E2E8F0"
+                                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                        ToolTip.Tip="Tăng 0.1x (10%)">
+                                    <TextBlock Text="➕" FontSize="11" />
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+
                         <Border Height="1" Background="#334155" Margin="0,2" />
 
                         <CheckBox IsChecked="{Binding IsContinuousChaptersMode}"
@@ -1762,6 +1796,19 @@
                                 Background="#1E293B" Foreground="#E2E8F0"
                                 Padding="8,6" CornerRadius="4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
                             <TextBlock Text="🔍 Double tap zoom..." FontSize="11.5" />
+                        </Button>
+
+                        <Border Height="1" Background="#334155" Margin="0,2" />
+
+                        <!-- NÚT MỞ BẢNG CÀI ĐẶT & PHÍM TẮT (F5) -->
+                        <Button Command="{Binding OpenSettingsPopupCommand}"
+                                Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                Foreground="#38BDF8" FontWeight="SemiBold"
+                                Padding="8,6" CornerRadius="4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="⚙" FontSize="13" />
+                                <TextBlock Text="Cài đặt &amp; Phím tắt (F5)..." FontSize="11.5" />
+                            </StackPanel>
                         </Button>
                     </StackPanel>
                 </Border>
@@ -1964,6 +2011,337 @@
                 </UniformGrid>
             </Border>
         </Grid>
+
+            <!-- ================================================================= -->
+            <!-- MODAL CÀI ĐẶT & PHÍM TẮT TRÌNH ĐỌC (F5 SETTINGS MODAL) CHUẨN BANDIVIEW -->
+            <!-- ================================================================= -->
+            <Border IsVisible="{Binding IsSettingsPopupOpen}"
+                    Background="#CC090D16"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                    ZIndex="100">
+                <Border Width="780" MaxWidth="920" Height="620" MaxHeight="720"
+                        Background="#161B22"
+                        BorderBrush="#38BDF8" BorderThickness="1.5"
+                        CornerRadius="10" Padding="18"
+                        BoxShadow="0 25 60 0 #DD000000"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Grid RowDefinitions="Auto, Auto, *, Auto" RowSpacing="12">
+
+                        <!-- HEADER: TIÊU ĐỀ & NÚT ĐÓNG -->
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto, *, Auto" VerticalAlignment="Center">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="6" Padding="6,3">
+                                    <TextBlock Text="F5" Foreground="#38BDF8" FontSize="12" FontWeight="ExtraBold" />
+                                </Border>
+                                <TextBlock Text="Cài đặt trình đọc (Configuration &amp; Shortcuts)"
+                                           Foreground="#F8FAFC" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <Border Grid.Column="1" Background="#1E293B" CornerRadius="4" Padding="8,3"
+                                    HorizontalAlignment="Left" Margin="14,0,0,0">
+                                <TextBlock Text="Chuẩn BandiView / Honeyview" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" />
+                            </Border>
+
+                            <Button Grid.Column="2" Command="{Binding CloseSettingsPopupCommand}"
+                                    Width="32" Height="32" Padding="0" CornerRadius="6"
+                                    Background="#1E293B" Foreground="#94A3B8"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                    ToolTip.Tip="Đóng cài đặt (Esc / F5)">
+                                <TextBlock Text="✕" FontSize="14" FontWeight="Bold" />
+                            </Button>
+                        </Grid>
+
+                        <!-- TAB SELECTOR: TAB ĐẦU TIÊN LÀ SHORTCUT (PHÍM TẮT) -->
+                        <Border Grid.Row="1" Background="#0F141C" CornerRadius="7" Padding="4">
+                            <Grid ColumnDefinitions="*, *, *">
+                                <!-- TAB 0: SHORTCUT (PHÍM TẮT) -->
+                                <RadioButton Grid.Column="0"
+                                             GroupName="SettingsTabs"
+                                             IsChecked="{Binding IsShortcutTabSelected}"
+                                             Command="{Binding SelectSettingsTabCommand}" CommandParameter="0"
+                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                             Padding="12,8">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="⌨" FontSize="14" />
+                                        <TextBlock Text="Phím tắt (Shortcuts)" FontWeight="Bold" FontSize="12.5" />
+                                    </StackPanel>
+                                </RadioButton>
+
+                                <!-- TAB 1: HOẠT ẢNH & TỐC ĐỘ -->
+                                <RadioButton Grid.Column="1"
+                                             GroupName="SettingsTabs"
+                                             IsChecked="{Binding IsAnimationTabSelected}"
+                                             Command="{Binding SelectSettingsTabCommand}" CommandParameter="1"
+                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                             Padding="12,8">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="🎬" FontSize="14" />
+                                        <TextBlock Text="Hoạt ảnh &amp; Tốc độ" FontWeight="Bold" FontSize="12.5" />
+                                    </StackPanel>
+                                </RadioButton>
+
+                                <!-- TAB 2: CHẾ ĐỘ ĐỌC & CUỘN -->
+                                <RadioButton Grid.Column="2"
+                                             GroupName="SettingsTabs"
+                                             IsChecked="{Binding IsReadingModeTabSelected}"
+                                             Command="{Binding SelectSettingsTabCommand}" CommandParameter="2"
+                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                             Padding="12,8">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="📜" FontSize="14" />
+                                        <TextBlock Text="Chế độ đọc &amp; Khung nhìn" FontWeight="Bold" FontSize="12.5" />
+                                    </StackPanel>
+                                </RadioButton>
+                            </Grid>
+                        </Border>
+
+                        <!-- CONTENT: NỘI DUNG TỪNG TAB -->
+                        <Panel Grid.Row="2">
+
+                            <!-- ========================================================= -->
+                            <!-- TAB 0: QUẢN LÝ & TÙY BIẾN PHÍM TẮT CHUẨN BANDIVIEW         -->
+                            <!-- ========================================================= -->
+                            <Grid RowDefinitions="Auto, Auto, *" RowSpacing="10"
+                                  IsVisible="{Binding IsShortcutTabSelected}">
+
+                                <!-- Thanh công cụ tìm kiếm & nút Reset Defaults -->
+                                <Grid Grid.Row="0" ColumnDefinitions="*, Auto" ColumnSpacing="10">
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding ShortcutSearchText}"
+                                             PlaceholderText="🔍 Tìm kiếm thao tác, nhóm hoặc phím tắt..."
+                                             Background="#0F141C" Foreground="#F8FAFC"
+                                             BorderBrush="#334155" BorderThickness="1"
+                                             CornerRadius="6" Padding="10,7" FontSize="12" />
+
+                                    <Button Grid.Column="1"
+                                            Command="{Binding ResetAllShortcutsCommand}"
+                                            Background="#1E293B" BorderBrush="#64748B" BorderThickness="1"
+                                            Foreground="#E2E8F0" Padding="12,7" CornerRadius="6"
+                                            ToolTip.Tip="Khôi phục toàn bộ phím tắt về mặc định ban đầu của BandiView">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="↺" FontSize="13" FontWeight="Bold" />
+                                            <TextBlock Text="Đặt lại mặc định BandiView" FontSize="12" FontWeight="SemiBold" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+
+                                <!-- Banner hướng dẫn khi đang chờ người dùng nhấn phím để gán -->
+                                <Border Grid.Row="1"
+                                        IsVisible="{Binding IsListeningForShortcutKey}"
+                                        Background="#382806" BorderBrush="#F59E0B" BorderThickness="1.5"
+                                        CornerRadius="6" Padding="12,8">
+                                    <Grid ColumnDefinitions="*, Auto">
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <TextBlock Text="⌨" FontSize="16" Foreground="#FBBF24" />
+                                            <TextBlock Text="{Binding ShortcutListeningPrompt}" Foreground="#FDE047" FontSize="12.5" FontWeight="Bold" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Command="{Binding CancelAssignKeyCommand}"
+                                                Background="#1E293B" Foreground="#EF4444" BorderBrush="#EF4444" BorderThickness="1"
+                                                CornerRadius="4" Padding="8,4" FontSize="11" FontWeight="Bold" Content="Hủy (Esc)" />
+                                    </Grid>
+                                </Border>
+
+                                <!-- Danh sách phím tắt có thể chỉnh sửa -->
+                                <ScrollViewer Grid.Row="2" Background="#0A0F16" CornerRadius="6">
+                                    <ItemsControl ItemsSource="{Binding ShortcutEntries}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="services:ReaderShortcutEntry">
+                                                <Border BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="10,8">
+                                                    <Grid ColumnDefinitions="140, *, 200, Auto" ColumnSpacing="10" VerticalAlignment="Center">
+                                                        <!-- Cột 1: Nhóm chức năng -->
+                                                        <Border Grid.Column="0" Background="#1E293B" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left">
+                                                            <TextBlock Text="{Binding Group}" Foreground="#38BDF8" FontSize="10.5" FontWeight="SemiBold" />
+                                                        </Border>
+
+                                                        <!-- Cột 2: Tên hành động & Diễn giải -->
+                                                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Name}" Foreground="#F8FAFC" FontSize="12.5" FontWeight="Bold" />
+                                                            <TextBlock Text="{Binding Description}" Foreground="#64748B" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+
+                                                        <!-- Cột 3: Phím tắt hiện tại (Badge nổi bật) -->
+                                                        <Border Grid.Column="2" Background="#1A2230" BorderBrush="#334155" BorderThickness="1" CornerRadius="5" Padding="8,4" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding CurrentKeysText}" Foreground="#4ADE80" FontSize="11.5" FontWeight="Bold" />
+                                                        </Border>
+
+                                                        <!-- Cột 4: Nút gán phím mới -->
+                                                        <Button Grid.Column="3"
+                                                                Command="{Binding $parent[UserControl].((vm:ComicReaderViewModel)DataContext).StartAssignShortcutCommand}"
+                                                                CommandParameter="{Binding}"
+                                                                Background="#0284C7" Foreground="#FFFFFF"
+                                                                CornerRadius="5" Padding="10,5"
+                                                                ToolTip.Tip="Bấm để gán phím tắt mới">
+                                                            <TextBlock Text="Đổi phím" FontSize="11" FontWeight="Bold" />
+                                                        </Button>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Grid>
+
+                            <!-- ========================================================= -->
+                            <!-- TAB 1: HOẠT ẢNH & TỐC ĐỘ (ANIMATED SPEED: GIF / WEBP)       -->
+                            <!-- ========================================================= -->
+                            <Border IsVisible="{Binding IsAnimationTabSelected}"
+                                    Background="#0A0F16" CornerRadius="6" Padding="18">
+                                <StackPanel Spacing="16" VerticalAlignment="Top">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="🎬 Tốc độ phát ảnh động (GIF &amp; Animated WebP)" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" />
+                                        <TextBlock Text="Điều chỉnh tốc độ nhanh hoặc chậm cho toàn bộ ảnh động khi đọc truyện (0.1x đến 4.0x)."
+                                                   Foreground="#94A3B8" FontSize="11.5" />
+                                    </StackPanel>
+
+                                    <!-- Bộ điều khiển tốc độ -->
+                                    <Border Background="#161B22" BorderBrush="#334155" BorderThickness="1" CornerRadius="8" Padding="16">
+                                        <Grid RowDefinitions="Auto, Auto" RowSpacing="12">
+                                            <Grid Grid.Row="0" ColumnDefinitions="*, Auto">
+                                                <TextBlock Grid.Column="0" Text="Tốc độ hiện tại:" Foreground="#E2E8F0" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                <Border Grid.Column="1" Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="6" Padding="12,4">
+                                                    <TextBlock Text="{Binding AnimationSpeedText}" Foreground="#38BDF8" FontSize="14" FontWeight="ExtraBold" />
+                                                </Border>
+                                            </Grid>
+
+                                            <Grid Grid.Row="1" ColumnDefinitions="Auto, *, Auto, Auto" ColumnSpacing="10" VerticalAlignment="Center">
+                                                <Button Grid.Column="0" Command="{Binding DecreaseAnimationSpeedCommand}"
+                                                        Width="36" Height="36" CornerRadius="6"
+                                                        Background="#1E293B" Foreground="#E2E8F0"
+                                                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                                        ToolTip.Tip="Giảm 0.1x">
+                                                    <TextBlock Text="➖" FontSize="13" />
+                                                </Button>
+
+                                                <Slider Grid.Column="1"
+                                                        Minimum="0.1" Maximum="4.0"
+                                                        Value="{Binding AnimationSpeed}"
+                                                        TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                        SmallChange="0.1" LargeChange="0.5"
+                                                        VerticalAlignment="Center" />
+
+                                                <Button Grid.Column="2" Command="{Binding IncreaseAnimationSpeedCommand}"
+                                                        Width="36" Height="36" CornerRadius="6"
+                                                        Background="#1E293B" Foreground="#E2E8F0"
+                                                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                                        ToolTip.Tip="Tăng 0.1x">
+                                                    <TextBlock Text="➕" FontSize="13" />
+                                                </Button>
+
+                                                <Button Grid.Column="3" Command="{Binding ResetAnimationSpeedCommand}"
+                                                        Background="#1E293B" Foreground="#10B981" BorderBrush="#10B981" BorderThickness="1"
+                                                        CornerRadius="6" Padding="12,8" ToolTip.Tip="Đặt lại tốc độ mặc định 1.0x (100%)">
+                                                    <TextBlock Text="1.0x (Gốc)" FontSize="12" FontWeight="Bold" />
+                                                </Button>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Khối thông tin tối ưu Skia C++ Decoder -->
+                                    <Border Background="#101827" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="14">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="⚡ Công nghệ tối ưu mượt mà đã tích hợp:" Foreground="#10B981" FontSize="12" FontWeight="Bold" />
+                                            <TextBlock Text="• Skia Delta Decoding: Sử dụng SKCodecOptions(currentFrame, requiredFrame) giải mã chỉ trong &lt; 0.5ms, triệt tiêu lag."
+                                                       Foreground="#94A3B8" FontSize="11" />
+                                            <TextBlock Text="• Frame Pacing Engine: Tính toán bù trừ thời gian giải mã thực tế bằng Stopwatch, loại bỏ giật khung hình."
+                                                       Foreground="#94A3B8" FontSize="11" />
+                                            <TextBlock Text="• Non-blocking UI Thread: Tự động bỏ qua khung hình trễ (Frame-dropping) khi giao diện đang bận render."
+                                                       Foreground="#94A3B8" FontSize="11" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ========================================================= -->
+                            <!-- TAB 2: CHẾ ĐỘ ĐỌC & KHUNG NHÌN                              -->
+                            <!-- ========================================================= -->
+                            <Border IsVisible="{Binding IsReadingModeTabSelected}"
+                                    Background="#0A0F16" CornerRadius="6" Padding="18">
+                                <ScrollViewer>
+                                    <StackPanel Spacing="16">
+                                        <TextBlock Text="📜 Chế độ cuộn &amp; Lật trang (Phím 5, 6, 7)" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" />
+                                        <WrapPanel Orientation="Horizontal">
+                                            <Button Command="{Binding SelectPageScrollingModeCommand}" CommandParameter="5"
+                                                    Margin="0,0,8,8" Padding="14,10" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="6">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="📜 Webtoon (Phím 5)" FontWeight="Bold" FontSize="12" />
+                                                    <TextBlock Text="Cuộn dọc liên tục mượt mà" Foreground="#64748B" FontSize="10.5" />
+                                                </StackPanel>
+                                            </Button>
+
+                                            <Button Command="{Binding SelectPageScrollingModeCommand}" CommandParameter="1"
+                                                    Margin="0,0,8,8" Padding="14,10" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="6">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="◀ Manga Phải → Trái (Phím 6)" FontWeight="Bold" FontSize="12" />
+                                                    <TextBlock Text="Lật trang chuẩn truyện tranh Nhật Bản" Foreground="#64748B" FontSize="10.5" />
+                                                </StackPanel>
+                                            </Button>
+
+                                            <Button Command="{Binding SelectPageScrollingModeCommand}" CommandParameter="0"
+                                                    Margin="0,0,8,8" Padding="14,10" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="6">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="▶ Manga Trái → Phải (Phím 7)" FontWeight="Bold" FontSize="12" />
+                                                    <TextBlock Text="Lật trang truyện phương Tây" Foreground="#64748B" FontSize="10.5" />
+                                                </StackPanel>
+                                            </Button>
+
+                                            <Button Command="{Binding SelectPageScrollingModeCommand}" CommandParameter="4"
+                                                    Margin="0,0,8,8" Padding="14,10" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="6">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="⏪ Cuộn ngang Phải → Trái (Ctrl+6)" FontWeight="Bold" FontSize="12" />
+                                                    <TextBlock Text="Cuộn dải ngang liên tục RTL" Foreground="#64748B" FontSize="10.5" />
+                                                </StackPanel>
+                                            </Button>
+
+                                            <Button Command="{Binding SelectPageScrollingModeCommand}" CommandParameter="3"
+                                                    Margin="0,0,8,8" Padding="14,10" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="6">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="⏩ Cuộn ngang Trái → Phải (Ctrl+7)" FontWeight="Bold" FontSize="12" />
+                                                    <TextBlock Text="Cuộn dải ngang liên tục LTR" Foreground="#64748B" FontSize="10.5" />
+                                                </StackPanel>
+                                            </Button>
+                                        </WrapPanel>
+
+                                        <Border Height="1" Background="#1E293B" Margin="0,4" />
+
+                                        <TextBlock Text="📐 Tỉ lệ khung hình (Fit Mode - Phím 8, 9, 3, S)" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" />
+                                        <WrapPanel Orientation="Horizontal">
+                                            <Button Command="{Binding SetFitModeCommand}" CommandParameter="FitWidth"
+                                                    Margin="0,0,8,8" Padding="14,8" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="6">
+                                                <TextBlock Text="↔ Vừa chiều rộng (Phím 8 / 1 / W)" FontSize="11.5" FontWeight="SemiBold" />
+                                            </Button>
+                                            <Button Command="{Binding SetFitModeCommand}" CommandParameter="FitHeight"
+                                                    Margin="0,0,8,8" Padding="14,8" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="6">
+                                                <TextBlock Text="↕ Vừa chiều cao (Phím 9 / 2 / H)" FontSize="11.5" FontWeight="SemiBold" />
+                                            </Button>
+                                            <Button Command="{Binding SetFitModeCommand}" CommandParameter="FitScreen"
+                                                    Margin="0,0,8,8" Padding="14,8" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="6">
+                                                <TextBlock Text="⊡ Vừa toàn màn hình (Phím 3 / B)" FontSize="11.5" FontWeight="SemiBold" />
+                                            </Button>
+                                            <Button Command="{Binding SetFitModeCommand}" CommandParameter="StretchFull"
+                                                    Margin="0,0,8,8" Padding="14,8" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="6">
+                                                <TextBlock Text="⤢ Kéo tràn khung hình (Phím S)" FontSize="11.5" FontWeight="SemiBold" />
+                                            </Button>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+
+                        </Panel>
+
+                        <!-- FOOTER: NÚT ĐÓNG & HƯỚNG DẪN -->
+                        <Grid Grid.Row="3" ColumnDefinitions="*, Auto" VerticalAlignment="Center">
+                            <TextBlock Grid.Column="0" Text="💡 Mẹo: Bấm F5 bất cứ lúc nào (kể cả Toàn màn hình) để mở bảng Cài đặt này."
+                                       Foreground="#64748B" FontSize="11.5" FontStyle="Italic" VerticalAlignment="Center" />
+
+                            <Button Grid.Column="1" Command="{Binding CloseSettingsPopupCommand}"
+                                    Background="#0284C7" Foreground="#FFFFFF"
+                                    CornerRadius="6" Padding="18,8" FontWeight="Bold" FontSize="12.5"
+                                    Content="Đóng (Esc / F5)" />
+                        </Grid>
+
+                    </Grid>
+                </Border>
+            </Border>
 
     </Grid>
 </UserControl>

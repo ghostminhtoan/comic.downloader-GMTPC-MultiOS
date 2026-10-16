@@ -153,6 +153,14 @@ public partial class ReaderPageItem : ObservableObject
 
     public AnimatedPagePlayer? AnimationPlayer { get; set; }
 
+    public void SetAnimationSpeed(double speed)
+    {
+        if (AnimationPlayer != null)
+        {
+            AnimationPlayer.Speed = speed;
+        }
+    }
+
     public bool HasImage => Image != null;
 
     /// <summary>

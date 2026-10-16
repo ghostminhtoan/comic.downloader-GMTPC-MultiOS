@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -27,6 +28,11 @@ public partial class ComicReaderViewModel : ViewModelBase
     private bool _suppressBrightnessAutoUncheck;
     private double _viewportWidth = 1080;
     private double _viewportHeight = 1920;
+
+    public ComicReaderViewModel()
+    {
+        LoadShortcuts();
+    }
 
     public LibraryComicItem? ParentComic { get; private set; }
 
@@ -266,6 +272,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsMoreMenuOpen))]
     [NotifyPropertyChangedFor(nameof(IsPageButtonAreaPopupOpen))]
     [NotifyPropertyChangedFor(nameof(IsDoubleTapZoomPopupOpen))]
+    [NotifyPropertyChangedFor(nameof(IsSettingsPopupOpen))]
     [NotifyPropertyChangedFor(nameof(IsStandardOverlayBarsVisible))]
     private string _activePopup = string.Empty;
 
@@ -283,6 +290,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     public bool IsMoreMenuOpen => ActivePopup == "MoreMenu";
     public bool IsPageButtonAreaPopupOpen => ActivePopup == "PageButtonArea";
     public bool IsDoubleTapZoomPopupOpen => ActivePopup == "DoubleTapZoom";
+    public bool IsSettingsPopupOpen => ActivePopup == "Settings";
 
     public bool IsStandardOverlayBarsVisible => IsOverlayVisible && !IsMarginEditorOpen;
 
@@ -317,9 +325,21 @@ public partial class ComicReaderViewModel : ViewModelBase
     /// </summary>
     public bool HandleBackNavigation()
     {
+        if (IsListeningForShortcutKey)
+        {
+            CancelAssignKey();
+            return true;
+        }
+
         if (IsMarginEditorOpen)
         {
             CancelMarginEditor();
+            return true;
+        }
+
+        if (IsSettingsPopupOpen)
+        {
+            CloseSettingsPopup();
             return true;
         }
 
@@ -2597,5 +2617,172 @@ public partial class ComicReaderViewModel : ViewModelBase
             }
             catch { }
         }, token);
+    }
+
+    // =========================================================================
+    // HOẠT ẢNH & TỐC ĐỘ (ANIMATION SPEED: GIF / WEBP ĐỘNG TỪ 0.1x ĐẾN 4.0x)
+    // =========================================================================
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AnimationSpeedText))]
+    private double _animationSpeed = ComicReaderService.GlobalAnimationSpeed;
+
+    public string AnimationSpeedText => $"{AnimationSpeed:0.0}x ({Math.Round(AnimationSpeed * 100):0}%)";
+
+    partial void OnAnimationSpeedChanged(double value)
+    {
+        double clamped = Math.Clamp(Math.Round(value, 1), 0.1, 4.0);
+        ComicReaderService.GlobalAnimationSpeed = clamped;
+        foreach (var page in Pages)
+        {
+            page.SetAnimationSpeed(clamped);
+        }
+        LeftFlipPage?.SetAnimationSpeed(clamped);
+        RightFlipPage?.SetAnimationSpeed(clamped);
+    }
+
+    [RelayCommand]
+    public void IncreaseAnimationSpeed()
+    {
+        SetAnimationSpeed(Math.Min(4.0, Math.Round(AnimationSpeed + 0.1, 1)));
+    }
+
+    [RelayCommand]
+    public void DecreaseAnimationSpeed()
+    {
+        SetAnimationSpeed(Math.Max(0.1, Math.Round(AnimationSpeed - 0.1, 1)));
+    }
+
+    [RelayCommand]
+    public void ResetAnimationSpeed()
+    {
+        SetAnimationSpeed(1.0);
+    }
+
+    public void SetAnimationSpeed(double speed)
+    {
+        double clamped = Math.Clamp(Math.Round(speed, 1), 0.1, 4.0);
+        AnimationSpeed = clamped;
+    }
+
+    // =========================================================================
+    // CÀI ĐẶT & PHÍM TẮT CHUẨN BANDIVIEW (SETTINGS & SHORTCUTS MODAL F5)
+    // =========================================================================
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsShortcutTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsAnimationTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsReadingModeTabSelected))]
+    private int _settingsTabIndex = 0; // 0 = Phím tắt, 1 = Hoạt ảnh, 2 = Chế độ đọc
+
+    public bool IsShortcutTabSelected => SettingsTabIndex == 0;
+    public bool IsAnimationTabSelected => SettingsTabIndex == 1;
+    public bool IsReadingModeTabSelected => SettingsTabIndex == 2;
+
+    [RelayCommand]
+    public void SelectSettingsTab(string? tabStr)
+    {
+        if (int.TryParse(tabStr, out int idx))
+        {
+            SettingsTabIndex = idx;
+        }
+    }
+
+    [ObservableProperty]
+    private string _shortcutSearchText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isListeningForShortcutKey = false;
+
+    [ObservableProperty]
+    private ReaderShortcutEntry? _activeEditingShortcut;
+
+    [ObservableProperty]
+    private string _shortcutListeningPrompt = string.Empty;
+
+    public ObservableCollection<ReaderShortcutEntry> ShortcutEntries { get; } = new();
+
+    public void LoadShortcuts()
+    {
+        ShortcutEntries.Clear();
+        var list = ReaderShortcutService.Instance.Entries;
+        if (!string.IsNullOrWhiteSpace(ShortcutSearchText))
+        {
+            list = list.Where(e => e.Name.Contains(ShortcutSearchText, StringComparison.OrdinalIgnoreCase) ||
+                                   e.Group.Contains(ShortcutSearchText, StringComparison.OrdinalIgnoreCase) ||
+                                   e.Description.Contains(ShortcutSearchText, StringComparison.OrdinalIgnoreCase) ||
+                                   e.CurrentKeysText.Contains(ShortcutSearchText, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+        foreach (var item in list)
+        {
+            ShortcutEntries.Add(item);
+        }
+    }
+
+    partial void OnShortcutSearchTextChanged(string value)
+    {
+        LoadShortcuts();
+    }
+
+    [RelayCommand]
+    public void OpenSettingsPopup(int tabIndex = 0)
+    {
+        SettingsTabIndex = tabIndex;
+        CancelAssignKey();
+        LoadShortcuts();
+        ActivePopup = "Settings";
+    }
+
+    [RelayCommand]
+    public void CloseSettingsPopup()
+    {
+        CancelAssignKey();
+        if (ActivePopup == "Settings")
+        {
+            ActivePopup = string.Empty;
+        }
+    }
+
+    [RelayCommand]
+    public void StartAssignShortcut(ReaderShortcutEntry? entry)
+    {
+        if (entry == null) return;
+        ActiveEditingShortcut = entry;
+        IsListeningForShortcutKey = true;
+        ShortcutListeningPrompt = $"⌨ Đang chờ nhấn phím cho '{entry.Name}'... (Nhấn phím bất kỳ, Esc để hủy)";
+    }
+
+    [RelayCommand]
+    public void CancelAssignKey()
+    {
+        ActiveEditingShortcut = null;
+        IsListeningForShortcutKey = false;
+        ShortcutListeningPrompt = string.Empty;
+    }
+
+    public void AssignKeyToEditingShortcut(Key key, KeyModifiers modifiers)
+    {
+        if (!IsListeningForShortcutKey || ActiveEditingShortcut == null) return;
+
+        // Bỏ qua nếu chỉ là phím bổ trợ (Ctrl/Alt/Shift đơn độc)
+        if (key == Key.LeftCtrl || key == Key.RightCtrl ||
+            key == Key.LeftAlt || key == Key.RightAlt ||
+            key == Key.LeftShift || key == Key.RightShift)
+        {
+            return;
+        }
+
+        string gesture = ReaderShortcutService.BuildGestureString(key, modifiers);
+        ReaderShortcutService.Instance.AssignShortcut(ActiveEditingShortcut.Id, gesture);
+        ShowTransientToast($"✓ Đã gán phím '{gesture}' cho {ActiveEditingShortcut.Name}");
+        CancelAssignKey();
+        LoadShortcuts();
+    }
+
+    [RelayCommand]
+    public void ResetAllShortcuts()
+    {
+        ReaderShortcutService.Instance.ResetToDefaults();
+        CancelAssignKey();
+        LoadShortcuts();
+        ShowTransientToast("✓ Đã khôi phục toàn bộ phím tắt về mặc định chuẩn BandiView");
     }
 }

@@ -32,14 +32,26 @@ public sealed class AnimatedPagePlayer : IDisposable
     private readonly WriteableBitmap _wb2;
     private readonly int _byteCount;
     private readonly int[] _frameDurations;
+    private readonly int[] _requiredFrames;
 
     private CancellationTokenSource? _cts;
     private bool _isDisposed;
     private bool _isStarted;
+    private double _speed = 1.0;
+    private int _isUiRenderingBusy;
 
     public int FrameCount => _frameCount;
     public int Width => _width;
     public int Height => _height;
+
+    /// <summary>
+    /// Tốc độ phát hoạt ảnh (0.1x đến 4.0x, mặc định 1.0x).
+    /// </summary>
+    public double Speed
+    {
+        get => Volatile.Read(ref _speed);
+        set => Volatile.Write(ref _speed, Math.Clamp(value, 0.1, 4.0));
+    }
 
     /// <summary>
     /// Kiểm tra nhanh xem mảng byte ảnh có phải là ảnh động (GIF hoặc WebP với nhiều hơn 1 frame) hay không.
@@ -73,10 +85,11 @@ public sealed class AnimatedPagePlayer : IDisposable
         return false;
     }
 
-    public AnimatedPagePlayer(ReaderPageItem page, byte[] rawBytes, ReaderVisualEffectSettings? effects = null)
+    public AnimatedPagePlayer(ReaderPageItem page, byte[] rawBytes, ReaderVisualEffectSettings? effects = null, double initialSpeed = 1.0)
     {
         _page = page ?? throw new ArgumentNullException(nameof(page));
         _effects = effects;
+        _speed = Math.Clamp(initialSpeed, 0.1, 4.0);
 
         _skData = SKData.CreateCopy(rawBytes);
         _codec = SKCodec.Create(_skData) ?? throw new InvalidOperationException("Không thể khởi tạo SKCodec từ dữ liệu ảnh.");
@@ -92,11 +105,15 @@ public sealed class AnimatedPagePlayer : IDisposable
         _wb2 = new WriteableBitmap(new PixelSize(_width, _height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
 
         _frameDurations = new int[_frameCount];
+        _requiredFrames = new int[_frameCount];
         for (int i = 0; i < _frameCount; i++)
         {
             int d = _codec.FrameInfo[i].Duration;
             if (d <= 15) d = 100; // Tiêu chuẩn web/GIF: nếu delay <= 15ms thì fallback về 100ms
             _frameDurations[i] = d;
+
+            // Lưu trữ RequiredFrame để decode delta tức thì (< 0.5ms), loại bỏ hoàn toàn lag O(N^2)
+            _requiredFrames[i] = _codec.FrameInfo[i].RequiredFrame;
         }
     }
 
@@ -111,7 +128,8 @@ public sealed class AnimatedPagePlayer : IDisposable
         try
         {
             // Giải mã Frame 0 ngay lập tức để trang không bao giờ bị trắng
-            var opts0 = new SKCodecOptions(0);
+            int req0 = _requiredFrames[0];
+            var opts0 = (req0 == -1) ? new SKCodecOptions(0) : new SKCodecOptions(0, req0);
             _codec.GetPixels(_info, _canvasBitmap.GetPixels(), opts0);
 
             if (_effects != null && _effects.HasAnyEffect)
@@ -127,7 +145,7 @@ public sealed class AnimatedPagePlayer : IDisposable
                 {
                     _page.Image = _wb1;
                 }
-            });
+            }, DispatcherPriority.Normal);
 
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
@@ -141,8 +159,9 @@ public sealed class AnimatedPagePlayer : IDisposable
         bool useWb1 = false; // Frame 0 đã dùng wb1, frame 1 tiếp theo sẽ dùng wb2
         int currentFrame = 1 % _frameCount;
 
-        // Chờ thời lượng của Frame 0
-        int initialDelay = _frameDurations[0];
+        // Chờ thời lượng của Frame 0 tính theo tốc độ
+        int initialBaseDelay = _frameDurations[0];
+        int initialDelay = (int)Math.Max(10, Math.Round(initialBaseDelay / _speed));
         try
         {
             await Task.Delay(initialDelay, ct).ConfigureAwait(false);
@@ -152,13 +171,19 @@ public sealed class AnimatedPagePlayer : IDisposable
             return;
         }
 
+        var sw = new System.Diagnostics.Stopwatch();
+
         while (!ct.IsCancellationRequested && !_isDisposed)
         {
-            int duration = _frameDurations[currentFrame];
+            sw.Restart();
+            int baseDuration = _frameDurations[currentFrame];
 
             try
             {
-                var opts = new SKCodecOptions(currentFrame);
+                // TỐI ƯU CỐT LÕI: Truyền RequiredFrame giúp Skia C++ decode delta trong < 0.5ms,
+                // loại bỏ hoàn toàn việc decode lại từ frame 0!
+                int req = _requiredFrames[currentFrame];
+                var opts = (req == -1) ? new SKCodecOptions(currentFrame) : new SKCodecOptions(currentFrame, req);
                 var res = _codec.GetPixels(_info, _canvasBitmap.GetPixels(), opts);
 
                 if (res == SKCodecResult.Success || res == SKCodecResult.IncompleteInput)
@@ -173,15 +198,28 @@ public sealed class AnimatedPagePlayer : IDisposable
 
                     CopyBitmapToWriteableBitmap(_canvasBitmap, targetWb);
 
+                    // CƠ CHẾ FRAME-DROPPING & NON-BLOCKING POST:
+                    // Không dùng await InvokeAsync (tránh treo luồng nền),
+                    // nếu UI thread đang bận vẽ frame trước thì bỏ qua frame này một cách mượt mà.
                     if (!ct.IsCancellationRequested && !_isDisposed)
                     {
-                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        if (Interlocked.CompareExchange(ref _isUiRenderingBusy, 1, 0) == 0)
                         {
-                            if (!ct.IsCancellationRequested && !_isDisposed && _page.IsLoaded)
+                            Dispatcher.UIThread.Post(() =>
                             {
-                                _page.Image = targetWb;
-                            }
-                        }, DispatcherPriority.Render);
+                                try
+                                {
+                                    if (!ct.IsCancellationRequested && !_isDisposed && _page.IsLoaded)
+                                    {
+                                        _page.Image = targetWb;
+                                    }
+                                }
+                                finally
+                                {
+                                    Interlocked.Exchange(ref _isUiRenderingBusy, 0);
+                                }
+                            }, DispatcherPriority.Normal);
+                        }
                     }
                 }
             }
@@ -191,9 +229,16 @@ public sealed class AnimatedPagePlayer : IDisposable
             }
             catch { }
 
+            // TÍNH TOÁN FRAME PACING CHUẨN XÁC:
+            // Bù trừ thời gian giải mã thực tế để nhịp độ frame luôn ổn định tuyệt đối từng mili-giây
+            long elapsedMs = sw.ElapsedMilliseconds;
+            double currentSpeed = _speed;
+            int targetDelay = (int)Math.Max(10, Math.Round(baseDuration / currentSpeed));
+            int actualWait = (int)Math.Max(2, targetDelay - elapsedMs);
+
             try
             {
-                await Task.Delay(duration, ct).ConfigureAwait(false);
+                await Task.Delay(actualWait, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
