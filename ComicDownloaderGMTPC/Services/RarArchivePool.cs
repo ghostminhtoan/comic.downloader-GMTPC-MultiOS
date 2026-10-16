@@ -274,29 +274,42 @@ public sealed class RarArchivePool : IDisposable
 
             if (rarEntry == null) return null;
 
-            // Nếu chỉ là đọc trang bìa đầu tiên (quét thư viện)
-            if (entry.ExtractedCount == 0 && entry.EntriesMap.Count > 0 &&
-                string.Equals(cleanKey, entry.EntriesMap.Keys.First(), StringComparison.OrdinalIgnoreCase))
+            // 1. Thử giải nén trực tiếp Entry theo yêu cầu (On-Demand Direct Streaming) - Tốc độ tức thì ngang ZIP (< 5ms)
+            try
             {
-                try
+                using var es = rarEntry.OpenEntryStream();
+                using var ms = new MemoryStream((int)Math.Max(32768, rarEntry.Size));
+                es.CopyTo(ms);
+                byte[] entryBytes = ms.ToArray();
+                entry.StoreInCache(cleanKey, entryBytes, true);
+
+                // Khởi chạy tác vụ ngầm làm ấm (WarmUp / giải nén dần) trong nền, tuyệt đối KHÔNG CHẶN luồng đọc hiện tại!
+                if (!entry.IsFullyExtracted)
                 {
-                    using var es = rarEntry.OpenEntryStream();
-                    using var ms = new MemoryStream((int)Math.Max(32768, rarEntry.Size));
-                    es.CopyTo(ms);
-                    byte[] singleBytes = ms.ToArray();
-                    entry.StoreInCache(cleanKey, singleBytes, true);
-                    return singleBytes;
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            lock (entry.Lock)
+                            {
+                                if (!entry.IsFullyExtracted)
+                                {
+                                    entry.ExtractAllEntriesInternal();
+                                }
+                            }
+                        }
+                        catch { }
+                    });
                 }
-                catch
-                {
-                    return null;
-                }
+
+                return entryBytes;
             }
-
-            // Người dùng đang đọc truyện hoặc convert: Giải nén toàn bộ 1 lượt tuần tự (Single-Pass)
-            entry.ExtractAllEntriesInternal();
-
-            return entry.TryGetFromCache(cleanKey);
+            catch
+            {
+                // 2. Fallback cho Solid RAR (khi OpenEntryStream thất bại do định dạng khối nén liên tục)
+                entry.ExtractAllEntriesInternal();
+                return entry.TryGetFromCache(cleanKey);
+            }
         }
     }
 

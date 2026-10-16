@@ -206,14 +206,14 @@
                                    Width="{Binding DisplayWidth}"
                                    Height="{Binding DisplayHeight}"
                                    Margin="{Binding PageMargin}"
-                                   MinHeight="240"
                                    Background="Transparent"
                                    ClipToBounds="True"
                                    AttachedToVisualTree="OnPageContainerAttached">
-                                <!-- Khung chờ khi trang đang giải mã -->
+                                <!-- Khung chờ khi trang đang giải mã (chỉ đặt MinHeight khi chưa có ảnh) -->
                                 <Border Background="#0B1120" BorderBrush="#1E293B" BorderThickness="0,0,0,1"
                                         HorizontalAlignment="Stretch"
                                         VerticalAlignment="Stretch"
+                                        MinHeight="180"
                                         IsVisible="{Binding !HasImage}">
                                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
                                         <TextBlock Text="{Binding DisplayPageNumber, StringFormat='⏳ Đang tải trang {0}...'}"
@@ -222,7 +222,7 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- Ảnh trang truyện -->
+                                <!-- Ảnh trang truyện (ôm khít 100% chiều cao và chiều rộng thực tế, không có viền đen thừa) -->
                                 <Image Source="{Binding Image}"
                                        Width="{Binding DisplayWidth}"
                                        Height="{Binding DisplayHeight}"
@@ -248,8 +248,8 @@
                         </LayoutTransformControl.LayoutTransform>
 
                         <UniformGrid Columns="{Binding FlipGridColumns}" Rows="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <!-- Trang Trái (hoặc Trang Đơn) -->
-                            <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}">
+                            <!-- Trang Trái (hoặc Trang Đơn): Khi 2 trang kép, căn sát mép phải rãnh giữa để nối khít 100% -->
+                            <Panel HorizontalAlignment="{Binding LeftFlipPageAlignment}" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}">
                                 <Border Background="#0B1120" MinWidth="260" MinHeight="360" CornerRadius="6"
                                         IsVisible="{Binding LeftFlipPage.HasImage, Converter={x:Static BoolConverters.Not}, FallbackValue=True}">
                                     <TextBlock Text="⏳ Đang nạp trang..." Foreground="#4FC3F7" FontSize="14" FontWeight="Bold"
@@ -266,8 +266,8 @@
                                        RenderOptions.BitmapInterpolationMode="HighQuality" />
                             </Panel>
 
-                            <!-- Trang Phải (chỉ hiện khi bật 2 Trang Kép) -->
-                            <Panel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}"
+                            <!-- Trang Phải (chỉ hiện khi bật 2 Trang Kép): Căn sát mép trái rãnh giữa để nối khít 100% -->
+                            <Panel HorizontalAlignment="{Binding RightFlipPageAlignment}" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}"
                                    IsVisible="{Binding HasSecondaryPage}">
                                 <Border Background="#0B1120" MinWidth="260" MinHeight="360" CornerRadius="6"
                                         IsVisible="{Binding RightFlipPage.HasImage, Converter={x:Static BoolConverters.Not}, FallbackValue=True}">

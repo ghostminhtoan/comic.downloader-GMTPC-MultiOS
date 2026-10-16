@@ -660,12 +660,18 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public Thickness FixedDividingPadding => new Thickness(0);
 
+    public Avalonia.Layout.HorizontalAlignment LeftFlipPageAlignment =>
+        (IsDoublePage && HasSecondaryPage) ? Avalonia.Layout.HorizontalAlignment.Right : Avalonia.Layout.HorizontalAlignment.Center;
+
+    public Avalonia.Layout.HorizontalAlignment RightFlipPageAlignment =>
+        (IsDoublePage && HasSecondaryPage) ? Avalonia.Layout.HorizontalAlignment.Left : Avalonia.Layout.HorizontalAlignment.Center;
+
     public double FlipDisplayWidth
     {
         get
         {
             double vw = Math.Max(240, _viewportWidth);
-            double singlePageVw = (IsDoublePage && SecondaryPage != null) ? Math.Max(120, vw * 0.498) : vw;
+            double singlePageVw = (IsDoublePage && SecondaryPage != null) ? Math.Max(120, vw * 0.5) : vw;
             if (FitMode == ImageFitMode.StretchFull || FitMode == ImageFitMode.FitWidth || FitMode == ImageFitMode.FitScreen)
             {
                 return Math.Round(singlePageVw * ZoomLevel);
@@ -695,7 +701,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         double vw = Math.Max(240, _viewportWidth);
         double vh = Math.Max(240, _viewportHeight);
 
-        double singlePageVw = (IsFlipMode && IsDoublePage) ? Math.Max(120, vw * 0.498) : vw;
+        double singlePageVw = (IsFlipMode && IsDoublePage) ? Math.Max(120, vw * 0.5) : vw;
 
         foreach (var page in Pages)
         {
@@ -709,6 +715,8 @@ public partial class ComicReaderViewModel : ViewModelBase
         OnPropertyChanged(nameof(FlipImageStretch));
         OnPropertyChanged(nameof(FlipPageMargin));
         OnPropertyChanged(nameof(FixedDividingPadding));
+        OnPropertyChanged(nameof(LeftFlipPageAlignment));
+        OnPropertyChanged(nameof(RightFlipPageAlignment));
     }
 
     public void UpdateViewportDimensions(double width, double height)
@@ -1394,7 +1402,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     {
         get
         {
-            if (!IsPageSpacingEnabled || PageSpacingPercent <= 0.01) return new Thickness(2, 0);
+            if (!IsPageSpacingEnabled || PageSpacingPercent <= 0.01) return new Thickness(0);
             double px = Math.Round(PageSpacingPercent * 0.5);
             return new Thickness(Math.Max(0, px), 0);
         }
@@ -2399,6 +2407,8 @@ public partial class ComicReaderViewModel : ViewModelBase
         OnPropertyChanged(nameof(FlipDisplayWidth));
         OnPropertyChanged(nameof(FlipDisplayHeight));
         OnPropertyChanged(nameof(FlipImageStretch));
+        OnPropertyChanged(nameof(LeftFlipPageAlignment));
+        OnPropertyChanged(nameof(RightFlipPageAlignment));
     }
 
     private void RecordReadingProgress(int pageIndex)

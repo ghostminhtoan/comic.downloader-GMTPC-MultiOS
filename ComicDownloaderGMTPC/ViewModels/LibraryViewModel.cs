@@ -972,6 +972,9 @@ public partial class LibraryViewModel : ViewModelBase
         StatusMessage = $"🗑️ Đã bỏ ghim thư mục: {item.Title}";
     }
 
+    private CancellationTokenSource? _loadDirCts;
+    private CancellationTokenSource? _directoryThumbnailCts;
+
     public void LoadDirectory(string? path)
     {
         _ = LoadDirectoryAsync(path);
@@ -982,6 +985,10 @@ public partial class LibraryViewModel : ViewModelBase
         _loadDirCts?.Cancel();
         _loadDirCts = new CancellationTokenSource();
         var ct = _loadDirCts.Token;
+
+        _directoryThumbnailCts?.Cancel();
+        _directoryThumbnailCts = new CancellationTokenSource();
+        var thumbCt = _directoryThumbnailCts.Token;
 
         string dir = path ?? string.Empty;
         if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
@@ -1210,18 +1217,19 @@ public partial class LibraryViewModel : ViewModelBase
                 {
                     foreach (var item in list)
                     {
-                        if (ct.IsCancellationRequested) break;
+                        if (thumbCt.IsCancellationRequested || ct.IsCancellationRequested) break;
+                        if (item.HasCover) continue;
                         try
                         {
                             var bmp = _scanner.DecodeCoverThumbnailForPath(item.FullPath, 220);
-                            if (bmp != null)
+                            if (bmp != null && !thumbCt.IsCancellationRequested && !ct.IsCancellationRequested)
                             {
                                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => item.Cover = bmp);
                             }
                         }
                         catch { }
                     }
-                }, ct);
+                }, thumbCt);
             }
         }
         catch (Exception ex)
@@ -1313,6 +1321,7 @@ public partial class LibraryViewModel : ViewModelBase
     public async Task SelectDirectoryItemAsync(DirectoryItemModel? item)
     {
         if (item == null) return;
+        _directoryThumbnailCts?.Cancel();
         if (item.IsFolder)
         {
             CurrentDirectoryPath = item.FullPath;
@@ -1647,6 +1656,7 @@ public partial class LibraryViewModel : ViewModelBase
     private async Task OpenPathToReadInternalAsync(string path, int targetPageIndex = -1)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
+        _directoryThumbnailCts?.Cancel();
         try
         {
             string actualComicPath = path;

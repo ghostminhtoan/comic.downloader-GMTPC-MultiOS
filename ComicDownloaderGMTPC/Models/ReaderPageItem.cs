@@ -88,13 +88,13 @@ public partial class ReaderPageItem : ObservableObject
         {
             case ImageFitMode.FitWidth:
                 DisplayWidth = Math.Round(vw * effectiveZoom);
-                DisplayHeight = Math.Max(180, Math.Round(DisplayWidth * ah / aw));
-                ImageStretch = Stretch.Uniform;
+                DisplayHeight = Math.Max(1, Math.Round(DisplayWidth * ah / aw));
+                ImageStretch = Stretch.Fill;
                 break;
 
             case ImageFitMode.FitHeight:
                 DisplayHeight = Math.Round(vh * effectiveZoom);
-                DisplayWidth = Math.Max(120, Math.Round(DisplayHeight * aw / ah));
+                DisplayWidth = Math.Max(1, Math.Round(DisplayHeight * aw / ah));
                 ImageStretch = Stretch.Uniform;
                 break;
 

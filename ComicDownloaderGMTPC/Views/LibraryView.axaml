@@ -225,6 +225,7 @@
                             <!-- 1. CHẾ ĐỘ DANH SÁCH (THUMBNAIL LIST - CHUẨN ẢNH 1 COMIC SCREEN, XEM TRỌN VẸN FULL TÊN) -->
                             <ListBox ItemsSource="{Binding DirectoryItems}"
                                      IsVisible="{Binding IsDirectoryListView}"
+                                     SelectionMode="Single"
                                      Background="Transparent"
                                      BorderThickness="0">
                                 <ListBox.ItemsPanel>
@@ -236,6 +237,14 @@
                                     <Style Selector="ListBoxItem">
                                         <Setter Property="Padding" Value="0" />
                                         <Setter Property="Margin" Value="0,1" />
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="BorderThickness" Value="0" />
+                                    </Style>
+                                    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="BorderThickness" Value="0" />
+                                    </Style>
+                                    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
                                         <Setter Property="Background" Value="Transparent" />
                                         <Setter Property="BorderThickness" Value="0" />
                                     </Style>
