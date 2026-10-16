@@ -32,6 +32,13 @@ public static class UniversalImageDecoder
         return bytes.Length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47;
     }
 
+    public static bool IsGif(ReadOnlySpan<byte> bytes)
+    {
+        return bytes.Length >= 6 &&
+               bytes[0] == (byte)'G' && bytes[1] == (byte)'I' && bytes[2] == (byte)'F' &&
+               bytes[3] == (byte)'8' && (bytes[4] == (byte)'7' || bytes[4] == (byte)'9') && bytes[5] == (byte)'a';
+    }
+
     public sealed class FastPngInfo
     {
         public int Width { get; set; }

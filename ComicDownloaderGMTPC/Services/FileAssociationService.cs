@@ -21,7 +21,7 @@ public sealed class FileAssociationService
     // Danh sách định dạng mở mặc định (Ảnh và Sách truyện)
     public static readonly string[] DefaultImageBookExtensions = new[]
     {
-        ".png", ".jpg", ".jpeg", ".bmp", ".webp", ".pdf", ".mobi"
+        ".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif", ".pdf", ".mobi"
     };
 
     // Danh sách định dạng tệp nén chỉ thêm Context Menu (giữ nguyên WinRAR / 7-Zip mở mặc định)
@@ -255,7 +255,7 @@ public sealed class FileAssociationService
             // 4. Phát tín hiệu SHChangeNotify để Windows Explorer cập nhật icon và liên kết ngay lập tức
             SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero);
 
-            return (true, "✅ Đã thiết lập mở mặc định các tệp ảnh (.png, .jpg, .jpeg, .bmp, .webp) và sách (.pdf, .mobi) bằng app!");
+            return (true, "✅ Đã thiết lập mở mặc định các tệp ảnh (.png, .jpg, .jpeg, .bmp, .webp, .gif) và sách (.pdf, .mobi) bằng app!");
         }
         catch (Exception ex)
         {
@@ -456,6 +456,7 @@ public sealed class FileAssociationService
         { "image/jpeg", ".jpg, .jpeg" },
         { "image/bmp", ".bmp" },
         { "image/webp", ".webp" },
+        { "image/gif", ".gif" },
         { "application/pdf", ".pdf" },
         { "application/x-mobipocket-ebook", ".mobi" }
     };
@@ -498,7 +499,7 @@ Exec=""{exePath}"" %f
 Icon=comicdownloadergmtpc
 Terminal=false
 Categories=Graphics;Viewer;Office;
-MimeType=image/png;image/jpeg;image/bmp;image/webp;application/pdf;application/x-mobipocket-ebook;application/zip;application/vnd.rar;application/x-cbr;application/x-cbz;
+MimeType=image/png;image/jpeg;image/bmp;image/webp;image/gif;application/pdf;application/x-mobipocket-ebook;application/zip;application/vnd.rar;application/x-cbr;application/x-cbz;
 ";
             File.WriteAllText(desktopPath, content, new UTF8Encoding(false));
 

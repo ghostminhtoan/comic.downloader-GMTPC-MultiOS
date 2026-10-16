@@ -241,8 +241,11 @@ public partial class ComicReaderControl : UserControl
         double currentDist = Distance(p1, p2);
         if (_pinchStartDistance <= 5.0 || currentDist <= 5.0) return;
 
-        double scale = currentDist / _pinchStartDistance;
-        double newZoom = Math.Clamp(Math.Round(_pinchStartZoom * scale, 3), 0.4, 4.0);
+        // Áp dụng hệ số làm mượt Damped Pinch Scale (hàm mũ 0.45):
+        // Giảm tốc độ phóng to / thu nhỏ quá mức, mang lại cảm giác zoom đầm chắc, kiểm soát vi điểm giống ComicScreen
+        double rawScale = currentDist / _pinchStartDistance;
+        double dampedScale = Math.Pow(rawScale, 0.45);
+        double newZoom = Math.Clamp(Math.Round(_pinchStartZoom * dampedScale, 3), 0.4, 4.0);
 
         // Cập nhật mức Zoom (kích hoạt ApplyFitModeLayout tính lại DisplayWidth / DisplayHeight cho mọi trang)
         vm.ZoomLevel = newZoom;
@@ -572,7 +575,17 @@ public partial class ComicReaderControl : UserControl
         }
 
         AddHandler(KeyDownEvent, OnControlKeyDown, RoutingStrategies.Tunnel);
+
+        Focusable = true;
+        AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(() => this.Focus(), DispatcherPriority.Input);
+        Loaded += (_, _) => Dispatcher.UIThread.Post(() => this.Focus(), DispatcherPriority.Input);
     }
+
+    /// <summary>
+    /// Cho phép ComicReaderWindow chuyển tiếp trực tiếp sự kiện phím tắt (Tunnel KeyDown) xuống UserControl
+    /// ngay khi vừa mở FullScreen mà người dùng chưa cần click chuột.
+    /// </summary>
+    public void HandleKeyDownFromHost(KeyEventArgs e) => OnControlKeyDown(this, e);
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -2152,6 +2165,22 @@ public partial class ComicReaderControl : UserControl
 
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
+            // Ctrl + 6: Kiểu đọc Right to Left Scroll (Cuộn ngang liên tục Phải → Trái)
+            if (e.Key == Key.D6 || e.Key == Key.NumPad6)
+            {
+                vm.SelectPageScrollingMode("4");
+                e.Handled = true;
+                return;
+            }
+
+            // Ctrl + 7: Kiểu đọc Left to Right Scroll (Cuộn ngang liên tục Trái → Phải)
+            if (e.Key == Key.D7 || e.Key == Key.NumPad7)
+            {
+                vm.SelectPageScrollingMode("3");
+                e.Handled = true;
+                return;
+            }
+
             if (e.Key == Key.D0 || e.Key == Key.NumPad0)
             {
                 vm.ResetZoom();
@@ -2329,10 +2358,14 @@ public partial class ComicReaderControl : UserControl
                 e.Handled = true;
                 break;
 
-            // Phím Tỉ lệ xem (Fit Modes) theo Honeyview / Bandiview (1=Width, 2=Height, 3=Screen, 9=Stretch)
+            // Phím Tỉ lệ xem (Fit Modes) & Kiểu đọc (Reading Modes) theo yêu cầu:
+            // 8 là fit width, 9 là fit height
+            // 5 là kiểu đọc webtoon, 6 là kiểu đọc manga right to left, 7 là kiểu đọc manga left to right
             case Key.D1:
             case Key.NumPad1:
             case Key.W:
+            case Key.D8:
+            case Key.NumPad8:
                 vm.SetFitMode("FitWidth");
                 e.Handled = true;
                 break;
@@ -2340,6 +2373,8 @@ public partial class ComicReaderControl : UserControl
             case Key.D2:
             case Key.NumPad2:
             case Key.H:
+            case Key.D9:
+            case Key.NumPad9:
                 vm.SetFitMode("FitHeight");
                 e.Handled = true;
                 break;
@@ -2351,8 +2386,24 @@ public partial class ComicReaderControl : UserControl
                 e.Handled = true;
                 break;
 
-            case Key.D9:
-            case Key.NumPad9:
+            case Key.D5:
+            case Key.NumPad5:
+                vm.SelectPageScrollingMode("5"); // Webtoon (Cuộn dọc)
+                e.Handled = true;
+                break;
+
+            case Key.D6:
+            case Key.NumPad6:
+                vm.SelectPageScrollingMode("1"); // Manga Right to Left (Lật trang Phải → Trái)
+                e.Handled = true;
+                break;
+
+            case Key.D7:
+            case Key.NumPad7:
+                vm.SelectPageScrollingMode("0"); // Manga Left to Right (Lật trang Trái → Phải)
+                e.Handled = true;
+                break;
+
             case Key.S:
                 vm.SetFitMode("StretchFull");
                 e.Handled = true;

@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
+using ComicDownloaderGMTPC.Services;
 
 namespace ComicDownloaderGMTPC.Models;
 
@@ -147,5 +148,33 @@ public partial class ReaderPageItem : ObservableObject
     [ObservableProperty]
     private bool _isLoaded;
 
+    [ObservableProperty]
+    private bool _isAnimated;
+
+    public AnimatedPagePlayer? AnimationPlayer { get; set; }
+
     public bool HasImage => Image != null;
+
+    /// <summary>
+    /// Giải phóng toàn bộ bộ nhớ và dừng phát hoạt ảnh (nếu có) khi trang cuộn ra xa khỏi tầm nhìn.
+    /// </summary>
+    public void Unload()
+    {
+        try
+        {
+            AnimationPlayer?.Dispose();
+        }
+        catch { }
+        AnimationPlayer = null;
+
+        var old = Image;
+        Image = null;
+        IsLoaded = false;
+        IsLoading = false;
+        try
+        {
+            old?.Dispose();
+        }
+        catch { }
+    }
 }

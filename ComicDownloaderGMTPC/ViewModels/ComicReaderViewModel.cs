@@ -1242,13 +1242,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                 {
                     foreach (var p in Pages)
                     {
-                        if (p.IsLoaded && p.Image != null)
-                        {
-                            var old = p.Image;
-                            p.Image = null;
-                            p.IsLoaded = false;
-                            try { old.Dispose(); } catch { }
-                        }
+                        p.Unload();
                     }
                 });
 
@@ -2576,13 +2570,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     {
         foreach (var p in Pages)
         {
-            if (p.Image != null)
-            {
-                var img = p.Image;
-                p.Image = null;
-                p.IsLoaded = false;
-                try { img.Dispose(); } catch { }
-            }
+            p.Unload();
         }
     }
 

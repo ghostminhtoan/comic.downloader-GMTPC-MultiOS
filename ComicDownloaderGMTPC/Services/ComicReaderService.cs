@@ -324,7 +324,36 @@ public sealed class ComicReaderService
             if (page.IsLoaded || ct.IsCancellationRequested) return;
 
             var effects = ActiveEffectSettings.Clone();
-            Bitmap? bmp = await Task.Run(() => DecodePageBitmap(page, effects), ct).ConfigureAwait(false);
+
+            byte[]? rawBytes = await Task.Run(() => ReadRawPageBytes(page), ct).ConfigureAwait(false);
+            if (rawBytes == null || rawBytes.Length == 0 || ct.IsCancellationRequested) return;
+
+            // 1. Kiểm tra và kích hoạt hoạt ảnh động (GIF hoặc WebP Animated)
+            if (AnimatedPagePlayer.IsAnimatedImage(rawBytes, out int frameCount, out int animW, out int animH))
+            {
+                page.IsAnimated = true;
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (animW > 0 && animH > 0)
+                    {
+                        page.SetKnownDimensions(animW, animH);
+                    }
+                });
+
+                var player = new AnimatedPagePlayer(page, rawBytes, effects);
+                page.AnimationPlayer?.Dispose();
+                page.AnimationPlayer = player;
+                player.Start();
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    page.IsLoaded = true;
+                });
+                return;
+            }
+
+            // 2. Xử lý ảnh tĩnh thông thường
+            Bitmap? bmp = await Task.Run(() => DecodeRawBytesToBitmap(rawBytes, page, effects), ct).ConfigureAwait(false);
             if (bmp != null && !ct.IsCancellationRequested)
             {
                 int pxW = bmp.PixelSize.Width;
@@ -384,12 +413,9 @@ public sealed class ComicReaderService
                 if (i < minKeep || i > maxKeep)
                 {
                     var p = pages[i];
-                    if (p.IsLoaded && p.Image != null)
+                    if (p.IsLoaded || p.HasImage)
                     {
-                        var oldImg = p.Image;
-                        p.Image = null;
-                        p.IsLoaded = false;
-                        try { oldImg.Dispose(); } catch { }
+                        p.Unload();
                         releasedCount++;
                     }
                 }
@@ -436,50 +462,49 @@ public sealed class ComicReaderService
         }
     }
 
-    private static Bitmap? DecodePageBitmap(ReaderPageItem page, ReaderVisualEffectSettings effects)
+    public static byte[]? ReadRawPageBytes(ReaderPageItem page)
     {
         try
         {
-            byte[]? rawBytes = null;
-
             if (page.IsMobiEntry)
             {
                 if (!File.Exists(page.SourcePath)) return null;
-                rawBytes = MobiComicParser.Instance.ReadPageBytes(page.SourcePath, page.MobiPageIndex);
+                return MobiComicParser.Instance.ReadPageBytes(page.SourcePath, page.MobiPageIndex);
             }
-            else if (page.IsPdfEntry)
+            if (page.IsPdfEntry)
             {
                 if (!File.Exists(page.SourcePath)) return null;
                 var pdfBmp = PdfComicParser.Instance.DecodePageBitmap(page.SourcePath, page.PdfPageIndex);
                 if (pdfBmp == null) return null;
-                if (!effects.HasAnyEffect)
-                {
-                    return pdfBmp;
-                }
-
                 using var pdfMs = new MemoryStream();
 #pragma warning disable CS0618
                 pdfBmp.Save(pdfMs);
 #pragma warning restore CS0618
                 pdfBmp.Dispose();
-                rawBytes = pdfMs.ToArray();
+                return pdfMs.ToArray();
             }
-            else if (page.IsRarEntry)
+            if (page.IsRarEntry)
             {
-                rawBytes = RarArchivePool.Instance.ReadEntryBytes(page.SourcePath, page.ArchiveEntryFullName);
+                return RarArchivePool.Instance.ReadEntryBytes(page.SourcePath, page.ArchiveEntryFullName);
             }
-            else if (page.IsArchiveEntry)
+            if (page.IsArchiveEntry)
             {
-                rawBytes = ZipArchivePool.Instance.ReadEntryBytes(page.SourcePath, page.ArchiveEntryFullName);
-            }
-            else
-            {
-                if (!File.Exists(page.SourcePath)) return null;
-                rawBytes = File.ReadAllBytes(page.SourcePath);
+                return ZipArchivePool.Instance.ReadEntryBytes(page.SourcePath, page.ArchiveEntryFullName);
             }
 
-            if (rawBytes == null || rawBytes.Length == 0) return null;
+            if (!File.Exists(page.SourcePath)) return null;
+            return File.ReadAllBytes(page.SourcePath);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
+    private static Bitmap? DecodeRawBytesToBitmap(byte[] rawBytes, ReaderPageItem page, ReaderVisualEffectSettings effects)
+    {
+        try
+        {
             if (effects.HasAnyEffect)
             {
                 var processedBmp = DecodeAndApplyEffectsWithSkia(rawBytes, effects);
@@ -587,7 +612,7 @@ public sealed class ComicReaderService
         }
     }
 
-    private static void ApplyPixelTransformsInPlace(SKBitmap bmp, ReaderVisualEffectSettings effects)
+    internal static void ApplyPixelTransformsInPlace(SKBitmap bmp, ReaderVisualEffectSettings effects)
     {
         IntPtr ptr = bmp.GetPixels();
         int totalBytes = bmp.ByteCount;

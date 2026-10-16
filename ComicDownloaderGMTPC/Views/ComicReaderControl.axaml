@@ -7,6 +7,7 @@
              mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="1920"
              x:Class="ComicDownloaderGMTPC.Views.ComicReaderControl"
              x:DataType="vm:ComicReaderViewModel"
+             Focusable="True"
              Background="{Binding ReaderBackgroundColor}">
 
     <UserControl.Styles>
