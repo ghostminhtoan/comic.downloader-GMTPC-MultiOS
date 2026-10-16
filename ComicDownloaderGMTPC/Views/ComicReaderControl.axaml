@@ -1233,30 +1233,65 @@
                 <!-- ============================================================= -->
                 <Border IsVisible="{Binding IsFilterPopupOpen}"
                         HorizontalAlignment="Center" VerticalAlignment="Top"
-                        Margin="0,12,0,0" Width="230"
+                        Margin="0,12,0,0" Width="260"
                         Background="#F222262E"
                         BorderBrush="#475569" BorderThickness="1"
                         CornerRadius="6" Padding="14,10"
                         BoxShadow="0 10 25 0 #AA000000">
-                    <StackPanel Spacing="2">
+                    <StackPanel Spacing="3">
                         <CheckBox Classes="comicCheck" IsChecked="{Binding IsGrayScale}" Content="Gray Scale" />
                         <CheckBox Classes="comicCheck" IsChecked="{Binding IsAutoContrast}" Content="Auto Contrast" />
                         <CheckBox Classes="comicCheck" IsChecked="{Binding IsUpscaling}" Content="Upscaling" />
-                        <CheckBox Classes="comicCheck" IsChecked="{Binding IsSharpenFilter}" Content="Sharpen Filter" />
-                        <!-- Thanh trượt độ nét Sharpen từ 0 đến 100 -->
-                        <StackPanel IsVisible="{Binding IsSharpenFilter}" Margin="20,2,0,4" Spacing="2">
+                        
+                        <!-- Độ nét (Sharpen Filter) -->
+                        <CheckBox Classes="comicCheck" IsChecked="{Binding IsSharpenFilter}" Content="Độ nét" />
+                        <StackPanel IsVisible="{Binding IsSharpenFilter}" Margin="20,1,0,4" Spacing="2">
                             <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Text="Độ nét (0-100):" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center" />
+                                <TextBlock Text="Mức độ nét:" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1" Text="{Binding SharpenStrengthText}" FontSize="11" FontWeight="Bold" Foreground="#4FC3F7" />
                             </Grid>
-                            <Slider Minimum="0" Maximum="100" Value="{Binding SharpenStrength}"
-                                    SmallChange="1" LargeChange="10" TickFrequency="5"
-                                    Height="24" Margin="0" />
+                            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                <Button Grid.Column="0" Content="➖" Classes="iconBtn"
+                                        Command="{Binding DecreaseSharpenStrengthCommand}"
+                                        Width="24" Height="22" Padding="0" FontSize="9"
+                                        ToolTip.Tip="Giảm 1%" />
+                                <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding SharpenStrength}"
+                                        SmallChange="1" LargeChange="10" TickFrequency="5"
+                                        Height="22" Margin="6,0" />
+                                <Button Grid.Column="2" Content="➕" Classes="iconBtn"
+                                        Command="{Binding IncreaseSharpenStrengthCommand}"
+                                        Width="24" Height="22" Padding="0" FontSize="9"
+                                        ToolTip.Tip="Tăng 1%" />
+                            </Grid>
                         </StackPanel>
+
+                        <!-- Giảm nhiễu (Denoise / Noise Reduction) bên dưới Độ nét -->
+                        <CheckBox Classes="comicCheck" IsChecked="{Binding IsDenoiseFilter}" Content="Giảm nhiễu" />
+                        <StackPanel IsVisible="{Binding IsDenoiseFilter}" Margin="20,1,0,4" Spacing="2">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="Mức giảm nhiễu:" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding DenoiseStrengthText}" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                <Button Grid.Column="0" Content="➖" Classes="iconBtn"
+                                        Command="{Binding DecreaseDenoiseStrengthCommand}"
+                                        Width="24" Height="22" Padding="0" FontSize="9"
+                                        ToolTip.Tip="Giảm 1%" />
+                                <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding DenoiseStrength}"
+                                        SmallChange="1" LargeChange="10" TickFrequency="5"
+                                        Height="22" Margin="6,0" />
+                                <Button Grid.Column="2" Content="➕" Classes="iconBtn"
+                                        Command="{Binding IncreaseDenoiseStrengthCommand}"
+                                        Width="24" Height="22" Padding="0" FontSize="9"
+                                        ToolTip.Tip="Tăng 1%" />
+                            </Grid>
+                        </StackPanel>
+
                         <CheckBox Classes="comicCheck" IsChecked="{Binding IsInvertColor}" Content="Invert Color" />
                         <CheckBox Classes="comicCheck" IsChecked="{Binding IsBlueLightEnabled}" Content="Blue Light" />
                     </StackPanel>
                 </Border>
+
 
 
                 <!-- ============================================================= -->
@@ -2362,5 +2397,37 @@
                 </Border>
             </Border>
 
+            <!-- ============================================================= -->
+            <!-- HUD THÔNG TIN THUỘC TÍNH ẢNH (IMAGE PROPERTIES HUD - PHÍM `)  -->
+            <!-- ============================================================= -->
+
+            <Border IsVisible="{Binding IsImagePropertiesHudVisible}"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Margin="18,52,0,0" Width="380"
+                    Background="#E60B1120"
+                    BorderBrush="#38BDF8" BorderThickness="1.5"
+                    CornerRadius="8" Padding="14,12"
+                    BoxShadow="0 10 30 0 #CC000000">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*, Auto">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <TextBlock Text="ℹ️ Thuộc tính ảnh (Properties)" Foreground="#38BDF8" FontSize="13" FontWeight="Bold" />
+                            <Border Background="#1E293B" CornerRadius="4" Padding="5,1">
+                                <TextBlock Text="Phím `" Foreground="#94A3B8" FontSize="10" FontWeight="SemiBold" />
+                            </Border>
+                        </StackPanel>
+                        <Button Grid.Column="1" Command="{Binding ToggleImagePropertiesHudCommand}"
+                                Classes="iconBtn" Width="22" Height="22" Padding="0" Content="✕"
+                                Foreground="#94A3B8" FontSize="11" />
+                    </Grid>
+                    <Border Height="1" Background="#1E293B" />
+                    <SelectableTextBlock Text="{Binding ImagePropertiesDetailsText}"
+                                         Foreground="#E2E8F0" FontSize="11.5"
+                                         FontFamily="Consolas, Cascadia Code, Courier New, monospace"
+                                         LineHeight="18" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
     </Grid>
 </UserControl>
+

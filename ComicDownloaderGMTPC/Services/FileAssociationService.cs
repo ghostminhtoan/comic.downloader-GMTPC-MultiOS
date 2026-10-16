@@ -302,7 +302,7 @@ public sealed class FileAssociationService
             string commandStr = $"\"{exePath}\" \"%1\"";
             string iconStr = $"\"{exePath}\",0";
 
-            // Đăng ký context menu cho .zip, .rar, .cbz, .cbr
+            // 1. Đăng ký context menu cho .zip, .rar, .cbz, .cbr
             // Đăng ký vào cả SystemFileAssociations và Classes/{ext}/shell để tương thích 100% Win 7, 8, 10, 11
             foreach (var ext in ArchiveContextMenuExtensions)
             {
@@ -319,9 +319,21 @@ public sealed class FileAssociationService
                 SetRegistryValue($@"{directKey}\command", null, commandStr);
             }
 
+            // 2. Đăng ký context menu chuột phải cho Thư mục (Folder) và Nền thư mục (Directory Background)
+            string dirKey = $@"Software\Classes\Directory\shell\{ContextMenuVerb}";
+            SetRegistryValue(dirKey, null, ContextMenuTitle);
+            SetRegistryValue(dirKey, "Icon", iconStr);
+            SetRegistryValue($@"{dirKey}\command", null, commandStr);
+
+            string dirBgKey = $@"Software\Classes\Directory\Background\shell\{ContextMenuVerb}";
+            string commandBgStr = $"\"{exePath}\" \"%V\"";
+            SetRegistryValue(dirBgKey, null, ContextMenuTitle);
+            SetRegistryValue(dirBgKey, "Icon", iconStr);
+            SetRegistryValue($@"{dirBgKey}\command", null, commandBgStr);
+
             SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero);
 
-            return (true, "✅ Đã thêm menu chuột phải 'Đọc truyện bằng Comic Downloader GMTPC' cho .zip, .rar, .cbz, .cbr!");
+            return (true, "✅ Đã thêm menu chuột phải 'Đọc truyện bằng Comic Downloader GMTPC' cho Thư mục và tệp nén (.zip, .rar, .cbz, .cbr)!");
         }
         catch (Exception ex)
         {
@@ -339,15 +351,19 @@ public sealed class FileAssociationService
                 RegDeleteTree(HKEY_CURRENT_USER, $@"Software\Classes\{ext}\shell\{ContextMenuVerb}");
             }
 
+            RegDeleteTree(HKEY_CURRENT_USER, $@"Software\Classes\Directory\shell\{ContextMenuVerb}");
+            RegDeleteTree(HKEY_CURRENT_USER, $@"Software\Classes\Directory\Background\shell\{ContextMenuVerb}");
+
             SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero);
 
-            return (true, "✅ Đã gỡ bỏ menu chuột phải cho .zip, .rar, .cbz, .cbr!");
+            return (true, "✅ Đã gỡ bỏ menu chuột phải cho Thư mục và tệp nén (.zip, .rar, .cbz, .cbr)!");
         }
         catch (Exception ex)
         {
             return (false, $"❌ Lỗi gỡ bỏ Windows Context Menu: {ex.Message}");
         }
     }
+
 
     private bool CheckWindowsDefaultRegistered()
     {
@@ -370,6 +386,11 @@ public sealed class FileAssociationService
     {
         try
         {
+            string dirKey = $@"Software\Classes\Directory\shell\{ContextMenuVerb}";
+            string? dirTitle = GetRegistryValue(dirKey, null);
+            if (!string.IsNullOrEmpty(dirTitle))
+                return true;
+
             string sysKey = $@"Software\Classes\SystemFileAssociations\.zip\shell\{ContextMenuVerb}";
             string? title = GetRegistryValue(sysKey, null);
             if (!string.IsNullOrEmpty(title))
@@ -378,6 +399,7 @@ public sealed class FileAssociationService
             string directKey = $@"Software\Classes\.zip\shell\{ContextMenuVerb}";
             string? directTitle = GetRegistryValue(directKey, null);
             return !string.IsNullOrEmpty(directTitle);
+
         }
         catch
         {

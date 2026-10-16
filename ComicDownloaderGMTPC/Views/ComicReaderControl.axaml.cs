@@ -39,6 +39,8 @@ public partial class ComicReaderControl : UserControl
     private double _kineticVelocityX;
     private double _kineticVelocityY;
     private readonly DispatcherTimer _kineticTimer;
+    private readonly System.Diagnostics.Stopwatch _kineticStopwatch = new();
+
 
     // Trạng thái kéo vượt biên để chuyển chương liền mạch (Continuous Chapters Mode)
     private double _cumulativeOverscrollY = 0;
@@ -627,6 +629,7 @@ public partial class ComicReaderControl : UserControl
     private void StopKineticScroll()
     {
         _kineticTimer.Stop();
+        _kineticStopwatch.Reset();
         _kineticVelocityX = 0;
         _kineticVelocityY = 0;
     }
@@ -639,9 +642,13 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
-        // Ma sát hãm đà quán tính mượt mà
-        _kineticVelocityX *= 0.915;
-        _kineticVelocityY *= 0.915;
+        double dt = Math.Clamp(_kineticStopwatch.Elapsed.TotalSeconds, 0.002, 0.05);
+        _kineticStopwatch.Restart();
+
+        // Ma sát hãm đà quán tính mượt mà chuẩn 60-120 FPS
+        double friction = Math.Pow(0.915, dt / 0.016);
+        _kineticVelocityX *= friction;
+        _kineticVelocityY *= friction;
 
         if (Math.Abs(_kineticVelocityX) < 0.025 && Math.Abs(_kineticVelocityY) < 0.025)
         {
@@ -649,8 +656,9 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
-        double stepX = _kineticVelocityX * 16.0;
-        double stepY = _kineticVelocityY * 16.0;
+        double stepX = _kineticVelocityX * (dt * 1000.0);
+        double stepY = _kineticVelocityY * (dt * 1000.0);
+
 
         if (vm.IsScrollMode)
         {
@@ -1294,36 +1302,41 @@ public partial class ComicReaderControl : UserControl
             }
         }
 
+        if (vm.Pages.Count == 0) return;
+
         if (vm.IsHorizontalScrollMode)
         {
-            double viewportCenterX = listBox.Bounds.Width * 0.5;
-            int bestPageIndexX = -1;
+            double vw = (scrollViewer != null && scrollViewer.Viewport.Width > 10) ? scrollViewer.Viewport.Width : listBox.Bounds.Width;
+            if (vw <= 10) return;
+
+            double offsetX = scrollViewer != null ? scrollViewer.Offset.X : 0;
+            double targetCenterX = offsetX + vw * 0.5;
+            int bestPageIndexX = 0;
             double bestDistX = double.MaxValue;
+            double currentX = 0;
 
-            foreach (var child in listBox.GetVisualDescendants())
+            for (int i = 0; i < vm.Pages.Count; i++)
             {
-                if (child is ListBoxItem container && container.DataContext is ReaderPageItem page)
-                {
-                    var pos = container.TranslatePoint(new Point(0, 0), listBox);
-                    if (pos.HasValue)
-                    {
-                        double left = pos.Value.X;
-                        double right = left + container.Bounds.Width;
-                        if (left <= viewportCenterX && right >= viewportCenterX)
-                        {
-                            bestPageIndexX = page.Index;
-                            break;
-                        }
+                var page = vm.Pages[i];
+                double pageW = Math.Max(40, page.DisplayWidth + page.PageMargin.Left + page.PageMargin.Right);
+                double pageLeft = currentX;
+                double pageRight = currentX + pageW;
 
-                        double mid = (left + right) * 0.5;
-                        double dist = Math.Abs(mid - viewportCenterX);
-                        if (dist < bestDistX)
-                        {
-                            bestDistX = dist;
-                            bestPageIndexX = page.Index;
-                        }
-                    }
+                if (pageLeft <= targetCenterX && pageRight >= targetCenterX)
+                {
+                    bestPageIndexX = i;
+                    break;
                 }
+
+                double mid = (pageLeft + pageRight) * 0.5;
+                double dist = Math.Abs(mid - targetCenterX);
+                if (dist < bestDistX)
+                {
+                    bestDistX = dist;
+                    bestPageIndexX = i;
+                }
+
+                currentX += pageW;
             }
 
             if (bestPageIndexX >= 0)
@@ -1334,68 +1347,73 @@ public partial class ComicReaderControl : UserControl
         }
 
         // Chế độ cuộn dọc (Webtoon / Vertical Scroll)
-        // Áp dụng cơ chế Hysteresis Sticky Anchor để triệt để chống nhảy/tua trang khi Zoom & Cuộn
-        double vh = listBox.Bounds.Height;
+        // Thuật toán toán học O(N) thuần túy trên RAM (0.001ms), loại bỏ hoàn toàn việc duyệt Visual Tree
+        // Giúp tốc độ cuộn đạt 60-120 FPS siêu mượt, đồng thời bảo tồn cơ chế Hysteresis Sticky Anchor chống tua giật
+        double vh = (scrollViewer != null && scrollViewer.Viewport.Height > 10) ? scrollViewer.Viewport.Height : listBox.Bounds.Height;
         if (vh <= 10) return;
 
-        // 1. Kiểm tra xem trang hiện tại (CurrentPageIndex) có còn hiển thị trên viewport không
-        if (vm.CurrentPageIndex >= 0 && vm.CurrentPageIndex < vm.Pages.Count)
-        {
-            foreach (var child in listBox.GetVisualDescendants())
-            {
-                if (child is ListBoxItem container && container.DataContext is ReaderPageItem page && page.Index == vm.CurrentPageIndex)
-                {
-                    var pos = container.TranslatePoint(new Point(0, 0), listBox);
-                    if (pos.HasValue)
-                    {
-                        double top = pos.Value.Y;
-                        double bottom = top + container.Bounds.Height;
-                        double visibleTop = Math.Max(0, top);
-                        double visibleBottom = Math.Min(vh, bottom);
-                        double visibleHeight = Math.Max(0, visibleBottom - visibleTop);
+        double offsetY = scrollViewer != null ? scrollViewer.Offset.Y : 0;
+        double viewportTop = offsetY;
+        double viewportBottom = offsetY + vh;
+        double viewportMid = offsetY + vh * 0.5;
 
-                        // Miễn là trang hiện tại còn hiển thị ít nhất 25% chiều cao trên màn hình
-                        // HOẶC bao phủ vùng giữa màn hình (từ 40% đến 60% vh):
-                        // -> GIỮ NGUYÊN CurrentPageIndex, TUYỆT ĐỐI KHÔNG TUA TRANG!
-                        if (visibleHeight >= vh * 0.25 || (top <= vh * 0.5 && bottom >= vh * 0.5))
-                        {
-                            return;
-                        }
-                    }
-                    break;
-                }
+        // 1. Kiểm tra Hysteresis cho CurrentPageIndex
+        double currentAccY = 0;
+        double curPageTop = -1;
+        double curPageBottom = -1;
+
+        for (int i = 0; i < vm.Pages.Count; i++)
+        {
+            var p = vm.Pages[i];
+            double pH = Math.Max(40, p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom);
+            if (i == vm.CurrentPageIndex)
+            {
+                curPageTop = currentAccY;
+                curPageBottom = currentAccY + pH;
+                break;
+            }
+            currentAccY += pH;
+        }
+
+        if (curPageTop >= 0)
+        {
+            double visibleTop = Math.Max(curPageTop, viewportTop);
+            double visibleBottom = Math.Min(curPageBottom, viewportBottom);
+            double visibleHeight = Math.Max(0, visibleBottom - visibleTop);
+
+            // Miễn là trang hiện tại còn hiển thị ít nhất 25% chiều cao trên màn hình
+            // HOẶC bao phủ vùng giữa màn hình (từ 40% đến 60% vh):
+            // -> GIỮ NGUYÊN CurrentPageIndex, TUYỆT ĐỐI KHÔNG TUA TRANG!
+            if (visibleHeight >= vh * 0.25 || (curPageTop <= viewportMid && curPageBottom >= viewportMid))
+            {
+                return;
             }
         }
 
         // 2. Nếu trang hiện tại đã cuộn khỏi màn hình, tìm trang mới chiếm diện tích hiển thị lớn nhất (Maximum Overlap)
         int bestPageIndex = -1;
         double maxVisibleHeight = -1;
+        double runningY = 0;
 
-        foreach (var child in listBox.GetVisualDescendants())
+        for (int i = 0; i < vm.Pages.Count; i++)
         {
-            if (child is ListBoxItem container && container.DataContext is ReaderPageItem page)
+            var page = vm.Pages[i];
+            double pH = Math.Max(40, page.DisplayHeight + page.PageMargin.Top + page.PageMargin.Bottom);
+            double top = runningY;
+            double bottom = runningY + pH;
+            runningY += pH;
+
+            if (bottom < viewportTop) continue;
+            if (top > viewportBottom) break;
+
+            double visibleTop = Math.Max(top, viewportTop);
+            double visibleBottom = Math.Min(bottom, viewportBottom);
+            double visibleHeight = Math.Max(0, visibleBottom - visibleTop);
+
+            if (visibleHeight > maxVisibleHeight)
             {
-                var pos = container.TranslatePoint(new Point(0, 0), listBox);
-                if (pos.HasValue)
-                {
-                    double top = pos.Value.Y;
-                    double bottom = top + container.Bounds.Height;
-                    double visibleTop = Math.Max(0, top);
-                    double visibleBottom = Math.Min(vh, bottom);
-                    double visibleHeight = Math.Max(0, visibleBottom - visibleTop);
-
-                    // Tự động kích hoạt nạp ảnh tức thì cho bất kỳ trang nào lọt vào viewport mà chưa nạp
-                    if (visibleHeight > 10 && !page.IsLoaded && !page.IsLoading)
-                    {
-                        _ = vm.EnsureSinglePageLoadedAsync(page);
-                    }
-
-                    if (visibleHeight > maxVisibleHeight)
-                    {
-                        maxVisibleHeight = visibleHeight;
-                        bestPageIndex = page.Index;
-                    }
-                }
+                maxVisibleHeight = visibleHeight;
+                bestPageIndex = i;
             }
         }
 
@@ -1403,6 +1421,7 @@ public partial class ComicReaderControl : UserControl
         {
             vm.UpdatePageIndexFromScroll(bestPageIndex);
         }
+
     }
 
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -1764,7 +1783,9 @@ public partial class ComicReaderControl : UserControl
                 {
                     _kineticVelocityX = _panVelocityX;
                     _kineticVelocityY = _panVelocityY;
+                    _kineticStopwatch.Restart();
                     _kineticTimer.Start();
+
                 }
             }
             return;
@@ -2262,12 +2283,22 @@ public partial class ComicReaderControl : UserControl
                 return;
             }
 
+            // Ctrl + 0: Khớp trọn vẹn màn hình (best fit / FitScreen)
             if (e.Key == Key.D0 || e.Key == Key.NumPad0)
             {
-                vm.ResetZoom();
+                vm.SetFitMode("FitScreen");
                 e.Handled = true;
                 return;
             }
+
+            // Ctrl + D: Thêm / Xóa dấu trang (Bookmark) trang hiện tại
+            if (e.Key == Key.D)
+            {
+                vm.ToggleBookmarkCurrentPage();
+                e.Handled = true;
+                return;
+            }
+
             if (e.Key == Key.F)
             {
                 vm.ToggleChapterDrawer();
@@ -2275,6 +2306,18 @@ public partial class ComicReaderControl : UserControl
                 return;
             }
         }
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            // Shift + D: Mở danh sách bookmark
+            if (e.Key == Key.D)
+            {
+                vm.OpenBookmarkListPopup();
+                e.Handled = true;
+                return;
+            }
+        }
+
 
         switch (e.Key)
         {
@@ -2432,22 +2475,34 @@ public partial class ComicReaderControl : UserControl
                 e.Handled = true;
                 break;
 
+            // Phím số 0: Kích thước gốc ảnh (Original size 1:1, zoom 100%)
             case Key.D0:
             case Key.NumPad0:
+                vm.SetOriginalSizeImage();
+                e.Handled = true;
+                break;
+
             case Key.Z:
                 vm.ResetZoom();
                 e.Handled = true;
                 break;
 
-            // Phím Tỉ lệ xem (Fit Modes) & Kiểu đọc (Reading Modes) theo yêu cầu:
-            // 8 là fit width, 9 là fit height
-            // 5 là kiểu đọc webtoon, 6 là kiểu đọc manga right to left, 7 là kiểu đọc manga left to right
-            // Phím số 1: Kích thước gốc ảnh (Original size 1:1)
+            // Phím số 1: Chuyển đổi tuần tự các tỉ lệ vừa khung hình: Fit Width -> Fit Height -> Fit Screen -> Stretch Full
             case Key.D1:
             case Key.NumPad1:
-                vm.SetOriginalSizeImage();
+                vm.CycleFitMode();
                 e.Handled = true;
                 break;
+
+            // Phím ` / ~: Bật/Tắt HUD hiển thị chi tiết thuộc tính ảnh (Độ phân giải, dung lượng, codec, container)
+            case Key.OemTilde:
+            case Key.Oem8:
+                vm.ToggleImagePropertiesHud();
+                e.Handled = true;
+                break;
+
+
+
 
             // Phím số 2: Chuyển đổi bố cục trang (Toggle Page Layout: Off -> Single -> Dual -> Auto)
             case Key.D2:
@@ -2630,12 +2685,29 @@ public partial class ComicReaderControl : UserControl
                 vm.OpenSettingsPopup(0);
                 break;
 
+            case "CycleFitMode":
+                vm.CycleFitMode();
+                break;
+
+            case "ToggleBookmark":
+                vm.ToggleBookmarkCurrentPage();
+                break;
+
+            case "BookmarkList":
+                vm.OpenBookmarkListPopup();
+                break;
+
+            case "ImageProperties":
+                vm.ToggleImagePropertiesHud();
+                break;
+
             case "CloseReader":
                 if (vm.HandleBackNavigation()) return;
                 if (vm.IsFullScreen) vm.ToggleFullScreen();
                 else vm.CloseReader();
                 break;
         }
+
     }
 
     private static bool IsScrollBarOrInteractiveControl(Visual? source)

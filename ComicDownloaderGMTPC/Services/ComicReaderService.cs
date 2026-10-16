@@ -25,6 +25,8 @@ public sealed class ReaderVisualEffectSettings
     public bool IsAutoContrast { get; set; }
     public bool IsSharpenFilter { get; set; }
     public double SharpenStrength { get; set; } = 50.0;
+    public bool IsDenoiseFilter { get; set; }
+    public double DenoiseStrength { get; set; } = 30.0;
     public bool IsInvertColor { get; set; }
     public bool IsSaturationEnabled { get; set; }
     public double SaturationValue { get; set; } = 100.0;
@@ -39,6 +41,7 @@ public sealed class ReaderVisualEffectSettings
         IsGrayScale ||
         IsAutoContrast ||
         IsSharpenFilter ||
+        IsDenoiseFilter ||
         IsInvertColor ||
         (IsSaturationEnabled && Math.Abs(SaturationValue - 100.0) > 1.0);
 
@@ -56,12 +59,15 @@ public sealed class ReaderVisualEffectSettings
             IsAutoContrast = IsAutoContrast,
             IsSharpenFilter = IsSharpenFilter,
             SharpenStrength = SharpenStrength,
+            IsDenoiseFilter = IsDenoiseFilter,
+            DenoiseStrength = DenoiseStrength,
             IsInvertColor = IsInvertColor,
             IsSaturationEnabled = IsSaturationEnabled,
             SaturationValue = SaturationValue
         };
     }
 }
+
 
 public sealed class ComicReaderService
 {
@@ -108,7 +114,9 @@ public sealed class ComicReaderService
         ReaderActiveStateChanged?.Invoke(isActive);
     }
 
-    private readonly SemaphoreSlim _decodeSemaphore = new(OperatingSystem.IsAndroid() ? 1 : 3, OperatingSystem.IsAndroid() ? 1 : 3);
+    private readonly SemaphoreSlim _decodeSemaphore = new(
+        OperatingSystem.IsAndroid() ? 2 : Math.Clamp(Environment.ProcessorCount, 4, 8),
+        OperatingSystem.IsAndroid() ? 2 : Math.Clamp(Environment.ProcessorCount, 4, 8));
 
     public Task<List<ReaderPageItem>> LoadChapterPagesAsync(LibraryChapterItem chapter, CancellationToken ct = default)
     {
@@ -299,6 +307,10 @@ public sealed class ComicReaderService
                         {
                             item.SetKnownDimensions(jw, jh);
                         }
+                        else if (UniversalImageDecoder.TryGetFastWebpInfo(file, out int ww, out int wh) && ww > 0 && wh > 0)
+                        {
+                            item.SetKnownDimensions(ww, wh);
+                        }
                         else if (UniversalImageDecoder.TryGetFastPngInfo(file, out var pInfo) && pInfo.Width > 0 && pInfo.Height > 0)
                         {
                             item.SetKnownDimensions(pInfo.Width, pInfo.Height);
@@ -444,10 +456,26 @@ public sealed class ComicReaderService
             if (safeCurrent - offset >= minLoad) indicesToLoad.Add(safeCurrent - offset);
         }
 
-        foreach (int idx in indicesToLoad)
+        if (OperatingSystem.IsAndroid() || effectiveEco)
         {
-            if (ct.IsCancellationRequested) break;
-            await EnsurePageLoadedAsync(pages[idx], ct).ConfigureAwait(false);
+            foreach (int idx in indicesToLoad)
+            {
+                if (ct.IsCancellationRequested) break;
+                await EnsurePageLoadedAsync(pages[idx], ct).ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            // Desktop (Windows/Linux): Nạp song song có kiểm soát bằng Task.WhenAll kết hợp _decodeSemaphore
+            var pendingTasks = indicesToLoad
+                .Where(idx => idx >= 0 && idx < pages.Count && !pages[idx].IsLoaded && !pages[idx].IsLoading)
+                .Select(idx => EnsurePageLoadedAsync(pages[idx], ct))
+                .ToList();
+
+            if (pendingTasks.Count > 0)
+            {
+                await Task.WhenAll(pendingTasks).ConfigureAwait(false);
+            }
         }
     }
 
@@ -572,33 +600,71 @@ public sealed class ComicReaderService
                 var srcRect = new SKRect(leftPx, topPx, leftPx + cropW, topPx + cropH);
                 var dstRect = new SKRect(0, 0, cropW, cropH);
 
-                if (effects.IsSharpenFilter)
+                if (effects.IsSharpenFilter || effects.IsDenoiseFilter)
                 {
                     using var paint = new SKPaint();
-                    float strength = (float)Math.Clamp(effects.SharpenStrength, 0.0, 100.0);
-                    float k = (strength / 100.0f) * 1.5f;
-                    float center = 1.0f + 4.0f * k;
-                    float[] kernel =
+                    SKImageFilter? combinedFilter = null;
+                    SKImageFilter? blurFilter = null;
+                    SKImageFilter? convFilter = null;
+
+                    if (effects.IsDenoiseFilter)
                     {
-                        0f, -k, 0f,
-                        -k, center, -k,
-                        0f, -k, 0f
-                    };
-                    using var conv = SKImageFilter.CreateMatrixConvolution(
-                        new SKSizeI(3, 3),
-                        kernel,
-                        1.0f,
-                        0.0f,
-                        new SKPointI(1, 1),
-                        SKShaderTileMode.Clamp,
-                        false);
-                    paint.ImageFilter = conv;
+                        float denoiseStrength = (float)Math.Clamp(effects.DenoiseStrength, 0.0, 100.0);
+                        // Bán kính làm mờ mịn nhẹ từ 0.1f đến 1.8f để khử hạt nhiễu (noise/grain) mà không làm mờ nhoè nét chữ
+                        float sigma = Math.Max(0.1f, (denoiseStrength / 100.0f) * 1.8f);
+                        blurFilter = SKImageFilter.CreateBlur(sigma, sigma);
+                    }
+
+                    if (effects.IsSharpenFilter)
+                    {
+                        float strength = (float)Math.Clamp(effects.SharpenStrength, 0.0, 100.0);
+                        float k = (strength / 100.0f) * 1.5f;
+                        float center = 1.0f + 4.0f * k;
+                        float[] kernel =
+                        {
+                            0f, -k, 0f,
+                            -k, center, -k,
+                            0f, -k, 0f
+                        };
+                        convFilter = SKImageFilter.CreateMatrixConvolution(
+                            new SKSizeI(3, 3),
+                            kernel,
+                            1.0f,
+                            0.0f,
+                            new SKPointI(1, 1),
+                            SKShaderTileMode.Clamp,
+                            false);
+                    }
+
+                    if (blurFilter != null && convFilter != null)
+                    {
+                        // Giảm nhiễu trước, sau đó tôn nét cạnh
+                        combinedFilter = SKImageFilter.CreateCompose(convFilter, blurFilter);
+                    }
+                    else if (blurFilter != null)
+                    {
+                        combinedFilter = blurFilter;
+                    }
+                    else if (convFilter != null)
+                    {
+                        combinedFilter = convFilter;
+                    }
+
+                    paint.ImageFilter = combinedFilter;
                     canvas.DrawBitmap(srcBitmap, srcRect, dstRect, paint);
+
+                    if (combinedFilter != null && combinedFilter != blurFilter && combinedFilter != convFilter)
+                    {
+                        combinedFilter.Dispose();
+                    }
+                    blurFilter?.Dispose();
+                    convFilter?.Dispose();
                 }
                 else
                 {
                     canvas.DrawBitmap(srcBitmap, srcRect, dstRect);
                 }
+
             }
 
             if (effects.IsAutoContrast ||
@@ -865,4 +931,94 @@ public sealed class ComicReaderService
             return (3.0, 3.0, 3.0, 3.0);
         }
     }
+
+    /// <summary>
+    /// Trích xuất toàn bộ siêu dữ liệu thuộc tính của trang ảnh hiện tại (phục vụ HUD thông tin phím `)
+    /// </summary>
+    public static string GetImagePropertiesSummary(ReaderPageItem? page, double currentZoomLevel = 1.0)
+    {
+        if (page == null) return "Không có thông tin trang.";
+
+        var sb = new System.Text.StringBuilder();
+
+        // 1. Phân giải & Tỉ lệ
+        int aw = page.AspectWidth > 0 ? page.AspectWidth : 900;
+        int ah = page.AspectHeight > 0 ? page.AspectHeight : 1350;
+        double ratio = aw > 0 ? (double)ah / aw : 1.5;
+        sb.AppendLine($"📐 Độ phân giải gốc: {aw} × {ah} px (Tỉ lệ 1 : {ratio:F2})");
+        sb.AppendLine($"🖥️ Khung hiển thị: {Math.Round(page.DisplayWidth)} × {Math.Round(page.DisplayHeight)} px (Zoom {currentZoomLevel * 100:F0}%)");
+
+        // 2. Dung lượng tệp
+        long bytes = page.FileSizeBytes;
+        if (bytes <= 0 && !string.IsNullOrEmpty(page.SourcePath) && !page.IsArchiveEntry && File.Exists(page.SourcePath))
+        {
+            try { bytes = new FileInfo(page.SourcePath).Length; } catch { }
+        }
+
+        string sizeStr = bytes switch
+        {
+            > 1024 * 1024 => $"{(double)bytes / (1024 * 1024):F2} MB ({bytes:N0} bytes)",
+            > 1024 => $"{(double)bytes / 1024:F1} KB ({bytes:N0} bytes)",
+            > 0 => $"{bytes} bytes",
+            _ => "Không xác định"
+        };
+        sb.AppendLine($"💾 Dung lượng: {sizeStr}");
+
+        // 3. Codec & Hoạt ảnh
+        string ext = Path.GetExtension(!string.IsNullOrEmpty(page.ArchiveEntryFullName) ? page.ArchiveEntryFullName : page.SourcePath).ToUpperInvariant().TrimStart('.');
+        if (string.IsNullOrEmpty(ext)) ext = "UNKNOWN";
+
+        string codecInfo = ext switch
+        {
+            "WEBP" => "WebP (VP8/VP8L/VP8X Decoder)",
+            "JPG" or "JPEG" => "JPEG (Baseline/Progressive SOF)",
+            "PNG" => "PNG (Portable Network Graphics)",
+            "GIF" => "GIF (Graphics Interchange Format)",
+            "BMP" => "BMP (Windows Bitmap)",
+            "AVIF" => "AVIF (AV1 Image File Format)",
+            _ => ext
+        };
+
+        if (page.IsAnimated && page.AnimationPlayer != null)
+        {
+            codecInfo += $" [Hoạt ảnh {page.AnimationPlayer.FrameCount} frames @ {page.AnimationPlayer.Speed:F1}x]";
+        }
+        sb.AppendLine($"🎞️ Định dạng/Codec: {codecInfo}");
+
+        // 4. Container & Vị trí lưu trữ
+        string containerType;
+        string locationDetails;
+
+        if (page.IsRarEntry)
+        {
+            containerType = "CBR / RAR Archive";
+            locationDetails = $"{Path.GetFileName(page.SourcePath)} -> {page.ArchiveEntryFullName}";
+        }
+        else if (page.IsPdfEntry)
+        {
+            containerType = "PDF Document";
+            locationDetails = $"{Path.GetFileName(page.SourcePath)} (Trang {page.PdfPageIndex + 1})";
+        }
+        else if (page.IsMobiEntry)
+        {
+            containerType = "MOBI / AZW Ebook";
+            locationDetails = $"{Path.GetFileName(page.SourcePath)} (Trang {page.MobiPageIndex + 1})";
+        }
+        else if (page.IsArchiveEntry)
+        {
+            containerType = "CBZ / ZIP Archive";
+            locationDetails = $"{Path.GetFileName(page.SourcePath)} -> {page.ArchiveEntryFullName}";
+        }
+        else
+        {
+            containerType = "Tệp ảnh rời trên đĩa (Standalone Image)";
+            locationDetails = page.SourcePath;
+        }
+
+        sb.AppendLine($"📦 Container: {containerType}");
+        sb.AppendLine($"📍 Nguồn: {locationDetails}");
+
+        return sb.ToString().TrimEnd();
+    }
 }
+

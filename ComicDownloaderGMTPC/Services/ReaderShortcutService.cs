@@ -101,8 +101,11 @@ public sealed class ReaderShortcutService
         AddEntry("ResetZoom", "Hiển thị (View)", "Đặt lại thu phóng (Reset Zoom)", "Khôi phục độ phóng to về mặc định",
             new[] { "Alt+D0", "Z" });
 
-        AddEntry("Zoom100", "Hiển thị (View)", "Kích thước gốc 100% (Original 1:1)", "Hiển thị kích thước gốc 100% của ảnh (Phím 1/0)",
-            new[] { "D1", "NumPad1", "D0", "NumPad0" });
+        AddEntry("Zoom100", "Hiển thị (View)", "Kích thước gốc 100% (Original 1:1)", "Hiển thị kích thước gốc 100% của ảnh (Phím 0)",
+            new[] { "D0", "NumPad0" });
+
+        AddEntry("CycleFitMode", "Kiểu đọc (View Mode)", "Chuyển đổi vừa khung hình (Cycle Fit Mode)", "Chuyển đổi tuần tự: Fit Width → Fit Height → Fit Screen → Stretch Full (Phím 1)",
+            new[] { "D1", "NumPad1" });
 
         // 3. NHÓM CHẾ ĐỘ ĐỌC (VIEW MODE) - Chuẩn BandiView
         AddEntry("TogglePageLayout", "Kiểu đọc (View Mode)", "Bố cục trang (Toggle Page Layout)", "Chuyển đổi bố cục trang: Tắt / 1 Trang / 2 Trang / Tự động (Phím 2)",
@@ -114,10 +117,10 @@ public sealed class ReaderShortcutService
         AddEntry("FitHeight", "Kiểu đọc (View Mode)", "Vừa chiều cao (Fit to Height/Window)", "Tỉ lệ vừa khít chiều dọc màn hình (Phím 9/H)",
             new[] { "D9", "NumPad9", "H" });
 
-        AddEntry("FitScreen", "Kiểu đọc (View Mode)", "Vừa màn hình (Fit to Screen)", "Hiển thị toàn bộ trang trong khung nhìn",
-            new[] { "D3", "NumPad3", "B" });
+        AddEntry("FitScreen", "Kiểu đọc (View Mode)", "Vừa màn hình (Fit to Screen)", "Hiển thị toàn bộ trang trong khung nhìn (Ctrl+0 / Phím 3 / B)",
+            new[] { "Ctrl+D0", "Ctrl+NumPad0", "D3", "NumPad3", "B" });
 
-        AddEntry("StretchFull", "Kiểu đọc (View Mode)", "Kéo tràn màn hình (Stretch Full)", "Kéo giãn ảnh lấp đầy toàn bộ khung nhìn",
+        AddEntry("StretchFull", "Kiểu đọc (View Mode)", "Kéo tràn màn hình (Stretch Full)", "Kéo giãn ảnh lấp đầy toàn bộ khung nhìn (Phím S)",
             new[] { "S" });
 
         AddEntry("WebtoonMode", "Kiểu đọc (View Mode)", "Kiểu đọc Webtoon (Cuộn dọc)", "Chuyển sang chế độ cuộn dọc liên tục (Phím 5)",
@@ -136,6 +139,16 @@ public sealed class ReaderShortcutService
             new[] { "Ctrl+D7", "Ctrl+NumPad7" });
 
         // 4. NHÓM THAO TÁC & HOẠT ẢNH (ACTION & ANIMATION)
+        AddEntry("ToggleBookmark", "Thao tác (Action)", "Đánh dấu trang (Toggle Bookmark)", "Thêm hoặc xóa dấu trang cho trang hiện tại (Ctrl+D)",
+            new[] { "Ctrl+D" });
+
+        AddEntry("BookmarkList", "Thao tác (Action)", "Danh sách dấu trang (Bookmark List)", "Mở danh sách các trang đã đánh dấu (Shift+D)",
+            new[] { "Shift+D" });
+
+        AddEntry("ImageProperties", "Hiển thị (View)", "Thuộc tính hình ảnh (Image Properties)", "Bật/Tắt bảng thông tin chi tiết độ phân giải, dung lượng, codec, container (Phím `)",
+            new[] { "OemTilde", "Oem3" });
+
+
         AddEntry("ChapterDrawer", "Thao tác (Action)", "Danh sách chương (Chapter Drawer)", "Mở danh sách các chương của truyện",
             new[] { "C", "F" });
 
@@ -143,6 +156,7 @@ public sealed class ReaderShortcutService
             new[] { "V" });
 
         AddEntry("OpenSettings", "Thao tác (Action)", "Cài đặt trình đọc (Configuration)", "Mở bảng cấu hình và phím tắt (F5)",
+
             new[] { "F5" });
 
         AddEntry("CloseReader", "Thao tác (Action)", "Thoát trình đọc (Exit Reader)", "Thoát chế độ đọc truyện",

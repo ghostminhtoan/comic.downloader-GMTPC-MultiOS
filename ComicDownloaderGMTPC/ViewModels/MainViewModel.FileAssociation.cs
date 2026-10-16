@@ -30,13 +30,14 @@ public partial class MainViewModel
         IsDefaultImageBookAssociated ? "#0284C7" : "#334155";
 
     public string ArchiveContextMenuStatusText =>
-        IsArchiveContextMenuAssociated ? "✅ Đang BẬT (Đã có menu chuột phải)" : "⚪ Đang TẮT (Chưa thêm vào menu chuột phải)";
+        IsArchiveContextMenuAssociated ? "✅ Đang BẬT (Menu chuột phải cho Thư mục & tệp nén ZIP, RAR, CBZ, CBR)" : "⚪ Đang TẮT (Chưa thêm vào menu chuột phải)";
 
     public string ArchiveContextMenuButtonText =>
         IsArchiveContextMenuAssociated ? "TẮT MENU PHẢI" : "BẬT MENU PHẢI";
 
     public string ArchiveContextMenuButtonBackground =>
         IsArchiveContextMenuAssociated ? "#059669" : "#334155";
+
 
     [ObservableProperty]
     private string _associationStatusMessage = "Sẵn sàng thiết lập liên kết tệp.";

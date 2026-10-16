@@ -641,11 +641,12 @@ public partial class ComicReaderViewModel : ViewModelBase
             ImageFitMode.FitWidth => ImageFitMode.FitHeight,
             ImageFitMode.FitHeight => ImageFitMode.FitScreen,
             ImageFitMode.FitScreen => ImageFitMode.StretchFull,
-            ImageFitMode.StretchFull => ImageFitMode.Original,
+            ImageFitMode.StretchFull => ImageFitMode.FitWidth,
             _ => ImageFitMode.FitWidth
         };
         ShowTransientToast($"📐 Chế độ khung hình: {FitModeTooltipText}");
     }
+
 
     [RelayCommand]
     public void SetFitMode(string? modeStr)
@@ -1228,12 +1229,75 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public string SharpenStrengthText => $"{Math.Round(SharpenStrength):0}%";
 
+    [RelayCommand]
+    public void IncreaseSharpenStrength()
+    {
+        SharpenStrength = Math.Clamp(Math.Round(SharpenStrength) + 1.0, 0.0, 100.0);
+    }
+
+    [RelayCommand]
+    public void DecreaseSharpenStrength()
+    {
+        SharpenStrength = Math.Clamp(Math.Round(SharpenStrength) - 1.0, 0.0, 100.0);
+    }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Button7IconTint))]
+    private bool _isDenoiseFilter = false;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DenoiseStrengthText))]
+    private double _denoiseStrength = 30.0;
+
+    public string DenoiseStrengthText => $"{Math.Round(DenoiseStrength):0}%";
+
+    [RelayCommand]
+    public void IncreaseDenoiseStrength()
+    {
+        DenoiseStrength = Math.Clamp(Math.Round(DenoiseStrength) + 1.0, 0.0, 100.0);
+    }
+
+    [RelayCommand]
+    public void DecreaseDenoiseStrength()
+    {
+        DenoiseStrength = Math.Clamp(Math.Round(DenoiseStrength) - 1.0, 0.0, 100.0);
+    }
+
+    [ObservableProperty]
+    private bool _isImagePropertiesHudVisible = false;
+
+    [ObservableProperty]
+    private string _imagePropertiesDetailsText = string.Empty;
+
+    [RelayCommand]
+    public void ToggleImagePropertiesHud()
+    {
+        IsImagePropertiesHudVisible = !IsImagePropertiesHudVisible;
+        if (IsImagePropertiesHudVisible)
+        {
+            UpdateImagePropertiesDetails();
+        }
+    }
+
+    public void UpdateImagePropertiesDetails()
+    {
+        if (CurrentPageIndex >= 0 && CurrentPageIndex < Pages.Count)
+        {
+            var page = Pages[CurrentPageIndex];
+            ImagePropertiesDetailsText = ComicReaderService.GetImagePropertiesSummary(page, ZoomLevel);
+        }
+        else
+        {
+            ImagePropertiesDetailsText = "Chưa có thông tin trang hiện tại.";
+        }
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Button7IconTint))]
     private bool _isInvertColor = false;
 
     public string Button7IconTint =>
-        (IsGrayScale || IsAutoContrast || IsSharpenFilter || IsInvertColor || IsBlueLightEnabled)
+        (IsGrayScale || IsAutoContrast || IsSharpenFilter || IsDenoiseFilter || IsInvertColor || IsBlueLightEnabled)
             ? "#4FC3F7"
             : "#E2E8F0";
 
@@ -1244,6 +1308,8 @@ public partial class ComicReaderViewModel : ViewModelBase
     partial void OnIsAutoContrastChanged(bool value) => SyncAndRefreshVisualEffects();
     partial void OnIsSharpenFilterChanged(bool value) => SyncAndRefreshVisualEffects();
     partial void OnSharpenStrengthChanged(double value) => SyncAndRefreshVisualEffects(debounced: true);
+    partial void OnIsDenoiseFilterChanged(bool value) => SyncAndRefreshVisualEffects();
+    partial void OnDenoiseStrengthChanged(double value) => SyncAndRefreshVisualEffects(debounced: true);
     partial void OnIsInvertColorChanged(bool value) => SyncAndRefreshVisualEffects();
 
     partial void OnIsUpscalingChanged(bool value)
@@ -1266,9 +1332,12 @@ public partial class ComicReaderViewModel : ViewModelBase
         settings.IsAutoContrast = IsAutoContrast;
         settings.IsSharpenFilter = IsSharpenFilter;
         settings.SharpenStrength = SharpenStrength;
+        settings.IsDenoiseFilter = IsDenoiseFilter;
+        settings.DenoiseStrength = DenoiseStrength;
         settings.IsInvertColor = IsInvertColor;
         settings.IsSaturationEnabled = IsSaturationEnabled;
         settings.SaturationValue = SaturationValue;
+
 
         _effectRefreshCts?.Cancel();
         _effectRefreshCts = new CancellationTokenSource();
@@ -1812,6 +1881,48 @@ public partial class ComicReaderViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void ToggleBookmarkCurrentPage()
+    {
+        if (CurrentChapter == null || TotalPages <= 0) return;
+
+        string rootPath = ParentComic?.RootFolderPath ?? CurrentChapter.LocalPath;
+        string resolvedChapterTitle = !string.IsNullOrWhiteSpace(CurrentChapter.Title)
+            ? CurrentChapter.Title
+            : (!string.IsNullOrWhiteSpace(ChapterTitle) ? ChapterTitle : System.IO.Path.GetFileName(CurrentChapter.LocalPath));
+
+        var existing = Bookmarks.FirstOrDefault(b =>
+            b.ChapterProgressKey == CurrentChapter.EffectiveProgressKey &&
+            b.PageIndex == CurrentPageIndex);
+
+        if (existing != null)
+        {
+            _progressStore.RemoveBookmark(existing.Id);
+            RefreshBookmarksList();
+            ShowTransientToast($"🗑️ Đã xóa dấu trang: {resolvedChapterTitle} - Trang {CurrentPageDisplayNumber}/{TotalPages}");
+        }
+
+        else
+        {
+            var item = new ReaderBookmarkItem
+            {
+                ComicRootPath = rootPath,
+                ComicTitle = string.IsNullOrWhiteSpace(ComicTitle) ? resolvedChapterTitle : ComicTitle,
+                ChapterLocalPath = CurrentChapter.LocalPath,
+                ChapterProgressKey = CurrentChapter.EffectiveProgressKey,
+                ChapterIndex = CurrentChapter.Index,
+                ChapterTitle = resolvedChapterTitle,
+                PageIndex = CurrentPageIndex,
+                TotalPages = TotalPages,
+                Memo = string.Empty
+            };
+            _progressStore.AddOrUpdateBookmark(item);
+            RefreshBookmarksList();
+            ShowTransientToast($"🔖 Đã thêm dấu trang: {resolvedChapterTitle} - Trang {CurrentPageDisplayNumber}/{TotalPages}");
+        }
+    }
+
+
+    [RelayCommand]
     public void OpenBookmarkListPopup()
     {
         RefreshBookmarksList();
@@ -2061,7 +2172,12 @@ public partial class ComicReaderViewModel : ViewModelBase
         SyncActivePdfBookmark(clamped);
         RecordReadingProgress(clamped);
         TriggerPrefetch(clamped);
+        if (IsImagePropertiesHudVisible)
+        {
+            UpdateImagePropertiesDetails();
+        }
     }
+
 
     public void RequestScrollToPage(int pageIndex)
     {
