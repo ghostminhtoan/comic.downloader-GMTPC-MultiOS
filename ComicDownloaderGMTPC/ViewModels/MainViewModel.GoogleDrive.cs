@@ -145,6 +145,90 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
+    public void UseCommunityCredentials()
+    {
+        _gdriveService.ApplyCommunityCredentials();
+        var (cid, sec) = _gdriveService.GetClientCredentials();
+        GoogleDriveCustomClientId = cid;
+        GoogleDriveCustomClientSecret = sec;
+        GoogleDriveStatusText = "⚡ Đã kích hoạt Client ID công khai (Quick Connect). Bạn có thể bấm 'ĐĂNG NHẬP GOOGLE DRIVE' ngay!";
+        ShowCenterToast("QUICK CONNECT", "Đã áp dụng Client ID công khai sẵn sàng đăng nhập.", "⚡", "GOOGLE DRIVE", 2500);
+    }
+
+    [RelayCommand]
+    public async Task ImportCredentialsFileAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanOpen)
+            {
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Chọn tệp credentials.json tải từ Google Cloud Console",
+                    AllowMultiple = false,
+                    FileTypeFilter = new List<Avalonia.Platform.Storage.FilePickerFileType>
+                    {
+                        new("Google OAuth Client JSON (*.json)") { Patterns = new[] { "*.json" } },
+                        new("All Files (*.*)") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (files != null && files.Count > 0)
+                {
+                    await using var stream = await files[0].OpenReadAsync();
+                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
+                    string json = await reader.ReadToEndAsync();
+                    var (ok, cid, sec, msg) = _gdriveService.ImportCredentialsFromJson(json);
+                    if (ok)
+                    {
+                        GoogleDriveCustomClientId = cid;
+                        GoogleDriveCustomClientSecret = sec;
+                        GoogleDriveStatusText = "✅ " + msg;
+                        ShowCenterToast("NHẬP THÀNH CÔNG", "Đã nạp Client ID từ tệp JSON.", "✓", "GOOGLE DRIVE", 2500);
+                    }
+                    else
+                    {
+                        GoogleDriveStatusText = "❌ " + msg;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            GoogleDriveStatusText = $"❌ Lỗi nhập tệp JSON: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public void OpenGoogleCloudConsole()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://console.cloud.google.com/apis/credentials",
+                UseShellExecute = true
+            });
+        }
+        catch { }
+    }
+
+    [RelayCommand]
+    public void OpenGoogleDriveApiLibrary()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://console.cloud.google.com/apis/library/drive.googleapis.com",
+                UseShellExecute = true
+            });
+        }
+        catch { }
+    }
+
+    [RelayCommand]
     public async Task LoginGoogleDriveAsync()
     {
         if (IsGoogleDriveBusy) return;

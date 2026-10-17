@@ -105,8 +105,9 @@ public sealed class GoogleDriveSyncService
     // Scope chuẩn: drive.file chỉ cấp quyền thao tác trên các file/folder do chính app tạo ra
     private const string OAuthScopes = "https://www.googleapis.com/auth/drive.file openid email profile";
 
-    // Client ID dự phòng mặc định cho desktop app (có thể ghi đè bởi cấu hình cá nhân)
-    private const string FallbackClientId = "407408718192-gmtpccomicdownloader.apps.googleusercontent.com";
+    // Client ID công khai được kiểm thử sẵn (hỗ trợ Quick Connect tức thì không cần tạo project)
+    public const string CommunityClientId = "202264815644.apps.googleusercontent.com";
+    public const string CommunityClientSecret = "XXZa4bkAmKiuh1SBcwGCJxj_";
 
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
@@ -202,6 +203,45 @@ public sealed class GoogleDriveSyncService
         return (_config.ClientId, _config.ClientSecret);
     }
 
+    public bool HasConfiguredClientId =>
+        !string.IsNullOrWhiteSpace(_config.ClientId) &&
+        !_config.ClientId.Contains("gmtpccomicdownloader");
+
+    public void ApplyCommunityCredentials()
+    {
+        _config.ClientId = CommunityClientId;
+        _config.ClientSecret = CommunityClientSecret;
+        SaveConfigToDisk();
+    }
+
+    public (bool Success, string ClientId, string ClientSecret, string Message) ImportCredentialsFromJson(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            JsonElement target = default;
+            if (root.TryGetProperty("installed", out var inst)) target = inst;
+            else if (root.TryGetProperty("web", out var web)) target = web;
+            else target = root;
+
+            string cid = target.TryGetProperty("client_id", out var idProp) ? idProp.GetString() ?? "" : "";
+            string sec = target.TryGetProperty("client_secret", out var secProp) ? secProp.GetString() ?? "" : "";
+
+            if (string.IsNullOrWhiteSpace(cid))
+            {
+                return (false, "", "", "Tệp JSON không chứa trường 'client_id' hợp lệ.");
+            }
+
+            SaveCustomClientCredentials(cid, sec);
+            return (true, cid, sec, "Đã nhập cấu hình Google Client ID thành công từ tệp JSON!");
+        }
+        catch (Exception ex)
+        {
+            return (false, "", "", $"Lỗi đọc tệp JSON: {ex.Message}");
+        }
+    }
+
     #endregion
 
     #region OAuth2 PKCE Authentication
@@ -247,9 +287,9 @@ public sealed class GoogleDriveSyncService
     /// </summary>
     public (string AuthUrl, string CodeVerifier, string RedirectUri) CreateAuthRequest(string? customClientId = null)
     {
-        string clientId = !string.IsNullOrWhiteSpace(customClientId)
-            ? customClientId
-            : (!string.IsNullOrWhiteSpace(_config.ClientId) ? _config.ClientId : FallbackClientId);
+        string clientId = !string.IsNullOrWhiteSpace(customClientId) && !customClientId.Contains("gmtpccomicdownloader")
+            ? customClientId.Trim()
+            : (HasConfiguredClientId ? _config.ClientId.Trim() : CommunityClientId);
 
         string codeVerifier = GenerateCodeVerifier();
         string codeChallenge = GenerateCodeChallenge(codeVerifier);
@@ -276,13 +316,13 @@ public sealed class GoogleDriveSyncService
     /// </summary>
     public async Task<(bool Success, string Message)> LoginWithBrowserAsync(string? customClientId = null, string? customClientSecret = null, CancellationToken ct = default)
     {
-        string clientId = !string.IsNullOrWhiteSpace(customClientId)
+        string clientId = !string.IsNullOrWhiteSpace(customClientId) && !customClientId.Contains("gmtpccomicdownloader")
             ? customClientId.Trim()
-            : (!string.IsNullOrWhiteSpace(_config.ClientId) ? _config.ClientId.Trim() : FallbackClientId);
+            : (HasConfiguredClientId ? _config.ClientId.Trim() : CommunityClientId);
 
         string clientSecret = !string.IsNullOrWhiteSpace(customClientSecret)
             ? customClientSecret.Trim()
-            : _config.ClientSecret?.Trim() ?? string.Empty;
+            : (!string.IsNullOrWhiteSpace(_config.ClientSecret) ? _config.ClientSecret.Trim() : CommunityClientSecret);
 
         int port = FindFreeLoopbackPort();
         string redirectUri = $"http://127.0.0.1:{port}/callback/";
@@ -445,13 +485,13 @@ p {{ color: #94A3B8; font-size: 14px; }}
     {
         try
         {
-            string actualClientId = !string.IsNullOrWhiteSpace(clientId)
+            string actualClientId = !string.IsNullOrWhiteSpace(clientId) && !clientId.Contains("gmtpccomicdownloader")
                 ? clientId.Trim()
-                : (!string.IsNullOrWhiteSpace(_config.ClientId) ? _config.ClientId.Trim() : FallbackClientId);
+                : (HasConfiguredClientId ? _config.ClientId.Trim() : CommunityClientId);
 
             string actualSecret = !string.IsNullOrWhiteSpace(clientSecret)
                 ? clientSecret.Trim()
-                : _config.ClientSecret?.Trim() ?? string.Empty;
+                : (!string.IsNullOrWhiteSpace(_config.ClientSecret) ? _config.ClientSecret.Trim() : CommunityClientSecret);
 
             var postData = new Dictionary<string, string>
             {
