@@ -708,6 +708,10 @@ p {{ color: #94A3B8; font-size: 14px; }}
                         return _config.CachedAppFolderId;
                     }
                 }
+
+                // Nếu folder trên cloud đã bị xóa hoặc không còn hợp lệ, xóa cache để tạo lại
+                _config.CachedAppFolderId = string.Empty;
+                SaveConfigToDisk();
             }
             catch { }
         }
@@ -749,13 +753,19 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 }
             }
 
-            // Nếu chưa có, tạo mới
-            var payload = new
-            {
-                name = folderName,
-                mimeType = "application/vnd.google-apps.folder",
-                parents = new[] { parentId }
-            };
+            // Nếu chưa có, tạo mới: với folder cha là root không truyền trường 'parents' để Google Drive v3 tự đặt ở root của user
+            object payload = parentId == "root"
+                ? new
+                {
+                    name = folderName,
+                    mimeType = "application/vnd.google-apps.folder"
+                }
+                : new
+                {
+                    name = folderName,
+                    mimeType = "application/vnd.google-apps.folder",
+                    parents = new[] { parentId }
+                };
 
             using var createReq = new HttpRequestMessage(HttpMethod.Post, $"{GoogleDriveApiBase}/files");
             createReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -768,11 +778,17 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 using var createdDoc = JsonDocument.Parse(createdJson);
                 return createdDoc.RootElement.GetProperty("id").GetString();
             }
+            else
+            {
+                string err = await createRes.Content.ReadAsStringAsync(ct);
+                Debug.WriteLine($"[GoogleDriveSync] Tạo thư mục '{folderName}' thất bại ({createRes.StatusCode}): {err}");
+            }
 
             return null;
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"[GoogleDriveSync] Ngoại lệ khi tạo/tìm thư mục '{folderName}': {ex.Message}");
             return null;
         }
     }
@@ -829,6 +845,14 @@ p {{ color: #94A3B8; font-size: 14px; }}
         return new GoogleDriveFileInfo();
     }
 
+    private static string SanitizeMediaType(string? rawMimeType, string fallback = "text/plain")
+    {
+        if (string.IsNullOrWhiteSpace(rawMimeType)) return fallback;
+        int idx = rawMimeType.IndexOf(';');
+        string clean = (idx >= 0 ? rawMimeType[..idx] : rawMimeType).Trim();
+        return string.IsNullOrWhiteSpace(clean) ? fallback : clean;
+    }
+
     /// <summary>
     /// Tải lên hoặc cập nhật tệp tin trong thư mục đích trên Google Drive.
     /// </summary>
@@ -836,11 +860,13 @@ p {{ color: #94A3B8; font-size: 14px; }}
         string folderId,
         string fileName,
         string content,
-        string mimeType = "text/markdown; charset=utf-8",
+        string mimeType = "text/markdown",
         CancellationToken ct = default)
     {
         string? token = await EnsureValidAccessTokenAsync(ct);
         if (string.IsNullOrEmpty(token)) return (false, "", "Chưa đăng nhập hoặc không lấy được token Google Drive.");
+
+        string cleanMime = SanitizeMediaType(mimeType, "text/plain");
 
         try
         {
@@ -852,18 +878,20 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 string uploadUrl = $"{GoogleDriveUploadBase}/files/{existing.Id}?uploadType=media";
                 using var patchReq = new HttpRequestMessage(HttpMethod.Patch, uploadUrl);
                 patchReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                patchReq.Content = new StringContent(content, Encoding.UTF8, mimeType);
+                patchReq.Content = new StringContent(content, Encoding.UTF8, cleanMime);
 
                 using var patchRes = await _httpClient.SendAsync(patchReq, ct);
                 if (patchRes.IsSuccessStatusCode)
                 {
                     return (true, existing.Id, $"Đã cập nhật tệp {fileName} trên Google Drive.");
                 }
-                return (false, existing.Id, $"Lỗi cập nhật {fileName}: {patchRes.StatusCode}");
+
+                string patchErr = await patchRes.Content.ReadAsStringAsync(ct);
+                return (false, existing.Id, $"Lỗi cập nhật {fileName} ({patchRes.StatusCode}): {patchErr}");
             }
             else
             {
-                // POST tạo mới bằng Multipart Upload
+                // POST tạo mới bằng Multipart Upload (chuẩn multipart/related của Google Drive REST API v3)
                 string boundary = "----GMTPCGoogleDriveBoundary" + DateTime.UtcNow.Ticks.ToString("x");
                 string uploadUrl = $"{GoogleDriveUploadBase}/files?uploadType=multipart";
 
@@ -874,12 +902,11 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 };
                 string metaJson = JsonSerializer.Serialize(metadata);
 
-                var multipart = new MultipartFormDataContent(boundary);
+                var multipart = new MultipartContent("related", boundary);
                 var metaContent = new StringContent(metaJson, Encoding.UTF8, "application/json");
-                metaContent.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "UTF-8" };
                 multipart.Add(metaContent);
 
-                var fileContent = new StringContent(content, Encoding.UTF8, mimeType);
+                var fileContent = new StringContent(content, Encoding.UTF8, cleanMime);
                 multipart.Add(fileContent);
 
                 using var postReq = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
@@ -895,7 +922,8 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     return (true, id, $"Đã tải lên tệp mới {fileName} vào thư mục {DefaultTargetFolderPath}");
                 }
 
-                return (false, "", $"Lỗi tạo tệp {fileName}: {postRes.StatusCode}");
+                string postErr = await postRes.Content.ReadAsStringAsync(ct);
+                return (false, "", $"Lỗi tạo tệp {fileName} ({postRes.StatusCode}): {postErr}");
             }
         }
         catch (Exception ex)
@@ -994,7 +1022,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
             if (string.IsNullOrEmpty(folderId)) return (false, "Không thể mở hoặc tạo thư mục trên Google Drive.");
 
             string mdContent = QueueBackupService.Instance.BuildQueueMarkdownContent(items);
-            var (ok, _, msg) = await UploadOrUpdateFileAsync(folderId, QueueFileName, mdContent, "text/markdown; charset=utf-8", ct);
+            var (ok, _, msg) = await UploadOrUpdateFileAsync(folderId, QueueFileName, mdContent, "text/markdown", ct);
 
             if (ok)
             {
@@ -1050,7 +1078,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
             if (string.IsNullOrEmpty(folderId)) return (false, "Không thể kết nối thư mục Google Drive.");
 
             string mdContent = ReadProgressStore.Instance.BuildReaderMarkdownContent();
-            var (ok, _, msg) = await UploadOrUpdateFileAsync(folderId, ReaderFileName, mdContent, "text/markdown; charset=utf-8", ct);
+            var (ok, _, msg) = await UploadOrUpdateFileAsync(folderId, ReaderFileName, mdContent, "text/markdown", ct);
 
             if (ok)
             {
@@ -1158,7 +1186,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 target_folder = DefaultTargetFolderPath
             };
             string json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
-            await UploadOrUpdateFileAsync(folderId, ManifestFileName, json, "application/json; charset=utf-8", ct);
+            await UploadOrUpdateFileAsync(folderId, ManifestFileName, json, "application/json", ct);
         }
         catch { }
     }
