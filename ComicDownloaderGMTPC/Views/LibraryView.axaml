@@ -320,6 +320,20 @@
                                                 Background="#131C31" BorderBrush="#1E293B" BorderThickness="0,0,0,1"
                                                 CornerRadius="4" Padding="8,6" HorizontalAlignment="Stretch"
                                                 HorizontalContentAlignment="Stretch">
+                                            <Button.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="▶ Đọc truyện / Mở"
+                                                              Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
+                                                              CommandParameter="{Binding}" />
+                                                    <Separator Background="#1E293B" Height="1" Margin="2,3" />
+                                                    <MenuItem Header="🔄 Xóa vị trí đọc dở"
+                                                              Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ClearComicResumeCommand}"
+                                                              CommandParameter="{Binding}" />
+                                                    <MenuItem Header="📑 Xóa dấu trang truyện này"
+                                                              Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ClearComicBookmarksCommand}"
+                                                              CommandParameter="{Binding}" />
+                                                </ContextMenu>
+                                            </Button.ContextMenu>
                                             <Grid ColumnDefinitions="52, *, Auto">
                                                 <!-- Cột 1: Ảnh bìa chữ nhật đứng chuẩn ComicScreen -->
                                                 <Border Grid.Column="0" Width="50" Height="70" CornerRadius="4" Background="#090D16" ClipToBounds="True">
@@ -500,6 +514,14 @@
                                                             <MenuItem Header="📂 Mở thư mục chứa"
                                                                       Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).OpenHistoryItemFolderCommand}"
                                                                       CommandParameter="{Binding}" />
+                                                            <Separator Background="#1E293B" Height="1" Margin="2,3" />
+                                                            <MenuItem Header="🔄 Xóa vị trí đọc dở"
+                                                                      Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ClearComicResumeCommand}"
+                                                                      CommandParameter="{Binding}" />
+                                                            <MenuItem Header="📑 Xóa dấu trang truyện này"
+                                                                      Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ClearComicBookmarksCommand}"
+                                                                      CommandParameter="{Binding}" />
+                                                            <Separator Background="#1E293B" Height="1" Margin="2,3" />
                                                             <MenuItem Header="🗑️ Xóa khỏi lịch sử"
                                                                       Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).RemoveHistoryItemCommand}"
                                                                       CommandParameter="{Binding}" />
@@ -549,10 +571,18 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="models:BookmarkGroupModel">
                                     <StackPanel Margin="0,2,0,8">
-                                        <!-- Header Tên bộ truyện màu Cyan (chuẩn ảnh 4) -->
+                                        <!-- Header Tên bộ truyện màu Cyan kèm nút Xóa toàn bộ dấu trang bộ này -->
                                         <Border Background="#1A2436" BorderBrush="#2D3B55" BorderThickness="0,0,0,1" Padding="10,6">
-                                            <TextBlock Text="{Binding ComicTitle}" Foreground="#38BDF8" FontWeight="Bold" FontSize="13"
-                                                       TextTrimming="CharacterEllipsis" />
+                                            <Grid ColumnDefinitions="*, Auto">
+                                                <TextBlock Grid.Column="0" Text="{Binding ComicTitle}" Foreground="#38BDF8" FontWeight="Bold" FontSize="13"
+                                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <Button Grid.Column="1" Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ClearComicBookmarksCommand}"
+                                                        CommandParameter="{Binding}"
+                                                        Background="Transparent" BorderThickness="0" Padding="6,2"
+                                                        ToolTip.Tip="Xóa toàn bộ dấu trang của bộ truyện này">
+                                                    <TextBlock Text="🗑️ Xóa dấu trang bộ này" Foreground="#F87171" FontSize="10.5" FontWeight="SemiBold" />
+                                                </Button>
+                                            </Grid>
                                         </Border>
 
                                         <!-- Các mục bookmark con bên trong bộ truyện -->

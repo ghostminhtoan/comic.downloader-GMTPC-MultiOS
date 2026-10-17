@@ -67,6 +67,13 @@ public class NaturalSortComparer : IComparer<string>
             }
             else
             {
+                int wx = GetCharCategoryWeight(cx);
+                int wy = GetCharCategoryWeight(cy);
+                if (wx != wy)
+                {
+                    return wx.CompareTo(wy);
+                }
+
                 int charCompare = char.ToUpperInvariant(cx).CompareTo(char.ToUpperInvariant(cy));
                 if (charCompare != 0)
                 {
@@ -78,6 +85,21 @@ public class NaturalSortComparer : IComparer<string>
         }
 
         return lenX.CompareTo(lenY);
+    }
+
+    /// <summary>
+    /// Trọng số phân lớp ký tự:
+    /// 0: Khoảng trắng
+    /// 1: Ký tự đặc biệt / dấu ngoặc / ký hiệu: [, ], (, ), _, -, #, !, @... (Luôn xếp TRƯỚC chữ cái A-Z và chữ số)
+    /// 2: Chữ số 0-9
+    /// 3: Chữ cái A-Z
+    /// </summary>
+    private static int GetCharCategoryWeight(char c)
+    {
+        if (char.IsWhiteSpace(c)) return 0;
+        if (!char.IsLetterOrDigit(c)) return 1;
+        if (char.IsDigit(c)) return 2;
+        return 3;
     }
 }
 

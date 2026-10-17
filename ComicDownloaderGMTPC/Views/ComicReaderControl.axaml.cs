@@ -1534,7 +1534,7 @@ public partial class ComicReaderControl : UserControl
         double offsetY = scrollViewer != null ? scrollViewer.Offset.Y : 0;
         double viewportTop = offsetY;
         double viewportBottom = offsetY + vh;
-        double viewportMid = offsetY + vh * 0.5;
+        double viewportMidY = offsetY + vh * 0.5;
 
         // 1. Kiểm tra Hysteresis cho CurrentPageIndex
         double currentAccY = 0;
@@ -1563,7 +1563,7 @@ public partial class ComicReaderControl : UserControl
             // Miễn là trang hiện tại còn hiển thị ít nhất 25% chiều cao trên màn hình
             // HOẶC bao phủ vùng giữa màn hình (từ 40% đến 60% vh):
             // -> GIỮ NGUYÊN CurrentPageIndex, TUYỆT ĐỐI KHÔNG TUA TRANG!
-            if (visibleHeight >= vh * 0.25 || (curPageTop <= viewportMid && curPageBottom >= viewportMid))
+            if (visibleHeight >= vh * 0.25 || (curPageTop <= viewportMidY && curPageBottom >= viewportMidY))
             {
                 return;
             }

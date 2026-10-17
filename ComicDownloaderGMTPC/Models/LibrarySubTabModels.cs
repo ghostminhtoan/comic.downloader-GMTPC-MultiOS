@@ -74,11 +74,14 @@ public partial class DirectoryItemModel : ObservableObject
 
     public string FileSizeText { get; set; } = string.Empty;
 
-    public string ReadingProgressText { get; set; } = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasReadingProgress))]
+    private string _readingProgressText = string.Empty;
 
     public bool HasReadingProgress => !string.IsNullOrWhiteSpace(ReadingProgressText);
 
-    public double ProgressPercent { get; set; }
+    [ObservableProperty]
+    private double _progressPercent;
 }
 
 public partial class HistoryItemModel : ObservableObject

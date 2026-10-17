@@ -352,6 +352,62 @@ public sealed class ReadProgressStore
         MarkDirtyAndScheduleFlush();
     }
 
+    /// <summary>
+    /// Xóa toàn bộ tiến độ đọc dở (Resume progress) của riêng một bộ truyện hoặc tập tin cụ thể.
+    /// Đưa vị trí đọc về ban đầu (0%), đồng thời bảo toàn hoặc xóa lịch sử theo nhu cầu.
+    /// </summary>
+    public void ClearProgressForComic(string comicRootOrFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(comicRootOrFilePath)) return;
+        string cleanPath = NormalizeKey(comicRootOrFilePath);
+        string leafName = Path.GetFileName(cleanPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+        var keysToRemove = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Khóa trực tiếp và khóa chương cuối cùng
+        keysToRemove.Add(cleanPath);
+        keysToRemove.Add(cleanPath + "::#last_active_chapter");
+
+        // Portable keys
+        foreach (var pk in BuildPortableIdentityKeys(cleanPath))
+        {
+            keysToRemove.Add(pk);
+        }
+        foreach (var pk in BuildPortableIdentityKeys(cleanPath + "::#last_active_chapter"))
+        {
+            keysToRemove.Add(pk);
+        }
+
+        string prefixSep1 = cleanPath + Path.DirectorySeparatorChar;
+        string prefixSep2 = cleanPath + "/";
+        string prefixSep3 = cleanPath + "::";
+
+        foreach (var key in _progressMap.Keys)
+        {
+            if (string.Equals(key, cleanPath, StringComparison.OrdinalIgnoreCase) ||
+                key.StartsWith(prefixSep1, StringComparison.OrdinalIgnoreCase) ||
+                key.StartsWith(prefixSep2, StringComparison.OrdinalIgnoreCase) ||
+                key.StartsWith(prefixSep3, StringComparison.OrdinalIgnoreCase))
+            {
+                keysToRemove.Add(key);
+            }
+            else if (!string.IsNullOrWhiteSpace(leafName) && key.StartsWith(PortableIdPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                if (key.Contains(leafName, StringComparison.OrdinalIgnoreCase))
+                {
+                    keysToRemove.Add(key);
+                }
+            }
+        }
+
+        foreach (var k in keysToRemove)
+        {
+            _progressMap.TryRemove(k, out _);
+        }
+
+        MarkDirtyAndScheduleFlush();
+    }
+
     public void ClearAllHistory()
     {
         foreach (var key in _progressMap.Keys.Where(k => k.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase) || k.StartsWith(FolderHistoryPrefix, StringComparison.OrdinalIgnoreCase)).ToList())
@@ -536,6 +592,63 @@ public sealed class ReadProgressStore
         {
             _bookmarks.Clear();
             SaveBookmarksToDisk();
+        }
+    }
+
+    /// <summary>
+    /// Xóa toàn bộ dấu trang (Bookmarks) thuộc về riêng một bộ truyện hoặc tập tin cụ thể.
+    /// Trả về số lượng bookmark đã bị xóa.
+    /// </summary>
+    public int ClearBookmarksForComic(string comicRootOrFilePath, string? comicTitle = null)
+    {
+        if (string.IsNullOrWhiteSpace(comicRootOrFilePath) && string.IsNullOrWhiteSpace(comicTitle)) return 0;
+
+        string cleanPath = !string.IsNullOrWhiteSpace(comicRootOrFilePath) ? NormalizeKey(comicRootOrFilePath) : string.Empty;
+        string leaf = !string.IsNullOrWhiteSpace(cleanPath)
+            ? Path.GetFileName(cleanPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            : string.Empty;
+
+        lock (_bookmarkLock)
+        {
+            int removed = _bookmarks.RemoveAll(b =>
+            {
+                if (!string.IsNullOrEmpty(cleanPath) &&
+                    string.Equals(NormalizeKey(b.ComicRootPath), cleanPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(comicTitle) &&
+                    string.Equals(b.ComicTitle, comicTitle, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(leaf))
+                {
+                    string bLeaf = Path.GetFileName(NormalizeKey(b.ComicRootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    if (string.Equals(bLeaf, leaf, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(b.ComicTitle, leaf, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(cleanPath) && !string.IsNullOrWhiteSpace(b.ChapterLocalPath) &&
+                    (b.ChapterLocalPath.StartsWith(cleanPath, StringComparison.OrdinalIgnoreCase) ||
+                     (!string.IsNullOrEmpty(leaf) && b.ChapterLocalPath.Contains(leaf, StringComparison.OrdinalIgnoreCase))))
+                {
+                    return true;
+                }
+
+                return false;
+            });
+
+            if (removed > 0)
+            {
+                SaveBookmarksToDisk();
+            }
+            return removed;
         }
     }
 

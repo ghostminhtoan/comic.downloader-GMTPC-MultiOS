@@ -1522,6 +1522,102 @@ public partial class LibraryViewModel : ViewModelBase
         StatusMessage = "🗑️ Đã xóa toàn bộ Lịch sử đọc.";
     }
 
+    [RelayCommand]
+    public void ClearComicResume(object? param)
+    {
+        string? path = null;
+        string? title = null;
+
+        if (param is HistoryItemModel h)
+        {
+            path = h.Path;
+            title = h.Title;
+            h.CurrentPage = 0;
+            h.ProgressPercent = 0;
+            h.ProgressText = h.TotalPages > 0 ? $"0/{h.TotalPages}    0%" : "0%";
+        }
+        else if (param is LibraryComicItem c)
+        {
+            path = c.RootFolderPath;
+            title = c.Title;
+        }
+        else if (param is DirectoryItemModel d)
+        {
+            path = d.FullPath;
+            title = d.Name;
+            d.ReadingProgressText = string.Empty;
+            d.ProgressPercent = 0;
+        }
+        else if (param is string s)
+        {
+            path = s;
+            title = Path.GetFileName(s.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        }
+
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        ReadProgressStore.Instance.ClearProgressForComic(path);
+
+        if (param is LibraryComicItem comicItem)
+        {
+            comicItem.RefreshReadStatus();
+            ApplyFilter();
+        }
+        else
+        {
+            var existing = AllComics.FirstOrDefault(ci => string.Equals(ci.RootFolderPath, path, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                existing.RefreshReadStatus();
+                ApplyFilter();
+            }
+        }
+
+        StatusMessage = $"🔄 Đã xóa vị trí đọc dở của '{title ?? path}'.";
+    }
+
+    [RelayCommand]
+    public void ClearComicBookmarks(object? param)
+    {
+        string? path = null;
+        string? title = null;
+
+        if (param is HistoryItemModel h)
+        {
+            path = h.Path;
+            title = h.Title;
+        }
+        else if (param is LibraryComicItem c)
+        {
+            path = c.RootFolderPath;
+            title = c.Title;
+        }
+        else if (param is BookmarkGroupModel bg)
+        {
+            path = bg.ComicRootPath;
+            title = bg.ComicTitle;
+        }
+        else if (param is DirectoryItemModel d)
+        {
+            path = d.FullPath;
+            title = d.Name;
+        }
+        else if (param is string s)
+        {
+            path = s;
+            title = Path.GetFileName(s.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        }
+
+        if (string.IsNullOrWhiteSpace(path) && string.IsNullOrWhiteSpace(title)) return;
+
+        int count = ReadProgressStore.Instance.ClearBookmarksForComic(path ?? string.Empty, title);
+        LoadBookmarkGroups();
+
+        StatusMessage = count > 0
+            ? $"📑 Đã xóa toàn bộ {count} dấu trang của '{title ?? path}'."
+            : $"📑 Truyện '{title ?? path}' không có dấu trang nào.";
+    }
+
     public void LoadBookmarkGroups()
     {
         try
