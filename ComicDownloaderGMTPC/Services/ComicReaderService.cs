@@ -164,6 +164,9 @@ public sealed class ComicReaderService
 
                     if (page.IsArchiveEntry || page.IsRarEntry || page.IsMobiEntry || page.IsPdfEntry)
                     {
+                        // Đối với RAR, Single-Pass Extractor nền đã tự động tuần tự giải nén ra đĩa; chỉ precache các trang gần hiện tại
+                        if (page.IsRarEntry && Math.Abs(idx - current) > 4) continue;
+
                         string subKey = page.IsMobiEntry ? $"mobi_p_{page.MobiPageIndex}"
                                       : page.IsPdfEntry ? $"pdf_p_{page.PdfPageIndex}"
                                       : !string.IsNullOrEmpty(page.ArchiveEntryFullName) ? page.ArchiveEntryFullName

@@ -811,6 +811,28 @@ public sealed class LibraryScannerService
             // TRƯỜNG HỢP 2: File phẳng nhưng có quá nhiều ảnh (> 120 trang) -> chia thành các chương 80 trang
             if (flatSorted.Count > 120)
             {
+                string allProgressKey = $"{archivePath}::{scheme}_all_pages";
+                int allSavedPage = ReadProgressStore.Instance.GetLastReadPage(allProgressKey);
+                if (allSavedPage <= 0 && legacyGlobalPage1Based > 0)
+                {
+                    allSavedPage = legacyGlobalPage1Based;
+                }
+
+                // Luôn có mục 'Toàn bộ truyện' để người dùng có thể đọc trọn vẹn từ trang 1 đến trang N như Comic Screen
+                list.Add(new LibraryChapterItem
+                {
+                    Index = nextIndex++,
+                    Title = $"Toàn bộ truyện (Tất cả {flatSorted.Count} trang)",
+                    LocalPath = archivePath,
+                    ProgressKey = allProgressKey,
+                    IsCbz = !isRar,
+                    IsRar = isRar,
+                    ArchiveEntryNames = flatSorted,
+                    TotalPages = flatSorted.Count,
+                    LastReadPage = allSavedPage,
+                    LastModified = lastMod
+                });
+
                 int partNum = 1;
                 for (int start = 0; start < flatSorted.Count; start += DefaultAutoSplitPagesPerChapter)
                 {
