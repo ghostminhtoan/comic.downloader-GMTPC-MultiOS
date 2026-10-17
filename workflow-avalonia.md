@@ -3122,3 +3122,7 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      * Bảng cấu hình tùy biến Client ID & Client Secret cá nhân từ Google Cloud Console (dành cho người dùng muốn sở hữu OAuth app riêng).
 
 
+4. **Khắc Phục Sự Cố Upload Tệp & Quản Lý Thư Mục Google Drive**:
+   - **Xử lý MIME Type trong .NET**: Loại bỏ phần tham số `; charset=utf-8` khi truyền vào `StringContent`, bổ sung hàm `SanitizeMediaType()` lọc sạch media-type token đơn (ví dụ `text/markdown`, `application/json`) nhằm ngăn chặn ngoại lệ `FormatException: The format of value 'text/markdown; charset=utf-8' is invalid.` của `MediaTypeHeaderValue`.
+   - **Chuẩn hóa Multipart Upload Google Drive REST API v3**: Chuyển đổi từ `MultipartFormDataContent` (sinh `multipart/form-data`) sang `MultipartContent("related", boundary)` (sinh `multipart/related`) không mang header `Content-Disposition: form-data` thừa, đáp ứng 100% đặc tả upload của Google Drive.
+   - **Tối ưu hóa Thư mục Gốc**: Khi tạo thư mục cha `GMTPC` tại `root`, không truyền trường `parents: ["root"]` để Google Drive v3 tự động đặt vào thư mục gốc của Drive người dùng; đồng thời tự động dọn sạch cache `CachedAppFolderId` nếu thư mục bị xóa hoặc không hợp lệ.
