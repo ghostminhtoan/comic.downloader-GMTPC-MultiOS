@@ -3144,11 +3144,12 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      * Phương thức `RenameDeviceFolderAsync(newName)`: Gọi PATCH `files/{folderId}` của Google Drive REST API v3 để đổi tên thư mục từ tên cũ sang tên mới (ví dụ `[Windows] ADMIN-PC` -> `231`).
      * Xử lý gộp thư mục (`MergeDeviceFoldersAsync`): Nếu cả thư mục cũ và thư mục mới đều đã tồn tại trên Drive, hệ thống tự động di chuyển toàn bộ tệp sao lưu từ thư mục cũ sang mới, sau đó đưa thư mục rác cũ vào thùng rác (`TrashFileAsync`), đảm bảo dữ liệu không bị thất lạc.
      * Nâng cấp `GetCloudDeviceSlotsAsync()`: Quét tìm các slot thiết bị ở cả thư mục con trực tiếp trong `Comic Downloader GMTPC/` và thư mục `Devices/`, khắc phục triệt để lỗi ComboBox danh sách nguồn phục hồi bị rỗng.
-   - **Tối ưu hóa trải nghiệm Google Drive trên Android**:
+   - **Tối ưu hóa trải nghiệm & Khắc phục sự cố Đăng nhập Google Drive trên Android**:
      * Nút `☁️ DRIVE` trên Header Bar của `MainView.axaml`: Luôn luôn hiển thị ở đầu màn hình trên mọi nền tảng và mọi tab.
      * Nút `☁️ Google Drive` trên thanh công cụ chính của Thư viện (`LibraryView.axaml`): Mở hộp thoại Cloud Sync ngay từ giao diện Thư viện.
-     * Tự động điều hướng trên Android (`OperatingSystem.IsAndroid()`): Tự động chuyển sang luồng Manual Code Flow do Android không hỗ trợ mở HttpListener loopback.
-     * Tiện ích cảm ứng 1 chạm: Bổ sung 3 nút trợ lực: `🌐 Mở Trình Duyệt` (`LaunchWebUrlAsync`), `📋 Chép Link` (Clipboard), và `📋 Dán Mã` (Clipboard) giúp người dùng Android đăng nhập Google Drive dễ dàng.
+     * Đa nhiệm Loopback Listener + Trình duyệt chéo nền tảng: `GoogleDriveSyncService` kích hoạt `OpenBrowserAsyncHandler` thông qua `LaunchWebUrlAsync` (Avalonia Launcher / Android ActionView) kết hợp chạy ngầm `HttpListener` cục bộ.
+     * Lưu vết an toàn `LastCodeVerifier` & `LastRedirectUri` vào cấu hình đĩa: Phòng ngừa trường hợp Android quản lý bộ nhớ tạm ngưng app trong lúc người dùng thao tác ở Chrome.
+     * Giải quyết triệt để lỗi trình duyệt `ERR_CONNECTION_REFUSED` (127.0.0.1 từ chối kết nối): Khi Google hoàn tất xác thực và chuyển hướng về `http://127.0.0.1:{port}/callback/?code=...`, nếu trình duyệt không thể gửi HTTP request tới app ngầm, người dùng chỉ cần sao chép toàn bộ đường link trên thanh địa chỉ. Nút `📋 Dán Mã & Xác Nhận` tự động phân tích query string, trích xuất chính xác cả `code` lẫn `redirect_uri`, giải phóng cổng listener đang chờ và gửi yêu cầu đổi token thành công 100% trong 1 chạm.
 
 
 

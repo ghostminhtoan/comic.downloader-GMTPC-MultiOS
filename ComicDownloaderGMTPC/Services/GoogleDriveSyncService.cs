@@ -36,6 +36,8 @@ public sealed class GoogleDriveAuthConfig
     public string DeviceId { get; set; } = string.Empty;
     public string CustomDeviceName { get; set; } = string.Empty;
     public string CachedDeviceFolderId { get; set; } = string.Empty;
+    public string LastCodeVerifier { get; set; } = string.Empty;
+    public string LastRedirectUri { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -175,6 +177,22 @@ public sealed class GoogleDriveSyncService
     }
     public DateTime LastSyncUtc => _config.LastSyncUtc;
     public string TargetFolderId => _config.CachedAppFolderId;
+    public string LastCodeVerifier => _config.LastCodeVerifier;
+    public string LastRedirectUri => _config.LastRedirectUri;
+
+    public static Func<string, Task>? OpenBrowserAsyncHandler { get; set; }
+    private CancellationTokenSource? _activeLoginCts;
+    private HttpListener? _activeListener;
+
+    public void CancelActiveBrowserLogin()
+    {
+        try
+        {
+            _activeLoginCts?.Cancel();
+            _activeListener?.Stop();
+        }
+        catch { }
+    }
 
     #region Configuration Storage
 
@@ -380,6 +398,10 @@ public sealed class GoogleDriveSyncService
         int port = FindFreeLoopbackPort();
         string redirectUri = $"http://127.0.0.1:{port}/callback/";
 
+        _config.LastCodeVerifier = codeVerifier;
+        _config.LastRedirectUri = redirectUri;
+        SaveConfigToDisk();
+
         var query = new StringBuilder();
         query.Append($"{GoogleAuthEndpoint}?");
         query.Append($"client_id={Uri.EscapeDataString(clientId)}");
@@ -397,7 +419,11 @@ public sealed class GoogleDriveSyncService
     /// <summary>
     /// Bắt đầu quy trình đăng nhập Google Drive (Loopback server trên Desktop + Browser).
     /// </summary>
-    public async Task<(bool Success, string Message)> LoginWithBrowserAsync(string? customClientId = null, string? customClientSecret = null, CancellationToken ct = default)
+    public async Task<(bool Success, string Message)> LoginWithBrowserAsync(
+        string? customClientId = null, 
+        string? customClientSecret = null, 
+        Action<string, string, string>? onAuthPrepared = null,
+        CancellationToken ct = default)
     {
         string clientId = !string.IsNullOrWhiteSpace(customClientId) && !customClientId.Contains("gmtpccomicdownloader")
             ? customClientId.Trim()
@@ -419,6 +445,10 @@ public sealed class GoogleDriveSyncService
         string codeVerifier = GenerateCodeVerifier();
         string codeChallenge = GenerateCodeChallenge(codeVerifier);
 
+        _config.LastCodeVerifier = codeVerifier;
+        _config.LastRedirectUri = redirectUri;
+        SaveConfigToDisk();
+
         string authUrl = $"{GoogleAuthEndpoint}?" +
             $"client_id={Uri.EscapeDataString(clientId)}" +
             $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
@@ -429,49 +459,71 @@ public sealed class GoogleDriveSyncService
             $"&access_type=offline" +
             $"&prompt=consent";
 
+        onAuthPrepared?.Invoke(authUrl, codeVerifier, redirectUri);
+
         HttpListener? listener = null;
         try
         {
             listener = new HttpListener();
             listener.Prefixes.Add(redirectUri);
             listener.Start();
+            _activeListener = listener;
         }
         catch (Exception ex)
         {
-            return (false, $"Không thể khởi tạo cổng lắng nghe cục bộ ({ex.Message}). Vui lòng dùng phương thức nhập mã thủ công.");
+            // Nếu cổng loopback bị chặn, mở link cho người dùng để họ copy mã
+            if (OpenBrowserAsyncHandler != null)
+            {
+                _ = OpenBrowserAsyncHandler(authUrl);
+            }
+            return (false, $"Cổng lắng nghe cục bộ không mở được ({ex.Message}). Link đã được tạo, vui lòng sao chép link trên trình duyệt và dán vào ô bên dưới.");
         }
+
+        using var linkedLoginCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _activeLoginCts = linkedLoginCts;
 
         try
         {
-            // Mở trình duyệt mặc định
-            try
+            // Mở trình duyệt mặc định cross-platform
+            if (OpenBrowserAsyncHandler != null)
             {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = authUrl,
-                    UseShellExecute = true
-                });
+                await OpenBrowserAsyncHandler(authUrl);
             }
-            catch
+            else
             {
-                // Nếu không mở được shell, thử dùng explorer trên Windows
-                if (OperatingSystem.IsWindows())
+                try
                 {
-                    Process.Start("explorer", authUrl);
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = authUrl,
+                        UseShellExecute = true
+                    });
+                }
+                catch
+                {
+                    if (OperatingSystem.IsWindows())
+                    {
+                        Process.Start("explorer", authUrl);
+                    }
                 }
             }
 
             // Chờ phản hồi callback từ trình duyệt tối đa 2 phút
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+            using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(linkedLoginCts.Token, timeoutCts.Token);
 
             var contextTask = listener.GetContextAsync();
-            var completedTask = await Task.WhenAny(contextTask, Task.Delay(Timeout.Infinite, linkedCts.Token));
+            var completedTask = await Task.WhenAny(contextTask, Task.Delay(Timeout.Infinite, combinedCts.Token));
 
             if (completedTask != contextTask)
             {
                 listener.Stop();
-                return (false, "Hết thời gian chờ cấp quyền từ trình duyệt (2 phút) hoặc người dùng đã hủy.");
+                _activeListener = null;
+                if (linkedLoginCts.IsCancellationRequested)
+                {
+                    return (false, "Đã chuyển sang chế độ xác thực thủ công.");
+                }
+                return (false, "Hết thời gian chờ cấp quyền từ trình duyệt (2 phút). Nếu trình duyệt đã hiện '127.0.0.1 từ chối kết nối', bạn chỉ cần sao chép liên kết thanh địa chỉ rồi bấm '📋 Dán Mã & Xác Nhận'.");
             }
 
             var context = await contextTask;
@@ -534,6 +586,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
             await response.OutputStream.WriteAsync(buffer, ct);
             response.OutputStream.Close();
             listener.Stop();
+            _activeListener = null;
 
             if (!string.IsNullOrEmpty(error))
             {
@@ -559,6 +612,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
         finally
         {
             try { listener?.Stop(); listener?.Close(); } catch { }
+            _activeListener = null;
         }
     }
 

@@ -5342,17 +5342,25 @@
                                                         </Button>
                                                     </Grid>
 
-                                                    <TextBlock Text="2. Dán mã Authorization Code hoặc URL callback nhận được vào đây:" Foreground="#94A3B8" FontSize="10.5" Margin="0,4,0,0" />
+                                                    <!-- Khung hướng dẫn thông minh khi gặp ERR_CONNECTION_REFUSED trên Android -->
+                                                    <Border Background="#1E1B4B" BorderBrush="#6366F1" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,2,0,2">
+                                                        <StackPanel Spacing="2">
+                                                            <TextBlock Text="💡 NẾU TRÌNH DUYỆT BÁO '127.0.0.1 TỪ CHỐI KẾT NỐI' (ERR_CONNECTION_REFUSED):" Foreground="#A5B4FC" FontSize="10" FontWeight="Bold" />
+                                                            <TextBlock Text="Google đã xác thực xong! Bạn chỉ cần: Chạm thanh địa chỉ trình duyệt ➔ Sao chép (Copy) toàn bộ link ➔ Bấm nút [📋 Dán Mã &amp; Xác Nhận] bên dưới!" Foreground="#CBD5E1" FontSize="10" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <TextBlock Text="2. Dán mã Authorization Code hoặc liên kết callback 127.0.0.1 nhận được vào đây:" Foreground="#94A3B8" FontSize="10.5" Margin="0,2,0,0" />
                                                     <Grid ColumnDefinitions="*, Auto, Auto" ColumnSpacing="6">
                                                         <TextBox Grid.Column="0" Text="{Binding GoogleDriveManualCodeInput}" PlaceholderText="Dán mã code hoặc URL callback..." Height="30" FontSize="11" Background="#0B0F19" />
                                                         <Button Grid.Column="1" Command="{Binding PasteManualCodeCommand}"
-                                                                Background="#334155" Foreground="#F8FAFC" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30"
-                                                                ToolTip.Tip="Dán nhanh từ bộ nhớ tạm">
-                                                            <TextBlock Text="📋 Dán Mã" FontSize="10.5" />
+                                                                Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="10,5" Height="30"
+                                                                ToolTip.Tip="Tự động đọc mã từ bộ nhớ tạm và hoàn tất đăng nhập ngay">
+                                                            <TextBlock Text="📋 Dán Mã &amp; Xác Nhận" FontSize="10.5" />
                                                         </Button>
                                                         <Button Grid.Column="2" Command="{Binding ConfirmManualCodeGoogleDriveCommand}"
-                                                                Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="12,5" Height="30">
-                                                            <TextBlock Text="✓ XÁC NHẬN" FontSize="11" />
+                                                                Background="#1E293B" BorderBrush="#334155" BorderThickness="1" Foreground="#94A3B8" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30">
+                                                            <TextBlock Text="✓ Xác Nhận" FontSize="10.5" />
                                                         </Button>
                                                     </Grid>
                                                 </StackPanel>

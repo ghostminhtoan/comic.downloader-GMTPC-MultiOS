@@ -204,6 +204,9 @@ public partial class MainViewModel
 
         // Liên kết callback mở Google Drive Modal từ LibraryViewModel
         LibraryVm.OpenGoogleDriveAction = () => OpenGoogleDriveModal();
+
+        // Cung cấp handler mở trình duyệt đa nền tảng (Avalonia Launcher / Android Intent / Process.Start)
+        GoogleDriveSyncService.OpenBrowserAsyncHandler = async url => await LaunchWebUrlAsync(url);
     }
 
     [RelayCommand]
@@ -327,21 +330,28 @@ public partial class MainViewModel
 
         // Nếu chạy trên Android, HttpListener loopback không hoạt động -> tự động chuyển sang Manual Code Flow
         if (OperatingSystem.IsAndroid())
-        {
-            await StartManualLoginGoogleDriveAsync();
-            return;
-        }
-
         IsGoogleDriveBusy = true;
         GoogleDriveStatusText = "⏳ Đang mở trình duyệt để xác thực tài khoản Google...";
         try
         {
-            var (ok, msg) = await _gdriveService.LoginWithBrowserAsync(GoogleDriveCustomClientId, GoogleDriveCustomClientSecret);
+            var (ok, msg) = await _gdriveService.LoginWithBrowserAsync(
+                GoogleDriveCustomClientId, 
+                GoogleDriveCustomClientSecret,
+                onAuthPrepared: (url, verifier, redirect) =>
+                {
+                    _lastManualCodeVerifier = verifier;
+                    _lastManualRedirectUri = redirect;
+                    GoogleDriveManualAuthUrl = url;
+                    IsGoogleDriveManualCodeVisible = true;
+                    GoogleDriveStatusText = "⏳ Đang chờ xác thực từ trình duyệt...\nNếu trình duyệt hiện '127.0.0.1 từ chối kết nối', bạn chỉ cần sao chép liên kết thanh địa chỉ rồi bấm '📋 Dán Mã & Xác Nhận' bên dưới.";
+                });
+
             if (ok)
             {
                 IsGoogleDriveConnected = _gdriveService.IsConnected;
                 GoogleDriveUserEmail = _gdriveService.UserEmail;
                 GoogleDriveUserName = _gdriveService.UserName;
+                IsGoogleDriveManualCodeVisible = false;
                 GoogleDriveStatusText = "✅ " + msg;
                 AddLog("SUCCESS", $"☁️ {msg}");
                 ShowCenterToast("KẾT NỐI THÀNH CÔNG", $"Đã kết nối tài khoản: {_gdriveService.UserEmail}\nThư mục: \\GMTPC\\Comic Downloader GMTPC\\", "☁️", "GOOGLE DRIVE", 3200);
@@ -349,8 +359,8 @@ public partial class MainViewModel
             }
             else
             {
-                GoogleDriveStatusText = "❌ " + msg;
-                AddLog("WARN", $"☁️ Đăng nhập Google Drive thất bại: {msg}");
+                GoogleDriveStatusText = "⚠️ " + msg;
+                AddLog("WARN", $"☁️ {msg}");
             }
         }
         catch (Exception ex)
@@ -424,7 +434,14 @@ public partial class MainViewModel
                 if (!string.IsNullOrWhiteSpace(text))
                 {
                     GoogleDriveManualCodeInput = text.Trim();
-                    ShowCenterToast("ĐÃ DÁN MÃ", "Đã dán mã ủy quyền từ bộ nhớ tạm.", "📋", "GOOGLE DRIVE", 1500);
+                    ShowCenterToast("ĐÃ DÁN MÃ", "Đang tự động xác thực với Google...", "📋", "GOOGLE DRIVE", 1500);
+
+                    // Tự động kiểm tra và kích hoạt xác thực ngay nếu dán link hoặc code
+                    await ConfirmManualCodeGoogleDriveAsync();
+                }
+                else
+                {
+                    ShowCenterToast("BỘ NHỚ TẠM TRỐNG", "Vui lòng sao chép liên kết trên thanh địa chỉ trình duyệt trước.", "⚠️", "GOOGLE DRIVE", 2000);
                 }
             }
         }
@@ -439,11 +456,12 @@ public partial class MainViewModel
     {
         if (string.IsNullOrWhiteSpace(GoogleDriveManualCodeInput))
         {
-            GoogleDriveStatusText = "⚠️ Vui lòng dán mã ủy quyền (Code) hoặc URL chuyển hướng vào ô.";
+            GoogleDriveStatusText = "⚠️ Vui lòng dán mã ủy quyền (Code) hoặc URL callback từ trình duyệt vào ô.";
             return;
         }
 
-        if (IsGoogleDriveBusy) return;
+        // Hủy bỏ bất kỳ HttpListener nào đang chạy ngầm để giải phóng cổng
+        _gdriveService.CancelActiveBrowserLogin();
 
         IsGoogleDriveBusy = true;
         GoogleDriveStatusText = "⏳ Đang xác thực mã ủy quyền với Google...";
@@ -451,8 +469,23 @@ public partial class MainViewModel
         {
             string raw = GoogleDriveManualCodeInput.Trim();
             string code = raw;
+            string redirectUri = !string.IsNullOrWhiteSpace(_lastManualRedirectUri) 
+                ? _lastManualRedirectUri 
+                : _gdriveService.LastRedirectUri;
 
-            // Nếu người dùng dán toàn bộ URL (ví dụ http://localhost:port/callback/?code=XYZ...)
+            string verifier = !string.IsNullOrWhiteSpace(_lastManualCodeVerifier)
+                ? _lastManualCodeVerifier
+                : _gdriveService.LastCodeVerifier;
+
+            // Nếu người dùng sao chép từ thanh địa chỉ trình duyệt không có http://
+            if (!raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !raw.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
+                (raw.StartsWith("127.0.0.1", StringComparison.OrdinalIgnoreCase) || raw.StartsWith("localhost", StringComparison.OrdinalIgnoreCase)))
+            {
+                raw = "http://" + raw;
+            }
+
+            // Nếu người dùng dán toàn bộ URL (ví dụ http://127.0.0.1:41751/callback/?iss=...&code=XYZ...)
             if (raw.Contains("code="))
             {
                 try
@@ -464,14 +497,22 @@ public partial class MainViewModel
                     {
                         code = parsedCode;
                     }
+                    // Trích xuất chính xác redirect_uri từ URL callback: ví dụ http://127.0.0.1:41751/callback/
+                    redirectUri = $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath}";
                 }
                 catch { }
             }
 
+            if (string.IsNullOrWhiteSpace(verifier))
+            {
+                GoogleDriveStatusText = "❌ Không tìm thấy Code Verifier. Vui lòng bấm 'ĐĂNG NHẬP GOOGLE DRIVE' để tạo phiên mới.";
+                return;
+            }
+
             var (ok, msg) = await _gdriveService.ExchangeCodeForTokensAsync(
                 code,
-                _lastManualCodeVerifier,
-                _lastManualRedirectUri,
+                verifier,
+                redirectUri,
                 GoogleDriveCustomClientId,
                 GoogleDriveCustomClientSecret);
 
@@ -490,6 +531,7 @@ public partial class MainViewModel
             else
             {
                 GoogleDriveStatusText = "❌ " + msg;
+                ShowCenterToast("LỖI XÁC THỰC", msg, "❌", "GOOGLE DRIVE", 3500);
             }
         }
         catch (Exception ex)
