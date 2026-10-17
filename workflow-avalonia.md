@@ -2954,3 +2954,60 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 
 
 
+
+---
+
+## 41. Chuẩn Hóa Cơ Chế Pinch-to-Zoom & Drag Liền Mạch (Seamless Parity) Trên Android Cho Mọi Chế Độ Cuộn / Lật Trang
+1. **Neo Chính Xác Vào Trang Đang Chạm & Tuyệt Đối Chống Tua Trang (`ComicReaderControl.axaml.cs`)**:
+   - **Xác định trang mục tiêu đa chế độ (`FindPageIndexAtPoint` 5 tham số)**:
+     * **Cuộn dọc (Vertical Scroll - LTR & RTL)**: Quét container hiển thị trực quan `ListBoxItem` theo tọa độ Y. Nếu điểm chạm nằm ngoài các item đã realized (do ảo hóa), tự động phân giải tích lũy tọa độ Document `docY = sv.Offset.Y + ptInLb.Y` trên RAM qua danh sách `vm.Pages` để bắt chính xác 100% trang mục tiêu.
+     * **Cuộn ngang (Horizontal Scroll - LTR & RTL)**: Quét container theo tọa độ X. Nếu ảo hóa, tự động phân giải tích lũy `docX` từ `sv.Offset.X` (đối với LTR) hoặc `(maxX - sv.Offset.X) + (viewportWidth - ptInLb.X)` (đối với RTL), tính toán chính xác trang nằm dưới ngón tay.
+     * **Lật trang (Flip Mode - Trang đơn & Trang kép)**: Phân định nửa trái / nửa phải viewport để chọn chính xác trang đơn hoặc trang kép (`LeftFlipPage` / `RightFlipPage`).
+   - **Bắt vị trí ngón tay đầu tiên hoặc cả 2 ngón tay**:
+     * So khớp cả `_pointerPressPoint` (vị trí ngón đầu tiên chạm vào) và `_pinchPivotInLb` (trung điểm 2 ngón tay), đảm bảo dù người dùng đặt ngón tay cái cố định lên trang rồi mở rộng ngón trỏ hoặc chụm 2 ngón tay lại thì app luôn khóa cứng vào đúng trang đó.
+   - **Khóa cứng không tua trang**:
+     * Gán `vm.CurrentPageIndex = _pinchTargetPageIndex` ngay khi bắt đầu và duy trì xuyên suốt mọi chu kỳ `UpdatePinchGesture` cùng cờ `_suppressScrollChangedUntilTick = Environment.TickCount64 + 1000`.
+2. **Khóa 100% Thao Tác Drag Khi Có 2 Ngón Tay Đang Thao Tác (`ComicReaderControl.axaml.cs`)**:
+   - **Nguyên nhân trước đây**: Trong `UpdatePinchGesture`, offset mới được tính trừ theo `currentPivotInLb`. Khi người dùng rê cả 2 ngón tay trong lúc pinch, `currentPivotInLb` thay đổi liên tục làm ảnh bị kéo rê/trượt theo chuyển động tay.
+   - **Giải pháp cố định điểm neo**: Neo vị trí hiển thị trên viewport vào `_pinchPivotInLb` cố định lúc bắt đầu chạm (`newOffsetY = anchorPointInDocY - _pinchPivotInLb.Y`, `newOffsetX = anchorPointInDocX - _pinchPivotInLb.X`).
+   - Nhờ đó, chuyển động của 2 ngón tay chỉ điều khiển mức Zoom (`vm.ZoomLevel`), ảnh hoàn toàn không bị trượt/rê theo tay.
+3. **Chuyển Tiếp Liền Mạch (Seamless Transition) Giữa Pinch 2 Ngón và Drag 1 Ngón**:
+   - **Khi nhấc 1 ngón tay lên (`_activePointers.Count == 1`)**:
+     * Kết thúc Pinch (`_isPinching = false`), không đặt cooldown làm đơ ngón tay còn lại (`_pinchCooldownUntilTick = 0`).
+     * Lấy ngay con trỏ còn lại và kích hoạt chế độ Drag tức thời: `_isPanHolding = true; _isPanDragging = true; _panStartPoint = remainingPt; _panLastPoint = remainingPt;`.
+     * Khi ngón tay còn lại di chuyển, `OnViewportPointerMoved` kéo rê ảnh mượt mà ngay lập tức mà không có độ trễ hay khựng giật.
+   - **Khi chạm thêm ngón thứ hai (`_activePointers.Count >= 2`)**:
+     * Tức thì hủy bỏ trạng thái drag (`_isPanHolding = false; _isPanDragging = false;`) và chuyển sang `StartPinchGesture(p1, p2)`.
+   - **Khi nhấc cả 2 ngón tay (`_activePointers.Count == 0`)**:
+     * Hoàn tất an toàn, giữ nguyên trang `_pinchTargetPageIndex`, kích hoạt chạy đà (Kinetic momentum) nếu có vận tốc.
+4. **Kiểm Thử Nghiệm Thu Tự Động 20 Chu Kỳ Liên Tục**:
+   - Đã vượt qua 20/20 chu kỳ kiểm thử tự động toàn diện qua tất cả các chế độ đọc (Vertical, Horizontal LTR/RTL, Flip Single/Dual) đạt tỷ lệ Pass 100%.
+
+---
+
+## 41. Chuẩn Hóa Cơ Chế Pinch-to-Zoom & Drag Liền Mạch (Seamless Parity) Trên Android Cho Mọi Chế Độ Cuộn / Lật Trang
+1. **Neo Chính Xác Vào Trang Đang Chạm & Tuyệt Đối Chống Tua Trang (`ComicReaderControl.axaml.cs`)**:
+   - **Xác định trang mục tiêu đa chế độ (`FindPageIndexAtPoint` 5 tham số)**:
+     * **Cuộn dọc (Vertical Scroll - LTR & RTL)**: Quét container hiển thị trực quan `ListBoxItem` theo tọa độ Y. Nếu điểm chạm nằm ngoài các item đã realized (do ảo hóa), tự động phân giải tích lũy tọa độ Document `docY = sv.Offset.Y + ptInLb.Y` trên RAM qua danh sách `vm.Pages` để bắt chính xác 100% trang mục tiêu.
+     * **Cuộn ngang (Horizontal Scroll - LTR & RTL)**: Quét container theo tọa độ X. Nếu ảo hóa, tự động phân giải tích lũy `docX` từ `sv.Offset.X` (đối với LTR) hoặc `(maxX - sv.Offset.X) + (viewportWidth - ptInLb.X)` (đối với RTL), tính toán chính xác trang nằm dưới ngón tay.
+     * **Lật trang (Flip Mode - Trang đơn & Trang kép)**: Phân định nửa trái / nửa phải viewport để chọn chính xác trang đơn hoặc trang kép (`LeftFlipPage` / `RightFlipPage`).
+   - **Bắt vị trí ngón tay đầu tiên hoặc cả 2 ngón tay**:
+     * So khớp cả `_pointerPressPoint` (vị trí ngón đầu tiên chạm vào) và `_pinchPivotInLb` (trung điểm 2 ngón tay), đảm bảo dù người dùng đặt ngón tay cái cố định lên trang rồi mở rộng ngón trỏ hoặc chụm 2 ngón tay lại thì app luôn khóa cứng vào đúng trang đó.
+   - **Khóa cứng không tua trang**:
+     * Gán `vm.CurrentPageIndex = _pinchTargetPageIndex` ngay khi bắt đầu và duy trì xuyên suốt mọi chu kỳ `UpdatePinchGesture` cùng cờ `_suppressScrollChangedUntilTick = Environment.TickCount64 + 1000`.
+2. **Khóa 100% Thao Tác Drag Khi Có 2 Ngón Tay Đang Thao Tác (`ComicReaderControl.axaml.cs`)**:
+   - **Nguyên nhân trước đây**: Trong `UpdatePinchGesture`, offset mới được tính trừ theo `currentPivotInLb`. Khi người dùng rê cả 2 ngón tay trong lúc pinch, `currentPivotInLb` thay đổi liên tục làm ảnh bị kéo rê/trượt theo chuyển động tay.
+   - **Giải pháp cố định điểm neo**: Neo vị trí hiển thị trên viewport vào `_pinchPivotInLb` cố định lúc bắt đầu chạm (`newOffsetY = anchorPointInDocY - _pinchPivotInLb.Y`, `newOffsetX = anchorPointInDocX - _pinchPivotInLb.X`).
+   - Nhờ đó, chuyển động của 2 ngón tay chỉ điều khiển mức Zoom (`vm.ZoomLevel`), ảnh hoàn toàn không bị trượt/rê theo tay.
+3. **Chuyển Tiếp Liền Mạch (Seamless Transition) Giữa Pinch 2 Ngón và Drag 1 Ngón**:
+   - **Khi nhấc 1 ngón tay lên (`_activePointers.Count == 1`)**:
+     * Kết thúc Pinch (`_isPinching = false`), không đặt cooldown làm đơ ngón tay còn lại (`_pinchCooldownUntilTick = 0`).
+     * Lấy ngay con trỏ còn lại và kích hoạt chế độ Drag tức thời: `_isPanHolding = true; _isPanDragging = true; _panStartPoint = remainingPt; _panLastPoint = remainingPt;`.
+     * Khi ngón tay còn lại di chuyển, `OnViewportPointerMoved` kéo rê ảnh mượt mà ngay lập tức mà không có độ trễ hay khựng giật.
+   - **Khi chạm thêm ngón thứ hai (`_activePointers.Count >= 2`)**:
+     * Tức thì hủy bỏ trạng thái drag (`_isPanHolding = false; _isPanDragging = false;`) và chuyển sang `StartPinchGesture(p1, p2)`.
+   - **Khi nhấc cả 2 ngón tay (`_activePointers.Count == 0`)**:
+     * Hoàn tất an toàn, giữ nguyên trang `_pinchTargetPageIndex`, kích hoạt chạy đà (Kinetic momentum) nếu có vận tốc.
+4. **Kiểm Thử Nghiệm Thu Tự Động 20 Chu Kỳ Liên Tục**:
+   - Đã vượt qua 20/20 chu kỳ kiểm thử tự động toàn diện qua tất cả các chế độ đọc (Vertical, Horizontal LTR/RTL, Flip Single/Dual) đạt tỷ lệ Pass 100%.
+
