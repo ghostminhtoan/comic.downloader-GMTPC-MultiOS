@@ -2213,6 +2213,13 @@ public partial class ComicReaderViewModel : ViewModelBase
 
         CurrentPageIndex = clamped;
         RequestScrollToPage(clamped);
+
+        // Nạp tức thì trang đích với ưu tiên cao nhất
+        var targetPage = Pages[clamped];
+        if (!targetPage.IsLoaded && !targetPage.IsLoading)
+        {
+            _ = _readerService.EnsurePageLoadedAsync(targetPage);
+        }
     }
 
     private void SyncActivePdfBookmark(int pageIndex)
@@ -2459,10 +2466,33 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
     }
 
+    private int _lastPrefetchedIndex = -1;
+    private long _lastPrefetchTick = 0;
+
     private void TriggerPrefetch(int centerIndex)
     {
-        _prefetchCts?.Cancel();
-        _prefetchCts = new CancellationTokenSource();
+        long now = Environment.TickCount64;
+        // Nếu sự kiện cuộn xảy ra quá nhanh (< 120ms) và khoảng cách trang chỉ lệch 1 trang:
+        // không hủy task cũ để các worker đang giải mã tiếp tục hoàn thành
+        if (Math.Abs(centerIndex - _lastPrefetchedIndex) <= 1 && now - _lastPrefetchTick < 120)
+        {
+            return;
+        }
+
+        bool isBigJump = _lastPrefetchedIndex >= 0 && Math.Abs(centerIndex - _lastPrefetchedIndex) >= 4;
+        if (isBigJump)
+        {
+            _prefetchCts?.Cancel();
+            _prefetchCts = new CancellationTokenSource();
+        }
+        else if (_prefetchCts == null || _prefetchCts.IsCancellationRequested)
+        {
+            _prefetchCts = new CancellationTokenSource();
+        }
+
+        _lastPrefetchedIndex = centerIndex;
+        _lastPrefetchTick = now;
+
         var ct = _prefetchCts.Token;
         var snapshot = Pages.ToList();
         bool scrollMode = IsScrollMode;

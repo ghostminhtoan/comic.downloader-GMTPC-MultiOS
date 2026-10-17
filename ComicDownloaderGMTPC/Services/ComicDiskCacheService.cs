@@ -194,6 +194,9 @@ public sealed class ComicDiskCacheService
         return null;
     }
 
+    private static long _lastDiskPruneTick;
+    private static long _lastThumbPruneTick;
+
     public void SaveCachedPageBytes(string cacheKey, byte[] data)
     {
         if (string.IsNullOrWhiteSpace(cacheKey) || data == null || data.Length == 0) return;
@@ -208,7 +211,14 @@ public sealed class ComicDiskCacheService
                 File.WriteAllBytes(tmpFile, data);
                 File.Move(tmpFile, targetFile, overwrite: true);
                 File.SetLastAccessTimeUtc(targetFile, DateTime.UtcNow);
-                PruneArchivePagesIfOverQuota();
+
+                // Debounce prune quota: chỉ kiểm tra định kỳ mỗi 5 phút (300.000 ms), loại bỏ hoàn toàn Disk Thrashing trên Flash
+                long now = Environment.TickCount64;
+                if (now - _lastDiskPruneTick > 300000)
+                {
+                    _lastDiskPruneTick = now;
+                    PruneArchivePagesIfOverQuota();
+                }
             }
             catch { }
         });
@@ -282,7 +292,12 @@ public sealed class ComicDiskCacheService
                 File.Move(tmp, targetFile, overwrite: true);
                 File.SetLastAccessTimeUtc(targetFile, DateTime.UtcNow);
 
-                PruneThumbnailsIfOverQuota();
+                long now = Environment.TickCount64;
+                if (now - _lastThumbPruneTick > 300000)
+                {
+                    _lastThumbPruneTick = now;
+                    PruneThumbnailsIfOverQuota();
+                }
             }
             catch { }
         });

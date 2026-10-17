@@ -1442,7 +1442,8 @@ public partial class ComicReaderControl : UserControl
         int reqVersion = ++_scrollRequestVersion;
         var targetItem = vm.Pages[pageIndex];
         _isProgrammaticScroll = true;
-        _suppressScrollChangedUntilTick = Environment.TickCount64 + 600;
+        // Khóa sự kiện ScrollChanged đủ lâu (1200ms trên Android) để ảo hóa VirtualizingStackPanel và bố cục ổn định tuyệt đối
+        _suppressScrollChangedUntilTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 1200 : 600);
 
         var sv = GetReaderScrollViewer();
         if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
@@ -1458,10 +1459,7 @@ public partial class ComicReaderControl : UserControl
                 double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
                 sv.Offset = new Vector(sv.Offset.X, Math.Clamp(targetY, 0, maxY));
             }
-            else
-            {
-                try { listBox.ScrollIntoView(targetItem); } catch { }
-            }
+            try { listBox.ScrollIntoView(targetItem); } catch { }
         }
         else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
         {
@@ -1477,10 +1475,7 @@ public partial class ComicReaderControl : UserControl
                 double targetX = vm.IsRightToLeft ? (maxX - accX) : accX;
                 sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), sv.Offset.Y);
             }
-            else
-            {
-                try { listBox.ScrollIntoView(targetItem); } catch { }
-            }
+            try { listBox.ScrollIntoView(targetItem); } catch { }
         }
         else if (vm.IsFlipMode)
         {
