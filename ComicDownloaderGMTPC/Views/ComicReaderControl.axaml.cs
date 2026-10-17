@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -604,7 +605,16 @@ public partial class ComicReaderControl : UserControl
             _singleTapTimer.Stop();
             if (DataContext is ComicReaderViewModel vm)
             {
-                Dispatcher.UIThread.Post(() => vm.ToggleOverlay());
+                int savedPage = vm.CurrentPageIndex;
+                _suppressScrollChangedUntilTick = Environment.TickCount64 + 800;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    vm.ToggleOverlay();
+                    if (savedPage >= 0 && savedPage < vm.Pages.Count)
+                    {
+                        vm.CurrentPageIndex = savedPage;
+                    }
+                });
             }
         };
 
@@ -685,7 +695,13 @@ public partial class ComicReaderControl : UserControl
             var b = Bounds;
             if (b.Width > 0 && b.Height > 0)
             {
+                int savedPage = vm.CurrentPageIndex;
+                _suppressScrollChangedUntilTick = Environment.TickCount64 + 800;
                 vm.UpdateViewportDimensions(b.Width, b.Height);
+                if (savedPage >= 0 && savedPage < vm.Pages.Count)
+                {
+                    vm.CurrentPageIndex = savedPage;
+                }
             }
         }
     }
@@ -957,6 +973,7 @@ public partial class ComicReaderControl : UserControl
             _subscribedVm.ScrollToPageRequested -= OnVmScrollToPageRequested;
             _subscribedVm.AutoScrollStepRequested -= OnVmAutoScrollStepRequested;
             _subscribedVm.PageButtonAreaScrollRequested -= OnVmPageButtonAreaScrollRequested;
+            _subscribedVm.PropertyChanged -= OnVmPropertyChanged;
             _subscribedVm = null;
         }
 
@@ -966,6 +983,7 @@ public partial class ComicReaderControl : UserControl
             vm.ScrollToPageRequested += OnVmScrollToPageRequested;
             vm.AutoScrollStepRequested += OnVmAutoScrollStepRequested;
             vm.PageButtonAreaScrollRequested += OnVmPageButtonAreaScrollRequested;
+            vm.PropertyChanged += OnVmPropertyChanged;
             if (Bounds.Width > 0 && Bounds.Height > 0)
             {
                 vm.UpdateViewportDimensions(Bounds.Width, Bounds.Height);
@@ -974,6 +992,14 @@ public partial class ComicReaderControl : UserControl
             {
                 OnVmScrollToPageRequested(vm.CurrentPageIndex);
             }
+        }
+    }
+
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ComicReaderViewModel.IsOverlayVisible))
+        {
+            _suppressScrollChangedUntilTick = Environment.TickCount64 + 800;
         }
     }
 
@@ -1223,6 +1249,22 @@ public partial class ComicReaderControl : UserControl
                 sv.Offset = new Vector(sv.Offset.X, Math.Clamp(targetY, 0, maxY));
             }
         }
+        else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
+        {
+            var sv = GetReaderScrollViewer();
+            if (sv != null)
+            {
+                double accX = 0;
+                for (int i = 0; i < pageIndex && i < vm.Pages.Count; i++)
+                {
+                    var p = vm.Pages[i];
+                    accX += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
+                }
+                double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
+                double targetX = vm.IsRightToLeft ? (maxX - accX) : accX;
+                sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), sv.Offset.Y);
+            }
+        }
         else if (vm.IsFlipMode)
         {
             var flipSv = GetFlipScrollViewer();
@@ -1260,6 +1302,22 @@ public partial class ComicReaderControl : UserControl
                 {
                     double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
                     sv.Offset = new Vector(sv.Offset.X, Math.Clamp(targetY, 0, maxY));
+                }
+            }
+            else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
+            {
+                var sv = GetReaderScrollViewer();
+                if (sv != null)
+                {
+                    double accX = 0;
+                    for (int i = 0; i < pageIndex && i < vm.Pages.Count; i++)
+                    {
+                        var p = vm.Pages[i];
+                        accX += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
+                    }
+                    double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
+                    double targetX = vm.IsRightToLeft ? (maxX - accX) : accX;
+                    sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), sv.Offset.Y);
                 }
             }
 
@@ -1301,13 +1359,18 @@ public partial class ComicReaderControl : UserControl
         long now = Environment.TickCount64;
         long pinchElapsed = now - _lastPinchEndTick;
 
-        if (_isPinching || now < _pinchCooldownUntilTick || now < _suppressScrollChangedUntilTick ||
+        if (_isPinching || now < _pinchCooldownUntilTick ||
             (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 800))
         {
             if (DataContext is ComicReaderViewModel vmP && _pinchTargetPageIndex >= 0 && vmP.Pages.Count > _pinchTargetPageIndex)
             {
                 vmP.CurrentPageIndex = _pinchTargetPageIndex;
             }
+            return;
+        }
+
+        if (now < _suppressScrollChangedUntilTick)
+        {
             return;
         }
 
@@ -1329,14 +1392,14 @@ public partial class ComicReaderControl : UserControl
                 bool isAtEnd = vm.IsRightToLeft ? scrollViewer.Offset.X <= 6 : scrollViewer.Offset.X >= maxX - 6;
                 bool isAtStart = vm.IsRightToLeft ? scrollViewer.Offset.X >= maxX - 6 : scrollViewer.Offset.X <= 6;
 
-                if (isAtStart)
+                if (isAtStart && vm.CurrentPageIndex <= 1)
                 {
                     vm.IsScrollAtStart = true;
                     vm.IsScrollAtEnd = false;
                     vm.UpdatePageIndexFromScroll(0);
                     return;
                 }
-                else if (isAtEnd && maxX > 0)
+                else if (isAtEnd && maxX > 0 && vm.CurrentPageIndex >= vm.Pages.Count - 2)
                 {
                     vm.IsScrollAtStart = false;
                     vm.IsScrollAtEnd = true;
@@ -1352,14 +1415,14 @@ public partial class ComicReaderControl : UserControl
             else
             {
                 double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
-                if (scrollViewer.Offset.Y <= 6)
+                if (scrollViewer.Offset.Y <= 6 && vm.CurrentPageIndex <= 1)
                 {
                     vm.IsScrollAtStart = true;
                     vm.IsScrollAtEnd = false;
                     vm.UpdatePageIndexFromScroll(0);
                     return;
                 }
-                else if (scrollViewer.Offset.Y >= maxY - 6 && maxY > 0)
+                else if (scrollViewer.Offset.Y >= maxY - 6 && maxY > 0 && vm.CurrentPageIndex >= vm.Pages.Count - 2)
                 {
                     vm.IsScrollAtStart = false;
                     vm.IsScrollAtEnd = true;
@@ -1381,37 +1444,81 @@ public partial class ComicReaderControl : UserControl
             double vw = (scrollViewer != null && scrollViewer.Viewport.Width > 10) ? scrollViewer.Viewport.Width : listBox.Bounds.Width;
             if (vw <= 10) return;
 
+            double maxX = scrollViewer != null ? Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width) : 0;
             double offsetX = scrollViewer != null ? scrollViewer.Offset.X : 0;
-            double targetCenterX = offsetX + vw * 0.5;
-            int bestPageIndexX = 0;
-            double bestDistX = double.MaxValue;
-            double currentX = 0;
+
+            // Xử lý tọa độ cuộn hiệu dụng (effectiveScrollX) tính từ Trang 0:
+            // Với LTR: Trang 0 ở X = 0, cuộn tới thì Offset.X tăng dần từ 0 đến maxX.
+            // Với RTL: Trang 0 ở X = maxX, cuộn tới thì Offset.X giảm dần từ maxX về 0.
+            double effectiveScrollX = (vm.IsRightToLeft && maxX > 0)
+                ? Math.Clamp(maxX - offsetX, 0, maxX)
+                : Math.Clamp(offsetX, 0, maxX);
+
+            double viewportLeft = effectiveScrollX;
+            double viewportRight = effectiveScrollX + vw;
+            double viewportMidX = effectiveScrollX + vw * 0.5;
+
+            // 1. Kiểm tra Hysteresis Sticky Anchor cho trang hiện tại (vm.CurrentPageIndex)
+            double currentAccX = 0;
+            double curPageLeft = -1;
+            double curPageRight = -1;
+
+            for (int i = 0; i < vm.Pages.Count; i++)
+            {
+                var p = vm.Pages[i];
+                double pW = Math.Max(40, p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right);
+                if (i == vm.CurrentPageIndex)
+                {
+                    curPageLeft = currentAccX;
+                    curPageRight = currentAccX + pW;
+                    break;
+                }
+                currentAccX += pW;
+            }
+
+            if (curPageLeft >= 0)
+            {
+                double visibleLeft = Math.Max(curPageLeft, viewportLeft);
+                double visibleRight = Math.Min(curPageRight, viewportRight);
+                double visibleWidth = Math.Max(0, visibleRight - visibleLeft);
+
+                // Miễn là trang hiện tại còn hiển thị ít nhất 25% chiều rộng trên màn hình
+                // HOẶC bao phủ vùng giữa màn hình (từ tâm viewportMidX):
+                // -> GIỮ NGUYÊN CurrentPageIndex, TUYỆT ĐỐI KHÔNG TUA TRANG!
+                if (visibleWidth >= vw * 0.25 || (curPageLeft <= viewportMidX && curPageRight >= viewportMidX))
+                {
+                    return;
+                }
+            }
+
+            // 2. Nếu trang hiện tại đã cuộn thực sự ra khỏi vùng đọc, tìm trang mới chiếm diện tích hiển thị lớn nhất (Maximum Overlap)
+            int bestPageIndexX = -1;
+            double maxVisibleWidth = -1;
+            double runningX = 0;
 
             for (int i = 0; i < vm.Pages.Count; i++)
             {
                 var page = vm.Pages[i];
-                double pageW = Math.Max(40, page.DisplayWidth + page.PageMargin.Left + page.PageMargin.Right);
-                double pageLeft = currentX;
-                double pageRight = currentX + pageW;
+                double pW = Math.Max(40, page.DisplayWidth + page.PageMargin.Left + page.PageMargin.Right);
+                double left = runningX;
+                double right = runningX + pW;
+                runningX += pW;
 
-                if (pageLeft <= targetCenterX && pageRight >= targetCenterX)
+                if (right < viewportLeft) continue;
+                if (left > viewportRight) break;
+
+                double visibleLeft = Math.Max(left, viewportLeft);
+                double visibleRight = Math.Min(right, viewportRight);
+                double visibleWidth = Math.Max(0, visibleRight - visibleLeft);
+
+                if (visibleWidth > maxVisibleWidth)
                 {
-                    bestPageIndexX = i;
-                    break;
-                }
-
-                double mid = (pageLeft + pageRight) * 0.5;
-                double dist = Math.Abs(mid - targetCenterX);
-                if (dist < bestDistX)
-                {
-                    bestDistX = dist;
+                    maxVisibleWidth = visibleWidth;
                     bestPageIndexX = i;
                 }
-
-                currentX += pageW;
             }
 
-            if (bestPageIndexX >= 0)
+            if (bestPageIndexX >= 0 && bestPageIndexX != vm.CurrentPageIndex && maxVisibleWidth >= vw * 0.20)
             {
                 vm.UpdatePageIndexFromScroll(bestPageIndexX);
             }

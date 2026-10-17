@@ -2864,3 +2864,24 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
    - Thanh tổng hợp dung lượng hiển thị `TotalCacheSummaryText`, phân loại rõ ràng 3 nhóm: Ảnh bìa (Thumbnails), Tệp nén (Zip Cache), và Dữ liệu đọc (Resume, Bookmarks, History).
    - Đổi nhãn nút trên Toolbar thành `💾 Bộ nhớ đệm` để người dùng nhận diện nhanh chóng.
 
+---
+
+## 38. Khắc Phục Triệt Để Lỗi Tua Tới 1 Trang Khi Single Tap Show Tool Ở Chế Độ Cuộn Ngang (LTR & RTL Scroll) Trên Android (`ComicReaderControl.axaml.cs`, `ComicReaderViewModel.cs`)
+1. **Nguyên Nhân Gốc Rễ**:
+   - Khi người dùng chạm đơn (Single Tap) trên Android để hiển thị thanh công cụ (`vm.ToggleOverlay()`), `ComicReaderActivity.cs` bắt sự kiện `AndroidOverlayVisibilityChanged` và thoát chế độ Immersive FullScreen để hiện System Navigation Bar và Status Bar.
+   - Việc thanh điều hướng Android xuất hiện làm thay đổi tức thời kích thước Viewport (`Bounds.Height`), kéo theo việc `vm.ApplyFitModeLayout()` tính lại `DisplayWidth` của toàn bộ các trang (do chế độ cuộn ngang cố định `FitMode = FitHeight`).
+   - Các trang bị co nhỏ bề ngang trong khi `scrollViewer.Offset.X` vẫn giữ nguyên giá trị cũ, dẫn đến việc `OnReaderScrollChanged` tính toán `targetCenterX` bị lệch và rơi vào trang kế tiếp (`k + 1`), làm tua sang trang sau.
+   - Ở chế độ cuộn ngang Right-to-Left (RTL), tọa độ đảo ngược (`maxX - Offset.X`) nhưng code cũ lại duyệt `currentX` từ `0` sang phải mà không xét hướng đọc, khiến việc xác định trang bị sai lệch nghiêm trọng.
+2. **Giải Pháp Kiến Trúc Nguyên Lý Đầu Tiên (First-Principles Architectural Fix)**:
+   - **Tích Hợp Thuật Toán Hysteresis Sticky Anchor Cho Cuộn Ngang**:
+     * Kiểm tra trạng thái trang hiện tại `vm.CurrentPageIndex`: Miễn là trang hiện tại còn hiển thị $\ge 25\%$ bề rộng Viewport hoặc bao phủ tâm Viewport (`viewportMid`), hệ thống giữ nguyên tuyệt đối `CurrentPageIndex` và thoát ngay lập tức (`return;`), triệt tiêu 100% hiện tượng tua trang do rung lắc hoặc co dãn Viewport khi thanh công cụ bật/tắt.
+     * Chỉ chuyển trang (`Maximum Overlap`) khi người dùng chủ động vuốt cuộn trang khiến trang cũ rời khỏi vùng đọc.
+   - **Đồng Bộ Tọa Độ Cuộn Hiệu Dụng `effectiveScrollX` Cho Cả LTR & RTL**:
+     * Chuẩn hóa: LTR dùng `Offset.X`, RTL dùng `maxX - Offset.X`. Toàn bộ phép tính vị trí trang và khoảng giao với Viewport hoạt động đồng nhất, chính xác tuyệt đối trên cả hai chiều đọc.
+   - **Cơ Chế Khóa Giảm Xóc Đa Tầng (`_suppressScrollChangedUntilTick`)**:
+     * Kích hoạt cờ chặn 800ms khi `_singleTapTimer.Tick` gọi `ToggleOverlay()`, khi `BoundsProperty` co dãn, và khi ViewModel phát tín hiệu `IsOverlayVisible` thay đổi.
+     * Bảo toàn nguyên vẹn `vm.CurrentPageIndex = savedPageIndex` xuyên suốt chu trình resize và tái tính toán layout `ApplyFitModeLayout()`.
+   - **Bổ Sung Tính Toán `targetX` Chính Xác Trong `OnVmScrollToPageRequested`**:
+     * Tự động tính toán vị trí `targetX` tích lũy cho `vm.IsHorizontalScrollMode` (tương đương nhánh `targetY` của Vertical Scroll), hỗ trợ đảo chiều cho RTL (`maxX - accX`).
+
+

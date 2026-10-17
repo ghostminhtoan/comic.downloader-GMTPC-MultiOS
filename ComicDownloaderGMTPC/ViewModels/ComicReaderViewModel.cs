@@ -739,7 +739,12 @@ public partial class ComicReaderViewModel : ViewModelBase
 
         if (sizeChanged)
         {
+            int savedPageIndex = CurrentPageIndex;
             ApplyFitModeLayout();
+            if (savedPageIndex >= 0 && savedPageIndex < Pages.Count && CurrentPageIndex != savedPageIndex)
+            {
+                CurrentPageIndex = savedPageIndex;
+            }
         }
     }
 
