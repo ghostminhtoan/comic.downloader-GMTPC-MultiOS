@@ -15,6 +15,13 @@ echo   Release Tag: beta
 echo ========================================================
 echo.
 
+:: Don dep file lock ton dong neu co truoc khi khoi dong
+del /f /q "%~dp0.edge_profile\lockfile" 2>nul
+del /f /q "%~dp0.edge_profile\Singleton*" 2>nul
+del /f /q "%~dp0.edge_profile\Default\lockfile" 2>nul
+del /f /q "%~dp0.edge_profile\Default\Singleton*" 2>nul
+
+
 set "NO_PAUSE="
 for %%I in (%*) do (
     if /I "%%~I"=="--no-pause" set "NO_PAUSE=1"

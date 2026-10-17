@@ -14,6 +14,8 @@ import time
 import argparse
 import requests
 import ctypes
+import subprocess
+import json
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
@@ -55,13 +57,129 @@ def disable_quick_edit_mode():
         pass
 
 
+def cleanup_edge_profile_locks(profile_dir):
+    """
+    Don dep triet de cac tien trinh msedge mo coi va cac file lock Chromium tren profile
+    de triet tieu hoan toan loi 'ProcessSingleton: Lock file can not be created!'.
+    """
+    p_dir = Path(profile_dir).resolve()
+    if not p_dir.exists():
+        return
+
+    p_str = str(p_dir).lower()
+    # 1. Quet va terminate cac tien trinh msedge.exe mo coi dang gan voi profile_dir
+    try:
+        cmd = ["wmic", "process", "where", "name='msedge.exe'", "get", "ProcessId,CommandLine", "/format:csv"]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+        killed = []
+        for line in res.stdout.splitlines():
+            line = line.strip()
+            if not line or line.startswith("Node,"):
+                continue
+            parts = line.rsplit(",", 1)
+            if len(parts) == 2:
+                pid = parts[1].strip()
+                cmdline = parts[0].lower()
+                if pid.isdigit() and p_str in cmdline:
+                    try:
+                        subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=5)
+                        killed.append(pid)
+                    except Exception:
+                        pass
+        if killed:
+            print(f"[CLEANUP] Da giai phong {len(killed)} tien trinh Edge chay ngam tren profile: PID {', '.join(killed)}")
+            time.sleep(1.0)
+    except Exception:
+        pass
+
+    # 2. Xoa cac file lock Chromium ton dong
+    lock_names = [
+        "lockfile",
+        "SingletonLock",
+        "SingletonCookie",
+        "SingletonSocket",
+        "SingletonPort",
+    ]
+    for root_or_def in [p_dir, p_dir / "Default"]:
+        if not root_or_def.exists():
+            continue
+        for l_name in lock_names:
+            f_path = root_or_def / l_name
+            if f_path.exists() or f_path.is_symlink():
+                try:
+                    f_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+
+def launch_edge_context_safe(p, profile_dir, headless, max_retries=3):
+    """
+    Khoi chay Microsoft Edge Persistent Context co phong thu xung dot ProcessSingleton.
+    Neu gap loi lock file, tu dong don dep tien trinh ngam va retry.
+    """
+    p_dir = Path(profile_dir).resolve()
+    p_dir.mkdir(parents=True, exist_ok=True)
+
+    cleanup_edge_profile_locks(p_dir)
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            context = p.chromium.launch_persistent_context(
+                user_data_dir=str(p_dir),
+                channel="msedge",
+                headless=headless,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox"
+                ]
+            )
+            return context
+        except Exception as ex:
+            err_str = str(ex).lower()
+            if "processsingleton" in err_str or "lock file" in err_str or "cannot be created" in err_str:
+                print(f"[CANH BAO] Phat hien xung dot ProcessSingleton tren Edge profile (Lan {attempt}/{max_retries}).")
+                print("[CANH BAO] Dang tu dong giai phong tien trinh va go lock file...")
+                cleanup_edge_profile_locks(p_dir)
+                time.sleep(1.5)
+                if attempt == max_retries:
+                    raise
+            else:
+                raise
+
+
+def get_git_credential_token():
+    """Thu lay GitHub token tu Windows Git Credential Manager"""
+    try:
+        proc = subprocess.run(
+            ["git", "credential", "fill"],
+            input="protocol=https\nhost=github.com\n\n",
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        for line in proc.stdout.splitlines():
+            if line.startswith("password="):
+                return line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return ""
+
+
 def load_github_token():
     if TOKEN_FILE.exists():
         try:
-            return TOKEN_FILE.read_text(encoding="utf-8").strip()
+            t = TOKEN_FILE.read_text(encoding="utf-8").strip()
+            if t:
+                return t
         except Exception:
             pass
-    return os.environ.get("GITHUB_TOKEN", "").strip()
+    env_token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if env_token:
+        return env_token
+    return get_git_credential_token()
 
 
 def delete_existing_release_assets_via_api(target_names):
@@ -93,6 +211,178 @@ def delete_existing_release_assets_via_api(target_names):
                 print(f"[API] -> Da xoa '{a_name}' thanh cong.")
     except Exception as ex:
         print(f"[API] Chu y khi don dep asset qua API: {ex}")
+
+
+class ProgressFileReader:
+    """Stream reader file tu disk kem bao cao tien do va toc do truyen tai real-time"""
+    def __init__(self, file_path, callback=None):
+        self.file_path = Path(file_path)
+        self.file_size = self.file_path.stat().st_size
+        self._file = open(self.file_path, "rb")
+        self.bytes_read = 0
+        self.callback = callback
+        self.start_time = time.time()
+        self.last_update = 0
+
+    def __len__(self):
+        return self.file_size
+
+    def read(self, size=-1):
+        chunk = self._file.read(size)
+        if chunk:
+            self.bytes_read += len(chunk)
+            now = time.time()
+            if self.callback and (now - self.last_update >= 0.8 or self.bytes_read >= self.file_size):
+                self.last_update = now
+                self.callback(self.bytes_read, self.file_size, now - self.start_time)
+        return chunk
+
+    def close(self):
+        self._file.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+
+def upload_single_asset_direct_api(upload_base_url, file_path, token, max_attempts=3):
+    """
+    Stream upload 1 asset truc tiep len GitHub Release bang REST API (Khong qua S3 Browser).
+    Dung lam giai phap cuu ho hoan hao khi Browser upload bi crash hoac stall.
+    """
+    file_path = Path(file_path)
+    file_name = file_path.name
+    file_size = file_path.stat().st_size
+    file_size_mb = file_size / (1024 * 1024)
+
+    # Clean upload url: strip {?name,label}
+    base_url = upload_base_url.split("{", 1)[0]
+    upload_url = f"{base_url}?name={file_name}"
+
+    for attempt in range(1, max_attempts + 1):
+        print(f"\n  -> [API Lan {attempt}/{max_attempts}] Dang stream upload '{file_name}' ({file_size_mb:.2f} MB)...")
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(file_size),
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "ComicDownloaderUploader/2.0",
+        }
+
+        prev_read = [0]
+        prev_time = [time.time()]
+
+        def progress_cb(cur, total, elapsed):
+            pct = (cur / total) * 100.0 if total > 0 else 0
+            cur_mb = cur / (1024 * 1024)
+            total_mb = total / (1024 * 1024)
+            avg_mbps = (cur * 8.0) / (elapsed * 1_000_000.0) if elapsed > 0 else 0.0
+
+            now = time.time()
+            dt = max(0.1, now - prev_time[0])
+            d_bytes = cur - prev_read[0]
+            inst_mbps = (d_bytes * 8.0) / (dt * 1_000_000.0)
+            prev_read[0] = cur
+            prev_time[0] = now
+
+            print(
+                f"\r     [TIEN DO API] {cur_mb:.1f}/{total_mb:.1f} MB ({pct:.1f}%) | "
+                f"Tuc thoi: {inst_mbps:.1f} Mbps | TB: {avg_mbps:.1f} Mbps | {elapsed:.1f}s",
+                end="",
+                flush=True
+            )
+
+        try:
+            with ProgressFileReader(file_path, callback=progress_cb) as stream:
+                res = requests.post(upload_url, headers=headers, data=stream, timeout=600)
+
+            print()  # newline sau progress
+            if res.status_code in (200, 201):
+                res_data = res.json() if res.text else {}
+                dl_url = res_data.get("browser_download_url", "")
+                print(f"  [THANH CONG API] Da upload xong '{file_name}' len Release Beta!")
+                if dl_url:
+                    print(f"                   Download URL: {dl_url}")
+                return True
+            else:
+                print(f"  [CANH BAO API] GitHub tra ve status {res.status_code}: {res.text[:200]}")
+                time.sleep(2)
+        except Exception as ex:
+            print(f"\n  [LOI API] Ket noi upload '{file_name}' bi loi: {ex}")
+            time.sleep(3)
+
+    return False
+
+
+def fallback_direct_api_upload(target_files, token=None):
+    """
+    Quy trinh cuu ho Direct REST API:
+    Dam bao Release Beta LUON LUON co du 3 file, triet tieu 100% tinh trang bi xoa trang file.
+    """
+    print("\n====================================================================")
+    print("  [CUU HO TOAN DIEN] Kich hoat quy trinh Direct REST API Uploader")
+    print("====================================================================")
+    if not token:
+        token = load_github_token()
+
+    if not token:
+        print("[LOI API] Khong co GitHub token. Khong the thuc hien cuu ho API.")
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    # 1. Lay thong tin Release Beta
+    release_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/tags/{RELEASE_TAG}"
+    res = requests.get(release_url, headers=headers, timeout=15)
+    if res.status_code == 404:
+        print(f"[API] Release '{RELEASE_TAG}' chua ton tai. Dang tao moi...")
+        create_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases"
+        body = {
+            "tag_name": RELEASE_TAG,
+            "name": f"Release {RELEASE_TAG}",
+            "body": "Ban phat hanh thu nghiem tu dong (Automated Beta Release) cho Comic Downloader GMTPC Multi-OS.\n\nBao gom cac goi cai dat standalone: Windows (.exe), Linux (.tar.gz) va Android (.apk).",
+            "draft": False,
+            "prerelease": True
+        }
+        res = requests.post(create_url, headers=headers, json=body, timeout=15)
+
+    if res.status_code not in (200, 201):
+        print(f"[LOI API] Khong the truy van hoac tao Release Beta: {res.status_code} - {res.text[:200]}")
+        return False
+
+    rel_data = res.json()
+    upload_url_template = rel_data.get("upload_url", "")
+    existing_assets = {a.get("name"): a.get("id") for a in rel_data.get("assets", [])}
+
+    all_ok = True
+    for f in target_files:
+        f_path = Path(f)
+        if not f_path.exists():
+            continue
+
+        f_name = f_path.name
+        # Neu file da ton tai tren release, xoa de ghi de sach se
+        if f_name in existing_assets:
+            old_id = existing_assets[f_name]
+            print(f"[API] Dang xoa asset cu '{f_name}' (ID: {old_id}) de ghi de...")
+            del_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/assets/{old_id}"
+            try:
+                requests.delete(del_url, headers=headers, timeout=15)
+                time.sleep(0.5)
+            except Exception:
+                pass
+
+        ok = upload_single_asset_direct_api(upload_url_template, f_path, token)
+        if not ok:
+            all_ok = False
+
+    return all_ok
 
 
 def verify_files_exist():
@@ -243,238 +533,268 @@ def perform_browser_upload(force_login=False, min_speed_mbps=0.0, max_wait_sec=9
 
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
-    with sync_playwright() as p:
-        print("[PROFILE] Su dung Persistent Profile tai: .edge_profile")
-        initial_headless = not force_login
+    browser_succeeded = False
+    final_elapsed = 0
+    final_speed = 0
 
-        context = p.chromium.launch_persistent_context(
-            user_data_dir=str(PROFILE_DIR),
-            channel="msedge",
-            headless=initial_headless,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-first-run",
-                "--no-default-browser-check"
-            ]
-        )
+    try:
+        with sync_playwright() as p:
+            print("[PROFILE] Su dung Persistent Profile an toan tai: .edge_profile")
+            initial_headless = not force_login
 
-        page = context.pages[0] if context.pages else context.new_page()
+            context = launch_edge_context_safe(p, PROFILE_DIR, headless=initial_headless)
 
-        # Inject real-time XHR upload tracker ngay khi trang duoc khoi tao
-        page.add_init_script(JS_UPLOAD_TRACKER)
+            page = context.pages[0] if context.pages else context.new_page()
 
-        # Kiem tra xac thuc
-        page.goto("https://github.com", wait_until="domcontentloaded", timeout=45000)
-        has_session = is_authenticated_context(context)
+            # Inject real-time XHR upload tracker ngay khi trang duoc khoi tao
+            page.add_init_script(JS_UPLOAD_TRACKER)
 
-        # Neu chua co session ma dang chay headless -> Mo Edge co giao dien de dang nhap 1 lan duy nhat
-        if not has_session:
-            if initial_headless:
-                print("\n[LOGIN] Phat hien chua co session dang nhap GitHub trong Profile.")
-                print("[LOGIN] Dang mo Microsoft Edge truc quan de ban dang nhap 1 LAN DUY NHAT...")
-                context.close()
+            # Kiem tra xac thuc
+            page.goto("https://github.com", wait_until="domcontentloaded", timeout=45000)
+            has_session = is_authenticated_context(context)
 
-                context = p.chromium.launch_persistent_context(
-                    user_data_dir=str(PROFILE_DIR),
-                    channel="msedge",
-                    headless=False,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--no-first-run",
-                        "--no-default-browser-check"
-                    ]
-                )
-                page = context.pages[0] if context.pages else context.new_page()
-                page.add_init_script(JS_UPLOAD_TRACKER)
-                page.goto("https://github.com/login", wait_until="domcontentloaded")
+            # Neu chua co session ma dang chay headless -> Mo Edge co giao dien de dang nhap 1 lan duy nhat
+            if not has_session:
+                if initial_headless:
+                    print("\n[LOGIN] Phat hien chua co session dang nhap GitHub trong Profile.")
+                    print("[LOGIN] Dang mo Microsoft Edge truc quan de ban dang nhap 1 LAN DUY NHAT...")
+                    try:
+                        context.close()
+                    except Exception:
+                        pass
 
-            print("\n>>> VUI LONG DANG NHAP GITHUB TREN CUA SO MICROSOFT EDGE VUA MO <<<")
-            print(">>> HE THONG SE TU DONG NHAN DIEN NGAY KHI DANG NHAP XONG <<<")
-            print("[LOGIN] Dang cho ban dang nhap...")
+                    context = launch_edge_context_safe(p, PROFILE_DIR, headless=False)
+                    page = context.pages[0] if context.pages else context.new_page()
+                    page.add_init_script(JS_UPLOAD_TRACKER)
+                    page.goto("https://github.com/login", wait_until="domcontentloaded")
 
-            logged_in = False
-            for sec in range(240):  # Toi da 2 phut
-                time.sleep(0.5)
-                if is_authenticated_context(context):
-                    logged_in = True
-                    break
-                cur_url = page.url.lower()
-                if "github.com/login" not in cur_url and "session" not in cur_url and "github.com" in cur_url:
-                    time.sleep(1)
-                    if is_authenticated_context(context) or sec >= 10:
+                print("\n>>> VUI LONG DANG NHAP GITHUB TREN CUA SO MICROSOFT EDGE VUA MO <<<")
+                print(">>> HE THONG SE TU DONG NHAN DIEN NGAY KHI DANG NHAP XONG <<<")
+                print("[LOGIN] Dang cho ban dang nhap...")
+
+                logged_in = False
+                for sec in range(240):  # Toi da 2 phut
+                    time.sleep(0.5)
+                    if is_authenticated_context(context):
                         logged_in = True
                         break
+                    cur_url = page.url.lower()
+                    if "github.com/login" not in cur_url and "session" not in cur_url and "github.com" in cur_url:
+                        time.sleep(1)
+                        if is_authenticated_context(context) or sec >= 10:
+                            logged_in = True
+                            break
 
-            if not logged_in:
-                print("[LOI] Het thoi gian cho dang nhap (2 phut). Vui long thu lai.")
-                context.close()
-                sys.exit(1)
+                if not logged_in:
+                    print("[LOI] Het thoi gian cho dang nhap (2 phut). Vui long thu lai.")
+                    try:
+                        context.close()
+                    except Exception:
+                        pass
+                    sys.exit(1)
 
-            print("[LOGIN] -> XAC NHAN DANG NHAP THANH CONG!")
-            print("[LOGIN] -> Phien lam viec da duoc luu vinh vien vao Profile! Tu gio se khong can dang nhap lai.")
+                print("[LOGIN] -> XAC NHAN DANG NHAP THANH CONG!")
+                print("[LOGIN] -> Phien lam viec da duoc luu vinh vien vao Profile! Tu gio se khong can dang nhap lai.")
 
-        # Vong lap Retry voi Co che Kiem Soat Toc Do (Speed Guard) & Nhan Dien Finish Chinh Xac
-        upload_success = False
-        final_elapsed = 0
-        final_speed = 0
+            # Vong lap Retry voi Co che Kiem Soat Toc Do (Speed Guard) & Nhan Dien Finish Chinh Xac
+            upload_success = False
+            assets_cleaned = False
 
-        for attempt in range(1, MAX_RETRIES + 1):
-            print("\n====================================================================")
-            print(f"  [LAN THU {attempt}/{MAX_RETRIES}] Khoi dong quy trinh upload Release Beta...")
-            print("====================================================================")
+            for attempt in range(1, MAX_RETRIES + 1):
+                print("\n====================================================================")
+                print(f"  [LAN THU {attempt}/{MAX_RETRIES}] Khoi dong quy trinh upload Release Beta...")
+                print("====================================================================")
 
-            # Don dep cac asset cu tren release truoc khi upload de dam bao trang thai sach
-            delete_existing_release_assets_via_api(target_names)
+                print(f"[NAVIGATE] Dang truy cap trang Release Edit: {EDIT_URL}...")
+                page.goto(EDIT_URL, wait_until="domcontentloaded", timeout=60000)
 
-            print(f"[NAVIGATE] Dang truy cap trang Release Edit: {EDIT_URL}...")
-            page.goto(EDIT_URL, wait_until="domcontentloaded", timeout=60000)
+                # Kiem tra phien dang nhap
+                if "github.com/login" in page.url.lower():
+                    print("[CANH BAO] Phien dang nhap het han. Vui long chay lai voi tham so --login.")
+                    try:
+                        context.close()
+                    except Exception:
+                        pass
+                    sys.exit(1)
 
-            # Kiem tra phien dang nhap
-            if "github.com/login" in page.url.lower():
-                print("[CANH BAO] Phien dang nhap het han. Vui long chay lai voi tham so --login.")
-                context.close()
-                sys.exit(1)
-
-            print("[WAIT] Dang tim khu vuc tai file Releases Upload (#releases-upload)...")
-            try:
-                page.wait_for_selector("#releases-upload", state="attached", timeout=15000)
-                file_input = page.locator("#releases-upload")
-            except Exception:
-                print("[WAIT] Fallback: Tim input file asset khong thuoc ve release body...")
-                page.wait_for_selector('input[type="file"]:not(#fc-release_body)', state="attached", timeout=15000)
-                file_input = page.locator('input[type="file"]:not(#fc-release_body)').first
-
-            # Reset bo dem upload tracker trong browser
-            page.evaluate("""() => {
-                if (window.__uploadTracker) {
-                    window.__uploadTracker.startTime = 0;
-                    window.__uploadTracker.totalLoaded = 0;
-                    window.__uploadTracker.totalBytes = 0;
-                    window.__uploadTracker.files = {};
-                    window.__uploadTracker.activeCount = 0;
-                    window.__uploadTracker.completedCount = 0;
-                    window.__uploadTracker.failedCount = 0;
-                }
-            }""")
-
-            file_paths = [str(p) for p in TARGET_FILES]
-            print(f"[UPLOAD] Bat dau dinh kem {len(file_paths)} file ({total_target_mb:.2f} MB) de truyen truc tiep len AWS S3...")
-            file_input.set_input_files(file_paths)
-
-            start_time = time.time()
-            prev_loaded = 0
-            retry_needed = False
-            max_upload_wait = max_wait_sec  # Mac dinh 900s (15 phut)
-
-            for sec in range(1, max_upload_wait + 1):
-                time.sleep(1.0)
-                elapsed = time.time() - start_time
-
-                # Lay thong so tu JS tracker
-                tracker = page.evaluate("() => window.__uploadTracker || {}")
-                total_loaded = tracker.get("totalLoaded", 0)
-
-                # Tinh toan toc do trung binh va toc do tuc thoi
-                avg_mbps = (total_loaded * 8) / (elapsed * 1_000_000) if elapsed > 0 else 0.0
-                instant_delta = max(0, total_loaded - prev_loaded)
-                instant_mbps = (instant_delta * 8) / (1.0 * 1_000_000)
-                prev_loaded = total_loaded
-
-                loaded_mb = total_loaded / (1024 * 1024)
-                pct = min(100.0, (total_loaded / total_target_bytes) * 100) if total_target_bytes > 0 else 0
-
-                # Kiem tra danh sach file da render tren DOM cua trang
-                ul_text = ""
+                print("[WAIT] Dang tim khu vuc tai file Releases Upload (#releases-upload)...")
                 try:
-                    ul_loc = page.locator("ul.uploaded-files")
-                    if ul_loc.count() > 0:
-                        ul_text = ul_loc.inner_text()
+                    page.wait_for_selector("#releases-upload", state="attached", timeout=15000)
+                    file_input = page.locator("#releases-upload")
                 except Exception:
-                    pass
+                    print("[WAIT] Fallback: Tim input file asset khong thuoc ve release body...")
+                    page.wait_for_selector('input[type="file"]:not(#fc-release_body)', state="attached", timeout=15000)
+                    file_input = page.locator('input[type="file"]:not(#fc-release_body)').first
 
-                all_files_in_ul = all(p.name in ul_text for p in TARGET_FILES)
+                # CHI XOA ASSET CU KHI TRANG EDIT DA MO THANH CONG VA FILE INPUT SAN SANG!
+                # Phong thu tuyet doi: Neu trang chua san sang, khong bao gio duoc xoa file cu!
+                if not assets_cleaned:
+                    print("[CLEANUP] Trang Edit da san sang. Don dep asset cu tren Release Beta truoc khi truyen file moi...")
+                    delete_existing_release_assets_via_api(target_names)
+                    assets_cleaned = True
 
-                # Kiem tra xem co phan tu uploading nao dang hien thi (loai bo hoan toan template an d-none)
-                uploading_count = 0
-                try:
-                    uploading_count = page.locator(
-                        "ul.uploaded-files .upload-progress:not(.d-none), ul.uploaded-files .is-uploading, file-attachment.is-uploading"
-                    ).count()
-                except Exception:
-                    pass
+                # Reset bo dem upload tracker trong browser
+                page.evaluate("""() => {
+                    if (window.__uploadTracker) {
+                        window.__uploadTracker.startTime = 0;
+                        window.__uploadTracker.totalLoaded = 0;
+                        window.__uploadTracker.totalBytes = 0;
+                        window.__uploadTracker.files = {};
+                        window.__uploadTracker.activeCount = 0;
+                        window.__uploadTracker.completedCount = 0;
+                        window.__uploadTracker.failedCount = 0;
+                    }
+                }""")
 
-                update_btn = page.locator('button:has-text("Update release")').first
-                btn_ready = update_btn.is_visible() and update_btn.is_enabled()
+                file_paths = [str(p) for p in TARGET_FILES]
+                print(f"[UPLOAD] Bat dau dinh kem {len(file_paths)} file ({total_target_mb:.2f} MB) de truyen truc tiep len AWS S3...")
+                file_input.set_input_files(file_paths)
 
-                # In tien do ro rang tung giay
-                status_desc = f"{loaded_mb:.1f}/{total_target_mb:.1f} MB ({pct:.1f}%) | TB: {avg_mbps:.1f} Mbps | Tuc thoi: {instant_mbps:.1f} Mbps | {elapsed:.1f}s"
-                print(f" [TIEN DO] {status_desc}")
+                start_time = time.time()
+                prev_loaded = 0
+                retry_needed = False
+                max_upload_wait = max_wait_sec  # Mac dinh 900s (15 phut)
 
-                # -------------------------------------------------------------
-                # 1. SPEED GUARD: Kiem tra toc do, neu bi stall hoac < min_speed_mbps -> KILL & RETRY
-                # -------------------------------------------------------------
-                effective_min_speed = min_speed_mbps if min_speed_mbps is not None else MIN_UPLOAD_SPEED_MBPS
-                if elapsed >= GRACE_PERIOD_SEC:
-                    is_stalled = (elapsed >= 30 and total_loaded == 0)
-                    is_below_threshold = (effective_min_speed > 0 and avg_mbps < effective_min_speed and total_loaded > 0)
+                for sec in range(1, max_upload_wait + 1):
+                    time.sleep(1.0)
+                    elapsed = time.time() - start_time
 
-                    if is_stalled or is_below_threshold:
-                        threshold_label = f"{effective_min_speed} Mbps" if effective_min_speed > 0 else "stalled (0 bytes)"
-                        print(f"\n[CANH BAO TOC DO] Toc do upload trung binh dat {avg_mbps:.2f} Mbps (< nguong yeu cau {threshold_label})!")
-                        print(f"[KILL & RETRY] Tu dong huy upload (window.stop) va chuan bi thu lai lan {attempt + 1}/{MAX_RETRIES}...")
-                        try:
-                            page.evaluate("() => window.stop()")
-                        except Exception:
-                            pass
-                        retry_needed = True
+                    # Lay thong so tu JS tracker
+                    tracker = page.evaluate("() => window.__uploadTracker || {}")
+                    total_loaded = tracker.get("totalLoaded", 0)
+
+                    # Tinh toan toc do trung binh va toc do tuc thoi
+                    avg_mbps = (total_loaded * 8) / (elapsed * 1_000_000) if elapsed > 0 else 0.0
+                    instant_delta = max(0, total_loaded - prev_loaded)
+                    instant_mbps = (instant_delta * 8) / (1.0 * 1_000_000)
+                    prev_loaded = total_loaded
+
+                    loaded_mb = total_loaded / (1024 * 1024)
+                    pct = min(100.0, (total_loaded / total_target_bytes) * 100) if total_target_bytes > 0 else 0
+
+                    # Kiem tra danh sach file da render tren DOM cua trang
+                    ul_text = ""
+                    try:
+                        ul_loc = page.locator("ul.uploaded-files")
+                        if ul_loc.count() > 0:
+                            ul_text = ul_loc.inner_text()
+                    except Exception:
+                        pass
+
+                    all_files_in_ul = all(p.name in ul_text for p in TARGET_FILES)
+
+                    # Kiem tra xem co phan tu uploading nao dang hien thi
+                    uploading_count = 0
+                    try:
+                        uploading_count = page.locator(
+                            "ul.uploaded-files .upload-progress:not(.d-none), ul.uploaded-files .is-uploading, file-attachment.is-uploading"
+                        ).count()
+                    except Exception:
+                        pass
+
+                    update_btn = page.locator('button:has-text("Update release")').first
+                    btn_ready = update_btn.is_visible() and update_btn.is_enabled()
+
+                    # In tien do ro rang tung giay
+                    status_desc = f"{loaded_mb:.1f}/{total_target_mb:.1f} MB ({pct:.1f}%) | TB: {avg_mbps:.1f} Mbps | Tuc thoi: {instant_mbps:.1f} Mbps | {elapsed:.1f}s"
+                    print(f" [TIEN DO] {status_desc}")
+
+                    # 1. SPEED GUARD
+                    effective_min_speed = min_speed_mbps if min_speed_mbps is not None else MIN_UPLOAD_SPEED_MBPS
+                    if elapsed >= GRACE_PERIOD_SEC:
+                        is_stalled = (elapsed >= 30 and total_loaded == 0)
+                        is_below_threshold = (effective_min_speed > 0 and avg_mbps < effective_min_speed and total_loaded > 0)
+
+                        if is_stalled or is_below_threshold:
+                            threshold_label = f"{effective_min_speed} Mbps" if effective_min_speed > 0 else "stalled (0 bytes)"
+                            print(f"\n[CANH BAO TOC DO] Toc do upload trung binh dat {avg_mbps:.2f} Mbps (< nguong yeu cau {threshold_label})!")
+                            print(f"[KILL & RETRY] Tu dong huy upload (window.stop) va chuan bi thu lai lan {attempt + 1}/{MAX_RETRIES}...")
+                            try:
+                                page.evaluate("() => window.stop()")
+                            except Exception:
+                                pass
+                            retry_needed = True
+                            break
+
+                    # 2. FINISH GUARD: Nhan dien hoan tat 100% chuan xac
+                    is_tracker_done = (
+                        tracker.get("completedCount", 0) >= len(TARGET_FILES) or
+                        (total_loaded >= total_target_bytes * 0.99 and tracker.get("activeCount", 0) == 0)
+                    )
+
+                    if (is_tracker_done or all_files_in_ul) and uploading_count == 0 and btn_ready and elapsed >= 3:
+                        final_elapsed = elapsed
+                        final_speed = avg_mbps if avg_mbps > 0 else (total_target_mb * 8 / final_elapsed)
+                        print(f"\n[XAC NHAN HOAN TAT] 100% du lieu ({total_target_mb:.2f} MB) da truyen len S3 trong {final_elapsed:.1f}s (Toc do: {final_speed:.1f} Mbps)!")
+                        upload_success = True
                         break
 
-                # -------------------------------------------------------------
-                # 2. FINISH GUARD: Nhan dien hoan tat 100% chuan xac
-                # -------------------------------------------------------------
-                is_tracker_done = (
-                    tracker.get("completedCount", 0) >= len(TARGET_FILES) or
-                    (total_loaded >= total_target_bytes * 0.99 and tracker.get("activeCount", 0) == 0)
-                )
-
-                if (is_tracker_done or all_files_in_ul) and uploading_count == 0 and btn_ready and elapsed >= 3:
-                    final_elapsed = elapsed
-                    final_speed = avg_mbps if avg_mbps > 0 else (total_target_mb * 8 / final_elapsed)
-                    print(f"\n[XAC NHAN HOAN TAT] 100% du lieu ({total_target_mb:.2f} MB) da truyen len S3 trong {final_elapsed:.1f}s (Toc do: {final_speed:.1f} Mbps)!")
-                    upload_success = True
+                if upload_success:
                     break
+                elif retry_needed:
+                    print(f"[RETRY] Cho 2 giay de he thong on dinh truoc khi thu lai...")
+                    time.sleep(2)
+                else:
+                    print(f"[TIMEOUT] Luot upload thu {attempt} qua thoi gian cho. Thu lai...")
 
             if upload_success:
-                break
-            elif retry_needed:
-                print(f"[RETRY] Cho 2 giay de he thong on dinh truoc khi thu lai...")
-                time.sleep(2)
-            else:
-                print(f"[TIMEOUT] Luot upload thu {attempt} qua 180s. Thu lai...")
+                # Bam nut "Update release"
+                print("[SUBMIT] Dang bam nut 'Update release' de luu ban phat hanh...")
+                update_btn = page.locator('button:has-text("Update release")').first
+                update_btn.click()
 
-        if not upload_success:
-            print(f"\n[LOI] Da thu {MAX_RETRIES} lan nhung khong dat toc do > {MIN_UPLOAD_SPEED_MBPS} Mbps hoac bi loi mang.")
-            context.close()
+                print(f"[SUBMIT] Dang cho GitHub luu release ({VIEW_URL})...")
+                try:
+                    page.wait_for_url("**/releases/tag/**", timeout=30000)
+                    print(f"[THANH CONG] Release Beta da cap nhat hoan tat tai: {page.url}")
+                except Exception:
+                    time.sleep(4)
+                    print("[SUBMIT] Da gui lenh cap nhat thanh cong.")
+
+                browser_succeeded = True
+
+            try:
+                context.close()
+            except Exception:
+                pass
+
+    except Exception as ex:
+        print(f"\n[CANH BAO BROWSER] Trinh duyet Edge gap su co ngoai le: {ex}")
+
+    # PHONG THU CUU HO TOAN DIEN (Three-Tier Safety Net):
+    # Neu Browser upload khong thanh cong hoac bi loi bat ky -> Tu dong cuu ho bang Direct REST API!
+    if not browser_succeeded:
+        print("\n[CUU HO] Browser upload khong hoan tat. Chuyen sang luong Direct REST API Uploader de dam bao khong mat file...")
+        token = load_github_token()
+        api_ok = fallback_direct_api_upload(TARGET_FILES, token)
+        if not api_ok:
+            print("[LOI TOAN PHAN] Ca hai phuong thuc Browser va REST API deu gap loi mang. Vui long kiem tra ket noi!")
             sys.exit(1)
-
-        # Bam nut "Update release"
-        print("[SUBMIT] Dang bam nut 'Update release' de luu ban phat hanh...")
-        update_btn = page.locator('button:has-text("Update release")').first
-        update_btn.click()
-
-        print(f"[SUBMIT] Dang cho GitHub luu release ({VIEW_URL})...")
-        try:
-            page.wait_for_url("**/releases/tag/**", timeout=30000)
-            print(f"[THANH CONG] Release Beta da cap nhat hoan tat tai: {page.url}")
-        except Exception:
-            time.sleep(4)
-            print("[SUBMIT] Da gui lenh cap nhat thanh cong.")
-
-        context.close()
+    else:
+        # Neu Browser upload bao thanh cong, van kiem tra lai xem tren Release Beta co du ca 3 file hay khong!
+        token = load_github_token()
+        if token:
+            try:
+                headers = {
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                }
+                res = requests.get(f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/tags/{RELEASE_TAG}", headers=headers, timeout=15)
+                if res.status_code == 200:
+                    online_names = [a.get("name") for a in res.json().get("assets", [])]
+                    missing = [p for p in TARGET_FILES if p.name not in online_names]
+                    if missing:
+                        print(f"\n[KIEM TRA LAI] Phat hien thieu {len(missing)} file tren Release: {[p.name for p in missing]}")
+                        print("[KIEM TRA LAI] Dang tu dong upload bu qua Direct API...")
+                        fallback_direct_api_upload(missing, token)
+            except Exception as e:
+                pass
 
     print("\n====================================================================")
     print("  [HOAN TAT 100%] Da upload thanh cong 3 file len Release Beta!")
-    print(f"  Tong dung luong: {total_target_mb:.2f} MB | Thoi gian: {final_elapsed:.1f}s | Toc do: {final_speed:.1f} Mbps")
+    if browser_succeeded and final_elapsed > 0:
+        print(f"  Tong dung luong: {total_target_mb:.2f} MB | Thoi gian: {final_elapsed:.1f}s | Toc do: {final_speed:.1f} Mbps")
     print(f"  URL: {VIEW_URL}")
     print("====================================================================")
 

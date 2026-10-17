@@ -2839,3 +2839,19 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 4. **Tối Ưu Modal Cài Đặt Trình Đọc (`ComicReaderControl.axaml`)**:
    - Tinh chỉnh Modal F5 Settings và Tab 3 (Cache Data) co giãn responsive mượt mà trên cả máy tính và màn hình điện thoại dọc.
 
+---
+
+## 36. Khắc Phục Triệt Để Xung Đột Chromium ProcessSingleton Lock & Triệt Tiêu 100% Lỗi Mất Asset Trên Release Beta (`upload_beta_browser.py`, `upload beta.cmd`)
+1. **Cơ Chế Tự Động Giải Phóng & Phòng Thủ Xung Đột ProcessSingleton**:
+   - Khắc phục lỗi `Failed to create a ProcessSingleton for your profile by another instance of Chromium. Lock file can not be created!`.
+   - `cleanup_edge_profile_locks`: Tự động truy vấn WMI/CIM quét các tiến trình `msedge.exe` chạy ngầm/mồ côi giữ thư mục `.edge_profile` và ép kết thúc (`taskkill /F`); quét và xóa sạch các tệp lock Chromium (`lockfile`, `SingletonLock`, `SingletonCookie`, `SingletonSocket`, `SingletonPort`) ở cả root profile và thư mục `Default`.
+   - `launch_edge_context_safe`: Bọc quá trình khởi tạo persistent context trong cơ chế retry 3 lần thông minh, tự động kích hoạt dọn dẹp và giãn cách thời gian nếu phát hiện lỗi khóa hồ sơ.
+   - `upload beta.cmd`: Tích hợp bước dọn dẹp sơ bộ lockfile trước khi nạp Python.
+2. **Triệt Tiêu 100% Hiện Tượng Xóa Asset Cũ Xong Nhưng Không Upload Được File Mới**:
+   - **Trì hoãn thời điểm dọn dẹp asset cũ (Deferred Deletion)**: Tuyệt đối không xóa asset cũ trước khi điều hướng. Chỉ thực hiện xóa asset cũ khi trang Release Edit (`EDIT_URL`) đã tải xong và selector `#releases-upload` đã xuất hiện sẵn sàng nhận tệp mới.
+   - **Hệ thống Cứu hộ Tự động Qua Direct REST API (Three-Tier Safety Net)**:
+     * Viết mới `ProgressFileReader` hỗ trợ stream dữ liệu trực tiếp từ ổ đĩa theo khối 128 KB, đo lường tốc độ tức thời / trung bình và % hoàn thành theo thời gian thực.
+     * `upload_single_asset_direct_api`: Tự động stream upload trực tiếp từng file lên GitHub Release API (`https://uploads.github.com/.../releases/{id}/assets?name={file_name}`).
+     * `fallback_direct_api_upload`: Nếu quá trình tải Direct-to-S3 qua trình duyệt Edge bị stall/crash sau các lượt retry, hệ thống tự động kích hoạt luồng cứu hộ API để đưa các file lên GitHub, bảo đảm Release Beta không bao giờ bị rỗng.
+     * **Xác thực hậu kiểm (Post-Upload Verification)**: Ngay sau khi hoàn tất, script tự động đối chiếu danh sách asset trực tuyến trên Release Beta, nếu thiếu bất kỳ file nào trong 3 gói (`.apk`, `.exe`, `.tar.gz`) sẽ lập tức stream upload bổ sung qua API.
+
