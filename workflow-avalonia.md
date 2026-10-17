@@ -2833,9 +2833,9 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
    - Modal quản lý độc quyền cho Tab Download hiển thị 2 cụm chức năng cốt lõi:
      * Nhóm 1: Bộ nhớ đệm ảnh bìa (Thumbnails) — Thiết lập hạn mức quota (`Set thumbnails storage`) và Xóa sạch ảnh bìa (`Clear Thumbnails`).
      * Nhóm 2: Bộ nhớ đệm tệp nén & tài liệu (Zip Cache) — Thiết lập hạn mức quota (`Set zip-file cache storage`), Xóa sạch tệp nén đệm (`Clear zip-file cache`) và Đổi thời hạn lưu trữ (`Set retention period`).
-3. **Thu Gọn & Định Chuẩn Dữ Liệu Trong Tab Thư Viện (`LibraryView.axaml`)**:
-   - Loại bỏ hoàn toàn Thumbnail Storage và Zip Cache khỏi Thư viện theo yêu cầu nghiệp vụ.
-   - Modal Thư viện chỉ tập trung quản lý dữ liệu đọc đặc thù: Xóa vị trí đọc dở (`Clear resume cache`), Xóa dấu trang (`Clear bookmarks`), Xóa lịch sử đọc (`Clear history`) và Xóa toàn bộ dữ liệu đọc (`Clear library data`).
+3. **Tích Hợp Đồng Bộ Bộ Nhớ Đệm Vào Thư Viện (`LibraryView.axaml`)**:
+   - Khôi phục đầy đủ cụm Thumbnail Storage (Hạn mức & Xóa ảnh bìa) và Zip Cache (Hạn mức, Xóa cache giải nén, Thời hạn lưu) trong Modal Thư viện, đáp ứng nhu cầu quản lý ảnh bìa và file nén trực tiếp trong Thư viện.
+   - Kết hợp mượt mà với cụm Dữ liệu đọc đặc thù: Xóa vị trí đọc dở (`Clear resume cache`), Xóa dấu trang (`Clear bookmarks`), Xóa lịch sử đọc (`Clear history`) và Xóa toàn bộ dữ liệu đọc (`Clear library data`).
 4. **Tối Ưu Modal Cài Đặt Trình Đọc (`ComicReaderControl.axaml`)**:
    - Tinh chỉnh Modal F5 Settings và Tab 3 (Cache Data) co giãn responsive mượt mà trên cả máy tính và màn hình điện thoại dọc.
 
@@ -2854,4 +2854,13 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      * `upload_single_asset_direct_api`: Tự động stream upload trực tiếp từng file lên GitHub Release API (`https://uploads.github.com/.../releases/{id}/assets?name={file_name}`).
      * `fallback_direct_api_upload`: Nếu quá trình tải Direct-to-S3 qua trình duyệt Edge bị stall/crash sau các lượt retry, hệ thống tự động kích hoạt luồng cứu hộ API để đưa các file lên GitHub, bảo đảm Release Beta không bao giờ bị rỗng.
      * **Xác thực hậu kiểm (Post-Upload Verification)**: Ngay sau khi hoàn tất, script tự động đối chiếu danh sách asset trực tuyến trên Release Beta, nếu thiếu bất kỳ file nào trong 3 gói (`.apk`, `.exe`, `.tar.gz`) sẽ lập tức stream upload bổ sung qua API.
+
+---
+
+## 37. Khôi Phục Toàn Diện Quản Lý Thumbnail Storage & Zip Cache Cho Tab Thư Viện (`LibraryView.axaml`)
+1. **Đồng Bộ Bộ Nhớ Đệm Đa Năng Cho Thư Viện**:
+   - Khôi phục đầy đủ 2 nhóm cốt lõi Thumbnail Storage và Zip-File Cache vào Modal Bộ nhớ đệm của Thư viện (`LibraryView.axaml`), kết nối trực tiếp với các lệnh và thuộc tính đã sẵn sàng trong `LibraryViewModel.cs`.
+   - Cung cấp 3 Dialog chọn hạn mức responsive (Hạn mức Thumbnail Quota 200MB - 5GB; Hạn mức Zip Quota 500MB - 32GB; Thời hạn lưu Retention 1 - 30 ngày / Vĩnh viễn).
+   - Thanh tổng hợp dung lượng hiển thị `TotalCacheSummaryText`, phân loại rõ ràng 3 nhóm: Ảnh bìa (Thumbnails), Tệp nén (Zip Cache), và Dữ liệu đọc (Resume, Bookmarks, History).
+   - Đổi nhãn nút trên Toolbar thành `💾 Bộ nhớ đệm` để người dùng nhận diện nhanh chóng.
 
