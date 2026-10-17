@@ -107,7 +107,7 @@ public sealed class GoogleDriveSyncService
 
     // Client ID công khai được kiểm thử sẵn (hỗ trợ Quick Connect tức thì không cần tạo project)
     public const string CommunityClientId = "202264815644.apps.googleusercontent.com";
-    public const string CommunityClientSecret = "XXZa4bkAmKiuh1SBcwGCJxj_";
+    public const string CommunityClientSecret = "X4Z3ca8xfWDb1Voo-F9a7ZxJ";
 
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
@@ -174,6 +174,14 @@ public sealed class GoogleDriveSyncService
                 if (loaded != null)
                 {
                     _config = loaded;
+
+                    // Tự động chuyển đổi secret cũ bị vô hiệu hóa sang secret mới hợp lệ
+                    if (_config.ClientSecret == "XXZa4bkAmKiuh1SBcwGCJxj_" ||
+                        (_config.ClientId == CommunityClientId && _config.ClientSecret != CommunityClientSecret))
+                    {
+                        _config.ClientSecret = CommunityClientSecret;
+                        SaveConfigToDisk();
+                    }
                 }
             }
         }
@@ -322,7 +330,14 @@ public sealed class GoogleDriveSyncService
 
         string clientSecret = !string.IsNullOrWhiteSpace(customClientSecret)
             ? customClientSecret.Trim()
-            : (!string.IsNullOrWhiteSpace(_config.ClientSecret) ? _config.ClientSecret.Trim() : CommunityClientSecret);
+            : (!string.IsNullOrWhiteSpace(_config.ClientSecret) && _config.ClientSecret != "XXZa4bkAmKiuh1SBcwGCJxj_"
+                ? _config.ClientSecret.Trim()
+                : CommunityClientSecret);
+
+        if (clientId == CommunityClientId && (string.IsNullOrWhiteSpace(clientSecret) || clientSecret == "XXZa4bkAmKiuh1SBcwGCJxj_"))
+        {
+            clientSecret = CommunityClientSecret;
+        }
 
         int port = FindFreeLoopbackPort();
         string redirectUri = $"http://127.0.0.1:{port}/callback/";
@@ -491,7 +506,14 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
             string actualSecret = !string.IsNullOrWhiteSpace(clientSecret)
                 ? clientSecret.Trim()
-                : (!string.IsNullOrWhiteSpace(_config.ClientSecret) ? _config.ClientSecret.Trim() : CommunityClientSecret);
+                : (!string.IsNullOrWhiteSpace(_config.ClientSecret) && _config.ClientSecret != "XXZa4bkAmKiuh1SBcwGCJxj_"
+                    ? _config.ClientSecret.Trim()
+                    : CommunityClientSecret);
+
+            if (actualClientId == CommunityClientId && (string.IsNullOrWhiteSpace(actualSecret) || actualSecret == "XXZa4bkAmKiuh1SBcwGCJxj_"))
+            {
+                actualSecret = CommunityClientSecret;
+            }
 
             var postData = new Dictionary<string, string>
             {
@@ -588,16 +610,21 @@ p {{ color: #94A3B8; font-size: 14px; }}
         // Cần làm mới token
         try
         {
+            string actualClientId = !string.IsNullOrWhiteSpace(_config.ClientId) ? _config.ClientId : CommunityClientId;
+            string actualSecret = _config.ClientSecret == "XXZa4bkAmKiuh1SBcwGCJxj_" || (actualClientId == CommunityClientId && string.IsNullOrWhiteSpace(_config.ClientSecret))
+                ? CommunityClientSecret
+                : _config.ClientSecret;
+
             var postData = new Dictionary<string, string>
             {
-                ["client_id"] = _config.ClientId,
+                ["client_id"] = actualClientId,
                 ["refresh_token"] = _config.RefreshToken,
                 ["grant_type"] = "refresh_token"
             };
 
-            if (!string.IsNullOrWhiteSpace(_config.ClientSecret))
+            if (!string.IsNullOrWhiteSpace(actualSecret))
             {
-                postData["client_secret"] = _config.ClientSecret;
+                postData["client_secret"] = actualSecret;
             }
 
             using var content = new FormUrlEncodedContent(postData);
