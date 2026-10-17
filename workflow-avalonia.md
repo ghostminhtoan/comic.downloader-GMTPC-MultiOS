@@ -3139,4 +3139,16 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      * ComboBox trên giao diện Modal cho phép người dùng chọn bất kỳ thiết bị nguồn nào để phục hồi dữ liệu về máy hiện tại (ví dụ: đồng bộ dấu trang từ Android sang PC hoặc ngược lại).
      * Hỗ trợ đổi tên thiết bị ngay trên UI và lưu đồng bộ vào cấu hình `gdrive_auth.json`.
 
+6. **Tự Động Đổi Tên Thư Mục Drive Khi Đổi Tên Thiết Bị & Hỗ Trợ Đăng Nhập Android Cross-Platform**:
+   - **Tự động đổi tên thư mục Google Drive (Live Folder Rename & Merge)**:
+     * Phương thức `RenameDeviceFolderAsync(newName)`: Gọi PATCH `files/{folderId}` của Google Drive REST API v3 để đổi tên thư mục từ tên cũ sang tên mới (ví dụ `[Windows] ADMIN-PC` -> `231`).
+     * Xử lý gộp thư mục (`MergeDeviceFoldersAsync`): Nếu cả thư mục cũ và thư mục mới đều đã tồn tại trên Drive, hệ thống tự động di chuyển toàn bộ tệp sao lưu từ thư mục cũ sang mới, sau đó đưa thư mục rác cũ vào thùng rác (`TrashFileAsync`), đảm bảo dữ liệu không bị thất lạc.
+     * Nâng cấp `GetCloudDeviceSlotsAsync()`: Quét tìm các slot thiết bị ở cả thư mục con trực tiếp trong `Comic Downloader GMTPC/` và thư mục `Devices/`, khắc phục triệt để lỗi ComboBox danh sách nguồn phục hồi bị rỗng.
+   - **Tối ưu hóa trải nghiệm Google Drive trên Android**:
+     * Nút `☁️ DRIVE` trên Header Bar của `MainView.axaml`: Luôn luôn hiển thị ở đầu màn hình trên mọi nền tảng và mọi tab.
+     * Nút `☁️ Google Drive` trên thanh công cụ chính của Thư viện (`LibraryView.axaml`): Mở hộp thoại Cloud Sync ngay từ giao diện Thư viện.
+     * Tự động điều hướng trên Android (`OperatingSystem.IsAndroid()`): Tự động chuyển sang luồng Manual Code Flow do Android không hỗ trợ mở HttpListener loopback.
+     * Tiện ích cảm ứng 1 chạm: Bổ sung 3 nút trợ lực: `🌐 Mở Trình Duyệt` (`LaunchWebUrlAsync`), `📋 Chép Link` (Clipboard), và `📋 Dán Mã` (Clipboard) giúp người dùng Android đăng nhập Google Drive dễ dàng.
+
+
 

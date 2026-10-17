@@ -869,7 +869,8 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Đảm bảo và lấy ID thư mục riêng của thiết bị hiện tại: \GMTPC\Comic Downloader GMTPC\Devices\[Platform] DeviceName\
+    /// Đảm bảo và lấy ID thư mục riêng của thiết bị hiện tại trên Google Drive.
+    /// Hỗ trợ cả cấu trúc trực tiếp trong \GMTPC\Comic Downloader GMTPC\[DeviceName]\ hoặc \Devices\[DeviceName]\.
     /// </summary>
     public async Task<string?> EnsureCurrentDeviceFolderAsync(CancellationToken ct = default)
     {
@@ -879,7 +880,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
         string? appFolderId = await EnsureTargetFolderAsync(ct);
         if (string.IsNullOrEmpty(appFolderId)) return null;
 
-        // Nếu đã cache device folder id, kiểm tra tính hợp lệ nhanh
+        // Nếu đã cache device folder id, kiểm tra tính hợp lệ và cập nhật tên nếu cần
         if (!string.IsNullOrEmpty(_config.CachedDeviceFolderId))
         {
             try
@@ -893,9 +894,18 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     using var checkDoc = JsonDocument.Parse(checkJson);
                     bool trashed = checkDoc.RootElement.TryGetProperty("trashed", out var tr) && tr.GetBoolean();
                     string name = checkDoc.RootElement.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                    if (!trashed && name.Equals(CurrentDeviceName, StringComparison.OrdinalIgnoreCase))
+                    if (!trashed)
                     {
-                        return _config.CachedDeviceFolderId;
+                        if (name.Equals(CurrentDeviceName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return _config.CachedDeviceFolderId;
+                        }
+                        else
+                        {
+                            // Tên trên Drive khác CurrentDeviceName -> tự động rename folder trên Drive cho đồng bộ!
+                            await RenameDeviceFolderAsync(CurrentDeviceName, ct);
+                            return _config.CachedDeviceFolderId;
+                        }
                     }
                 }
                 _config.CachedDeviceFolderId = string.Empty;
@@ -904,23 +914,230 @@ p {{ color: #94A3B8; font-size: 14px; }}
             catch { }
         }
 
-        // Bước 1: Tìm hoặc tạo thư mục 'Devices' trực thuộc appFolderId
-        string? devicesFolderId = await FindOrCreateFolderAsync(DevicesFolderName, appFolderId, token, ct);
-        if (string.IsNullOrEmpty(devicesFolderId)) return null;
-
-        // Bước 2: Tìm hoặc tạo thư mục cho thiết bị hiện tại trực thuộc 'Devices'
-        string? deviceFolderId = await FindOrCreateFolderAsync(CurrentDeviceName, devicesFolderId, token, ct);
-        if (!string.IsNullOrEmpty(deviceFolderId))
+        // Tìm theo CurrentDeviceName trong appFolderId hoặc Devices
+        string? existingFolderId = await FindFolderByNameInAppOrDevicesAsync(CurrentDeviceName, appFolderId, token, ct);
+        if (!string.IsNullOrEmpty(existingFolderId))
         {
-            _config.CachedDeviceFolderId = deviceFolderId;
+            _config.CachedDeviceFolderId = existingFolderId;
+            SaveConfigToDisk();
+            return existingFolderId;
+        }
+
+        // Nếu chưa có, tạo mới: nếu đã có thư mục Devices thì đặt vào Devices, ngược lại đặt trực tiếp trong appFolderId
+        string? devicesFolderId = await FindFolderByNameAsync(DevicesFolderName, appFolderId, token, ct);
+        string parentForNewDevice = !string.IsNullOrEmpty(devicesFolderId) ? devicesFolderId : appFolderId;
+
+        string? createdId = await FindOrCreateFolderAsync(CurrentDeviceName, parentForNewDevice, token, ct);
+        if (!string.IsNullOrEmpty(createdId))
+        {
+            _config.CachedDeviceFolderId = createdId;
             SaveConfigToDisk();
         }
 
-        return deviceFolderId;
+        return createdId;
+    }
+
+    /// <summary>
+    /// Đổi tên thiết bị hiện tại đồng thời tự động rename thư mục tương ứng trên Google Drive qua REST API v3.
+    /// Tự động xử lý trường hợp thư mục mới đã tồn tại từ trước (gộp tệp và xóa thư mục trùng lặp cũ).
+    /// </summary>
+    public async Task<(bool Success, string Message)> RenameDeviceFolderAsync(string newCustomName, CancellationToken ct = default)
+    {
+        string trimmed = newCustomName?.Trim() ?? string.Empty;
+        trimmed = trimmed.Replace("/", "-").Replace("\\", "-").Replace("'", "");
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return (false, "Tên thiết bị không được để trống.");
+        }
+
+        string oldDeviceName = CurrentDeviceName;
+        if (oldDeviceName.Equals(trimmed, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(_config.CachedDeviceFolderId))
+        {
+            return (true, $"Tên thiết bị đã là [{trimmed}].");
+        }
+
+        // Cập nhật tên trong config cục bộ
+        _config.CustomDeviceName = trimmed;
+        SaveConfigToDisk();
+
+        if (!IsConnected)
+        {
+            NotifyStatusChanged($"Đã đổi tên thiết bị cục bộ thành: [{trimmed}]");
+            return (true, $"Đã đổi tên thiết bị cục bộ thành [{trimmed}].");
+        }
+
+        string? token = await EnsureValidAccessTokenAsync(ct);
+        if (string.IsNullOrEmpty(token))
+        {
+            return (false, "Không thể lấy token xác thực Google Drive.");
+        }
+
+        string? appFolderId = await EnsureTargetFolderAsync(ct);
+        if (string.IsNullOrEmpty(appFolderId))
+        {
+            return (false, "Không thể kết nối thư mục chính trên Google Drive.");
+        }
+
+        try
+        {
+            // 1. Tìm thư mục hiện tại của thiết bị (dựa vào cached ID hoặc tên cũ)
+            string? currentFolderId = _config.CachedDeviceFolderId;
+            bool currentFolderValid = false;
+
+            if (!string.IsNullOrEmpty(currentFolderId))
+            {
+                using var checkReq = new HttpRequestMessage(HttpMethod.Get, $"{GoogleDriveApiBase}/files/{currentFolderId}?fields=id,name,trashed");
+                checkReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                using var checkRes = await _httpClient.SendAsync(checkReq, ct);
+                if (checkRes.IsSuccessStatusCode)
+                {
+                    string checkJson = await checkRes.Content.ReadAsStringAsync(ct);
+                    using var doc = JsonDocument.Parse(checkJson);
+                    bool trashed = doc.RootElement.TryGetProperty("trashed", out var tr) && tr.GetBoolean();
+                    if (!trashed) currentFolderValid = true;
+                }
+            }
+
+            if (!currentFolderValid)
+            {
+                currentFolderId = await FindFolderByNameInAppOrDevicesAsync(oldDeviceName, appFolderId, token, ct);
+            }
+
+            // 2. Kiểm tra xem trên Drive đã có thư mục mang tên mới 'trimmed' chưa
+            string? existingNewFolderId = await FindFolderByNameInAppOrDevicesAsync(trimmed, appFolderId, token, ct);
+
+            if (!string.IsNullOrEmpty(currentFolderId))
+            {
+                if (!string.IsNullOrEmpty(existingNewFolderId) && existingNewFolderId != currentFolderId)
+                {
+                    // Trường hợp cả hai thư mục đều đã tồn tại (ví dụ: đã tạo thư mục mới khi thử đổi tên trước đó)
+                    // Gộp tệp tin từ thư mục cũ sang thư mục mới
+                    await MergeDeviceFoldersAsync(currentFolderId, existingNewFolderId, token, ct);
+
+                    // Chuyển thư mục cũ vào Thùng rác (Trash) để tránh trùng lặp
+                    await TrashFileAsync(currentFolderId, token, ct);
+
+                    _config.CachedDeviceFolderId = existingNewFolderId;
+                    SaveConfigToDisk();
+                }
+                else
+                {
+                    // Đổi tên thư mục cũ trên Google Drive qua lệnh PATCH
+                    var patchBody = new { name = trimmed };
+                    using var patchReq = new HttpRequestMessage(HttpMethod.Patch, $"{GoogleDriveApiBase}/files/{currentFolderId}");
+                    patchReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    patchReq.Content = new StringContent(JsonSerializer.Serialize(patchBody), Encoding.UTF8, "application/json");
+
+                    using var patchRes = await _httpClient.SendAsync(patchReq, ct);
+                    if (!patchRes.IsSuccessStatusCode)
+                    {
+                        string err = await patchRes.Content.ReadAsStringAsync(ct);
+                        return (false, $"Lỗi đổi tên thư mục trên Google Drive ({patchRes.StatusCode}): {err}");
+                    }
+
+                    _config.CachedDeviceFolderId = currentFolderId;
+                    SaveConfigToDisk();
+                }
+
+                NotifyStatusChanged($"Đã đổi tên thư mục thiết bị trên Google Drive thành: [{trimmed}]");
+                return (true, $"Đã tự động đổi tên thư mục thiết bị trên Google Drive thành [{trimmed}].");
+            }
+            else
+            {
+                // Thư mục chưa có trên Drive, khởi tạo thư mục mới với tên đã đổi
+                string? newId = await EnsureCurrentDeviceFolderAsync(ct);
+                NotifyStatusChanged($"Đã thiết lập tên thiết bị mới: [{trimmed}]");
+                return (true, $"Đã cập nhật tên thiết bị thành [{trimmed}].");
+            }
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Ngoại lệ khi đổi tên thư mục: {ex.Message}");
+        }
+    }
+
+    private async Task<string?> FindFolderByNameAsync(string folderName, string parentId, string token, CancellationToken ct)
+    {
+        try
+        {
+            string query = $"name = '{folderName.Replace("'", "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and '{parentId}' in parents and trashed = false";
+            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name)&pageSize=1";
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var res = await _httpClient.SendAsync(req, ct);
+
+            if (res.IsSuccessStatusCode)
+            {
+                string json = await res.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("files", out var files) && files.GetArrayLength() > 0)
+                {
+                    return files[0].GetProperty("id").GetString();
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private async Task<string?> FindFolderByNameInAppOrDevicesAsync(string folderName, string appFolderId, string token, CancellationToken ct)
+    {
+        // 1. Tìm trực tiếp trong appFolderId
+        string? id = await FindFolderByNameAsync(folderName, appFolderId, token, ct);
+        if (!string.IsNullOrEmpty(id)) return id;
+
+        // 2. Tìm trong thư mục Devices nếu có
+        string? devicesFolderId = await FindFolderByNameAsync(DevicesFolderName, appFolderId, token, ct);
+        if (!string.IsNullOrEmpty(devicesFolderId))
+        {
+            return await FindFolderByNameAsync(folderName, devicesFolderId, token, ct);
+        }
+
+        return null;
+    }
+
+    private async Task MergeDeviceFoldersAsync(string sourceFolderId, string targetFolderId, string token, CancellationToken ct)
+    {
+        try
+        {
+            string[] filesToSync = { QueueFileName, ReaderFileName, ManifestFileName };
+            foreach (var fileName in filesToSync)
+            {
+                var targetFile = await GetFileInfoAsync(targetFolderId, fileName, ct);
+                var sourceFile = await GetFileInfoAsync(sourceFolderId, fileName, ct);
+
+                if (sourceFile.Exists && (!targetFile.Exists || (sourceFile.ModifiedTime > targetFile.ModifiedTime)))
+                {
+                    var (ok, content, _, _) = await DownloadFileContentAsync(sourceFolderId, fileName, ct);
+                    if (ok && !string.IsNullOrEmpty(content))
+                    {
+                        string mime = fileName.EndsWith(".json") ? "application/json" : "text/markdown";
+                        await UploadOrUpdateFileAsync(targetFolderId, fileName, content, mime, ct);
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task<bool> TrashFileAsync(string fileId, string token, CancellationToken ct)
+    {
+        try
+        {
+            var body = new { trashed = true };
+            using var req = new HttpRequestMessage(HttpMethod.Patch, $"{GoogleDriveApiBase}/files/{fileId}");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+            using var res = await _httpClient.SendAsync(req, ct);
+            return res.IsSuccessStatusCode;
+        }
+        catch { return false; }
     }
 
     /// <summary>
     /// Lấy danh sách toàn bộ các thiết bị (Slots) đã được đồng bộ trên cùng tài khoản Google Drive.
+    /// Tự động quét cả thư mục trực tiếp trong \GMTPC\Comic Downloader GMTPC\ lẫn thư mục con trong \Devices\.
     /// </summary>
     public async Task<List<GoogleDriveDeviceSlot>> GetCloudDeviceSlotsAsync(CancellationToken ct = default)
     {
@@ -933,32 +1150,47 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
         try
         {
-            // Tìm folder Devices
-            string query = $"name = '{DevicesFolderName}' and mimeType = 'application/vnd.google-apps.folder' and '{appFolderId}' in parents and trashed = false";
-            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name)&pageSize=1";
+            var rawFolders = new List<(string Id, string Name)>();
 
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var res = await _httpClient.SendAsync(req, ct);
+            // 1. Quét toàn bộ thư mục con trực tiếp trong appFolderId
+            string query = $"mimeType = 'application/vnd.google-apps.folder' and '{appFolderId}' in parents and trashed = false";
+            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name)&pageSize=100";
 
             string? devicesFolderId = null;
-            if (res.IsSuccessStatusCode)
+            using (var req = new HttpRequestMessage(HttpMethod.Get, url))
             {
-                string json = await res.Content.ReadAsStringAsync(ct);
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("files", out var files) && files.GetArrayLength() > 0)
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                using var res = await _httpClient.SendAsync(req, ct);
+                if (res.IsSuccessStatusCode)
                 {
-                    devicesFolderId = files[0].GetProperty("id").GetString();
+                    string json = await res.Content.ReadAsStringAsync(ct);
+                    using var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("files", out var files))
+                    {
+                        foreach (var f in files.EnumerateArray())
+                        {
+                            string id = f.GetProperty("id").GetString() ?? "";
+                            string name = f.GetProperty("name").GetString() ?? "";
+                            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(name)) continue;
+
+                            if (name.Equals(DevicesFolderName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                devicesFolderId = id;
+                            }
+                            else
+                            {
+                                rawFolders.Add((id, name));
+                            }
+                        }
+                    }
                 }
             }
 
-            bool foundCurrentDevice = false;
-
+            // 2. Nếu có thư mục Devices, quét thêm toàn bộ thư mục bên trong Devices
             if (!string.IsNullOrEmpty(devicesFolderId))
             {
-                // Liệt kê các folder thiết bị trong Devices
                 string subQuery = $"mimeType = 'application/vnd.google-apps.folder' and '{devicesFolderId}' in parents and trashed = false";
-                string subUrl = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(subQuery)}&fields=files(id, name, modifiedTime)&pageSize=50";
+                string subUrl = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(subQuery)}&fields=files(id, name)&pageSize=100";
 
                 using var subReq = new HttpRequestMessage(HttpMethod.Get, subUrl);
                 subReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -968,56 +1200,66 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 {
                     string subJson = await subRes.Content.ReadAsStringAsync(ct);
                     using var subDoc = JsonDocument.Parse(subJson);
-                    if (subDoc.RootElement.TryGetProperty("files", out var devFolders))
+                    if (subDoc.RootElement.TryGetProperty("files", out var devFiles))
                     {
-                        foreach (var f in devFolders.EnumerateArray())
+                        foreach (var f in devFiles.EnumerateArray())
                         {
                             string id = f.GetProperty("id").GetString() ?? "";
                             string name = f.GetProperty("name").GetString() ?? "";
                             if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(name)) continue;
-
-                            bool isCurrent = name.Equals(CurrentDeviceName, StringComparison.OrdinalIgnoreCase);
-                            if (isCurrent) foundCurrentDevice = true;
-
-                            var slot = new GoogleDriveDeviceSlot
+                            if (!rawFolders.Any(x => x.Id == id))
                             {
-                                DeviceFolderId = id,
-                                DeviceFolderName = name,
-                                IsCurrentDevice = isCurrent
-                            };
-
-                            // Đọc thông tin tệp trong thư mục thiết bị này
-                            slot.QueueCloudFile = await GetFileInfoAsync(id, QueueFileName, ct);
-                            slot.ReaderCloudFile = await GetFileInfoAsync(id, ReaderFileName, ct);
-                            slot.ManifestCloudFile = await GetFileInfoAsync(id, ManifestFileName, ct);
-
-                            slot.LastSyncUtc = slot.ManifestCloudFile.ModifiedTime
-                                ?? slot.QueueCloudFile.ModifiedTime
-                                ?? slot.ReaderCloudFile.ModifiedTime;
-
-                            string timeStr = slot.LastSyncUtc.HasValue
-                                ? slot.LastSyncUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
-                                : "Chưa có dữ liệu";
-
-                            string icon = name.Contains("Android") ? "📱"
-                                : name.Contains("Linux") ? "🐧"
-                                : name.Contains("macOS") || name.Contains("Mac") ? "🍎"
-                                : "🖥️";
-
-                            slot.DisplayName = isCurrent
-                                ? $"⭐ {icon} {name} (Thiết bị này - {timeStr})"
-                                : $"{icon} {name} ({timeStr})";
-
-                            if (isCurrent)
-                            {
-                                slots.Insert(0, slot);
-                            }
-                            else
-                            {
-                                slots.Add(slot);
+                                rawFolders.Add((id, name));
                             }
                         }
                     }
+                }
+            }
+
+            bool foundCurrentDevice = false;
+
+            foreach (var (id, name) in rawFolders)
+            {
+                bool isCurrent = name.Equals(CurrentDeviceName, StringComparison.OrdinalIgnoreCase) ||
+                                 (!string.IsNullOrEmpty(_config.CachedDeviceFolderId) && id == _config.CachedDeviceFolderId);
+
+                if (isCurrent) foundCurrentDevice = true;
+
+                var slot = new GoogleDriveDeviceSlot
+                {
+                    DeviceFolderId = id,
+                    DeviceFolderName = name,
+                    IsCurrentDevice = isCurrent
+                };
+
+                slot.QueueCloudFile = await GetFileInfoAsync(id, QueueFileName, ct);
+                slot.ReaderCloudFile = await GetFileInfoAsync(id, ReaderFileName, ct);
+                slot.ManifestCloudFile = await GetFileInfoAsync(id, ManifestFileName, ct);
+
+                slot.LastSyncUtc = slot.ManifestCloudFile.ModifiedTime
+                    ?? slot.QueueCloudFile.ModifiedTime
+                    ?? slot.ReaderCloudFile.ModifiedTime;
+
+                string timeStr = slot.LastSyncUtc.HasValue
+                    ? slot.LastSyncUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                    : "Chưa có dữ liệu";
+
+                string icon = name.Contains("Android") ? "📱"
+                    : name.Contains("Linux") ? "🐧"
+                    : name.Contains("macOS") || name.Contains("Mac") ? "🍎"
+                    : "🖥️";
+
+                slot.DisplayName = isCurrent
+                    ? $"⭐ {icon} {name} (Thiết bị này - {timeStr})"
+                    : $"{icon} {name} ({timeStr})";
+
+                if (isCurrent)
+                {
+                    slots.Insert(0, slot);
+                }
+                else
+                {
+                    slots.Add(slot);
                 }
             }
 
@@ -1032,7 +1274,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 {
                     DeviceFolderId = string.Empty,
                     DeviceFolderName = CurrentDeviceName,
-                    DisplayName = $"⭐ {icon} {CurrentDeviceName} (Thiết bị này - Chưa sao lưu)",
+                    DisplayName = $"⭐ {icon} {CurrentDeviceName} (Thiết bị này - Sẵn sàng sao lưu)",
                     IsCurrentDevice = true
                 });
             }
@@ -1056,7 +1298,10 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 });
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[GoogleDriveSync] Lỗi quét danh sách thiết bị: {ex.Message}");
+        }
 
         return slots;
     }
@@ -1305,7 +1550,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
             string? folderId = await EnsureCurrentDeviceFolderAsync(ct);
             if (string.IsNullOrEmpty(folderId)) return (false, "Không thể mở hoặc tạo thư mục thiết bị trên Google Drive.");
 
-            var itemList = items as IList<ComicBookItem> ?? items.ToList();
+            var itemList = items.ToList();
             string mdContent = QueueBackupService.Instance.BuildQueueMarkdownContent(itemList);
             var (ok, _, msg) = await UploadOrUpdateFileAsync(folderId, QueueFileName, mdContent, "text/markdown", ct);
 

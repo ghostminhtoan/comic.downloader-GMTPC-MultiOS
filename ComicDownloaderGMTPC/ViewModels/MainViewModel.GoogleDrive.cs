@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.Services;
@@ -128,13 +129,43 @@ public partial class MainViewModel
     [RelayCommand]
     public async Task SaveCustomDeviceNameAsync()
     {
-        if (!string.IsNullOrWhiteSpace(CustomDeviceNameInput))
+        if (string.IsNullOrWhiteSpace(CustomDeviceNameInput)) return;
+
+        string newName = CustomDeviceNameInput.Trim();
+        if (string.Equals(newName, _gdriveService.CurrentDeviceName, StringComparison.OrdinalIgnoreCase))
         {
-            _gdriveService.SaveCustomDeviceName(CustomDeviceNameInput);
+            IsRenamingDevice = false;
+            return;
+        }
+
+        IsGoogleDriveBusy = true;
+        GoogleDriveStatusText = $"⏳ Đang cập nhật và đổi tên thư mục thiết bị [{newName}] trên Google Drive...";
+        try
+        {
+            var (ok, msg) = await _gdriveService.RenameDeviceFolderAsync(newName);
             CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
             IsRenamingDevice = false;
-            ShowCenterToast("ĐỔI TÊN THIẾT BỊ", $"Tên thiết bị mới: {CurrentDeviceDisplayName}", "🖥️", "GOOGLE DRIVE", 2000);
+            if (ok)
+            {
+                GoogleDriveStatusText = "✅ " + msg;
+                AddLog("SUCCESS", $"☁️ {msg}");
+                ShowCenterToast("ĐỔI TÊN THIẾT BỊ", msg, "🖥️", "GOOGLE DRIVE", 3000);
+            }
+            else
+            {
+                GoogleDriveStatusText = "⚠️ " + msg;
+                AddLog("WARN", $"☁️ {msg}");
+                ShowCenterToast("ĐỔI TÊN THIẾT BỊ", msg, "⚠️", "GOOGLE DRIVE", 3000);
+            }
             await RefreshGoogleDriveStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            GoogleDriveStatusText = $"❌ Lỗi đổi tên: {ex.Message}";
+        }
+        finally
+        {
+            IsGoogleDriveBusy = false;
         }
     }
 
@@ -278,37 +309,28 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
-    public void OpenGoogleCloudConsole()
+    public async Task OpenGoogleCloudConsoleAsync()
     {
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "https://console.cloud.google.com/apis/credentials",
-                UseShellExecute = true
-            });
-        }
-        catch { }
+        await LaunchWebUrlAsync("https://console.cloud.google.com/apis/credentials");
     }
 
     [RelayCommand]
-    public void OpenGoogleDriveApiLibrary()
+    public async Task OpenGoogleDriveApiLibraryAsync()
     {
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "https://console.cloud.google.com/apis/library/drive.googleapis.com",
-                UseShellExecute = true
-            });
-        }
-        catch { }
+        await LaunchWebUrlAsync("https://console.cloud.google.com/apis/library/drive.googleapis.com");
     }
 
     [RelayCommand]
     public async Task LoginGoogleDriveAsync()
     {
         if (IsGoogleDriveBusy) return;
+
+        // Nếu chạy trên Android, HttpListener loopback không hoạt động -> tự động chuyển sang Manual Code Flow
+        if (OperatingSystem.IsAndroid())
+        {
+            await StartManualLoginGoogleDriveAsync();
+            return;
+        }
 
         IsGoogleDriveBusy = true;
         GoogleDriveStatusText = "⏳ Đang mở trình duyệt để xác thực tài khoản Google...";
@@ -342,7 +364,7 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
-    public void StartManualLoginGoogleDrive()
+    public async Task StartManualLoginGoogleDriveAsync()
     {
         try
         {
@@ -351,18 +373,64 @@ public partial class MainViewModel
             _lastManualRedirectUri = redirect;
             GoogleDriveManualAuthUrl = url;
             IsGoogleDriveManualCodeVisible = true;
-            GoogleDriveStatusText = "📋 Hãy copy đường link xác thực bên dưới, mở trên trình duyệt rồi dán mã nhận được vào ô bên dưới.";
+            GoogleDriveStatusText = "📋 Hãy cấp quyền trên trình duyệt, sao chép mã Authorization Code nhận được rồi dán vào ô bên dưới.";
 
-            // Mở link trên trình duyệt
-            try
-            {
-                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-            }
-            catch { }
+            // Mở link trên trình duyệt mặc định qua hệ thống Cross-Platform LaunchWebUrlAsync
+            await LaunchWebUrlAsync(url);
         }
         catch (Exception ex)
         {
             GoogleDriveStatusText = $"❌ Lỗi tạo link xác thực: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task ReopenManualAuthUrlAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(GoogleDriveManualAuthUrl))
+        {
+            await LaunchWebUrlAsync(GoogleDriveManualAuthUrl);
+        }
+    }
+
+    [RelayCommand]
+    public async Task CopyManualAuthUrlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(GoogleDriveManualAuthUrl)) return;
+        try
+        {
+            var clipboard = GetClipboard();
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(GoogleDriveManualAuthUrl);
+                ShowCenterToast("ĐÃ CHÉP LINK", "Đã chép link đăng nhập Google Drive vào bộ nhớ tạm.", "📋", "GOOGLE DRIVE", 2000);
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Không thể chép link: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task PasteManualCodeAsync()
+    {
+        try
+        {
+            var clipboard = GetClipboard();
+            if (clipboard != null)
+            {
+                string? text = await clipboard.TryGetTextAsync();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    GoogleDriveManualCodeInput = text.Trim();
+                    ShowCenterToast("ĐÃ DÁN MÃ", "Đã dán mã ủy quyền từ bộ nhớ tạm.", "📋", "GOOGLE DRIVE", 1500);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Không thể đọc bộ nhớ tạm: {ex.Message}");
         }
     }
 
@@ -768,43 +836,17 @@ public partial class MainViewModel
             IsGoogleDriveBusy = false;
         }
     }
-                ShowCenterToast("PHỤC HỒI CLOUD THÀNH CÔNG", result.Message, "☁️", "GOOGLE DRIVE", 3500);
-            }
-            else
-            {
-                GoogleDriveStatusText = "❌ " + result.Message;
-            }
-        }
-        catch (Exception ex)
-        {
-            GoogleDriveStatusText = $"❌ Lỗi: {ex.Message}";
-        }
-        finally
-        {
-            IsGoogleDriveBusy = false;
-        }
-    }
 
     [RelayCommand]
-    public void OpenGoogleDriveFolderInBrowser()
+    public async Task OpenGoogleDriveFolderInBrowserAsync()
     {
         try
         {
-            string url;
-            if (!string.IsNullOrEmpty(_gdriveService.TargetFolderId))
-            {
-                url = $"https://drive.google.com/drive/folders/{_gdriveService.TargetFolderId}";
-            }
-            else
-            {
-                url = "https://drive.google.com/drive/my-drive";
-            }
+            string url = !string.IsNullOrEmpty(_gdriveService.TargetFolderId)
+                ? $"https://drive.google.com/drive/folders/{_gdriveService.TargetFolderId}"
+                : "https://drive.google.com/drive/my-drive";
 
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true
-            });
+            await LaunchWebUrlAsync(url);
         }
         catch (Exception ex)
         {
@@ -812,4 +854,5 @@ public partial class MainViewModel
         }
     }
 }
+
 

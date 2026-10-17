@@ -67,6 +67,17 @@
                             <TextBlock Text="{Binding CurrentLanguage, StringFormat='{}🌐 {0}'}" FontWeight="SemiBold" Foreground="#38BDF8" FontSize="11" />
                         </Button>
 
+                        <!-- Google Drive Cloud Sync Nổi Bật Cho Android & Desktop -->
+                        <Button Command="{Binding OpenGoogleDriveModalCommand}"
+                                Background="#4338CA" BorderBrush="#6366F1" BorderThickness="1"
+                                CornerRadius="6" Padding="8,3" Height="28" Margin="0,0,6,4"
+                                ToolTip.Tip="Đồng bộ Cloud đa thiết bị qua Google Drive (Hàng chờ, Dấu trang, Lịch sử đọc)">
+                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                <TextBlock Text="☁️" FontSize="11" />
+                                <TextBlock Text="DRIVE" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
                         <!-- NÚT THOÁT HOÀN TOÀN (BÊN TRÁI NÚT CẬP NHẬT) -->
                         <Button Command="{Binding OpenExitConfirmCommand}"
                                 Background="#991B1B" BorderBrush="#DC2626" BorderThickness="1"
@@ -5317,11 +5328,29 @@
                                                     Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,4,0,0">
                                                 <StackPanel Spacing="6">
                                                     <TextBlock Text="1. Hãy mở đường link này trên trình duyệt và bấm 'Cho phép':" Foreground="#94A3B8" FontSize="10.5" />
-                                                    <TextBox Text="{Binding GoogleDriveManualAuthUrl}" IsReadOnly="True" FontSize="10" Height="28" Background="#0B0F19" Foreground="#38BDF8" />
-                                                    <TextBlock Text="2. Dán mã Authorization Code nhận được vào đây:" Foreground="#94A3B8" FontSize="10.5" Margin="0,4,0,0" />
-                                                    <Grid ColumnDefinitions="*, Auto" ColumnSpacing="6">
+                                                    <Grid ColumnDefinitions="*, Auto, Auto" ColumnSpacing="6">
+                                                        <TextBox Grid.Column="0" Text="{Binding GoogleDriveManualAuthUrl}" IsReadOnly="True" FontSize="10" Height="28" Background="#0B0F19" Foreground="#38BDF8" />
+                                                        <Button Grid.Column="1" Command="{Binding ReopenManualAuthUrlCommand}"
+                                                                Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" CornerRadius="4" Padding="8,4" Height="28"
+                                                                ToolTip.Tip="Mở liên kết này trên trình duyệt web">
+                                                            <TextBlock Text="🌐 Mở Trình Duyệt" FontSize="10.5" />
+                                                        </Button>
+                                                        <Button Grid.Column="2" Command="{Binding CopyManualAuthUrlCommand}"
+                                                                Background="#334155" Foreground="#F8FAFC" FontWeight="SemiBold" CornerRadius="4" Padding="8,4" Height="28"
+                                                                ToolTip.Tip="Chép đường dẫn xác thực vào bộ nhớ tạm">
+                                                            <TextBlock Text="📋 Chép Link" FontSize="10.5" />
+                                                        </Button>
+                                                    </Grid>
+
+                                                    <TextBlock Text="2. Dán mã Authorization Code hoặc URL callback nhận được vào đây:" Foreground="#94A3B8" FontSize="10.5" Margin="0,4,0,0" />
+                                                    <Grid ColumnDefinitions="*, Auto, Auto" ColumnSpacing="6">
                                                         <TextBox Grid.Column="0" Text="{Binding GoogleDriveManualCodeInput}" PlaceholderText="Dán mã code hoặc URL callback..." Height="30" FontSize="11" Background="#0B0F19" />
-                                                        <Button Grid.Column="1" Command="{Binding ConfirmManualCodeGoogleDriveCommand}"
+                                                        <Button Grid.Column="1" Command="{Binding PasteManualCodeCommand}"
+                                                                Background="#334155" Foreground="#F8FAFC" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30"
+                                                                ToolTip.Tip="Dán nhanh từ bộ nhớ tạm">
+                                                            <TextBlock Text="📋 Dán Mã" FontSize="10.5" />
+                                                        </Button>
+                                                        <Button Grid.Column="2" Command="{Binding ConfirmManualCodeGoogleDriveCommand}"
                                                                 Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="12,5" Height="30">
                                                             <TextBlock Text="✓ XÁC NHẬN" FontSize="11" />
                                                         </Button>
