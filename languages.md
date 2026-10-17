@@ -844,5 +844,25 @@
 | Multi-instance disabled (Recommended): Single main app window only | Đang TẮT (Khuyên dùng): Chỉ chạy 1 cửa sổ App chính để tránh xung đột tải và bảo vệ dữ liệu |
 | Standalone Reader Mode | Chế độ đọc truyện độc lập siêu nhẹ |
 
+## 21. Google Drive Cloud Sync (Đồng Bộ Đám Mây Google Drive)
 
-
+| English | Vietnamese |
+| :--- | :--- |
+| Google Drive Cloud Sync | Đồng bộ đám mây Google Drive |
+| Target Folder: \GMTPC\Comic Downloader GMTPC\ | Thư mục chỉ định: \GMTPC\Comic Downloader GMTPC\ |
+| Sign in with Google Drive | Đăng nhập Google Drive |
+| Sign in with Browser | Đăng nhập bằng trình duyệt |
+| Manual Code Authorization | Nhập mã ủy quyền thủ công |
+| Confirm Authorization Code | Xác nhận mã ủy quyền |
+| Custom Client ID & Secret | Tùy biến Client ID & Secret |
+| Disconnect / Sign out | Đăng xuất / Ngắt kết nối |
+| Connected Account | Tài khoản liên kết |
+| Open Folder in Web Drive | Mở thư mục trên Web Drive |
+| Backup Queue to Cloud | Sao lưu hàng chờ lên Drive |
+| Restore Queue from Cloud | Phục hồi hàng chờ từ Drive |
+| Backup Bookmarks & History | Sao lưu Dấu trang & Lịch sử |
+| Restore Bookmarks & History | Phục hồi Dấu trang & Lịch sử |
+| Backup All (Queue + Reader) | Sao lưu tất cả (Queue + Reader) |
+| Restore All from Drive | Phục hồi tất cả từ Drive |
+| Auto-sync to Drive on change | Tự động tải lên Google Drive khi có thay đổi |
+| Refresh Cloud Status | Làm mới trạng thái |

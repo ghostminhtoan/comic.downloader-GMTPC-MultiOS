@@ -3087,18 +3087,38 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
    - Tương thích đa nền tảng Windows, Linux, Android thông qua `TopLevel.StorageProvider`: hỗ trợ chọn file/lưu file cả đường dẫn POSIX trực tiếp và Android Content Streams.
 ---
 
-## 45. Chuẩn Hóa Định Dạng Sao Lưu Markdown (.md) Đa Tầng Cho Dấu Trang & Lịch Sử Đọc (Reader Markdown Backup & Restore)
-1. **Mục tiêu & Kiến trúc Dual-Layer (2 trong 1)**:
-   - Đồng bộ hóa toàn diện chuẩn lưu trữ Markdown (`.md`) giữa 2 phân hệ lớn của ứng dụng: Tab Download (`autosave.md`) và Tab Reader (`saved_reader_bookmarks.md` / `autosave_reader.md`).
-   - Cấu trúc Dual-Layer:
-     * **Tầng 1 - Trực quan cho Người đọc (Human-Readable)**: Bảng biểu Markdown hiển thị đẹp mắt, mở trực tiếp trên Google Drive, GitHub, Obsidian hoặc các ứng dụng di động để xem danh sách Dấu trang (Bookmarks: STT, Bộ truyện, Chương, Trang, %, Memo, Ngày lưu, Đường dẫn) và Lịch sử đọc gần đây (Recent Reading History).
-     * **Tầng 2 - Toàn vẹn cho Máy đọc (Machine-Readable Snapshot)**: Kẹp khối JSON mã hóa bên trong cặp thẻ đánh dấu `<!-- COMIC_READER_STATE_BEGIN -->` và `<!-- COMIC_READER_STATE_END -->`. Giúp bộ parser khôi phục chính xác 100% dữ liệu kỹ thuật (tiến độ đọc chi tiết, tổng số trang, thời gian Unix, và hệ thống khóa định danh linh hoạt `@id|` để giữ nguyên vị trí đọc khi đổi máy/đổi thư mục).
-     * **Fallback thông minh**: Trong trường hợp người dùng chỉnh sửa thủ công file `.md` làm mất thẻ comment JSON, parser tự động đọc và khôi phục trực tiếp từ các hàng của bảng Markdown.
-2. **Giao Diện & Tương Tác**:
-   - Tích hợp cụm nút `💾 SAO LƯU MD` và `📂 PHỤC HỒI MD` trực quan, tiện lợi tại 4 vị trí:
-     1. **Subtab 3: History (Lịch sử đọc)** trong Thư viện truyện (`LibraryView.axaml`).
-     2. **Subtab 4: Bookmark (Dấu trang)** trong Thư viện truyện (`LibraryView.axaml`).
-     3. **Modal Quản lý Bộ nhớ đệm (Cache Data Modal)** của Thư viện truyện (`LibraryView.axaml`).
-     4. **Popup Bookmark List (Button 10)** bên trong Trình đọc truyện (`ComicReaderControl.axaml`).
-   - Tương thích đa nền tảng Windows, Linux, Android thông qua `TopLevel.StorageProvider`: hỗ trợ chọn file/lưu file cả đường dẫn POSIX trực tiếp và Android Content Streams.
+## 46. Tích Hợp Google Drive Cloud Sync Đa Nền Tảng Với Thư Mục Chỉ Định \GMTPC\Comic Downloader GMTPC\
+1. **Kiến Trúc & Tiêu Chuẩn Kỹ Thuật (Zero Dependency, Native REST API v3 & OAuth2 PKCE)**:
+   - **Thư mục chỉ định trên Google Drive**:
+     * Thư mục cha: `root/GMTPC`
+     * Thư mục con ứng dụng: `root/GMTPC/Comic Downloader GMTPC`
+     * Hệ thống tự động truy vấn (`q=name='...' and mimeType='application/vnd.google-apps.folder'`) và tự tạo tự động cây thư mục nếu chưa tồn tại.
+   - **Bảo mật & Chuẩn Xác Thực (OAuth2 PKCE RFC 7636)**:
+     * Scope tối thiểu: `https://www.googleapis.com/auth/drive.file openid email profile` — chỉ truy cập các file/thư mục do chính ứng dụng tạo ra trong Google Drive của người dùng, đảm bảo an toàn riêng tư 100%, không đòi hỏi quyền đọc các tài liệu cá nhân khác của người dùng.
+     * Tạo mã ngẫu nhiên `code_verifier` (32 bytes cryptographically secure) và `code_challenge` S256.
+     * Flow 1 (Loopback tự động trên Desktop): Khởi tạo `HttpListener` trên cổng loopback ngẫu nhiên (`http://127.0.0.1:<port>/callback/`), tự động mở trình duyệt mặc định, bắt callback code và tự động trao đổi lấy `access_token` + `refresh_token`, trả về trang web HTML Cyberpunk thông báo thành công.
+     * Flow 2 (Manual Code / Fallback cho Android & Firewall): Cung cấp URL đăng nhập kèm nút Copy, cho phép người dùng dán Authorization Code nhận được vào ứng dụng để kích hoạt.
+     * Tự động làm mới Access Token (`grant_type=refresh_token`) trước mỗi lần gọi API khi token hết hạn.
+     * Lưu trữ cấu hình và token an toàn tại `.portable/gdrive_auth.json` (hoặc AppData trên Android).
+   - **Tối ưu hóa Truyền Tải (Multipart Upload & Direct Stream)**:
+     * Dùng Standard Library `HttpClient` và `System.Text.Json` có sẵn của .NET 10, không phụ thuộc vào NuGet SDK cồng kềnh.
+     * Với file mới: Dùng Multipart Upload `POST /upload/drive/v3/files?uploadType=multipart` gộp metadata + content trong 1 HTTP request duy nhất.
+     * Với file đã có: Dùng `PATCH /upload/drive/v3/files/{id}?uploadType=media` cập nhật nội dung tức thì.
+2. **Cơ Chế Đồng Bộ 2 Trong 1 (Dual-File Cloud Synchronization)**:
+   - **File 1**: `autosave.md` — Toàn bộ danh sách hàng chờ tải truyện, tiến độ từng chương/trang, dải chương tách, cấu hình số luồng tải.
+   - **File 2**: `saved_reader_bookmarks.md` — Toàn bộ danh sách Dấu trang & Lịch sử đọc truyện, tiến độ đọc dở, thẻ portable identity `@id|`.
+   - **File 3**: `cloud_sync_manifest.json` — Metadata thời gian đồng bộ, tên thiết bị, hệ điều hành (Windows, Linux, Android) và phiên bản ứng dụng.
+   - **Tùy chọn Tự động Đồng bộ (Debounced Auto-Sync)**: Tự động kích hoạt tải lên Google Drive ngầm sau 30 giây kể từ khi có thay đổi trong hàng chờ hoặc lịch sử đọc, hạn chế tối đa việc spam API.
+3. **Giao Diện & Trải Nghiệm Người Dùng (UI/UX)**:
+   - **Nút Mở Nhanh**:
+     * Tab Download Toolbar: Nút `☁️ GOOGLE DRIVE` màu chàm nổi bật `#4F46E5`.
+     * Tab Thư viện (Subtab History, Subtab Bookmark, Cache Modal): Nút `☁️ Google Drive`.
+     * Header Popup Danh Sách Dấu Trang trong Trình đọc (`ComicReaderControl.axaml`): Nút `☁️ Drive`.
+   - **Modal Quản Lý Google Drive Cloud Sync Toàn Diện**:
+     * Thẻ Tài khoản: Hiển thị Avatar/Email/Tên tài khoản, nút Đăng xuất, link mở trực tiếp thư mục `\GMTPC\Comic Downloader GMTPC\` trên giao diện Web Google Drive.
+     * Thẻ Trạng thái Tệp: Hiển thị kích thước và thời gian sửa đổi lần cuối của `autosave.md` và `saved_reader_bookmarks.md` trên đám mây.
+     * Cụm nút tác vụ 1 chạm: `🔄 SAO LƯU TẤT CẢ (QUEUE + READER)`, `⬇ PHỤC HỒI TẤT CẢ TỪ DRIVE`, `🔄 Làm mới trạng thái`.
+     * Checkbox bật/tắt tự động tải lên Google Drive khi có thay đổi.
+     * Bảng cấu hình tùy biến Client ID & Client Secret cá nhân từ Google Cloud Console (dành cho người dùng muốn sở hữu OAuth app riêng).
+
 

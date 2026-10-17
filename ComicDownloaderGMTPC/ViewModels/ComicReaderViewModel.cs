@@ -2076,6 +2076,34 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    public async Task SyncGoogleDriveBookmarksAsync()
+    {
+        if (!GoogleDriveSyncService.Instance.IsConnected)
+        {
+            ShowTransientToast("⚠️ Chưa kết nối Google Drive. Vui lòng kết nối từ màn hình chính.");
+            return;
+        }
+
+        try
+        {
+            ShowTransientToast("⏳ Đang đồng bộ Dấu trang lên Google Drive...");
+            var (ok, msg) = await GoogleDriveSyncService.Instance.BackupReaderToCloudAsync();
+            if (ok)
+            {
+                ShowTransientToast("✅ Đã sao lưu Dấu trang lên Google Drive (\\GMTPC\\Comic Downloader GMTPC\\)");
+            }
+            else
+            {
+                ShowTransientToast($"❌ Lỗi: {msg}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowTransientToast($"❌ Lỗi đồng bộ: {ex.Message}");
+        }
+    }
+
     private static TopLevel? GetTopLevel()
     {
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop && desktop.MainWindow != null)

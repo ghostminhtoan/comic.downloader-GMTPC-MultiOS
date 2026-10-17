@@ -1515,6 +1515,7 @@ public partial class MainViewModel : ViewModelBase
         LoadUserPresetsFromDisk();
         InitializeSearchDomains();
         InitializeQueueAutoBackupAndRestore();
+        InitGoogleDriveService();
 
         // Lắng nghe thay đổi trạng thái Modal của LibraryVm để tự động ẩn/hiện FAB
         LibraryVm.PropertyChanged += (s, e) =>
@@ -1907,6 +1908,10 @@ public partial class MainViewModel : ViewModelBase
         if (_isAutoSaveSuspended) return;
         SyncAutoSaveSettingsToService();
         QueueBackupService.Instance.TriggerDebouncedAutoSave(ComicBooks, delayMs);
+        if (_gdriveService.IsConnected && _gdriveService.AutoSyncEnabled)
+        {
+            _gdriveService.TriggerDebouncedAutoSync(() => ComicBooks.ToList());
+        }
     }
 
     public void FlushAutoSaveImmediately()

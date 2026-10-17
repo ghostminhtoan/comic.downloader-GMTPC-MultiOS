@@ -1432,6 +1432,9 @@
                                     <Button Command="{Binding RestoreQueueCommand}" Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Phục hồi danh sách hàng chờ và tiến độ từ file .md">
                                         <TextBlock Text="📂 PHỤC HỒI MD" FontSize="11" />
                                     </Button>
+                                    <Button Command="{Binding OpenGoogleDriveModalCommand}" Background="#4F46E5" BorderBrush="#818CF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Đồng bộ Hàng chờ tải &amp; Dấu trang / Lịch sử đọc lên Google Drive (\GMTPC\Comic Downloader GMTPC\)">
+                                        <TextBlock Text="☁️ GOOGLE DRIVE" FontSize="11" />
+                                    </Button>
                                     <Button Command="{Binding OpenDownloadCacheModalCommand}" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Quản lý bộ nhớ đệm ảnh bìa (Thumbnails) và tệp nén (Zip file cache) của Tab Download">
                                         <TextBlock Text="💾 BỘ NHỚ ĐỆM" FontSize="11" />
                                     </Button>
@@ -5206,6 +5209,259 @@
                             </Grid>
                         </StackPanel>
                     </Border>
+                </Border>
+            </Panel>
+        </Border>
+
+        <!-- ========================================================================= -->
+        <!-- MODAL GOOGLE DRIVE CLOUD SYNC (\GMTPC\Comic Downloader GMTPC\) -->
+        <!-- ========================================================================= -->
+        <Border IsVisible="{Binding IsGoogleDriveModalOpen}"
+                Background="#C805080F"
+                ZIndex="5500"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch">
+            <Panel>
+                <Border MaxWidth="620" MaxHeight="680"
+                        Background="#0D131F" BorderBrush="#818CF8" BorderThickness="1.5"
+                        CornerRadius="12" Padding="18"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="14,16"
+                        BoxShadow="0 20 50 0 #EE000000">
+                    <Grid RowDefinitions="Auto, *" RowSpacing="12">
+                        <!-- HEADER MODAL -->
+                        <Grid Grid.Row="0" ColumnDefinitions="*, Auto">
+                            <StackPanel Grid.Column="0">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Border Background="#4F46E5" CornerRadius="6" Width="26" Height="26">
+                                        <TextBlock Text="☁️" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="Google Drive Cloud Sync" Foreground="#A5B4FC" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Text="Thư mục chỉ định: \GMTPC\Comic Downloader GMTPC\ (Google Drive)"
+                                           Foreground="#64748B" FontSize="11" Margin="34,2,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Command="{Binding CloseGoogleDriveModalCommand}"
+                                    Width="30" Height="30" Padding="0" CornerRadius="6"
+                                    Background="#1E293B" Foreground="#94A3B8"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                    ToolTip.Tip="Đóng">
+                                <TextBlock Text="✕" FontSize="13" FontWeight="Bold" />
+                            </Button>
+                        </Grid>
+
+                        <!-- NỘI DUNG CUỘN CỦA MODAL -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel Spacing="12">
+
+                                <!-- CARD 1: THÔNG TIN TÀI KHOẢN GOOGLE -->
+                                <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                    <StackPanel Spacing="10">
+                                        <Grid ColumnDefinitions="*, Auto">
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="TÀI KHOẢN LIÊN KẾT" Foreground="#9CA3AF" FontSize="10.5" FontWeight="Bold" />
+                                                <TextBlock Text="{Binding GoogleDriveUserEmail, FallbackValue='Chưa kết nối tài khoản Google'}"
+                                                           FontSize="13" FontWeight="SemiBold" Foreground="#38BDF8" Margin="0,3,0,0" />
+                                                <TextBlock Text="{Binding GoogleDriveUserName}"
+                                                           IsVisible="{Binding IsGoogleDriveConnected}"
+                                                           Foreground="#60A5FA" FontSize="11" Margin="0,2,0,0" />
+                                            </StackPanel>
+
+                                            <!-- Nút Đăng xuất hoặc Trạng thái -->
+                                            <Button Grid.Column="1" Command="{Binding LogoutGoogleDriveCommand}"
+                                                    IsVisible="{Binding IsGoogleDriveConnected}"
+                                                    Background="#1E293B" BorderBrush="#EF4444" BorderThickness="1"
+                                                    Foreground="#F87171" FontWeight="SemiBold" CornerRadius="6" Padding="10,4" Height="28">
+                                                <TextBlock Text="🚪 Đăng xuất" FontSize="11" VerticalAlignment="Center" />
+                                            </Button>
+                                        </Grid>
+
+                                        <!-- Khu vực Đăng nhập khi chưa kết nối -->
+                                        <StackPanel IsVisible="{Binding !IsGoogleDriveConnected}" Spacing="8">
+                                            <WrapPanel Orientation="Horizontal">
+                                                <Button Command="{Binding LoginGoogleDriveCommand}"
+                                                        IsEnabled="{Binding !IsGoogleDriveBusy}"
+                                                        Background="#2563EB" BorderBrush="#60A5FA" BorderThickness="1"
+                                                        Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="6" Padding="14,7" Margin="0,0,8,6">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                        <TextBlock Text="🔑" FontSize="12" />
+                                                        <TextBlock Text="ĐĂNG NHẬP GOOGLE DRIVE" FontSize="11.5" FontWeight="Bold" />
+                                                    </StackPanel>
+                                                </Button>
+
+                                                <Button Command="{Binding StartManualLoginGoogleDriveCommand}"
+                                                        Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
+                                                        Foreground="#38BDF8" CornerRadius="6" Padding="10,6" Margin="0,0,8,6">
+                                                    <TextBlock Text="📋 Nhập mã thủ công" FontSize="11" />
+                                                </Button>
+
+                                                <Button Command="{Binding ToggleGoogleDriveCredentialsCommand}"
+                                                        Background="Transparent" Foreground="#94A3B8" Padding="6,6" Margin="0,0,0,6">
+                                                    <TextBlock Text="⚙️ Tùy biến Client ID ▾" FontSize="10.5" />
+                                                </Button>
+                                            </WrapPanel>
+
+                                            <!-- Panel nhập mã thủ công (Dành cho Android hoặc khi Loopback bị chặn) -->
+                                            <Border IsVisible="{Binding IsGoogleDriveManualCodeVisible}"
+                                                    Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,4,0,0">
+                                                <StackPanel Spacing="6">
+                                                    <TextBlock Text="1. Hãy mở đường link này trên trình duyệt và bấm 'Cho phép':" Foreground="#94A3B8" FontSize="10.5" />
+                                                    <TextBox Text="{Binding GoogleDriveManualAuthUrl}" IsReadOnly="True" FontSize="10" Height="28" Background="#0B0F19" Foreground="#38BDF8" />
+                                                    <TextBlock Text="2. Dán mã Authorization Code nhận được vào đây:" Foreground="#94A3B8" FontSize="10.5" Margin="0,4,0,0" />
+                                                    <Grid ColumnDefinitions="*, Auto" ColumnSpacing="6">
+                                                        <TextBox Grid.Column="0" Text="{Binding GoogleDriveManualCodeInput}" PlaceholderText="Dán mã code hoặc URL callback..." Height="30" FontSize="11" Background="#0B0F19" />
+                                                        <Button Grid.Column="1" Command="{Binding ConfirmManualCodeGoogleDriveCommand}"
+                                                                Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="12,5" Height="30">
+                                                            <TextBlock Text="✓ XÁC NHẬN" FontSize="11" />
+                                                        </Button>
+                                                    </Grid>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Panel cấu hình Client ID / Secret cá nhân -->
+                                            <Border IsVisible="{Binding IsGoogleDriveCredentialsExpanded}"
+                                                    Background="#0B0F19" BorderBrush="#334155" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,4,0,0">
+                                                <StackPanel Spacing="6">
+                                                    <TextBlock Text="⚙️ Cấu hình Google Cloud Console (Tùy chọn):" Foreground="#F59E0B" FontSize="10.5" FontWeight="Bold" />
+                                                    <TextBox Text="{Binding GoogleDriveCustomClientId}" PlaceholderText="Google OAuth Client ID (bỏ trống để dùng mặc định)..." Height="28" FontSize="10.5" Background="#111827" />
+                                                    <TextBox Text="{Binding GoogleDriveCustomClientSecret}" PlaceholderText="Client Secret (nếu có)..." Height="28" FontSize="10.5" Background="#111827" />
+                                                    <Button Command="{Binding SaveGoogleDriveCredentialsCommand}"
+                                                            Background="#0284C7" Foreground="#FFFFFF" CornerRadius="4" Padding="10,4" HorizontalAlignment="Right">
+                                                        <TextBlock Text="💾 Lưu Client ID" FontSize="10.5" FontWeight="Bold" />
+                                                    </Button>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+
+                                        <!-- Đường dẫn thư mục Google Drive & Nút Mở Web -->
+                                        <Grid ColumnDefinitions="*, Auto" IsVisible="{Binding IsGoogleDriveConnected}">
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <TextBlock Text="Thư mục: \GMTPC\Comic Downloader GMTPC\" Foreground="#34D399" FontSize="11" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Command="{Binding OpenGoogleDriveFolderInBrowserCommand}"
+                                                    Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                                    Foreground="#38BDF8" CornerRadius="5" Padding="8,4" Height="26">
+                                                <TextBlock Text="🌐 Mở trên Web Drive" FontSize="10" FontWeight="SemiBold" />
+                                            </Button>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- CARD 2: BẢNG TRẠNG THÁI 2 TỆP ĐỒNG BỘ -->
+                                <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Text="CÁC TỆP ĐỒNG BỘ CLOUD (.md)" Foreground="#9CA3AF" FontSize="10.5" FontWeight="Bold" />
+
+                                        <!-- Tệp 1: autosave.md (Queue tải) -->
+                                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8">
+                                            <Grid RowDefinitions="Auto, Auto" RowSpacing="6">
+                                                <Grid Grid.Row="0" ColumnDefinitions="Auto, *, Auto">
+                                                    <TextBlock Grid.Column="0" Text="📋" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="autosave.md (Hàng Chờ Tải &amp; Tiến Độ)" Foreground="#F3F4F6" FontSize="11.5" FontWeight="Bold" />
+                                                        <TextBlock Text="{Binding GoogleDriveQueueCloudInfo}" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                                    <Button Command="{Binding BackupQueueToGoogleDriveCommand}"
+                                                            IsEnabled="{Binding IsGoogleDriveConnected}"
+                                                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                                            CornerRadius="4" Padding="10,4" Height="26" Margin="0,0,6,0">
+                                                        <TextBlock Text="⬆ Tải lên Drive" FontSize="10.5" />
+                                                    </Button>
+                                                    <Button Command="{Binding RestoreQueueFromGoogleDriveCommand}"
+                                                            IsEnabled="{Binding IsGoogleDriveConnected}"
+                                                            Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                                            CornerRadius="4" Padding="10,4" Height="26">
+                                                        <TextBlock Text="⬇ Phục hồi về máy" FontSize="10.5" />
+                                                    </Button>
+                                                </WrapPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Tệp 2: saved_reader_bookmarks.md (Dấu trang & Lịch sử đọc) -->
+                                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8">
+                                            <Grid RowDefinitions="Auto, Auto" RowSpacing="6">
+                                                <Grid Grid.Row="0" ColumnDefinitions="Auto, *, Auto">
+                                                    <TextBlock Grid.Column="0" Text="📖" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="saved_reader_bookmarks.md (Dấu Trang &amp; Lịch Sử)" Foreground="#F3F4F6" FontSize="11.5" FontWeight="Bold" />
+                                                        <TextBlock Text="{Binding GoogleDriveReaderCloudInfo}" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                                    <Button Command="{Binding BackupReaderToGoogleDriveCommand}"
+                                                            IsEnabled="{Binding IsGoogleDriveConnected}"
+                                                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                                            CornerRadius="4" Padding="10,4" Height="26" Margin="0,0,6,0">
+                                                        <TextBlock Text="⬆ Tải lên Drive" FontSize="10.5" />
+                                                    </Button>
+                                                    <Button Command="{Binding RestoreReaderFromGoogleDriveCommand}"
+                                                            IsEnabled="{Binding IsGoogleDriveConnected}"
+                                                            Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                                            CornerRadius="4" Padding="10,4" Height="26">
+                                                        <TextBlock Text="⬇ Phục hồi về máy" FontSize="10.5" />
+                                                    </Button>
+                                                </WrapPanel>
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- CARD 3: ĐỒNG BỘ 2 TRONG 1 & TÙY CHỌN TỰ ĐỘNG -->
+                                <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="8" Padding="14,12">
+                                    <StackPanel Spacing="10">
+                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <!-- Nút sao lưu tất cả 2 trong 1 -->
+                                            <Button Command="{Binding FullSyncUploadGoogleDriveCommand}"
+                                                    IsEnabled="{Binding IsGoogleDriveConnected}"
+                                                    Background="#059669" BorderBrush="#34D399" BorderThickness="1"
+                                                    Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="6" Padding="14,8" Margin="0,0,8,6">
+                                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                    <TextBlock Text="🔄" FontSize="13" />
+                                                    <TextBlock Text="SAO LƯU TẤT CẢ (QUEUE + READER)" FontSize="11.5" FontWeight="Bold" />
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- Nút phục hồi tất cả từ drive -->
+                                            <Button Command="{Binding FullSyncRestoreGoogleDriveCommand}"
+                                                    IsEnabled="{Binding IsGoogleDriveConnected}"
+                                                    Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1"
+                                                    Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="6" Padding="14,8" Margin="0,0,8,6">
+                                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                    <TextBlock Text="⬇" FontSize="13" />
+                                                    <TextBlock Text="PHỤC HỒI TẤT CẢ TỪ DRIVE" FontSize="11.5" FontWeight="Bold" />
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- Nút làm mới trạng thái -->
+                                            <Button Command="{Binding RefreshGoogleDriveStatusCommand}"
+                                                    IsEnabled="{Binding IsGoogleDriveConnected}"
+                                                    Background="#1E293B" Foreground="#94A3B8" CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+                                                <TextBlock Text="🔄 Làm mới" FontSize="11" />
+                                            </Button>
+                                        </WrapPanel>
+
+                                        <!-- Checkbox Tự động tải lên Google Drive -->
+                                        <CheckBox IsChecked="{Binding IsGoogleDriveAutoSync}"
+                                                  IsEnabled="{Binding IsGoogleDriveConnected}">
+                                            <TextBlock Text="⚡ Tự động tải lên Google Drive khi có thay đổi (Auto-Sync Queue &amp; Reader)"
+                                                       Foreground="#E2E8F0" FontSize="11.5" VerticalAlignment="Center" />
+                                        </CheckBox>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- DÒNG TRẠNG THÁI / LOG -->
+                                <Border Background="#080D1A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,6">
+                                    <Grid ColumnDefinitions="Auto, *">
+                                        <TextBlock Grid.Column="0" Text="📢 " FontSize="11" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding GoogleDriveStatusText}"
+                                                   Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
+
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
                 </Border>
             </Panel>
         </Border>

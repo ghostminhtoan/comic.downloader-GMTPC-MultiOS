@@ -1605,9 +1605,16 @@
                                 </Button>
                                 <Button Command="{Binding RestoreBookmarksCommand}"
                                         Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
-                                        Padding="7,3" CornerRadius="4" Margin="0,0,8,0"
+                                        Padding="7,3" CornerRadius="4" Margin="0,0,5,0"
                                         ToolTip.Tip="Phục hồi dấu trang từ file .md">
                                     <TextBlock Text="📂 Phục Hồi MD" FontSize="11" />
+                                </Button>
+                                <Button Command="{Binding SyncGoogleDriveBookmarksCommand}"
+                                        Background="#4F46E5" BorderBrush="#818CF8" BorderThickness="1"
+                                        Foreground="#FFFFFF" FontWeight="Bold"
+                                        Padding="7,3" CornerRadius="4" Margin="0,0,8,0"
+                                        ToolTip.Tip="Đồng bộ Dấu trang lên Google Drive (\GMTPC\Comic Downloader GMTPC\)">
+                                    <TextBlock Text="☁️ Drive" FontSize="11" />
                                 </Button>
                                 <Button Command="{Binding CloseBookmarkListPopupCommand}"
                                         Background="Transparent" Foreground="#FACC15" FontWeight="Bold"

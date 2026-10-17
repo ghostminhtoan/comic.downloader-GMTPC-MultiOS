@@ -526,6 +526,12 @@
                                         ToolTip.Tip="Phục hồi dấu trang và lịch sử đọc từ file .md">
                                     <TextBlock Text="📂 Phục Hồi MD" FontSize="10.5" />
                                 </Button>
+                                <Button Command="{Binding OpenGoogleDriveCommand}"
+                                        Background="#4F46E5" BorderBrush="#818CF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold"
+                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        ToolTip.Tip="Đồng bộ Dấu trang &amp; Lịch sử đọc với Google Drive (\GMTPC\Comic Downloader GMTPC\)">
+                                    <TextBlock Text="☁️ Google Drive" FontSize="10.5" />
+                                </Button>
                                 <Button Command="{Binding ClearAllHistoryCommand}"
                                         Background="#334155" Foreground="#F87171" FontWeight="SemiBold"
                                         Padding="8,3" CornerRadius="5">
@@ -646,6 +652,12 @@
                                         Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
                                         ToolTip.Tip="Phục hồi dấu trang và lịch sử đọc từ file .md">
                                     <TextBlock Text="📂 Phục Hồi MD" FontSize="10.5" />
+                                </Button>
+                                <Button Command="{Binding OpenGoogleDriveCommand}"
+                                        Background="#4F46E5" BorderBrush="#818CF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold"
+                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        ToolTip.Tip="Đồng bộ Dấu trang &amp; Lịch sử đọc với Google Drive (\GMTPC\Comic Downloader GMTPC\)">
+                                    <TextBlock Text="☁️ Google Drive" FontSize="10.5" />
                                 </Button>
                                 <Button Command="{Binding ClearAllBookmarksCommand}"
                                         Background="#334155" Foreground="#F87171" FontWeight="SemiBold"
@@ -924,6 +936,10 @@
                                                         Background="#0D9488" Foreground="#FFFFFF"
                                                         CornerRadius="6" Padding="9,4" FontWeight="SemiBold" FontSize="10.5"
                                                         Content="📂 Phục hồi" ToolTip.Tip="Phục hồi từ file .md" />
+                                                <Button Command="{Binding OpenGoogleDriveCommand}"
+                                                        Background="#4F46E5" Foreground="#FFFFFF"
+                                                        CornerRadius="6" Padding="9,4" FontWeight="SemiBold" FontSize="10.5"
+                                                        Content="☁️ Google Drive" ToolTip.Tip="Đồng bộ Google Drive (\GMTPC\Comic Downloader GMTPC\)" />
                                             </StackPanel>
                                         </Grid>
                                     </Border>

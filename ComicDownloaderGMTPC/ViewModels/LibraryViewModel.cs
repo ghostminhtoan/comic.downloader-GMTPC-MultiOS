@@ -1910,6 +1910,21 @@ public partial class LibraryViewModel : ViewModelBase
         }
     }
 
+    public Action? OpenGoogleDriveAction { get; set; }
+
+    [RelayCommand]
+    public void OpenGoogleDrive()
+    {
+        OpenGoogleDriveAction?.Invoke();
+    }
+
+    public async Task ReloadAllLibraryStateAsync()
+    {
+        await LoadHistoryItemsAsync();
+        LoadBookmarkGroups();
+        LoadStorageItems();
+    }
+
     [RelayCommand]
     public async Task OpenMostRecentComicAsync()
     {
