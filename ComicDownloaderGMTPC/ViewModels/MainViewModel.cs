@@ -1516,6 +1516,15 @@ public partial class MainViewModel : ViewModelBase
         InitializeSearchDomains();
         InitializeQueueAutoBackupAndRestore();
 
+        // Lắng nghe thay đổi trạng thái Modal của LibraryVm để tự động ẩn/hiện FAB
+        LibraryVm.PropertyChanged += (s, e) =>
+        {
+            if (e?.PropertyName == nameof(LibraryViewModel.IsCacheDataModalOpen))
+            {
+                OnPropertyChanged(nameof(IsFloatingQuickControlVisible));
+            }
+        };
+
         // Tạm dừng các tác vụ nền không cần thiết (như kiểm tra Clipboard liên tục) khi người dùng mở Trình Đọc Truyện để hạ nhiệt máy
         ComicReaderService.Instance.ReaderActiveStateChanged += (isActive) =>
         {

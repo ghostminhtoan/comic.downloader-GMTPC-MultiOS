@@ -2817,7 +2817,25 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 3. **Giao Diện Modal F5 Settings Trong Trình Đọc (`ComicReaderControl.axaml`, `ComicReaderViewModel.cs`)**:
    - Nâng cấp thanh Tab Selector từ 3 tab lên 4 tab: Tab 0 (Phím tắt), Tab 1 (Hoạt ảnh), Tab 2 (Chế độ đọc), Tab 3 (Bộ nhớ đệm / Cache Data).
    - Trình bày trực quan 8 mục chuẩn Comic Screen với số liệu dung lượng thực tế, nút dọn dẹp và 2 hộp thoại chọn hạn mức Quota và Thời hạn lưu trữ.
-4. **Tích Hợp Quản Lý Cache Ngay Tại Thư Viện (`LibraryView.axaml`, `LibraryViewModel.cs`)**:
-   - Bổ sung nút `💾 Bộ nhớ đệm` trên thanh công cụ header thư viện.
-   - Hiển thị Modal Popup độc lập chuẩn Cyberpunk Dark UI với 8 mục quản lý và 2 picker hạn mức, giúp người dùng dọn dẹp và quản lý dung lượng ngay tại thư viện mà không cần mở trình đọc truyện.
+4. **Tách Biệt & Chuẩn Hóa Phân Quyền Quản Lý Cache Giữa Các Phân Vùng**:
+   - Chỉ Reader và Tab Download mới có quyền quản lý Thumbnail Storage và Zip File Cache.
+   - Thư viện chuyển thành Modal quản lý dữ liệu đọc đặc thù (Resume cache, Bookmarks, History).
+
+---
+
+## 35. Tái Cấu Trúc Toàn Diện Giao Diện Bộ Nhớ Đệm Responsive Cho Mobile & Phân Quyền Độc Quyền Cache Cho Reader & Tab Download
+1. **Thiết Kế Responsive 100% Cho Mọi Kích Thước Màn Hình (Mobile Portrait & Desktop)**:
+   - Thay thế toàn bộ các khung cố định `Width="650"`, `Width="780"` và `Width="360/380"` bằng cấu trúc linh hoạt: `MaxWidth="520-780"`, `HorizontalAlignment="Stretch"` kết hợp `Margin="10-16"`.
+   - Bổ sung `TextWrapping="Wrap"` cho toàn bộ tiêu đề, mô tả và số liệu thống kê, căn phải cột nút thao tác độc lập giúp không bao giờ bị tràn lề phải hay khuất icon mép trái trên điện thoại.
+   - Cơ chế tự động ẩn cụm nút nổi (Floating Quick Control Bar / FAB) khi có bất kỳ Modal nào được mở (`IsFloatingQuickControlVisible`), triệt tiêu 100% hiện tượng FAB đè che khuất các nút thao tác.
+2. **Tích Hợp Quản Lý Thumbnail & Zip Cache Vào Tab Download (`MainView.axaml`, `MainViewModel.DownloadCache.cs`)**:
+   - Thêm nút `💾 BỘ NHỚ ĐỆM` trên thanh công cụ của Tab Download (cạnh nút Sao lưu / Phục hồi MD).
+   - Modal quản lý độc quyền cho Tab Download hiển thị 2 cụm chức năng cốt lõi:
+     * Nhóm 1: Bộ nhớ đệm ảnh bìa (Thumbnails) — Thiết lập hạn mức quota (`Set thumbnails storage`) và Xóa sạch ảnh bìa (`Clear Thumbnails`).
+     * Nhóm 2: Bộ nhớ đệm tệp nén & tài liệu (Zip Cache) — Thiết lập hạn mức quota (`Set zip-file cache storage`), Xóa sạch tệp nén đệm (`Clear zip-file cache`) và Đổi thời hạn lưu trữ (`Set retention period`).
+3. **Thu Gọn & Định Chuẩn Dữ Liệu Trong Tab Thư Viện (`LibraryView.axaml`)**:
+   - Loại bỏ hoàn toàn Thumbnail Storage và Zip Cache khỏi Thư viện theo yêu cầu nghiệp vụ.
+   - Modal Thư viện chỉ tập trung quản lý dữ liệu đọc đặc thù: Xóa vị trí đọc dở (`Clear resume cache`), Xóa dấu trang (`Clear bookmarks`), Xóa lịch sử đọc (`Clear history`) và Xóa toàn bộ dữ liệu đọc (`Clear library data`).
+4. **Tối Ưu Modal Cài Đặt Trình Đọc (`ComicReaderControl.axaml`)**:
+   - Tinh chỉnh Modal F5 Settings và Tab 3 (Cache Data) co giãn responsive mượt mà trên cả máy tính và màn hình điện thoại dọc.
 

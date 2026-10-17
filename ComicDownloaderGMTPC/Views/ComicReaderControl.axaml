@@ -2073,12 +2073,12 @@
                     Background="#CC090D16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                     ZIndex="100">
-                <Border Width="780" MaxWidth="920" Height="620" MaxHeight="720"
+                <Border MaxWidth="780" MaxHeight="640" Margin="10,14"
                         Background="#161B22"
                         BorderBrush="#38BDF8" BorderThickness="1.5"
-                        CornerRadius="10" Padding="18"
+                        CornerRadius="10" Padding="14"
                         BoxShadow="0 25 60 0 #DD000000"
-                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                        HorizontalAlignment="Stretch" VerticalAlignment="Center">
                     <Grid RowDefinitions="Auto, Auto, *, Auto" RowSpacing="12">
 
                         <!-- HEADER: TIÊU ĐỀ & NÚT ĐÓNG -->
@@ -2562,11 +2562,11 @@
                                 IsVisible="{Binding IsThumbnailQuotaDialogOpen}"
                                 Background="#D005080F" CornerRadius="10" ZIndex="5000"
                                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                            <Border Width="360" Background="#111827" BorderBrush="#38BDF8" BorderThickness="1.5"
-                                    CornerRadius="10" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            <Border MaxWidth="380" Background="#111827" BorderBrush="#38BDF8" BorderThickness="1.5"
+                                    CornerRadius="10" Padding="16" HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="14"
                                     BoxShadow="0 10 30 0 #AA000000">
                                 <StackPanel Spacing="12">
-                                    <TextBlock Text="⚙ Hạn mức bộ nhớ ảnh bìa (Thumbnails)" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" />
+                                    <TextBlock Text="⚙ Hạn mức bộ nhớ ảnh bìa (Thumbnails)" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" TextWrapping="Wrap" />
                                     <TextBlock Text="Chọn dung lượng tối đa cho ảnh bìa thư viện. Khi vượt quá, hệ thống sẽ tự động dọn bớt ảnh ít dùng nhất (LRU):"
                                                Foreground="#94A3B8" FontSize="11.5" TextWrapping="Wrap" />
 
@@ -2590,7 +2590,7 @@
                                                 Background="#1E293B" Foreground="#E2E8F0" Margin="0,0,6,6" Padding="12,6" CornerRadius="5" />
                                     </WrapPanel>
 
-                                        <Grid ColumnDefinitions="*, *" ColumnSpacing="10" Margin="0,6,0,0">
+                                    <Grid ColumnDefinitions="*, *" ColumnSpacing="10" Margin="0,6,0,0">
                                         <Button Grid.Column="0" Command="{Binding CloseThumbnailQuotaDialogCommand}"
                                                 Background="#1E293B" Foreground="#94A3B8" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                                 Padding="0,8" CornerRadius="6" Content="Hủy" />
@@ -2607,11 +2607,11 @@
                                 IsVisible="{Binding IsZipQuotaDialogOpen}"
                                 Background="#D005080F" CornerRadius="10" ZIndex="5000"
                                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                            <Border Width="380" Background="#111827" BorderBrush="#38BDF8" BorderThickness="1.5"
-                                    CornerRadius="10" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            <Border MaxWidth="380" Background="#111827" BorderBrush="#38BDF8" BorderThickness="1.5"
+                                    CornerRadius="10" Padding="16" HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="14"
                                     BoxShadow="0 10 30 0 #AA000000">
                                 <StackPanel Spacing="12">
-                                    <TextBlock Text="⚙ Hạn mức bộ nhớ đệm tệp nén (Zip Cache)" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" />
+                                    <TextBlock Text="⚙ Hạn mức bộ nhớ đệm tệp nén (Zip Cache)" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" TextWrapping="Wrap" />
                                     <TextBlock Text="Chọn dung lượng tối đa cho bộ nhớ đệm giải nén tệp zip, cbz, rar, pdf... Khi vượt quá hạn mức, hệ thống tự động dọn bớt trang cũ nhất (LRU):"
                                                Foreground="#94A3B8" FontSize="11.5" TextWrapping="Wrap" />
 
@@ -2654,8 +2654,8 @@
                                 IsVisible="{Binding IsRetentionDialogOpen}"
                                 Background="#D005080F" CornerRadius="10" ZIndex="5000"
                                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                            <Border Width="380" Background="#111827" BorderBrush="#38BDF8" BorderThickness="1.5"
-                                    CornerRadius="10" Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            <Border MaxWidth="380" Background="#111827" BorderBrush="#38BDF8" BorderThickness="1.5"
+                                    CornerRadius="10" Padding="16" HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="14"
                                     BoxShadow="0 10 30 0 #AA000000">
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="⏳ Thời hạn lưu bộ nhớ đệm tệp nén &amp; tài liệu" Foreground="#38BDF8" FontSize="14" FontWeight="Bold" />
