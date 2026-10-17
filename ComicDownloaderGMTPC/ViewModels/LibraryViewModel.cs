@@ -1753,6 +1753,164 @@ public partial class LibraryViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task BackupReaderDataAsync()
+    {
+        int bmCount = ReadProgressStore.Instance.GetBookmarkCount();
+        int histCount = ReadProgressStore.Instance.GetAllHistoryPaths(checkPathExists: false).Count;
+
+        if (bmCount == 0 && histCount == 0)
+        {
+            StatusMessage = "⚠️ Chưa có Dấu trang hoặc Lịch sử đọc nào để sao lưu.";
+            return;
+        }
+
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanSave)
+            {
+                IStorageFolder? suggestedFolder = null;
+                try
+                {
+                    string autoDir = QueueBackupService.GetAutoSaveDirectory();
+                    if (Directory.Exists(autoDir))
+                    {
+                        suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(autoDir);
+                    }
+                }
+                catch { }
+
+                var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+                {
+                    Title = "Chọn nơi lưu file sao lưu Dấu trang & Lịch sử đọc (.md)",
+                    SuggestedFileName = ReadProgressStore.SavedReaderFileName,
+                    DefaultExtension = "md",
+                    ShowOverwritePrompt = true,
+                    SuggestedStartLocation = suggestedFolder,
+                    FileTypeChoices = new List<FilePickerFileType>
+                    {
+                        new("Markdown Reader Backup (*.md)") { Patterns = new[] { "*.md" } },
+                        new("All Files (*.*)") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (file == null)
+                {
+                    StatusMessage = "Đã hủy chọn nơi lưu file sao lưu (.md).";
+                    return;
+                }
+
+                string? localPath = file.TryGetLocalPath();
+                if (!string.IsNullOrWhiteSpace(localPath))
+                {
+                    string savedPath = await ReadProgressStore.Instance.SaveReaderToMarkdownAsync(localPath);
+                    StatusMessage = $"💾 Đã sao lưu thành công {bmCount} dấu trang và {histCount} lịch sử ra file Markdown: {Path.GetFileName(savedPath)}";
+                }
+                else
+                {
+                    string content = ReadProgressStore.Instance.BuildReaderMarkdownContent();
+                    await using var stream = await file.OpenWriteAsync();
+                    stream.SetLength(0);
+                    await using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8);
+                    await writer.WriteAsync(content);
+                    await writer.FlushAsync();
+                    StatusMessage = $"💾 Đã sao lưu thành công {bmCount} dấu trang và {histCount} lịch sử ra file Markdown: {file.Name}";
+                }
+                return;
+            }
+
+            string path = await ReadProgressStore.Instance.SaveReaderToMarkdownAsync();
+            StatusMessage = $"💾 Đã sao lưu thành công ra file Markdown: {path}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi khi sao lưu Dấu trang & Lịch sử: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task RestoreReaderDataAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanOpen)
+            {
+                IStorageFolder? suggestedFolder = null;
+                try
+                {
+                    string autoDir = QueueBackupService.GetAutoSaveDirectory();
+                    if (Directory.Exists(autoDir))
+                    {
+                        suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(autoDir);
+                    }
+                }
+                catch { }
+
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = "Chọn file Markdown (.md) để phục hồi Dấu trang & Lịch sử đọc",
+                    AllowMultiple = false,
+                    SuggestedStartLocation = suggestedFolder,
+                    FileTypeFilter = new List<FilePickerFileType>
+                    {
+                        new("Markdown Reader Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
+                        new("All Files (*.*)") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (files == null || files.Count == 0)
+                {
+                    StatusMessage = "Đã hủy chọn file phục hồi Markdown (.md).";
+                    return;
+                }
+
+                var selectedFile = files[0];
+                string? localPath = selectedFile.TryGetLocalPath();
+                ReaderRestoreResult res;
+
+                if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
+                {
+                    res = await ReadProgressStore.Instance.LoadReaderFromMarkdownAsync(localPath, mergeWithExisting: true);
+                }
+                else
+                {
+                    await using var stream = await selectedFile.OpenReadAsync();
+                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
+                    string content = await reader.ReadToEndAsync();
+                    res = ReadProgressStore.Instance.ParseReaderMarkdownContent(content, mergeWithExisting: true, selectedFile.Name);
+                }
+
+                if (res.HasValidStructure)
+                {
+                    _ = LoadHistoryItemsAsync();
+                    LoadBookmarkGroups();
+                    LoadStorageItems();
+                    StatusMessage = $"✅ Đã phục hồi thành công {res.RestoredBookmarks} dấu trang và {res.RestoredHistory} mục lịch sử từ file Markdown!";
+                }
+                else
+                {
+                    StatusMessage = "⚠️ File Markdown không đúng định dạng sao lưu của Comic Downloader GMTPC.";
+                }
+                return;
+            }
+
+            var fallbackRes = await ReadProgressStore.Instance.LoadReaderFromMarkdownAsync(null, mergeWithExisting: true);
+            if (fallbackRes.HasValidStructure)
+            {
+                _ = LoadHistoryItemsAsync();
+                LoadBookmarkGroups();
+                LoadStorageItems();
+                StatusMessage = $"✅ Đã phục hồi thành công {fallbackRes.RestoredBookmarks} dấu trang và {fallbackRes.RestoredHistory} mục lịch sử!";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi khi phục hồi Dấu trang & Lịch sử: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
     public async Task OpenMostRecentComicAsync()
     {
         var recentPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();

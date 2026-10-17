@@ -513,11 +513,25 @@
                                 <TextBlock Text="{Binding HistoryItems.Count, StringFormat='{}{0} mục'}" Foreground="#94A3B8" FontSize="11" />
                             </StackPanel>
 
-                            <Button Grid.Column="1" Command="{Binding ClearAllHistoryCommand}"
-                                    Background="#334155" Foreground="#F87171" FontWeight="SemiBold"
-                                    Padding="8,3" CornerRadius="5">
-                                <TextBlock Text="🗑️ Xóa Lịch Sử" FontSize="10.5" />
-                            </Button>
+                            <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button Command="{Binding BackupReaderDataCommand}"
+                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        ToolTip.Tip="Sao lưu dấu trang và lịch sử đọc truyện ra file .md">
+                                    <TextBlock Text="💾 Sao Lưu MD" FontSize="10.5" />
+                                </Button>
+                                <Button Command="{Binding RestoreReaderDataCommand}"
+                                        Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        ToolTip.Tip="Phục hồi dấu trang và lịch sử đọc từ file .md">
+                                    <TextBlock Text="📂 Phục Hồi MD" FontSize="10.5" />
+                                </Button>
+                                <Button Command="{Binding ClearAllHistoryCommand}"
+                                        Background="#334155" Foreground="#F87171" FontWeight="SemiBold"
+                                        Padding="8,3" CornerRadius="5">
+                                    <TextBlock Text="🗑️ Xóa Lịch Sử" FontSize="10.5" />
+                                </Button>
+                            </WrapPanel>
                         </Grid>
                     </Border>
 
@@ -620,11 +634,25 @@
                                 <TextBlock Text="{Binding BookmarkGroups.Count, StringFormat='{}{0} bộ truyện'}" Foreground="#94A3B8" FontSize="11" />
                             </StackPanel>
 
-                            <Button Grid.Column="1" Command="{Binding ClearAllBookmarksCommand}"
-                                    Background="#334155" Foreground="#F87171" FontWeight="SemiBold"
-                                    Padding="8,3" CornerRadius="5">
-                                <TextBlock Text="🗑️ Xóa Toàn Bộ" FontSize="10.5" />
-                            </Button>
+                            <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button Command="{Binding BackupReaderDataCommand}"
+                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        ToolTip.Tip="Sao lưu dấu trang và lịch sử đọc truyện ra file .md">
+                                    <TextBlock Text="💾 Sao Lưu MD" FontSize="10.5" />
+                                </Button>
+                                <Button Command="{Binding RestoreReaderDataCommand}"
+                                        Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        ToolTip.Tip="Phục hồi dấu trang và lịch sử đọc từ file .md">
+                                    <TextBlock Text="📂 Phục Hồi MD" FontSize="10.5" />
+                                </Button>
+                                <Button Command="{Binding ClearAllBookmarksCommand}"
+                                        Background="#334155" Foreground="#F87171" FontWeight="SemiBold"
+                                        Padding="8,3" CornerRadius="5">
+                                    <TextBlock Text="🗑️ Xóa Toàn Bộ" FontSize="10.5" />
+                                </Button>
+                            </WrapPanel>
                         </Grid>
                     </Border>
 
@@ -878,6 +906,27 @@
 
                                     <!-- NHÓM 3: DỮ LIỆU ĐỌC DỞ & LỊCH SỬ THƯ VIỆN -->
                                     <TextBlock Text="🔖 DỮ LIỆU ĐỌC &amp; DẤU TRANG THƯ VIỆN" Foreground="#38BDF8" FontSize="10.5" FontWeight="Bold" Margin="4,4,0,0" />
+
+                                    <!-- ITEM: BACKUP & RESTORE MARKDOWN -->
+                                    <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="7" Padding="10,7">
+                                        <Grid ColumnDefinitions="Auto, *, Auto">
+                                            <TextBlock Grid.Column="0" Text="📑" FontSize="17" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0">
+                                                <TextBlock Text="Backup &amp; Restore Reader (.md)" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Text="Sao lưu hoặc phục hồi Dấu trang &amp; Lịch sử đọc từ file Markdown (.md)" Foreground="#94A3B8" FontSize="10.5" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                <Button Command="{Binding BackupReaderDataCommand}"
+                                                        Background="#0284C7" Foreground="#FFFFFF"
+                                                        CornerRadius="6" Padding="9,4" FontWeight="SemiBold" FontSize="10.5"
+                                                        Content="💾 Sao lưu" ToolTip.Tip="Sao lưu ra file .md" />
+                                                <Button Command="{Binding RestoreReaderDataCommand}"
+                                                        Background="#0D9488" Foreground="#FFFFFF"
+                                                        CornerRadius="6" Padding="9,4" FontWeight="SemiBold" FontSize="10.5"
+                                                        Content="📂 Phục hồi" ToolTip.Tip="Phục hồi từ file .md" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
 
                                     <!-- ITEM 6: CLEAR RESUME CACHE -->
                                     <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="7" Padding="10,7">

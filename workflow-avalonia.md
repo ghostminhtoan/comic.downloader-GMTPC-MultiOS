@@ -3069,3 +3069,36 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      * Nâng thời gian khóa `_suppressScrollChangedUntilTick` lên 1.200ms trên Android khi seek trong danh sách lớn, loại bỏ hoàn toàn hiện tượng nhảy trang giật cục lên xuống.
      * Ổn định kích thước Aspect: Nếu tỉ lệ khung hình thay đổi $< 2\%$, sử dụng `SetKnownDimensionsFast` để không kích hoạt re-measure layout toàn bộ ListBox.
 
+---
+
+## 45. Chuẩn Hóa Định Dạng Sao Lưu Markdown (.md) Đa Tầng Cho Dấu Trang & Lịch Sử Đọc (Reader Markdown Backup & Restore)
+1. **Mục tiêu & Kiến trúc Dual-Layer (2 trong 1)**:
+   - Đồng bộ hóa toàn diện chuẩn lưu trữ Markdown (`.md`) giữa 2 phân hệ lớn của ứng dụng: Tab Download (`autosave.md`) và Tab Reader (`saved_reader_bookmarks.md` / `autosave_reader.md`).
+   - Cấu trúc Dual-Layer:
+     * **Tầng 1 - Trực quan cho Người đọc (Human-Readable)**: Bảng biểu Markdown hiển thị đẹp mắt, mở trực tiếp trên Google Drive, GitHub, Obsidian hoặc các ứng dụng di động để xem danh sách Dấu trang (Bookmarks: STT, Bộ truyện, Chương, Trang, %, Memo, Ngày lưu, Đường dẫn) và Lịch sử đọc gần đây (Recent Reading History).
+     * **Tầng 2 - Toàn vẹn cho Máy đọc (Machine-Readable Snapshot)**: Kẹp khối JSON mã hóa bên trong cặp thẻ đánh dấu `<!-- COMIC_READER_STATE_BEGIN -->` và `<!-- COMIC_READER_STATE_END -->`. Giúp bộ parser khôi phục chính xác 100% dữ liệu kỹ thuật (tiến độ đọc chi tiết, tổng số trang, thời gian Unix, và hệ thống khóa định danh linh hoạt `@id|` để giữ nguyên vị trí đọc khi đổi máy/đổi thư mục).
+     * **Fallback thông minh**: Trong trường hợp người dùng chỉnh sửa thủ công file `.md` làm mất thẻ comment JSON, parser tự động đọc và khôi phục trực tiếp từ các hàng của bảng Markdown.
+2. **Giao Diện & Tương Tác**:
+   - Tích hợp cụm nút `💾 SAO LƯU MD` và `📂 PHỤC HỒI MD` trực quan, tiện lợi tại 4 vị trí:
+     1. **Subtab 3: History (Lịch sử đọc)** trong Thư viện truyện (`LibraryView.axaml`).
+     2. **Subtab 4: Bookmark (Dấu trang)** trong Thư viện truyện (`LibraryView.axaml`).
+     3. **Modal Quản lý Bộ nhớ đệm (Cache Data Modal)** của Thư viện truyện (`LibraryView.axaml`).
+     4. **Popup Bookmark List (Button 10)** bên trong Trình đọc truyện (`ComicReaderControl.axaml`).
+   - Tương thích đa nền tảng Windows, Linux, Android thông qua `TopLevel.StorageProvider`: hỗ trợ chọn file/lưu file cả đường dẫn POSIX trực tiếp và Android Content Streams.
+---
+
+## 45. Chuẩn Hóa Định Dạng Sao Lưu Markdown (.md) Đa Tầng Cho Dấu Trang & Lịch Sử Đọc (Reader Markdown Backup & Restore)
+1. **Mục tiêu & Kiến trúc Dual-Layer (2 trong 1)**:
+   - Đồng bộ hóa toàn diện chuẩn lưu trữ Markdown (`.md`) giữa 2 phân hệ lớn của ứng dụng: Tab Download (`autosave.md`) và Tab Reader (`saved_reader_bookmarks.md` / `autosave_reader.md`).
+   - Cấu trúc Dual-Layer:
+     * **Tầng 1 - Trực quan cho Người đọc (Human-Readable)**: Bảng biểu Markdown hiển thị đẹp mắt, mở trực tiếp trên Google Drive, GitHub, Obsidian hoặc các ứng dụng di động để xem danh sách Dấu trang (Bookmarks: STT, Bộ truyện, Chương, Trang, %, Memo, Ngày lưu, Đường dẫn) và Lịch sử đọc gần đây (Recent Reading History).
+     * **Tầng 2 - Toàn vẹn cho Máy đọc (Machine-Readable Snapshot)**: Kẹp khối JSON mã hóa bên trong cặp thẻ đánh dấu `<!-- COMIC_READER_STATE_BEGIN -->` và `<!-- COMIC_READER_STATE_END -->`. Giúp bộ parser khôi phục chính xác 100% dữ liệu kỹ thuật (tiến độ đọc chi tiết, tổng số trang, thời gian Unix, và hệ thống khóa định danh linh hoạt `@id|` để giữ nguyên vị trí đọc khi đổi máy/đổi thư mục).
+     * **Fallback thông minh**: Trong trường hợp người dùng chỉnh sửa thủ công file `.md` làm mất thẻ comment JSON, parser tự động đọc và khôi phục trực tiếp từ các hàng của bảng Markdown.
+2. **Giao Diện & Tương Tác**:
+   - Tích hợp cụm nút `💾 SAO LƯU MD` và `📂 PHỤC HỒI MD` trực quan, tiện lợi tại 4 vị trí:
+     1. **Subtab 3: History (Lịch sử đọc)** trong Thư viện truyện (`LibraryView.axaml`).
+     2. **Subtab 4: Bookmark (Dấu trang)** trong Thư viện truyện (`LibraryView.axaml`).
+     3. **Modal Quản lý Bộ nhớ đệm (Cache Data Modal)** của Thư viện truyện (`LibraryView.axaml`).
+     4. **Popup Bookmark List (Button 10)** bên trong Trình đọc truyện (`ComicReaderControl.axaml`).
+   - Tương thích đa nền tảng Windows, Linux, Android thông qua `TopLevel.StorageProvider`: hỗ trợ chọn file/lưu file cả đường dẫn POSIX trực tiếp và Android Content Streams.
+

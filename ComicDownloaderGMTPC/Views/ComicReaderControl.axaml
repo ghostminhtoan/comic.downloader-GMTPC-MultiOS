@@ -1596,12 +1596,25 @@
                         <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,8">
                             <TextBlock Grid.Column="0" Text="🔖 Bookmarks"
                                        Foreground="#94A3B8" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
-                            <Button Grid.Column="1"
-                                    Command="{Binding CloseBookmarkListPopupCommand}"
-                                    Background="Transparent" Foreground="#FACC15" FontWeight="Bold"
-                                    Padding="8,4">
-                                <TextBlock Text="CLOSE" FontSize="13" />
-                            </Button>
+                            <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button Command="{Binding BackupBookmarksCommand}"
+                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                        Padding="7,3" CornerRadius="4" Margin="0,0,5,0"
+                                        ToolTip.Tip="Sao lưu dấu trang ra file .md">
+                                    <TextBlock Text="💾 Sao Lưu MD" FontSize="11" />
+                                </Button>
+                                <Button Command="{Binding RestoreBookmarksCommand}"
+                                        Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                        Padding="7,3" CornerRadius="4" Margin="0,0,8,0"
+                                        ToolTip.Tip="Phục hồi dấu trang từ file .md">
+                                    <TextBlock Text="📂 Phục Hồi MD" FontSize="11" />
+                                </Button>
+                                <Button Command="{Binding CloseBookmarkListPopupCommand}"
+                                        Background="Transparent" Foreground="#FACC15" FontWeight="Bold"
+                                        Padding="8,4">
+                                    <TextBlock Text="CLOSE" FontSize="13" />
+                                </Button>
+                            </WrapPanel>
                         </Grid>
 
                         <Panel Grid.Row="1">

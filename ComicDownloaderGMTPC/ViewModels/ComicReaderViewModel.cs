@@ -1,17 +1,23 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.Services;
+using ComicDownloaderGMTPC.Views;
 
 namespace ComicDownloaderGMTPC.ViewModels;
 
@@ -1948,6 +1954,139 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void CloseBookmarkListPopup()
     {
         ActivePopup = string.Empty;
+    }
+
+    [RelayCommand]
+    public async Task BackupBookmarksAsync()
+    {
+        int bmCount = _progressStore.GetBookmarkCount();
+        if (bmCount == 0)
+        {
+            ShowTransientToast("⚠️ Chưa có dấu trang nào để sao lưu.");
+            return;
+        }
+
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanSave)
+            {
+                var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+                {
+                    Title = "Chọn nơi lưu file sao lưu Dấu trang & Lịch sử đọc (.md)",
+                    SuggestedFileName = ReadProgressStore.SavedReaderFileName,
+                    DefaultExtension = "md",
+                    ShowOverwritePrompt = true,
+                    FileTypeChoices = new List<FilePickerFileType>
+                    {
+                        new("Markdown Reader Backup (*.md)") { Patterns = new[] { "*.md" } },
+                        new("All Files (*.*)") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (file == null) return;
+
+                string? localPath = file.TryGetLocalPath();
+                if (!string.IsNullOrWhiteSpace(localPath))
+                {
+                    string saved = await _progressStore.SaveReaderToMarkdownAsync(localPath);
+                    ShowTransientToast($"💾 Đã sao lưu {bmCount} dấu trang ra {Path.GetFileName(saved)}");
+                }
+                else
+                {
+                    string content = _progressStore.BuildReaderMarkdownContent();
+                    await using var stream = await file.OpenWriteAsync();
+                    stream.SetLength(0);
+                    await using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8);
+                    await writer.WriteAsync(content);
+                    await writer.FlushAsync();
+                    ShowTransientToast($"💾 Đã sao lưu {bmCount} dấu trang ra {file.Name}");
+                }
+                return;
+            }
+
+            string defSaved = await _progressStore.SaveReaderToMarkdownAsync();
+            ShowTransientToast($"💾 Đã sao lưu ra {Path.GetFileName(defSaved)}");
+        }
+        catch (Exception ex)
+        {
+            ShowTransientToast($"❌ Lỗi sao lưu: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task RestoreBookmarksAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanOpen)
+            {
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = "Chọn file Markdown (.md) để phục hồi Dấu trang",
+                    AllowMultiple = false,
+                    FileTypeFilter = new List<FilePickerFileType>
+                    {
+                        new("Markdown Reader Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
+                        new("All Files (*.*)") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (files == null || files.Count == 0) return;
+
+                var selectedFile = files[0];
+                string? localPath = selectedFile.TryGetLocalPath();
+                ReaderRestoreResult res;
+
+                if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
+                {
+                    res = await _progressStore.LoadReaderFromMarkdownAsync(localPath, mergeWithExisting: true);
+                }
+                else
+                {
+                    await using var stream = await selectedFile.OpenReadAsync();
+                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
+                    string content = await reader.ReadToEndAsync();
+                    res = _progressStore.ParseReaderMarkdownContent(content, mergeWithExisting: true, selectedFile.Name);
+                }
+
+                if (res.HasValidStructure)
+                {
+                    RefreshBookmarksList();
+                    ShowTransientToast($"✅ Đã phục hồi {res.RestoredBookmarks} dấu trang từ file Markdown!");
+                }
+                else
+                {
+                    ShowTransientToast("⚠️ File Markdown không đúng định dạng sao lưu.");
+                }
+                return;
+            }
+
+            var fallbackRes = await _progressStore.LoadReaderFromMarkdownAsync(null, mergeWithExisting: true);
+            if (fallbackRes.HasValidStructure)
+            {
+                RefreshBookmarksList();
+                ShowTransientToast($"✅ Đã phục hồi {fallbackRes.RestoredBookmarks} dấu trang!");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowTransientToast($"❌ Lỗi phục hồi: {ex.Message}");
+        }
+    }
+
+    private static TopLevel? GetTopLevel()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop && desktop.MainWindow != null)
+        {
+            return desktop.MainWindow;
+        }
+        if (MainView.Instance != null)
+        {
+            return TopLevel.GetTopLevel(MainView.Instance);
+        }
+        return null;
     }
 
     [RelayCommand]

@@ -785,6 +785,12 @@
 | Fullscreen | Toàn màn hình |
 | Windowed | Cửa sổ |
 | Exit Reader | Thoát |
+| Backup Reader (.md) | Sao lưu Dấu trang & Lịch sử (.md) |
+| Restore Reader (.md) | Phục hồi Dấu trang & Lịch sử (.md) |
+| Backup Bookmarks | Sao lưu Dấu trang |
+| Restore Bookmarks | Phục hồi Dấu trang |
+| Backup MD | Sao Lưu MD |
+| Restore MD | Phục Hồi MD |
 
 ## 18. Dual Picture Sort (Lọc Ảnh Song Song)
 
