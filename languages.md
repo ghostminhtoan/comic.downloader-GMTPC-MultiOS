@@ -866,3 +866,7 @@
 | Restore All from Drive | Phục hồi tất cả từ Drive |
 | Auto-sync to Drive on change | Tự động tải lên Google Drive khi có thay đổi |
 | Refresh Cloud Status | Làm mới trạng thái |
+| Current Device (Backup Slot) | Thiết bị hiện tại (Slot sao lưu) |
+| Rename Device | Đổi tên thiết bị |
+| Cloud Restore Source (All Devices) | Nguồn phục hồi từ đám mây (Tất cả thiết bị) |
+| Multi-Device Isolation | Cách ly đa thiết bị độc lập |

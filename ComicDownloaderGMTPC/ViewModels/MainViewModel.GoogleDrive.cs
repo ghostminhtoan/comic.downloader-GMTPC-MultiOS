@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -28,6 +29,20 @@ public partial class MainViewModel
 
     [ObservableProperty]
     private string _googleDriveUserName = string.Empty;
+
+    [ObservableProperty]
+    private string _currentDeviceDisplayName = string.Empty;
+
+    [ObservableProperty]
+    private bool _isRenamingDevice;
+
+    [ObservableProperty]
+    private string _customDeviceNameInput = string.Empty;
+
+    public ObservableCollection<GoogleDriveDeviceSlot> AvailableCloudDevices { get; } = new();
+
+    [ObservableProperty]
+    private GoogleDriveDeviceSlot? _selectedCloudDevice;
 
     [ObservableProperty]
     private string _googleDriveStatusText = "Sẵn sàng đồng bộ";
@@ -70,6 +85,65 @@ public partial class MainViewModel
         _gdriveService.AutoSyncEnabled = value;
     }
 
+    partial void OnSelectedCloudDeviceChanged(GoogleDriveDeviceSlot? value)
+    {
+        if (value != null)
+        {
+            UpdateCloudFileInfoDisplay(value.QueueCloudFile, value.ReaderCloudFile);
+        }
+    }
+
+    private void UpdateCloudFileInfoDisplay(GoogleDriveFileInfo queueFile, GoogleDriveFileInfo readerFile)
+    {
+        if (queueFile != null && queueFile.Exists)
+        {
+            string timeStr = queueFile.ModifiedTime?.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") ?? "Không rõ";
+            double kb = queueFile.Size / 1024.0;
+            GoogleDriveQueueCloudInfo = $"Đã có trên Cloud ({kb:F1} KB, sửa: {timeStr})";
+        }
+        else
+        {
+            GoogleDriveQueueCloudInfo = "Chưa có trên Cloud (Sẵn sàng tải lên)";
+        }
+
+        if (readerFile != null && readerFile.Exists)
+        {
+            string timeStr = readerFile.ModifiedTime?.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") ?? "Không rõ";
+            double kb = readerFile.Size / 1024.0;
+            GoogleDriveReaderCloudInfo = $"Đã có trên Cloud ({kb:F1} KB, sửa: {timeStr})";
+        }
+        else
+        {
+            GoogleDriveReaderCloudInfo = "Chưa có trên Cloud (Sẵn sàng tải lên)";
+        }
+    }
+
+    [RelayCommand]
+    public void StartRenameDevice()
+    {
+        CustomDeviceNameInput = _gdriveService.CurrentDeviceName;
+        IsRenamingDevice = true;
+    }
+
+    [RelayCommand]
+    public async Task SaveCustomDeviceNameAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(CustomDeviceNameInput))
+        {
+            _gdriveService.SaveCustomDeviceName(CustomDeviceNameInput);
+            CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
+            IsRenamingDevice = false;
+            ShowCenterToast("ĐỔI TÊN THIẾT BỊ", $"Tên thiết bị mới: {CurrentDeviceDisplayName}", "🖥️", "GOOGLE DRIVE", 2000);
+            await RefreshGoogleDriveStatusAsync();
+        }
+    }
+
+    [RelayCommand]
+    public void CancelRenameDevice()
+    {
+        IsRenamingDevice = false;
+    }
+
     /// <summary>
     /// Khởi tạo và đồng bộ trạng thái Google Drive ban đầu.
     /// </summary>
@@ -79,6 +153,7 @@ public partial class MainViewModel
         GoogleDriveUserEmail = _gdriveService.UserEmail;
         GoogleDriveUserName = _gdriveService.UserName;
         IsGoogleDriveAutoSync = _gdriveService.AutoSyncEnabled;
+        CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
 
         var (cid, secret) = _gdriveService.GetClientCredentials();
         GoogleDriveCustomClientId = cid;
@@ -91,6 +166,7 @@ public partial class MainViewModel
                 IsGoogleDriveConnected = status.IsConnected;
                 GoogleDriveUserEmail = status.AccountEmail;
                 GoogleDriveUserName = status.AccountName;
+                CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
                 GoogleDriveStatusText = status.StatusMessage;
             });
         };
@@ -107,6 +183,7 @@ public partial class MainViewModel
         GoogleDriveUserEmail = _gdriveService.UserEmail;
         GoogleDriveUserName = _gdriveService.UserName;
         IsGoogleDriveAutoSync = _gdriveService.AutoSyncEnabled;
+        CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
 
         if (IsGoogleDriveConnected)
         {
@@ -376,33 +453,38 @@ public partial class MainViewModel
         if (!_gdriveService.IsConnected || IsGoogleDriveBusy) return;
 
         IsGoogleDriveBusy = true;
-        GoogleDriveStatusText = "⏳ Đang kiểm tra thư mục \\GMTPC\\Comic Downloader GMTPC\\ trên Google Drive...";
+        GoogleDriveStatusText = "⏳ Đang kiểm tra danh sách thiết bị & tệp tin trên Google Drive...";
         try
         {
+            CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
             var status = await _gdriveService.CheckCloudStatusAsync();
-            if (status.QueueCloudFile.Exists)
+
+            string? prevSelectedId = SelectedCloudDevice?.DeviceFolderId;
+            AvailableCloudDevices.Clear();
+            foreach (var dev in status.AvailableDevices)
             {
-                string timeStr = status.QueueCloudFile.ModifiedTime?.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") ?? "Không rõ";
-                double kb = status.QueueCloudFile.Size / 1024.0;
-                GoogleDriveQueueCloudInfo = $"Đã có trên Cloud ({kb:F1} KB, sửa: {timeStr})";
+                AvailableCloudDevices.Add(dev);
+            }
+
+            // Giữ lựa chọn thiết bị trước đó nếu còn hợp lệ, hoặc chọn thiết bị hiện tại
+            GoogleDriveDeviceSlot? targetSlot = null;
+            if (!string.IsNullOrEmpty(prevSelectedId))
+            {
+                targetSlot = AvailableCloudDevices.FirstOrDefault(d => d.DeviceFolderId == prevSelectedId);
+            }
+            targetSlot ??= AvailableCloudDevices.FirstOrDefault(d => d.IsCurrentDevice) ?? AvailableCloudDevices.FirstOrDefault();
+            SelectedCloudDevice = targetSlot;
+
+            if (targetSlot != null)
+            {
+                UpdateCloudFileInfoDisplay(targetSlot.QueueCloudFile, targetSlot.ReaderCloudFile);
             }
             else
             {
-                GoogleDriveQueueCloudInfo = "Chưa có trên Cloud (Sẵn sàng tải lên)";
+                UpdateCloudFileInfoDisplay(status.QueueCloudFile, status.ReaderCloudFile);
             }
 
-            if (status.ReaderCloudFile.Exists)
-            {
-                string timeStr = status.ReaderCloudFile.ModifiedTime?.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") ?? "Không rõ";
-                double kb = status.ReaderCloudFile.Size / 1024.0;
-                GoogleDriveReaderCloudInfo = $"Đã có trên Cloud ({kb:F1} KB, sửa: {timeStr})";
-            }
-            else
-            {
-                GoogleDriveReaderCloudInfo = "Chưa có trên Cloud (Sẵn sàng tải lên)";
-            }
-
-            GoogleDriveStatusText = $"✅ Đã đồng bộ thông tin thư mục Google Drive ({DateTime.Now:HH:mm:ss}).";
+            GoogleDriveStatusText = $"✅ Đã đồng bộ thông tin ({AvailableCloudDevices.Count} thiết bị phát hiện lúc {DateTime.Now:HH:mm:ss}).";
         }
         catch (Exception ex)
         {
@@ -426,7 +508,7 @@ public partial class MainViewModel
         if (IsGoogleDriveBusy) return;
 
         IsGoogleDriveBusy = true;
-        GoogleDriveStatusText = "⏳ Đang chuẩn bị và tải file autosave.md lên Google Drive...";
+        GoogleDriveStatusText = $"⏳ Đang chuẩn bị và tải autosave.md lên thư mục thiết bị [{_gdriveService.CurrentDeviceName}]...";
         try
         {
             SyncAutoSaveSettingsToService();
@@ -435,7 +517,7 @@ public partial class MainViewModel
             {
                 GoogleDriveStatusText = "✅ " + msg;
                 AddLog("SUCCESS", $"☁️ {msg}");
-                ShowCenterToast("SAO LƯU QUEUE THÀNH CÔNG", $"Đã tải lên tệp autosave.md ({ComicBooks.Count} truyện) vào Google Drive.", "☁️", "GOOGLE DRIVE", 2800);
+                ShowCenterToast("SAO LƯU QUEUE THÀNH CÔNG", $"Đã tải lên tệp autosave.md ({ComicBooks.Count} truyện) vào slot thiết bị [{_gdriveService.CurrentDeviceName}].", "☁️", "GOOGLE DRIVE", 3000);
                 await RefreshGoogleDriveStatusAsync();
             }
             else
@@ -465,11 +547,14 @@ public partial class MainViewModel
 
         if (IsGoogleDriveBusy) return;
 
+        string sourceName = SelectedCloudDevice?.DeviceFolderName ?? _gdriveService.CurrentDeviceName;
+        string? sourceFolderId = SelectedCloudDevice?.DeviceFolderId;
+
         IsGoogleDriveBusy = true;
-        GoogleDriveStatusText = "⏳ Đang tải file autosave.md từ Google Drive về máy...";
+        GoogleDriveStatusText = $"⏳ Đang tải file autosave.md từ nguồn [{sourceName}] về máy...";
         try
         {
-            var (ok, result, msg) = await _gdriveService.RestoreQueueFromCloudAsync();
+            var (ok, result, msg) = await _gdriveService.RestoreQueueFromCloudAsync(sourceFolderId);
             if (ok && result != null && result.Items.Count > 0)
             {
                 ComicBooks.Clear();
@@ -495,7 +580,7 @@ public partial class MainViewModel
 
                 GoogleDriveStatusText = $"✅ {msg}";
                 AddLog("SUCCESS", $"☁️ {msg}");
-                ShowCenterToast("PHỤC HỒI QUEUE THÀNH CÔNG", $"Đã khôi phục {result.Items.Count} truyện từ Google Drive vào hàng chờ.", "☁️", "GOOGLE DRIVE", 3000);
+                ShowCenterToast("PHỤC HỒI QUEUE THÀNH CÔNG", $"Đã khôi phục {result.Items.Count} truyện từ nguồn [{sourceName}] vào hàng chờ.", "☁️", "GOOGLE DRIVE", 3200);
             }
             else
             {
@@ -524,7 +609,7 @@ public partial class MainViewModel
         if (IsGoogleDriveBusy) return;
 
         IsGoogleDriveBusy = true;
-        GoogleDriveStatusText = "⏳ Đang tạo bản sao lưu Markdown và tải lên Google Drive...";
+        GoogleDriveStatusText = $"⏳ Đang tạo bản sao lưu Markdown và tải lên thư mục [{_gdriveService.CurrentDeviceName}]...";
         try
         {
             var (ok, msg) = await _gdriveService.BackupReaderToCloudAsync();
@@ -532,7 +617,7 @@ public partial class MainViewModel
             {
                 GoogleDriveStatusText = "✅ " + msg;
                 AddLog("SUCCESS", $"☁️ {msg}");
-                ShowCenterToast("SAO LƯU READER THÀNH CÔNG", "Đã lưu dấu trang & lịch sử đọc lên Google Drive.", "☁️", "GOOGLE DRIVE", 2800);
+                ShowCenterToast("SAO LƯU READER THÀNH CÔNG", $"Đã lưu dấu trang & lịch sử đọc vào slot thiết bị [{_gdriveService.CurrentDeviceName}].", "☁️", "GOOGLE DRIVE", 3000);
                 await RefreshGoogleDriveStatusAsync();
             }
             else
@@ -561,11 +646,14 @@ public partial class MainViewModel
 
         if (IsGoogleDriveBusy) return;
 
+        string sourceName = SelectedCloudDevice?.DeviceFolderName ?? _gdriveService.CurrentDeviceName;
+        string? sourceFolderId = SelectedCloudDevice?.DeviceFolderId;
+
         IsGoogleDriveBusy = true;
-        GoogleDriveStatusText = "⏳ Đang tải saved_reader_bookmarks.md từ Google Drive...";
+        GoogleDriveStatusText = $"⏳ Đang tải saved_reader_bookmarks.md từ nguồn [{sourceName}]...";
         try
         {
-            var (ok, result, msg) = await _gdriveService.RestoreReaderFromCloudAsync();
+            var (ok, result, msg) = await _gdriveService.RestoreReaderFromCloudAsync(sourceFolderId);
             if (ok && result != null)
             {
                 // Làm mới danh sách trong LibraryViewModel
@@ -573,7 +661,7 @@ public partial class MainViewModel
 
                 GoogleDriveStatusText = $"✅ {msg}";
                 AddLog("SUCCESS", $"☁️ {msg}");
-                ShowCenterToast("PHỤC HỒI READER THÀNH CÔNG", $"Đã khôi phục {result.RestoredBookmarks} dấu trang & {result.RestoredHistory} lịch sử đọc.", "☁️", "GOOGLE DRIVE", 3000);
+                ShowCenterToast("PHỤC HỒI READER THÀNH CÔNG", $"Đã khôi phục {result.RestoredBookmarks} dấu trang & {result.RestoredHistory} lịch sử đọc từ nguồn [{sourceName}].", "☁️", "GOOGLE DRIVE", 3200);
             }
             else
             {
@@ -602,7 +690,7 @@ public partial class MainViewModel
         if (IsGoogleDriveBusy) return;
 
         IsGoogleDriveBusy = true;
-        GoogleDriveStatusText = "⏳ Đang sao lưu toàn diện cả Hàng chờ tải và Dấu trang / Lịch sử đọc lên Google Drive...";
+        GoogleDriveStatusText = $"⏳ Đang sao lưu toàn diện Queue và Reader vào thư mục thiết bị [{_gdriveService.CurrentDeviceName}]...";
         try
         {
             SyncAutoSaveSettingsToService();
@@ -611,7 +699,7 @@ public partial class MainViewModel
             {
                 GoogleDriveStatusText = "✅ " + result.Message;
                 AddLog("SUCCESS", $"☁️ {result.Message}");
-                ShowCenterToast("ĐỒNG BỘ CLOUD THÀNH CÔNG", $"Đã sao lưu 2 trong 1 lên Google Drive:\n- {ComicBooks.Count} truyện chờ tải\n- Toàn bộ Dấu trang & Lịch sử đọc", "☁️", "GOOGLE DRIVE", 3500);
+                ShowCenterToast("ĐỒNG BỘ CLOUD THÀNH CÔNG", $"Đã sao lưu 2 trong 1 vào slot [{_gdriveService.CurrentDeviceName}]:\n- {ComicBooks.Count} truyện chờ tải\n- Toàn bộ Dấu trang & Lịch sử đọc", "☁️", "GOOGLE DRIVE", 3500);
                 await RefreshGoogleDriveStatusAsync();
             }
             else
@@ -640,11 +728,14 @@ public partial class MainViewModel
 
         if (IsGoogleDriveBusy) return;
 
+        string sourceName = SelectedCloudDevice?.DeviceFolderName ?? _gdriveService.CurrentDeviceName;
+        string? sourceFolderId = SelectedCloudDevice?.DeviceFolderId;
+
         IsGoogleDriveBusy = true;
-        GoogleDriveStatusText = "⏳ Đang tải và phục hồi toàn diện cả Queue và Reader từ Google Drive...";
+        GoogleDriveStatusText = $"⏳ Đang tải và phục hồi toàn diện từ nguồn [{sourceName}]...";
         try
         {
-            var (result, qResult, rResult) = await _gdriveService.FullSyncRestoreAsync();
+            var (result, qResult, rResult) = await _gdriveService.FullSyncRestoreAsync(sourceFolderId);
             if (result.Success)
             {
                 if (qResult != null && qResult.Items.Count > 0)
@@ -661,6 +752,22 @@ public partial class MainViewModel
 
                 GoogleDriveStatusText = "✅ " + result.Message;
                 AddLog("SUCCESS", $"☁️ {result.Message}");
+                ShowCenterToast("PHỤC HỒI CLOUD THÀNH CÔNG", $"Đã phục hồi từ nguồn [{sourceName}]:\n{result.Message}", "☁️", "GOOGLE DRIVE", 3500);
+            }
+            else
+            {
+                GoogleDriveStatusText = "❌ " + result.Message;
+            }
+        }
+        catch (Exception ex)
+        {
+            GoogleDriveStatusText = $"❌ Lỗi: {ex.Message}";
+        }
+        finally
+        {
+            IsGoogleDriveBusy = false;
+        }
+    }
                 ShowCenterToast("PHỤC HỒI CLOUD THÀNH CÔNG", result.Message, "☁️", "GOOGLE DRIVE", 3500);
             }
             else

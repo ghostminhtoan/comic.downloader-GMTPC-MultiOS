@@ -3126,3 +3126,17 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
    - **Xử lý MIME Type trong .NET**: Loại bỏ phần tham số `; charset=utf-8` khi truyền vào `StringContent`, bổ sung hàm `SanitizeMediaType()` lọc sạch media-type token đơn (ví dụ `text/markdown`, `application/json`) nhằm ngăn chặn ngoại lệ `FormatException: The format of value 'text/markdown; charset=utf-8' is invalid.` của `MediaTypeHeaderValue`.
    - **Chuẩn hóa Multipart Upload Google Drive REST API v3**: Chuyển đổi từ `MultipartFormDataContent` (sinh `multipart/form-data`) sang `MultipartContent("related", boundary)` (sinh `multipart/related`) không mang header `Content-Disposition: form-data` thừa, đáp ứng 100% đặc tả upload của Google Drive.
    - **Tối ưu hóa Thư mục Gốc**: Khi tạo thư mục cha `GMTPC` tại `root`, không truyền trường `parents: ["root"]` để Google Drive v3 tự động đặt vào thư mục gốc của Drive người dùng; đồng thời tự động dọn sạch cache `CachedAppFolderId` nếu thư mục bị xóa hoặc không hợp lệ.
+
+5. **Cơ Chế Đồng Bộ Đa Thiết Bị Không Chồng Chéo (Multi-Device Isolation & Cross-Device Restore)**:
+   - **Vấn đề giải quyết**: Một người dùng sử dụng cùng một tài khoản Google Drive trên nhiều thiết bị (Windows, Android, Linux) nếu ghi chung vào tệp gốc sẽ bị ghi đè, làm mất queue và lịch sử đọc của máy kia.
+   - **Cấu trúc thư mục độc lập**:
+     * Thư mục thiết bị: `\GMTPC\Comic Downloader GMTPC\Devices\[Platform] DeviceName\`
+     * Mỗi thiết bị sở hữu `DeviceId` duy nhất (GUID) và tên thiết bị mặc định (hoặc tên tùy biến do người dùng đặt).
+     * Mọi lượt sao lưu (`BackupQueueToCloudAsync`, `BackupReaderToCloudAsync`, `FullSyncUploadAsync`) luôn ghi độc lập vào thư mục thiết bị hiện tại, chống ghi đè chéo 100%.
+   - **Phục hồi chéo thông minh (Cross-Device Cloud Slots)**:
+     * `GetCloudDeviceSlotsAsync()` tự động duyệt toàn bộ thư mục thiết bị trong `Devices/` trên Google Drive.
+     * Tự động nhận diện thiết bị hiện tại (`(Thiết bị này)`) và các tệp dữ liệu cũ ở thư mục gốc (Legacy Root).
+     * ComboBox trên giao diện Modal cho phép người dùng chọn bất kỳ thiết bị nguồn nào để phục hồi dữ liệu về máy hiện tại (ví dụ: đồng bộ dấu trang từ Android sang PC hoặc ngược lại).
+     * Hỗ trợ đổi tên thiết bị ngay trên UI và lưu đồng bộ vào cấu hình `gdrive_auth.json`.
+
+
