@@ -138,6 +138,13 @@ public partial class ReaderPageItem : ObservableObject
         }
     }
 
+    public void SetKnownDimensionsFast(int width, int height)
+    {
+        if (width <= 0 || height <= 0) return;
+        _aspectWidth = width;
+        _aspectHeight = height;
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasImage))]
     private Bitmap? _image;

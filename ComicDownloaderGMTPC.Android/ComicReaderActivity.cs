@@ -439,17 +439,11 @@ public class ComicReaderActivity : AvaloniaActivity
 
     private void OnAndroidOverlayVisibilityChanged(bool isOverlayVisible)
     {
-        RunOnUiThread(() =>
-        {
-            try
-            {
-                // Khi mở thanh công cụ (isOverlayVisible == true), hiển thị thanh điều hướng Android (Recent, Home, Back) và Status Bar ngay lập tức
-                // Khi đóng thanh công cụ (isOverlayVisible == false), quay lại chế độ đọc toàn màn hình (Immersive Mode) nếu ViewModel yêu cầu
-                bool fullScreen = !isOverlayVisible && (_subscribedVm?.IsFullScreen ?? true);
-                ApplyImmersiveFullScreen(fullScreen);
-            }
-            catch { }
-        });
+        // QUY TẮC BẤT BIẾN KHUNG HÌNH (WINDOW/LINUX PARITY):
+        // Giống như Windows và Linux, khi bật/tắt thanh công cụ (Overlay Tool),
+        // Android Reader Activity DUY TRÌ 100% chế độ Immersive Sticky FullScreen cố định.
+        // Tuyệt đối không thoát toàn màn hình để tránh làm co giật Viewport / Bounds,
+        // triệt tiêu hoàn toàn hiện tượng lệch trang, nhảy trang hoặc co méo ảnh.
     }
 
     protected override void OnDestroy()

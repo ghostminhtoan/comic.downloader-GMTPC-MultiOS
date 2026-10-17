@@ -657,8 +657,8 @@ public partial class LibraryViewModel : ViewModelBase
                     ApplyFilter();
                 });
             };
-            await readerVm.InitializeAsync(comic, chapter);
             ComicReaderService.AndroidLaunchSeparateReaderTask.Invoke(readerVm);
+            await readerVm.InitializeAsync(comic, chapter);
         }
         else
         {

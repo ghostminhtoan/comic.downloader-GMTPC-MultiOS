@@ -40,7 +40,7 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public ObservableCollection<PdfBookmarkItem> PdfBookmarks { get; } = new();
 
-    public ObservableCollection<ReaderPageItem> Pages { get; } = new();
+    public BulkObservableCollection<ReaderPageItem> Pages { get; } = new();
 
     public ObservableCollection<ReaderBookmarkItem> Bookmarks { get; } = new();
 
@@ -422,12 +422,14 @@ public partial class ComicReaderViewModel : ViewModelBase
                 IsScrollMode = false;
                 IsHorizontalScrollMode = false;
                 IsRightToLeft = false;
+                FitMode = ImageFitMode.FitScreen; // Khớp trọn vẹn màn hình theo yêu cầu
                 ShowTransientToast("📄 Lật trang: trái (☞ﾟヮﾟ)☞ phải");
                 break;
             case 1: // Left (Flip RTL)
                 IsScrollMode = false;
                 IsHorizontalScrollMode = false;
                 IsRightToLeft = true;
+                FitMode = ImageFitMode.FitScreen; // Khớp trọn vẹn màn hình theo yêu cầu
                 ShowTransientToast("📖 Lật trang: phải ☜(ﾟヮﾟ☜) trái");
                 break;
             case 2: // Right + Vertical (Cuộn dọc RTL)
@@ -440,14 +442,14 @@ public partial class ComicReaderViewModel : ViewModelBase
                 IsScrollMode = true;
                 IsHorizontalScrollMode = true;
                 IsRightToLeft = false;
-                FitMode = ImageFitMode.FitHeight; // Bắt buộc Fit Height để trang khớp chiều cao và cuộn ngang liên tiếp
+                FitMode = ImageFitMode.FitScreen; // Khớp trọn vẹn màn hình (Fit Screen) theo yêu cầu chuẩn đa nền tảng
                 ShowTransientToast("↔ Cuộn ngang: trái (☞ﾟヮﾟ)☞ phải");
                 break;
             case 4: // Left S (Horizontal Scroll RTL - Cuộn ngang liên tục Phải → Trái)
                 IsScrollMode = true;
                 IsHorizontalScrollMode = true;
                 IsRightToLeft = true;
-                FitMode = ImageFitMode.FitHeight; // Bắt buộc Fit Height để trang khớp chiều cao và cuộn ngang liên tiếp
+                FitMode = ImageFitMode.FitScreen; // Khớp trọn vẹn màn hình (Fit Screen) theo yêu cầu chuẩn đa nền tảng
                 ShowTransientToast("↔ Cuộn ngang: phải ☜(ﾟヮﾟ☜) trái");
                 break;
             default: // 5 = Left + Vertical (Webtoon Scroll LTR)
@@ -2205,6 +2207,10 @@ public partial class ComicReaderViewModel : ViewModelBase
         int clamped = Math.Clamp(targetPageIndex, 0, Pages.Count - 1);
         if (CurrentPageIndex == clamped) return;
 
+        // Hủy ngay toàn bộ task nạp ảnh cũ đang dở dang để ưu tiên 100% CPU/RAM giải mã trang đích tức thì
+        _prefetchCts?.Cancel();
+        _prefetchCts = new CancellationTokenSource();
+
         CurrentPageIndex = clamped;
         RequestScrollToPage(clamped);
     }
@@ -2283,8 +2289,8 @@ public partial class ComicReaderViewModel : ViewModelBase
             foreach (var p in loadedPages)
             {
                 p.PageMargin = currentMargin;
-                Pages.Add(p);
             }
+            Pages.AddRange(loadedPages);
             ApplyFitModeLayout();
 
             if (chapter.PdfBookmarks != null && chapter.PdfBookmarks.Count > 0)
@@ -2347,7 +2353,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                     {
                         if (!p.IsLoaded && (p.AspectWidth == 900 && p.AspectHeight == 1350 || p.AspectWidth <= 0))
                         {
-                            p.SetKnownDimensions(w, h);
+                            p.SetKnownDimensionsFast(w, h);
                         }
                     }
                     ApplyFitModeLayout();

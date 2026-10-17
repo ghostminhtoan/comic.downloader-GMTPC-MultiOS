@@ -605,16 +605,21 @@ public partial class ComicReaderControl : UserControl
             _singleTapTimer.Stop();
             if (DataContext is ComicReaderViewModel vm)
             {
+                var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
+                Vector? savedOffset = sv?.Offset;
                 int savedPage = vm.CurrentPageIndex;
                 _suppressScrollChangedUntilTick = Environment.TickCount64 + 800;
-                Dispatcher.UIThread.Post(() =>
+
+                vm.ToggleOverlay();
+
+                if (sv != null && savedOffset.HasValue)
                 {
-                    vm.ToggleOverlay();
-                    if (savedPage >= 0 && savedPage < vm.Pages.Count)
-                    {
-                        vm.CurrentPageIndex = savedPage;
-                    }
-                });
+                    sv.Offset = savedOffset.Value;
+                }
+                if (savedPage >= 0 && savedPage < vm.Pages.Count)
+                {
+                    vm.CurrentPageIndex = savedPage;
+                }
             }
         };
 
@@ -937,8 +942,9 @@ public partial class ComicReaderControl : UserControl
         _isUserDraggingScrubber = false;
         if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
         {
-            vm.ScrubToPage((int)Math.Round(slider.Value));
+            _suppressScrollChangedUntilTick = Environment.TickCount64 + 600;
             vm.UpdateScrubberHover(0, false);
+            vm.ScrubToPage((int)Math.Round(slider.Value));
         }
     }
 
@@ -948,8 +954,9 @@ public partial class ComicReaderControl : UserControl
         _isUserDraggingScrubber = false;
         if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
         {
-            vm.ScrubToPage((int)Math.Round(slider.Value));
+            _suppressScrollChangedUntilTick = Environment.TickCount64 + 600;
             vm.UpdateScrubberHover(0, false);
+            vm.ScrubToPage((int)Math.Round(slider.Value));
         }
     }
 
@@ -961,8 +968,9 @@ public partial class ComicReaderControl : UserControl
             DataContext is ComicReaderViewModel vm)
         {
             int targetPage = (int)Math.Round(slider.Value);
+            // Trong khi đang kéo thanh trượt: CHỈ cập nhật bong bóng số trang (Preview HUD)
+            // TUYỆT ĐỐI KHÔNG cuộn dồn dập ScrollViewer để tránh rung lắc và nghẽn decode với hàng ngàn trang
             vm.UpdateScrubberHover(targetPage, true);
-            vm.ScrubToPage(targetPage);
         }
     }
 
@@ -1233,7 +1241,9 @@ public partial class ComicReaderControl : UserControl
         int reqVersion = ++_scrollRequestVersion;
         var targetItem = vm.Pages[pageIndex];
         _isProgrammaticScroll = true;
+        _suppressScrollChangedUntilTick = Environment.TickCount64 + 600;
 
+        var sv = GetReaderScrollViewer();
         if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
         {
             double targetY = 0;
@@ -1242,16 +1252,18 @@ public partial class ComicReaderControl : UserControl
                 var p = vm.Pages[i];
                 targetY += p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom;
             }
-            var sv = GetReaderScrollViewer();
             if (sv != null)
             {
                 double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
                 sv.Offset = new Vector(sv.Offset.X, Math.Clamp(targetY, 0, maxY));
             }
+            else
+            {
+                try { listBox.ScrollIntoView(targetItem); } catch { }
+            }
         }
         else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
         {
-            var sv = GetReaderScrollViewer();
             if (sv != null)
             {
                 double accX = 0;
@@ -1264,6 +1276,10 @@ public partial class ComicReaderControl : UserControl
                 double targetX = vm.IsRightToLeft ? (maxX - accX) : accX;
                 sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), sv.Offset.Y);
             }
+            else
+            {
+                try { listBox.ScrollIntoView(targetItem); } catch { }
+            }
         }
         else if (vm.IsFlipMode)
         {
@@ -1273,12 +1289,6 @@ public partial class ComicReaderControl : UserControl
                 flipSv.Offset = Vector.Zero;
             }
         }
-
-        try
-        {
-            listBox.ScrollIntoView(targetItem);
-        }
-        catch { }
 
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
@@ -1297,7 +1307,6 @@ public partial class ComicReaderControl : UserControl
                     var p = vm.Pages[i];
                     targetY += p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom;
                 }
-                var sv = GetReaderScrollViewer();
                 if (sv != null)
                 {
                     double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
@@ -1306,7 +1315,6 @@ public partial class ComicReaderControl : UserControl
             }
             else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
             {
-                var sv = GetReaderScrollViewer();
                 if (sv != null)
                 {
                     double accX = 0;
@@ -1321,26 +1329,15 @@ public partial class ComicReaderControl : UserControl
                 }
             }
 
-            try
-            {
-                if (pageIndex >= 0 && pageIndex < vm.Pages.Count)
+            Avalonia.Threading.Dispatcher.UIThread.Post(
+                () =>
                 {
-                    listBox.ScrollIntoView(vm.Pages[pageIndex]);
-                }
-            }
-            catch { }
-            finally
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(
-                    () =>
+                    if (reqVersion == _scrollRequestVersion)
                     {
-                        if (reqVersion == _scrollRequestVersion)
-                        {
-                            _isProgrammaticScroll = false;
-                        }
-                    },
-                    Avalonia.Threading.DispatcherPriority.Background);
-            }
+                        _isProgrammaticScroll = false;
+                    }
+                },
+                Avalonia.Threading.DispatcherPriority.Background);
         }, Avalonia.Threading.DispatcherPriority.Loaded);
     }
 
