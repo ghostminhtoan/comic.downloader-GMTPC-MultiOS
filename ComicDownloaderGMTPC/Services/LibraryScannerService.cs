@@ -1012,6 +1012,169 @@ public sealed class LibraryScannerService
         return null;
     }
 
+    /// <summary>
+    /// Xây dựng một bộ truyện hoàn chỉnh từ một thư mục chứa nhiều chapter con (hoặc nhiều file nén chapter con),
+    /// cho phép đọc truyện xuyên suốt toàn bộ folder từ Chapter 1 đến Chapter N mà không bị gián đoạn.
+    /// </summary>
+    public LibraryComicItem? BuildComicFromFolderAllChapters(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath)) return null;
+
+        try
+        {
+            var enumOptions = new EnumerationOptions
+            {
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = false,
+                ReturnSpecialDirectories = false
+            };
+
+            var subDirs = Directory.GetDirectories(folderPath, "*", enumOptions);
+            var files = Directory.GetFiles(folderPath, "*", enumOptions);
+
+            var chapters = new List<LibraryChapterItem>();
+            int chapterIndex = 1;
+
+            // 1. Quét các thư mục chapter con (ví dụ: Chapter 1, Chapter 2, Chap 01...)
+            foreach (string sub in subDirs.NaturalSort())
+            {
+                string subName = Path.GetFileName(sub);
+                if (subName.StartsWith(".", StringComparison.Ordinal)) continue;
+
+                var directImgs = GetDirectImagesSafe(sub);
+                if (directImgs.Count > 0)
+                {
+                    chapters.Add(new LibraryChapterItem
+                    {
+                        Index = chapterIndex++,
+                        Title = subName,
+                        LocalPath = sub,
+                        TotalPages = directImgs.Count,
+                        LastReadPage = ReadProgressStore.Instance.GetLastReadPage(sub)
+                    });
+                }
+            }
+
+            // 2. Quét các file nén / file chapter độc lập (ví dụ: Chap 1.zip, Chap 2.rar, Chap 3.cbz...)
+            var archiveFiles = files.Where(IsArchiveFile).NaturalSort();
+            foreach (string arch in archiveFiles)
+            {
+                int tempIdx = 1;
+                var expanded = ExpandArchiveIntoChapters(arch, ref tempIdx, out string? firstEntry);
+                if (expanded.Count > 0)
+                {
+                    foreach (var exp in expanded)
+                    {
+                        exp.Index = chapterIndex++;
+                        chapters.Add(exp);
+                    }
+                }
+            }
+
+            // 3. Quét các file PDF / MOBI
+            var pdfFiles = files.Where(IsPdfFile).NaturalSort();
+            foreach (string pdf in pdfFiles)
+            {
+                int tempIdx = 1;
+                var expanded = ExpandPdfIntoChapters(pdf, ref tempIdx);
+                if (expanded.Count > 0)
+                {
+                    foreach (var exp in expanded)
+                    {
+                        exp.Index = chapterIndex++;
+                        chapters.Add(exp);
+                    }
+                }
+            }
+
+            var mobiFiles = files.Where(IsMobiFile).NaturalSort();
+            foreach (string mobi in mobiFiles)
+            {
+                int tempIdx = 1;
+                var expanded = MobiComicParser.Instance.ExpandMobiIntoChapters(mobi, ref tempIdx);
+                if (expanded.Count > 0)
+                {
+                    foreach (var exp in expanded)
+                    {
+                        exp.Index = chapterIndex++;
+                        chapters.Add(exp);
+                    }
+                }
+            }
+
+            // 4. Nếu không có subfolder hay file nén, kiểm tra ảnh trực tiếp trong thư mục này
+            if (chapters.Count == 0)
+            {
+                var directImgs = GetDirectImagesSafe(folderPath);
+                if (directImgs.Count > 0)
+                {
+                    chapters.Add(new LibraryChapterItem
+                    {
+                        Index = 1,
+                        Title = Path.GetFileName(folderPath),
+                        LocalPath = folderPath,
+                        TotalPages = directImgs.Count,
+                        LastReadPage = ReadProgressStore.Instance.GetLastReadPage(folderPath)
+                    });
+                }
+            }
+
+            if (chapters.Count == 0) return null;
+
+            // Đánh số lại Index chuẩn 1..N
+            for (int i = 0; i < chapters.Count; i++)
+            {
+                chapters[i].Index = i + 1;
+            }
+
+            string comicTitle = Path.GetFileName(folderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrWhiteSpace(comicTitle)) comicTitle = "Truyện Đã Tải";
+
+            var comic = new LibraryComicItem
+            {
+                Title = comicTitle,
+                RootFolderPath = folderPath,
+                SourceLocationLabel = BuildShortLocationBadge(folderPath, isExternal: true)
+            };
+
+            foreach (var ch in chapters)
+            {
+                comic.Chapters.Add(ch);
+            }
+
+            // Gán ảnh bìa từ chapter đầu tiên
+            var firstChap = chapters[0];
+            if (firstChap.IsPdf)
+            {
+                comic.CoverPdfPath = firstChap.LocalPath;
+            }
+            else if (firstChap.IsMobi)
+            {
+                comic.CoverMobiPath = firstChap.LocalPath;
+            }
+            else if (firstChap.IsCbz || firstChap.IsRar)
+            {
+                comic.CoverArchivePath = firstChap.LocalPath;
+                if (firstChap.ArchiveEntryNames != null && firstChap.ArchiveEntryNames.Count > 0)
+                {
+                    comic.CoverArchiveEntry = firstChap.ArchiveEntryNames[0];
+                }
+            }
+            else if (Directory.Exists(firstChap.LocalPath))
+            {
+                var imgs = GetDirectImagesSafe(firstChap.LocalPath);
+                if (imgs.Count > 0) comic.CoverFilePath = imgs[0];
+            }
+
+            comic.RefreshReadStatus();
+            return comic;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static List<string> GetDirectImagesSafe(string folderPath)
     {
         try

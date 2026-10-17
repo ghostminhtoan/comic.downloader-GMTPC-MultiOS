@@ -247,12 +247,22 @@
                     <!-- BREADCRUMB THANH ĐIỀU HƯỚNG TRÊN CÙNG -->
                     <Border Grid.Row="1" Background="#131C31" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,0,0,6">
                         <Grid ColumnDefinitions="Auto, *, Auto">
-                            <Button Grid.Column="0" Command="{Binding NavigateUpDirectoryCommand}"
-                                    Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
-                                    Foreground="#38BDF8" FontWeight="Bold"
-                                    Padding="10,4" CornerRadius="5" Margin="0,0,8,0">
-                                <TextBlock Text="⬆ Lên 1 cấp" FontSize="11" />
-                            </Button>
+                            <!-- Nút Lên 1 cấp và Nút Đọc truyện xuyên suốt toàn bộ folder ở ngay bên dưới -->
+                            <StackPanel Grid.Column="0" Orientation="Vertical" Spacing="4" Margin="0,0,8,0">
+                                <Button Command="{Binding NavigateUpDirectoryCommand}"
+                                        Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                        Foreground="#38BDF8" FontWeight="Bold"
+                                        Padding="10,4" CornerRadius="5" HorizontalAlignment="Stretch">
+                                    <TextBlock Text="⬆ Lên 1 cấp" FontSize="11" HorizontalAlignment="Center" />
+                                </Button>
+                                <Button Command="{Binding ReadCurrentDirectoryCommand}"
+                                        Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1"
+                                        Foreground="White" FontWeight="Bold"
+                                        Padding="10,4" CornerRadius="5" HorizontalAlignment="Stretch"
+                                        ToolTip.Tip="Đọc truyện xuyên suốt toàn bộ thư mục này">
+                                    <TextBlock Text="📖 Đọc truyện" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" />
+                                </Button>
+                            </StackPanel>
 
                             <TextBlock Grid.Column="1" Text="{Binding CurrentDirectoryPath}"
                                        Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11.5"
@@ -315,16 +325,31 @@
                                 </ListBox.Styles>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="models:DirectoryItemModel">
-                                        <Button Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
-                                                CommandParameter="{Binding}"
-                                                Background="#131C31" BorderBrush="#1E293B" BorderThickness="0,0,0,1"
+                                        <!-- Dùng Border thay Button để chống mất ContextMenu khi Hold rồi buông tay trên Android -->
+                                        <Border Background="#131C31" BorderBrush="#1E293B" BorderThickness="0,0,0,1"
                                                 CornerRadius="4" Padding="8,6" HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Stretch">
-                                            <Button.ContextMenu>
+                                                Cursor="Hand"
+                                                Tapped="OnDirectoryItemTapped"
+                                                PointerPressed="OnDirectoryItemPointerPressed"
+                                                PointerReleased="OnDirectoryItemPointerReleased">
+                                            <Border.ContextMenu>
                                                 <ContextMenu>
-                                                    <MenuItem Header="▶ Đọc truyện / Mở"
+                                                    <!-- Nếu là Thư mục: Nút Mở để duyệt và Nút Đọc toàn bộ thư mục -->
+                                                    <MenuItem Header="📂 Mở"
+                                                              IsVisible="{Binding IsFolder}"
                                                               Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
                                                               CommandParameter="{Binding}" />
+                                                    <MenuItem Header="📖 Đọc truyện (Toàn bộ thư mục)"
+                                                              IsVisible="{Binding IsFolder}"
+                                                              Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ReadEntireFolderCommand}"
+                                                              CommandParameter="{Binding FullPath}" />
+
+                                                    <!-- Nếu là File truyện: Nút Đọc truyện -->
+                                                    <MenuItem Header="📖 Đọc truyện"
+                                                              IsVisible="{Binding !IsFolder}"
+                                                              Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
+                                                              CommandParameter="{Binding}" />
+
                                                     <Separator Background="#1E293B" Height="1" Margin="2,3" />
                                                     <MenuItem Header="🔄 Xóa vị trí đọc dở"
                                                               Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ClearComicResumeCommand}"
@@ -333,8 +358,8 @@
                                                               Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ClearComicBookmarksCommand}"
                                                               CommandParameter="{Binding}" />
                                                 </ContextMenu>
-                                            </Button.ContextMenu>
-                                            <Grid ColumnDefinitions="52, *, Auto">
+                                            </Border.ContextMenu>
+                                            <Grid ColumnDefinitions="52, *, Auto, Auto">
                                                 <!-- Cột 1: Ảnh bìa chữ nhật đứng chuẩn ComicScreen -->
                                                 <Border Grid.Column="0" Width="50" Height="70" CornerRadius="4" Background="#090D16" ClipToBounds="True">
                                                     <Panel>
@@ -364,8 +389,17 @@
                                                                HorizontalAlignment="Right" TextAlignment="Right"
                                                                IsVisible="{Binding HasReadingProgress}" />
                                                 </StackPanel>
+
+                                                <!-- Cột 4: Nút menu 3 chấm để mở ContextMenu trực tiếp cho cảm ứng Android -->
+                                                <Button Grid.Column="3"
+                                                        Background="Transparent" BorderThickness="0"
+                                                        Padding="8,6" Margin="4,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        Click="OnDirectoryItemMenuButtonClick">
+                                                    <TextBlock Text="⋮" Foreground="#94A3B8" FontSize="16" FontWeight="Bold" />
+                                                </Button>
                                             </Grid>
-                                        </Button>
+                                        </Border>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
@@ -382,11 +416,39 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:DirectoryItemModel">
-                                            <Button Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
-                                                    CommandParameter="{Binding}"
-                                                    Width="114" Height="170" Margin="4" Padding="0"
+                                            <Border Width="114" Height="170" Margin="4" Padding="0"
                                                     Background="#131C31" BorderBrush="#1E293B" BorderThickness="1"
-                                                    CornerRadius="6" ClipToBounds="True">
+                                                    CornerRadius="6" ClipToBounds="True" Cursor="Hand"
+                                                    Tapped="OnDirectoryItemTapped"
+                                                    PointerPressed="OnDirectoryItemPointerPressed"
+                                                    PointerReleased="OnDirectoryItemPointerReleased">
+                                                <Border.ContextMenu>
+                                                    <ContextMenu>
+                                                        <!-- Nếu là Thư mục: Nút Mở để duyệt và Nút Đọc toàn bộ thư mục -->
+                                                        <MenuItem Header="📂 Mở"
+                                                                  IsVisible="{Binding IsFolder}"
+                                                                  Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
+                                                                  CommandParameter="{Binding}" />
+                                                        <MenuItem Header="📖 Đọc truyện (Toàn bộ thư mục)"
+                                                                  IsVisible="{Binding IsFolder}"
+                                                                  Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ReadEntireFolderCommand}"
+                                                                  CommandParameter="{Binding FullPath}" />
+
+                                                        <!-- Nếu là File truyện: Nút Đọc truyện -->
+                                                        <MenuItem Header="📖 Đọc truyện"
+                                                                  IsVisible="{Binding !IsFolder}"
+                                                                  Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).SelectDirectoryItemCommand}"
+                                                                  CommandParameter="{Binding}" />
+
+                                                        <Separator Background="#1E293B" Height="1" Margin="2,3" />
+                                                        <MenuItem Header="🔄 Xóa vị trí đọc dở"
+                                                                  Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ClearComicResumeCommand}"
+                                                                  CommandParameter="{Binding}" />
+                                                        <MenuItem Header="📑 Xóa dấu trang truyện này"
+                                                                  Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).ClearComicBookmarksCommand}"
+                                                                  CommandParameter="{Binding}" />
+                                                    </ContextMenu>
+                                                </Border.ContextMenu>
                                                 <Panel HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                                                     <!-- Nền ảnh bìa lớn toàn ô -->
                                                     <Panel HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
@@ -397,6 +459,14 @@
                                                                HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                                                IsVisible="{Binding HasCover}" />
                                                     </Panel>
+
+                                                    <!-- Nút 3 chấm mở menu góc trên phải cho cảm ứng Android -->
+                                                    <Button Background="#99090D16" BorderThickness="0" CornerRadius="4"
+                                                            Padding="6,3" Margin="0,4,4,0"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                            Click="OnDirectoryItemMenuButtonClick">
+                                                        <TextBlock Text="⋮" Foreground="#E2E8F0" FontSize="14" FontWeight="Bold" />
+                                                    </Button>
 
                                                     <!-- Dải thông tin mờ ở đáy thẻ (Tên file, Dung lượng, Tiến độ) -->
                                                     <Border Background="#E6090D16" VerticalAlignment="Bottom"
@@ -409,7 +479,7 @@
                                                         </StackPanel>
                                                     </Border>
                                                 </Panel>
-                                            </Button>
+                                            </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>

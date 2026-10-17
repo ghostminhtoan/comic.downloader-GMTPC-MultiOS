@@ -1306,7 +1306,41 @@ public partial class LibraryViewModel : ViewModelBase
     public async Task ReadCurrentDirectoryAsync()
     {
         if (string.IsNullOrWhiteSpace(CurrentDirectoryPath)) return;
-        await OpenPathToReadInternalAsync(CurrentDirectoryPath);
+        await ReadEntireFolderAsync(CurrentDirectoryPath);
+    }
+
+    [RelayCommand]
+    public async Task ReadEntireFolderAsync(string? folderPath)
+    {
+        string target = folderPath ?? CurrentDirectoryPath;
+        if (string.IsNullOrWhiteSpace(target) || !Directory.Exists(target)) return;
+
+        IsDirectoryLoading = true;
+        StatusMessage = "⏳ Đang chuẩn bị đọc truyện toàn bộ thư mục...";
+        try
+        {
+            var comic = await Task.Run(() => _scanner.BuildComicFromFolderAllChapters(target));
+            if (comic != null && comic.Chapters.Count > 0)
+            {
+                ReadProgressStore.Instance.RegisterReadComic(comic.RootFolderPath, touchTimestamp: true);
+                var targetChap = comic.GetBestResumeChapter() ?? comic.Chapters[0];
+                await OpenChapterInternalAsync(comic, targetChap);
+                _ = LoadHistoryItemsAsync();
+                LoadStorageItems();
+            }
+            else
+            {
+                await OpenPathToReadInternalAsync(target);
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi khi đọc thư mục: {ex.Message}";
+        }
+        finally
+        {
+            IsDirectoryLoading = false;
+        }
     }
 
     [RelayCommand]
