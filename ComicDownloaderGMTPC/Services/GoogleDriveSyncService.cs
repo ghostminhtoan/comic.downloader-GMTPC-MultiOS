@@ -55,6 +55,8 @@ public sealed class GoogleDriveDeviceSlot
     public bool IsLegacyRoot { get; set; }
     public DateTime? LastSyncUtc { get; set; }
     public GoogleDriveFileInfo QueueCloudFile { get; set; } = new();
+    public GoogleDriveFileInfo BookmarksCloudFile { get; set; } = new();
+    public GoogleDriveFileInfo HistoryCloudFile { get; set; } = new();
     public GoogleDriveFileInfo ReaderCloudFile { get; set; } = new();
     public GoogleDriveFileInfo ManifestCloudFile { get; set; } = new();
     public GoogleDriveFileInfo ResumeCloudFile { get; set; } = new();
@@ -125,8 +127,11 @@ public sealed class GoogleDriveSyncService
     public const string AppSubFolderName = "Comic Downloader GMTPC";
 
     public const string QueueFileName = "autosave.md";
-    public const string ReaderFileName = "saved_reader_bookmarks.md";
+    public const string BookmarksFileName = "bookmarks.md";
+    public const string HistoryFileName = "history.md";
     public const string ResumeFileName = "resume.md";
+    public const string LegacyReaderFileName = "saved_reader_bookmarks.md";
+    public const string ReaderFileName = "bookmarks.md";
     public const string ManifestFileName = "cloud_sync_manifest.json";
     private const string AuthConfigFileName = "gdrive_auth.json";
 
@@ -1708,7 +1713,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
     {
         try
         {
-            string[] filesToSync = { QueueFileName, ReaderFileName, ManifestFileName };
+            string[] filesToSync = { QueueFileName, BookmarksFileName, HistoryFileName, ManifestFileName };
             foreach (var fileName in filesToSync)
             {
                 var targetFile = await GetFileInfoAsync(targetFolderId, fileName, ct);
@@ -1975,17 +1980,24 @@ p {{ color: #94A3B8; font-size: 14px; }}
                         };
 
                         if (name.Equals(QueueFileName, StringComparison.OrdinalIgnoreCase)) slot.QueueCloudFile = fileInfo;
-                        else if (name.Equals(ReaderFileName, StringComparison.OrdinalIgnoreCase)) slot.ReaderCloudFile = fileInfo;
+                        else if (name.Equals(BookmarksFileName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            slot.BookmarksCloudFile = fileInfo;
+                            slot.ReaderCloudFile = fileInfo;
+                        }
+                        else if (name.Equals(HistoryFileName, StringComparison.OrdinalIgnoreCase)) slot.HistoryCloudFile = fileInfo;
                         else if (name.Equals(ManifestFileName, StringComparison.OrdinalIgnoreCase)) slot.ManifestCloudFile = fileInfo;
                         else if (name.Equals(ResumeFileName, StringComparison.OrdinalIgnoreCase)) slot.ResumeCloudFile = fileInfo;
+                        else if (name.Equals(LegacyReaderFileName, StringComparison.OrdinalIgnoreCase) && !slot.BookmarksCloudFile.Exists) slot.ReaderCloudFile = fileInfo;
                     }
                 }
             }
 
             slot.LastSyncUtc = slot.ManifestCloudFile.ModifiedTime
                 ?? slot.QueueCloudFile.ModifiedTime
-                ?? slot.ReaderCloudFile.ModifiedTime
-                ?? slot.ResumeCloudFile.ModifiedTime;
+                ?? slot.BookmarksCloudFile.ModifiedTime
+                ?? slot.HistoryCloudFile.ModifiedTime
+                ?? slot.ReaderCloudFile.ModifiedTime;
         }
         catch { }
     }
@@ -2402,7 +2414,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Sao lưu Dấu trang & Lịch sử đọc lên thư mục riêng của thiết bị trên Google Drive.
+    /// Sao lưu Dấu trang (bookmarks.md) và Lịch sử đọc (history.md) lên thư mục riêng của thiết bị trên Google Drive.
     /// Cho phép chỉ định targetFolderId cụ thể để bảo đảm dữ liệu luôn lưu đúng vào thư mục con đã chọn.
     /// </summary>
     public async Task<(bool Success, string Message)> BackupReaderToCloudAsync(string? targetFolderId = null, CancellationToken ct = default)
@@ -2431,18 +2443,28 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 SaveConfigToDisk();
             }
 
-            string mdContent = ReadProgressStore.Instance.BuildReaderMarkdownContent();
-            var (ok, _, msg) = await UploadOrUpdateFileAsync(folderId, ReaderFileName, mdContent, "text/markdown", ct);
+            // 1. Sao lưu bookmarks.md
+            string bookmarksContent = ReadProgressStore.Instance.BuildBookmarksMarkdownContent();
+            var (bOk, _, bMsg) = await UploadOrUpdateFileAsync(folderId, BookmarksFileName, bookmarksContent, "text/markdown", ct);
 
-            if (ok)
+            // 2. Sao lưu history.md
+            string historyContent = ReadProgressStore.Instance.BuildHistoryMarkdownContent();
+            var (hOk, _, hMsg) = await UploadOrUpdateFileAsync(folderId, HistoryFileName, historyContent, "text/markdown", ct);
+
+            bool ok = bOk && hOk;
+            if (ok || bOk || hOk)
             {
                 _config.LastSyncUtc = DateTime.UtcNow;
                 SaveConfigToDisk();
                 await UpdateSyncManifestAsync(folderId, 0, ct);
-                NotifyStatusChanged($"Đã sao lưu Bookmark & History thiết bị [{CurrentDeviceName}] lên Google Drive ({DateTime.Now:HH:mm:ss})");
+                NotifyStatusChanged($"Đã sao lưu bookmarks.md & history.md thiết bị [{CurrentDeviceName}] lên Google Drive ({DateTime.Now:HH:mm:ss})");
             }
 
-            return (ok, msg);
+            string resultMsg = ok
+                ? "Đã sao lưu thành công bookmarks.md và history.md lên Google Drive."
+                : $"Sao lưu Reader: bookmarks.md ({ (bOk ? "OK" : bMsg) }), history.md ({ (hOk ? "OK" : hMsg) })";
+
+            return (ok || bOk || hOk, resultMsg);
         }
         finally
         {
@@ -2451,7 +2473,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Phục hồi Dấu trang & Lịch sử đọc từ thư mục thiết bị chỉ định (hoặc thiết bị hiện tại) về máy.
+    /// Phục hồi Dấu trang (bookmarks.md) và Lịch sử đọc (history.md) từ thư mục thiết bị chỉ định về máy.
     /// </summary>
     public async Task<(bool Success, ReaderRestoreResult? Result, string Message)> RestoreReaderFromCloudAsync(string? sourceFolderId = null, CancellationToken ct = default)
     {
@@ -2465,13 +2487,13 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 // Fallback nếu thư mục thiết bị này chưa có tệp thì thử tìm ở appFolderId cũ
                 if (!string.IsNullOrEmpty(folderId))
                 {
-                    var file = await GetFileInfoAsync(folderId, ReaderFileName, ct);
+                    var file = await GetFileInfoAsync(folderId, BookmarksFileName, ct);
                     if (!file.Exists)
                     {
                         string? appFolderId = await EnsureTargetFolderAsync(ct);
                         if (!string.IsNullOrEmpty(appFolderId))
                         {
-                            var legacyFile = await GetFileInfoAsync(appFolderId, ReaderFileName, ct);
+                            var legacyFile = await GetFileInfoAsync(appFolderId, BookmarksFileName, ct);
                             if (legacyFile.Exists) folderId = appFolderId;
                         }
                     }
@@ -2480,13 +2502,47 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
             if (string.IsNullOrEmpty(folderId)) return (false, null, "Không thể kết nối thư mục nguồn trên Google Drive.");
 
-            var (ok, content, _, msg) = await DownloadFileContentAsync(folderId, ReaderFileName, ct);
-            if (!ok || string.IsNullOrWhiteSpace(content))
+            var result = new ReaderRestoreResult();
+            bool anySuccess = false;
+
+            // 1. Tải và phục hồi bookmarks.md
+            var (bOk, bContent, _, bMsg) = await DownloadFileContentAsync(folderId, BookmarksFileName, ct);
+            if (bOk && !string.IsNullOrWhiteSpace(bContent))
             {
-                return (false, null, msg);
+                int bmCount = ReadProgressStore.Instance.ParseBookmarksMarkdownContent(bContent, mergeWithExisting: true);
+                result.RestoredBookmarks = bmCount;
+                result.HasValidStructure = true;
+                anySuccess = true;
+            }
+            else
+            {
+                // Fallback: Thử tải file cũ saved_reader_bookmarks.md nếu chưa có bookmarks.md
+                var (legOk, legContent, _, _) = await DownloadFileContentAsync(folderId, LegacyReaderFileName, ct);
+                if (legOk && !string.IsNullOrWhiteSpace(legContent))
+                {
+                    var legResult = ReadProgressStore.Instance.ParseReaderMarkdownContent(legContent, mergeWithExisting: true, loadedFromPath: "Google Drive: saved_reader_bookmarks.md");
+                    result.RestoredBookmarks = legResult.RestoredBookmarks;
+                    result.RestoredHistory = legResult.RestoredHistory;
+                    result.HasValidStructure = true;
+                    anySuccess = true;
+                }
             }
 
-            var result = ReadProgressStore.Instance.ParseReaderMarkdownContent(content, mergeWithExisting: true, loadedFromPath: "Google Drive:\\GMTPC\\Comic Downloader GMTPC\\saved_reader_bookmarks.md");
+            // 2. Tải và phục hồi history.md
+            var (hOk, hContent, _, hMsg) = await DownloadFileContentAsync(folderId, HistoryFileName, ct);
+            if (hOk && !string.IsNullOrWhiteSpace(hContent))
+            {
+                int histCount = ReadProgressStore.Instance.ParseHistoryMarkdownContent(hContent, mergeWithExisting: true);
+                result.RestoredHistory = Math.Max(result.RestoredHistory, histCount);
+                result.HasValidStructure = true;
+                anySuccess = true;
+            }
+
+            if (!anySuccess)
+            {
+                return (false, null, $"Không tìm thấy tệp bookmarks.md hoặc history.md trong thư mục thiết bị Google Drive.");
+            }
+
             return (true, result, $"Đã phục hồi {result.RestoredBookmarks} dấu trang và {result.RestoredHistory} lịch sử đọc từ Google Drive.");
         }
         finally
@@ -2496,8 +2552,9 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Sao lưu tiến trình đọc dở (resume.md) vào cả thư mục thiết bị đang chọn (cùng với autosave.md và saved_reader_bookmarks.md)
-    /// VÀ thư mục gốc chung của app trên Google Drive (\GMTPC\Comic Downloader GMTPC\).
+    /// Sao lưu tiến trình đọc dở (resume.md) CHỈ VÀO THƯ MỤC GỐC DÙNG CHUNG CỦA ỨNG DỤNG TRÊN GOOGLE DRIVE (\GMTPC\Comic Downloader GMTPC\).
+    /// Chuẩn hóa theo mô hình ComicScreen: Toàn bộ thiết bị (Windows, Android, Linux) chia sẻ chung duy nhất một tệp resume.md ở cấp parent folder.
+    /// Đồng thời tự động dọn dẹp file resume.md cũ trong thư mục riêng của thiết bị (nếu có) để tránh rác.
     /// </summary>
     public async Task<(bool Success, string Message)> BackupResumeToCloudAsync(string? targetFolderId = null, CancellationToken ct = default)
     {
@@ -2507,42 +2564,48 @@ p {{ color: #94A3B8; font-size: 14px; }}
             string? appFolderId = await EnsureTargetFolderAsync(ct);
             if (string.IsNullOrEmpty(appFolderId)) return (false, "Không thể kết nối thư mục gốc của app trên Google Drive.");
 
-            string? deviceFolderId = targetFolderId;
-            if (string.IsNullOrEmpty(deviceFolderId))
-            {
-                deviceFolderId = await EnsureCurrentDeviceFolderAsync(ct);
-            }
-
             string mdContent = ReadProgressStore.Instance.BuildResumeMarkdownContent(CurrentDeviceName);
 
-            // 1. Lưu vào thư mục slot thiết bị đang chọn (nơi chứa autosave.md và saved_reader_bookmarks.md)
-            bool deviceOk = true;
-            string deviceMsg = string.Empty;
-            if (!string.IsNullOrEmpty(deviceFolderId))
-            {
-                var (devOk, devFileId, devMsg) = await UploadOrUpdateFileAsync(deviceFolderId, ResumeFileName, mdContent, "text/markdown", ct);
-                deviceOk = devOk;
-                deviceMsg = devMsg;
-            }
-
-            // 2. Lưu vào thư mục gốc app (để làm bản dùng chung toàn cục)
+            // 1. LƯU DUY NHẤT VÀO THƯ MỤC CHA DÙNG CHUNG (Parent Folder: \GMTPC\Comic Downloader GMTPC\resume.md)
             var (appOk, appFileId, appMsg) = await UploadOrUpdateFileAsync(appFolderId, ResumeFileName, mdContent, "text/markdown", ct);
 
-            bool overallOk = deviceOk || appOk;
-            if (overallOk)
+            // 2. DỌN DẸP: Nếu trong thư mục con của thiết bị có file resume.md cũ sót lại thì xóa/trash đi
+            try
+            {
+                string? deviceFolderId = targetFolderId;
+                if (string.IsNullOrEmpty(deviceFolderId))
+                {
+                    deviceFolderId = _config.CachedDeviceFolderId;
+                }
+                if (!string.IsNullOrEmpty(deviceFolderId) && !deviceFolderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase))
+                {
+                    var devOldFile = await GetFileInfoAsync(deviceFolderId, ResumeFileName, ct);
+                    if (devOldFile.Exists && !string.IsNullOrEmpty(devOldFile.Id))
+                    {
+                        string? token = await EnsureValidAccessTokenAsync(ct);
+                        if (!string.IsNullOrEmpty(token))
+                        {
+                            await TrashFileAsync(devOldFile.Id, token, ct);
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            if (appOk)
             {
                 _cachedResumeCloudFile = new GoogleDriveFileInfo
                 {
-                    Id = appOk ? appFileId : "",
+                    Id = appFileId,
                     Name = ResumeFileName,
                     ModifiedTime = DateTime.UtcNow,
                     Size = Encoding.UTF8.GetByteCount(mdContent),
                     MimeType = "text/markdown"
                 };
-                NotifyStatusChanged($"Đã sao lưu tiến độ đọc (resume.md) lên thư mục thiết bị & Google Drive ({DateTime.Now:HH:mm:ss})");
+                NotifyStatusChanged($"Đã sao lưu tiến độ đọc dùng chung (resume.md) lên thư mục gốc Google Drive ({DateTime.Now:HH:mm:ss})");
             }
 
-            return (overallOk, overallOk ? "Sao lưu resume.md thành công vào thư mục thiết bị và Google Drive." : (appMsg ?? deviceMsg));
+            return (appOk, appOk ? "Sao lưu resume.md dùng chung thành công vào thư mục gốc Google Drive." : appMsg);
         }
         finally
         {
@@ -2552,7 +2615,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
     /// <summary>
     /// Phục hồi và Smart Merge tiến trình đọc dở từ file resume.md trên Google Drive về máy.
-    /// Ưu tiên nạp từ thư mục slot thiết bị nguồn (sourceFolderId), nếu chưa có mới fallback nạp từ thư mục gốc app.
+    /// LUÔN NẠP TỪ THƯ MỤC GỐC CHUNG CỦA APP (\GMTPC\Comic Downloader GMTPC\resume.md) để đồng bộ chéo tức thì giữa mọi thiết bị.
     /// </summary>
     public async Task<(bool Success, ResumeRestoreResult? Result, string Message)> RestoreResumeFromCloudAsync(string? sourceFolderId = null, CancellationToken ct = default)
     {
@@ -2566,29 +2629,26 @@ p {{ color: #94A3B8; font-size: 14px; }}
             bool ok = false;
             string msg = string.Empty;
 
-            // 1. Thử tải resume.md từ thư mục thiết bị nguồn được chọn
-            if (!string.IsNullOrEmpty(sourceFolderId))
+            // 1. Luôn ưu tiên nạp từ thư mục cha dùng chung của app
+            var (aOk, aContent, _, aMsg) = await DownloadFileContentAsync(appFolderId, ResumeFileName, ct);
+            if (aOk && !string.IsNullOrWhiteSpace(aContent))
             {
-                var (sOk, sContent, _, sMsg) = await DownloadFileContentAsync(sourceFolderId, ResumeFileName, ct);
-                if (sOk && !string.IsNullOrWhiteSpace(sContent))
-                {
-                    ok = true;
-                    content = sContent;
-                }
+                ok = true;
+                content = aContent;
             }
-
-            // 2. Nếu thư mục thiết bị nguồn chưa có file resume.md, fallback nạp từ thư mục gốc chung của app
-            if (!ok)
+            else
             {
-                var (aOk, aContent, _, aMsg) = await DownloadFileContentAsync(appFolderId, ResumeFileName, ct);
-                if (aOk && !string.IsNullOrWhiteSpace(aContent))
+                msg = aMsg;
+
+                // Fallback nếu có sourceFolderId được chỉ định và khác appFolderId
+                if (!string.IsNullOrEmpty(sourceFolderId) && !sourceFolderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase))
                 {
-                    ok = true;
-                    content = aContent;
-                }
-                else
-                {
-                    msg = aMsg;
+                    var (sOk, sContent, _, sMsg) = await DownloadFileContentAsync(sourceFolderId, ResumeFileName, ct);
+                    if (sOk && !string.IsNullOrWhiteSpace(sContent))
+                    {
+                        ok = true;
+                        content = sContent;
+                    }
                 }
             }
 
@@ -2624,7 +2684,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
         result.Success = qOk && rOk;
         if (result.Success)
         {
-            result.Message = $"Đã sao lưu thành công Queue & Bookmark/History [{CurrentDeviceName}] và Resume vào thư mục thiết bị & Google Drive.";
+            result.Message = $"Đã sao lưu thành công Queue, Bookmarks & History [{CurrentDeviceName}] và Resume dùng chung lên Google Drive.";
         }
         else
         {

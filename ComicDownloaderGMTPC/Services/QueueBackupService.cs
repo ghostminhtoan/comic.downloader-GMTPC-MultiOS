@@ -302,13 +302,21 @@ public class QueueBackupService
             string autoSaveDir = GetAutoSaveDirectory();
             WritePrimaryAndMirrorFilesSync(autoSaveDir, content);
 
+            // Chỉ lưu duy nhất vào thư mục autosave chuẩn (.portable\autosave)
             if (!OperatingSystem.IsAndroid())
             {
-                string portableDir = GetPortableDirectory();
-                if (!string.Equals(autoSaveDir, portableDir, StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    WritePrimaryAndMirrorFilesSync(portableDir, content);
+                    string portableDir = GetPortableDirectory();
+                    if (!string.Equals(autoSaveDir, portableDir, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string legacyAutoSave = Path.Combine(portableDir, AutoSaveFileName);
+                        string legacyMirror = Path.Combine(portableDir, AutoSaveMirrorFileName);
+                        if (File.Exists(legacyAutoSave)) File.Delete(legacyAutoSave);
+                        if (File.Exists(legacyMirror)) File.Delete(legacyMirror);
+                    }
                 }
+                catch { }
             }
         }
     }

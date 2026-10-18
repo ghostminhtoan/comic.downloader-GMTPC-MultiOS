@@ -21,6 +21,30 @@ public sealed class ReaderBackupPayload
     public Dictionary<string, int> ProgressMap { get; set; } = new();
 }
 
+public sealed class BookmarksBackupPayload
+{
+    public string SavedAt { get; set; } = string.Empty;
+    public List<ReaderBookmarkItem> Bookmarks { get; set; } = new();
+}
+
+public sealed class HistoryItemSnapshot
+{
+    public string Title { get; set; } = string.Empty;
+    public string ChapterOrSubTitle { get; set; } = string.Empty;
+    public int LastReadPage { get; set; }
+    public int TotalPages { get; set; }
+    public int LastActiveChapterIndex { get; set; }
+    public int OrderStamp { get; set; }
+    public string DeviceName { get; set; } = string.Empty;
+    public string LocalPath { get; set; } = string.Empty;
+}
+
+public sealed class HistoryBackupPayload
+{
+    public string SavedAt { get; set; } = string.Empty;
+    public List<HistoryItemSnapshot> History { get; set; } = new();
+}
+
 public sealed class CrossDeviceResumeEntry
 {
     public string ComicTitle { get; set; } = string.Empty;
@@ -33,7 +57,6 @@ public sealed class CrossDeviceResumeEntry
     public int TotalPages { get; set; } = 0;
     public long UpdatedAtUnixSeconds { get; set; }
     public string DeviceName { get; set; } = string.Empty;
-    public string OriginalDevicePath { get; set; } = string.Empty;
 }
 
 public sealed class UnifiedHistoryItemInfo
@@ -52,9 +75,8 @@ public sealed class ComicResumePayload
 {
     public string SavedAt { get; set; } = string.Empty;
     public string DeviceName { get; set; } = string.Empty;
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
     public List<CrossDeviceResumeEntry> Entries { get; set; } = new();
-    public Dictionary<string, int> ProgressMap { get; set; } = new();
 }
 
 public sealed class ResumeRestoreResult
@@ -79,9 +101,16 @@ public sealed class ReadProgressStore
     private static readonly Lazy<ReadProgressStore> _lazy = new(() => new ReadProgressStore());
     public static ReadProgressStore Instance => _lazy.Value;
 
-    public const string AutoSaveReaderFileName = "autosave_reader.md";
-    public const string SavedReaderFileName = "saved_reader_bookmarks.md";
+    public const string BookmarksFileName = "bookmarks.md";
+    public const string HistoryFileName = "history.md";
     public const string ResumeFileName = "resume.md";
+    public const string AutoSaveReaderFileName = "bookmarks.md";
+    public const string SavedReaderFileName = "bookmarks.md";
+
+    public const string BookmarksStateBeginMarker = "<!-- COMIC_BOOKMARKS_STATE_BEGIN -->";
+    public const string BookmarksStateEndMarker = "<!-- COMIC_BOOKMARKS_STATE_END -->";
+    public const string HistoryStateBeginMarker = "<!-- COMIC_HISTORY_STATE_BEGIN -->";
+    public const string HistoryStateEndMarker = "<!-- COMIC_HISTORY_STATE_END -->";
     public const string ReaderStateBeginMarker = "<!-- COMIC_READER_STATE_BEGIN -->";
     public const string ReaderStateEndMarker = "<!-- COMIC_READER_STATE_END -->";
     public const string ResumeStateBeginMarker = "<!-- COMIC_RESUME_STATE_BEGIN -->";
@@ -113,28 +142,40 @@ public sealed class ReadProgressStore
     private ReadProgressStore()
     {
         _debounceTimer = new Timer(_ => FlushImmediately(), null, Timeout.Infinite, Timeout.Infinite);
+        MigrateLegacyStorageFiles();
         LoadFromDisk();
         LoadBookmarksFromDisk();
+        LoadHistoryFromDisk();
     }
 
-    private static string GetStoreFilePath()
+    public static string GetStoreFilePath()
     {
-        string dir = ComicScraperService.GetConfigDirectory();
+        string dir = QueueBackupService.GetAutoSaveDirectory();
         if (!Directory.Exists(dir))
         {
             try { Directory.CreateDirectory(dir); } catch { }
         }
-        return Path.Combine(dir, "resume.md");
+        return Path.Combine(dir, ResumeFileName);
     }
 
-    private static string GetBookmarksFilePath()
+    public static string GetBookmarksFilePath()
     {
-        string dir = ComicScraperService.GetConfigDirectory();
+        string dir = QueueBackupService.GetAutoSaveDirectory();
         if (!Directory.Exists(dir))
         {
             try { Directory.CreateDirectory(dir); } catch { }
         }
-        return Path.Combine(dir, "reader_bookmarks.json");
+        return Path.Combine(dir, BookmarksFileName);
+    }
+
+    public static string GetHistoryFilePath()
+    {
+        string dir = QueueBackupService.GetAutoSaveDirectory();
+        if (!Directory.Exists(dir))
+        {
+            try { Directory.CreateDirectory(dir); } catch { }
+        }
+        return Path.Combine(dir, HistoryFileName);
     }
 
     private static int GetCurrentOrderStamp()
@@ -722,25 +763,23 @@ public sealed class ReadProgressStore
             catch { }
         }
 
-        try { TryAdd(DownloadEngineService.Instance.DownloadRoot); } catch { }
+        try
+        {
+            TryAdd(AppDomain.CurrentDomain.BaseDirectory);
+            string defDownload = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Download");
+            TryAdd(defDownload);
+        }
+        catch { }
 
         try
         {
-            if (OperatingSystem.IsAndroid())
+            if (!OperatingSystem.IsAndroid())
             {
-                var nativePaths = LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
-                if (nativePaths != null)
+                foreach (var d in DriveInfo.GetDrives())
                 {
-                    foreach (var np in nativePaths) TryAdd(np);
-                }
-            }
-            else
-            {
-                foreach (var drive in DriveInfo.GetDrives())
-                {
-                    if (drive.IsReady && Directory.Exists(drive.RootDirectory.FullName))
+                    if (d.IsReady)
                     {
-                        TryAdd(drive.RootDirectory.FullName);
+                        TryAdd(d.RootDirectory.FullName);
                     }
                 }
             }
@@ -996,7 +1035,7 @@ public sealed class ReadProgressStore
                 seenTitles.Add(entry.ComicTitle);
                 result.Add(new UnifiedHistoryItemInfo
                 {
-                    Path = resolved ?? entry.OriginalDevicePath,
+                    Path = resolved ?? string.Empty,
                     Title = entry.ComicTitle,
                     ChapterOrSubTitle = subTitle,
                     LastReadPage = entry.LastReadPage,
@@ -1196,14 +1235,123 @@ public sealed class ReadProgressStore
         }
     }
 
-    private void SaveBookmarksToDisk()
+    private void MigrateLegacyStorageFiles()
+    {
+        try
+        {
+            if (OperatingSystem.IsAndroid()) return;
+
+            string configDir = ComicScraperService.GetConfigDirectory();
+            string autoSaveDir = QueueBackupService.GetAutoSaveDirectory();
+            if (string.Equals(configDir, autoSaveDir, StringComparison.OrdinalIgnoreCase)) return;
+
+            // 1. Chuyển resume.md cũ ở root .portable sang .portable\autosave
+            string legacyResume = Path.Combine(configDir, "resume.md");
+            string targetResume = Path.Combine(autoSaveDir, ResumeFileName);
+            if (File.Exists(legacyResume))
+            {
+                if (!File.Exists(targetResume))
+                {
+                    File.Move(legacyResume, targetResume);
+                }
+                else
+                {
+                    File.Delete(legacyResume);
+                }
+            }
+
+            // 2. Chuyển read_progress.json cũ ở root .portable
+            string legacyProgress = Path.Combine(configDir, "read_progress.json");
+            if (File.Exists(legacyProgress))
+            {
+                try
+                {
+                    string json = File.ReadAllText(legacyProgress);
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, int>>(json);
+                    if (dict != null)
+                    {
+                        foreach (var kv in dict)
+                        {
+                            if (!string.IsNullOrWhiteSpace(kv.Key) && kv.Value > 0)
+                            {
+                                _progressMap.TryAdd(NormalizeKey(kv.Key), kv.Value);
+                            }
+                        }
+                    }
+                }
+                catch { }
+                try { File.Delete(legacyProgress); } catch { }
+            }
+
+            // 3. Chuyển reader_bookmarks.json cũ ở root .portable
+            string legacyBookmarksJson = Path.Combine(configDir, "reader_bookmarks.json");
+            string targetBookmarksMd = Path.Combine(autoSaveDir, BookmarksFileName);
+            if (File.Exists(legacyBookmarksJson))
+            {
+                try
+                {
+                    string json = File.ReadAllText(legacyBookmarksJson);
+                    var list = JsonSerializer.Deserialize<List<ReaderBookmarkItem>>(json);
+                    if (list != null && list.Count > 0)
+                    {
+                        lock (_bookmarkLock)
+                        {
+                            foreach (var b in list)
+                            {
+                                if (b != null && !_bookmarks.Any(x => x.Id == b.Id))
+                                {
+                                    _bookmarks.Add(b);
+                                }
+                            }
+                        }
+                        if (!File.Exists(targetBookmarksMd))
+                        {
+                            SaveBookmarksToDisk();
+                        }
+                    }
+                }
+                catch { }
+                try { File.Delete(legacyBookmarksJson); } catch { }
+            }
+
+            // 4. Dọn dẹp saved_reader_bookmarks.md và autosave_reader.md cũ ở root .portable
+            string legacySavedReader = Path.Combine(configDir, "saved_reader_bookmarks.md");
+            if (File.Exists(legacySavedReader))
+            {
+                try
+                {
+                    string content = File.ReadAllText(legacySavedReader);
+                    ParseReaderMarkdownContent(content, mergeWithExisting: true);
+                }
+                catch { }
+                try { File.Delete(legacySavedReader); } catch { }
+            }
+
+            string legacyAutoSaveReader = Path.Combine(configDir, "autosave_reader.md");
+            if (File.Exists(legacyAutoSaveReader))
+            {
+                try { File.Delete(legacyAutoSaveReader); } catch { }
+            }
+
+            // 5. Dọn dẹp autosave.md và autosave mirror.md còn sót ở root .portable
+            string rootAutoSave = Path.Combine(configDir, "autosave.md");
+            string rootMirror = Path.Combine(configDir, "autosave mirror.md");
+            string rootMirrorAlt = Path.Combine(configDir, "autosave_mirror.md");
+            if (File.Exists(rootAutoSave)) try { File.Delete(rootAutoSave); } catch { }
+            if (File.Exists(rootMirror)) try { File.Delete(rootMirror); } catch { }
+            if (File.Exists(rootMirrorAlt)) try { File.Delete(rootMirrorAlt); } catch { }
+        }
+        catch { }
+    }
+
+    public void SaveBookmarksToDisk()
     {
         try
         {
             string filePath = GetBookmarksFilePath();
             string tmpPath = filePath + ".tmp";
-            string json = JsonSerializer.Serialize(_bookmarks, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(tmpPath, json);
+            string mdContent = BuildBookmarksMarkdownContent();
+            File.WriteAllText(tmpPath, mdContent, Encoding.UTF8);
             File.Move(tmpPath, filePath, overwrite: true);
         }
         catch { }
@@ -1214,15 +1362,109 @@ public sealed class ReadProgressStore
         try
         {
             string filePath = GetBookmarksFilePath();
-            if (!File.Exists(filePath)) return;
-            string json = File.ReadAllText(filePath);
-            var list = JsonSerializer.Deserialize<List<ReaderBookmarkItem>>(json);
-            if (list != null)
+            if (!File.Exists(filePath))
+            {
+                string legacyJson = Path.Combine(QueueBackupService.GetAutoSaveDirectory(), "reader_bookmarks.json");
+                if (File.Exists(legacyJson))
+                {
+                    string json = File.ReadAllText(legacyJson);
+                    var list = JsonSerializer.Deserialize<List<ReaderBookmarkItem>>(json);
+                    if (list != null)
+                    {
+                        lock (_bookmarkLock)
+                        {
+                            _bookmarks.Clear();
+                            _bookmarks.AddRange(list);
+                        }
+                        SaveBookmarksToDisk();
+                    }
+                    try { File.Delete(legacyJson); } catch { }
+                }
+                return;
+            }
+
+            string content = File.ReadAllText(filePath, Encoding.UTF8);
+            if (string.IsNullOrWhiteSpace(content)) return;
+
+            var payload = TryParseBookmarksJsonPayload(content);
+            if (payload?.Bookmarks != null && payload.Bookmarks.Count > 0)
             {
                 lock (_bookmarkLock)
                 {
                     _bookmarks.Clear();
-                    _bookmarks.AddRange(list);
+                    _bookmarks.AddRange(payload.Bookmarks);
+                }
+                return;
+            }
+
+            string trimmed = content.Trim();
+            if (trimmed.StartsWith("["))
+            {
+                var list = JsonSerializer.Deserialize<List<ReaderBookmarkItem>>(trimmed);
+                if (list != null)
+                {
+                    lock (_bookmarkLock)
+                    {
+                        _bookmarks.Clear();
+                        _bookmarks.AddRange(list);
+                    }
+                    SaveBookmarksToDisk();
+                }
+            }
+        }
+        catch { }
+    }
+
+    public void SaveHistoryToDisk()
+    {
+        try
+        {
+            string filePath = GetHistoryFilePath();
+            string tmpPath = filePath + ".tmp";
+            string mdContent = BuildHistoryMarkdownContent();
+            File.WriteAllText(tmpPath, mdContent, Encoding.UTF8);
+            File.Move(tmpPath, filePath, overwrite: true);
+        }
+        catch { }
+    }
+
+    private void LoadHistoryFromDisk()
+    {
+        try
+        {
+            string filePath = GetHistoryFilePath();
+            if (!File.Exists(filePath)) return;
+
+            string content = File.ReadAllText(filePath, Encoding.UTF8);
+            if (string.IsNullOrWhiteSpace(content)) return;
+
+            var payload = TryParseHistoryJsonPayload(content);
+            if (payload?.History != null && payload.History.Count > 0)
+            {
+                foreach (var h in payload.History)
+                {
+                    if (string.IsNullOrWhiteSpace(h.LocalPath)) continue;
+                    string norm = NormalizeKey(h.LocalPath);
+                    if (h.OrderStamp > 0)
+                    {
+                        _progressMap[HistoryPrefix + norm] = h.OrderStamp;
+                    }
+                    if (h.LastActiveChapterIndex > 0)
+                    {
+                        _progressMap[norm + "::#last_active_chapter"] = h.LastActiveChapterIndex;
+                    }
+                    if (h.TotalPages > 0)
+                    {
+                        _progressMap[norm + "::#total_pages"] = h.TotalPages;
+                    }
+                    if (h.LastReadPage > 0)
+                    {
+                        _progressMap[norm] = h.LastReadPage;
+                    }
+                    foreach (string pk in BuildPortableIdentityKeys(norm))
+                    {
+                        if (h.LastReadPage > 0) _progressMap.TryAdd(pk, h.LastReadPage);
+                    }
                 }
             }
         }
@@ -1304,8 +1546,11 @@ public sealed class ReadProgressStore
                 }
 
                 string mdContent = BuildResumeMarkdownContent(deviceName);
-                File.WriteAllText(tmpPath, mdContent);
+                File.WriteAllText(tmpPath, mdContent, Encoding.UTF8);
                 File.Move(tmpPath, filePath, overwrite: true);
+
+                // Đồng thời lưu lịch sử đọc vào history.md trong .portable\autosave
+                SaveHistoryToDisk();
             }
             catch { }
         }
@@ -1779,6 +2024,312 @@ public sealed class ReadProgressStore
         }
     }
 
+    private static BookmarksBackupPayload? TryParseBookmarksJsonPayload(string content)
+    {
+        int beginIdx = content.IndexOf(BookmarksStateBeginMarker, StringComparison.Ordinal);
+        if (beginIdx < 0) return null;
+
+        int endIdx = content.IndexOf(BookmarksStateEndMarker, beginIdx, StringComparison.Ordinal);
+        if (endIdx < 0) return null;
+
+        int fenceStart = content.IndexOf("```json", beginIdx, StringComparison.OrdinalIgnoreCase);
+        if (fenceStart < 0 || fenceStart > endIdx) return null;
+
+        int lineEnd = content.IndexOf('\n', fenceStart);
+        if (lineEnd < 0 || lineEnd > endIdx) return null;
+
+        int jsonStart = lineEnd + 1;
+        int fenceEnd = content.IndexOf("```", jsonStart, StringComparison.Ordinal);
+        if (fenceEnd < 0 || fenceEnd > endIdx) return null;
+
+        string json = content.Substring(jsonStart, fenceEnd - jsonStart).Trim();
+        if (string.IsNullOrWhiteSpace(json)) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<BookmarksBackupPayload>(json, _jsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static HistoryBackupPayload? TryParseHistoryJsonPayload(string content)
+    {
+        int beginIdx = content.IndexOf(HistoryStateBeginMarker, StringComparison.Ordinal);
+        if (beginIdx < 0) return null;
+
+        int endIdx = content.IndexOf(HistoryStateEndMarker, beginIdx, StringComparison.Ordinal);
+        if (endIdx < 0) return null;
+
+        int fenceStart = content.IndexOf("```json", beginIdx, StringComparison.OrdinalIgnoreCase);
+        if (fenceStart < 0 || fenceStart > endIdx) return null;
+
+        int lineEnd = content.IndexOf('\n', fenceStart);
+        if (lineEnd < 0 || lineEnd > endIdx) return null;
+
+        int jsonStart = lineEnd + 1;
+        int fenceEnd = content.IndexOf("```", jsonStart, StringComparison.Ordinal);
+        if (fenceEnd < 0 || fenceEnd > endIdx) return null;
+
+        string json = content.Substring(jsonStart, fenceEnd - jsonStart).Trim();
+        if (string.IsNullOrWhiteSpace(json)) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<HistoryBackupPayload>(json, _jsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Phục hồi Dấu trang từ nội dung tệp bookmarks.md.
+    /// </summary>
+    public int ParseBookmarksMarkdownContent(string content, bool mergeWithExisting = true)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return 0;
+        int restored = 0;
+
+        var payload = TryParseBookmarksJsonPayload(content);
+        if (payload?.Bookmarks != null && payload.Bookmarks.Count > 0)
+        {
+            lock (_bookmarkLock)
+            {
+                if (!mergeWithExisting)
+                {
+                    _bookmarks.Clear();
+                }
+
+                foreach (var item in payload.Bookmarks)
+                {
+                    if (item == null) continue;
+                    var existing = _bookmarks.FirstOrDefault(b =>
+                        string.Equals(b.ChapterProgressKey, item.ChapterProgressKey, StringComparison.OrdinalIgnoreCase) &&
+                        b.PageIndex == item.PageIndex);
+
+                    if (existing != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(item.Memo)) existing.Memo = item.Memo;
+                        existing.TotalPages = Math.Max(existing.TotalPages, item.TotalPages);
+                        existing.CreatedAtUnixSeconds = Math.Max(existing.CreatedAtUnixSeconds, item.CreatedAtUnixSeconds);
+                    }
+                    else
+                    {
+                        _bookmarks.Add(item);
+                        restored++;
+                    }
+                }
+                SaveBookmarksToDisk();
+            }
+            return restored > 0 ? restored : payload.Bookmarks.Count;
+        }
+
+        // Fallback: nếu tệp dùng định dạng Reader cũ (saved_reader_bookmarks.md)
+        var readerPayload = TryParseReaderJsonPayload(content);
+        if (readerPayload?.Bookmarks != null && readerPayload.Bookmarks.Count > 0)
+        {
+            lock (_bookmarkLock)
+            {
+                if (!mergeWithExisting)
+                {
+                    _bookmarks.Clear();
+                }
+
+                foreach (var item in readerPayload.Bookmarks)
+                {
+                    if (item == null) continue;
+                    var existing = _bookmarks.FirstOrDefault(b =>
+                        string.Equals(b.ChapterProgressKey, item.ChapterProgressKey, StringComparison.OrdinalIgnoreCase) &&
+                        b.PageIndex == item.PageIndex);
+
+                    if (existing != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(item.Memo)) existing.Memo = item.Memo;
+                        existing.TotalPages = Math.Max(existing.TotalPages, item.TotalPages);
+                        existing.CreatedAtUnixSeconds = Math.Max(existing.CreatedAtUnixSeconds, item.CreatedAtUnixSeconds);
+                    }
+                    else
+                    {
+                        _bookmarks.Add(item);
+                        restored++;
+                    }
+                }
+                SaveBookmarksToDisk();
+            }
+            return restored > 0 ? restored : readerPayload.Bookmarks.Count;
+        }
+
+        return restored;
+    }
+
+    /// <summary>
+    /// Phục hồi Lịch sử đọc từ nội dung tệp history.md.
+    /// </summary>
+    public int ParseHistoryMarkdownContent(string content, bool mergeWithExisting = true)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return 0;
+        int restored = 0;
+
+        var payload = TryParseHistoryJsonPayload(content);
+        if (payload?.History != null && payload.History.Count > 0)
+        {
+            if (!mergeWithExisting)
+            {
+                ClearAllHistory();
+            }
+
+            foreach (var h in payload.History)
+            {
+                if (string.IsNullOrWhiteSpace(h.LocalPath)) continue;
+                string norm = NormalizeKey(h.LocalPath);
+                if (h.OrderStamp > 0)
+                {
+                    _progressMap[HistoryPrefix + norm] = h.OrderStamp;
+                    restored++;
+                }
+                if (h.LastActiveChapterIndex > 0)
+                {
+                    _progressMap[norm + "::#last_active_chapter"] = h.LastActiveChapterIndex;
+                }
+                if (h.TotalPages > 0)
+                {
+                    _progressMap[norm + "::#total_pages"] = h.TotalPages;
+                }
+                if (h.LastReadPage > 0)
+                {
+                    _progressMap[norm] = h.LastReadPage;
+                }
+                foreach (string pk in BuildPortableIdentityKeys(norm))
+                {
+                    if (h.LastReadPage > 0) _progressMap.TryAdd(pk, h.LastReadPage);
+                }
+            }
+
+            SaveHistoryToDisk();
+            FlushImmediately();
+            return restored;
+        }
+
+        return restored;
+    }
+
+    public string BuildBookmarksMarkdownContent()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# COMIC DOWNLOADER GMTPC - DẤU TRANG ĐÃ LƯU (BOOKMARKS.MD)");
+        sb.AppendLine($"> Thời gian sao lưu: {DateTime.Now:yyyy-MM-dd HH:mm:ss} | Hệ điều hành: {Environment.OSVersion.Platform}");
+
+        List<ReaderBookmarkItem> bookmarksSnapshot;
+        lock (_bookmarkLock)
+        {
+            bookmarksSnapshot = new List<ReaderBookmarkItem>(_bookmarks);
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("## 🔖 Danh Sách Dấu Trang (Bookmarks)");
+        sb.AppendLine($"> Tổng cộng: {bookmarksSnapshot.Count} dấu trang");
+        sb.AppendLine();
+        sb.AppendLine("| STT | Bộ Truyện | Chương | Vị Trí Trang | % | Ghi Chú | Thời Gian | Đường Dẫn |");
+        sb.AppendLine("| :---: | :--- | :--- | :---: | :---: | :--- | :---: | :--- |");
+
+        int bIdx = 1;
+        foreach (var b in bookmarksSnapshot)
+        {
+            string safeComic = EscapeMarkdown(b.DisplayComicTitle);
+            string safeChap = EscapeMarkdown(b.FullChapterTitle);
+            string pageText = b.RightDisplayText;
+            string pct = b.PercentText;
+            string memo = EscapeMarkdown(!string.IsNullOrWhiteSpace(b.Memo) ? b.Memo : "-");
+            string date = b.CreatedDateText;
+            string safePath = EscapeMarkdown(b.ChapterLocalPath ?? b.ComicRootPath ?? string.Empty);
+            sb.AppendLine($"| {bIdx++} | {safeComic} | {safeChap} | {pageText} | {pct} | {memo} | {date} | {safePath} |");
+        }
+
+        var payload = new BookmarksBackupPayload
+        {
+            SavedAt = DateTime.Now.ToString("O", CultureInfo.InvariantCulture),
+            Bookmarks = bookmarksSnapshot
+        };
+
+        string json = JsonSerializer.Serialize(payload, _jsonOptions);
+
+        sb.AppendLine();
+        sb.AppendLine("## Machine-Readable Bookmarks State");
+        sb.AppendLine(BookmarksStateBeginMarker);
+        sb.AppendLine("```json");
+        sb.AppendLine(json);
+        sb.AppendLine("```");
+        sb.AppendLine(BookmarksStateEndMarker);
+
+        return sb.ToString();
+    }
+
+    public string BuildHistoryMarkdownContent()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# COMIC DOWNLOADER GMTPC - LỊCH SỬ ĐỌC (HISTORY.MD)");
+        sb.AppendLine($"> Thời gian cập nhật: {DateTime.Now:yyyy-MM-dd HH:mm:ss} | Hệ điều hành: {Environment.OSVersion.Platform}");
+
+        var historyPaths = GetAllHistoryPaths(checkPathExists: false);
+        sb.AppendLine();
+        sb.AppendLine("## 🕒 Danh Sách Lịch Sử Đọc (Reading History)");
+        sb.AppendLine($"> Tổng cộng: {historyPaths.Count} bộ truyện");
+        sb.AppendLine();
+        sb.AppendLine("| STT | Tên Truyện / File | Chương Đang Đọc | Trang Đang Đọc | Lần Đọc Gần Nhất | Đường Dẫn Cục Bộ |");
+        sb.AppendLine("| :---: | :--- | :---: | :---: | :---: | :--- |");
+
+        var snapshots = new List<HistoryItemSnapshot>();
+        int hIdx = 1;
+        foreach (var path in historyPaths)
+        {
+            string title = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            int lastChap = GetLastActiveChapterIndex(path);
+            int lastPage = GetLastReadPage(path);
+            int totalPages = GetChapterTotalPages(path);
+            int order = GetComicLastReadOrder(path);
+            string chapText = lastChap > 0 ? $"Chương {lastChap}" : "-";
+            string pageText = lastPage > 0 ? $"Trang {lastPage}" : "-";
+            string timeText = order > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(order + EpochOffsetSeconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                : "-";
+            string safePath = EscapeMarkdown(path);
+            sb.AppendLine($"| {hIdx++} | {EscapeMarkdown(title)} | {chapText} | {pageText} | {timeText} | {safePath} |");
+
+            snapshots.Add(new HistoryItemSnapshot
+            {
+                Title = title,
+                ChapterOrSubTitle = chapText,
+                LastReadPage = lastPage,
+                TotalPages = totalPages,
+                LastActiveChapterIndex = lastChap,
+                OrderStamp = order,
+                LocalPath = path
+            });
+        }
+
+        var payload = new HistoryBackupPayload
+        {
+            SavedAt = DateTime.Now.ToString("O", CultureInfo.InvariantCulture),
+            History = snapshots
+        };
+
+        string json = JsonSerializer.Serialize(payload, _jsonOptions);
+
+        sb.AppendLine();
+        sb.AppendLine("## Machine-Readable History State");
+        sb.AppendLine(HistoryStateBeginMarker);
+        sb.AppendLine("```json");
+        sb.AppendLine(json);
+        sb.AppendLine("```");
+        sb.AppendLine(HistoryStateEndMarker);
+
+        return sb.ToString();
+    }
+
     private static string EscapeMarkdown(string text)
     {
         if (string.IsNullOrEmpty(text)) return string.Empty;
@@ -1787,13 +2338,14 @@ public sealed class ReadProgressStore
 
     /// <summary>
     /// Xuất tiến trình đọc truyện dở dùng chung (resume.md) cho toàn bộ các thiết bị.
-    /// Bao gồm danh sách CrossDeviceResumeEntry độc lập nền tảng và toàn bộ ProgressMap.
+    /// Chuẩn hóa theo phong cách ComicScreen: Tuyệt đối không chứa đường dẫn ổ đĩa tuyệt đối (C:\, D:\, /storage/...).
     /// </summary>
     public string BuildResumeMarkdownContent(string currentDeviceName)
     {
         var sb = new StringBuilder();
         sb.AppendLine("# COMIC DOWNLOADER GMTPC - TIẾN TRÌNH ĐỌC DÙNG CHUNG (RESUME.MD)");
         sb.AppendLine("> Tệp tin này được dùng chung cho toàn bộ các thiết bị (Windows, Android, Linux).");
+        sb.AppendLine("> Nội dung được chuẩn hóa độc lập nền tảng, không phụ thuộc vào đường dẫn ổ đĩa tuyệt đối.");
         sb.AppendLine($"> Thiết bị cập nhật cuối: **{EscapeMarkdown(currentDeviceName)}** | Thời gian: `{DateTime.Now:yyyy-MM-dd HH:mm:ss}`");
         sb.AppendLine();
         sb.AppendLine("## Danh Sách Truyện & Trang Đang Đọc Dở");
@@ -1890,8 +2442,7 @@ public sealed class ReadProgressStore
                 LastReadPage = bestPage,
                 TotalPages = bestTotalPages,
                 UpdatedAtUnixSeconds = updatedTime,
-                DeviceName = currentDeviceName,
-                OriginalDevicePath = cleanPath
+                DeviceName = currentDeviceName
             });
         }
 
@@ -1908,7 +2459,6 @@ public sealed class ReadProgressStore
             }
         }
 
-        // Sắp xếp danh sách theo thời gian đọc gần nhất giảm dần
         var sortedEntries = entries.OrderByDescending(e => e.UpdatedAtUnixSeconds).ToList();
         int idx = 1;
         foreach (var e in sortedEntries)
@@ -1930,13 +2480,13 @@ public sealed class ReadProgressStore
             sb.AppendLine($"| {idx++} | {EscapeMarkdown(e.ComicTitle)} | {chapText} | {pageText} | {timeText} | {devText} |");
         }
 
+        // CHUẨN COMICSCREEN: TUYỆT ĐỐI KHÔNG LƯU ProgressMap CÓ PATH VÀO RESUME.MD
         var payload = new ComicResumePayload
         {
             SavedAt = DateTime.Now.ToString("O", CultureInfo.InvariantCulture),
             DeviceName = currentDeviceName,
-            SchemaVersion = 2,
-            Entries = sortedEntries,
-            ProgressMap = new Dictionary<string, int>(_progressMap, StringComparer.OrdinalIgnoreCase)
+            SchemaVersion = 3,
+            Entries = sortedEntries
         };
 
         string json = JsonSerializer.Serialize(payload, _jsonOptions);
@@ -1986,50 +2536,8 @@ public sealed class ReadProgressStore
                             if (payload != null)
                             {
                                 res.HasValidStructure = true;
-                                int updatedCount = 0;
 
-                                // 1. Smart merge ProgressMap
-                                if (payload.ProgressMap != null && payload.ProgressMap.Count > 0)
-                                {
-                                    foreach (var kvp in payload.ProgressMap)
-                                    {
-                                        if (string.IsNullOrWhiteSpace(kvp.Key) || kvp.Value <= 0) continue;
-
-                                        string normKey = NormalizeKey(kvp.Key);
-                                        if (_progressMap.TryGetValue(normKey, out int currentVal))
-                                        {
-                                            if (normKey.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                if (kvp.Value > currentVal)
-                                                {
-                                                    _progressMap[normKey] = kvp.Value;
-                                                    updatedCount++;
-                                                }
-                                            }
-                                            else if (kvp.Value > currentVal || !mergeWithExisting)
-                                            {
-                                                _progressMap[normKey] = kvp.Value;
-                                                updatedCount++;
-                                            }
-                                        }
-                                        else
-                                        {
-                                            _progressMap[normKey] = kvp.Value;
-                                            updatedCount++;
-                                        }
-
-                                        // Tự động bổ sung portable keys cho các key nạp được
-                                        if (!normKey.StartsWith("@", StringComparison.Ordinal))
-                                        {
-                                            foreach (string pk in BuildPortableIdentityKeys(normKey))
-                                            {
-                                                _progressMap.TryAdd(pk, kvp.Value);
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // 2. Nạp và xử lý danh sách CrossDeviceResumeEntry độc lập nền tảng
+                                // Nạp và xử lý danh sách CrossDeviceResumeEntry độc lập nền tảng
                                 if (payload.Entries != null && payload.Entries.Count > 0)
                                 {
                                     lock (_crossDeviceLock)
@@ -2092,16 +2600,16 @@ public sealed class ReadProgressStore
                                         }
                                     }
 
-                                    // 3. Tự động dò tìm và liên kết vào các thư mục / file truyện cục bộ có sẵn trên thiết bị
+                                    // Tự động dò tìm và liên kết vào các thư mục / file truyện cục bộ có sẵn trên thiết bị
                                     int remapped = AutoResolveAndRemapLocalPaths(payload.Entries);
                                     res.RestoredCrossDeviceComics = payload.Entries.Count;
-                                    res.RestoredProgressEntries = updatedCount;
+                                    res.RestoredProgressEntries = payload.Entries.Count;
                                     res.Message = $"Đã đồng bộ {payload.Entries.Count} bộ truyện từ [{payload.DeviceName}], tự động liên kết {remapped} thư mục/file trên thiết bị này.";
                                 }
                                 else
                                 {
-                                    res.RestoredProgressEntries = updatedCount;
-                                    res.Message = $"Đã đồng bộ {updatedCount} tiến trình đọc dở từ [{payload.DeviceName}].";
+                                    res.RestoredProgressEntries = 0;
+                                    res.Message = $"Đã đồng bộ resume.md từ [{payload.DeviceName}] (Danh sách rỗng).";
                                 }
 
                                 MarkDirtyAndScheduleFlush();

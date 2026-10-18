@@ -1549,7 +1549,7 @@ public partial class LibraryViewModel : ViewModelBase
 
         string devMsg = !string.IsNullOrWhiteSpace(item.CloudDeviceName) ? $" từ [{item.CloudDeviceName}]" : string.Empty;
         StatusMessage = $"⚠️ Bộ truyện '{item.Title}' được đồng bộ{devMsg} nhưng chưa tìm thấy trên thiết bị này.";
-        (ComicDownloaderGMTPC.Views.MainView.Instance?.DataContext as MainViewModel)?.ShowCenterToast(
+        App.TryGetSharedMainViewModel()?.ShowCenterToast(
             "CHƯA TÌM THẤY FILE TRUYỆN",
             $"Bộ truyện '{item.Title}' được đọc{devMsg} nhưng chưa có tệp trên máy này. Vui lòng đặt file/thư mục truyện vào bộ nhớ để tiếp tục đọc.",
             "☁️",

@@ -5605,13 +5605,13 @@
                                             </Grid>
                                         </Border>
 
-                                        <!-- Tệp 2: saved_reader_bookmarks.md (Dấu trang & Lịch sử đọc) -->
+                                        <!-- Tệp 2: bookmarks.md & history.md (Dấu trang & Lịch sử đọc) -->
                                         <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8">
                                             <Grid RowDefinitions="Auto, Auto" RowSpacing="6">
                                                 <Grid Grid.Row="0" ColumnDefinitions="Auto, *, Auto">
                                                     <TextBlock Grid.Column="0" Text="📖" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center" />
                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                        <TextBlock Text="saved_reader_bookmarks.md (Dấu Trang &amp; Lịch Sử)" Foreground="#F3F4F6" FontSize="11.5" FontWeight="Bold" />
+                                                        <TextBlock Text="bookmarks.md &amp; history.md (Dấu Trang &amp; Lịch Sử)" Foreground="#F3F4F6" FontSize="11.5" FontWeight="Bold" />
                                                         <TextBlock Text="{Binding GoogleDriveReaderCloudInfo}" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0" />
                                                     </StackPanel>
                                                 </Grid>
