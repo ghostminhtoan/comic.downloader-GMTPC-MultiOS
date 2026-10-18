@@ -1415,6 +1415,20 @@ public partial class LibraryViewModel : ViewModelBase
         StatusMessage = $"🔄 Đã làm mới thư mục: {CurrentDirectoryPath}";
     }
 
+    [RelayCommand]
+    public void RefreshAllReadStatuses()
+    {
+        foreach (var comic in AllComics)
+        {
+            foreach (var ch in comic.Chapters)
+            {
+                ch.LastReadPage = ReadProgressStore.Instance.GetLastReadPage(ch.EffectiveProgressKey);
+            }
+            comic.RefreshReadStatus();
+        }
+        ApplyFilter();
+    }
+
     public async Task LoadHistoryItemsAsync()
     {
         try
@@ -1424,64 +1438,64 @@ public partial class LibraryViewModel : ViewModelBase
                 LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
             }
 
-            var knownPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();
+            var unifiedList = ReadProgressStore.Instance.GetUnifiedHistoryItems();
             var items = new List<HistoryItemModel>();
 
-            foreach (var path in knownPaths)
+            foreach (var u in unifiedList)
             {
-                if (!File.Exists(path) && !Directory.Exists(path))
-                {
-                    if (OperatingSystem.IsAndroid() && path.Contains("/storage/"))
-                    {
-                        LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
-                        if (!File.Exists(path) && !Directory.Exists(path)) continue;
-                    }
-                    else
-                    {
-                        continue;
-                    }
-                }
-
-                string title = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                 string sizeText = string.Empty;
                 string dateText = string.Empty;
 
-                try
+                if (u.HasLocalPath)
                 {
-                    if (File.Exists(path))
+                    try
                     {
-                        var fi = new FileInfo(path);
-                        sizeText = FormatBytes(fi.Length);
-                        dateText = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+                        if (File.Exists(u.Path))
+                        {
+                            var fi = new FileInfo(u.Path);
+                            sizeText = FormatBytes(fi.Length);
+                            dateText = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+                        }
+                        else if (Directory.Exists(u.Path))
+                        {
+                            var di = new DirectoryInfo(u.Path);
+                            dateText = di.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+                        }
                     }
-                    else if (Directory.Exists(path))
+                    catch { }
+                }
+                else
+                {
+                    sizeText = "☁️ Đồng bộ đám mây";
+                    if (u.OrderStamp > 0)
                     {
-                        var di = new DirectoryInfo(path);
-                        dateText = di.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+                        try
+                        {
+                            dateText = DateTimeOffset.FromUnixTimeSeconds(u.OrderStamp + 1700000000L).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+                        }
+                        catch { }
                     }
                 }
-                catch { }
 
-                int lastPage = ReadProgressStore.Instance.GetLastReadPage(path);
-                int totalPages = ReadProgressStore.Instance.GetChapterTotalPages(path);
+                int lastPage = u.LastReadPage;
+                int totalPages = u.TotalPages;
                 int percent = totalPages > 0 ? Math.Clamp((int)Math.Round((double)lastPage / totalPages * 100), 0, 100) : 0;
                 string progressText = totalPages > 0 ? $"{lastPage}/{totalPages}    {percent}%" : (lastPage > 0 ? $"Trang {lastPage}" : "0%");
 
-                int lastActiveChap = ReadProgressStore.Instance.GetLastActiveChapterIndex(path);
-                string subTitle = lastActiveChap > 0 ? $"Chương {lastActiveChap}" : string.Empty;
-
                 items.Add(new HistoryItemModel
                 {
-                    Path = path,
-                    Title = title,
-                    ChapterOrSubTitle = subTitle,
+                    Path = u.Path,
+                    Title = u.Title,
+                    ChapterOrSubTitle = u.ChapterOrSubTitle,
                     FileSizeText = sizeText,
                     LastReadDateText = dateText,
                     CurrentPage = lastPage,
                     TotalPages = totalPages,
                     ProgressPercent = percent,
                     ProgressText = progressText,
-                    ProgressBarColor = percent >= 100 ? "#10B981" : "#E91E63"
+                    ProgressBarColor = percent >= 100 ? "#10B981" : "#E91E63",
+                    IsCloudSynced = !string.IsNullOrWhiteSpace(u.DeviceName),
+                    CloudDeviceName = u.DeviceName
                 });
             }
 
@@ -1491,12 +1505,12 @@ public partial class LibraryViewModel : ViewModelBase
                 HistoryItems.Add(it);
             }
 
-            // Tải ảnh bìa ngầm trên task nền
+            // Tải ảnh bìa ngầm trên task nền cho các truyện có đường dẫn cục bộ
             _ = Task.Run(() =>
             {
                 foreach (var h in HistoryItems)
                 {
-                    if (h.Cover != null) continue;
+                    if (h.Cover != null || !h.HasLocalPath) continue;
                     try
                     {
                         var bmp = _scanner.DecodeCoverThumbnailForPath(h.Path, 200);
@@ -1515,8 +1529,32 @@ public partial class LibraryViewModel : ViewModelBase
     [RelayCommand]
     public async Task OpenHistoryItemAsync(HistoryItemModel? item)
     {
-        if (item == null || string.IsNullOrWhiteSpace(item.Path)) return;
-        await OpenPathToReadAsync(item.Path);
+        if (item == null) return;
+
+        if (item.HasLocalPath)
+        {
+            await OpenPathToReadAsync(item.Path);
+            return;
+        }
+
+        // Thử tìm nhanh đường dẫn cục bộ trên thiết bị
+        string? resolved = ReadProgressStore.Instance.TryResolveLocalPathForComic(item.Title);
+        if (!string.IsNullOrWhiteSpace(resolved) && (File.Exists(resolved) || Directory.Exists(resolved)))
+        {
+            item.Path = resolved;
+            await OpenPathToReadAsync(resolved);
+            _ = LoadHistoryItemsAsync();
+            return;
+        }
+
+        string devMsg = !string.IsNullOrWhiteSpace(item.CloudDeviceName) ? $" từ [{item.CloudDeviceName}]" : string.Empty;
+        StatusMessage = $"⚠️ Bộ truyện '{item.Title}' được đồng bộ{devMsg} nhưng chưa tìm thấy trên thiết bị này.";
+        (ComicDownloaderGMTPC.Views.MainView.Instance?.DataContext as MainViewModel)?.ShowCenterToast(
+            "CHƯA TÌM THẤY FILE TRUYỆN",
+            $"Bộ truyện '{item.Title}' được đọc{devMsg} nhưng chưa có tệp trên máy này. Vui lòng đặt file/thư mục truyện vào bộ nhớ để tiếp tục đọc.",
+            "☁️",
+            "LỊCH SỬ ĐỒNG BỘ",
+            3500);
     }
 
     [RelayCommand]
@@ -1886,6 +1924,7 @@ public partial class LibraryViewModel : ViewModelBase
                     _ = LoadHistoryItemsAsync();
                     LoadBookmarkGroups();
                     LoadStorageItems();
+                    RefreshAllReadStatuses();
                     StatusMessage = $"✅ Đã phục hồi thành công {res.RestoredBookmarks} dấu trang và {res.RestoredHistory} mục lịch sử từ file Markdown!";
                 }
                 else
@@ -1901,6 +1940,7 @@ public partial class LibraryViewModel : ViewModelBase
                 _ = LoadHistoryItemsAsync();
                 LoadBookmarkGroups();
                 LoadStorageItems();
+                RefreshAllReadStatuses();
                 StatusMessage = $"✅ Đã phục hồi thành công {fallbackRes.RestoredBookmarks} dấu trang và {fallbackRes.RestoredHistory} mục lịch sử!";
             }
         }
@@ -1923,6 +1963,7 @@ public partial class LibraryViewModel : ViewModelBase
         await LoadHistoryItemsAsync();
         LoadBookmarkGroups();
         LoadStorageItems();
+        RefreshAllReadStatuses();
     }
 
     [RelayCommand]

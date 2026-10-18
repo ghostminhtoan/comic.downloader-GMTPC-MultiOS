@@ -1173,7 +1173,10 @@ public partial class MainViewModel
 
                 GoogleDriveStatusText = $"✅ {msg}";
                 AddLog("SUCCESS", $"☁️ {msg}");
-                ShowCenterToast("PHỤC HỒI RESUME THÀNH CÔNG", $"Đã khôi phục {result.RestoredProgressEntries} tiến trình đọc dở từ nguồn [{sourceName}].", "📖", "GOOGLE DRIVE", 3200);
+                string detailMsg = result.RestoredCrossDeviceComics > 0
+                    ? $"Đã khôi phục {result.RestoredCrossDeviceComics} bộ truyện và {result.RestoredProgressEntries} tiến trình đọc dở từ nguồn [{sourceName}]."
+                    : $"Đã khôi phục {result.RestoredProgressEntries} tiến trình đọc dở từ nguồn [{sourceName}].";
+                ShowCenterToast("PHỤC HỒI RESUME THÀNH CÔNG", detailMsg, "📖", "GOOGLE DRIVE", 3200);
             }
             else
             {

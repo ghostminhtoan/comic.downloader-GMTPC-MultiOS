@@ -3297,3 +3297,23 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
         * `MainActivity`: Nếu có Intent tệp ngoài lọt vào, lập tức chuyển tiếp (forward) trực tiếp sang `ComicReaderActivity` kèm cờ `ActivityFlags.NewTask | ActivityFlags.ClearTop` rồi `Finish()` ngay, tuyệt đối không nạp `MainView`.
         * `ComicReaderActivity`: Nhận Intent trực tiếp từ File Manager, kích hoạt ngay lập tức `ComicReaderControl`, giải mã URI qua `AndroidStorageHelper.ResolveUriToFilePathAsync`, nạp `ComicReaderViewModel` và mở ngay trang truyện/ảnh.
         * Toàn bộ quá trình chỉ trải qua **DUY NHẤT 1 LẦN LOAD READER**, khởi động siêu tốc, giảm tối đa mức chiếm dụng RAM và CPU trên thiết bị Android.
+
+20. **Tái Cấu Trúc Toàn Diện Cơ Chế Phục Hồi Chéo Tiến Độ Đọc Dở (Cross-Device Resume Engine) Giữa Windows, Android & Linux (`ReadProgressStore.cs`, `LibraryViewModel.cs`, `LibrarySubTabModels.cs`, `MainViewModel.GoogleDrive.cs`)**:
+    - **Nguyên nhân lỗi phục hồi chéo trước đây**:
+      + `resume.md` chỉ serialize dictionary `ProgressMap` chứa đường dẫn tuyệt đối riêng của máy lưu (ví dụ Windows `D:\...`).
+      + Khi nạp sang Android/Linux, các khóa đường dẫn Windows không tồn tại trên hệ thống tệp mới (`File.Exists || Directory.Exists == false`), dẫn đến toàn bộ Lịch Sử đọc bị lọc bỏ 100%, gây ra hiện tượng Lịch Sử trống trơn và không nhận diện được truyện đang đọc dở.
+      + Khóa chương con và trang đọc dở dựa trên chuỗi tên thư mục cứng; nếu tên chương sai khác padding (ví dụ `Chap 05` vs `Chap 5` hoặc `Chapter 5`), việc so khớp sẽ thất bại.
+      + Sau khi phục hồi từ cloud, giao diện Thư viện không tự động refresh lại trạng thái đọc dở cho từng chương và từng truyện.
+    - **Kiến trúc giải pháp Rebuild toàn diện**:
+      + **Thực thể dữ liệu độc lập nền tảng `CrossDeviceResumeEntry`**: Lưu trữ đầy đủ `ComicTitle`, `RelativePath`, `ChapterTitle`, `ChapterNumber`, `ChapterIndex`, `ChapterSuffix`, `LastReadPage`, `TotalPages`, `UpdatedAtUnixSeconds`, `DeviceName`, `OriginalDevicePath`.
+      + **Nâng cấp `ComicResumePayload` Schema v2**: Đóng gói đồng thời cả danh sách `Entries` chuẩn hóa độc lập OS và `ProgressMap` thô để bảo toàn 100% tính tương thích ngược. Bảng Markdown trực quan bổ sung cột `Thiết Bị` hiển thị trực quan ai là người cập nhật.
+      + **Bộ sinh khóa định danh linh hoạt nâng cao (Smart Portable Identity Keys)**: Tự động trích xuất số chương (`ExtractChapterNumber`), chuẩn hóa tên chương (`NormalizeChapterName`), hỗ trợ các khóa `@id|num|{parent}/chap_{num}`, `@id|norm|{parent}/{norm}`, `@id|file|{noExt}` và `@id|leaf|{comic}::#last_active_chapter`.
+      + **Cơ chế tự động ánh xạ đường dẫn cục bộ (Local Path Auto-Remapping Engine - `AutoResolveAndRemapLocalPaths`)**:
+        * Tự động quét toàn bộ các thư mục lưu trữ khả dụng trên thiết bị hiện tại (`DownloadRoot`, `StorageRoots`, `PinnedFolders`, `LastLibraryRoot`, thư mục Download hệ thống và `/storage/emulated/0/Download`).
+        * Tự động phát hiện thư mục hoặc file truyện trùng tên (`ComicTitle`) trên thiết bị hiện tại, liên kết và đăng ký ngay lập tức các khóa cục bộ chuẩn (`@history|...`, `#last_active_chapter`, `#total_pages`, trang đọc dở từng chương).
+      + **Danh mục Lịch Sử Hợp Nhất Chéo Nền Tảng (`GetUnifiedHistoryItems`)**:
+        * Hiển thị đầy đủ cả truyện có sẵn trên máy và các truyện được đồng bộ từ thiết bị khác (có huy hiệu ☁️ Đám mây kèm tên thiết bị nguồn và tiến độ % trang đọc dở).
+        * Khi người dùng click vào truyện đồng bộ: nếu máy đã có file thì mở đọc ngay lập tức; nếu chưa có, app hiển thị Center Toast thông báo rõ ràng để người dùng biết.
+      + **Cập nhật giao diện tức thì không cần khởi động lại (`RefreshAllReadStatuses`)**:
+        * `LibraryViewModel.RefreshAllReadStatuses()`: Quét lại `LastReadPage` của toàn bộ chapter trong `AllComics`, cập nhật lại `RefreshReadStatus()` và `ApplyFilter()`.
+        * Tự động kích hoạt ngay sau khi Restore Resume hoặc Restore Cloud thành công.

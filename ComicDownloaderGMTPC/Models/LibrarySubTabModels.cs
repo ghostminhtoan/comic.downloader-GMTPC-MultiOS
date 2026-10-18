@@ -110,6 +110,12 @@ public partial class HistoryItemModel : ObservableObject
 
     [ObservableProperty]
     private Bitmap? _cover;
+
+    public bool IsCloudSynced { get; set; }
+
+    public string CloudDeviceName { get; set; } = string.Empty;
+
+    public bool HasLocalPath => !string.IsNullOrWhiteSpace(Path) && (System.IO.File.Exists(Path) || System.IO.Directory.Exists(Path));
 }
 
 public partial class BookmarkGroupModel : ObservableObject

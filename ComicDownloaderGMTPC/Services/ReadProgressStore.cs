@@ -21,16 +21,46 @@ public sealed class ReaderBackupPayload
     public Dictionary<string, int> ProgressMap { get; set; } = new();
 }
 
+public sealed class CrossDeviceResumeEntry
+{
+    public string ComicTitle { get; set; } = string.Empty;
+    public string RelativePath { get; set; } = string.Empty;
+    public string ChapterTitle { get; set; } = string.Empty;
+    public double ChapterNumber { get; set; } = -1;
+    public int ChapterIndex { get; set; } = 1;
+    public string ChapterSuffix { get; set; } = string.Empty;
+    public int LastReadPage { get; set; } = 1;
+    public int TotalPages { get; set; } = 0;
+    public long UpdatedAtUnixSeconds { get; set; }
+    public string DeviceName { get; set; } = string.Empty;
+    public string OriginalDevicePath { get; set; } = string.Empty;
+}
+
+public sealed class UnifiedHistoryItemInfo
+{
+    public string Path { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string ChapterOrSubTitle { get; set; } = string.Empty;
+    public int LastReadPage { get; set; }
+    public int TotalPages { get; set; }
+    public int OrderStamp { get; set; }
+    public string DeviceName { get; set; } = string.Empty;
+    public bool HasLocalPath { get; set; }
+}
+
 public sealed class ComicResumePayload
 {
     public string SavedAt { get; set; } = string.Empty;
     public string DeviceName { get; set; } = string.Empty;
+    public int SchemaVersion { get; set; } = 2;
+    public List<CrossDeviceResumeEntry> Entries { get; set; } = new();
     public Dictionary<string, int> ProgressMap { get; set; } = new();
 }
 
 public sealed class ResumeRestoreResult
 {
     public int RestoredProgressEntries { get; set; }
+    public int RestoredCrossDeviceComics { get; set; }
     public bool HasValidStructure { get; set; }
     public string Message { get; set; } = string.Empty;
 }
@@ -72,6 +102,8 @@ public sealed class ReadProgressStore
     private const long EpochOffsetSeconds = 1700000000L;
 
     private readonly ConcurrentDictionary<string, int> _progressMap = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<CrossDeviceResumeEntry> _crossDeviceEntries = new();
+    private readonly object _crossDeviceLock = new();
     private readonly List<ReaderBookmarkItem> _bookmarks = new();
     private readonly object _bookmarkLock = new();
     private readonly object _saveLock = new();
@@ -146,13 +178,60 @@ public sealed class ReadProgressStore
         }
     }
 
+    public static double ExtractChapterNumber(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return -1;
+        // Bắt các pattern như: chap 12, chapter 12.5, ch 05, hồi 10, tập 3, c12, v.v.
+        var m = Regex.Match(text, @"(?:chap(?:ter)?|ch|hồi|tập|tâp|ep|part|bài|quyển)?\s*(\d+(?:[.,]\d+)?)", RegexOptions.IgnoreCase);
+        if (m.Success && double.TryParse(m.Groups[1].Value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
+        {
+            return val;
+        }
+        var m2 = Regex.Match(text, @"\b(\d+(?:[.,]\d+)?)\b");
+        if (m2.Success && double.TryParse(m2.Groups[1].Value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double val2))
+        {
+            return val2;
+        }
+        return -1;
+    }
+
+    public static string NormalizeChapterName(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        string clean = text.Trim().ToLowerInvariant();
+        clean = Regex.Replace(clean, @"[_\-\s]+", " ");
+        double num = ExtractChapterNumber(clean);
+        if (num >= 0)
+        {
+            return $"ch_{num.ToString(CultureInfo.InvariantCulture)}";
+        }
+        return clean;
+    }
+
+    public static string GetSafeRelativePath(string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath)) return string.Empty;
+        string clean = NormalizeKey(fullPath);
+        int sep = clean.IndexOf("::", StringComparison.Ordinal);
+        string suffix = sep > 0 ? clean.Substring(sep) : string.Empty;
+        string baseP = sep > 0 ? clean.Substring(0, sep) : clean;
+        string leaf = Path.GetFileName(baseP.TrimEnd('\\', '/'));
+        string? parent = Path.GetDirectoryName(baseP.TrimEnd('\\', '/'));
+        string parentLeaf = !string.IsNullOrWhiteSpace(parent) ? Path.GetFileName(parent.TrimEnd('\\', '/')) : string.Empty;
+        if (!string.IsNullOrWhiteSpace(parentLeaf) && !string.IsNullOrWhiteSpace(leaf))
+        {
+            return $"{parentLeaf}/{leaf}{suffix}";
+        }
+        return $"{leaf}{suffix}";
+    }
+
     /// <summary>
     /// Tạo danh sách khóa nhận diện linh hoạt (Portable Identity Keys) dựa trên tên file / tên bộ truyện + tên chương.
     /// Giúp giữ nguyên 100% lịch sử đọc kể cả khi người dùng di chuyển truyện sang thư mục hoặc ổ đĩa khác.
     /// </summary>
     private static List<string> BuildPortableIdentityKeys(string rawKey)
     {
-        var keys = new List<string>(2);
+        var keys = new List<string>(6);
         if (string.IsNullOrWhiteSpace(rawKey) || rawKey.StartsWith("@", StringComparison.Ordinal))
         {
             return keys;
@@ -181,11 +260,18 @@ public sealed class ReadProgressStore
 
         if (!string.IsNullOrEmpty(suffix))
         {
-            // Khóa cho chương con bên trong PDF/ZIP hoặc #last_active_chapter
+            // Khóa cho chương con bên trong PDF/ZIP hoặc #last_active_chapter hoặc #total_pages
             keys.Add($"{PortableIdPrefix}leaf|{leafName}{suffix}");
             if (!string.IsNullOrWhiteSpace(parentName))
             {
                 keys.Add($"{PortableIdPrefix}pair|{parentName}/{leafName}{suffix}");
+            }
+
+            double sufNum = ExtractChapterNumber(suffix);
+            if (sufNum >= 0)
+            {
+                keys.Add($"{PortableIdPrefix}num|{leafName}/chap_{sufNum.ToString(CultureInfo.InvariantCulture)}");
+                keys.Add($"{PortableIdPrefix}num|{leafName}/chap_{((int)sufNum).ToString(CultureInfo.InvariantCulture)}");
             }
         }
         else
@@ -194,12 +280,29 @@ public sealed class ReadProgressStore
             if (!string.IsNullOrWhiteSpace(parentName))
             {
                 keys.Add($"{PortableIdPrefix}pair|{parentName}/{leafName}");
+                keys.Add($"{PortableIdPrefix}norm|{parentName}/{NormalizeChapterName(leafName)}");
+
+                double chNum = ExtractChapterNumber(leafName);
+                if (chNum >= 0)
+                {
+                    keys.Add($"{PortableIdPrefix}num|{parentName}/chap_{chNum.ToString(CultureInfo.InvariantCulture)}");
+                    keys.Add($"{PortableIdPrefix}num|{parentName}/chap_{((int)chNum).ToString(CultureInfo.InvariantCulture)}");
+                }
             }
 
             string ext = Path.GetExtension(leafName);
             if (!string.IsNullOrEmpty(ext))
             {
                 keys.Add($"{PortableIdPrefix}file|{leafName}");
+                string noExt = Path.GetFileNameWithoutExtension(leafName);
+                if (!string.IsNullOrWhiteSpace(noExt) && !string.Equals(noExt, leafName, StringComparison.OrdinalIgnoreCase))
+                {
+                    keys.Add($"{PortableIdPrefix}file|{noExt}");
+                }
+            }
+            else
+            {
+                keys.Add($"{PortableIdPrefix}leaf|{leafName}");
             }
         }
 
@@ -208,24 +311,52 @@ public sealed class ReadProgressStore
 
     /// <summary>
     /// Trả về số trang đang đọc (1-based: 0 = chưa đọc, 1..N = trang đang đọc).
-    /// Tự động đối chiếu cả đường dẫn tuyệt đối lẫn khóa định danh linh hoạt (khi đổi thư mục).
+    /// Tự động đối chiếu cả đường dẫn tuyệt đối lẫn khóa định danh linh hoạt (khi đổi thư mục hoặc cross-device).
     /// </summary>
     public int GetLastReadPage(string chapterKey)
     {
         string key = NormalizeKey(chapterKey);
         if (string.IsNullOrEmpty(key)) return 0;
 
+        // 1. Đối chiếu trực tiếp theo đường dẫn tuyệt đối
         if (_progressMap.TryGetValue(key, out int page) && page > 0)
         {
             return page;
         }
 
+        // 2. Đối chiếu qua các khóa nhận diện linh hoạt (Portable Identity Keys)
         foreach (string portableKey in BuildPortableIdentityKeys(key))
         {
             if (_progressMap.TryGetValue(portableKey, out int portablePage) && portablePage > 0)
             {
                 return portablePage;
             }
+        }
+
+        // 3. Đối chiếu thông minh theo số chương hoặc tên chương chuẩn hóa
+        int sepIdx = key.IndexOf("::", StringComparison.Ordinal);
+        string basePath = sepIdx > 0 ? key.Substring(0, sepIdx) : key;
+        string cleanBase = basePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string leaf = Path.GetFileName(cleanBase);
+        string? parentDir = null;
+        try { parentDir = Path.GetDirectoryName(cleanBase); } catch { }
+        string parentName = !string.IsNullOrWhiteSpace(parentDir)
+            ? Path.GetFileName(parentDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            : string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(parentName) && !string.IsNullOrWhiteSpace(leaf))
+        {
+            double chNum = ExtractChapterNumber(leaf);
+            if (chNum >= 0)
+            {
+                string numKey1 = $"{PortableIdPrefix}num|{parentName}/chap_{chNum.ToString(CultureInfo.InvariantCulture)}";
+                if (_progressMap.TryGetValue(numKey1, out int p1) && p1 > 0) return p1;
+                string numKey2 = $"{PortableIdPrefix}num|{parentName}/chap_{((int)chNum).ToString(CultureInfo.InvariantCulture)}";
+                if (_progressMap.TryGetValue(numKey2, out int p2) && p2 > 0) return p2;
+            }
+
+            string normKey = $"{PortableIdPrefix}norm|{parentName}/{NormalizeChapterName(leaf)}";
+            if (_progressMap.TryGetValue(normKey, out int pNorm) && pNorm > 0) return pNorm;
         }
 
         return 0;
@@ -299,6 +430,13 @@ public sealed class ReadProgressStore
             {
                 return portableIdx;
             }
+        }
+
+        string leaf = Path.GetFileName(comicOrFilePath.TrimEnd('\\', '/'));
+        if (!string.IsNullOrWhiteSpace(leaf))
+        {
+            string leafKey = $"{PortableIdPrefix}leaf|{leaf}::#last_active_chapter";
+            if (_progressMap.TryGetValue(leafKey, out int lIdx) && lIdx > 0) return lIdx;
         }
 
         return 0;
@@ -539,6 +677,12 @@ public sealed class ReadProgressStore
         if (string.IsNullOrWhiteSpace(chapterKey) || totalPages <= 0) return;
         string key = NormalizeKey(chapterKey) + "::#total_pages";
         _progressMap[key] = totalPages;
+
+        foreach (string pk in BuildPortableIdentityKeys(key))
+        {
+            _progressMap[pk] = totalPages;
+        }
+
         MarkDirtyAndScheduleFlush();
     }
 
@@ -547,7 +691,324 @@ public sealed class ReadProgressStore
         if (string.IsNullOrWhiteSpace(chapterKey)) return 0;
         string key = NormalizeKey(chapterKey) + "::#total_pages";
         if (_progressMap.TryGetValue(key, out int total) && total > 0) return total;
+
+        foreach (string pk in BuildPortableIdentityKeys(key))
+        {
+            if (_progressMap.TryGetValue(pk, out int pTotal) && pTotal > 0) return pTotal;
+        }
+
         return 0;
+    }
+
+    /// <summary>
+    /// Thu thập toàn bộ các thư mục gốc khả dụng trên thiết bị (Download, Storage roots, Thư mục ghim, Thư viện gần nhất)
+    /// để tự động quét tìm và liên kết đường dẫn truyện cục bộ khi phục hồi chéo từ thiết bị khác.
+    /// </summary>
+    public List<string> GetCandidateStorageRoots()
+    {
+        var candidateRoots = new List<string>();
+
+        void TryAdd(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            try
+            {
+                string norm = NormalizeKey(path).TrimEnd('\\', '/');
+                if (Directory.Exists(norm) && !candidateRoots.Contains(norm, StringComparer.OrdinalIgnoreCase))
+                {
+                    candidateRoots.Add(norm);
+                }
+            }
+            catch { }
+        }
+
+        try { TryAdd(DownloadEngineService.Instance.DownloadRoot); } catch { }
+
+        try
+        {
+            if (OperatingSystem.IsAndroid())
+            {
+                var nativePaths = LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
+                if (nativePaths != null)
+                {
+                    foreach (var np in nativePaths) TryAdd(np);
+                }
+            }
+            else
+            {
+                foreach (var drive in DriveInfo.GetDrives())
+                {
+                    if (drive.IsReady && Directory.Exists(drive.RootDirectory.FullName))
+                    {
+                        TryAdd(drive.RootDirectory.FullName);
+                    }
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
+            foreach (var p in GetPinnedFolders())
+            {
+                TryAdd(p);
+            }
+        }
+        catch { }
+
+        try
+        {
+            TryAdd(GetLastLibraryRootPath());
+        }
+        catch { }
+
+        try
+        {
+            string sysDown = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            TryAdd(sysDown);
+        }
+        catch { }
+
+        if (OperatingSystem.IsAndroid())
+        {
+            TryAdd("/storage/emulated/0/Download");
+            TryAdd("/storage/emulated/0/Download/Comics");
+            TryAdd("/storage/emulated/0/Documents");
+            TryAdd("/storage/emulated/0/Comics");
+        }
+
+        return candidateRoots;
+    }
+
+    /// <summary>
+    /// Thử tìm đường dẫn cục bộ trên thiết bị hiện tại khớp với tên truyện (ComicTitle) hoặc tên file.
+    /// </summary>
+    public string? TryResolveLocalPathForComic(string comicTitle)
+    {
+        if (string.IsNullOrWhiteSpace(comicTitle)) return null;
+        string cleanTitle = comicTitle.Trim();
+
+        var roots = GetCandidateStorageRoots();
+        foreach (var root in roots)
+        {
+            try
+            {
+                // 1. Kiểm tra trực tiếp thư mục hoặc file cùng tên
+                string directFolder = Path.Combine(root, cleanTitle);
+                if (Directory.Exists(directFolder)) return directFolder;
+                if (File.Exists(directFolder)) return directFolder;
+
+                // 2. Tìm trong các thư mục con 1 cấp
+                var subDirs = Directory.GetDirectories(root);
+                foreach (var sd in subDirs)
+                {
+                    string sdName = Path.GetFileName(sd);
+                    if (string.Equals(sdName, cleanTitle, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return sd;
+                    }
+                    string nested = Path.Combine(sd, cleanTitle);
+                    if (Directory.Exists(nested) || File.Exists(nested))
+                    {
+                        return nested;
+                    }
+                }
+
+                // 3. Tìm các file nén / PDF có cùng base name
+                var files = Directory.GetFiles(root);
+                foreach (var f in files)
+                {
+                    string fName = Path.GetFileName(f);
+                    if (string.Equals(fName, cleanTitle, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return f;
+                    }
+                    string fBase = Path.GetFileNameWithoutExtension(f);
+                    if (string.Equals(fBase, cleanTitle, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return f;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Tự động dò tìm và ánh xạ tiến độ từ các mục CrossDeviceResumeEntry vào các file/thư mục cục bộ có sẵn trên thiết bị hiện tại.
+    /// </summary>
+    public int AutoResolveAndRemapLocalPaths(IEnumerable<CrossDeviceResumeEntry> entries)
+    {
+        if (entries == null) return 0;
+        int mappedCount = 0;
+
+        foreach (var entry in entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.ComicTitle)) continue;
+
+            string? localPath = TryResolveLocalPathForComic(entry.ComicTitle);
+            if (string.IsNullOrWhiteSpace(localPath)) continue;
+
+            string cleanLocal = NormalizeKey(localPath);
+            int orderStamp = entry.UpdatedAtUnixSeconds > 0
+                ? (int)Math.Clamp(entry.UpdatedAtUnixSeconds - EpochOffsetSeconds, 1L, int.MaxValue - 1L)
+                : GetCurrentOrderStamp();
+
+            RegisterReadComic(cleanLocal, touchTimestamp: false);
+            _progressMap[HistoryPrefix + cleanLocal] = orderStamp;
+
+            if (entry.ChapterIndex > 0)
+            {
+                _progressMap[cleanLocal + "::#last_active_chapter"] = entry.ChapterIndex;
+            }
+            if (entry.TotalPages > 0)
+            {
+                _progressMap[cleanLocal + "::#total_pages"] = entry.TotalPages;
+            }
+
+            if (File.Exists(cleanLocal))
+            {
+                if (entry.LastReadPage > 0)
+                {
+                    _progressMap[cleanLocal] = entry.LastReadPage;
+                }
+                if (!string.IsNullOrWhiteSpace(entry.ChapterSuffix))
+                {
+                    _progressMap[cleanLocal + entry.ChapterSuffix] = entry.LastReadPage;
+                    if (entry.TotalPages > 0)
+                    {
+                        _progressMap[cleanLocal + entry.ChapterSuffix + "::#total_pages"] = entry.TotalPages;
+                    }
+                }
+                mappedCount++;
+            }
+            else if (Directory.Exists(cleanLocal))
+            {
+                try
+                {
+                    var subDirs = Directory.GetDirectories(cleanLocal);
+                    foreach (var sub in subDirs)
+                    {
+                        string subName = Path.GetFileName(sub);
+                        bool isMatch = false;
+
+                        if (!string.IsNullOrWhiteSpace(entry.ChapterTitle) &&
+                            string.Equals(subName, entry.ChapterTitle, StringComparison.OrdinalIgnoreCase))
+                        {
+                            isMatch = true;
+                        }
+                        else if (entry.ChapterNumber >= 0 && ExtractChapterNumber(subName) == entry.ChapterNumber)
+                        {
+                            isMatch = true;
+                        }
+
+                        if (isMatch)
+                        {
+                            string normSub = NormalizeKey(sub);
+                            if (entry.LastReadPage > 0)
+                            {
+                                _progressMap[normSub] = entry.LastReadPage;
+                            }
+                            if (entry.TotalPages > 0)
+                            {
+                                _progressMap[normSub + "::#total_pages"] = entry.TotalPages;
+                            }
+                            break;
+                        }
+                    }
+                    mappedCount++;
+                }
+                catch { }
+            }
+        }
+
+        if (mappedCount > 0)
+        {
+            MarkDirtyAndScheduleFlush();
+        }
+
+        return mappedCount;
+    }
+
+    /// <summary>
+    /// Trả về danh sách Lịch Sử Đọc hợp nhất gồm cả các truyện cục bộ trên thiết bị
+    /// VÀ các truyện được đồng bộ từ thiết bị khác (kể cả khi chưa tìm thấy file cục bộ).
+    /// </summary>
+    public List<UnifiedHistoryItemInfo> GetUnifiedHistoryItems()
+    {
+        var result = new List<UnifiedHistoryItemInfo>();
+        var seenTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. Thêm các truyện cục bộ tồn tại trên thiết bị hiện tại
+        var localPaths = GetAllHistoryPaths(checkPathExists: true);
+        foreach (var path in localPaths)
+        {
+            string title = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            int lastChap = GetLastActiveChapterIndex(path);
+            int lastPage = GetLastReadPage(path);
+            int totalPages = GetChapterTotalPages(path);
+            int order = GetComicLastReadOrder(path);
+            string subTitle = lastChap > 0 ? $"Chương {lastChap}" : string.Empty;
+
+            seenTitles.Add(title);
+            result.Add(new UnifiedHistoryItemInfo
+            {
+                Path = path,
+                Title = title,
+                ChapterOrSubTitle = subTitle,
+                LastReadPage = lastPage,
+                TotalPages = totalPages,
+                OrderStamp = order,
+                DeviceName = string.Empty,
+                HasLocalPath = true
+            });
+        }
+
+        // 2. Bổ sung các truyện đồng bộ chéo từ thiết bị khác mà chưa có file cục bộ tương ứng
+        lock (_crossDeviceLock)
+        {
+            foreach (var entry in _crossDeviceEntries)
+            {
+                if (string.IsNullOrWhiteSpace(entry.ComicTitle) || seenTitles.Contains(entry.ComicTitle))
+                    continue;
+
+                // Thử xem có resolve được đường dẫn cục bộ không
+                string? resolved = TryResolveLocalPathForComic(entry.ComicTitle);
+                bool hasLocal = !string.IsNullOrWhiteSpace(resolved) && (File.Exists(resolved) || Directory.Exists(resolved));
+
+                int orderStamp = entry.UpdatedAtUnixSeconds > 0
+                    ? (int)Math.Clamp(entry.UpdatedAtUnixSeconds - EpochOffsetSeconds, 1L, int.MaxValue - 1L)
+                    : 0;
+
+                string subTitle = !string.IsNullOrWhiteSpace(entry.ChapterTitle)
+                    ? entry.ChapterTitle
+                    : (entry.ChapterIndex > 0 ? $"Chương {entry.ChapterIndex}" : string.Empty);
+
+                if (!string.IsNullOrWhiteSpace(entry.DeviceName))
+                {
+                    subTitle = string.IsNullOrWhiteSpace(subTitle)
+                        ? $"Từ {entry.DeviceName}"
+                        : $"{subTitle} ({entry.DeviceName})";
+                }
+
+                seenTitles.Add(entry.ComicTitle);
+                result.Add(new UnifiedHistoryItemInfo
+                {
+                    Path = resolved ?? entry.OriginalDevicePath,
+                    Title = entry.ComicTitle,
+                    ChapterOrSubTitle = subTitle,
+                    LastReadPage = entry.LastReadPage,
+                    TotalPages = entry.TotalPages,
+                    OrderStamp = orderStamp,
+                    DeviceName = entry.DeviceName,
+                    HasLocalPath = hasLocal
+                });
+            }
+        }
+
+        return result.OrderByDescending(r => r.OrderStamp).ToList();
     }
 
     public void SaveLastLibraryRootPath(string folderPath)
@@ -1326,7 +1787,7 @@ public sealed class ReadProgressStore
 
     /// <summary>
     /// Xuất tiến trình đọc truyện dở dùng chung (resume.md) cho toàn bộ các thiết bị.
-    /// Không chứa Bookmarks hay Queue riêng của thiết bị.
+    /// Bao gồm danh sách CrossDeviceResumeEntry độc lập nền tảng và toàn bộ ProgressMap.
     /// </summary>
     public string BuildResumeMarkdownContent(string currentDeviceName)
     {
@@ -1336,29 +1797,145 @@ public sealed class ReadProgressStore
         sb.AppendLine($"> Thiết bị cập nhật cuối: **{EscapeMarkdown(currentDeviceName)}** | Thời gian: `{DateTime.Now:yyyy-MM-dd HH:mm:ss}`");
         sb.AppendLine();
         sb.AppendLine("## Danh Sách Truyện & Trang Đang Đọc Dở");
-        sb.AppendLine("| STT | Tên Truyện / File | Chương Đang Đọc | Trang Đang Đọc | Cập Nhật Gần Nhất |");
-        sb.AppendLine("| :--- | :--- | :--- | :--- | :--- |");
+        sb.AppendLine("| STT | Tên Truyện / File | Chương Đang Đọc | Trang Đang Đọc | Cập Nhật Gần Nhất | Thiết Bị |");
+        sb.AppendLine("| :--- | :--- | :--- | :--- | :--- | :--- |");
 
-        var historyComics = GetAllHistoryPaths(checkPathExists: false);
-        int idx = 1;
-        foreach (var path in historyComics)
+        var allHistoryPaths = GetAllHistoryPaths(checkPathExists: false);
+        var entries = new List<CrossDeviceResumeEntry>();
+        var seenTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. Quét từ lịch sử đọc hiện tại trên thiết bị
+        foreach (var path in allHistoryPaths)
         {
-            string title = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            int lastChap = GetLastActiveChapterIndex(path);
-            int lastPage = GetLastReadPage(path);
-            string chapText = lastChap > 0 ? $"Chương {lastChap}" : "-";
-            string pageText = lastPage > 0 ? $"Trang {lastPage}" : "-";
-            int order = GetComicLastReadOrder(path);
-            string timeText = order > 0
-                ? DateTimeOffset.FromUnixTimeSeconds(order + EpochOffsetSeconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            string cleanPath = NormalizeKey(path);
+            string comicTitle = Path.GetFileName(cleanPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrWhiteSpace(comicTitle) || seenTitles.Contains(comicTitle)) continue;
+            seenTitles.Add(comicTitle);
+
+            int lastChapIdx = GetLastActiveChapterIndex(cleanPath);
+            int order = GetComicLastReadOrder(cleanPath);
+            long updatedTime = order > 0 ? (order + EpochOffsetSeconds) : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            string bestChapterTitle = string.Empty;
+            string bestChapterSuffix = string.Empty;
+            double bestChapterNumber = -1;
+            int bestPage = 0;
+            int bestTotalPages = 0;
+
+            string prefixSep1 = cleanPath + Path.DirectorySeparatorChar;
+            string prefixSep2 = cleanPath + "/";
+            string prefixSep3 = cleanPath + "::";
+
+            foreach (var kvp in _progressMap)
+            {
+                if (kvp.Value <= 0 || kvp.Key.StartsWith("@", StringComparison.Ordinal)) continue;
+                if (kvp.Key.EndsWith("::#last_active_chapter", StringComparison.OrdinalIgnoreCase) ||
+                    kvp.Key.EndsWith("::#total_pages", StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (string.Equals(kvp.Key, cleanPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    bestPage = Math.Max(bestPage, kvp.Value);
+                    bestTotalPages = Math.Max(bestTotalPages, GetChapterTotalPages(cleanPath));
+                }
+                else if (kvp.Key.StartsWith(prefixSep3, StringComparison.OrdinalIgnoreCase))
+                {
+                    string suffix = kvp.Key.Substring(cleanPath.Length);
+                    bestChapterSuffix = suffix;
+                    bestChapterNumber = ExtractChapterNumber(suffix);
+                    bestPage = kvp.Value;
+                    bestTotalPages = GetChapterTotalPages(kvp.Key);
+                }
+                else if (kvp.Key.StartsWith(prefixSep1, StringComparison.OrdinalIgnoreCase) ||
+                         kvp.Key.StartsWith(prefixSep2, StringComparison.OrdinalIgnoreCase))
+                {
+                    string subPath = kvp.Key;
+                    string subName = Path.GetFileName(subPath.TrimEnd('\\', '/'));
+                    double chNum = ExtractChapterNumber(subName);
+
+                    if (lastChapIdx > 0 && chNum == lastChapIdx)
+                    {
+                        bestChapterTitle = subName;
+                        bestChapterNumber = chNum;
+                        bestPage = kvp.Value;
+                        bestTotalPages = GetChapterTotalPages(subPath);
+                        break;
+                    }
+                    else if (kvp.Value > bestPage)
+                    {
+                        bestChapterTitle = subName;
+                        bestChapterNumber = chNum;
+                        bestPage = kvp.Value;
+                        bestTotalPages = GetChapterTotalPages(subPath);
+                    }
+                }
+            }
+
+            if (bestPage <= 0)
+            {
+                bestPage = GetLastReadPage(cleanPath);
+            }
+            if (bestTotalPages <= 0)
+            {
+                bestTotalPages = GetChapterTotalPages(cleanPath);
+            }
+
+            entries.Add(new CrossDeviceResumeEntry
+            {
+                ComicTitle = comicTitle,
+                RelativePath = GetSafeRelativePath(cleanPath),
+                ChapterTitle = bestChapterTitle,
+                ChapterNumber = bestChapterNumber,
+                ChapterIndex = lastChapIdx > 0 ? lastChapIdx : 1,
+                ChapterSuffix = bestChapterSuffix,
+                LastReadPage = bestPage,
+                TotalPages = bestTotalPages,
+                UpdatedAtUnixSeconds = updatedTime,
+                DeviceName = currentDeviceName,
+                OriginalDevicePath = cleanPath
+            });
+        }
+
+        // 2. Bảo toàn các mục từ thiết bị khác trong _crossDeviceEntries nếu chưa được ghi đè
+        lock (_crossDeviceLock)
+        {
+            foreach (var oldEntry in _crossDeviceEntries)
+            {
+                if (string.IsNullOrWhiteSpace(oldEntry.ComicTitle) || seenTitles.Contains(oldEntry.ComicTitle))
+                    continue;
+
+                seenTitles.Add(oldEntry.ComicTitle);
+                entries.Add(oldEntry);
+            }
+        }
+
+        // Sắp xếp danh sách theo thời gian đọc gần nhất giảm dần
+        var sortedEntries = entries.OrderByDescending(e => e.UpdatedAtUnixSeconds).ToList();
+        int idx = 1;
+        foreach (var e in sortedEntries)
+        {
+            string chapText = !string.IsNullOrWhiteSpace(e.ChapterTitle)
+                ? e.ChapterTitle
+                : (e.ChapterIndex > 0 ? $"Chương {e.ChapterIndex}" : "-");
+
+            string pageText = e.TotalPages > 0
+                ? $"Trang {e.LastReadPage}/{e.TotalPages}"
+                : (e.LastReadPage > 0 ? $"Trang {e.LastReadPage}" : "-");
+
+            string timeText = e.UpdatedAtUnixSeconds > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(e.UpdatedAtUnixSeconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                 : "-";
-            sb.AppendLine($"| {idx++} | {EscapeMarkdown(title)} | {chapText} | {pageText} | {timeText} |");
+
+            string devText = !string.IsNullOrWhiteSpace(e.DeviceName) ? e.DeviceName : currentDeviceName;
+
+            sb.AppendLine($"| {idx++} | {EscapeMarkdown(e.ComicTitle)} | {chapText} | {pageText} | {timeText} | {devText} |");
         }
 
         var payload = new ComicResumePayload
         {
             SavedAt = DateTime.Now.ToString("O", CultureInfo.InvariantCulture),
             DeviceName = currentDeviceName,
+            SchemaVersion = 2,
+            Entries = sortedEntries,
             ProgressMap = new Dictionary<string, int>(_progressMap, StringComparer.OrdinalIgnoreCase)
         };
 
@@ -1377,7 +1954,7 @@ public sealed class ReadProgressStore
 
     /// <summary>
     /// Phục hồi và Smart Merge tiến trình đọc dở từ file resume.md trên đám mây.
-    /// Tự động đối chiếu theo trang đọc xa hơn hoặc timestamp mới hơn.
+    /// Tự động sinh Portable Keys, đối chiếu chéo nền tảng và ánh xạ vào các đường dẫn cục bộ khả dụng.
     /// </summary>
     public ResumeRestoreResult ParseResumeMarkdownContent(string content, bool mergeWithExisting = true)
     {
@@ -1406,39 +1983,127 @@ public sealed class ReadProgressStore
                         try
                         {
                             var payload = JsonSerializer.Deserialize<ComicResumePayload>(json, _jsonOptions);
-                            if (payload?.ProgressMap != null && payload.ProgressMap.Count > 0)
+                            if (payload != null)
                             {
                                 res.HasValidStructure = true;
                                 int updatedCount = 0;
-                                foreach (var kvp in payload.ProgressMap)
-                                {
-                                    if (string.IsNullOrWhiteSpace(kvp.Key) || kvp.Value <= 0) continue;
 
-                                    if (_progressMap.TryGetValue(kvp.Key, out int currentVal))
+                                // 1. Smart merge ProgressMap
+                                if (payload.ProgressMap != null && payload.ProgressMap.Count > 0)
+                                {
+                                    foreach (var kvp in payload.ProgressMap)
                                     {
-                                        if (kvp.Key.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase))
+                                        if (string.IsNullOrWhiteSpace(kvp.Key) || kvp.Value <= 0) continue;
+
+                                        string normKey = NormalizeKey(kvp.Key);
+                                        if (_progressMap.TryGetValue(normKey, out int currentVal))
                                         {
-                                            if (kvp.Value > currentVal)
+                                            if (normKey.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase))
                                             {
-                                                _progressMap[kvp.Key] = kvp.Value;
+                                                if (kvp.Value > currentVal)
+                                                {
+                                                    _progressMap[normKey] = kvp.Value;
+                                                    updatedCount++;
+                                                }
+                                            }
+                                            else if (kvp.Value > currentVal || !mergeWithExisting)
+                                            {
+                                                _progressMap[normKey] = kvp.Value;
                                                 updatedCount++;
                                             }
                                         }
-                                        else if (kvp.Value > currentVal || !mergeWithExisting)
+                                        else
                                         {
-                                            _progressMap[kvp.Key] = kvp.Value;
+                                            _progressMap[normKey] = kvp.Value;
                                             updatedCount++;
                                         }
-                                    }
-                                    else
-                                    {
-                                        _progressMap[kvp.Key] = kvp.Value;
-                                        updatedCount++;
+
+                                        // Tự động bổ sung portable keys cho các key nạp được
+                                        if (!normKey.StartsWith("@", StringComparison.Ordinal))
+                                        {
+                                            foreach (string pk in BuildPortableIdentityKeys(normKey))
+                                            {
+                                                _progressMap.TryAdd(pk, kvp.Value);
+                                            }
+                                        }
                                     }
                                 }
 
-                                res.RestoredProgressEntries = updatedCount;
-                                res.Message = $"Đã đồng bộ {updatedCount} tiến trình đọc dở từ [{payload.DeviceName}].";
+                                // 2. Nạp và xử lý danh sách CrossDeviceResumeEntry độc lập nền tảng
+                                if (payload.Entries != null && payload.Entries.Count > 0)
+                                {
+                                    lock (_crossDeviceLock)
+                                    {
+                                        foreach (var entry in payload.Entries)
+                                        {
+                                            if (string.IsNullOrWhiteSpace(entry.ComicTitle)) continue;
+
+                                            // Cập nhật vào danh sách cache cross-device
+                                            int exIdx = _crossDeviceEntries.FindIndex(e => string.Equals(e.ComicTitle, entry.ComicTitle, StringComparison.OrdinalIgnoreCase));
+                                            if (exIdx >= 0)
+                                            {
+                                                if (entry.UpdatedAtUnixSeconds >= _crossDeviceEntries[exIdx].UpdatedAtUnixSeconds || !mergeWithExisting)
+                                                {
+                                                    _crossDeviceEntries[exIdx] = entry;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                _crossDeviceEntries.Add(entry);
+                                            }
+
+                                            // Sinh portable keys chuẩn hóa vào _progressMap
+                                            if (entry.ChapterIndex > 0)
+                                            {
+                                                string chKey = $"{PortableIdPrefix}leaf|{entry.ComicTitle}::#last_active_chapter";
+                                                _progressMap[chKey] = entry.ChapterIndex;
+                                            }
+
+                                            if (entry.LastReadPage > 0)
+                                            {
+                                                if (entry.ChapterNumber >= 0)
+                                                {
+                                                    _progressMap[$"{PortableIdPrefix}num|{entry.ComicTitle}/chap_{entry.ChapterNumber.ToString(CultureInfo.InvariantCulture)}"] = entry.LastReadPage;
+                                                    _progressMap[$"{PortableIdPrefix}num|{entry.ComicTitle}/chap_{((int)entry.ChapterNumber).ToString(CultureInfo.InvariantCulture)}"] = entry.LastReadPage;
+                                                }
+
+                                                if (!string.IsNullOrWhiteSpace(entry.ChapterTitle))
+                                                {
+                                                    _progressMap[$"{PortableIdPrefix}pair|{entry.ComicTitle}/{entry.ChapterTitle}"] = entry.LastReadPage;
+                                                    _progressMap[$"{PortableIdPrefix}norm|{entry.ComicTitle}/{NormalizeChapterName(entry.ChapterTitle)}"] = entry.LastReadPage;
+                                                }
+
+                                                if (!string.IsNullOrWhiteSpace(entry.ChapterSuffix))
+                                                {
+                                                    _progressMap[$"{PortableIdPrefix}leaf|{entry.ComicTitle}{entry.ChapterSuffix}"] = entry.LastReadPage;
+                                                }
+
+                                                _progressMap[$"{PortableIdPrefix}file|{entry.ComicTitle}"] = entry.LastReadPage;
+                                            }
+
+                                            if (entry.TotalPages > 0)
+                                            {
+                                                _progressMap[$"{PortableIdPrefix}leaf|{entry.ComicTitle}::#total_pages"] = entry.TotalPages;
+                                                if (!string.IsNullOrWhiteSpace(entry.ChapterTitle))
+                                                {
+                                                    _progressMap[$"{PortableIdPrefix}pair|{entry.ComicTitle}/{entry.ChapterTitle}::#total_pages"] = entry.TotalPages;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 3. Tự động dò tìm và liên kết vào các thư mục / file truyện cục bộ có sẵn trên thiết bị
+                                    int remapped = AutoResolveAndRemapLocalPaths(payload.Entries);
+                                    res.RestoredCrossDeviceComics = payload.Entries.Count;
+                                    res.RestoredProgressEntries = updatedCount;
+                                    res.Message = $"Đã đồng bộ {payload.Entries.Count} bộ truyện từ [{payload.DeviceName}], tự động liên kết {remapped} thư mục/file trên thiết bị này.";
+                                }
+                                else
+                                {
+                                    res.RestoredProgressEntries = updatedCount;
+                                    res.Message = $"Đã đồng bộ {updatedCount} tiến trình đọc dở từ [{payload.DeviceName}].";
+                                }
+
                                 MarkDirtyAndScheduleFlush();
                                 return res;
                             }
