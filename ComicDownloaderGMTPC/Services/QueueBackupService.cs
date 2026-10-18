@@ -127,12 +127,36 @@ public class QueueBackupService
                 return androidAutoSave;
             }
 
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string autoSaveDir = Path.Combine(baseDir, "autosave");
+            string portableDir = GetPortableDirectory();
+            string autoSaveDir = Path.Combine(portableDir, "autosave");
             if (!Directory.Exists(autoSaveDir))
             {
                 Directory.CreateDirectory(autoSaveDir);
             }
+
+            // Tự động di chuyển các file autosave cũ từ baseDir/autosave sang .portable/autosave nếu có
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string oldAutoSaveDir = Path.Combine(baseDir, "autosave");
+                if (Directory.Exists(oldAutoSaveDir) && !string.Equals(oldAutoSaveDir, autoSaveDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (var file in Directory.GetFiles(oldAutoSaveDir))
+                    {
+                        string dest = Path.Combine(autoSaveDir, Path.GetFileName(file));
+                        if (!File.Exists(dest))
+                        {
+                            File.Move(file, dest);
+                        }
+                    }
+                    if (!Directory.EnumerateFileSystemEntries(oldAutoSaveDir).Any())
+                    {
+                        Directory.Delete(oldAutoSaveDir, false);
+                    }
+                }
+            }
+            catch { }
+
             return autoSaveDir;
         }
         catch

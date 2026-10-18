@@ -3262,3 +3262,25 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + Tái cấu trúc thanh tiêu đề trong `LibraryView.axaml` từ dạng 1 hàng 2 cột (`Grid ColumnDefinitions="*, Auto"`) sang dạng 2 hàng (`Grid RowDefinitions="Auto, Auto" RowSpacing="6"`).
       + **Hàng trên**: Hiển thị tiêu đề to rõ (`📖 LỊCH SỬ ĐỌC GẦN ĐÂY` / `📑 DẤU TRANG ĐÃ LƯU`) kèm số lượng mục/bộ truyện.
       + **Hàng dưới**: Chuyển toàn bộ cụm 4 nút tác vụ (`[💾 Sao Lưu MD]`, `[📂 Phục Hồi MD]`, `[☁️ Google Drive]`, `[🗑️ Xóa Lịch Sử / Xóa Toàn Bộ]`) sang `WrapPanel` responsive có `Margin="0,0,6,4"`, chống tràn viền tuyệt đối trên mọi kích thước màn hình điện thoại dọc hoặc cửa sổ thu nhỏ.
+
+18. **Đồng Bộ Resume.md Chuẩn Markdown, Di Chuyển Autosave Vào .Portable, Webtoon Mặc Định Fit Screen, Tự Động Refresh Re-Layout Reader, Sửa Lỗi Kẹt Trang Lẻ & Tinh Gọn Cấu Trúc Archive/PDF/MOBI**:
+    - **Lưu trữ và đồng bộ tiến độ đọc cục bộ chuẩn `resume.md`**:
+      + Đổi tên file cấu hình tiến trình đọc từ `read_progress.json` thành `resume.md` đồng nhất giữa cục bộ và đám mây Google Drive.
+      + `ReadProgressStore.FlushImmediately()`: Tự động xuất nội dung Markdown chuẩn (`BuildResumeMarkdownContent()`) bao gồm cả bảng thống kê Markdown thân thiện người đọc và khối JSON máy đọc `<!-- BEGIN_RESUME_STATE_JSON -->`.
+      + `ReadProgressStore.LoadFromDisk()`: Ưu tiên nạp từ `resume.md`, fallback tự động sang `read_progress.json` cũ nếu có và tự động nâng cấp lưu sang `resume.md` mới.
+    - **Di chuyển thư mục `autosave` vào `.portable\autosave\` trên Windows & Linux**:
+      + `QueueBackupService.GetAutoSaveDirectory()`: Trên Windows và Linux, thư mục hàng đợi tải tự động được lưu trữ tại `.portable\autosave\` thay vì cấp thư mục gốc ứng dụng, giữ thư mục root sạch sẽ.
+      + Tự động di chuyển (migrate) toàn bộ file sao lưu cũ từ `baseDir\autosave` sang `.portable\autosave\` để đảm bảo không thất thoát dữ liệu của người dùng.
+    - **Chế độ đọc Webtoon mặc định Fit Screen**:
+      + Cập nhật mặc định `_fitMode = ImageFitMode.FitScreen;` và trong `SelectPageScrollingMode(5)` gán `FitMode = ImageFitMode.FitScreen` thay cho Fit Width, tối ưu trải nghiệm đọc trên mọi độ phân giải màn hình.
+    - **Tự động refresh layout ngay khi đổi chế độ đọc, bảo toàn số trang đang xem**:
+      + Trong `SelectPageScrollingMode`: Bảo toàn `preservedPageIndex = CurrentPageIndex`, đồng thời cập nhật `ApplyFitModeLayout()`, `UpdateCurrentFlipPages()`, và kích hoạt cuộn chuẩn xác tới trang đang đọc.
+      + Trong `ComicReaderControl.axaml.cs`: Lắng nghe thay đổi của `PageScrollingMode`, `IsHorizontalScrollMode`, `IsScrollMode`, `IsDoublePage`; tự động gọi `InvalidateMeasure()`, `InvalidateArrange()`, reset offset cho Flip Mode và kích hoạt giải mã ảnh tức thì.
+    - **Sửa triệt để lỗi stuck "đang tải trang" ở đầu/hết chương trang lẻ và Dual Page**:
+      + Trong `UpdateCurrentFlipPages()`: Kích hoạt ngay `EnsureSinglePageLoadedAsync` cho cả `CurrentPage` và `SecondaryPage` (nếu có), triệt tiêu hoàn toàn hiện tượng kẹt ở trang lẻ hoặc trang cuối.
+      + Trong `OnVmScrollToPageRequested`: Chủ động giải mã ngay lập tức trang mục tiêu và các trang lân cận (index - 1, index, index + 1) để khắc phục triệt để việc VirtualizingStackPanel tái sử dụng container mà không bắn sự kiện `AttachedToVisualTree`.
+    - **Loại bỏ chương tổng quát gom hàng ngàn trang ở đầu file Archive (ZIP/RAR/CBZ/CBR), PDF, MOBI**:
+      + Trong `LibraryScannerService.ExpandArchiveIntoChapters`: Loại bỏ việc sinh node "Toàn bộ truyện (Tất cả N trang)" ở đầu danh sách chương khi file nén có nhiều thư mục con hoặc khi tự động cắt phần (> 120 trang).
+      + Các file mở ra sẽ bắt đầu ngay từ Chương 1 hoặc Mở đầu, chống hoàn toàn lỗi cuộn lên bị nhảy ngược về chương chung hàng ngàn trang.
+      + `LibraryComicItem`: Bổ sung thuộc tính `TotalPages` tính tổng toàn bộ trang của các chương con, và cập nhật `ChapterCountText` hiển thị rõ ràng tổng số trang (ví dụ `10 chương (250 trang)` hoặc `120 trang`) cho người dùng.
+

@@ -420,7 +420,10 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void SelectPageScrollingMode(string? modeParam)
     {
         if (!int.TryParse(modeParam, out int mode)) return;
-        PageScrollingMode = Math.Clamp(mode, 0, 5);
+        int targetMode = Math.Clamp(mode, 0, 5);
+        int preservedPageIndex = CurrentPageIndex;
+
+        PageScrollingMode = targetMode;
 
         switch (PageScrollingMode)
         {
@@ -442,6 +445,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                 IsScrollMode = true;
                 IsHorizontalScrollMode = false;
                 IsRightToLeft = true;
+                FitMode = ImageFitMode.FitScreen;
                 ShowTransientToast("📜 Cuộn dọc RTL: phải ☜(ﾟヮﾟ☜) trái");
                 break;
             case 3: // Right S (Horizontal Scroll LTR - Cuộn ngang liên tục Trái → Phải)
@@ -462,14 +466,31 @@ public partial class ComicReaderViewModel : ViewModelBase
                 IsScrollMode = true;
                 IsHorizontalScrollMode = false;
                 IsRightToLeft = false;
+                FitMode = ImageFitMode.FitScreen; // Mặc định Fit Screen cho Webtoon theo yêu cầu
                 ShowTransientToast("📜 Cuộn dọc: trái (☞ﾟヮﾟ)☞ phải (Webtoon)");
                 break;
         }
 
         OnPropertyChanged(nameof(ReaderFlowDirection));
         ApplyFitModeLayout();
+
+        if (Pages.Count > 0)
+        {
+            CurrentPageIndex = Math.Clamp(preservedPageIndex, 0, Pages.Count - 1);
+        }
+
         UpdateCurrentFlipPages();
         TriggerPrefetch(CurrentPageIndex);
+
+        if (CurrentPage != null && !CurrentPage.IsLoaded)
+        {
+            _ = EnsureSinglePageLoadedAsync(CurrentPage);
+        }
+        if (SecondaryPage != null && !SecondaryPage.IsLoaded)
+        {
+            _ = EnsureSinglePageLoadedAsync(SecondaryPage);
+        }
+
         if (IsScrollMode)
         {
             Dispatcher.UIThread.Post(() => RequestScrollToPage(CurrentPageIndex), DispatcherPriority.Background);
@@ -616,7 +637,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FitModeBadgeText))]
     [NotifyPropertyChangedFor(nameof(FitModeTooltipText))]
-    private ImageFitMode _fitMode = ImageFitMode.FitWidth;
+    private ImageFitMode _fitMode = ImageFitMode.FitScreen;
 
     public string FitModeBadgeText => FitMode switch
     {
@@ -2616,6 +2637,16 @@ public partial class ComicReaderViewModel : ViewModelBase
         OnPropertyChanged(nameof(FlipImageStretch));
         OnPropertyChanged(nameof(LeftFlipPageAlignment));
         OnPropertyChanged(nameof(RightFlipPageAlignment));
+
+        // Nạp và giải mã tức thời cả 2 trang lật (trang đơn & trang kép) để triệt tiêu lỗi stuck '⏳ Đang nạp trang...'
+        if (CurrentPage != null && !CurrentPage.IsLoaded)
+        {
+            _ = EnsureSinglePageLoadedAsync(CurrentPage);
+        }
+        if (SecondaryPage != null && !SecondaryPage.IsLoaded)
+        {
+            _ = EnsureSinglePageLoadedAsync(SecondaryPage);
+        }
     }
 
     private void RecordReadingProgress(int pageIndex)

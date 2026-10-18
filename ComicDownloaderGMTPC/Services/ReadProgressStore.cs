@@ -92,7 +92,7 @@ public sealed class ReadProgressStore
         {
             try { Directory.CreateDirectory(dir); } catch { }
         }
-        return Path.Combine(dir, "read_progress.json");
+        return Path.Combine(dir, "resume.md");
     }
 
     private static string GetBookmarksFilePath()
@@ -831,9 +831,19 @@ public sealed class ReadProgressStore
             {
                 string filePath = GetStoreFilePath();
                 string tmpPath = filePath + ".tmp";
-                var snapshot = new Dictionary<string, int>(_progressMap, StringComparer.OrdinalIgnoreCase);
-                string json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(tmpPath, json);
+                string deviceName = string.Empty;
+                try
+                {
+                    deviceName = GoogleDriveSyncService.Instance.CurrentDeviceName;
+                }
+                catch { }
+                if (string.IsNullOrWhiteSpace(deviceName))
+                {
+                    deviceName = Environment.MachineName;
+                }
+
+                string mdContent = BuildResumeMarkdownContent(deviceName);
+                File.WriteAllText(tmpPath, mdContent);
                 File.Move(tmpPath, filePath, overwrite: true);
             }
             catch { }
@@ -844,20 +854,59 @@ public sealed class ReadProgressStore
     {
         try
         {
-            string filePath = GetStoreFilePath();
-            if (!File.Exists(filePath)) return;
+            string resumeFilePath = GetStoreFilePath();
+            string legacyJsonFilePath = Path.Combine(ComicScraperService.GetConfigDirectory(), "read_progress.json");
 
-            string json = File.ReadAllText(filePath);
-            var dict = JsonSerializer.Deserialize<Dictionary<string, int>>(json);
-            if (dict == null) return;
-
-            foreach (var kv in dict)
+            string? activePath = null;
+            if (File.Exists(resumeFilePath))
             {
-                if (!string.IsNullOrWhiteSpace(kv.Key) && kv.Value > 0)
+                activePath = resumeFilePath;
+            }
+            else if (File.Exists(legacyJsonFilePath))
+            {
+                activePath = legacyJsonFilePath;
+            }
+
+            if (string.IsNullOrEmpty(activePath) || !File.Exists(activePath)) return;
+
+            string content = File.ReadAllText(activePath);
+            if (string.IsNullOrWhiteSpace(content)) return;
+
+            bool loaded = false;
+            // 1. Phục hồi từ tệp Markdown chứa khối JSON máy đọc (resume.md)
+            if (content.Contains(ResumeStateBeginMarker, StringComparison.Ordinal))
+            {
+                var restoreResult = ParseResumeMarkdownContent(content, mergeWithExisting: true);
+                loaded = restoreResult.HasValidStructure;
+            }
+
+            // 2. Fallback: Parse trực tiếp nếu là JSON thuần (read_progress.json cũ)
+            if (!loaded)
+            {
+                string jsonToParse = content.Trim();
+                if (jsonToParse.StartsWith("{", StringComparison.Ordinal))
                 {
-                    string normKey = NormalizeKey(kv.Key);
-                    _progressMap[normKey] = kv.Value;
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, int>>(jsonToParse);
+                    if (dict != null && dict.Count > 0)
+                    {
+                        foreach (var kv in dict)
+                        {
+                            if (!string.IsNullOrWhiteSpace(kv.Key) && kv.Value > 0)
+                            {
+                                string normKey = NormalizeKey(kv.Key);
+                                _progressMap[normKey] = kv.Value;
+                            }
+                        }
+                        loaded = true;
+                    }
                 }
+            }
+
+            // 3. Nếu đọc từ file legacy json cũ mà chưa có resume.md -> lưu ngay ra resume.md
+            if (loaded && !File.Exists(resumeFilePath))
+            {
+                _isDirty = true;
+                FlushImmediately();
             }
 
             // Tự động đồng bộ khóa định danh linh hoạt (@id|...) và lịch sử đọc (@history|...) từ dữ liệu sẵn có

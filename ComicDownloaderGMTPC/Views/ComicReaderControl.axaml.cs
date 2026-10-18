@@ -1210,6 +1210,36 @@ public partial class ComicReaderControl : UserControl
         {
             _suppressScrollChangedUntilTick = Environment.TickCount64 + 800;
         }
+        else if (e.PropertyName == nameof(ComicReaderViewModel.PageScrollingMode) ||
+                 e.PropertyName == nameof(ComicReaderViewModel.IsHorizontalScrollMode) ||
+                 e.PropertyName == nameof(ComicReaderViewModel.IsScrollMode) ||
+                 e.PropertyName == nameof(ComicReaderViewModel.IsDoublePage))
+        {
+            if (DataContext is ComicReaderViewModel vm)
+            {
+                var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
+                listBox?.InvalidateMeasure();
+                listBox?.InvalidateArrange();
+
+                var flipSv = GetFlipScrollViewer();
+                if (vm.IsFlipMode && flipSv != null)
+                {
+                    flipSv.Offset = Vector.Zero;
+                    if (vm.LeftFlipPage != null) _ = vm.EnsureSinglePageLoadedAsync(vm.LeftFlipPage);
+                    if (vm.RightFlipPage != null) _ = vm.EnsureSinglePageLoadedAsync(vm.RightFlipPage);
+                }
+
+                _suppressScrollChangedUntilTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 800 : 400);
+
+                if (vm.IsScrollMode && vm.Pages.Count > 0 && vm.CurrentPageIndex >= 0)
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        OnVmScrollToPageRequested(vm.CurrentPageIndex);
+                    }, Avalonia.Threading.DispatcherPriority.Loaded);
+                }
+            }
+        }
     }
 
     private void OnPageButtonAreaPrevClick(object? sender, RoutedEventArgs e)
@@ -1484,6 +1514,17 @@ public partial class ComicReaderControl : UserControl
             {
                 flipSv.Offset = Vector.Zero;
             }
+        }
+
+        // Kích hoạt giải mã ngay lập tức trang mục tiêu và các trang lân cận để triệt tiêu lỗi stuck '⏳ Đang tải trang...'
+        _ = vm.EnsureSinglePageLoadedAsync(targetItem);
+        if (pageIndex + 1 < vm.Pages.Count)
+        {
+            _ = vm.EnsureSinglePageLoadedAsync(vm.Pages[pageIndex + 1]);
+        }
+        if (pageIndex > 0)
+        {
+            _ = vm.EnsureSinglePageLoadedAsync(vm.Pages[pageIndex - 1]);
         }
 
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>

@@ -49,7 +49,11 @@ public partial class LibraryComicItem : ObservableObject
 
     public int TotalChapters => Chapters.Count;
 
-    public string ChapterCountText => $"{Chapters.Count} chương";
+    public int TotalPages => Chapters.Count > 0 ? Chapters.Sum(c => c.TotalPages) : 0;
+
+    public string ChapterCountText => TotalPages > 0
+        ? (Chapters.Count <= 1 ? $"{TotalPages} trang" : $"{Chapters.Count} chương ({TotalPages} trang)")
+        : $"{Chapters.Count} chương";
 
     [ObservableProperty]
     private string _readStatusText = "Chưa đọc";
@@ -175,6 +179,7 @@ public partial class LibraryComicItem : ObservableObject
         OnPropertyChanged(nameof(HasAnyReadProgress));
         OnPropertyChanged(nameof(IsAllChaptersRead));
         OnPropertyChanged(nameof(TotalChapters));
+        OnPropertyChanged(nameof(TotalPages));
         OnPropertyChanged(nameof(ChapterCountText));
     }
 }
