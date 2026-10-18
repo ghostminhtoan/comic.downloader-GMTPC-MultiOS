@@ -1317,6 +1317,56 @@ p {{ color: #94A3B8; font-size: 14px; }}
     /// <summary>
     /// Xóa thư mục trên Google Drive (REST API v3 DELETE).
     /// Tuyệt đối ngăn chặn xóa nhầm thư mục gốc của ứng dụng (\GMTPC\Comic Downloader GMTPC\).
+    /// <summary>
+    /// Bóc tách Folder ID chuẩn từ chuỗi đầu vào của người dùng (hỗ trợ ID trần, URL Google Drive đầy đủ, link chia sẻ có query param, link /d/, link mobile...).
+    /// </summary>
+    public static string ExtractFolderId(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+        string clean = input.Trim().Trim('"', '\'', '<', '>', '[', ']', '(', ')');
+
+        // 1. Khớp link dạng /folders/{id}
+        var matchFolders = System.Text.RegularExpressions.Regex.Match(clean, @"folders\/([a-zA-Z0-9_\-]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (matchFolders.Success && matchFolders.Groups.Count > 1)
+        {
+            return matchFolders.Groups[1].Value.Trim();
+        }
+
+        // 2. Khớp link dạng id={id} (ví dụ: drive.google.com/open?id=... hoặc url có ?id=...)
+        var matchId = System.Text.RegularExpressions.Regex.Match(clean, @"[?&]id=([a-zA-Z0-9_\-]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (matchId.Success && matchId.Groups.Count > 1)
+        {
+            return matchId.Groups[1].Value.Trim();
+        }
+
+        // 3. Khớp link dạng /d/{id}
+        var matchD = System.Text.RegularExpressions.Regex.Match(clean, @"\/d\/([a-zA-Z0-9_\-]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (matchD.Success && matchD.Groups.Count > 1)
+        {
+            return matchD.Groups[1].Value.Trim();
+        }
+
+        // 4. Nếu có query parameters (ví dụ: 1aBcDe...?usp=sharing), cắt bỏ phần ?
+        int queryIndex = clean.IndexOf('?');
+        if (queryIndex >= 0)
+        {
+            clean = clean.Substring(0, queryIndex);
+        }
+
+        // 5. Nếu còn dấu gạch chéo /, lấy segment cuối cùng
+        int slashIndex = clean.LastIndexOf('/');
+        if (slashIndex >= 0 && slashIndex < clean.Length - 1)
+        {
+            clean = clean.Substring(slashIndex + 1);
+        }
+
+        return clean.Trim();
+    }
+
+    /// <summary>
+    /// Xóa thư mục trên Google Drive (REST API v3).
+    /// Áp dụng cơ chế xóa 2 tầng: Tầng 1 an toàn chuyển vào Thùng rác (Safe Trash via PATCH trashed=true), Tầng 2 xóa vĩnh viễn (Permanent Delete via DELETE).
+    /// Tuyệt đối ngăn chặn xóa nhầm thư mục gốc của ứng dụng (\GMTPC\Comic Downloader GMTPC\).
     /// </summary>
     public async Task<(bool Success, string Message)> DeleteCloudFolderAsync(string folderId, CancellationToken ct = default)
     {
@@ -1340,11 +1390,46 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Delete, $"{GoogleDriveApiBase}/files/{folderId}");
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var res = await _httpClient.SendAsync(req, ct);
+            // Tầng 1: Đưa vào Thùng Rác (Safe Trash) qua PATCH method kèm supportsAllDrives=true
+            // Hoạt động an toàn, không bị lỗi 403 Forbidden do thiếu quyền permanent delete với scope drive.file
+            bool trashedOk = false;
+            try
+            {
+                var trashBody = new { trashed = true };
+                using var reqTrash = new HttpRequestMessage(HttpMethod.Patch, $"{GoogleDriveApiBase}/files/{folderId}?supportsAllDrives=true");
+                reqTrash.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                reqTrash.Content = new StringContent(JsonSerializer.Serialize(trashBody), Encoding.UTF8, "application/json");
+                using var resTrash = await _httpClient.SendAsync(reqTrash, ct);
+                if (resTrash.IsSuccessStatusCode)
+                {
+                    trashedOk = true;
+                }
+            }
+            catch { }
 
-            if (res.IsSuccessStatusCode || res.StatusCode == HttpStatusCode.NotFound)
+            // Tầng 2: Thử Permanent Delete (xóa vĩnh viễn) nếu có thể
+            bool permanentDeleteOk = false;
+            string errDetail = string.Empty;
+            try
+            {
+                using var reqDel = new HttpRequestMessage(HttpMethod.Delete, $"{GoogleDriveApiBase}/files/{folderId}?supportsAllDrives=true");
+                reqDel.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                using var resDel = await _httpClient.SendAsync(reqDel, ct);
+                if (resDel.IsSuccessStatusCode || resDel.StatusCode == HttpStatusCode.NotFound)
+                {
+                    permanentDeleteOk = true;
+                }
+                else
+                {
+                    errDetail = await resDel.Content.ReadAsStringAsync(ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                errDetail = ex.Message;
+            }
+
+            if (trashedOk || permanentDeleteOk)
             {
                 if (folderId.Equals(_config.CachedDeviceFolderId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -1356,8 +1441,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 return (true, "Đã xóa thư mục trên Google Drive thành công.");
             }
 
-            string err = await res.Content.ReadAsStringAsync(ct);
-            return (false, $"Lỗi xóa thư mục ({res.StatusCode}): {err}");
+            return (false, $"Lỗi xóa thư mục Google Drive: {errDetail}");
         }
         catch (Exception ex)
         {
@@ -1368,33 +1452,15 @@ p {{ color: #94A3B8; font-size: 14px; }}
     /// <summary>
     /// Liên kết và chọn thư mục làm việc trên Google Drive bằng Folder ID trực tiếp hoặc URL chia sẻ.
     /// Cho phép người dùng kết nối nhanh với bất kỳ thư mục nào trên Drive mà không phụ thuộc vào việc tìm kiếm tên.
+    /// Tự động bóc tách sạch sẽ ID từ mọi dạng link Google Drive.
     /// </summary>
     public async Task<(bool Success, GoogleDriveDeviceSlot? Slot, string Message)> ConnectByFolderIdAsync(string inputFolderIdOrUrl, CancellationToken ct = default)
     {
-        string raw = inputFolderIdOrUrl?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(raw))
+        string folderId = ExtractFolderId(inputFolderIdOrUrl);
+        if (string.IsNullOrWhiteSpace(folderId))
         {
-            return (false, null, "Vui lòng nhập Folder ID hoặc URL Google Drive.");
+            return (false, null, "Vui lòng nhập Folder ID hoặc URL Google Drive hợp lệ.");
         }
-
-        string folderId = raw;
-        if (raw.Contains("drive.google.com"))
-        {
-            var match = System.Text.RegularExpressions.Regex.Match(raw, @"folders\/([a-zA-Z0-9_\-]+)");
-            if (match.Success && match.Groups.Count > 1)
-            {
-                folderId = match.Groups[1].Value;
-            }
-            else
-            {
-                var matchId = System.Text.RegularExpressions.Regex.Match(raw, @"id=([a-zA-Z0-9_\-]+)");
-                if (matchId.Success && matchId.Groups.Count > 1)
-                {
-                    folderId = matchId.Groups[1].Value;
-                }
-            }
-        }
-        folderId = folderId.Trim();
 
         string? token = await EnsureValidAccessTokenAsync(ct);
         if (string.IsNullOrEmpty(token))
@@ -1404,7 +1470,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, $"{GoogleDriveApiBase}/files/{folderId}?fields=id,name,mimeType,trashed");
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{GoogleDriveApiBase}/files/{folderId}?fields=id,name,mimeType,trashed&supportsAllDrives=true");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var res = await _httpClient.SendAsync(req, ct);
 
@@ -1418,12 +1484,12 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
                 if (trashed)
                 {
-                    return (false, null, $"Thư mục [{name}] đang nằm trong thùng rác Google Drive.");
+                    return (false, null, $"Thư mục [{name}] đang nằm trong thùng rác Google Drive. Vui lòng khôi phục trước khi đồng bộ.");
                 }
 
                 if (!string.Equals(mime, "application/vnd.google-apps.folder", StringComparison.OrdinalIgnoreCase))
                 {
-                    return (false, null, $"ID được cung cấp là tệp tin ({name}), không phải thư mục.");
+                    return (false, null, $"ID/URL được cung cấp là tệp tin ({name}), không phải thư mục Google Drive.");
                 }
 
                 SelectActiveFolder(folderId, name);
@@ -1446,7 +1512,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
             }
             else if (res.StatusCode == HttpStatusCode.NotFound)
             {
-                return (false, null, "Không tìm thấy thư mục trên Google Drive với ID này. Hãy kiểm tra lại ID hoặc quyền truy cập.");
+                return (false, null, "Không tìm thấy thư mục trên Google Drive với ID/URL này. Hãy kiểm tra lại ID hoặc quyền truy cập.");
             }
             else
             {

@@ -3183,12 +3183,19 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + Bổ sung vòng lặp retry 3 lần kèm Exponential Backoff (1.5s, 3.0s) trong `UploadOrUpdateFileAsync` khi gặp HTTP 403 / 429 / 5xx để tự động vượt qua các đỉnh rate limit tạm thời.
 12. **Tính Năng Xóa Thư Mục Đám Mây & Liên Kết Nhanh Qua Folder ID Google Drive**:
     - **Tính năng Xóa thư mục Google Drive (`DeleteCloudFolderAsync`)**:
-      + Cho phép xóa thư mục đang chọn trên Google Drive trực tiếp qua REST API v3 DELETE.
+      + Cơ chế xóa 2 tầng an toàn: Tầng 1 chuyển vào Thùng rác (Safe Trash via PATCH `trashed=true` kèm `supportsAllDrives=true`) tránh lỗi 403 Forbidden do permanent delete; Tầng 2 thử DELETE vĩnh viễn nếu được phép.
+      + Xử lý linh hoạt slot cục bộ: Nếu slot được chọn chưa có ID trên cloud, hệ thống tự động loại bỏ slot khỏi danh sách ngay lập tức mà không báo lỗi cản trở.
       + Cơ chế bảo vệ tuyệt đối: Cấm xóa thư mục gốc của ứng dụng (`\GMTPC\Comic Downloader GMTPC\`).
-      + Tự động dọn dẹp cache `CachedDeviceFolderId` nếu thư mục bị xóa đang là thư mục liên kết hiện tại, tự động chuyển selection sang slot hợp lệ khác.
-    - **Tính năng Liên kết / Đồng bộ qua Folder ID (`ConnectByFolderIdAsync`)**:
-      + Hỗ trợ người dùng dán trực tiếp Folder ID (ví dụ: `1J0-mghYBBq82oc...`) hoặc toàn bộ link URL Google Drive (`drive.google.com/drive/folders/...` hoặc `?id=...`).
-      + Hệ thống tự động phân tích và trích xuất sạch ID, kiểm tra sự tồn tại của thư mục, trạng thái thùng rác và đảm bảo đúng kiểu folder.
+      + Tự động dọn dẹp cache `CachedDeviceFolderId` nếu thư mục bị xóa đang là thư mục liên kết hiện tại, tự động chuyển selection sang slot hợp lệ khác và refresh trạng thái toàn bộ.
+    - **Tính năng Liên kết / Đồng bộ qua Folder ID hoặc Link Google Drive (`ConnectByFolderIdAsync`)**:
+      + Bộ parser `ExtractFolderId` chuyên dụng: Hỗ trợ bóc tách sạch sẽ ID từ mọi dạng liên kết Google Drive (web link, link /u/0/, link chia sẻ có query param `?usp=sharing`, `?usp=drive_link`, mobile link, open?id=..., /d/...).
+      + Tự động kiểm tra tính hợp lệ trên Google Drive API v3 (kèm `supportsAllDrives=true`), nhận diện trạng thái thùng rác, kiểm tra MIME type folder.
       + Tự động thêm slot vào danh sách, chuyển thiết bị sang thư mục đó và nạp thông tin file ngay lập tức.
+13. **Nút Cập Nhật Trực Tiếp (One-Click Update) Khi Check Update Phát Hiện Bản Mới**:
+    - Khi người dùng bấm `Kiểm tra cập nhật Release` hoặc `Kiểm tra cập nhật Beta`, hệ thống đối chiếu mã hash SHA-256 / ETag từ máy chủ GitHub Release.
+    - Nếu phát hiện có phiên bản mới (`HasUpdate == true`), giao diện lập tức kích hoạt hiển thị nút hành động trực tiếp:
+      + `⚡ CẬP NHẬT RELEASE NGAY` (gọi trực tiếp `AutoUpdateCommand`).
+      + `⚡ CẬP NHẬT BETA NGAY` (gọi trực tiếp `AutoUpdateBetaCommand`).
+    - Người dùng chỉ cần click 1 chạm vào nút nổi bật mà không cần phải mở lại MenuFlyout, tối ưu hóa trải nghiệm mượt mà và tiện lợi tối đa.
 
 

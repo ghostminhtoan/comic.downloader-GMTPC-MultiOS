@@ -385,7 +385,7 @@ public partial class MainViewModel
     [RelayCommand]
     public async Task DeleteSelectedCloudFolderAsync()
     {
-        if (SelectedCloudDevice == null || string.IsNullOrWhiteSpace(SelectedCloudDevice.DeviceFolderId))
+        if (SelectedCloudDevice == null)
         {
             GoogleDriveStatusText = "⚠️ Vui lòng chọn một thư mục cần xóa.";
             ShowCenterToast("CHƯA CHỌN THƯ MỤC", "Vui lòng chọn thư mục từ danh sách trước khi xóa.", "⚠️", "GOOGLE DRIVE", 2000);
@@ -393,7 +393,10 @@ public partial class MainViewModel
         }
 
         var targetSlot = SelectedCloudDevice;
-        if (targetSlot.IsLegacyRoot || targetSlot.DeviceFolderId.Equals(_gdriveService.CachedAppFolderId, StringComparison.OrdinalIgnoreCase))
+
+        // Chặn xóa thư mục gốc của app
+        if (targetSlot.IsLegacyRoot ||
+            (!string.IsNullOrEmpty(targetSlot.DeviceFolderId) && targetSlot.DeviceFolderId.Equals(_gdriveService.CachedAppFolderId, StringComparison.OrdinalIgnoreCase)))
         {
             GoogleDriveStatusText = "⚠️ Không thể xóa thư mục gốc của ứng dụng (\\GMTPC\\Comic Downloader GMTPC\\).";
             ShowCenterToast("KHÔNG THỂ XÓA", "Không được phép xóa thư mục gốc của ứng dụng.", "⛔", "GOOGLE DRIVE", 3000);
@@ -403,6 +406,18 @@ public partial class MainViewModel
         string folderName = targetSlot.DeviceFolderName;
         string folderId = targetSlot.DeviceFolderId;
 
+        // Trường hợp 1: Slot cục bộ tạm thời chưa có ID trên cloud -> Xóa ngay khỏi danh sách
+        if (string.IsNullOrWhiteSpace(folderId))
+        {
+            AvailableCloudDevices.Remove(targetSlot);
+            SelectedCloudDevice = AvailableCloudDevices.FirstOrDefault(d => d.IsCurrentDevice) ?? AvailableCloudDevices.FirstOrDefault();
+            CurrentDeviceDisplayName = SelectedCloudDevice?.DeviceFolderName ?? _gdriveService.CurrentDeviceName;
+            GoogleDriveStatusText = $"✅ Đã xóa slot [{folderName}] khỏi danh sách.";
+            ShowCenterToast("ĐÃ XÓA SLOT", $"Đã xóa slot [{folderName}] khỏi danh sách thiết bị.", "🗑️", "GOOGLE DRIVE", 2200);
+            return;
+        }
+
+        // Trường hợp 2: Thư mục thực tế trên Google Drive
         IsGoogleDriveBusy = true;
         GoogleDriveStatusText = $"⏳ Đang xóa thư mục [{folderName}] trên Google Drive...";
         try
@@ -412,22 +427,25 @@ public partial class MainViewModel
             {
                 AvailableCloudDevices.Remove(targetSlot);
                 SelectedCloudDevice = AvailableCloudDevices.FirstOrDefault(d => d.IsCurrentDevice) ?? AvailableCloudDevices.FirstOrDefault();
-                CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
+                CurrentDeviceDisplayName = SelectedCloudDevice?.DeviceFolderName ?? _gdriveService.CurrentDeviceName;
 
                 GoogleDriveStatusText = $"✅ Đã xóa thư mục [{folderName}] trên Google Drive.";
-                AddLog("SUCCESS", $"☁️ Đã xóa thư mục [{folderName}] trên Google Drive.");
+                AddLog("SUCCESS", $"🗑️ Đã xóa thư mục [{folderName}] trên Google Drive.");
                 ShowCenterToast("ĐÃ XÓA THƯ MỤC", $"Đã xóa thành công thư mục [{folderName}] khỏi Google Drive.", "🗑️", "GOOGLE DRIVE", 3000);
+
+                await RefreshGoogleDriveStatusAsync();
             }
             else
             {
                 GoogleDriveStatusText = "❌ " + msg;
-                AddLog("ERROR", $"☁️ Lỗi xóa thư mục: {msg}");
-                ShowCenterToast("LỖI XÓA THƯ MỤC", msg, "❌", "GOOGLE DRIVE", 3200);
+                AddLog("ERROR", $"🗑️ Lỗi xóa thư mục: {msg}");
+                ShowCenterToast("LỖI XÓA THƯ MỤC", msg, "❌", "GOOGLE DRIVE", 3500);
             }
         }
         catch (Exception ex)
         {
             GoogleDriveStatusText = $"❌ Lỗi xóa thư mục: {ex.Message}";
+            AddLog("ERROR", $"🗑️ Ngoại lệ xóa thư mục: {ex.Message}");
         }
         finally
         {

@@ -50,6 +50,12 @@ public partial class MainViewModel : ViewModelBase
     private string _updateBetaButtonLabel = "🧪 UPDATE BETA";
 
     [ObservableProperty]
+    private bool _hasAvailableReleaseUpdate = false;
+
+    [ObservableProperty]
+    private bool _hasAvailableBetaUpdate = false;
+
+    [ObservableProperty]
     private int _selectedRootTabIndex = 0;
 
     [ObservableProperty]
@@ -3386,6 +3392,7 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task AutoUpdateAsync()
     {
+        HasAvailableReleaseUpdate = false;
         if (IsUpdating)
         {
             AddLog("WARN", "Tiến trình cập nhật đang chạy, vui lòng đợi...");
@@ -3493,23 +3500,27 @@ public partial class MainViewModel : ViewModelBase
             {
                 if (check.HasUpdate)
                 {
+                    HasAvailableReleaseUpdate = true;
                     AddLog("SUCCESS", $"🚀 [Release] {check.Message}");
-                    ShowCenterToast("CẬP NHẬT RELEASE", check.Message + "\nBấm [Update Release] để tải ngay!", "🚀", "UPDATE RELEASE", 4500);
+                    ShowCenterToast("CẬP NHẬT RELEASE", check.Message + "\nĐã xuất hiện nút [⚡ CẬP NHẬT RELEASE NGAY] trên thanh công cụ!", "🚀", "UPDATE RELEASE", 5000);
                 }
                 else
                 {
+                    HasAvailableReleaseUpdate = false;
                     AddLog("INFO", $"🚀 [Release] {check.Message}");
                     ShowCenterToast("ĐÃ MỚI NHẤT", check.Message, "✅", "UPDATE RELEASE", 3200);
                 }
             }
             else
             {
+                HasAvailableReleaseUpdate = false;
                 AddLog("WARN", $"🚀 [Release] {check.Message}");
                 ShowCenterToast("KIỂM TRA THẤT BẠI", check.Message, "⚠️", "UPDATE RELEASE", 3500);
             }
         }
         catch (Exception ex)
         {
+            HasAvailableReleaseUpdate = false;
             UpdateButtonLabel = "🚀 UPDATE RELEASE";
             AddLog("ERROR", $"Lỗi kiểm tra Release: {ex.Message}");
         }
@@ -3541,23 +3552,27 @@ public partial class MainViewModel : ViewModelBase
             {
                 if (check.HasUpdate)
                 {
+                    HasAvailableBetaUpdate = true;
                     AddLog("SUCCESS", $"🧪 [Beta] {check.Message}");
-                    ShowCenterToast("CẬP NHẬT BETA", check.Message + "\nBấm [Update Beta] để tải ngay!", "🧪", "UPDATE BETA", 4500);
+                    ShowCenterToast("CẬP NHẬT BETA", check.Message + "\nĐã xuất hiện nút [⚡ CẬP NHẬT BETA NGAY] trên thanh công cụ!", "🧪", "UPDATE BETA", 5000);
                 }
                 else
                 {
+                    HasAvailableBetaUpdate = false;
                     AddLog("INFO", $"🧪 [Beta] {check.Message}");
                     ShowCenterToast("ĐÃ MỚI NHẤT", check.Message, "✅", "UPDATE BETA", 3200);
                 }
             }
             else
             {
+                HasAvailableBetaUpdate = false;
                 AddLog("WARN", $"🧪 [Beta] {check.Message}");
                 ShowCenterToast("KIỂM TRA THẤT BẠI", check.Message, "⚠️", "UPDATE BETA", 3500);
             }
         }
         catch (Exception ex)
         {
+            HasAvailableBetaUpdate = false;
             UpdateBetaButtonLabel = "🧪 UPDATE BETA";
             AddLog("ERROR", $"Lỗi kiểm tra Beta: {ex.Message}");
         }
@@ -3566,6 +3581,7 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task AutoUpdateBetaAsync()
     {
+        HasAvailableBetaUpdate = false;
         if (IsUpdating)
         {
             AddLog("WARN", "Tiến trình cập nhật đang chạy, vui lòng đợi...");
