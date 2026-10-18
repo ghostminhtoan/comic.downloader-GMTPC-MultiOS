@@ -1187,10 +1187,18 @@ p {{ color: #94A3B8; font-size: 14px; }}
             return createdId;
         }
 
-        // BƯỚC 3: FALLBACK AN TOÀN SANG appFolderId NẾU KHÔNG THỂ TẠO FOLDER CON THIẾT BỊ
-        // ĐẢM BẢO SAO LƯU THÀNH CÔNG, TUYỆT ĐỐI KHÔNG BỊ LỖI KHI ĐÃ CÓ THƯ MỤC CHÍNH TRÊN DRIVE!
-        Debug.WriteLine($"[GoogleDriveSync] Fallback sử dụng thư mục chính [{appFolderId}] cho thiết bị [{CurrentDeviceName}].");
-        return appFolderId;
+        // BƯỚC 3: NẾU TẠO FOLDER THẤT BẠI, THỬ TÌM LẠI HOẶC TẠO LẠI TRỰC TIẾP TRONG appFolderId
+        string? retryCreateId = await FindOrCreateFolderAsync(CurrentDeviceName, appFolderId, token, ct);
+        if (!string.IsNullOrEmpty(retryCreateId))
+        {
+            _config.CachedDeviceFolderId = retryCreateId;
+            SaveConfigToDisk();
+            return retryCreateId;
+        }
+
+        // TUYỆT ĐỐI KHÔNG FALLBACK VỀ appFolderId (thư mục cha dùng chung) để tránh ô nhiễm autosave.md và manifest lên thư mục cha!
+        Debug.WriteLine($"[GoogleDriveSync] CẢNH BÁO: Không thể tạo thư mục riêng cho thiết bị [{CurrentDeviceName}].");
+        return null;
     }
 
     /// <summary>
@@ -2314,35 +2322,49 @@ p {{ color: #94A3B8; font-size: 14px; }}
         }
 
         status.StatusMessage = $"Đã đồng bộ thông tin thiết bị [{CurrentDeviceName}] thành công.";
+
+        // Tự động dọn dẹp thư mục cha nếu còn sót tệp dùng riêng (autosave.md, cloud_sync_manifest.json)
+        string? targetDevFolder = (currentSlot != null && !currentSlot.IsLegacyRoot) ? currentSlot.DeviceFolderId : _config.CachedDeviceFolderId;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await CleanupRootSharedFolderAsync(appFolderId, targetDevFolder, CancellationToken.None);
+            }
+            catch { }
+        });
+
         return status;
     }
 
     /// <summary>
     /// Sao lưu Queue (Hàng chờ tải) hiện tại lên thư mục riêng của thiết bị trên Google Drive.
-    /// Cho phép chỉ định targetFolderId cụ thể để bảo đảm dữ liệu luôn lưu đúng vào thư mục con đã chọn, không bị rơi ra ngoài thư mục cha.
+    /// TUYỆT ĐỐI KHÔNG LƯU VÀO THƯ MỤC CHA DÙNG CHUNG: autosave.md là dữ liệu riêng của từng thiết bị.
     /// </summary>
     public async Task<(bool Success, string Message)> BackupQueueToCloudAsync(IEnumerable<ComicBookItem> items, string? targetFolderId = null, CancellationToken ct = default)
     {
         await _syncLock.WaitAsync(ct);
         try
         {
+            string? appFolderId = await EnsureTargetFolderAsync(ct);
             string? folderId = targetFolderId;
-            if (string.IsNullOrEmpty(folderId))
+
+            // Chặn tuyệt đối không cho lưu autosave.md vào thư mục cha dùng chung appFolderId
+            if (string.IsNullOrEmpty(folderId) || (!string.IsNullOrEmpty(appFolderId) && folderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase)))
             {
                 folderId = _config.CachedDeviceFolderId;
             }
-            if (string.IsNullOrEmpty(folderId))
+            if (string.IsNullOrEmpty(folderId) || (!string.IsNullOrEmpty(appFolderId) && folderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase)))
             {
                 folderId = await EnsureCurrentDeviceFolderAsync(ct);
             }
-            if (string.IsNullOrEmpty(folderId))
+            if (string.IsNullOrEmpty(folderId) || (!string.IsNullOrEmpty(appFolderId) && folderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase)))
             {
-                folderId = await EnsureTargetFolderAsync(ct);
+                return (false, "Không thể xác định hoặc tạo thư mục riêng cho thiết bị trên Google Drive.");
             }
-            if (string.IsNullOrEmpty(folderId)) return (false, "Không thể mở hoặc kết nối thư mục trên Google Drive.");
 
             // Cập nhật lại bộ nhớ đệm thư mục đích để giữ vững trạng thái
-            if (!string.IsNullOrEmpty(targetFolderId) && _config.CachedDeviceFolderId != targetFolderId)
+            if (!string.IsNullOrEmpty(targetFolderId) && !targetFolderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase) && _config.CachedDeviceFolderId != targetFolderId)
             {
                 _config.CachedDeviceFolderId = targetFolderId;
                 SaveConfigToDisk();
@@ -2357,6 +2379,13 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 _config.LastSyncUtc = DateTime.UtcNow;
                 SaveConfigToDisk();
                 await UpdateSyncManifestAsync(folderId, itemList.Count, ct);
+
+                // TỰ ĐỘNG DỌN DẸP THƯ MỤC CHA: Dời và dọn sạch autosave.md & cloud_sync_manifest.json khỏi thư mục cha dùng chung
+                if (!string.IsNullOrEmpty(appFolderId))
+                {
+                    await CleanupRootSharedFolderAsync(appFolderId, folderId, ct);
+                }
+
                 NotifyStatusChanged($"Đã sao lưu Queue thiết bị [{CurrentDeviceName}] lên Google Drive ({DateTime.Now:HH:mm:ss})");
             }
 
@@ -2415,29 +2444,31 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
     /// <summary>
     /// Sao lưu Dấu trang (bookmarks.md) và Lịch sử đọc (history.md) lên thư mục riêng của thiết bị trên Google Drive.
-    /// Cho phép chỉ định targetFolderId cụ thể để bảo đảm dữ liệu luôn lưu đúng vào thư mục con đã chọn.
+    /// TUYỆT ĐỐI KHÔNG LƯU VÀO THƯ MỤC CHA DÙNG CHUNG: Dấu trang và Lịch sử đọc là của riêng từng thiết bị.
     /// </summary>
     public async Task<(bool Success, string Message)> BackupReaderToCloudAsync(string? targetFolderId = null, CancellationToken ct = default)
     {
         await _syncLock.WaitAsync(ct);
         try
         {
+            string? appFolderId = await EnsureTargetFolderAsync(ct);
             string? folderId = targetFolderId;
-            if (string.IsNullOrEmpty(folderId))
+
+            // Chặn tuyệt đối không cho lưu vào thư mục cha dùng chung appFolderId
+            if (string.IsNullOrEmpty(folderId) || (!string.IsNullOrEmpty(appFolderId) && folderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase)))
             {
                 folderId = _config.CachedDeviceFolderId;
             }
-            if (string.IsNullOrEmpty(folderId))
+            if (string.IsNullOrEmpty(folderId) || (!string.IsNullOrEmpty(appFolderId) && folderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase)))
             {
                 folderId = await EnsureCurrentDeviceFolderAsync(ct);
             }
-            if (string.IsNullOrEmpty(folderId))
+            if (string.IsNullOrEmpty(folderId) || (!string.IsNullOrEmpty(appFolderId) && folderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase)))
             {
-                folderId = await EnsureTargetFolderAsync(ct);
+                return (false, "Không thể xác định thư mục riêng của thiết bị trên Google Drive.");
             }
-            if (string.IsNullOrEmpty(folderId)) return (false, "Không thể kết nối thư mục trên Google Drive.");
 
-            if (!string.IsNullOrEmpty(targetFolderId) && _config.CachedDeviceFolderId != targetFolderId)
+            if (!string.IsNullOrEmpty(targetFolderId) && !targetFolderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase) && _config.CachedDeviceFolderId != targetFolderId)
             {
                 _config.CachedDeviceFolderId = targetFolderId;
                 SaveConfigToDisk();
@@ -2457,6 +2488,13 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 _config.LastSyncUtc = DateTime.UtcNow;
                 SaveConfigToDisk();
                 await UpdateSyncManifestAsync(folderId, 0, ct);
+
+                // TỰ ĐỘNG DỌN DẸP THƯ MỤC CHA
+                if (!string.IsNullOrEmpty(appFolderId))
+                {
+                    await CleanupRootSharedFolderAsync(appFolderId, folderId, ct);
+                }
+
                 NotifyStatusChanged($"Đã sao lưu bookmarks.md & history.md thiết bị [{CurrentDeviceName}] lên Google Drive ({DateTime.Now:HH:mm:ss})");
             }
 
@@ -2570,16 +2608,15 @@ p {{ color: #94A3B8; font-size: 14px; }}
             var (appOk, appFileId, appMsg) = await UploadOrUpdateFileAsync(appFolderId, ResumeFileName, mdContent, "text/markdown", ct);
 
             // 2. DỌN DẸP: Nếu trong thư mục con của thiết bị có file resume.md cũ sót lại thì xóa/trash đi
+            string? devFolder = !string.IsNullOrEmpty(targetFolderId) && !targetFolderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase)
+                ? targetFolderId
+                : _config.CachedDeviceFolderId;
+
             try
             {
-                string? deviceFolderId = targetFolderId;
-                if (string.IsNullOrEmpty(deviceFolderId))
+                if (!string.IsNullOrEmpty(devFolder) && !devFolder.Equals(appFolderId, StringComparison.OrdinalIgnoreCase))
                 {
-                    deviceFolderId = _config.CachedDeviceFolderId;
-                }
-                if (!string.IsNullOrEmpty(deviceFolderId) && !deviceFolderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase))
-                {
-                    var devOldFile = await GetFileInfoAsync(deviceFolderId, ResumeFileName, ct);
+                    var devOldFile = await GetFileInfoAsync(devFolder, ResumeFileName, ct);
                     if (devOldFile.Exists && !string.IsNullOrEmpty(devOldFile.Id))
                     {
                         string? token = await EnsureValidAccessTokenAsync(ct);
@@ -2588,6 +2625,16 @@ p {{ color: #94A3B8; font-size: 14px; }}
                             await TrashFileAsync(devOldFile.Id, token, ct);
                         }
                     }
+                }
+            }
+            catch { }
+
+            // 3. TỰ ĐỘNG DỌN DẸP THƯ MỤC CHA: Di dời và dọn sạch autosave.md & cloud_sync_manifest.json khỏi thư mục cha dùng chung
+            try
+            {
+                if (!string.IsNullOrEmpty(devFolder))
+                {
+                    await CleanupRootSharedFolderAsync(appFolderId, devFolder, ct);
                 }
             }
             catch { }
@@ -2722,10 +2769,89 @@ p {{ color: #94A3B8; font-size: 14px; }}
         return (result, qResult, rResult);
     }
 
+    /// <summary>
+    /// Tự động di dời và dọn dẹp các tệp tin dùng riêng (autosave.md, cloud_sync_manifest.json, bookmarks.md, history.md) 
+    /// khỏi thư mục cha dùng chung của app (\GMTPC\Comic Downloader GMTPC\).
+    /// Đảm bảo thư mục cha CHỈ DUY NHẤT chứa các thư mục con của thiết bị và file resume.md dùng chung.
+    /// </summary>
+    public async Task CleanupRootSharedFolderAsync(string appFolderId, string? deviceFolderId = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(appFolderId)) return;
+        try
+        {
+            string? token = await EnsureValidAccessTokenAsync(ct);
+            if (string.IsNullOrEmpty(token)) return;
+
+            // Quét các tệp trực tiếp trong thư mục cha appFolderId
+            var rootChildren = await ListDirectChildrenAsync(appFolderId, token, ct);
+
+            // 1. Xử lý autosave.md ở thư mục cha: Di dời vào deviceFolderId (nếu chưa có) rồi xóa khỏi cha
+            var rootQueue = rootChildren.FirstOrDefault(f => !f.IsFolder && string.Equals(f.Name.Trim(), QueueFileName, StringComparison.OrdinalIgnoreCase));
+            if (rootQueue != null && !string.IsNullOrEmpty(rootQueue.Id))
+            {
+                if (!string.IsNullOrEmpty(deviceFolderId) && !deviceFolderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase))
+                {
+                    var devQueue = await GetFileInfoAsync(deviceFolderId, QueueFileName, ct);
+                    if (!devQueue.Exists)
+                    {
+                        var (dlOk, dlContent, _, _) = await DownloadFileContentAsync(appFolderId, QueueFileName, ct);
+                        if (dlOk && !string.IsNullOrEmpty(dlContent))
+                        {
+                            await UploadOrUpdateFileAsync(deviceFolderId, QueueFileName, dlContent, "text/markdown", ct);
+                        }
+                    }
+                }
+                await TrashFileAsync(rootQueue.Id, token, ct);
+                Debug.WriteLine("[GoogleDriveSync] Đã dọn dẹp autosave.md khỏi thư mục cha dùng chung.");
+            }
+
+            // 2. Xử lý cloud_sync_manifest.json ở thư mục cha: Xóa khỏi cha (manifest chỉ dùng riêng cho device)
+            var rootManifest = rootChildren.FirstOrDefault(f => !f.IsFolder && string.Equals(f.Name.Trim(), ManifestFileName, StringComparison.OrdinalIgnoreCase));
+            if (rootManifest != null && !string.IsNullOrEmpty(rootManifest.Id))
+            {
+                await TrashFileAsync(rootManifest.Id, token, ct);
+                Debug.WriteLine("[GoogleDriveSync] Đã dọn dẹp cloud_sync_manifest.json khỏi thư mục cha dùng chung.");
+            }
+
+            // 3. Xử lý bookmarks.md ở thư mục cha nếu có sót lại
+            var rootBookmarks = rootChildren.FirstOrDefault(f => !f.IsFolder && string.Equals(f.Name.Trim(), BookmarksFileName, StringComparison.OrdinalIgnoreCase));
+            if (rootBookmarks != null && !string.IsNullOrEmpty(rootBookmarks.Id))
+            {
+                await TrashFileAsync(rootBookmarks.Id, token, ct);
+            }
+
+            // 4. Xử lý history.md ở thư mục cha nếu có sót lại
+            var rootHistory = rootChildren.FirstOrDefault(f => !f.IsFolder && string.Equals(f.Name.Trim(), HistoryFileName, StringComparison.OrdinalIgnoreCase));
+            if (rootHistory != null && !string.IsNullOrEmpty(rootHistory.Id))
+            {
+                await TrashFileAsync(rootHistory.Id, token, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[GoogleDriveSync] Ngoại lệ khi dọn dẹp thư mục cha: {ex.Message}");
+        }
+    }
+
     private async Task UpdateSyncManifestAsync(string folderId, int queueCount, CancellationToken ct)
     {
         try
         {
+            string? appFolderId = _config.CachedAppFolderId;
+            // TUYỆT ĐỐI KHÔNG GHI cloud_sync_manifest.json VÀO THƯ MỤC CHA DÙNG CHUNG
+            if (string.IsNullOrEmpty(folderId) || (!string.IsNullOrEmpty(appFolderId) && folderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase)))
+            {
+                folderId = _config.CachedDeviceFolderId;
+                if (string.IsNullOrEmpty(folderId))
+                {
+                    folderId = await EnsureCurrentDeviceFolderAsync(ct) ?? string.Empty;
+                }
+            }
+            if (string.IsNullOrEmpty(folderId) || (!string.IsNullOrEmpty(appFolderId) && folderId.Equals(appFolderId, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
             var manifest = new
             {
                 app = "Comic Downloader GMTPC",

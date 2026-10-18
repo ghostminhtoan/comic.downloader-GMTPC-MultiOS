@@ -3317,3 +3317,18 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + **Cập nhật giao diện tức thì không cần khởi động lại (`RefreshAllReadStatuses`)**:
         * `LibraryViewModel.RefreshAllReadStatuses()`: Quét lại `LastReadPage` của toàn bộ chapter trong `AllComics`, cập nhật lại `RefreshReadStatus()` và `ApplyFilter()`.
         * Tự động kích hoạt ngay sau khi Restore Resume hoặc Restore Cloud thành công.
+
+21. **Phân Định Rạch Ròi Cấu Trúc Tệp Tin & Vị Trí Lưu Trữ Giữa Từng Thiết Bị Cục Bộ và Google Drive (`ReadProgressStore.cs`, `GoogleDriveSyncService.cs`, `MainViewModel.GoogleDrive.cs`)**:
+    - **`autosave.md` và `cloud_sync_manifest.json` là tài nguyên dùng riêng cho từng thiết bị**:
+      * Bắt buộc lưu độc lập trong thư mục riêng của thiết bị trên Google Drive (`\GMTPC\Comic Downloader GMTPC\[Tên Thiết Bị]\`) và thư mục cục bộ (`.portable\autosave\`).
+      * Tuyệt đối **CẤM** lưu `autosave.md` hoặc `cloud_sync_manifest.json` vào thư mục cha dùng chung (`\GMTPC\Comic Downloader GMTPC\`).
+      * Cơ chế tự động dọn dẹp & di dời thông minh (`CleanupRootSharedFolderAsync`): Khi kết nối hoặc sao lưu, nếu phát hiện có `autosave.md` ở thư mục cha, app tự động nạp sang thư mục thiết bị (nếu thiết bị chưa có) và Trash khỏi thư mục cha; đồng thời dọn sạch `cloud_sync_manifest.json` ở thư mục cha để đảm bảo thư mục cha luôn sạch sẽ 100%.
+      * Điều hướng ViewModel: Nếu người dùng chọn slot "Thư mục gốc" (hoặc `targetFolderId == CachedAppFolderId`), các lệnh sao lưu Queue (`BackupQueueGoogleDriveAsync`), Reader (`BackupReaderGoogleDriveAsync`) và FullSync (`FullSyncUploadGoogleDriveAsync`) luôn tự động chuyển hướng về thư mục riêng của thiết bị hiện tại, chống ghi đè ô nhiễm thư mục cha.
+    - **`resume.md` là tài nguyên dùng chung chéo toàn bộ thiết bị (Cross-Device Shared Resume)**:
+      * Trên Google Drive: Lưu trữ **DUY NHẤT** tại thư mục cha dùng chung `\GMTPC\Comic Downloader GMTPC\resume.md` (chuẩn hóa theo mô hình ComicScreen). Toàn bộ các thiết bị (Windows, Android, Linux) đều đọc và hợp nhất trực tiếp từ tệp này.
+      * Trong thư mục con của thiết bị: Tự động xóa/trash bất kỳ tệp `resume.md` cũ nào còn sót lại để tránh rác và xung đột.
+      * Tuyệt đối không lưu đường dẫn tuyệt đối (`C:\`, `/storage/...`) và không lưu `TotalPages` (tổng số trang) trong `resume.md` để tránh sai lệch khi người dùng chỉnh sửa, thêm hoặc xóa bớt trang trong chương. Tổng số trang luôn được tính toán động từ tệp/thư mục thực tế.
+    - **Phân định rạch ròi trách nhiệm giữa `history.md` và `resume.md`**:
+      * `history.md`: **CHỈ** phụ trách lưu danh sách các tệp/bộ truyện đã mở (tên truyện, đường dẫn cục bộ, thời gian mở gần nhất). Tuyệt đối **KHÔNG** lưu chương hay trang đang đọc dở để loại bỏ hoàn toàn nguy cơ ghi đè tiến trình đọc.
+      * `resume.md`: **ĐỘC QUYỀN** quản lý tiến trình chương và trang đang xem dở dang của người dùng trên toàn bộ hệ sinh thái thiết bị.
+

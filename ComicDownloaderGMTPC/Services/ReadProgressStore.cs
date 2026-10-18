@@ -30,10 +30,6 @@ public sealed class BookmarksBackupPayload
 public sealed class HistoryItemSnapshot
 {
     public string Title { get; set; } = string.Empty;
-    public string ChapterOrSubTitle { get; set; } = string.Empty;
-    public int LastReadPage { get; set; }
-    public int TotalPages { get; set; }
-    public int LastActiveChapterIndex { get; set; }
     public int OrderStamp { get; set; }
     public string DeviceName { get; set; } = string.Empty;
     public string LocalPath { get; set; } = string.Empty;
@@ -54,7 +50,10 @@ public sealed class CrossDeviceResumeEntry
     public int ChapterIndex { get; set; } = 1;
     public string ChapterSuffix { get; set; } = string.Empty;
     public int LastReadPage { get; set; } = 1;
+
+    [JsonIgnore]
     public int TotalPages { get; set; } = 0;
+
     public long UpdatedAtUnixSeconds { get; set; }
     public string DeviceName { get; set; } = string.Empty;
 }
@@ -763,13 +762,8 @@ public sealed class ReadProgressStore
             catch { }
         }
 
-        try
-        {
-            TryAdd(AppDomain.CurrentDomain.BaseDirectory);
-            string defDownload = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Download");
-            TryAdd(defDownload);
-        }
-        catch { }
+        try { TryAdd(QueueBackupService.GetAutoSaveDirectory()); } catch { }
+        try { TryAdd(AppDomain.CurrentDomain.BaseDirectory); } catch { }
 
         try
         {
@@ -991,6 +985,23 @@ public sealed class ReadProgressStore
             int order = GetComicLastReadOrder(path);
             string subTitle = lastChap > 0 ? $"Chương {lastChap}" : string.Empty;
 
+            // Đồng bộ tiến trình đọc dở từ _crossDeviceEntries (từ resume.md) nếu có
+            lock (_crossDeviceLock)
+            {
+                var matchEntry = _crossDeviceEntries.FirstOrDefault(e => string.Equals(e.ComicTitle, title, StringComparison.OrdinalIgnoreCase));
+                if (matchEntry != null)
+                {
+                    if (matchEntry.LastReadPage > 0) lastPage = matchEntry.LastReadPage;
+                    if (matchEntry.ChapterIndex > 0)
+                    {
+                        lastChap = matchEntry.ChapterIndex;
+                        subTitle = !string.IsNullOrWhiteSpace(matchEntry.ChapterTitle)
+                            ? matchEntry.ChapterTitle
+                            : $"Chương {matchEntry.ChapterIndex}";
+                    }
+                }
+            }
+
             seenTitles.Add(title);
             result.Add(new UnifiedHistoryItemInfo
             {
@@ -1016,6 +1027,7 @@ public sealed class ReadProgressStore
                 // Thử xem có resolve được đường dẫn cục bộ không
                 string? resolved = TryResolveLocalPathForComic(entry.ComicTitle);
                 bool hasLocal = !string.IsNullOrWhiteSpace(resolved) && (File.Exists(resolved) || Directory.Exists(resolved));
+                int dynTotalPages = (hasLocal && !string.IsNullOrEmpty(resolved)) ? GetChapterTotalPages(resolved) : 0;
 
                 int orderStamp = entry.UpdatedAtUnixSeconds > 0
                     ? (int)Math.Clamp(entry.UpdatedAtUnixSeconds - EpochOffsetSeconds, 1L, int.MaxValue - 1L)
@@ -1039,7 +1051,7 @@ public sealed class ReadProgressStore
                     Title = entry.ComicTitle,
                     ChapterOrSubTitle = subTitle,
                     LastReadPage = entry.LastReadPage,
-                    TotalPages = entry.TotalPages,
+                    TotalPages = dynTotalPages,
                     OrderStamp = orderStamp,
                     DeviceName = entry.DeviceName,
                     HasLocalPath = hasLocal
@@ -1447,23 +1459,8 @@ public sealed class ReadProgressStore
                     string norm = NormalizeKey(h.LocalPath);
                     if (h.OrderStamp > 0)
                     {
+                        // CHỈ GHI NHẬN LỊCH SỬ MỞ TRUYỆN, TUYỆT ĐỐI KHÔNG GHI ĐÈ TIẾN TRÌNH ĐỌC TRANG CỦA RESUME.MD
                         _progressMap[HistoryPrefix + norm] = h.OrderStamp;
-                    }
-                    if (h.LastActiveChapterIndex > 0)
-                    {
-                        _progressMap[norm + "::#last_active_chapter"] = h.LastActiveChapterIndex;
-                    }
-                    if (h.TotalPages > 0)
-                    {
-                        _progressMap[norm + "::#total_pages"] = h.TotalPages;
-                    }
-                    if (h.LastReadPage > 0)
-                    {
-                        _progressMap[norm] = h.LastReadPage;
-                    }
-                    foreach (string pk in BuildPortableIdentityKeys(norm))
-                    {
-                        if (h.LastReadPage > 0) _progressMap.TryAdd(pk, h.LastReadPage);
                     }
                 }
             }
@@ -1954,25 +1951,11 @@ public sealed class ReadProgressStore
                 {
                     result.HasValidStructure = true;
                     string path = UnescapeMarkdown(mh.Groups[6].Value);
-                    string lastChapText = mh.Groups[3].Value.Trim();
-                    string lastPageText = mh.Groups[4].Value.Trim();
 
                     if (!string.IsNullOrWhiteSpace(path))
                     {
                         RegisterReadComic(path, touchTimestamp: true);
                         result.RestoredHistory++;
-
-                        var mPage = Regex.Match(lastPageText, @"\d+");
-                        if (mPage.Success && int.TryParse(mPage.Value, out int pageNum) && pageNum > 0)
-                        {
-                            SaveProgress(path, pageNum - 1);
-                        }
-
-                        var mChap = Regex.Match(lastChapText, @"\d+");
-                        if (mChap.Success && int.TryParse(mChap.Value, out int chapNum) && chapNum > 0)
-                        {
-                            SaveLastActiveChapterIndex(path, chapNum);
-                        }
                     }
                 }
             }
@@ -2168,6 +2151,7 @@ public sealed class ReadProgressStore
 
     /// <summary>
     /// Phục hồi Lịch sử đọc từ nội dung tệp history.md.
+    /// CHỈ PHỤC HỒI DANH SÁCH FILE MỞ TRUYỆN, TUYỆT ĐỐI KHÔNG CAN THIỆP TIẾN TRÌNH ĐỌC DỞ CỦA RESUME.MD.
     /// </summary>
     public int ParseHistoryMarkdownContent(string content, bool mergeWithExisting = true)
     {
@@ -2188,24 +2172,9 @@ public sealed class ReadProgressStore
                 string norm = NormalizeKey(h.LocalPath);
                 if (h.OrderStamp > 0)
                 {
+                    // CHỈ GHI NHẬN LỊCH SỬ MỞ TRUYỆN, KHÔNG GHI ĐÈ TIẾN TRÌNH ĐỌC TRANG
                     _progressMap[HistoryPrefix + norm] = h.OrderStamp;
                     restored++;
-                }
-                if (h.LastActiveChapterIndex > 0)
-                {
-                    _progressMap[norm + "::#last_active_chapter"] = h.LastActiveChapterIndex;
-                }
-                if (h.TotalPages > 0)
-                {
-                    _progressMap[norm + "::#total_pages"] = h.TotalPages;
-                }
-                if (h.LastReadPage > 0)
-                {
-                    _progressMap[norm] = h.LastReadPage;
-                }
-                foreach (string pk in BuildPortableIdentityKeys(norm))
-                {
-                    if (h.LastReadPage > 0) _progressMap.TryAdd(pk, h.LastReadPage);
                 }
             }
 
@@ -2268,44 +2237,39 @@ public sealed class ReadProgressStore
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Xuất danh sách Lịch sử mở truyện ra file history.md.
+    /// CHỈ PHỤ TRÁCH LƯU FILE MỞ TRUYỆN, TUYỆT ĐỐI KHÔNG LƯU TIẾN TRÌNH ĐỌC DỞ (để tránh xung đột với resume.md).
+    /// </summary>
     public string BuildHistoryMarkdownContent()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# COMIC DOWNLOADER GMTPC - LỊCH SỬ ĐỌC (HISTORY.MD)");
+        sb.AppendLine("# COMIC DOWNLOADER GMTPC - LỊCH SỬ MỞ TRUYỆN (HISTORY.MD)");
         sb.AppendLine($"> Thời gian cập nhật: {DateTime.Now:yyyy-MM-dd HH:mm:ss} | Hệ điều hành: {Environment.OSVersion.Platform}");
 
         var historyPaths = GetAllHistoryPaths(checkPathExists: false);
         sb.AppendLine();
-        sb.AppendLine("## 🕒 Danh Sách Lịch Sử Đọc (Reading History)");
+        sb.AppendLine("## 🕒 Danh Sách Lịch Sử Mở Truyện (Reading History)");
         sb.AppendLine($"> Tổng cộng: {historyPaths.Count} bộ truyện");
         sb.AppendLine();
-        sb.AppendLine("| STT | Tên Truyện / File | Chương Đang Đọc | Trang Đang Đọc | Lần Đọc Gần Nhất | Đường Dẫn Cục Bộ |");
-        sb.AppendLine("| :---: | :--- | :---: | :---: | :---: | :--- |");
+        sb.AppendLine("| STT | Tên Truyện / File | Lần Mở Gần Nhất | Đường Dẫn Cục Bộ |");
+        sb.AppendLine("| :---: | :--- | :---: | :--- |");
 
         var snapshots = new List<HistoryItemSnapshot>();
         int hIdx = 1;
         foreach (var path in historyPaths)
         {
             string title = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            int lastChap = GetLastActiveChapterIndex(path);
-            int lastPage = GetLastReadPage(path);
-            int totalPages = GetChapterTotalPages(path);
             int order = GetComicLastReadOrder(path);
-            string chapText = lastChap > 0 ? $"Chương {lastChap}" : "-";
-            string pageText = lastPage > 0 ? $"Trang {lastPage}" : "-";
             string timeText = order > 0
                 ? DateTimeOffset.FromUnixTimeSeconds(order + EpochOffsetSeconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                 : "-";
             string safePath = EscapeMarkdown(path);
-            sb.AppendLine($"| {hIdx++} | {EscapeMarkdown(title)} | {chapText} | {pageText} | {timeText} | {safePath} |");
+            sb.AppendLine($"| {hIdx++} | {EscapeMarkdown(title)} | {timeText} | {safePath} |");
 
             snapshots.Add(new HistoryItemSnapshot
             {
                 Title = title,
-                ChapterOrSubTitle = chapText,
-                LastReadPage = lastPage,
-                TotalPages = totalPages,
-                LastActiveChapterIndex = lastChap,
                 OrderStamp = order,
                 LocalPath = path
             });
@@ -2467,9 +2431,8 @@ public sealed class ReadProgressStore
                 ? e.ChapterTitle
                 : (e.ChapterIndex > 0 ? $"Chương {e.ChapterIndex}" : "-");
 
-            string pageText = e.TotalPages > 0
-                ? $"Trang {e.LastReadPage}/{e.TotalPages}"
-                : (e.LastReadPage > 0 ? $"Trang {e.LastReadPage}" : "-");
+            // Chỉ hiển thị "Trang X", TUYỆT ĐỐI KHÔNG lưu hay hiển thị tổng số trang "/TotalPages"
+            string pageText = e.LastReadPage > 0 ? $"Trang {e.LastReadPage}" : "-";
 
             string timeText = e.UpdatedAtUnixSeconds > 0
                 ? DateTimeOffset.FromUnixTimeSeconds(e.UpdatedAtUnixSeconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
@@ -2587,15 +2550,6 @@ public sealed class ReadProgressStore
                                                 }
 
                                                 _progressMap[$"{PortableIdPrefix}file|{entry.ComicTitle}"] = entry.LastReadPage;
-                                            }
-
-                                            if (entry.TotalPages > 0)
-                                            {
-                                                _progressMap[$"{PortableIdPrefix}leaf|{entry.ComicTitle}::#total_pages"] = entry.TotalPages;
-                                                if (!string.IsNullOrWhiteSpace(entry.ChapterTitle))
-                                                {
-                                                    _progressMap[$"{PortableIdPrefix}pair|{entry.ComicTitle}/{entry.ChapterTitle}::#total_pages"] = entry.TotalPages;
-                                                }
                                             }
                                         }
                                     }

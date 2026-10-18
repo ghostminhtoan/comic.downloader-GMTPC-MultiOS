@@ -927,8 +927,12 @@ public partial class MainViewModel
         if (IsGoogleDriveBusy) return;
 
         string? targetFolderId = SelectedCloudDevice?.DeviceFolderId;
-        if (string.IsNullOrEmpty(targetFolderId)) targetFolderId = _gdriveService.CachedDeviceFolderId;
-        string targetName = SelectedCloudDevice?.DeviceFolderName ?? _gdriveService.CurrentDeviceName;
+        if (SelectedCloudDevice?.IsLegacyRoot == true || (!string.IsNullOrEmpty(_gdriveService.CachedAppFolderId) && targetFolderId == _gdriveService.CachedAppFolderId))
+        {
+            targetFolderId = null;
+        }
+        else if (string.IsNullOrEmpty(targetFolderId)) targetFolderId = _gdriveService.CachedDeviceFolderId;
+        string targetName = (SelectedCloudDevice != null && !SelectedCloudDevice.IsLegacyRoot) ? SelectedCloudDevice.DeviceFolderName : _gdriveService.CurrentDeviceName;
 
         IsGoogleDriveBusy = true;
         GoogleDriveStatusText = $"⏳ Đang chuẩn bị và tải autosave.md lên thư mục [{targetName}]...";
@@ -1032,8 +1036,12 @@ public partial class MainViewModel
         if (IsGoogleDriveBusy) return;
 
         string? targetFolderId = SelectedCloudDevice?.DeviceFolderId;
-        if (string.IsNullOrEmpty(targetFolderId)) targetFolderId = _gdriveService.CachedDeviceFolderId;
-        string targetName = SelectedCloudDevice?.DeviceFolderName ?? _gdriveService.CurrentDeviceName;
+        if (SelectedCloudDevice?.IsLegacyRoot == true || (!string.IsNullOrEmpty(_gdriveService.CachedAppFolderId) && targetFolderId == _gdriveService.CachedAppFolderId))
+        {
+            targetFolderId = null;
+        }
+        else if (string.IsNullOrEmpty(targetFolderId)) targetFolderId = _gdriveService.CachedDeviceFolderId;
+        string targetName = (SelectedCloudDevice != null && !SelectedCloudDevice.IsLegacyRoot) ? SelectedCloudDevice.DeviceFolderName : _gdriveService.CurrentDeviceName;
 
         IsGoogleDriveBusy = true;
         GoogleDriveStatusText = $"⏳ Đang tạo bản sao lưu Markdown và tải lên thư mục [{targetName}]...";
@@ -1205,8 +1213,12 @@ public partial class MainViewModel
         if (IsGoogleDriveBusy) return;
 
         string? targetFolderId = SelectedCloudDevice?.DeviceFolderId;
-        if (string.IsNullOrEmpty(targetFolderId)) targetFolderId = _gdriveService.CachedDeviceFolderId;
-        string targetName = SelectedCloudDevice?.DeviceFolderName ?? _gdriveService.CurrentDeviceName;
+        if (SelectedCloudDevice?.IsLegacyRoot == true || (!string.IsNullOrEmpty(_gdriveService.CachedAppFolderId) && targetFolderId == _gdriveService.CachedAppFolderId))
+        {
+            targetFolderId = null;
+        }
+        else if (string.IsNullOrEmpty(targetFolderId)) targetFolderId = _gdriveService.CachedDeviceFolderId;
+        string targetName = (SelectedCloudDevice != null && !SelectedCloudDevice.IsLegacyRoot) ? SelectedCloudDevice.DeviceFolderName : _gdriveService.CurrentDeviceName;
 
         IsGoogleDriveBusy = true;
         GoogleDriveStatusText = $"⏳ Đang sao lưu toàn diện (Queue, Reader và Resume dùng chung) vào thư mục [{targetName}]...";
