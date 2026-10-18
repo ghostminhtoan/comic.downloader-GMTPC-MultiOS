@@ -870,3 +870,8 @@
 | Rename Device | Đổi tên thiết bị |
 | Cloud Restore Source (All Devices) | Nguồn phục hồi từ đám mây (Tất cả thiết bị) |
 | Multi-Device Isolation | Cách ly đa thiết bị độc lập |
+| Backup Resume to Cloud | Sao lưu tiến độ đọc lên Drive |
+| Restore Resume from Cloud | Phục hồi tiến độ đọc từ Drive |
+| Shared Resume Progress (All Devices) | Tiến độ đọc dùng chung (Tất cả thiết bị) |
+| Backup All (Queue + Reader + Resume) | Sao lưu tất cả (Queue + Reader + Resume) |
+

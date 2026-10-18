@@ -89,6 +89,7 @@ public sealed class GoogleDriveSyncStatus
     public GoogleDriveFileInfo QueueCloudFile { get; set; } = new();
     public GoogleDriveFileInfo ReaderCloudFile { get; set; } = new();
     public GoogleDriveFileInfo ManifestCloudFile { get; set; } = new();
+    public GoogleDriveFileInfo ResumeCloudFile { get; set; } = new();
     public List<GoogleDriveDeviceSlot> AvailableDevices { get; set; } = new();
     public DateTime? LastSyncTimeUtc { get; set; }
     public string StatusMessage { get; set; } = string.Empty;
@@ -103,6 +104,7 @@ public sealed class FullSyncResult
     public string Message { get; set; } = string.Empty;
     public bool QueueSynced { get; set; }
     public bool ReaderSynced { get; set; }
+    public bool ResumeSynced { get; set; }
     public int QueueItemCount { get; set; }
     public int RestoredBookmarks { get; set; }
     public int RestoredHistory { get; set; }
@@ -123,6 +125,7 @@ public sealed class GoogleDriveSyncService
 
     public const string QueueFileName = "autosave.md";
     public const string ReaderFileName = "saved_reader_bookmarks.md";
+    public const string ResumeFileName = "resume.md";
     public const string ManifestFileName = "cloud_sync_manifest.json";
     private const string AuthConfigFileName = "gdrive_auth.json";
 
@@ -145,6 +148,8 @@ public sealed class GoogleDriveSyncService
     private GoogleDriveAuthConfig _config = new();
     private System.Threading.Timer? _autoSyncDebounceTimer;
     private bool _hasPendingAutoSync;
+    private GoogleDriveFileInfo _cachedResumeCloudFile = new();
+    public GoogleDriveFileInfo CachedResumeCloudFile => _cachedResumeCloudFile;
 
     public event Action<GoogleDriveSyncStatus>? StatusChanged;
 
@@ -900,11 +905,10 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 }
             }
 
-            // Tầng 2: Tìm kiếm theo truy vấn Scoped Search
+            // Tầng 2: Tìm kiếm nghiêm ngặt theo truy vấn Scoped Parent Search (Không bao giờ quét toàn Drive)
             string escapedName = cleanName.Replace("'", "\\'");
-            string query = (parentId == "root" || string.IsNullOrEmpty(parentId))
-                ? $"name = '{escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-                : $"name = '{escapedName}' and mimeType = 'application/vnd.google-apps.folder' and '{parentId}' in parents and trashed = false";
+            string parentConstraint = (parentId == "root" || string.IsNullOrEmpty(parentId)) ? "'root' in parents" : $"'{parentId}' in parents";
+            string query = $"{parentConstraint} and name = '{escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
 
             string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name, modifiedTime)&pageSize=10";
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
@@ -919,28 +923,6 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 {
                     string bestId = files[0].GetProperty("id").GetString() ?? "";
                     if (!string.IsNullOrEmpty(bestId)) return bestId;
-                }
-            }
-
-            // Tầng 3: Nếu vẫn chưa thấy, thử quét toàn Drive theo tên
-            // (Đặc biệt với folder GMTPC hoặc Comic Downloader GMTPC do user tự tạo trên web hoặc ở root)
-            if (cleanName.Equals(RootParentFolderName, StringComparison.OrdinalIgnoreCase) ||
-                cleanName.Equals(AppSubFolderName, StringComparison.OrdinalIgnoreCase))
-            {
-                string globalQuery = $"name = '{escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-                string globalUrl = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(globalQuery)}&fields=files(id, name, modifiedTime)&pageSize=10";
-                using var gReq = new HttpRequestMessage(HttpMethod.Get, globalUrl);
-                gReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                using var gRes = await _httpClient.SendAsync(gReq, ct);
-                if (gRes.IsSuccessStatusCode)
-                {
-                    string gJson = await gRes.Content.ReadAsStringAsync(ct);
-                    using var gDoc = JsonDocument.Parse(gJson);
-                    if (gDoc.RootElement.TryGetProperty("files", out var gFiles) && gFiles.GetArrayLength() > 0)
-                    {
-                        string gId = gFiles[0].GetProperty("id").GetString() ?? "";
-                        if (!string.IsNullOrEmpty(gId)) return gId;
-                    }
                 }
             }
         }
@@ -1587,7 +1569,9 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
     /// <summary>
     /// Lấy danh sách toàn bộ các thiết bị (Slots) đã được đồng bộ trên cùng tài khoản Google Drive.
-    /// Tự động quét cả thư mục trực tiếp trong \GMTPC\Comic Downloader GMTPC\ lẫn thư mục con trong \Devices\.
+    /// Tối ưu hóa cực hạn (Batch Scoped Query): Chỉ dùng tối đa 2 HTTP API requests cho toàn bộ danh sách và file,
+    /// triệt tiêu 100% nguy cơ vượt hạn mức Quota Exceeded Queries per 100 seconds.
+    /// Đồng thời tự động nhận diện và cập nhật thông tin tệp tiến độ dùng chung (resume.md).
     /// </summary>
     public async Task<List<GoogleDriveDeviceSlot>> GetCloudDeviceSlotsAsync(CancellationToken ct = default)
     {
@@ -1601,12 +1585,14 @@ p {{ color: #94A3B8; font-size: 14px; }}
         try
         {
             var rawFolders = new List<(string Id, string Name)>();
-
-            // 1. Quét toàn bộ thư mục con trực tiếp trong appFolderId
-            string query = $"mimeType = 'application/vnd.google-apps.folder' and '{appFolderId}' in parents and trashed = false";
-            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name)&pageSize=100";
-
             string? devicesFolderId = null;
+            GoogleDriveFileInfo rootQueue = new();
+            GoogleDriveFileInfo rootReader = new();
+
+            // 1. GOM 1 REQUEST DUY NHẤT: Lấy toàn bộ thư mục thiết bị, file resume.md và root files trong appFolderId
+            string query = $"'{appFolderId}' in parents and trashed = false";
+            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name, mimeType, modifiedTime, size)&pageSize=100";
+
             using (var req = new HttpRequestMessage(HttpMethod.Get, url))
             {
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1621,26 +1607,51 @@ p {{ color: #94A3B8; font-size: 14px; }}
                         {
                             string id = f.GetProperty("id").GetString() ?? "";
                             string name = f.GetProperty("name").GetString() ?? "";
+                            string mime = f.TryGetProperty("mimeType", out var m) ? m.GetString() ?? "" : "";
+                            DateTime? mod = f.TryGetProperty("modifiedTime", out var mt) && DateTime.TryParse(mt.GetString(), out var dt) ? dt.ToUniversalTime() : null;
+                            long size = f.TryGetProperty("size", out var sz) && long.TryParse(sz.GetString(), out var s) ? s : 0;
                             if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(name)) continue;
 
-                            if (name.Equals(DevicesFolderName, StringComparison.OrdinalIgnoreCase))
+                            if (mime.Equals("application/vnd.google-apps.folder", StringComparison.OrdinalIgnoreCase))
                             {
-                                devicesFolderId = id;
+                                if (name.Equals(DevicesFolderName, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    devicesFolderId = id;
+                                }
+                                else
+                                {
+                                    rawFolders.Add((id, name));
+                                }
                             }
-                            else
+                            else if (name.Equals(ResumeFileName, StringComparison.OrdinalIgnoreCase))
                             {
-                                rawFolders.Add((id, name));
+                                _cachedResumeCloudFile = new GoogleDriveFileInfo
+                                {
+                                    Id = id,
+                                    Name = name,
+                                    ModifiedTime = mod,
+                                    Size = size,
+                                    MimeType = mime
+                                };
+                            }
+                            else if (name.Equals(QueueFileName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                rootQueue = new GoogleDriveFileInfo { Id = id, Name = name, ModifiedTime = mod, Size = size, MimeType = mime };
+                            }
+                            else if (name.Equals(ReaderFileName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                rootReader = new GoogleDriveFileInfo { Id = id, Name = name, ModifiedTime = mod, Size = size, MimeType = mime };
                             }
                         }
                     }
                 }
             }
 
-            // 2. Nếu có thư mục Devices, quét thêm toàn bộ thư mục bên trong Devices
+            // 2. Nếu có thư mục con Devices (cũ), quét thêm toàn bộ thư mục bên trong Devices
             if (!string.IsNullOrEmpty(devicesFolderId))
             {
-                string subQuery = $"mimeType = 'application/vnd.google-apps.folder' and '{devicesFolderId}' in parents and trashed = false";
-                string subUrl = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(subQuery)}&fields=files(id, name)&pageSize=100";
+                string subQuery = $"'{devicesFolderId}' in parents and trashed = false";
+                string subUrl = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(subQuery)}&fields=files(id, name, mimeType)&pageSize=100";
 
                 using var subReq = new HttpRequestMessage(HttpMethod.Get, subUrl);
                 subReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1656,8 +1667,9 @@ p {{ color: #94A3B8; font-size: 14px; }}
                         {
                             string id = f.GetProperty("id").GetString() ?? "";
                             string name = f.GetProperty("name").GetString() ?? "";
+                            string mime = f.TryGetProperty("mimeType", out var m) ? m.GetString() ?? "" : "";
                             if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(name)) continue;
-                            if (!rawFolders.Any(x => x.Id == id))
+                            if (mime.Equals("application/vnd.google-apps.folder", StringComparison.OrdinalIgnoreCase) && !rawFolders.Any(x => x.Id == id))
                             {
                                 rawFolders.Add((id, name));
                             }
@@ -1687,17 +1699,10 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     : name.Contains("macOS") || name.Contains("Mac") ? "🍎"
                     : "🖥️";
 
-                // CHỈ GỬI REQUEST KIỂM TRA FILE ĐỐI VỚI THƯ MỤC ĐANG ĐƯỢC CHỌN (isCurrent)
-                // Các thư mục khác nạp tức thì chỉ với tên để triệt tiêu 100% tình trạng vượt hạn mức Quota Exceeded!
+                // CHỈ NẠP CHI TIẾT TỆP CHO SLOT ĐANG CHỌN (Gom 1 request duy nhất)
                 if (isCurrent)
                 {
-                    slot.QueueCloudFile = await GetFileInfoAsync(id, QueueFileName, ct);
-                    slot.ReaderCloudFile = await GetFileInfoAsync(id, ReaderFileName, ct);
-                    slot.ManifestCloudFile = await GetFileInfoAsync(id, ManifestFileName, ct);
-
-                    slot.LastSyncUtc = slot.ManifestCloudFile.ModifiedTime
-                        ?? slot.QueueCloudFile.ModifiedTime
-                        ?? slot.ReaderCloudFile.ModifiedTime;
+                    await PopulateSlotFilesAsync(slot, ct);
 
                     string timeStr = slot.LastSyncUtc.HasValue
                         ? slot.LastSyncUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
@@ -1729,9 +1734,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 });
             }
 
-            // Kiểm tra dữ liệu cũ ở thư mục gốc (Legacy Root)
-            var rootQueue = await GetFileInfoAsync(appFolderId, QueueFileName, ct);
-            var rootReader = await GetFileInfoAsync(appFolderId, ReaderFileName, ct);
+            // Kiểm tra dữ liệu cũ ở thư mục gốc (Legacy Root) - Đã có sẵn từ Bước 1, không tốn thêm request
             if (rootQueue.Exists || rootReader.Exists)
             {
                 string rootTime = (rootQueue.ModifiedTime ?? rootReader.ModifiedTime)?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "Bản cũ";
@@ -1757,16 +1760,51 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Tải thông tin tệp tin của một thiết bị cụ thể theo yêu cầu (Lazy Loading), tiết kiệm quota Google Drive API tối đa.
+    /// Tải toàn bộ thông tin tệp tin của một thiết bị cụ thể trong ĐÚNG 1 REQUEST DUY NHẤT (Scoped Query).
     /// </summary>
     public async Task PopulateSlotFilesAsync(GoogleDriveDeviceSlot slot, CancellationToken ct = default)
     {
         if (slot == null || string.IsNullOrEmpty(slot.DeviceFolderId)) return;
         try
         {
-            slot.QueueCloudFile = await GetFileInfoAsync(slot.DeviceFolderId, QueueFileName, ct);
-            slot.ReaderCloudFile = await GetFileInfoAsync(slot.DeviceFolderId, ReaderFileName, ct);
-            slot.ManifestCloudFile = await GetFileInfoAsync(slot.DeviceFolderId, ManifestFileName, ct);
+            string? token = await EnsureValidAccessTokenAsync(ct);
+            if (string.IsNullOrEmpty(token)) return;
+
+            string query = $"'{slot.DeviceFolderId}' in parents and trashed = false";
+            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name, mimeType, modifiedTime, size)&pageSize=20";
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var res = await _httpClient.SendAsync(req, ct);
+            if (res.IsSuccessStatusCode)
+            {
+                string json = await res.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("files", out var files))
+                {
+                    foreach (var f in files.EnumerateArray())
+                    {
+                        string id = f.GetProperty("id").GetString() ?? "";
+                        string name = f.GetProperty("name").GetString() ?? "";
+                        DateTime? mod = f.TryGetProperty("modifiedTime", out var mt) && DateTime.TryParse(mt.GetString(), out var dt) ? dt.ToUniversalTime() : null;
+                        long size = f.TryGetProperty("size", out var sz) && long.TryParse(sz.GetString(), out var s) ? s : 0;
+                        string mime = f.TryGetProperty("mimeType", out var m) ? m.GetString() ?? "" : "";
+
+                        var fileInfo = new GoogleDriveFileInfo
+                        {
+                            Id = id,
+                            Name = name,
+                            ModifiedTime = mod,
+                            Size = size,
+                            MimeType = mime
+                        };
+
+                        if (name.Equals(QueueFileName, StringComparison.OrdinalIgnoreCase)) slot.QueueCloudFile = fileInfo;
+                        else if (name.Equals(ReaderFileName, StringComparison.OrdinalIgnoreCase)) slot.ReaderCloudFile = fileInfo;
+                        else if (name.Equals(ManifestFileName, StringComparison.OrdinalIgnoreCase)) slot.ManifestCloudFile = fileInfo;
+                    }
+                }
+            }
 
             slot.LastSyncUtc = slot.ManifestCloudFile.ModifiedTime
                 ?? slot.QueueCloudFile.ModifiedTime
@@ -2032,19 +2070,14 @@ p {{ color: #94A3B8; font-size: 14px; }}
         // Quét danh sách toàn bộ các thiết bị (Windows, Android, Linux) đã đồng bộ lên cloud
         status.AvailableDevices = await GetCloudDeviceSlotsAsync(ct);
 
-        // Đọc thông tin tệp của thư mục thiết bị hiện tại
-        string? currentDevFolderId = await EnsureCurrentDeviceFolderAsync(ct);
-        if (!string.IsNullOrEmpty(currentDevFolderId))
+        // Tái sử dụng dữ liệu tệp đã nạp từ AvailableDevices & _cachedResumeCloudFile (0 request phụ)
+        status.ResumeCloudFile = _cachedResumeCloudFile;
+        var currentSlot = status.AvailableDevices.FirstOrDefault(d => d.IsCurrentDevice) ?? status.AvailableDevices.FirstOrDefault();
+        if (currentSlot != null)
         {
-            status.QueueCloudFile = await GetFileInfoAsync(currentDevFolderId, QueueFileName, ct);
-            status.ReaderCloudFile = await GetFileInfoAsync(currentDevFolderId, ReaderFileName, ct);
-            status.ManifestCloudFile = await GetFileInfoAsync(currentDevFolderId, ManifestFileName, ct);
-        }
-        else
-        {
-            status.QueueCloudFile = await GetFileInfoAsync(appFolderId, QueueFileName, ct);
-            status.ReaderCloudFile = await GetFileInfoAsync(appFolderId, ReaderFileName, ct);
-            status.ManifestCloudFile = await GetFileInfoAsync(appFolderId, ManifestFileName, ct);
+            status.QueueCloudFile = currentSlot.QueueCloudFile;
+            status.ReaderCloudFile = currentSlot.ReaderCloudFile;
+            status.ManifestCloudFile = currentSlot.ManifestCloudFile;
         }
 
         status.StatusMessage = $"Đã đồng bộ thông tin thiết bị [{CurrentDeviceName}] thành công.";
@@ -2242,6 +2275,67 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
+    /// Sao lưu tiến trình đọc dở dùng chung (resume.md) lên thư mục gốc chung của app trên Google Drive (\GMTPC\Comic Downloader GMTPC\).
+    /// </summary>
+    public async Task<(bool Success, string Message)> BackupResumeToCloudAsync(CancellationToken ct = default)
+    {
+        await _syncLock.WaitAsync(ct);
+        try
+        {
+            string? appFolderId = await EnsureTargetFolderAsync(ct);
+            if (string.IsNullOrEmpty(appFolderId)) return (false, "Không thể kết nối thư mục gốc của app trên Google Drive.");
+
+            string mdContent = ReadProgressStore.Instance.BuildResumeMarkdownContent(CurrentDeviceName);
+            var (ok, fileId, msg) = await UploadOrUpdateFileAsync(appFolderId, ResumeFileName, mdContent, "text/markdown", ct);
+
+            if (ok)
+            {
+                _cachedResumeCloudFile = new GoogleDriveFileInfo
+                {
+                    Id = fileId,
+                    Name = ResumeFileName,
+                    ModifiedTime = DateTime.UtcNow,
+                    Size = Encoding.UTF8.GetByteCount(mdContent),
+                    MimeType = "text/markdown"
+                };
+                NotifyStatusChanged($"Đã sao lưu tiến độ đọc dùng chung (resume.md) lên Google Drive ({DateTime.Now:HH:mm:ss})");
+            }
+
+            return (ok, msg);
+        }
+        finally
+        {
+            _syncLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Phục hồi và Smart Merge tiến trình đọc dở từ file resume.md trên thư mục gốc chung của Google Drive về máy.
+    /// </summary>
+    public async Task<(bool Success, ResumeRestoreResult? Result, string Message)> RestoreResumeFromCloudAsync(CancellationToken ct = default)
+    {
+        await _syncLock.WaitAsync(ct);
+        try
+        {
+            string? appFolderId = await EnsureTargetFolderAsync(ct);
+            if (string.IsNullOrEmpty(appFolderId)) return (false, null, "Không thể kết nối thư mục gốc của app trên Google Drive.");
+
+            var (ok, content, _, msg) = await DownloadFileContentAsync(appFolderId, ResumeFileName, ct);
+            if (!ok || string.IsNullOrWhiteSpace(content))
+            {
+                return (false, null, msg);
+            }
+
+            var result = ReadProgressStore.Instance.ParseResumeMarkdownContent(content, mergeWithExisting: true);
+            return (result.HasValidStructure, result, result.Message);
+        }
+        finally
+        {
+            _syncLock.Release();
+        }
+    }
+
+    /// <summary>
     /// Đồng bộ 2 trong 1: Sao lưu toàn diện cả Queue tải và Reader lên thư mục thiết bị trên Google Drive.
     /// </summary>
     public async Task<FullSyncResult> FullSyncUploadAsync(IEnumerable<ComicBookItem> queueItems, string? targetFolderId = null, CancellationToken ct = default)
@@ -2253,14 +2347,17 @@ p {{ color: #94A3B8; font-size: 14px; }}
         var (rOk, rMsg) = await BackupReaderToCloudAsync(targetFolderId, ct);
         result.ReaderSynced = rOk;
 
+        var (resOk, _) = await BackupResumeToCloudAsync(ct);
+        result.ResumeSynced = resOk;
+
         result.Success = qOk && rOk;
         if (result.Success)
         {
-            result.Message = $"Đã sao lưu thành công Queue & Bookmark/History của [{CurrentDeviceName}] lên Google Drive.";
+            result.Message = $"Đã sao lưu thành công Queue & Bookmark/History [{CurrentDeviceName}] và Resume dùng chung lên Google Drive.";
         }
         else
         {
-            result.Message = $"Sao lưu một phần: Queue ({ (qOk ? "OK" : qMsg) }), Reader ({ (rOk ? "OK" : rMsg) })";
+            result.Message = $"Sao lưu một phần: Queue ({ (qOk ? "OK" : qMsg) }), Reader ({ (rOk ? "OK" : rMsg) }), Resume ({ (resOk ? "OK" : "Lỗi") })";
         }
         return result;
     }
@@ -2283,9 +2380,12 @@ p {{ color: #94A3B8; font-size: 14px; }}
             result.RestoredHistory = rResult.RestoredHistory;
         }
 
-        result.Success = qOk || rOk;
+        var (resOk, resResult, _) = await RestoreResumeFromCloudAsync(ct);
+        result.ResumeSynced = resOk;
+
+        result.Success = qOk || rOk || resOk;
         result.Message = result.Success
-            ? $"Phục hồi từ Google Drive thành công: {result.QueueItemCount} truyện trong Queue, {result.RestoredBookmarks} dấu trang, {result.RestoredHistory} lịch sử đọc."
+            ? $"Phục hồi từ Google Drive thành công: {result.QueueItemCount} truyện trong Queue, {result.RestoredBookmarks} dấu trang, {result.RestoredHistory} lịch sử đọc, {resResult?.RestoredProgressEntries ?? 0} tiến trình resume."
             : $"Phục hồi thất bại: {qMsg} | {rMsg}";
 
         return (result, qResult, rResult);

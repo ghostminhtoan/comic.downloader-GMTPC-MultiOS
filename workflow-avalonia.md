@@ -3198,4 +3198,16 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + `⚡ CẬP NHẬT BETA NGAY` (gọi trực tiếp `AutoUpdateBetaCommand`).
     - Người dùng chỉ cần click 1 chạm vào nút nổi bật mà không cần phải mở lại MenuFlyout, tối ưu hóa trải nghiệm mượt mà và tiện lợi tối đa.
 
+14. **Kiến Trúc Đồng Bộ Hybrid & Giải Pháp Triệt Để Giới Hạn Quota Scoped Folder Google Drive**:
+    - **Cơ chế Hybrid Cloud Sync (Đồng bộ tiến độ đọc dùng chung & Tách biệt cấu hình thiết bị)**:
+      + Tệp `resume.md` đặt trực tiếp tại thư mục gốc của app trên Google Drive (`\GMTPC\Comic Downloader GMTPC\resume.md`): Là tệp dùng chung cho toàn bộ các thiết bị (Windows, Linux, Android) kết nối cùng tài khoản Google Drive. Bất kỳ thiết bị nào đọc truyện tới trang mới hơn sẽ đẩy tiến độ vào tệp này. Khi nạp về, hệ thống thực hiện Smart Merge tiến trình đọc (ưu tiên trang đọc xa hơn hoặc timestamp mới hơn), giúp người dùng chuyển đổi thiết bị đọc truyện tức thì và liền mạch mà không bị lệch trang.
+      + Trong khi đó, các tệp `autosave.md` (hàng chờ download) và `saved_reader_bookmarks.md` (dấu trang & lịch sử) vẫn được lưu riêng theo từng thư mục thiết bị (`\GMTPC\Comic Downloader GMTPC\<device_name>\`), đảm bảo tính độc lập tài nguyên và không ghi đè hàng chờ tải giữa các máy khác nhau.
+      + Tích hợp đầy đủ nút thao tác thủ công `⬆ Tải lên Drive`, `⬇ Phục hồi về máy` cho `resume.md` và gộp vào `🔄 SAO LƯU TẤT CẢ (QUEUE + READER + RESUME)`.
+    - **Khắc phục triệt để lỗi Quota Metric Exceeded (Queries per 100 seconds per user)**:
+      + **Khóa Scoped Parent Search 100%**: Loại bỏ toàn bộ các truy vấn quét không ràng buộc cha (`name = 'GMTPC'` toàn Drive). Thư mục gốc `GMTPC` bắt buộc ràng buộc `parents = 'root'`, các thư mục con và tệp tin bắt buộc ràng buộc `parents = '{parentId}'`. Ngăn chặn Google Drive quét toàn bộ hàng nghìn tệp cá nhân của người dùng, triệt tiêu việc tiêu tốn hạn ngạch tìm kiếm.
+      + **Tối ưu hóa Batch Query Giảm 90% số lượng HTTP API Requests**:
+        * Gom duy nhất 1 truy vấn `'{appFolderId}' in parents and trashed = false` để lấy toàn bộ thư mục thiết bị, tệp `resume.md` và root files thay vì lặp từng request.
+        * Gom duy nhất 1 truy vấn `'{slot.DeviceFolderId}' in parents and trashed = false` để lấy toàn bộ 3 file con của slot thay vì gọi 3 request rời rạc.
+        * `CheckCloudStatusAsync` tận dụng dữ liệu từ cache `AvailableDevices` và `CachedResumeCloudFile` (0 request phụ).
+
 

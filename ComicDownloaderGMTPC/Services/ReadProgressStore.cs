@@ -21,6 +21,20 @@ public sealed class ReaderBackupPayload
     public Dictionary<string, int> ProgressMap { get; set; } = new();
 }
 
+public sealed class ComicResumePayload
+{
+    public string SavedAt { get; set; } = string.Empty;
+    public string DeviceName { get; set; } = string.Empty;
+    public Dictionary<string, int> ProgressMap { get; set; } = new();
+}
+
+public sealed class ResumeRestoreResult
+{
+    public int RestoredProgressEntries { get; set; }
+    public bool HasValidStructure { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
 public sealed class ReaderRestoreResult
 {
     public int RestoredBookmarks { get; set; }
@@ -37,8 +51,11 @@ public sealed class ReadProgressStore
 
     public const string AutoSaveReaderFileName = "autosave_reader.md";
     public const string SavedReaderFileName = "saved_reader_bookmarks.md";
+    public const string ResumeFileName = "resume.md";
     public const string ReaderStateBeginMarker = "<!-- COMIC_READER_STATE_BEGIN -->";
     public const string ReaderStateEndMarker = "<!-- COMIC_READER_STATE_END -->";
+    public const string ResumeStateBeginMarker = "<!-- COMIC_RESUME_STATE_BEGIN -->";
+    public const string ResumeStateEndMarker = "<!-- COMIC_RESUME_STATE_END -->";
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -1256,6 +1273,138 @@ public sealed class ReadProgressStore
     {
         if (string.IsNullOrEmpty(text)) return string.Empty;
         return text.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ").Trim();
+    }
+
+    /// <summary>
+    /// Xuất tiến trình đọc truyện dở dùng chung (resume.md) cho toàn bộ các thiết bị.
+    /// Không chứa Bookmarks hay Queue riêng của thiết bị.
+    /// </summary>
+    public string BuildResumeMarkdownContent(string currentDeviceName)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# COMIC DOWNLOADER GMTPC - TIẾN TRÌNH ĐỌC DÙNG CHUNG (RESUME.MD)");
+        sb.AppendLine("> Tệp tin này được dùng chung cho toàn bộ các thiết bị (Windows, Android, Linux).");
+        sb.AppendLine($"> Thiết bị cập nhật cuối: **{EscapeMarkdown(currentDeviceName)}** | Thời gian: `{DateTime.Now:yyyy-MM-dd HH:mm:ss}`");
+        sb.AppendLine();
+        sb.AppendLine("## Danh Sách Truyện & Trang Đang Đọc Dở");
+        sb.AppendLine("| STT | Tên Truyện / File | Chương Đang Đọc | Trang Đang Đọc | Cập Nhật Gần Nhất |");
+        sb.AppendLine("| :--- | :--- | :--- | :--- | :--- |");
+
+        var historyComics = GetAllHistoryPaths(checkPathExists: false);
+        int idx = 1;
+        foreach (var path in historyComics)
+        {
+            string title = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            int lastChap = GetLastActiveChapterIndex(path);
+            int lastPage = GetLastReadPage(path);
+            string chapText = lastChap > 0 ? $"Chương {lastChap}" : "-";
+            string pageText = lastPage > 0 ? $"Trang {lastPage}" : "-";
+            int order = GetComicLastReadOrder(path);
+            string timeText = order > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(order + EpochOffsetSeconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                : "-";
+            sb.AppendLine($"| {idx++} | {EscapeMarkdown(title)} | {chapText} | {pageText} | {timeText} |");
+        }
+
+        var payload = new ComicResumePayload
+        {
+            SavedAt = DateTime.Now.ToString("O", CultureInfo.InvariantCulture),
+            DeviceName = currentDeviceName,
+            ProgressMap = new Dictionary<string, int>(_progressMap, StringComparer.OrdinalIgnoreCase)
+        };
+
+        string json = JsonSerializer.Serialize(payload, _jsonOptions);
+
+        sb.AppendLine();
+        sb.AppendLine("## Machine-Readable Resume State");
+        sb.AppendLine(ResumeStateBeginMarker);
+        sb.AppendLine("```json");
+        sb.AppendLine(json);
+        sb.AppendLine("```");
+        sb.AppendLine(ResumeStateEndMarker);
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Phục hồi và Smart Merge tiến trình đọc dở từ file resume.md trên đám mây.
+    /// Tự động đối chiếu theo trang đọc xa hơn hoặc timestamp mới hơn.
+    /// </summary>
+    public ResumeRestoreResult ParseResumeMarkdownContent(string content, bool mergeWithExisting = true)
+    {
+        var res = new ResumeRestoreResult();
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            res.Message = "Nội dung tệp resume.md trống.";
+            return res;
+        }
+
+        int beginIdx = content.IndexOf(ResumeStateBeginMarker, StringComparison.Ordinal);
+        int endIdx = beginIdx >= 0 ? content.IndexOf(ResumeStateEndMarker, beginIdx, StringComparison.Ordinal) : -1;
+        if (beginIdx >= 0 && endIdx > beginIdx)
+        {
+            int fenceStart = content.IndexOf("```json", beginIdx, StringComparison.OrdinalIgnoreCase);
+            if (fenceStart >= 0 && fenceStart < endIdx)
+            {
+                int lineEnd = content.IndexOf('\n', fenceStart);
+                if (lineEnd >= 0 && lineEnd < endIdx)
+                {
+                    int jsonStart = lineEnd + 1;
+                    int fenceEnd = content.IndexOf("```", jsonStart, StringComparison.Ordinal);
+                    if (fenceEnd >= 0 && fenceEnd <= endIdx)
+                    {
+                        string json = content.Substring(jsonStart, fenceEnd - jsonStart).Trim();
+                        try
+                        {
+                            var payload = JsonSerializer.Deserialize<ComicResumePayload>(json, _jsonOptions);
+                            if (payload?.ProgressMap != null && payload.ProgressMap.Count > 0)
+                            {
+                                res.HasValidStructure = true;
+                                int updatedCount = 0;
+                                foreach (var kvp in payload.ProgressMap)
+                                {
+                                    if (string.IsNullOrWhiteSpace(kvp.Key) || kvp.Value <= 0) continue;
+
+                                    if (_progressMap.TryGetValue(kvp.Key, out int currentVal))
+                                    {
+                                        if (kvp.Key.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            if (kvp.Value > currentVal)
+                                            {
+                                                _progressMap[kvp.Key] = kvp.Value;
+                                                updatedCount++;
+                                            }
+                                        }
+                                        else if (kvp.Value > currentVal || !mergeWithExisting)
+                                        {
+                                            _progressMap[kvp.Key] = kvp.Value;
+                                            updatedCount++;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        _progressMap[kvp.Key] = kvp.Value;
+                                        updatedCount++;
+                                    }
+                                }
+
+                                res.RestoredProgressEntries = updatedCount;
+                                res.Message = $"Đã đồng bộ {updatedCount} tiến trình đọc dở từ [{payload.DeviceName}].";
+                                MarkDirtyAndScheduleFlush();
+                                return res;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            res.Message = $"Lỗi phân tích JSON resume: {ex.Message}";
+                        }
+                    }
+                }
+            }
+        }
+
+        res.Message = "Không tìm thấy khối dữ liệu máy đọc hợp lệ trong resume.md.";
+        return res;
     }
 
     private static string UnescapeMarkdown(string text)
