@@ -1116,16 +1116,20 @@ public partial class MainViewModel
 
         if (IsGoogleDriveBusy) return;
 
+        string? targetFolderId = SelectedCloudDevice?.DeviceFolderId;
+        if (string.IsNullOrEmpty(targetFolderId)) targetFolderId = _gdriveService.CachedDeviceFolderId;
+        string targetName = SelectedCloudDevice?.DeviceFolderName ?? _gdriveService.CurrentDeviceName;
+
         IsGoogleDriveBusy = true;
-        GoogleDriveStatusText = "⏳ Đang tạo bản sao lưu tiến độ đọc (resume.md) dùng chung lên Google Drive...";
+        GoogleDriveStatusText = $"⏳ Đang tạo bản sao lưu tiến độ đọc (resume.md) vào [{targetName}] & Google Drive...";
         try
         {
-            var (ok, msg) = await _gdriveService.BackupResumeToCloudAsync();
+            var (ok, msg) = await _gdriveService.BackupResumeToCloudAsync(targetFolderId);
             if (ok)
             {
                 GoogleDriveStatusText = "✅ " + msg;
                 AddLog("SUCCESS", $"☁️ {msg}");
-                ShowCenterToast("SAO LƯU RESUME THÀNH CÔNG", "Đã lưu tiến độ đọc dùng chung (resume.md) lên thư mục gốc Google Drive.", "📖", "GOOGLE DRIVE", 3000);
+                ShowCenterToast("SAO LƯU RESUME THÀNH CÔNG", $"Đã lưu tiến độ đọc (resume.md) vào slot [{targetName}] và thư mục dùng chung Google Drive.", "📖", "GOOGLE DRIVE", 3000);
                 await RefreshGoogleDriveStatusAsync();
             }
             else
@@ -1155,18 +1159,21 @@ public partial class MainViewModel
 
         if (IsGoogleDriveBusy) return;
 
+        string sourceName = SelectedCloudDevice?.DeviceFolderName ?? _gdriveService.CurrentDeviceName;
+        string? sourceFolderId = SelectedCloudDevice?.DeviceFolderId;
+
         IsGoogleDriveBusy = true;
-        GoogleDriveStatusText = "⏳ Đang tải và hợp nhất tiến độ đọc (resume.md) từ Google Drive...";
+        GoogleDriveStatusText = $"⏳ Đang tải và hợp nhất tiến độ đọc (resume.md) từ nguồn [{sourceName}]...";
         try
         {
-            var (ok, result, msg) = await _gdriveService.RestoreResumeFromCloudAsync();
+            var (ok, result, msg) = await _gdriveService.RestoreResumeFromCloudAsync(sourceFolderId);
             if (ok && result != null)
             {
                 await LibraryVm.ReloadAllLibraryStateAsync();
 
                 GoogleDriveStatusText = $"✅ {msg}";
                 AddLog("SUCCESS", $"☁️ {msg}");
-                ShowCenterToast("PHỤC HỒI RESUME THÀNH CÔNG", $"Đã khôi phục {result.RestoredProgressEntries} tiến trình đọc dở từ file dùng chung resume.md.", "📖", "GOOGLE DRIVE", 3200);
+                ShowCenterToast("PHỤC HỒI RESUME THÀNH CÔNG", $"Đã khôi phục {result.RestoredProgressEntries} tiến trình đọc dở từ nguồn [{sourceName}].", "📖", "GOOGLE DRIVE", 3200);
             }
             else
             {

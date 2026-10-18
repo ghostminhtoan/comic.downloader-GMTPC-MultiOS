@@ -2279,6 +2279,15 @@ public partial class ComicReaderViewModel : ViewModelBase
     private bool _isLoadingChapter;
 
     [ObservableProperty]
+    private double _chapterLoadingProgress;
+
+    [ObservableProperty]
+    private string _chapterLoadingStatusText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isChapterLoadingIndeterminate;
+
+    [ObservableProperty]
     private string _statusToastText = string.Empty;
 
     [ObservableProperty]
@@ -2443,6 +2452,9 @@ public partial class ComicReaderViewModel : ViewModelBase
         var ct = _loadCts.Token;
 
         IsLoadingChapter = true;
+        ChapterLoadingProgress = 0;
+        ChapterLoadingStatusText = "Đang mở và phân tích tệp...";
+        IsChapterLoadingIndeterminate = false;
         ChapterTitle = chapter.Title;
         DisposeLoadedBitmaps();
         Pages.Clear();
@@ -2456,8 +2468,17 @@ public partial class ComicReaderViewModel : ViewModelBase
 
         try
         {
-            var loadedPages = await _readerService.LoadChapterPagesAsync(chapter, ct);
+            var progress = new Progress<(double percent, string status)>(val =>
+            {
+                ChapterLoadingProgress = Math.Clamp(val.percent, 0, 100);
+                ChapterLoadingStatusText = val.status;
+            });
+
+            var loadedPages = await _readerService.LoadChapterPagesAsync(chapter, progress, ct);
             if (ct.IsCancellationRequested) return;
+
+            ChapterLoadingProgress = 95;
+            ChapterLoadingStatusText = $"Đang tối ưu hiển thị {loadedPages.Count} trang...";
 
             Thickness currentMargin = CalculateCurrentPageItemMargin();
             foreach (var p in loadedPages)

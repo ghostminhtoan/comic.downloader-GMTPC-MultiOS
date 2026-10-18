@@ -5483,13 +5483,6 @@
                                                         ToolTip.Tip="Đổi tên thư mục này trực tiếp trên Google Drive">
                                                     <TextBlock Text="✏️ Đổi tên" FontSize="10.5" FontWeight="SemiBold" />
                                                 </Button>
-                                                <Button Command="{Binding StartCreateNewFolderCommand}"
-                                                        IsVisible="{Binding !IsCreatingNewFolder}"
-                                                        Background="#065F46" BorderBrush="#34D399" BorderThickness="1"
-                                                        Foreground="#A7F3D0" CornerRadius="6" Padding="9,5" Height="28" Margin="0,0,6,6"
-                                                        ToolTip.Tip="Tạo một thư mục mới trên Google Drive để đồng bộ">
-                                                    <TextBlock Text="➕ Tạo folder mới" FontSize="10.5" FontWeight="SemiBold" />
-                                                </Button>
                                                 <Button Command="{Binding StartInputFolderIdCommand}"
                                                         IsVisible="{Binding !IsInputFolderIdVisible}"
                                                         Background="#1E1B4B" BorderBrush="#818CF8" BorderThickness="1"
@@ -5518,24 +5511,6 @@
                                                     <TextBlock Text="💾 Đổi tên trên Drive" FontSize="10.5" />
                                                 </Button>
                                                 <Button Grid.Column="2" Command="{Binding CancelRenameDeviceCommand}"
-                                                         Background="#334155" Foreground="#94A3B8" CornerRadius="5" Padding="8,4" Height="28">
-                                                    <TextBlock Text="✕" FontSize="10.5" />
-                                                </Button>
-                                            </Grid>
-                                        </Border>
-
-                                        <!-- Panel nhập tạo thư mục mới -->
-                                        <Border IsVisible="{Binding IsCreatingNewFolder}"
-                                                Background="#064E3B" BorderBrush="#34D399" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,2,0,0">
-                                            <Grid ColumnDefinitions="*, Auto, Auto" ColumnSpacing="6">
-                                                <TextBox Grid.Column="0" Text="{Binding NewFolderNameInput}"
-                                                         PlaceholderText="Nhập tên thư mục mới muốn tạo (vd: 231, Android-Main...)"
-                                                         Height="28" FontSize="11" Background="#0B0F19" />
-                                                <Button Grid.Column="1" Command="{Binding CreateNewCloudFolderCommand}"
-                                                         Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="10,4" Height="28">
-                                                    <TextBlock Text="➕ Tạo thư mục Drive" FontSize="10.5" />
-                                                </Button>
-                                                <Button Grid.Column="2" Command="{Binding CancelCreateNewFolderCommand}"
                                                          Background="#334155" Foreground="#94A3B8" CornerRadius="5" Padding="8,4" Height="28">
                                                     <TextBlock Text="✕" FontSize="10.5" />
                                                 </Button>
@@ -5717,20 +5692,13 @@
                                                 </StackPanel>
                                             </Button>
 
-                                            <!-- Nút làm mới trạng thái -->
+                                             <!-- Nút làm mới trạng thái -->
                                             <Button Command="{Binding RefreshGoogleDriveStatusCommand}"
                                                     IsEnabled="{Binding IsGoogleDriveConnected}"
                                                     Background="#1E293B" Foreground="#94A3B8" CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
                                                 <TextBlock Text="🔄 Làm mới" FontSize="11" />
                                             </Button>
                                         </WrapPanel>
-
-                                        <!-- Checkbox Tự động tải lên Google Drive -->
-                                        <CheckBox IsChecked="{Binding IsGoogleDriveAutoSync}"
-                                                  IsEnabled="{Binding IsGoogleDriveConnected}">
-                                            <TextBlock Text="⚡ Tự động tải lên Google Drive khi có thay đổi (Auto-Sync Queue &amp; Reader)"
-                                                       Foreground="#E2E8F0" FontSize="11.5" VerticalAlignment="Center" />
-                                        </CheckBox>
                                     </StackPanel>
                                 </Border>
 
@@ -5746,6 +5714,61 @@
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>
+                </Border>
+
+                <!-- OVERLAY LOADING / BACKUP Ở CHÍNH GIỮA MODAL KHI ĐANG SAO LƯU HOẶC ĐỒNG BỘ -->
+                <Border IsVisible="{Binding IsGoogleDriveBusy}"
+                        Background="#D005080F"
+                        CornerRadius="12"
+                        ZIndex="6000"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch">
+                    <Border Background="#111827"
+                            BorderBrush="#38BDF8"
+                            BorderThickness="2"
+                            CornerRadius="14"
+                            Padding="24,20"
+                            MaxWidth="440"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            BoxShadow="0 15 45 0 #EE000000">
+                        <StackPanel Spacing="14" HorizontalAlignment="Center">
+                            <!-- Icon xoay / hoạt họa -->
+                            <Border Background="#0284C7" CornerRadius="30" Width="52" Height="52" HorizontalAlignment="Center">
+                                <TextBlock Text="☁️" FontSize="26" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                <TextBlock Text="ĐANG XỬ LÝ GOOGLE DRIVE"
+                                           Foreground="#38BDF8"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           HorizontalAlignment="Center" />
+                                <TextBlock Text="Vui lòng đợi giây lát, hệ thống đang đồng bộ dữ liệu..."
+                                           Foreground="#94A3B8"
+                                           FontSize="11"
+                                           HorizontalAlignment="Center" />
+                            </StackPanel>
+
+                            <!-- Progress Bar chuyển động -->
+                            <ProgressBar IsIndeterminate="True"
+                                         Height="6"
+                                         CornerRadius="3"
+                                         Foreground="#38BDF8"
+                                         Background="#1E293B"
+                                         HorizontalAlignment="Stretch" />
+
+                            <!-- Nội dung chi tiết trạng thái / thông báo Quota retry nếu có -->
+                            <Border Background="#080D1A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="12,8">
+                                <TextBlock Text="{Binding GoogleDriveStatusText}"
+                                           Foreground="#F8FAFC"
+                                           FontSize="11.5"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="Wrap"
+                                           TextAlignment="Center"
+                                           HorizontalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
                 </Border>
             </Panel>
         </Border>

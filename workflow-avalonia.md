@@ -3224,4 +3224,23 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + **Dán link `Device Folder`**: Liên kết slot thiết bị hiện tại, đồng thời tự động truy vết ngược lên để lưu cả `CachedAppFolderId` và `CachedGmtpcFolderId`.
       + Toàn bộ cây thư mục Google Drive được liên kết hoàn hảo chỉ với 1 thao tác dán link duy nhất.
 
+16. **Đồng Bộ Resume.md Đa Tầng, Vòng Lặp Quota Retry 2 Giây, Tinh Giản UI Thư Mục & Thanh Tiến Trình (%) Mở File Reader**:
+    - **Lưu và phục hồi `resume.md` đa tầng (Slot Thiết Bị + App Root)**:
+      + Trước đây `resume.md` chỉ lưu vào thư mục gốc của app, khiến thư mục con của thiết bị (chứa `autosave.md` và `saved_reader_bookmarks.md`) thiếu file `resume.md` dẫn đến các thiết bị không thể phục hồi chéo từ slot của nhau.
+      + Nâng cấp `BackupResumeToCloudAsync(targetFolderId)`: Tự động ghi đồng thời vào cả thư mục slot thiết bị đang chọn (`targetFolderId`) VÀ thư mục gốc của app (`appFolderId`).
+      + Nâng cấp `RestoreResumeFromCloudAsync(sourceFolderId)`: Ưu tiên tải `resume.md` từ thư mục slot nguồn được chọn, nếu chưa có mới fallback sang thư mục gốc của app.
+      + `GoogleDriveDeviceSlot`: Bổ sung thuộc tính `ResumeCloudFile` và `PopulateSlotFilesAsync` tự động nhận diện `resume.md` trong từng slot.
+    - **Vòng lặp Quota Retry 2 giây vô hạn (Infinite Quota Backoff)**:
+      + Trong `UploadOrUpdateFileAsync`, khi gặp HTTP 403 (Quota Exceeded / Rate Limit) hoặc 429: Hệ thống không bỏ cuộc sau 3 lần mà tự động chờ đúng 2 giây (`await Task.Delay(2000, ct)`) và retry liên tục đến khi thành công mới thôi hoặc bị hủy bởi người dùng, kèm thông báo số lần retry trực quan trên UI.
+    - **Tinh giản UI Thư mục & Bỏ Tính năng Tự động Đồng bộ (Auto-Sync)**:
+      + Bỏ nút "➕ Tạo folder mới" và form liên quan trên UI `MainView.axaml`, vì tính năng đổi tên thư mục đã tự động tạo và liên kết thư mục trên Drive rồi.
+      + Vô hiệu hóa triệt để `TriggerDebouncedAutoSync` và gỡ bỏ Checkbox Auto-Sync để ngăn chặn hoàn toàn nguy cơ cạn kiệt Quota do gọi API ngầm liên tục.
+    - **Overlay Loading ở chính giữa Modal Google Drive**:
+      + Bổ sung panel loading overlay nổi bật ở chính giữa modal Google Drive (`ZIndex="6000"`) khi `IsGoogleDriveBusy == true`, hiển thị icon đám mây, tiêu đề, thanh ProgressBar chuyển động và nội dung trạng thái/lỗi/quota retry to rõ để người dùng dễ theo dõi mà không phải nhìn message nhỏ ở chân modal.
+    - **Thanh tiến trình (Progress Bar) & Phần trăm (%) khi mở tệp trong Reader**:
+      + Bổ sung `IProgress<(double percent, string status)>` vào `ComicReaderService.LoadChapterPagesAsync`, báo cáo tiến độ chi tiết theo từng % thực tế khi mở các định dạng: file ảnh, thư mục, `.cbz`, `.cbr`, `.zip`, `.mobi`, `.pdf`, `.rar`.
+      + `ComicReaderViewModel`: Thêm các thuộc tính `ChapterLoadingProgress` (0-100%) và `ChapterLoadingStatusText`.
+      + `ComicReaderControl.axaml`: Thêm Overlay Loading ở chính giữa màn hình đọc với icon sách, tên chương, thanh Progress Bar và hiển thị số % rõ ràng (`Tiến độ nạp trang: X%`), giúp người dùng an tâm theo dõi và không lo ứng dụng bị đơ.
+
+
 

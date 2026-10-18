@@ -227,7 +227,7 @@ public sealed class ComicReaderService
         OperatingSystem.IsAndroid() ? Math.Clamp(Environment.ProcessorCount - 1, 3, 6) : Math.Clamp(Environment.ProcessorCount, 4, 8),
         OperatingSystem.IsAndroid() ? Math.Clamp(Environment.ProcessorCount - 1, 3, 6) : Math.Clamp(Environment.ProcessorCount, 4, 8));
 
-    public Task<List<ReaderPageItem>> LoadChapterPagesAsync(LibraryChapterItem chapter, CancellationToken ct = default)
+    public Task<List<ReaderPageItem>> LoadChapterPagesAsync(LibraryChapterItem chapter, IProgress<(double percent, string status)>? progress = null, CancellationToken ct = default)
     {
         return Task.Run(() =>
         {
@@ -243,6 +243,7 @@ public sealed class ComicReaderService
                 {
                     if (!File.Exists(chapter.LocalPath)) return pages;
 
+                    progress?.Report((10, "Đang phân tích cấu trúc tệp MOBI..."));
                     var mobiMeta = MobiComicParser.Instance.InspectMobi(chapter.LocalPath);
                     if (mobiMeta.Pages.Count == 0) return pages;
 
@@ -251,6 +252,7 @@ public sealed class ComicReaderService
                         ? Math.Min(chapter.MobiEndPageIndex, mobiMeta.Pages.Count - 1)
                         : (mobiMeta.Pages.Count - 1);
 
+                    int total = Math.Max(1, endPage - startPage + 1);
                     int localIdx = 0;
                     for (int pIdx = startPage; pIdx <= endPage; pIdx++)
                     {
@@ -268,12 +270,19 @@ public sealed class ComicReaderService
                         };
                         pages.Add(item);
                         localIdx++;
+
+                        if (localIdx % Math.Max(1, total / 20) == 0 || localIdx == total)
+                        {
+                            double pct = 15 + (80.0 * localIdx / total);
+                            progress?.Report((pct, $"Đang nạp trang {localIdx}/{total} ({pct:F0}%)..."));
+                        }
                     }
                 }
                 else if (chapter.IsPdf || LibraryScannerService.IsPdfFile(chapter.LocalPath))
                 {
                     if (!File.Exists(chapter.LocalPath)) return pages;
 
+                    progress?.Report((10, "Đang phân tích cấu trúc tệp PDF..."));
                     var pdfMeta = PdfComicParser.Instance.InspectPdf(chapter.LocalPath);
                     if (pdfMeta.Pages.Count == 0) return pages;
 
@@ -282,6 +291,7 @@ public sealed class ComicReaderService
                         ? Math.Min(chapter.PdfEndPageIndex, pdfMeta.Pages.Count - 1)
                         : (pdfMeta.Pages.Count - 1);
 
+                    int total = Math.Max(1, endPage - startPage + 1);
                     int localIdx = 0;
                     for (int pIdx = startPage; pIdx <= endPage; pIdx++)
                     {
@@ -303,15 +313,23 @@ public sealed class ComicReaderService
                         }
                         pages.Add(item);
                         localIdx++;
+
+                        if (localIdx % Math.Max(1, total / 20) == 0 || localIdx == total)
+                        {
+                            double pct = 15 + (80.0 * localIdx / total);
+                            progress?.Report((pct, $"Đang nạp trang {localIdx}/{total} ({pct:F0}%)..."));
+                        }
                     }
                 }
                 else if (chapter.IsRar || LibraryScannerService.IsRarFile(chapter.LocalPath))
                 {
                     if (!File.Exists(chapter.LocalPath)) return pages;
 
+                    progress?.Report((15, "Đang quét danh sách tệp nén RAR..."));
                     if (chapter.ArchiveEntryNames != null && chapter.ArchiveEntryNames.Count > 0)
                     {
-                        for (int i = 0; i < chapter.ArchiveEntryNames.Count; i++)
+                        int total = chapter.ArchiveEntryNames.Count;
+                        for (int i = 0; i < total; i++)
                         {
                             if (ct.IsCancellationRequested) break;
                             string entryFullName = chapter.ArchiveEntryNames[i];
@@ -323,12 +341,19 @@ public sealed class ComicReaderService
                                 ArchiveEntryFullName = entryFullName,
                                 IsRarEntry = true
                             });
+
+                            if ((i + 1) % Math.Max(1, total / 20) == 0 || i + 1 == total)
+                            {
+                                double pct = 20 + (75.0 * (i + 1) / total);
+                                progress?.Report((pct, $"Đang chuẩn bị trang {i + 1}/{total} ({pct:F0}%)..."));
+                            }
                         }
                     }
                     else
                     {
                         var imageEntries = RarArchivePool.Instance.GetImageEntriesInfo(chapter.LocalPath);
-                        for (int i = 0; i < imageEntries.Count; i++)
+                        int total = imageEntries.Count;
+                        for (int i = 0; i < total; i++)
                         {
                             if (ct.IsCancellationRequested) break;
                             var (fullName, name, length) = imageEntries[i];
@@ -341,6 +366,12 @@ public sealed class ComicReaderService
                                 IsRarEntry = true,
                                 FileSizeBytes = length
                             });
+
+                            if ((i + 1) % Math.Max(1, total / 20) == 0 || i + 1 == total)
+                            {
+                                double pct = 20 + (75.0 * (i + 1) / total);
+                                progress?.Report((pct, $"Đang chuẩn bị trang {i + 1}/{total} ({pct:F0}%)..."));
+                            }
                         }
                     }
                 }
@@ -348,9 +379,11 @@ public sealed class ComicReaderService
                 {
                     if (!File.Exists(chapter.LocalPath)) return pages;
 
+                    progress?.Report((15, "Đang quét danh sách tệp nén ZIP/CBZ..."));
                     if (chapter.ArchiveEntryNames != null && chapter.ArchiveEntryNames.Count > 0)
                     {
-                        for (int i = 0; i < chapter.ArchiveEntryNames.Count; i++)
+                        int total = chapter.ArchiveEntryNames.Count;
+                        for (int i = 0; i < total; i++)
                         {
                             if (ct.IsCancellationRequested) break;
                             string entryFullName = chapter.ArchiveEntryNames[i];
@@ -361,12 +394,19 @@ public sealed class ComicReaderService
                                 SourcePath = chapter.LocalPath,
                                 ArchiveEntryFullName = entryFullName
                             });
+
+                            if ((i + 1) % Math.Max(1, total / 20) == 0 || i + 1 == total)
+                            {
+                                double pct = 20 + (75.0 * (i + 1) / total);
+                                progress?.Report((pct, $"Đang chuẩn bị trang {i + 1}/{total} ({pct:F0}%)..."));
+                            }
                         }
                     }
                     else
                     {
                         var imageEntries = ZipArchivePool.Instance.GetImageEntriesInfo(chapter.LocalPath);
-                        for (int i = 0; i < imageEntries.Count; i++)
+                        int total = imageEntries.Count;
+                        for (int i = 0; i < total; i++)
                         {
                             if (ct.IsCancellationRequested) break;
                             var (fullName, name, length) = imageEntries[i];
@@ -378,11 +418,18 @@ public sealed class ComicReaderService
                                 ArchiveEntryFullName = fullName,
                                 FileSizeBytes = length
                             });
+
+                            if ((i + 1) % Math.Max(1, total / 20) == 0 || i + 1 == total)
+                            {
+                                double pct = 20 + (75.0 * (i + 1) / total);
+                                progress?.Report((pct, $"Đang chuẩn bị trang {i + 1}/{total} ({pct:F0}%)..."));
+                            }
                         }
                     }
                 }
                 else if (Directory.Exists(chapter.LocalPath))
                 {
+                    progress?.Report((15, "Đang quét các file ảnh trong thư mục..."));
                     var enumOptions = new EnumerationOptions
                     {
                         IgnoreInaccessible = true,
@@ -393,7 +440,8 @@ public sealed class ComicReaderService
                         .Where(LibraryScannerService.IsImageFile)
                         .NaturalSort();
 
-                    for (int i = 0; i < imageFiles.Count; i++)
+                    int total = imageFiles.Count;
+                    for (int i = 0; i < total; i++)
                     {
                         if (ct.IsCancellationRequested) break;
                         string file = imageFiles[i];
@@ -423,8 +471,16 @@ public sealed class ComicReaderService
                         }
 
                         pages.Add(item);
+
+                        if ((i + 1) % Math.Max(1, total / 20) == 0 || i + 1 == total)
+                        {
+                            double pct = 20 + (75.0 * (i + 1) / total);
+                            progress?.Report((pct, $"Đang nạp trang {i + 1}/{total} ({pct:F0}%)..."));
+                        }
                     }
                 }
+
+                progress?.Report((100, $"Đã nạp {pages.Count} trang. Đang khởi tạo giao diện..."));
             }
             catch { }
 

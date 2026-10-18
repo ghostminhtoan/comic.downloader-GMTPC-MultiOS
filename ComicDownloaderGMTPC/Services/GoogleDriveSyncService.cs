@@ -57,6 +57,7 @@ public sealed class GoogleDriveDeviceSlot
     public GoogleDriveFileInfo QueueCloudFile { get; set; } = new();
     public GoogleDriveFileInfo ReaderCloudFile { get; set; } = new();
     public GoogleDriveFileInfo ManifestCloudFile { get; set; } = new();
+    public GoogleDriveFileInfo ResumeCloudFile { get; set; } = new();
 
     public override string ToString() => DisplayName;
 }
@@ -146,8 +147,6 @@ public sealed class GoogleDriveSyncService
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private GoogleDriveAuthConfig _config = new();
-    private System.Threading.Timer? _autoSyncDebounceTimer;
-    private bool _hasPendingAutoSync;
     private GoogleDriveFileInfo _cachedResumeCloudFile = new();
     public GoogleDriveFileInfo CachedResumeCloudFile => _cachedResumeCloudFile;
 
@@ -734,14 +733,14 @@ p {{ color: #94A3B8; font-size: 14px; }}
     /// <summary>
     /// Đảm bảo Access Token còn hạn sử dụng, tự động refresh bằng RefreshToken nếu cần.
     /// </summary>
-    private async Task<string?> EnsureValidAccessTokenAsync(CancellationToken ct = default)
+    private async Task<string?> EnsureValidAccessTokenAsync(CancellationToken ct = default, bool forceRefresh = false)
     {
         if (string.IsNullOrWhiteSpace(_config.RefreshToken))
         {
             return null;
         }
 
-        if (!string.IsNullOrWhiteSpace(_config.AccessToken) && DateTime.UtcNow < _config.ExpiresAtUtc)
+        if (!forceRefresh && !string.IsNullOrWhiteSpace(_config.AccessToken) && DateTime.UtcNow < _config.ExpiresAtUtc)
         {
             return _config.AccessToken;
         }
@@ -1978,13 +1977,15 @@ p {{ color: #94A3B8; font-size: 14px; }}
                         if (name.Equals(QueueFileName, StringComparison.OrdinalIgnoreCase)) slot.QueueCloudFile = fileInfo;
                         else if (name.Equals(ReaderFileName, StringComparison.OrdinalIgnoreCase)) slot.ReaderCloudFile = fileInfo;
                         else if (name.Equals(ManifestFileName, StringComparison.OrdinalIgnoreCase)) slot.ManifestCloudFile = fileInfo;
+                        else if (name.Equals(ResumeFileName, StringComparison.OrdinalIgnoreCase)) slot.ResumeCloudFile = fileInfo;
                     }
                 }
             }
 
             slot.LastSyncUtc = slot.ManifestCloudFile.ModifiedTime
                 ?? slot.QueueCloudFile.ModifiedTime
-                ?? slot.ReaderCloudFile.ModifiedTime;
+                ?? slot.ReaderCloudFile.ModifiedTime
+                ?? slot.ResumeCloudFile.ModifiedTime;
         }
         catch { }
     }
@@ -2078,8 +2079,10 @@ p {{ color: #94A3B8; font-size: 14px; }}
         if (string.IsNullOrEmpty(token)) return (false, "", "Chưa đăng nhập hoặc không lấy được token Google Drive.");
 
         string cleanMime = SanitizeMediaType(mimeType, "text/plain");
+        int quotaRetryCount = 0;
+        int networkRetryCount = 0;
 
-        for (int attempt = 1; attempt <= 3; attempt++)
+        while (!ct.IsCancellationRequested)
         {
             try
             {
@@ -2102,10 +2105,28 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     int status = (int)patchRes.StatusCode;
                     string patchErr = await patchRes.Content.ReadAsStringAsync(ct);
 
-                    if ((status == 403 || status == 429 || status >= 500) && attempt < 3)
+                    // Xử lý Quota Exceeded / Rate Limit (403, 429) -> Tự động chờ 2s rồi retry đến khi được mới thôi
+                    if (status == 429 || status == 403)
                     {
-                        Debug.WriteLine($"[GoogleDriveSync] Upload PATCH {fileName} gặp lỗi {status}, thử lại lần {attempt + 1} sau {attempt * 1.5}s...");
-                        await Task.Delay((int)(attempt * 1500), ct);
+                        quotaRetryCount++;
+                        NotifyStatusChanged($"⚠️ Quota Google Drive tạm đầy / Giới hạn tốc độ ({fileName}). Tự động chờ 2s rồi thử lại (lần {quotaRetryCount})...");
+                        Debug.WriteLine($"[GoogleDriveSync] Quota/Rate limit {status} khi cập nhật {fileName}. Chờ 2s rồi thử lại lần {quotaRetryCount}...");
+                        await Task.Delay(2000, ct);
+                        token = await EnsureValidAccessTokenAsync(ct);
+                        continue;
+                    }
+
+                    if (status == 401)
+                    {
+                        // Token hết hạn, làm mới ngay
+                        token = await EnsureValidAccessTokenAsync(ct, forceRefresh: true);
+                        continue;
+                    }
+
+                    if (status >= 500 && networkRetryCount < 5)
+                    {
+                        networkRetryCount++;
+                        await Task.Delay(2000, ct);
                         continue;
                     }
 
@@ -2147,28 +2168,52 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     int status = (int)postRes.StatusCode;
                     string postErr = await postRes.Content.ReadAsStringAsync(ct);
 
-                    if ((status == 403 || status == 429 || status >= 500) && attempt < 3)
+                    // Xử lý Quota Exceeded / Rate Limit (403, 429) -> Tự động chờ 2s rồi retry đến khi được mới thôi
+                    if (status == 429 || status == 403)
                     {
-                        Debug.WriteLine($"[GoogleDriveSync] Upload POST {fileName} gặp lỗi {status}, thử lại lần {attempt + 1} sau {attempt * 1.5}s...");
-                        await Task.Delay((int)(attempt * 1500), ct);
+                        quotaRetryCount++;
+                        NotifyStatusChanged($"⚠️ Quota Google Drive tạm đầy / Giới hạn tốc độ ({fileName}). Tự động chờ 2s rồi thử lại (lần {quotaRetryCount})...");
+                        Debug.WriteLine($"[GoogleDriveSync] Quota/Rate limit {status} khi tạo mới {fileName}. Chờ 2s rồi thử lại lần {quotaRetryCount}...");
+                        await Task.Delay(2000, ct);
+                        token = await EnsureValidAccessTokenAsync(ct);
+                        continue;
+                    }
+
+                    if (status == 401)
+                    {
+                        // Token hết hạn, làm mới ngay
+                        token = await EnsureValidAccessTokenAsync(ct, forceRefresh: true);
+                        continue;
+                    }
+
+                    if (status >= 500 && networkRetryCount < 5)
+                    {
+                        networkRetryCount++;
+                        await Task.Delay(2000, ct);
                         continue;
                     }
 
                     return (false, "", $"Lỗi tạo tệp {fileName} ({postRes.StatusCode}): {postErr}");
                 }
             }
+            catch (OperationCanceledException)
+            {
+                return (false, "", $"Đã hủy thao tác tải lên {fileName}.");
+            }
             catch (Exception ex)
             {
-                if (attempt < 3)
+                if (networkRetryCount < 5)
                 {
-                    await Task.Delay(attempt * 1500, ct);
+                    networkRetryCount++;
+                    NotifyStatusChanged($"⚠️ Gián đoạn kết nối tải {fileName}. Thử lại sau 2s (lần {networkRetryCount}/5)...");
+                    await Task.Delay(2000, ct);
                     continue;
                 }
                 return (false, "", $"Lỗi khi tải tệp {fileName} lên Google Drive: {ex.Message}");
             }
         }
 
-        return (false, "", $"Không thể tải tệp {fileName} lên Google Drive sau 3 lần thử.");
+        return (false, "", $"Thao tác tải {fileName} đã bị hủy bỏ hoặc không thể hoàn thành.");
     }
 
     /// <summary>
@@ -2451,9 +2496,10 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Sao lưu tiến trình đọc dở dùng chung (resume.md) lên thư mục gốc chung của app trên Google Drive (\GMTPC\Comic Downloader GMTPC\).
+    /// Sao lưu tiến trình đọc dở (resume.md) vào cả thư mục thiết bị đang chọn (cùng với autosave.md và saved_reader_bookmarks.md)
+    /// VÀ thư mục gốc chung của app trên Google Drive (\GMTPC\Comic Downloader GMTPC\).
     /// </summary>
-    public async Task<(bool Success, string Message)> BackupResumeToCloudAsync(CancellationToken ct = default)
+    public async Task<(bool Success, string Message)> BackupResumeToCloudAsync(string? targetFolderId = null, CancellationToken ct = default)
     {
         await _syncLock.WaitAsync(ct);
         try
@@ -2461,23 +2507,42 @@ p {{ color: #94A3B8; font-size: 14px; }}
             string? appFolderId = await EnsureTargetFolderAsync(ct);
             if (string.IsNullOrEmpty(appFolderId)) return (false, "Không thể kết nối thư mục gốc của app trên Google Drive.");
 
-            string mdContent = ReadProgressStore.Instance.BuildResumeMarkdownContent(CurrentDeviceName);
-            var (ok, fileId, msg) = await UploadOrUpdateFileAsync(appFolderId, ResumeFileName, mdContent, "text/markdown", ct);
+            string? deviceFolderId = targetFolderId;
+            if (string.IsNullOrEmpty(deviceFolderId))
+            {
+                deviceFolderId = await EnsureCurrentDeviceFolderAsync(ct);
+            }
 
-            if (ok)
+            string mdContent = ReadProgressStore.Instance.BuildResumeMarkdownContent(CurrentDeviceName);
+
+            // 1. Lưu vào thư mục slot thiết bị đang chọn (nơi chứa autosave.md và saved_reader_bookmarks.md)
+            bool deviceOk = true;
+            string deviceMsg = string.Empty;
+            if (!string.IsNullOrEmpty(deviceFolderId))
+            {
+                var (devOk, devFileId, devMsg) = await UploadOrUpdateFileAsync(deviceFolderId, ResumeFileName, mdContent, "text/markdown", ct);
+                deviceOk = devOk;
+                deviceMsg = devMsg;
+            }
+
+            // 2. Lưu vào thư mục gốc app (để làm bản dùng chung toàn cục)
+            var (appOk, appFileId, appMsg) = await UploadOrUpdateFileAsync(appFolderId, ResumeFileName, mdContent, "text/markdown", ct);
+
+            bool overallOk = deviceOk || appOk;
+            if (overallOk)
             {
                 _cachedResumeCloudFile = new GoogleDriveFileInfo
                 {
-                    Id = fileId,
+                    Id = appOk ? appFileId : "",
                     Name = ResumeFileName,
                     ModifiedTime = DateTime.UtcNow,
                     Size = Encoding.UTF8.GetByteCount(mdContent),
                     MimeType = "text/markdown"
                 };
-                NotifyStatusChanged($"Đã sao lưu tiến độ đọc dùng chung (resume.md) lên Google Drive ({DateTime.Now:HH:mm:ss})");
+                NotifyStatusChanged($"Đã sao lưu tiến độ đọc (resume.md) lên thư mục thiết bị & Google Drive ({DateTime.Now:HH:mm:ss})");
             }
 
-            return (ok, msg);
+            return (overallOk, overallOk ? "Sao lưu resume.md thành công vào thư mục thiết bị và Google Drive." : (appMsg ?? deviceMsg));
         }
         finally
         {
@@ -2486,9 +2551,10 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Phục hồi và Smart Merge tiến trình đọc dở từ file resume.md trên thư mục gốc chung của Google Drive về máy.
+    /// Phục hồi và Smart Merge tiến trình đọc dở từ file resume.md trên Google Drive về máy.
+    /// Ưu tiên nạp từ thư mục slot thiết bị nguồn (sourceFolderId), nếu chưa có mới fallback nạp từ thư mục gốc app.
     /// </summary>
-    public async Task<(bool Success, ResumeRestoreResult? Result, string Message)> RestoreResumeFromCloudAsync(CancellationToken ct = default)
+    public async Task<(bool Success, ResumeRestoreResult? Result, string Message)> RestoreResumeFromCloudAsync(string? sourceFolderId = null, CancellationToken ct = default)
     {
         await _syncLock.WaitAsync(ct);
         try
@@ -2496,10 +2562,39 @@ p {{ color: #94A3B8; font-size: 14px; }}
             string? appFolderId = await EnsureTargetFolderAsync(ct);
             if (string.IsNullOrEmpty(appFolderId)) return (false, null, "Không thể kết nối thư mục gốc của app trên Google Drive.");
 
-            var (ok, content, _, msg) = await DownloadFileContentAsync(appFolderId, ResumeFileName, ct);
+            string content = string.Empty;
+            bool ok = false;
+            string msg = string.Empty;
+
+            // 1. Thử tải resume.md từ thư mục thiết bị nguồn được chọn
+            if (!string.IsNullOrEmpty(sourceFolderId))
+            {
+                var (sOk, sContent, _, sMsg) = await DownloadFileContentAsync(sourceFolderId, ResumeFileName, ct);
+                if (sOk && !string.IsNullOrWhiteSpace(sContent))
+                {
+                    ok = true;
+                    content = sContent;
+                }
+            }
+
+            // 2. Nếu thư mục thiết bị nguồn chưa có file resume.md, fallback nạp từ thư mục gốc chung của app
+            if (!ok)
+            {
+                var (aOk, aContent, _, aMsg) = await DownloadFileContentAsync(appFolderId, ResumeFileName, ct);
+                if (aOk && !string.IsNullOrWhiteSpace(aContent))
+                {
+                    ok = true;
+                    content = aContent;
+                }
+                else
+                {
+                    msg = aMsg;
+                }
+            }
+
             if (!ok || string.IsNullOrWhiteSpace(content))
             {
-                return (false, null, msg);
+                return (false, null, string.IsNullOrEmpty(msg) ? "Không tìm thấy file resume.md trên cloud." : msg);
             }
 
             var result = ReadProgressStore.Instance.ParseResumeMarkdownContent(content, mergeWithExisting: true);
@@ -2512,7 +2607,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Đồng bộ 2 trong 1: Sao lưu toàn diện cả Queue tải và Reader lên thư mục thiết bị trên Google Drive.
+    /// Đồng bộ 3 trong 1: Sao lưu toàn diện cả Queue tải, Reader và Resume lên thư mục thiết bị trên Google Drive.
     /// </summary>
     public async Task<FullSyncResult> FullSyncUploadAsync(IEnumerable<ComicBookItem> queueItems, string? targetFolderId = null, CancellationToken ct = default)
     {
@@ -2523,13 +2618,13 @@ p {{ color: #94A3B8; font-size: 14px; }}
         var (rOk, rMsg) = await BackupReaderToCloudAsync(targetFolderId, ct);
         result.ReaderSynced = rOk;
 
-        var (resOk, _) = await BackupResumeToCloudAsync(ct);
+        var (resOk, _) = await BackupResumeToCloudAsync(targetFolderId, ct);
         result.ResumeSynced = resOk;
 
         result.Success = qOk && rOk;
         if (result.Success)
         {
-            result.Message = $"Đã sao lưu thành công Queue & Bookmark/History [{CurrentDeviceName}] và Resume dùng chung lên Google Drive.";
+            result.Message = $"Đã sao lưu thành công Queue & Bookmark/History [{CurrentDeviceName}] và Resume vào thư mục thiết bị & Google Drive.";
         }
         else
         {
@@ -2539,7 +2634,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Phục hồi toàn diện cả Queue và Reader từ thư mục thiết bị chỉ định (hoặc thiết bị hiện tại).
+    /// Phục hồi toàn diện cả Queue, Reader và Resume từ thư mục thiết bị chỉ định (hoặc thiết bị hiện tại).
     /// </summary>
     public async Task<(FullSyncResult Result, QueueRestoreResult? QueueResult, ReaderRestoreResult? ReaderResult)> FullSyncRestoreAsync(string? sourceFolderId = null, CancellationToken ct = default)
     {
@@ -2556,7 +2651,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
             result.RestoredHistory = rResult.RestoredHistory;
         }
 
-        var (resOk, resResult, _) = await RestoreResumeFromCloudAsync(ct);
+        var (resOk, resResult, _) = await RestoreResumeFromCloudAsync(sourceFolderId, ct);
         result.ResumeSynced = resOk;
 
         result.Success = qOk || rOk || resOk;
@@ -2590,41 +2685,12 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Kích hoạt tự động đồng bộ ngầm có debounce (30 giây) khi có thay đổi.
+    /// Đã vô hiệu hóa tính năng tự động đồng bộ ngầm để tránh Quota Exceeded theo chỉ thị người dùng.
     /// </summary>
     public void TriggerDebouncedAutoSync(Func<IEnumerable<ComicBookItem>> getQueueItems)
     {
-        if (!IsConnected || !AutoSyncEnabled) return;
-
-        lock (this)
-        {
-            _hasPendingAutoSync = true;
-            if (_autoSyncDebounceTimer == null)
-            {
-                _autoSyncDebounceTimer = new System.Threading.Timer(async _ =>
-                {
-                    bool shouldSync = false;
-                    lock (this)
-                    {
-                        shouldSync = _hasPendingAutoSync;
-                        _hasPendingAutoSync = false;
-                    }
-                    if (shouldSync)
-                    {
-                        try
-                        {
-                            var items = getQueueItems();
-                            await FullSyncUploadAsync(items, ct: CancellationToken.None);
-                        }
-                        catch { }
-                    }
-                }, null, 30000, Timeout.Infinite);
-            }
-            else
-            {
-                _autoSyncDebounceTimer.Change(30000, Timeout.Infinite);
-            }
-        }
+        // Vô hiệu hóa triệt để Auto-Sync ngầm để tránh cạn kiệt Quota API Google Drive
+        return;
     }
 
     private void NotifyStatusChanged(string message)
