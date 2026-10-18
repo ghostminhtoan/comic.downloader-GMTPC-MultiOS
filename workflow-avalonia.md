@@ -3181,4 +3181,14 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + Áp dụng kiến trúc Lazy Loading cho `GetCloudDeviceSlotsAsync`: Khi quét danh sách, chỉ lấy metadata file cho thư mục đang active (`isCurrent`), các thư mục khác nạp tức thì chỉ với tên và icon. Giảm số lượng HTTP API request từ 30+ xuống chỉ còn 2-3 request, triệt tiêu nguy cơ cạn kiệt Quota Queries per 100 seconds per user.
       + Khi người dùng chuyển lựa chọn thư mục trên ComboBox, ViewModel gọi ngầm `PopulateSlotFilesAsync` để nạp thông tin tệp của slot đó theo nhu cầu thực tế.
       + Bổ sung vòng lặp retry 3 lần kèm Exponential Backoff (1.5s, 3.0s) trong `UploadOrUpdateFileAsync` khi gặp HTTP 403 / 429 / 5xx để tự động vượt qua các đỉnh rate limit tạm thời.
+12. **Tính Năng Xóa Thư Mục Đám Mây & Liên Kết Nhanh Qua Folder ID Google Drive**:
+    - **Tính năng Xóa thư mục Google Drive (`DeleteCloudFolderAsync`)**:
+      + Cho phép xóa thư mục đang chọn trên Google Drive trực tiếp qua REST API v3 DELETE.
+      + Cơ chế bảo vệ tuyệt đối: Cấm xóa thư mục gốc của ứng dụng (`\GMTPC\Comic Downloader GMTPC\`).
+      + Tự động dọn dẹp cache `CachedDeviceFolderId` nếu thư mục bị xóa đang là thư mục liên kết hiện tại, tự động chuyển selection sang slot hợp lệ khác.
+    - **Tính năng Liên kết / Đồng bộ qua Folder ID (`ConnectByFolderIdAsync`)**:
+      + Hỗ trợ người dùng dán trực tiếp Folder ID (ví dụ: `1J0-mghYBBq82oc...`) hoặc toàn bộ link URL Google Drive (`drive.google.com/drive/folders/...` hoặc `?id=...`).
+      + Hệ thống tự động phân tích và trích xuất sạch ID, kiểm tra sự tồn tại của thư mục, trạng thái thùng rác và đảm bảo đúng kiểu folder.
+      + Tự động thêm slot vào danh sách, chuyển thiết bị sang thư mục đó và nạp thông tin file ngay lập tức.
+
 

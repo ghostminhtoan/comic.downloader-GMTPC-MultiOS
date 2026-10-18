@@ -180,6 +180,7 @@ public sealed class GoogleDriveSyncService
     }
     public DateTime LastSyncUtc => _config.LastSyncUtc;
     public string TargetFolderId => _config.CachedAppFolderId;
+    public string CachedAppFolderId => _config.CachedAppFolderId;
     public string CachedDeviceFolderId => _config.CachedDeviceFolderId;
     public string LastCodeVerifier => _config.LastCodeVerifier;
     public string LastRedirectUri => _config.LastRedirectUri;
@@ -1311,6 +1312,152 @@ p {{ color: #94A3B8; font-size: 14px; }}
     public Task<(bool Success, string Message)> RenameDeviceFolderAsync(string newCustomName, CancellationToken ct = default)
     {
         return RenameCloudFolderAsync(newCustomName, ct);
+    }
+
+    /// <summary>
+    /// Xóa thư mục trên Google Drive (REST API v3 DELETE).
+    /// Tuyệt đối ngăn chặn xóa nhầm thư mục gốc của ứng dụng (\GMTPC\Comic Downloader GMTPC\).
+    /// </summary>
+    public async Task<(bool Success, string Message)> DeleteCloudFolderAsync(string folderId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(folderId))
+        {
+            return (false, "ID thư mục không hợp lệ.");
+        }
+
+        // Chặn xóa thư mục gốc của app
+        if (folderId.Equals(_config.CachedAppFolderId, StringComparison.OrdinalIgnoreCase) ||
+            folderId.Equals(_config.CachedGmtpcFolderId, StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, "Không được phép xóa thư mục gốc của ứng dụng (\\GMTPC\\Comic Downloader GMTPC\\).");
+        }
+
+        string? token = await EnsureValidAccessTokenAsync(ct);
+        if (string.IsNullOrEmpty(token))
+        {
+            return (false, "Chưa đăng nhập hoặc không lấy được token Google Drive.");
+        }
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Delete, $"{GoogleDriveApiBase}/files/{folderId}");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var res = await _httpClient.SendAsync(req, ct);
+
+            if (res.IsSuccessStatusCode || res.StatusCode == HttpStatusCode.NotFound)
+            {
+                if (folderId.Equals(_config.CachedDeviceFolderId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _config.CachedDeviceFolderId = string.Empty;
+                    SaveConfigToDisk();
+                }
+
+                NotifyStatusChanged("Đã xóa thư mục trên Google Drive thành công.");
+                return (true, "Đã xóa thư mục trên Google Drive thành công.");
+            }
+
+            string err = await res.Content.ReadAsStringAsync(ct);
+            return (false, $"Lỗi xóa thư mục ({res.StatusCode}): {err}");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Ngoại lệ khi xóa thư mục: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Liên kết và chọn thư mục làm việc trên Google Drive bằng Folder ID trực tiếp hoặc URL chia sẻ.
+    /// Cho phép người dùng kết nối nhanh với bất kỳ thư mục nào trên Drive mà không phụ thuộc vào việc tìm kiếm tên.
+    /// </summary>
+    public async Task<(bool Success, GoogleDriveDeviceSlot? Slot, string Message)> ConnectByFolderIdAsync(string inputFolderIdOrUrl, CancellationToken ct = default)
+    {
+        string raw = inputFolderIdOrUrl?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return (false, null, "Vui lòng nhập Folder ID hoặc URL Google Drive.");
+        }
+
+        string folderId = raw;
+        if (raw.Contains("drive.google.com"))
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(raw, @"folders\/([a-zA-Z0-9_\-]+)");
+            if (match.Success && match.Groups.Count > 1)
+            {
+                folderId = match.Groups[1].Value;
+            }
+            else
+            {
+                var matchId = System.Text.RegularExpressions.Regex.Match(raw, @"id=([a-zA-Z0-9_\-]+)");
+                if (matchId.Success && matchId.Groups.Count > 1)
+                {
+                    folderId = matchId.Groups[1].Value;
+                }
+            }
+        }
+        folderId = folderId.Trim();
+
+        string? token = await EnsureValidAccessTokenAsync(ct);
+        if (string.IsNullOrEmpty(token))
+        {
+            return (false, null, "Chưa đăng nhập hoặc không lấy được token Google Drive.");
+        }
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{GoogleDriveApiBase}/files/{folderId}?fields=id,name,mimeType,trashed");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var res = await _httpClient.SendAsync(req, ct);
+
+            if (res.IsSuccessStatusCode)
+            {
+                string json = await res.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(json);
+                string name = doc.RootElement.TryGetProperty("name", out var n) ? n.GetString() ?? folderId : folderId;
+                string mime = doc.RootElement.TryGetProperty("mimeType", out var m) ? m.GetString() ?? "" : "";
+                bool trashed = doc.RootElement.TryGetProperty("trashed", out var t) && t.GetBoolean();
+
+                if (trashed)
+                {
+                    return (false, null, $"Thư mục [{name}] đang nằm trong thùng rác Google Drive.");
+                }
+
+                if (!string.Equals(mime, "application/vnd.google-apps.folder", StringComparison.OrdinalIgnoreCase))
+                {
+                    return (false, null, $"ID được cung cấp là tệp tin ({name}), không phải thư mục.");
+                }
+
+                SelectActiveFolder(folderId, name);
+
+                string icon = name.Contains("Android") ? "📱"
+                    : name.Contains("Linux") ? "🐧"
+                    : name.Contains("macOS") || name.Contains("Mac") ? "🍎"
+                    : "🖥️";
+
+                var slot = new GoogleDriveDeviceSlot
+                {
+                    DeviceFolderId = folderId,
+                    DeviceFolderName = name,
+                    DisplayName = $"⭐ {icon} {name} (Liên kết ID - Sẵn sàng)",
+                    IsCurrentDevice = true
+                };
+
+                await PopulateSlotFilesAsync(slot, ct);
+                return (true, slot, $"Đã liên kết thành công với thư mục [{name}] qua ID.");
+            }
+            else if (res.StatusCode == HttpStatusCode.NotFound)
+            {
+                return (false, null, "Không tìm thấy thư mục trên Google Drive với ID này. Hãy kiểm tra lại ID hoặc quyền truy cập.");
+            }
+            else
+            {
+                string err = await res.Content.ReadAsStringAsync(ct);
+                return (false, null, $"Lỗi kiểm tra thư mục ({res.StatusCode}): {err}");
+            }
+        }
+        catch (Exception ex)
+        {
+            return (false, null, $"Ngoại lệ khi liên kết ID thư mục: {ex.Message}");
+        }
     }
 
     private async Task<string?> FindFolderByNameAsync(string folderName, string parentId, string token, CancellationToken ct)

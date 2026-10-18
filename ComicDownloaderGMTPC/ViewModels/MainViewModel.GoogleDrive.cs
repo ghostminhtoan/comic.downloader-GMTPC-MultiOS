@@ -46,6 +46,12 @@ public partial class MainViewModel
     [ObservableProperty]
     private string _newFolderNameInput = string.Empty;
 
+    [ObservableProperty]
+    private bool _isInputFolderIdVisible;
+
+    [ObservableProperty]
+    private string _customFolderIdInput = string.Empty;
+
     public ObservableCollection<GoogleDriveDeviceSlot> AvailableCloudDevices { get; } = new();
 
     [ObservableProperty]
@@ -154,6 +160,7 @@ public partial class MainViewModel
         NewFolderNameInput = string.Empty;
         IsCreatingNewFolder = true;
         IsRenamingDevice = false;
+        IsInputFolderIdVisible = false;
     }
 
     [RelayCommand]
@@ -240,6 +247,7 @@ public partial class MainViewModel
         CustomDeviceNameInput = _gdriveService.CurrentDeviceName;
         IsRenamingDevice = true;
         IsCreatingNewFolder = false;
+        IsInputFolderIdVisible = false;
     }
 
     [RelayCommand]
@@ -298,6 +306,133 @@ public partial class MainViewModel
     public void CancelRenameDevice()
     {
         IsRenamingDevice = false;
+    }
+
+    [RelayCommand]
+    public void StartInputFolderId()
+    {
+        CustomFolderIdInput = string.Empty;
+        IsInputFolderIdVisible = true;
+        IsCreatingNewFolder = false;
+        IsRenamingDevice = false;
+    }
+
+    [RelayCommand]
+    public void CancelInputFolderId()
+    {
+        IsInputFolderIdVisible = false;
+        CustomFolderIdInput = string.Empty;
+    }
+
+    [RelayCommand]
+    public async Task ConfirmConnectByFolderIdAsync()
+    {
+        if (string.IsNullOrWhiteSpace(CustomFolderIdInput))
+        {
+            GoogleDriveStatusText = "⚠️ Vui lòng nhập Folder ID hoặc URL Google Drive.";
+            return;
+        }
+
+        string input = CustomFolderIdInput.Trim();
+        IsGoogleDriveBusy = true;
+        GoogleDriveStatusText = "⏳ Đang kiểm tra và liên kết thư mục qua ID trên Google Drive...";
+        try
+        {
+            var (ok, slot, msg) = await _gdriveService.ConnectByFolderIdAsync(input);
+            if (ok && slot != null)
+            {
+                IsInputFolderIdVisible = false;
+                CustomFolderIdInput = string.Empty;
+                CurrentDeviceDisplayName = slot.DeviceFolderName;
+
+                var existing = AvailableCloudDevices.FirstOrDefault(d => d.DeviceFolderId == slot.DeviceFolderId);
+                if (existing != null)
+                {
+                    existing.DeviceFolderName = slot.DeviceFolderName;
+                    existing.DisplayName = slot.DisplayName;
+                    existing.IsCurrentDevice = true;
+                    SelectedCloudDevice = existing;
+                }
+                else
+                {
+                    AvailableCloudDevices.Insert(0, slot);
+                    SelectedCloudDevice = slot;
+                }
+
+                UpdateCloudFileInfoDisplay(slot.QueueCloudFile, slot.ReaderCloudFile);
+
+                GoogleDriveStatusText = "✅ " + msg;
+                AddLog("SUCCESS", $"☁️ {msg}");
+                ShowCenterToast("LIÊN KẾT THƯ MỤC ID", msg, "🔗", "GOOGLE DRIVE", 3000);
+            }
+            else
+            {
+                GoogleDriveStatusText = "❌ " + msg;
+                AddLog("WARN", $"☁️ {msg}");
+                ShowCenterToast("LỖI LIÊN KẾT ID", msg, "❌", "GOOGLE DRIVE", 3200);
+            }
+        }
+        catch (Exception ex)
+        {
+            GoogleDriveStatusText = $"❌ Lỗi liên kết ID: {ex.Message}";
+        }
+        finally
+        {
+            IsGoogleDriveBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task DeleteSelectedCloudFolderAsync()
+    {
+        if (SelectedCloudDevice == null || string.IsNullOrWhiteSpace(SelectedCloudDevice.DeviceFolderId))
+        {
+            GoogleDriveStatusText = "⚠️ Vui lòng chọn một thư mục cần xóa.";
+            ShowCenterToast("CHƯA CHỌN THƯ MỤC", "Vui lòng chọn thư mục từ danh sách trước khi xóa.", "⚠️", "GOOGLE DRIVE", 2000);
+            return;
+        }
+
+        var targetSlot = SelectedCloudDevice;
+        if (targetSlot.IsLegacyRoot || targetSlot.DeviceFolderId.Equals(_gdriveService.CachedAppFolderId, StringComparison.OrdinalIgnoreCase))
+        {
+            GoogleDriveStatusText = "⚠️ Không thể xóa thư mục gốc của ứng dụng (\\GMTPC\\Comic Downloader GMTPC\\).";
+            ShowCenterToast("KHÔNG THỂ XÓA", "Không được phép xóa thư mục gốc của ứng dụng.", "⛔", "GOOGLE DRIVE", 3000);
+            return;
+        }
+
+        string folderName = targetSlot.DeviceFolderName;
+        string folderId = targetSlot.DeviceFolderId;
+
+        IsGoogleDriveBusy = true;
+        GoogleDriveStatusText = $"⏳ Đang xóa thư mục [{folderName}] trên Google Drive...";
+        try
+        {
+            var (ok, msg) = await _gdriveService.DeleteCloudFolderAsync(folderId);
+            if (ok)
+            {
+                AvailableCloudDevices.Remove(targetSlot);
+                SelectedCloudDevice = AvailableCloudDevices.FirstOrDefault(d => d.IsCurrentDevice) ?? AvailableCloudDevices.FirstOrDefault();
+                CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
+
+                GoogleDriveStatusText = $"✅ Đã xóa thư mục [{folderName}] trên Google Drive.";
+                AddLog("SUCCESS", $"☁️ Đã xóa thư mục [{folderName}] trên Google Drive.");
+                ShowCenterToast("ĐÃ XÓA THƯ MỤC", $"Đã xóa thành công thư mục [{folderName}] khỏi Google Drive.", "🗑️", "GOOGLE DRIVE", 3000);
+            }
+            else
+            {
+                GoogleDriveStatusText = "❌ " + msg;
+                AddLog("ERROR", $"☁️ Lỗi xóa thư mục: {msg}");
+                ShowCenterToast("LỖI XÓA THƯ MỤC", msg, "❌", "GOOGLE DRIVE", 3200);
+            }
+        }
+        catch (Exception ex)
+        {
+            GoogleDriveStatusText = $"❌ Lỗi xóa thư mục: {ex.Message}";
+        }
+        finally
+        {
+            IsGoogleDriveBusy = false;
+        }
     }
 
     /// <summary>
