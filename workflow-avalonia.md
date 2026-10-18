@@ -16,9 +16,9 @@ Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ,
 - Không revert thay đổi của user nếu không yêu cầu.
 - Xong việc: đánh giá, gợi ý file cần sửa/kiểm tra, rà soát EN/VI.
 - Luôn luôn test build 2 bước: bước 1 là tự tải khởi tạo thư viện, bước 2 là app mở lên, có UI hoàn tất thì mới xem như là build thành công.
-- **Quy tắc Bắt Buộc Tự Động Upload Release Beta**: Bắt buộc luôn luôn upload release beta sau khi build/đóng gói xong để cập nhật 3 gói cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta`: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`. Quy trình tự động đã được tích hợp trong bước [4/4] của `build-avalonia.bat`, hoặc chạy trực tiếp lệnh `upload beta.cmd --no-pause` qua công nghệ Microsoft Edge Direct-to-S3 siêu tốc.
+- **Quy tắc Bắt Buộc Tự Động Upload Release Beta**: Bắt buộc luôn luôn upload release beta sau khi build/đóng gói xong để cập nhật 3 gói cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta`: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`. Quy trình tự động đã được tích hợp trong bước [4/4] của `build.bat`, hoặc chạy trực tiếp lệnh `upload beta.cmd --no-pause` qua công nghệ Microsoft Edge Direct-to-S3 siêu tốc.
 - **Quy tắc Build & Thư mục Publish**:
-  - Script build chính thức: `build-avalonia.bat` (đã tích hợp đóng gói Windows, Linux, Android và tự động upload beta; hỗ trợ cờ `--no-upload` để chỉ build local).
+  - Script build chính thức: `build.bat` (đã tích hợp đóng gói Windows, Linux, Android và tự động upload beta; hỗ trợ cờ `--no-upload` để chỉ build local). Luôn luôn nhớ build toàn bộ hệ điều hành (Windows, Linux, Android) và tự động upload release beta sau khi hoàn tất.
   - Khi build / publish file cho toàn bộ các hệ điều hành (Windows, Linux, Android), toàn bộ file standalone `.exe`, binary Linux, `.tar.gz`, `.deb` và `.apk` **bắt buộc luôn luôn ở chung một folder duy nhất `\Comic Downloader GMTPC AVALONIA\publish\`**, tuyệt đối **không được cho vào các subfolder như `windows`, `linux`, `android`**.
 - Luôn xuất khối trạng thái chuẩn ở cuối câu trả lời:
   - `commit local: <mã hash>`
@@ -3150,6 +3150,12 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      * Đa nhiệm Loopback Listener + Trình duyệt chéo nền tảng: `GoogleDriveSyncService` kích hoạt `OpenBrowserAsyncHandler` thông qua `LaunchWebUrlAsync` (Avalonia Launcher / Android ActionView) kết hợp chạy ngầm `HttpListener` cục bộ.
      * Lưu vết an toàn `LastCodeVerifier` & `LastRedirectUri` vào cấu hình đĩa: Phòng ngừa trường hợp Android quản lý bộ nhớ tạm ngưng app trong lúc người dùng thao tác ở Chrome.
      * Giải quyết triệt để lỗi trình duyệt `ERR_CONNECTION_REFUSED` (127.0.0.1 từ chối kết nối): Khi Google hoàn tất xác thực và chuyển hướng về `http://127.0.0.1:{port}/callback/?code=...`, nếu trình duyệt không thể gửi HTTP request tới app ngầm, người dùng chỉ cần sao chép toàn bộ đường link trên thanh địa chỉ. Nút `📋 Dán Mã & Xác Nhận` tự động phân tích query string, trích xuất chính xác cả `code` lẫn `redirect_uri`, giải phóng cổng listener đang chờ và gửi yêu cầu đổi token thành công 100% trong 1 chạm.
-
-
+7. **Đổi Tên Tập Lệnh Build Thành `build.bat` & Khắc Ghi Quy Tắc Build Toàn Bộ Hệ Điều Hành Đa Nền Tảng Kèm Upload Beta**:
+   - Đổi tên tệp kịch bản build chính thức từ `build-avalonia.bat` sang `build.bat` trong thư mục `Comic Downloader GMTPC AVALONIA`.
+   - Cung cấp tệp chuyển tiếp `build.cmd` trong thư mục dự án và `..\build.bat`, `..\build.cmd` tại thư mục cha gốc của kho lưu trữ.
+   - **Quy tắc cốt lõi bất di bất dịch**: Luôn luôn thực hiện build trọn gói toàn bộ các hệ điều hành:
+     1. Windows: Single-file Standalone EXE (`publish\ComicDownloaderGMTPC.Desktop.exe`).
+     2. Linux: Standalone binary (`publish\ComicDownloaderGMTPC`), Portable archive (`publish\ComicDownloaderGMTPC-linux-x64.tar.gz`), Debian package (`publish\comicdownloadergmtpc_1.0.0_amd64.deb`).
+     3. Android: Signed Standalone APK (`publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`).
+     4. Tự động Upload GitHub Release Beta: Đẩy trực tiếp 3 tệp phát hành lên GitHub Release tag `beta` (`https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`) thông qua `upload beta.cmd --no-pause`.
 
