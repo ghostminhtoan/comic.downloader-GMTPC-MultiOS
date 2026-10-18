@@ -2350,6 +2350,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     partial void OnCurrentChapterChanged(LibraryChapterItem? value)
     {
         if (_suppressChapterSelectionChanged || value == null) return;
+        _isNavigatingToPreviousChapter = false;
         ActivePopup = string.Empty;
         RefreshBookmarksList();
         _ = LoadChapterInternalAsync(value);
@@ -2546,11 +2547,17 @@ public partial class ComicReaderViewModel : ViewModelBase
 
             _suppressScrollSync = true;
             CurrentPageIndex = startIndex;
-            _suppressScrollSync = false;
 
             UpdateCurrentFlipPages();
             SyncActivePdfBookmark(startIndex);
-            RecordReadingProgress(startIndex);
+
+            chapter.TotalPages = TotalPages;
+            chapter.LastReadPage = startIndex + 1;
+            if (CurrentChapter != null)
+            {
+                CurrentChapter.TotalPages = TotalPages;
+                CurrentChapter.LastReadPage = startIndex + 1;
+            }
 
             if (TotalPages > 0)
             {
@@ -2583,11 +2590,19 @@ public partial class ComicReaderViewModel : ViewModelBase
             {
                 string bookmarkHint = SelectedPdfBookmark != null ? $" ({SelectedPdfBookmark.Title})" : string.Empty;
                 ShowTransientToast($"📖 Đã khôi phục vị trí đọc: {chapter.Title} - Trang {startIndex + 1}/{TotalPages}{bookmarkHint}");
-                Dispatcher.UIThread.Post(() => RequestScrollToPage(startIndex), DispatcherPriority.Background);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    RequestScrollToPage(startIndex);
+                    _suppressScrollSync = false;
+                }, DispatcherPriority.Loaded);
             }
             else
             {
-                Dispatcher.UIThread.Post(() => RequestScrollToPage(0), DispatcherPriority.Background);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    RequestScrollToPage(0);
+                    _suppressScrollSync = false;
+                }, DispatcherPriority.Loaded);
             }
         }
         finally
@@ -2651,7 +2666,7 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     private void RecordReadingProgress(int pageIndex)
     {
-        if (CurrentChapter == null || TotalPages <= 0) return;
+        if (IsLoadingChapter || _suppressScrollSync || CurrentChapter == null || TotalPages <= 0) return;
 
         int page1Based = Math.Clamp(pageIndex + 1, 1, TotalPages);
         CurrentChapter.TotalPages = TotalPages;

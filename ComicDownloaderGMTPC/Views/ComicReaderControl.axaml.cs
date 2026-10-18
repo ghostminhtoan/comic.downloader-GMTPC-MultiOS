@@ -1206,7 +1206,28 @@ public partial class ComicReaderControl : UserControl
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ComicReaderViewModel.IsOverlayVisible))
+        if (e.PropertyName == nameof(ComicReaderViewModel.IsLoadingChapter))
+        {
+            if (DataContext is ComicReaderViewModel vm && vm.IsLoadingChapter)
+            {
+                StopKineticScroll();
+                _isProgrammaticScroll = true;
+                _suppressScrollChangedUntilTick = Environment.TickCount64 + 2500;
+                var sv = GetReaderScrollViewer();
+                if (sv != null)
+                {
+                    sv.Offset = Vector.Zero;
+                }
+                var flipSv = GetFlipScrollViewer();
+                if (flipSv != null)
+                {
+                    flipSv.Offset = Vector.Zero;
+                }
+                _cumulativeOverscrollX = 0;
+                _cumulativeOverscrollY = 0;
+            }
+        }
+        else if (e.PropertyName == nameof(ComicReaderViewModel.IsOverlayVisible))
         {
             _suppressScrollChangedUntilTick = Environment.TickCount64 + 800;
         }
@@ -1487,7 +1508,7 @@ public partial class ComicReaderControl : UserControl
             if (sv != null)
             {
                 double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
-                sv.Offset = new Vector(sv.Offset.X, Math.Clamp(targetY, 0, maxY));
+                sv.Offset = new Vector(0, pageIndex == 0 ? 0 : Math.Clamp(targetY, 0, maxY));
             }
             try { listBox.ScrollIntoView(targetItem); } catch { }
         }
@@ -1502,8 +1523,10 @@ public partial class ComicReaderControl : UserControl
                     accX += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
                 }
                 double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
-                double targetX = vm.IsRightToLeft ? (maxX - accX) : accX;
-                sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), sv.Offset.Y);
+                double targetX = pageIndex == 0
+                    ? (vm.IsRightToLeft ? maxX : 0)
+                    : (vm.IsRightToLeft ? (maxX - accX) : accX);
+                sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), 0);
             }
             try { listBox.ScrollIntoView(targetItem); } catch { }
         }
@@ -1547,7 +1570,7 @@ public partial class ComicReaderControl : UserControl
                 if (sv != null)
                 {
                     double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
-                    sv.Offset = new Vector(sv.Offset.X, Math.Clamp(targetY, 0, maxY));
+                    sv.Offset = new Vector(0, pageIndex == 0 ? 0 : Math.Clamp(targetY, 0, maxY));
                 }
             }
             else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
@@ -1561,8 +1584,10 @@ public partial class ComicReaderControl : UserControl
                         accX += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
                     }
                     double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
-                    double targetX = vm.IsRightToLeft ? (maxX - accX) : accX;
-                    sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), sv.Offset.Y);
+                    double targetX = pageIndex == 0
+                        ? (vm.IsRightToLeft ? maxX : 0)
+                        : (vm.IsRightToLeft ? (maxX - accX) : accX);
+                    sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), 0);
                 }
             }
 
@@ -1612,7 +1637,7 @@ public partial class ComicReaderControl : UserControl
         {
             return;
         }
-        if (DataContext is not ComicReaderViewModel vm || !vm.IsScrollMode || vm.Pages.Count == 0) return;
+        if (DataContext is not ComicReaderViewModel vm || !vm.IsScrollMode || vm.Pages.Count == 0 || vm.IsLoadingChapter) return;
 
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
         if (listBox == null) return;

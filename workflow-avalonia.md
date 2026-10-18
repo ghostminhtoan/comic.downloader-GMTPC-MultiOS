@@ -3332,3 +3332,17 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       * `history.md`: **CHỈ** phụ trách lưu danh sách các tệp/bộ truyện đã mở (tên truyện, đường dẫn cục bộ, thời gian mở gần nhất). Tuyệt đối **KHÔNG** lưu chương hay trang đang đọc dở để loại bỏ hoàn toàn nguy cơ ghi đè tiến trình đọc.
       * `resume.md`: **ĐỘC QUYỀN** quản lý tiến trình chương và trang đang xem dở dang của người dùng trên toàn bộ hệ sinh thái thiết bị.
 
+22. **Khắc Phục Dứt Điểm Lỗi Chuyển Chương Tự Động Nhảy Ra Trang Cuối Của Chương (`ComicReaderViewModel.cs`, `ComicReaderControl.axaml.cs`)**:
+    - **Nguyên nhân cốt lõi**:
+      + Khi chuyển chương (qua ComboBox danh sách chương, nút Chương Sau hoặc cuộn tiếp sang chương mới), `Pages.Clear()` và `Pages.AddRange(loadedPages)` khiến ListBox cập nhật lại toàn bộ items.
+      + ScrollViewer của Avalonia không tự động reset Offset về (0,0) mà giữ nguyên Offset cũ (vốn đang nằm ở vị trí trang cuối hoặc vị trí cuộn của chương trước).
+      + Sự kiện `ScrollChangedEvent` bắn ra ngay lập tức trước khi ViewModel kịp thực thi lệnh cuộn đến trang bắt đầu (`RequestScrollToPage(startIndex)`).
+      + Thuật toán nhận diện trang trong `OnReaderScrollChanged` đọc Offset cũ và tính toán ra vị trí tương ứng với trang cuối cùng của chương mới, kích hoạt `vm.UpdatePageIndexFromScroll(TotalPages - 1)`.
+      + `CurrentPageIndex` bị ghi đè thành trang cuối và `RecordReadingProgress` lưu ngay vào DB biến chương mới thành "Đã đọc xong (N/N trang)".
+    - **Kiến trúc giải pháp triệt để 5 lớp bảo vệ**:
+      * **Lớp 1 (Guard Clause)**: Trong `OnReaderScrollChanged`: Bổ sung kiểm tra `if (vm.IsLoadingChapter) return;` — loại bỏ 100% việc tính toán và cập nhật trang từ cuộn trong khi đang tải chương.
+      * **Lớp 2 (Tức thời Reset Offset & Khóa ScrollChanged)**: Trong `OnVmPropertyChanged`: Khi `IsLoadingChapter` đổi sang `true`, ngay lập tức dừng cuộn quán tính, đặt `_isProgrammaticScroll = true;`, khóa `_suppressScrollChangedUntilTick = Environment.TickCount64 + 2500;`, và reset thẳng `sv.Offset = Vector.Zero;` và `flipSv.Offset = Vector.Zero;`.
+      * **Lớp 3 (Bảo vệ lưu DB)**: Trong `RecordReadingProgress`: Bổ sung điều kiện `if (IsLoadingChapter || _suppressScrollSync) return;` — triệt tiêu hoàn toàn khả năng lưu sai trang cuối vào DB khi chưa hoàn tất chuyển chương.
+      * **Lớp 4 (Giữ khóa đồng bộ)**: Trong `LoadChapterInternalAsync`: Giữ `_suppressScrollSync = true;` xuyên suốt quá trình nạp và chỉ mở lại bên trong callback `Loaded` sau khi `RequestScrollToPage(startIndex)` đã cuộn đến đúng vị trí; đồng thời reset `_isNavigatingToPreviousChapter = false;` khi chọn chương từ ComboBox.
+      * **Lớp 5 (Chuẩn hóa tọa độ cuộn)**: Trong `OnVmScrollToPageRequested`: Khi `pageIndex == 0`, reset tuyệt đối `sv.Offset = new Vector(0, 0)` cho cuộn dọc và `sv.Offset = new Vector(vm.IsRightToLeft ? maxX : 0, 0)` cho cuộn ngang.
+
