@@ -89,22 +89,38 @@
                             </StackPanel>
                         </Button>
 
-                        <!-- Nút Tự Động Cập Nhật Stable -->
-                        <Button Command="{Binding AutoUpdateCommand}"
-                                IsEnabled="{Binding !IsUpdating}"
+                        <!-- Nút Tự Động Cập Nhật Release -->
+                        <Button IsEnabled="{Binding !IsUpdating}"
                                 Background="#059669" BorderBrush="#10B981" BorderThickness="1"
                                 CornerRadius="6" Padding="10,3" Height="28" Margin="0,0,6,4"
-                                ToolTip.Tip="Tự động tải ngầm và cài đặt phiên bản phát hành chính thức (Stable)">
-                            <TextBlock Text="{Binding UpdateButtonLabel}" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
+                                ToolTip.Tip="Bấm để chọn: Kiểm tra cập nhật (Đối chiếu mã hash) hoặc Cập nhật Release ngay">
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuItem Header="🔍 Kiểm tra cập nhật Release (Check Update)" Command="{Binding CheckUpdateReleaseCommand}" />
+                                    <MenuItem Header="⬇️ Cập nhật Release ngay (Update Release)" Command="{Binding AutoUpdateCommand}" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding UpdateButtonLabel}" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
+                                <TextBlock Text="▾" Foreground="#A7F3D0" FontSize="9" VerticalAlignment="Center" />
+                            </StackPanel>
                         </Button>
 
                         <!-- Nút Tự Động Cập Nhật Beta -->
-                        <Button Command="{Binding AutoUpdateBetaCommand}"
-                                IsEnabled="{Binding !IsUpdating}"
+                        <Button IsEnabled="{Binding !IsUpdating}"
                                 Background="#D97706" BorderBrush="#F59E0B" BorderThickness="1"
                                 CornerRadius="6" Padding="10,3" Height="28" Margin="0,0,6,4"
-                                ToolTip.Tip="Tự động tải ngầm và cài đặt phiên bản thử nghiệm mới nhất (Beta)">
-                            <TextBlock Text="{Binding UpdateBetaButtonLabel}" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
+                                ToolTip.Tip="Bấm để chọn: Kiểm tra cập nhật (Đối chiếu mã hash) hoặc Cập nhật Beta ngay">
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuItem Header="🔍 Kiểm tra cập nhật Beta (Check Update)" Command="{Binding CheckUpdateBetaCommand}" />
+                                    <MenuItem Header="⬇️ Cập nhật Beta ngay (Update Beta)" Command="{Binding AutoUpdateBetaCommand}" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding UpdateBetaButtonLabel}" FontWeight="Bold" Foreground="#FFFFFF" FontSize="11" VerticalAlignment="Center" />
+                                <TextBlock Text="▾" Foreground="#FDE68A" FontSize="9" VerticalAlignment="Center" />
+                            </StackPanel>
                         </Button>
                     </WrapPanel>
                 </WrapPanel>

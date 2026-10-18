@@ -44,7 +44,7 @@ public partial class MainViewModel : ViewModelBase
     private bool _isUpdating = false;
 
     [ObservableProperty]
-    private string _updateButtonLabel = "🚀 UPDATE STABLE";
+    private string _updateButtonLabel = "🚀 UPDATE RELEASE";
 
     [ObservableProperty]
     private string _updateBetaButtonLabel = "🧪 UPDATE BETA";
@@ -3439,12 +3439,13 @@ public partial class MainViewModel : ViewModelBase
                     {
                         UpdateButtonLabel = $"⏳ {percent:F0}%";
                     });
-                });
+                },
+                channel: "release");
 
             if (!success)
             {
                 AddLog("WARN", "[Cập nhật tự động] Không thể tải bản cập nhật Stable. Vui lòng kiểm tra lại kết nối mạng và thử lại sau.");
-                UpdateButtonLabel = "🚀 UPDATE STABLE";
+                UpdateButtonLabel = "🚀 UPDATE RELEASE";
             }
             else if (OperatingSystem.IsWindows())
             {
@@ -3452,17 +3453,113 @@ public partial class MainViewModel : ViewModelBase
             }
             else
             {
-                UpdateButtonLabel = "🚀 UPDATE STABLE";
+                UpdateButtonLabel = "🚀 UPDATE RELEASE";
             }
         }
         catch (Exception ex)
         {
             AddLog("ERROR", $"Lỗi cập nhật tự động: {ex.Message}");
-            UpdateButtonLabel = "🚀 UPDATE STABLE";
+            UpdateButtonLabel = "🚀 UPDATE RELEASE";
         }
         finally
         {
             IsUpdating = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task CheckUpdateReleaseAsync()
+    {
+        if (IsUpdating)
+        {
+            AddLog("WARN", "Tiến trình cập nhật đang chạy, vui lòng đợi...");
+            return;
+        }
+
+        string[] updateUrls = OperatingSystem.IsAndroid()
+            ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/com.CompanyName.ComicDownloaderGMTPC-Signed.apk" }
+            : (OperatingSystem.IsLinux()
+                ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/ComicDownloaderGMTPC-linux-x64.tar.gz" }
+                : new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/ComicDownloaderGMTPC.Desktop.exe" });
+
+        UpdateButtonLabel = "⏳ Kiểm tra...";
+        try
+        {
+            AddLog("INFO", "🔍 [Release] Đang kết nối máy chủ GitHub kiểm tra mã hash bản cập nhật...");
+            var check = await AppUpdateService.Instance.CheckUpdateAsync(updateUrls, "release");
+            UpdateButtonLabel = "🚀 UPDATE RELEASE";
+
+            if (check.Success)
+            {
+                if (check.HasUpdate)
+                {
+                    AddLog("SUCCESS", $"🚀 [Release] {check.Message}");
+                    ShowCenterToast("CẬP NHẬT RELEASE", check.Message + "\nBấm [Update Release] để tải ngay!", "🚀", "UPDATE RELEASE", 4500);
+                }
+                else
+                {
+                    AddLog("INFO", $"🚀 [Release] {check.Message}");
+                    ShowCenterToast("ĐÃ MỚI NHẤT", check.Message, "✅", "UPDATE RELEASE", 3200);
+                }
+            }
+            else
+            {
+                AddLog("WARN", $"🚀 [Release] {check.Message}");
+                ShowCenterToast("KIỂM TRA THẤT BẠI", check.Message, "⚠️", "UPDATE RELEASE", 3500);
+            }
+        }
+        catch (Exception ex)
+        {
+            UpdateButtonLabel = "🚀 UPDATE RELEASE";
+            AddLog("ERROR", $"Lỗi kiểm tra Release: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task CheckUpdateBetaAsync()
+    {
+        if (IsUpdating)
+        {
+            AddLog("WARN", "Tiến trình cập nhật đang chạy, vui lòng đợi...");
+            return;
+        }
+
+        string[] updateUrls = OperatingSystem.IsAndroid()
+            ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/com.CompanyName.ComicDownloaderGMTPC-Signed.apk" }
+            : (OperatingSystem.IsLinux()
+                ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC-linux-x64.tar.gz" }
+                : new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC.Desktop.exe" });
+
+        UpdateBetaButtonLabel = "⏳ Kiểm tra...";
+        try
+        {
+            AddLog("INFO", "🔍 [Beta] Đang kết nối máy chủ GitHub kiểm tra mã hash bản cập nhật...");
+            var check = await AppUpdateService.Instance.CheckUpdateAsync(updateUrls, "beta");
+            UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+
+            if (check.Success)
+            {
+                if (check.HasUpdate)
+                {
+                    AddLog("SUCCESS", $"🧪 [Beta] {check.Message}");
+                    ShowCenterToast("CẬP NHẬT BETA", check.Message + "\nBấm [Update Beta] để tải ngay!", "🧪", "UPDATE BETA", 4500);
+                }
+                else
+                {
+                    AddLog("INFO", $"🧪 [Beta] {check.Message}");
+                    ShowCenterToast("ĐÃ MỚI NHẤT", check.Message, "✅", "UPDATE BETA", 3200);
+                }
+            }
+            else
+            {
+                AddLog("WARN", $"🧪 [Beta] {check.Message}");
+                ShowCenterToast("KIỂM TRA THẤT BẠI", check.Message, "⚠️", "UPDATE BETA", 3500);
+            }
+        }
+        catch (Exception ex)
+        {
+            UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+            AddLog("ERROR", $"Lỗi kiểm tra Beta: {ex.Message}");
         }
     }
 
@@ -3520,7 +3617,8 @@ public partial class MainViewModel : ViewModelBase
                     {
                         UpdateBetaButtonLabel = $"⏳ {percent:F0}%";
                     });
-                });
+                },
+                channel: "beta");
 
             if (!success)
             {

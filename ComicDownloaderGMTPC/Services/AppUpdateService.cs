@@ -9,12 +9,107 @@ using System.Threading.Tasks;
 
 namespace ComicDownloaderGMTPC.Services;
 
+public sealed class UpdateHashRecord
+{
+    public string Channel { get; set; } = string.Empty;
+    public string Platform { get; set; } = string.Empty;
+    public string ServerHash { get; set; } = string.Empty;
+    public string LocalSha256 { get; set; } = string.Empty;
+    public long FileSizeBytes { get; set; }
+    public DateTime LastDownloadedUtc { get; set; } = DateTime.MinValue;
+}
+
+public sealed class UpdateCheckResult
+{
+    public bool Success { get; set; }
+    public bool HasUpdate { get; set; }
+    public string Channel { get; set; } = string.Empty;
+    public string ServerHash { get; set; } = string.Empty;
+    public string SavedHash { get; set; } = string.Empty;
+    public long FileSizeBytes { get; set; }
+    public DateTime? LastModifiedUtc { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
 public class AppUpdateService
 {
     private static readonly Lazy<AppUpdateService> _instance = new(() => new AppUpdateService());
     public static AppUpdateService Instance => _instance.Value;
 
     public static event Action<string>? InstallApkRequested;
+
+    private const string UpdateHashCacheFileName = "update_hash_cache.json";
+
+    private static string GetHashCacheFilePath()
+    {
+        string configDir = ComicScraperService.GetConfigDirectory();
+        if (!Directory.Exists(configDir))
+        {
+            try { Directory.CreateDirectory(configDir); } catch { }
+        }
+        return Path.Combine(configDir, UpdateHashCacheFileName);
+    }
+
+    public static string CleanHashString(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        string clean = raw.Trim();
+        if (clean.StartsWith("W/\"", StringComparison.OrdinalIgnoreCase) && clean.EndsWith("\"")) clean = clean[3..^1];
+        else if (clean.StartsWith("\"") && clean.EndsWith("\"")) clean = clean[1..^1];
+        return clean.Trim();
+    }
+
+    public static UpdateHashRecord? GetSavedUpdateHash(string channel)
+    {
+        try
+        {
+            string path = GetHashCacheFilePath();
+            if (File.Exists(path))
+            {
+                string json = File.ReadAllText(path, System.Text.Encoding.UTF8);
+                var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, UpdateHashRecord>>(json);
+                if (dict != null && dict.TryGetValue(channel.ToLowerInvariant(), out var record))
+                {
+                    return record;
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public static void SaveUpdateHash(string channel, string serverHash, string localSha256, long size)
+    {
+        try
+        {
+            string path = GetHashCacheFilePath();
+            var dict = new Dictionary<string, UpdateHashRecord>(StringComparer.OrdinalIgnoreCase);
+            if (File.Exists(path))
+            {
+                try
+                {
+                    string oldJson = File.ReadAllText(path, System.Text.Encoding.UTF8);
+                    var loaded = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, UpdateHashRecord>>(oldJson);
+                    if (loaded != null) dict = loaded;
+                }
+                catch { }
+            }
+
+            dict[channel.ToLowerInvariant()] = new UpdateHashRecord
+            {
+                Channel = channel,
+                Platform = OperatingSystem.IsAndroid() ? "Android" : (OperatingSystem.IsWindows() ? "Windows" : "Linux"),
+                ServerHash = CleanHashString(serverHash),
+                LocalSha256 = localSha256?.ToLowerInvariant() ?? string.Empty,
+                FileSizeBytes = size,
+                LastDownloadedUtc = DateTime.UtcNow
+            };
+
+            string json = System.Text.Json.JsonSerializer.Serialize(dict, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(path, json, System.Text.Encoding.UTF8);
+        }
+        catch { }
+    }
 
     private readonly HttpClient _httpClient;
 
@@ -83,10 +178,139 @@ public class AppUpdateService
         return userDownloads;
     }
 
+    /// <summary>
+    /// Kiểm tra phiên bản cập nhật trên máy chủ GitHub và đối chiếu mã hash với phiên bản đã tải trước đó.
+    /// </summary>
+    public async Task<UpdateCheckResult> CheckUpdateAsync(string[] candidateUrls, string channel, CancellationToken ct = default)
+    {
+        var result = new UpdateCheckResult { Channel = channel };
+        try
+        {
+            HttpResponseMessage? headResponse = null;
+
+            foreach (var initialUrl in candidateUrls)
+            {
+                if (ct.IsCancellationRequested) break;
+                string currentUrl = initialUrl;
+                int redirectCount = 0;
+
+                while (redirectCount < 10)
+                {
+                    try
+                    {
+                        var req = new HttpRequestMessage(HttpMethod.Head, currentUrl);
+                        req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                        req.Headers.TryAddWithoutValidation("Accept", "*/*");
+
+                        var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+
+                        if (resp.StatusCode == HttpStatusCode.Redirect ||
+                            resp.StatusCode == HttpStatusCode.MovedPermanently ||
+                            resp.StatusCode == HttpStatusCode.Found ||
+                            resp.StatusCode == HttpStatusCode.SeeOther ||
+                            (int)resp.StatusCode == 307 ||
+                            (int)resp.StatusCode == 308)
+                        {
+                            var loc = resp.Headers.Location;
+                            resp.Dispose();
+                            if (loc != null)
+                            {
+                                currentUrl = loc.IsAbsoluteUri ? loc.AbsoluteUri : new Uri(new Uri(currentUrl), loc).AbsoluteUri;
+                                redirectCount++;
+                                continue;
+                            }
+                        }
+
+                        if (resp.IsSuccessStatusCode)
+                        {
+                            headResponse = resp;
+                            break;
+                        }
+                        else
+                        {
+                            resp.Dispose();
+                            // Fallback GET với Range 0-0 nếu máy chủ chặn HEAD
+                            var getReq = new HttpRequestMessage(HttpMethod.Get, currentUrl);
+                            getReq.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 0);
+                            getReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0");
+                            var getResp = await _httpClient.SendAsync(getReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                            if (getResp.IsSuccessStatusCode)
+                            {
+                                headResponse = getResp;
+                                break;
+                            }
+                            getResp.Dispose();
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        break;
+                    }
+                }
+
+                if (headResponse != null && headResponse.IsSuccessStatusCode) break;
+            }
+
+            if (headResponse == null || !headResponse.IsSuccessStatusCode)
+            {
+                result.Success = false;
+                result.Message = "Không thể kết nối máy chủ GitHub Release để kiểm tra bản cập nhật.";
+                return result;
+            }
+
+            using (headResponse)
+            {
+                string etag = CleanHashString(headResponse.Headers.ETag?.Tag);
+                long contentLength = headResponse.Content.Headers.ContentLength ?? 0;
+                DateTimeOffset? lastMod = headResponse.Content.Headers.LastModified;
+
+                result.ServerHash = !string.IsNullOrEmpty(etag) ? etag : (lastMod.HasValue ? lastMod.Value.UtcTicks.ToString() : $"{contentLength}");
+                result.FileSizeBytes = contentLength;
+                result.LastModifiedUtc = lastMod?.UtcDateTime;
+
+                var saved = GetSavedUpdateHash(channel);
+                result.SavedHash = saved?.ServerHash ?? string.Empty;
+
+                string shortServerHash = result.ServerHash.Length > 12 ? result.ServerHash[..12] : result.ServerHash;
+                string shortSavedHash = !string.IsNullOrEmpty(result.SavedHash)
+                    ? (result.SavedHash.Length > 12 ? result.SavedHash[..12] : result.SavedHash)
+                    : "(Chưa có)";
+
+                // Đối chiếu mã hash máy chủ vs bản đã tải trước đó
+                if (string.IsNullOrEmpty(result.SavedHash))
+                {
+                    result.HasUpdate = true;
+                    result.Message = $"Đã có phiên bản cập nhật mới trên máy chủ! (Mã hash: {shortServerHash})";
+                }
+                else if (!string.Equals(result.ServerHash, result.SavedHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.HasUpdate = true;
+                    result.Message = $"Đã có phiên bản cập nhật mới! (Mã hash mới: {shortServerHash} | Bản đã tải: {shortSavedHash})";
+                }
+                else
+                {
+                    result.HasUpdate = false;
+                    result.Message = $"Bạn đang sử dụng phiên bản mới nhất! (Mã hash: {shortServerHash})";
+                }
+
+                result.Success = true;
+                return result;
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.Message = $"Lỗi kiểm tra cập nhật: {ex.Message}";
+            return result;
+        }
+    }
+
     public async Task<bool> DownloadAndInstallUpdateAsync(
         string[] candidateUrls,
         Action<string, string> logCallback,
         Action<double>? progressCallback = null,
+        string channel = "release",
         CancellationToken ct = default)
     {
         try
@@ -231,6 +455,30 @@ public class AppUpdateService
                 progressCallback?.Invoke(100.0);
                 double finalMb = new FileInfo(targetPath).Length / (1024.0 * 1024.0);
                 logCallback("SUCCESS", $"[Cập nhật tự động] Tải xong 100% ({finalMb:F1} MB)!");
+
+                // Tự động trích xuất và lưu mã hash từ server và mã hash cục bộ vào bộ nhớ
+                try
+                {
+                    string serverHash = CleanHashString(response.Headers.ETag?.Tag);
+                    if (string.IsNullOrEmpty(serverHash) && response.Content.Headers.LastModified.HasValue)
+                    {
+                        serverHash = response.Content.Headers.LastModified.Value.UtcTicks.ToString();
+                    }
+
+                    string localSha = string.Empty;
+                    using (var fs = File.OpenRead(targetPath))
+                    using (var sha = System.Security.Cryptography.SHA256.Create())
+                    {
+                        byte[] hashBytes = await sha.ComputeHashAsync(fs, ct).ConfigureAwait(false);
+                        localSha = Convert.ToHexString(hashBytes).ToLowerInvariant();
+                    }
+
+                    if (string.IsNullOrEmpty(serverHash)) serverHash = localSha;
+                    SaveUpdateHash(channel, serverHash, localSha, new FileInfo(targetPath).Length);
+                    string shortHash = serverHash.Length > 12 ? serverHash[..12] : serverHash;
+                    logCallback("INFO", $"[Cập nhật tự động] Đã tự động lưu mã hash phiên bản [{channel.ToUpperInvariant()}]: {shortHash}");
+                }
+                catch { }
 
                 if (OperatingSystem.IsAndroid())
                 {
