@@ -99,7 +99,7 @@ public partial class MainViewModel
             UpdateCloudFileInfoDisplay(value.QueueCloudFile, value.ReaderCloudFile);
 
             // Khi người dùng chọn một folder từ danh sách, tự động liên kết thiết bị với thư mục đó
-            if (!string.IsNullOrEmpty(value.DeviceFolderId) && !value.IsLegacyRoot)
+            if (!string.IsNullOrEmpty(value.DeviceFolderId))
             {
                 _gdriveService.SelectActiveFolder(value.DeviceFolderId, value.DeviceFolderName);
                 CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;

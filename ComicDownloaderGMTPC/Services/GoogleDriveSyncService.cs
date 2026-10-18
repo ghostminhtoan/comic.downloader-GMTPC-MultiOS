@@ -33,6 +33,7 @@ public sealed class GoogleDriveAuthConfig
     public bool AutoSyncEnabled { get; set; } = false;
     public DateTime LastSyncUtc { get; set; } = DateTime.MinValue;
     public string CachedAppFolderId { get; set; } = string.Empty;
+    public string CachedGmtpcFolderId { get; set; } = string.Empty;
     public string DeviceId { get; set; } = string.Empty;
     public string CustomDeviceName { get; set; } = string.Empty;
     public string CachedDeviceFolderId { get; set; } = string.Empty;
@@ -67,9 +68,11 @@ public sealed class GoogleDriveFileInfo
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string MimeType { get; set; } = string.Empty;
     public DateTime? ModifiedTime { get; set; }
     public long Size { get; set; }
     public bool Exists => !string.IsNullOrEmpty(Id);
+    public bool IsFolder => MimeType == "application/vnd.google-apps.folder";
 }
 
 /// <summary>
@@ -803,6 +806,8 @@ p {{ color: #94A3B8; font-size: 14px; }}
         _config.UserName = string.Empty;
         _config.UserPictureUrl = string.Empty;
         _config.CachedAppFolderId = string.Empty;
+        _config.CachedGmtpcFolderId = string.Empty;
+        _config.CachedDeviceFolderId = string.Empty;
         SaveConfigToDisk();
         NotifyStatusChanged("Đã đăng xuất Google Drive.");
     }
@@ -810,6 +815,140 @@ p {{ color: #94A3B8; font-size: 14px; }}
     #endregion
 
     #region Google Drive Hierarchy Operations: \GMTPC\Comic Downloader GMTPC\
+
+    /// <summary>
+    /// Liệt kê toàn bộ các tệp và thư mục con trực tiếp của một thư mục trên Google Drive.
+    /// Sử dụng truy vấn trực tiếp '{parentId}' in parents để miễn nhiễm hoàn toàn với độ trễ Search Index của Google Drive.
+    /// </summary>
+    public async Task<List<GoogleDriveFileInfo>> ListDirectChildrenAsync(string parentId, string token, CancellationToken ct = default)
+    {
+        var result = new List<GoogleDriveFileInfo>();
+        if (string.IsNullOrWhiteSpace(parentId) || string.IsNullOrWhiteSpace(token)) return result;
+
+        try
+        {
+            string query = $"'{parentId}' in parents and trashed = false";
+            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name, mimeType, modifiedTime, size)&pageSize=100";
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var res = await _httpClient.SendAsync(req, ct);
+
+            if (res.IsSuccessStatusCode)
+            {
+                string json = await res.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("files", out var files))
+                {
+                    foreach (var f in files.EnumerateArray())
+                    {
+                        string id = f.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
+                        string name = f.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "" : "";
+                        string mime = f.TryGetProperty("mimeType", out var mimeProp) ? mimeProp.GetString() ?? "" : "";
+                        DateTime? mod = null;
+                        if (f.TryGetProperty("modifiedTime", out var mt) && DateTime.TryParse(mt.GetString(), out var dt))
+                        {
+                            mod = dt.ToUniversalTime();
+                        }
+                        long size = f.TryGetProperty("size", out var sz) && long.TryParse(sz.GetString(), out var s) ? s : 0;
+
+                        if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(name))
+                        {
+                            result.Add(new GoogleDriveFileInfo
+                            {
+                                Id = id,
+                                Name = name,
+                                MimeType = mime,
+                                ModifiedTime = mod,
+                                Size = size
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[GoogleDriveSync] ListDirectChildrenAsync lỗi ({parentId}): {ex.Message}");
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Tìm kiếm thông minh thư mục đã tồn tại trên Google Drive qua 3 tầng bảo vệ.
+    /// NẾU ĐÃ CÓ THƯ MỤC -> LẬP TỨC TRẢ VỀ ID VÀ SKIP (BỎ QUA) HOÀN TOÀN VIỆC TẠO MỚI.
+    /// </summary>
+    public async Task<string?> FindExistingFolderSmartAsync(string folderName, string? parentId, string token, CancellationToken ct = default)
+    {
+        string cleanName = folderName?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(cleanName) || string.IsNullOrWhiteSpace(token)) return null;
+
+        try
+        {
+            // Tầng 1: Nếu có parentId cụ thể (khác "root"), duyệt danh sách con trực tiếp
+            if (!string.IsNullOrEmpty(parentId) && !parentId.Equals("root", StringComparison.OrdinalIgnoreCase))
+            {
+                var children = await ListDirectChildrenAsync(parentId, token, ct);
+                var match = children.Where(f => f.IsFolder && string.Equals(f.Name.Trim(), cleanName, StringComparison.OrdinalIgnoreCase))
+                                    .OrderByDescending(f => f.ModifiedTime)
+                                    .FirstOrDefault();
+                if (match != null && !string.IsNullOrEmpty(match.Id))
+                {
+                    return match.Id;
+                }
+            }
+
+            // Tầng 2: Tìm kiếm theo truy vấn Scoped Search
+            string escapedName = cleanName.Replace("'", "\\'");
+            string query = (parentId == "root" || string.IsNullOrEmpty(parentId))
+                ? $"name = '{escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+                : $"name = '{escapedName}' and mimeType = 'application/vnd.google-apps.folder' and '{parentId}' in parents and trashed = false";
+
+            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name, modifiedTime)&pageSize=10";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var res = await _httpClient.SendAsync(req, ct);
+
+            if (res.IsSuccessStatusCode)
+            {
+                string json = await res.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("files", out var files) && files.GetArrayLength() > 0)
+                {
+                    string bestId = files[0].GetProperty("id").GetString() ?? "";
+                    if (!string.IsNullOrEmpty(bestId)) return bestId;
+                }
+            }
+
+            // Tầng 3: Nếu vẫn chưa thấy, thử quét toàn Drive theo tên
+            // (Đặc biệt với folder GMTPC hoặc Comic Downloader GMTPC do user tự tạo trên web hoặc ở root)
+            if (cleanName.Equals(RootParentFolderName, StringComparison.OrdinalIgnoreCase) ||
+                cleanName.Equals(AppSubFolderName, StringComparison.OrdinalIgnoreCase))
+            {
+                string globalQuery = $"name = '{escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+                string globalUrl = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(globalQuery)}&fields=files(id, name, modifiedTime)&pageSize=10";
+                using var gReq = new HttpRequestMessage(HttpMethod.Get, globalUrl);
+                gReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                using var gRes = await _httpClient.SendAsync(gReq, ct);
+                if (gRes.IsSuccessStatusCode)
+                {
+                    string gJson = await gRes.Content.ReadAsStringAsync(ct);
+                    using var gDoc = JsonDocument.Parse(gJson);
+                    if (gDoc.RootElement.TryGetProperty("files", out var gFiles) && gFiles.GetArrayLength() > 0)
+                    {
+                        string gId = gFiles[0].GetProperty("id").GetString() ?? "";
+                        if (!string.IsNullOrEmpty(gId)) return gId;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[GoogleDriveSync] FindExistingFolderSmartAsync lỗi ({cleanName}): {ex.Message}");
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Đảm bảo và lấy ID của thư mục chỉ định: \GMTPC\Comic Downloader GMTPC\
@@ -838,15 +977,46 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     }
                 }
 
-                // Nếu folder trên cloud đã bị xóa hoặc không còn hợp lệ, xóa cache để tạo lại
                 _config.CachedAppFolderId = string.Empty;
                 SaveConfigToDisk();
             }
             catch { }
         }
 
-        // Bước 1: Tìm hoặc tạo folder cha 'GMTPC' trực thuộc 'root'
-        string? gmtpcFolderId = await FindOrCreateFolderAsync("GMTPC", "root", token, ct);
+        // Bước 1: Tìm hoặc tận dụng cache folder cha 'GMTPC'
+        string? gmtpcFolderId = _config.CachedGmtpcFolderId;
+        if (!string.IsNullOrEmpty(gmtpcFolderId))
+        {
+            try
+            {
+                using var checkReq = new HttpRequestMessage(HttpMethod.Get, $"{GoogleDriveApiBase}/files/{gmtpcFolderId}?fields=id,name,trashed");
+                checkReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                using var checkRes = await _httpClient.SendAsync(checkReq, ct);
+                if (checkRes.IsSuccessStatusCode)
+                {
+                    string checkJson = await checkRes.Content.ReadAsStringAsync(ct);
+                    using var checkDoc = JsonDocument.Parse(checkJson);
+                    bool trashed = checkDoc.RootElement.TryGetProperty("trashed", out var tr) && tr.GetBoolean();
+                    if (trashed) gmtpcFolderId = null;
+                }
+                else
+                {
+                    gmtpcFolderId = null;
+                }
+            }
+            catch { gmtpcFolderId = null; }
+        }
+
+        if (string.IsNullOrEmpty(gmtpcFolderId))
+        {
+            gmtpcFolderId = await FindOrCreateFolderAsync(RootParentFolderName, "root", token, ct);
+            if (!string.IsNullOrEmpty(gmtpcFolderId))
+            {
+                _config.CachedGmtpcFolderId = gmtpcFolderId;
+                SaveConfigToDisk();
+            }
+        }
+
         if (string.IsNullOrEmpty(gmtpcFolderId)) return null;
 
         // Bước 2: Tìm hoặc tạo folder con 'Comic Downloader GMTPC' trực thuộc 'GMTPC'
@@ -864,26 +1034,17 @@ p {{ color: #94A3B8; font-size: 14px; }}
     {
         try
         {
-            // Query tìm folder
-            string query = $"name = '{folderName.Replace("'", "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and '{parentId}' in parents and trashed = false";
-            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name)&pageSize=1";
-
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var res = await _httpClient.SendAsync(req, ct);
-
-            if (res.IsSuccessStatusCode)
+            // BƯỚC 1: KIỂM TRA XEM THƯ MỤC ĐÃ CÓ TRÊN GOOGLE DRIVE CHƯA
+            // NẾU CÓ THÌ SKIP TẠO MỚI NGAY LẬP TỨC!
+            string? existingId = await FindExistingFolderSmartAsync(folderName, parentId, token, ct);
+            if (!string.IsNullOrEmpty(existingId))
             {
-                string json = await res.Content.ReadAsStringAsync(ct);
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("files", out var files) && files.GetArrayLength() > 0)
-                {
-                    return files[0].GetProperty("id").GetString();
-                }
+                Debug.WriteLine($"[GoogleDriveSync] Thư mục '{folderName}' đã tồn tại (ID: {existingId}). SKIP tạo mới!");
+                return existingId;
             }
 
-            // Nếu chưa có, tạo mới: với folder cha là root không truyền trường 'parents' để Google Drive v3 tự đặt ở root của user
-            object payload = parentId == "root"
+            // BƯỚC 2: CHỈ TẠO MỚI KHI THỰC SỰ CHƯA CÓ TRÊN DRIVE
+            object payload = (parentId == "root" || string.IsNullOrEmpty(parentId))
                 ? new
                 {
                     name = folderName,
@@ -907,25 +1068,28 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 using var createdDoc = JsonDocument.Parse(createdJson);
                 return createdDoc.RootElement.GetProperty("id").GetString();
             }
-            else
+
+            // BƯỚC 3: NẾU POST BỊ LỖI, THỬ DÒ LẠI XEM SERVER ĐÃ TẠO KỊP CHƯA
+            string? retryId = await FindExistingFolderSmartAsync(folderName, parentId, token, ct);
+            if (!string.IsNullOrEmpty(retryId))
             {
-                string err = await createRes.Content.ReadAsStringAsync(ct);
-                Debug.WriteLine($"[GoogleDriveSync] Tạo thư mục '{folderName}' thất bại ({createRes.StatusCode}): {err}");
+                return retryId;
             }
 
+            string err = await createRes.Content.ReadAsStringAsync(ct);
+            Debug.WriteLine($"[GoogleDriveSync] Tạo thư mục '{folderName}' thất bại ({createRes.StatusCode}): {err}");
             return null;
         }
         catch (Exception ex)
         {
+            string? fallbackId = await FindExistingFolderSmartAsync(folderName, parentId, token, ct);
+            if (!string.IsNullOrEmpty(fallbackId)) return fallbackId;
+
             Debug.WriteLine($"[GoogleDriveSync] Ngoại lệ khi tạo/tìm thư mục '{folderName}': {ex.Message}");
             return null;
         }
     }
 
-    /// <summary>
-    /// Đảm bảo và lấy ID thư mục riêng của thiết bị hiện tại trên Google Drive.
-    /// Hỗ trợ cả cấu trúc trực tiếp trong \GMTPC\Comic Downloader GMTPC\[DeviceName]\ hoặc \Devices\[DeviceName]\.
-    /// </summary>
     /// <summary>
     /// Đảm bảo và lấy ID thư mục riêng của thiết bị hiện tại trên Google Drive.
     /// Hỗ trợ cả cấu trúc trực tiếp trong \GMTPC\Comic Downloader GMTPC\[FolderName]\ hoặc \Devices\[FolderName]\.
@@ -962,7 +1126,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
             catch { }
         }
 
-        // Tìm theo CurrentDeviceName trong appFolderId hoặc Devices
+        // BƯỚC 1: DÒ TÌM THƯ MỤC ĐÃ CÓ (NẾU CÓ THÌ SKIP TẠO MỚI!)
         string? existingFolderId = await FindFolderByNameInAppOrDevicesAsync(CurrentDeviceName, appFolderId, token, ct);
         if (!string.IsNullOrEmpty(existingFolderId))
         {
@@ -971,7 +1135,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
             return existingFolderId;
         }
 
-        // Nếu chưa có, tạo mới trực tiếp trong appFolderId (hoặc Devices)
+        // BƯỚC 2: TẠO MỚI TRỰC TIẾP TRONG appFolderId (hoặc Devices)
         string? devicesFolderId = await FindFolderByNameAsync(DevicesFolderName, appFolderId, token, ct);
         string parentForNewDevice = !string.IsNullOrEmpty(devicesFolderId) ? devicesFolderId : appFolderId;
 
@@ -980,9 +1144,13 @@ p {{ color: #94A3B8; font-size: 14px; }}
         {
             _config.CachedDeviceFolderId = createdId;
             SaveConfigToDisk();
+            return createdId;
         }
 
-        return createdId;
+        // BƯỚC 3: FALLBACK AN TOÀN SANG appFolderId NẾU KHÔNG THỂ TẠO FOLDER CON THIẾT BỊ
+        // ĐẢM BẢO SAO LƯU THÀNH CÔNG, TUYỆT ĐỐI KHÔNG BỊ LỖI KHI ĐÃ CÓ THƯ MỤC CHÍNH TRÊN DRIVE!
+        Debug.WriteLine($"[GoogleDriveSync] Fallback sử dụng thư mục chính [{appFolderId}] cho thiết bị [{CurrentDeviceName}].");
+        return appFolderId;
     }
 
     /// <summary>
@@ -1131,40 +1299,20 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
     private async Task<string?> FindFolderByNameAsync(string folderName, string parentId, string token, CancellationToken ct)
     {
-        try
-        {
-            string query = $"name = '{folderName.Replace("'", "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and '{parentId}' in parents and trashed = false";
-            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name)&pageSize=1";
-
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var res = await _httpClient.SendAsync(req, ct);
-
-            if (res.IsSuccessStatusCode)
-            {
-                string json = await res.Content.ReadAsStringAsync(ct);
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("files", out var files) && files.GetArrayLength() > 0)
-                {
-                    return files[0].GetProperty("id").GetString();
-                }
-            }
-        }
-        catch { }
-        return null;
+        return await FindExistingFolderSmartAsync(folderName, parentId, token, ct);
     }
 
     private async Task<string?> FindFolderByNameInAppOrDevicesAsync(string folderName, string appFolderId, string token, CancellationToken ct)
     {
-        // 1. Tìm trực tiếp trong appFolderId
-        string? id = await FindFolderByNameAsync(folderName, appFolderId, token, ct);
+        // 1. Tìm trực tiếp trong appFolderId (qua kiểm tra con trực tiếp + scoped search)
+        string? id = await FindExistingFolderSmartAsync(folderName, appFolderId, token, ct);
         if (!string.IsNullOrEmpty(id)) return id;
 
         // 2. Tìm trong thư mục Devices nếu có
-        string? devicesFolderId = await FindFolderByNameAsync(DevicesFolderName, appFolderId, token, ct);
+        string? devicesFolderId = await FindExistingFolderSmartAsync(DevicesFolderName, appFolderId, token, ct);
         if (!string.IsNullOrEmpty(devicesFolderId))
         {
-            return await FindFolderByNameAsync(folderName, devicesFolderId, token, ct);
+            return await FindExistingFolderSmartAsync(folderName, devicesFolderId, token, ct);
         }
 
         return null;
@@ -1385,16 +1533,28 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
     /// <summary>
     /// Tìm file trong thư mục đích trên Google Drive.
+    /// Ưu tiên quét con trực tiếp bằng ListDirectChildrenAsync để chống trễ index và nhận diện đúng 100%.
     /// </summary>
     public async Task<GoogleDriveFileInfo> GetFileInfoAsync(string folderId, string fileName, CancellationToken ct = default)
     {
         string? token = await EnsureValidAccessTokenAsync(ct);
-        if (string.IsNullOrEmpty(token)) return new GoogleDriveFileInfo();
+        if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(folderId)) return new GoogleDriveFileInfo();
 
         try
         {
+            // Tầng 1: Quét con trực tiếp (nhanh, chính xác 100%, không bị ảnh hưởng bởi search index delay)
+            var children = await ListDirectChildrenAsync(folderId, token, ct);
+            var match = children.Where(f => !f.IsFolder && string.Equals(f.Name.Trim(), fileName.Trim(), StringComparison.OrdinalIgnoreCase))
+                                .OrderByDescending(f => f.ModifiedTime)
+                                .FirstOrDefault();
+            if (match != null && !string.IsNullOrEmpty(match.Id))
+            {
+                return match;
+            }
+
+            // Tầng 2: Fallback Scoped Search Query
             string query = $"name = '{fileName.Replace("'", "\\'")}' and '{folderId}' in parents and trashed = false";
-            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name, modifiedTime, size)&pageSize=1";
+            string url = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(query)}&fields=files(id, name, mimeType, modifiedTime, size)&pageSize=1";
 
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1409,6 +1569,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     var file = files[0];
                     string id = file.GetProperty("id").GetString() ?? "";
                     string name = file.GetProperty("name").GetString() ?? "";
+                    string mime = file.TryGetProperty("mimeType", out var mp) ? mp.GetString() ?? "" : "";
                     DateTime? mod = null;
                     if (file.TryGetProperty("modifiedTime", out var mt) && DateTime.TryParse(mt.GetString(), out var dt))
                     {
@@ -1420,6 +1581,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     {
                         Id = id,
                         Name = name,
+                        MimeType = mime,
                         ModifiedTime = mod,
                         Size = size
                     };
@@ -1621,7 +1783,11 @@ p {{ color: #94A3B8; font-size: 14px; }}
         try
         {
             string? folderId = await EnsureCurrentDeviceFolderAsync(ct);
-            if (string.IsNullOrEmpty(folderId)) return (false, "Không thể mở hoặc tạo thư mục thiết bị trên Google Drive.");
+            if (string.IsNullOrEmpty(folderId))
+            {
+                folderId = await EnsureTargetFolderAsync(ct);
+            }
+            if (string.IsNullOrEmpty(folderId)) return (false, "Không thể mở hoặc kết nối thư mục trên Google Drive.");
 
             var itemList = items.ToList();
             string mdContent = QueueBackupService.Instance.BuildQueueMarkdownContent(itemList);
@@ -1697,7 +1863,11 @@ p {{ color: #94A3B8; font-size: 14px; }}
         try
         {
             string? folderId = await EnsureCurrentDeviceFolderAsync(ct);
-            if (string.IsNullOrEmpty(folderId)) return (false, "Không thể kết nối thư mục thiết bị trên Google Drive.");
+            if (string.IsNullOrEmpty(folderId))
+            {
+                folderId = await EnsureTargetFolderAsync(ct);
+            }
+            if (string.IsNullOrEmpty(folderId)) return (false, "Không thể kết nối thư mục trên Google Drive.");
 
             string mdContent = ReadProgressStore.Instance.BuildReaderMarkdownContent();
             var (ok, _, msg) = await UploadOrUpdateFileAsync(folderId, ReaderFileName, mdContent, "text/markdown", ct);

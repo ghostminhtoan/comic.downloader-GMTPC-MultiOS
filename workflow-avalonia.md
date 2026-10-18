@@ -3168,3 +3168,10 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      + `🚀 UPDATE RELEASE`: Gồm `🔍 Kiểm tra cập nhật Release (Check Update)` và `⬇️ Cập nhật Release ngay (Update Release)`.
      + `🧪 UPDATE BETA`: Gồm `🔍 Kiểm tra cập nhật Beta (Check Update)` và `⬇️ Cập nhật Beta ngay (Update Beta)`.
    - **Cơ chế đối chiếu mã hash thông minh**: Tùy chọn Check Update kết nối máy chủ GitHub Release, trích xuất ETag/Content-Length/LastModified và so sánh với mã hash đã lưu. Nếu phát hiện bản mới, ứng dụng thông báo trực quan trên Toast và Log kèm mã hash máy chủ vs bản đã tải trước đó; nếu trùng khớp, thông báo ứng dụng đã ở phiên bản mới nhất.
+10. **Cơ Chế Bỏ Qua (Skip) Tạo Thư Mục Google Drive Khi Đã Tồn Tại & Bảo Vệ Sao Lưu Đa Tầng**:
+    - **Khắc phục triệt để lỗi sao lưu do cố tạo thêm thư mục khi đã có**:
+      + Thay thế truy vấn tìm kiếm phụ thuộc index bằng phương thức `ListDirectChildrenAsync` quét trực tiếp con của thư mục cha, miễn nhiễm hoàn toàn với độ trễ Search Index của Google Drive.
+      + Triển khai `FindExistingFolderSmartAsync` 3 tầng bảo vệ: Tầng 1 (Quét con trực tiếp), Tầng 2 (Scoped Search Query), Tầng 3 (Drive-wide Search Fallback). Nếu thư mục (cả `GMTPC`, `Comic Downloader GMTPC` hay thư mục thiết bị) đã tồn tại: **Lập tức trả về ID và SKIP (bỏ qua) hoàn toàn việc tạo mới**, triệt tiêu tình trạng tạo lặp nhiều thư mục cùng tên.
+      + Tối ưu cache `CachedGmtpcFolderId`, `CachedAppFolderId`, `CachedDeviceFolderId` giúp các lần sao lưu sau truy cập tức thì.
+      + Fallback sao lưu an toàn: Nếu không thể mở hoặc tạo thư mục con riêng của thiết bị, hệ thống tự động fallback lưu trực tiếp vào thư mục chính `Comic Downloader GMTPC`, đảm bảo sao lưu Queue và Reader không bao giờ bị báo lỗi khi thư mục đã tồn tại trên Drive.
+      + Cập nhật `GetFileInfoAsync` quét trực tiếp danh sách tệp con để kiểm tra `autosave.md` và `saved_reader_bookmarks.md`, đảm bảo PATCH cập nhật chuẩn xác không tạo file trùng lặp.
