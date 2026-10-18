@@ -3168,10 +3168,17 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      + `🚀 UPDATE RELEASE`: Gồm `🔍 Kiểm tra cập nhật Release (Check Update)` và `⬇️ Cập nhật Release ngay (Update Release)`.
      + `🧪 UPDATE BETA`: Gồm `🔍 Kiểm tra cập nhật Beta (Check Update)` và `⬇️ Cập nhật Beta ngay (Update Beta)`.
    - **Cơ chế đối chiếu mã hash thông minh**: Tùy chọn Check Update kết nối máy chủ GitHub Release, trích xuất ETag/Content-Length/LastModified và so sánh với mã hash đã lưu. Nếu phát hiện bản mới, ứng dụng thông báo trực quan trên Toast và Log kèm mã hash máy chủ vs bản đã tải trước đó; nếu trùng khớp, thông báo ứng dụng đã ở phiên bản mới nhất.
-10. **Cơ Chế Bỏ Qua (Skip) Tạo Thư Mục Google Drive Khi Đã Tồn Tại & Bảo Vệ Sao Lưu Đa Tầng**:
-    - **Khắc phục triệt để lỗi sao lưu do cố tạo thêm thư mục khi đã có**:
-      + Thay thế truy vấn tìm kiếm phụ thuộc index bằng phương thức `ListDirectChildrenAsync` quét trực tiếp con của thư mục cha, miễn nhiễm hoàn toàn với độ trễ Search Index của Google Drive.
-      + Triển khai `FindExistingFolderSmartAsync` 3 tầng bảo vệ: Tầng 1 (Quét con trực tiếp), Tầng 2 (Scoped Search Query), Tầng 3 (Drive-wide Search Fallback). Nếu thư mục (cả `GMTPC`, `Comic Downloader GMTPC` hay thư mục thiết bị) đã tồn tại: **Lập tức trả về ID và SKIP (bỏ qua) hoàn toàn việc tạo mới**, triệt tiêu tình trạng tạo lặp nhiều thư mục cùng tên.
-      + Tối ưu cache `CachedGmtpcFolderId`, `CachedAppFolderId`, `CachedDeviceFolderId` giúp các lần sao lưu sau truy cập tức thì.
-      + Fallback sao lưu an toàn: Nếu không thể mở hoặc tạo thư mục con riêng của thiết bị, hệ thống tự động fallback lưu trực tiếp vào thư mục chính `Comic Downloader GMTPC`, đảm bảo sao lưu Queue và Reader không bao giờ bị báo lỗi khi thư mục đã tồn tại trên Drive.
-      + Cập nhật `GetFileInfoAsync` quét trực tiếp danh sách tệp con để kiểm tra `autosave.md` và `saved_reader_bookmarks.md`, đảm bảo PATCH cập nhật chuẩn xác không tạo file trùng lặp.
+11. **Giải Pháp Triệt Để Lưu Đúng Thư Mục Đã Chọn, Cập Nhật Danh Sách Tức Thì (0ms) & Khắc Phục Lỗi Quota Exceeded Google Drive**:
+    - **Lưu chính xác 100% vào thư mục con đã chọn (Khắc phục lỗi file bị lưu ra ngoài thư mục cha)**:
+      + `BackupQueueToCloudAsync`, `BackupReaderToCloudAsync` và `FullSyncUploadAsync` nhận tham số `targetFolderId`. Khi người dùng chọn bất kỳ thư mục nào trên ComboBox (`SelectedCloudDevice`), ViewModel truyền trực tiếp `targetFolderId = SelectedCloudDevice.DeviceFolderId`.
+      + Trong Service, khi có `targetFolderId`, dữ liệu được lưu trực tiếp vào ID đó và cập nhật `CachedDeviceFolderId`, loại bỏ hoàn toàn tình trạng fallback sai ra thư mục root `Comic Downloader GMTPC`.
+      + `EnsureCurrentDeviceFolderAsync` và `EnsureTargetFolderAsync` chỉ xóa cache khi nhận HTTP `404 Not Found`. Khi gặp `403 Forbidden` (Quota/Rate limit) hoặc lỗi mạng, hệ thống tiếp tục tin cậy cache hiện tại, bảo toàn liên kết thư mục.
+    - **Cập nhật danh sách thư mục ngay tức thì (0ms) khi tạo mới hoặc đổi tên**:
+      + Khi tạo thư mục mới (`CreateNewCloudFolderAsync`), ứng dụng chèn ngay đối tượng slot mới vào `AvailableCloudDevices` và đặt `SelectedCloudDevice` lập tức, không để người dùng phải chờ độ trễ lập chỉ mục (Search Index Latency) của Google Drive API.
+      + Khi đổi tên thư mục (`SaveCustomDeviceNameAsync`), tên mới được cập nhật trực tiếp trên đối tượng slot hiện tại và UI tự động phản ánh.
+      + Trong `RefreshGoogleDriveStatusAsync`, ứng dụng bảo tồn slot đang chọn nếu Search API tạm thời chưa kịp trả về trong kết quả quét.
+    - **Khắc phục triệt để lỗi Quota Exceeded / Rate Limit Google Drive**:
+      + Áp dụng kiến trúc Lazy Loading cho `GetCloudDeviceSlotsAsync`: Khi quét danh sách, chỉ lấy metadata file cho thư mục đang active (`isCurrent`), các thư mục khác nạp tức thì chỉ với tên và icon. Giảm số lượng HTTP API request từ 30+ xuống chỉ còn 2-3 request, triệt tiêu nguy cơ cạn kiệt Quota Queries per 100 seconds per user.
+      + Khi người dùng chuyển lựa chọn thư mục trên ComboBox, ViewModel gọi ngầm `PopulateSlotFilesAsync` để nạp thông tin tệp của slot đó theo nhu cầu thực tế.
+      + Bổ sung vòng lặp retry 3 lần kèm Exponential Backoff (1.5s, 3.0s) trong `UploadOrUpdateFileAsync` khi gặp HTTP 403 / 429 / 5xx để tự động vượt qua các đỉnh rate limit tạm thời.
+

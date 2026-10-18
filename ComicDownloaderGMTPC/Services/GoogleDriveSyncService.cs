@@ -180,6 +180,7 @@ public sealed class GoogleDriveSyncService
     }
     public DateTime LastSyncUtc => _config.LastSyncUtc;
     public string TargetFolderId => _config.CachedAppFolderId;
+    public string CachedDeviceFolderId => _config.CachedDeviceFolderId;
     public string LastCodeVerifier => _config.LastCodeVerifier;
     public string LastRedirectUri => _config.LastRedirectUri;
 
@@ -976,11 +977,18 @@ p {{ color: #94A3B8; font-size: 14px; }}
                         return _config.CachedAppFolderId;
                     }
                 }
-
-                _config.CachedAppFolderId = string.Empty;
-                SaveConfigToDisk();
+                else if (checkRes.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _config.CachedAppFolderId = string.Empty;
+                    SaveConfigToDisk();
+                }
+                else
+                {
+                    // Lỗi 403 Rate Limit / Quota hoặc lỗi mạng: Giữ nguyên cache để không mất thư mục
+                    return _config.CachedAppFolderId;
+                }
             }
-            catch { }
+            catch { return _config.CachedAppFolderId; }
         }
 
         // Bước 1: Tìm hoặc tận dụng cache folder cha 'GMTPC'
@@ -1120,10 +1128,18 @@ p {{ color: #94A3B8; font-size: 14px; }}
                         return _config.CachedDeviceFolderId;
                     }
                 }
-                _config.CachedDeviceFolderId = string.Empty;
-                SaveConfigToDisk();
+                else if (checkRes.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _config.CachedDeviceFolderId = string.Empty;
+                    SaveConfigToDisk();
+                }
+                else
+                {
+                    // Lỗi 403 Rate Limit / Quota hoặc lỗi mạng: Giữ nguyên cache để không mất thư mục của thiết bị
+                    return _config.CachedDeviceFolderId;
+                }
             }
-            catch { }
+            catch { return _config.CachedDeviceFolderId; }
         }
 
         // BƯỚC 1: DÒ TÌM THƯ MỤC ĐÃ CÓ (NẾU CÓ THÌ SKIP TẠO MỚI!)
@@ -1453,33 +1469,33 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     IsCurrentDevice = isCurrent
                 };
 
-                slot.QueueCloudFile = await GetFileInfoAsync(id, QueueFileName, ct);
-                slot.ReaderCloudFile = await GetFileInfoAsync(id, ReaderFileName, ct);
-                slot.ManifestCloudFile = await GetFileInfoAsync(id, ManifestFileName, ct);
-
-                slot.LastSyncUtc = slot.ManifestCloudFile.ModifiedTime
-                    ?? slot.QueueCloudFile.ModifiedTime
-                    ?? slot.ReaderCloudFile.ModifiedTime;
-
-                string timeStr = slot.LastSyncUtc.HasValue
-                    ? slot.LastSyncUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
-                    : "Chưa có dữ liệu";
-
                 string icon = name.Contains("Android") ? "📱"
                     : name.Contains("Linux") ? "🐧"
                     : name.Contains("macOS") || name.Contains("Mac") ? "🍎"
                     : "🖥️";
 
-                slot.DisplayName = isCurrent
-                    ? $"⭐ {icon} {name} (Thiết bị này - {timeStr})"
-                    : $"{icon} {name} ({timeStr})";
-
+                // CHỈ GỬI REQUEST KIỂM TRA FILE ĐỐI VỚI THƯ MỤC ĐANG ĐƯỢC CHỌN (isCurrent)
+                // Các thư mục khác nạp tức thì chỉ với tên để triệt tiêu 100% tình trạng vượt hạn mức Quota Exceeded!
                 if (isCurrent)
                 {
+                    slot.QueueCloudFile = await GetFileInfoAsync(id, QueueFileName, ct);
+                    slot.ReaderCloudFile = await GetFileInfoAsync(id, ReaderFileName, ct);
+                    slot.ManifestCloudFile = await GetFileInfoAsync(id, ManifestFileName, ct);
+
+                    slot.LastSyncUtc = slot.ManifestCloudFile.ModifiedTime
+                        ?? slot.QueueCloudFile.ModifiedTime
+                        ?? slot.ReaderCloudFile.ModifiedTime;
+
+                    string timeStr = slot.LastSyncUtc.HasValue
+                        ? slot.LastSyncUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                        : "Sẵn sàng";
+
+                    slot.DisplayName = $"⭐ {icon} {name} (Đang chọn - {timeStr})";
                     slots.Insert(0, slot);
                 }
                 else
                 {
+                    slot.DisplayName = $"{icon} {name}";
                     slots.Add(slot);
                 }
             }
@@ -1525,6 +1541,25 @@ p {{ color: #94A3B8; font-size: 14px; }}
         }
 
         return slots;
+    }
+
+    /// <summary>
+    /// Tải thông tin tệp tin của một thiết bị cụ thể theo yêu cầu (Lazy Loading), tiết kiệm quota Google Drive API tối đa.
+    /// </summary>
+    public async Task PopulateSlotFilesAsync(GoogleDriveDeviceSlot slot, CancellationToken ct = default)
+    {
+        if (slot == null || string.IsNullOrEmpty(slot.DeviceFolderId)) return;
+        try
+        {
+            slot.QueueCloudFile = await GetFileInfoAsync(slot.DeviceFolderId, QueueFileName, ct);
+            slot.ReaderCloudFile = await GetFileInfoAsync(slot.DeviceFolderId, ReaderFileName, ct);
+            slot.ManifestCloudFile = await GetFileInfoAsync(slot.DeviceFolderId, ManifestFileName, ct);
+
+            slot.LastSyncUtc = slot.ManifestCloudFile.ModifiedTime
+                ?? slot.QueueCloudFile.ModifiedTime
+                ?? slot.ReaderCloudFile.ModifiedTime;
+        }
+        catch { }
     }
 
     #endregion
@@ -1603,6 +1638,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
     /// <summary>
     /// Tải lên hoặc cập nhật tệp tin trong thư mục đích trên Google Drive.
+    /// Tự động retry với Exponential Backoff khi gặp 403 Rate Limit / Quota Exceeded hoặc 429.
     /// </summary>
     public async Task<(bool Success, string FileId, string Message)> UploadOrUpdateFileAsync(
         string folderId,
@@ -1616,68 +1652,96 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
         string cleanMime = SanitizeMediaType(mimeType, "text/plain");
 
-        try
+        for (int attempt = 1; attempt <= 3; attempt++)
         {
-            var existing = await GetFileInfoAsync(folderId, fileName, ct);
-
-            if (existing.Exists)
+            try
             {
-                // PATCH cập nhật nội dung file
-                string uploadUrl = $"{GoogleDriveUploadBase}/files/{existing.Id}?uploadType=media";
-                using var patchReq = new HttpRequestMessage(HttpMethod.Patch, uploadUrl);
-                patchReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                patchReq.Content = new StringContent(content, Encoding.UTF8, cleanMime);
+                var existing = await GetFileInfoAsync(folderId, fileName, ct);
 
-                using var patchRes = await _httpClient.SendAsync(patchReq, ct);
-                if (patchRes.IsSuccessStatusCode)
+                if (existing.Exists)
                 {
-                    return (true, existing.Id, $"Đã cập nhật tệp {fileName} trên Google Drive.");
-                }
+                    // PATCH cập nhật nội dung file
+                    string uploadUrl = $"{GoogleDriveUploadBase}/files/{existing.Id}?uploadType=media";
+                    using var patchReq = new HttpRequestMessage(HttpMethod.Patch, uploadUrl);
+                    patchReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    patchReq.Content = new StringContent(content, Encoding.UTF8, cleanMime);
 
-                string patchErr = await patchRes.Content.ReadAsStringAsync(ct);
-                return (false, existing.Id, $"Lỗi cập nhật {fileName} ({patchRes.StatusCode}): {patchErr}");
+                    using var patchRes = await _httpClient.SendAsync(patchReq, ct);
+                    if (patchRes.IsSuccessStatusCode)
+                    {
+                        return (true, existing.Id, $"Đã cập nhật tệp {fileName} trên Google Drive.");
+                    }
+
+                    int status = (int)patchRes.StatusCode;
+                    string patchErr = await patchRes.Content.ReadAsStringAsync(ct);
+
+                    if ((status == 403 || status == 429 || status >= 500) && attempt < 3)
+                    {
+                        Debug.WriteLine($"[GoogleDriveSync] Upload PATCH {fileName} gặp lỗi {status}, thử lại lần {attempt + 1} sau {attempt * 1.5}s...");
+                        await Task.Delay((int)(attempt * 1500), ct);
+                        continue;
+                    }
+
+                    return (false, existing.Id, $"Lỗi cập nhật {fileName} ({patchRes.StatusCode}): {patchErr}");
+                }
+                else
+                {
+                    // POST tạo mới bằng Multipart Upload (chuẩn multipart/related của Google Drive REST API v3)
+                    string boundary = "----GMTPCGoogleDriveBoundary" + DateTime.UtcNow.Ticks.ToString("x");
+                    string uploadUrl = $"{GoogleDriveUploadBase}/files?uploadType=multipart";
+
+                    var metadata = new
+                    {
+                        name = fileName,
+                        parents = new[] { folderId }
+                    };
+                    string metaJson = JsonSerializer.Serialize(metadata);
+
+                    var multipart = new MultipartContent("related", boundary);
+                    var metaContent = new StringContent(metaJson, Encoding.UTF8, "application/json");
+                    multipart.Add(metaContent);
+
+                    var fileContent = new StringContent(content, Encoding.UTF8, cleanMime);
+                    multipart.Add(fileContent);
+
+                    using var postReq = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
+                    postReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    postReq.Content = multipart;
+
+                    using var postRes = await _httpClient.SendAsync(postReq, ct);
+                    if (postRes.IsSuccessStatusCode)
+                    {
+                        string resJson = await postRes.Content.ReadAsStringAsync(ct);
+                        using var doc = JsonDocument.Parse(resJson);
+                        string id = doc.RootElement.GetProperty("id").GetString() ?? "";
+                        return (true, id, $"Đã tải lên tệp mới {fileName} vào Google Drive.");
+                    }
+
+                    int status = (int)postRes.StatusCode;
+                    string postErr = await postRes.Content.ReadAsStringAsync(ct);
+
+                    if ((status == 403 || status == 429 || status >= 500) && attempt < 3)
+                    {
+                        Debug.WriteLine($"[GoogleDriveSync] Upload POST {fileName} gặp lỗi {status}, thử lại lần {attempt + 1} sau {attempt * 1.5}s...");
+                        await Task.Delay((int)(attempt * 1500), ct);
+                        continue;
+                    }
+
+                    return (false, "", $"Lỗi tạo tệp {fileName} ({postRes.StatusCode}): {postErr}");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                // POST tạo mới bằng Multipart Upload (chuẩn multipart/related của Google Drive REST API v3)
-                string boundary = "----GMTPCGoogleDriveBoundary" + DateTime.UtcNow.Ticks.ToString("x");
-                string uploadUrl = $"{GoogleDriveUploadBase}/files?uploadType=multipart";
-
-                var metadata = new
+                if (attempt < 3)
                 {
-                    name = fileName,
-                    parents = new[] { folderId }
-                };
-                string metaJson = JsonSerializer.Serialize(metadata);
-
-                var multipart = new MultipartContent("related", boundary);
-                var metaContent = new StringContent(metaJson, Encoding.UTF8, "application/json");
-                multipart.Add(metaContent);
-
-                var fileContent = new StringContent(content, Encoding.UTF8, cleanMime);
-                multipart.Add(fileContent);
-
-                using var postReq = new HttpRequestMessage(HttpMethod.Post, uploadUrl);
-                postReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                postReq.Content = multipart;
-
-                using var postRes = await _httpClient.SendAsync(postReq, ct);
-                if (postRes.IsSuccessStatusCode)
-                {
-                    string resJson = await postRes.Content.ReadAsStringAsync(ct);
-                    using var doc = JsonDocument.Parse(resJson);
-                    string id = doc.RootElement.GetProperty("id").GetString() ?? "";
-                    return (true, id, $"Đã tải lên tệp mới {fileName} vào thư mục {DefaultTargetFolderPath}");
+                    await Task.Delay(attempt * 1500, ct);
+                    continue;
                 }
-
-                string postErr = await postRes.Content.ReadAsStringAsync(ct);
-                return (false, "", $"Lỗi tạo tệp {fileName} ({postRes.StatusCode}): {postErr}");
+                return (false, "", $"Lỗi khi tải tệp {fileName} lên Google Drive: {ex.Message}");
             }
         }
-        catch (Exception ex)
-        {
-            return (false, "", $"Lỗi khi tải tệp {fileName} lên Google Drive: {ex.Message}");
-        }
+
+        return (false, "", $"Không thể tải tệp {fileName} lên Google Drive sau 3 lần thử.");
     }
 
     /// <summary>
@@ -1776,18 +1840,34 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
     /// <summary>
     /// Sao lưu Queue (Hàng chờ tải) hiện tại lên thư mục riêng của thiết bị trên Google Drive.
+    /// Cho phép chỉ định targetFolderId cụ thể để bảo đảm dữ liệu luôn lưu đúng vào thư mục con đã chọn, không bị rơi ra ngoài thư mục cha.
     /// </summary>
-    public async Task<(bool Success, string Message)> BackupQueueToCloudAsync(IEnumerable<ComicBookItem> items, CancellationToken ct = default)
+    public async Task<(bool Success, string Message)> BackupQueueToCloudAsync(IEnumerable<ComicBookItem> items, string? targetFolderId = null, CancellationToken ct = default)
     {
         await _syncLock.WaitAsync(ct);
         try
         {
-            string? folderId = await EnsureCurrentDeviceFolderAsync(ct);
+            string? folderId = targetFolderId;
+            if (string.IsNullOrEmpty(folderId))
+            {
+                folderId = _config.CachedDeviceFolderId;
+            }
+            if (string.IsNullOrEmpty(folderId))
+            {
+                folderId = await EnsureCurrentDeviceFolderAsync(ct);
+            }
             if (string.IsNullOrEmpty(folderId))
             {
                 folderId = await EnsureTargetFolderAsync(ct);
             }
             if (string.IsNullOrEmpty(folderId)) return (false, "Không thể mở hoặc kết nối thư mục trên Google Drive.");
+
+            // Cập nhật lại bộ nhớ đệm thư mục đích để giữ vững trạng thái
+            if (!string.IsNullOrEmpty(targetFolderId) && _config.CachedDeviceFolderId != targetFolderId)
+            {
+                _config.CachedDeviceFolderId = targetFolderId;
+                SaveConfigToDisk();
+            }
 
             var itemList = items.ToList();
             string mdContent = QueueBackupService.Instance.BuildQueueMarkdownContent(itemList);
@@ -1856,18 +1936,33 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
     /// <summary>
     /// Sao lưu Dấu trang & Lịch sử đọc lên thư mục riêng của thiết bị trên Google Drive.
+    /// Cho phép chỉ định targetFolderId cụ thể để bảo đảm dữ liệu luôn lưu đúng vào thư mục con đã chọn.
     /// </summary>
-    public async Task<(bool Success, string Message)> BackupReaderToCloudAsync(CancellationToken ct = default)
+    public async Task<(bool Success, string Message)> BackupReaderToCloudAsync(string? targetFolderId = null, CancellationToken ct = default)
     {
         await _syncLock.WaitAsync(ct);
         try
         {
-            string? folderId = await EnsureCurrentDeviceFolderAsync(ct);
+            string? folderId = targetFolderId;
+            if (string.IsNullOrEmpty(folderId))
+            {
+                folderId = _config.CachedDeviceFolderId;
+            }
+            if (string.IsNullOrEmpty(folderId))
+            {
+                folderId = await EnsureCurrentDeviceFolderAsync(ct);
+            }
             if (string.IsNullOrEmpty(folderId))
             {
                 folderId = await EnsureTargetFolderAsync(ct);
             }
             if (string.IsNullOrEmpty(folderId)) return (false, "Không thể kết nối thư mục trên Google Drive.");
+
+            if (!string.IsNullOrEmpty(targetFolderId) && _config.CachedDeviceFolderId != targetFolderId)
+            {
+                _config.CachedDeviceFolderId = targetFolderId;
+                SaveConfigToDisk();
+            }
 
             string mdContent = ReadProgressStore.Instance.BuildReaderMarkdownContent();
             var (ok, _, msg) = await UploadOrUpdateFileAsync(folderId, ReaderFileName, mdContent, "text/markdown", ct);
@@ -1936,13 +2031,13 @@ p {{ color: #94A3B8; font-size: 14px; }}
     /// <summary>
     /// Đồng bộ 2 trong 1: Sao lưu toàn diện cả Queue tải và Reader lên thư mục thiết bị trên Google Drive.
     /// </summary>
-    public async Task<FullSyncResult> FullSyncUploadAsync(IEnumerable<ComicBookItem> queueItems, CancellationToken ct = default)
+    public async Task<FullSyncResult> FullSyncUploadAsync(IEnumerable<ComicBookItem> queueItems, string? targetFolderId = null, CancellationToken ct = default)
     {
         var result = new FullSyncResult();
-        var (qOk, qMsg) = await BackupQueueToCloudAsync(queueItems, ct);
+        var (qOk, qMsg) = await BackupQueueToCloudAsync(queueItems, targetFolderId, ct);
         result.QueueSynced = qOk;
 
-        var (rOk, rMsg) = await BackupReaderToCloudAsync(ct);
+        var (rOk, rMsg) = await BackupReaderToCloudAsync(targetFolderId, ct);
         result.ReaderSynced = rOk;
 
         result.Success = qOk && rOk;
@@ -2030,7 +2125,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
                         try
                         {
                             var items = getQueueItems();
-                            await FullSyncUploadAsync(items, CancellationToken.None);
+                            await FullSyncUploadAsync(items, ct: CancellationToken.None);
                         }
                         catch { }
                     }
