@@ -515,34 +515,36 @@
                 <Grid IsVisible="{Binding IsHistoryTabActive}" RowDefinitions="Auto, *">
                     <!-- Thanh tiêu đề phụ: Số lượng và Nút xóa toàn bộ -->
                     <Border Grid.Row="0" Background="#131C31" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="0,0,0,6">
-                        <Grid ColumnDefinitions="*, Auto">
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                        <Grid RowDefinitions="Auto, Auto" RowSpacing="6">
+                            <!-- Hàng trên: Tiêu đề và số lượng mục -->
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
                                 <TextBlock Text="📖 LỊCH SỬ ĐỌC GẦN ĐÂY" Foreground="#38BDF8" FontWeight="Bold" FontSize="12" />
                                 <TextBlock Text="{Binding HistoryItems.Count, StringFormat='{}{0} mục'}" Foreground="#94A3B8" FontSize="11" />
                             </StackPanel>
 
-                            <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <!-- Hàng dưới: Cụm nút tác vụ dạng WrapPanel responsive -->
+                            <WrapPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button Command="{Binding BackupReaderDataCommand}"
                                         Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
-                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
                                         ToolTip.Tip="Sao lưu dấu trang và lịch sử đọc truyện ra file .md">
                                     <TextBlock Text="💾 Sao Lưu MD" FontSize="10.5" />
                                 </Button>
                                 <Button Command="{Binding RestoreReaderDataCommand}"
                                         Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
-                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
                                         ToolTip.Tip="Phục hồi dấu trang và lịch sử đọc từ file .md">
                                     <TextBlock Text="📂 Phục Hồi MD" FontSize="10.5" />
                                 </Button>
                                 <Button Command="{Binding OpenGoogleDriveCommand}"
                                         Background="#4F46E5" BorderBrush="#818CF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold"
-                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
                                         ToolTip.Tip="Đồng bộ Dấu trang &amp; Lịch sử đọc với Google Drive (\GMTPC\Comic Downloader GMTPC\)">
                                     <TextBlock Text="☁️ Google Drive" FontSize="10.5" />
                                 </Button>
                                 <Button Command="{Binding ClearAllHistoryCommand}"
                                         Background="#334155" Foreground="#F87171" FontWeight="SemiBold"
-                                        Padding="8,3" CornerRadius="5">
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,0,4">
                                     <TextBlock Text="🗑️ Xóa Lịch Sử" FontSize="10.5" />
                                 </Button>
                             </WrapPanel>
@@ -642,34 +644,36 @@
                 <Grid IsVisible="{Binding IsBookmarkTabActive}" RowDefinitions="Auto, *">
                     <!-- Thanh tiêu đề phụ: Nút xóa toàn bộ -->
                     <Border Grid.Row="0" Background="#131C31" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="0,0,0,6">
-                        <Grid ColumnDefinitions="*, Auto">
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                        <Grid RowDefinitions="Auto, Auto" RowSpacing="6">
+                            <!-- Hàng trên: Tiêu đề và số lượng bộ truyện -->
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
                                 <TextBlock Text="📑 DẤU TRANG ĐÃ LƯU" Foreground="#38BDF8" FontWeight="Bold" FontSize="12" />
                                 <TextBlock Text="{Binding BookmarkGroups.Count, StringFormat='{}{0} bộ truyện'}" Foreground="#94A3B8" FontSize="11" />
                             </StackPanel>
 
-                            <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <!-- Hàng dưới: Cụm nút tác vụ dạng WrapPanel responsive -->
+                            <WrapPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button Command="{Binding BackupReaderDataCommand}"
                                         Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
-                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
                                         ToolTip.Tip="Sao lưu dấu trang và lịch sử đọc truyện ra file .md">
                                     <TextBlock Text="💾 Sao Lưu MD" FontSize="10.5" />
                                 </Button>
                                 <Button Command="{Binding RestoreReaderDataCommand}"
                                         Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
-                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
                                         ToolTip.Tip="Phục hồi dấu trang và lịch sử đọc từ file .md">
                                     <TextBlock Text="📂 Phục Hồi MD" FontSize="10.5" />
                                 </Button>
                                 <Button Command="{Binding OpenGoogleDriveCommand}"
                                         Background="#4F46E5" BorderBrush="#818CF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold"
-                                        Padding="8,3" CornerRadius="5" Margin="0,0,5,0"
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
                                         ToolTip.Tip="Đồng bộ Dấu trang &amp; Lịch sử đọc với Google Drive (\GMTPC\Comic Downloader GMTPC\)">
                                     <TextBlock Text="☁️ Google Drive" FontSize="10.5" />
                                 </Button>
                                 <Button Command="{Binding ClearAllBookmarksCommand}"
                                         Background="#334155" Foreground="#F87171" FontWeight="SemiBold"
-                                        Padding="8,3" CornerRadius="5">
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,0,4">
                                     <TextBlock Text="🗑️ Xóa Toàn Bộ" FontSize="10.5" />
                                 </Button>
                             </WrapPanel>

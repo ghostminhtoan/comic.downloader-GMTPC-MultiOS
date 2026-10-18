@@ -3244,3 +3244,21 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 
 
 
+
+17. **Tích Hợp Khả Năng Mở Ứng Dụng Với Tệp Truyện Hệ Điều Hành (Android IntentFilter) & Chuẩn Hóa Responsive Header History / Bookmark**:
+    - **Tích hợp khả năng mở App với tệp truyện hệ thống trên Android (File Associations & Open with...)**:
+      + Đăng ký toàn diện các `[IntentFilter]` trên `MainActivity` hỗ trợ Action `Intent.ActionView` và `Intent.ActionSend` cho tất cả các định dạng truyện: `.zip`, `.mobi`, `.rar`, `.cbr`, `.cbz`, `.pdf`.
+      + Bao phủ cả 3 tầng nhận diện Android:
+        * Tầng 1: MIME Type chuyên dụng (`application/pdf`, `application/zip`, `application/x-zip-compressed`, `application/x-rar-compressed`, `application/rar`, `application/vnd.rar`, `application/x-cbz`, `application/x-cbr`, `application/x-mobipocket-ebook`, `application/vnd.amazon.mobi8-ebook`...).
+        * Tầng 2: DataScheme `file://` và `content://` với `DataPathPattern` đuôi file (`.*\.pdf`, `.*\.zip`, `.*\.rar`, `.*\.cbr`, `.*\.cbz`, `.*\.mobi`).
+        * Tầng 3: Generic `application/octet-stream` kết hợp `DataPathPattern` cho các trình quản lý tệp không khai báo rõ MIME type.
+      + **Bộ phân giải đường dẫn thông minh `ResolveUriToFilePathAsync`**:
+        * Hỗ trợ Zero-Copy trực tiếp khi mở file từ bộ nhớ máy (`primary:...` -> `/storage/emulated/0/...`) hoặc toàn bộ thẻ nhớ SD Card ngoài (`xxxx-xxxx:...`), không tốn RAM và thời gian sao chép.
+        * Hỗ trợ Stream Copy an toàn khi nhận `content://` từ các ứng dụng bảo mật bên thứ 3 (Gmail, Zalo, Drive...) vào thư mục đệm `CacheDir/opened_comics/` để nạp truyện tức thì.
+      + **Nạp và mở tự động vào Comic Reader**:
+        * Tự động gọi `LibraryViewModel.OpenStandaloneFileDirectlyAsync(filePath)` khi mở app hoặc khi nhận `OnNewIntent`.
+        * Tôn trọng cài đặt người dùng: Nếu bật "Cửa sổ đọc riêng (Đa nhiệm)", tự động kích hoạt `ComicReaderActivity` thành thẻ độc lập trong Recents; nếu tắt, mở ngay trên màn hình đọc chính.
+    - **Tái cấu trúc giao diện Responsive cho Header Tab Lịch Sử (History) & Dấu Trang (Bookmark)**:
+      + Tái cấu trúc thanh tiêu đề trong `LibraryView.axaml` từ dạng 1 hàng 2 cột (`Grid ColumnDefinitions="*, Auto"`) sang dạng 2 hàng (`Grid RowDefinitions="Auto, Auto" RowSpacing="6"`).
+      + **Hàng trên**: Hiển thị tiêu đề to rõ (`📖 LỊCH SỬ ĐỌC GẦN ĐÂY` / `📑 DẤU TRANG ĐÃ LƯU`) kèm số lượng mục/bộ truyện.
+      + **Hàng dưới**: Chuyển toàn bộ cụm 4 nút tác vụ (`[💾 Sao Lưu MD]`, `[📂 Phục Hồi MD]`, `[☁️ Google Drive]`, `[🗑️ Xóa Lịch Sử / Xóa Toàn Bộ]`) sang `WrapPanel` responsive có `Margin="0,0,6,4"`, chống tràn viền tuyệt đối trên mọi kích thước màn hình điện thoại dọc hoặc cửa sổ thu nhỏ.
