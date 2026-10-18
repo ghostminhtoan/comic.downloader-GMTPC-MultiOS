@@ -598,6 +598,7 @@ public partial class LibraryViewModel : ViewModelBase
                 readerVm.Cleanup();
                 comic?.RefreshReadStatus();
                 ApplyFilter();
+                _ = LoadHistoryItemsAsync();
             };
             win.Show();
         }
@@ -610,6 +611,7 @@ public partial class LibraryViewModel : ViewModelBase
                 {
                     comic?.RefreshReadStatus();
                     ApplyFilter();
+                    _ = LoadHistoryItemsAsync();
                 });
             };
             ComicReaderService.AndroidLaunchSeparateReaderTask.Invoke(readerVm);
@@ -641,6 +643,7 @@ public partial class LibraryViewModel : ViewModelBase
                 readerVm.Cleanup();
                 comic?.RefreshReadStatus();
                 ApplyFilter();
+                _ = LoadHistoryItemsAsync();
             };
             win.Show();
             await readerVm.InitializeAsync(comic, chapter);
@@ -655,6 +658,7 @@ public partial class LibraryViewModel : ViewModelBase
                 {
                     comic?.RefreshReadStatus();
                     ApplyFilter();
+                    _ = LoadHistoryItemsAsync();
                 });
             };
             ComicReaderService.AndroidLaunchSeparateReaderTask.Invoke(readerVm);
@@ -670,6 +674,7 @@ public partial class LibraryViewModel : ViewModelBase
                 InlineReaderVm = null;
                 comic?.RefreshReadStatus();
                 ApplyFilter();
+                _ = LoadHistoryItemsAsync();
             }
 
             readerVm.CloseRequested += OnInlineClose;
@@ -1429,6 +1434,13 @@ public partial class LibraryViewModel : ViewModelBase
         ApplyFilter();
     }
 
+    [RelayCommand]
+    public async Task RefreshHistoryAsync()
+    {
+        await LoadHistoryItemsAsync();
+        StatusMessage = "✓ Đã làm mới danh sách lịch sử đọc";
+    }
+
     public async Task LoadHistoryItemsAsync()
     {
         try
@@ -2037,11 +2049,12 @@ public partial class LibraryViewModel : ViewModelBase
                 ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
 
                 LibraryChapterItem? targetChap = null;
-                // Nếu path là thư mục chương con cụ thể bên trong truyện đa tầng
-                if (Directory.Exists(path) && !string.Equals(actualComicPath, path, StringComparison.OrdinalIgnoreCase))
+                string chDir = Directory.Exists(path) ? path : (Path.GetDirectoryName(path) ?? string.Empty);
+                if (!string.IsNullOrWhiteSpace(chDir))
                 {
                     targetChap = quickComic.Chapters.FirstOrDefault(c =>
-                        string.Equals(c.LocalPath.TrimEnd('\\', '/'), path.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
+                        string.Equals(c.LocalPath.TrimEnd('\\', '/'), chDir.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(c.Title, Path.GetFileName(chDir), StringComparison.OrdinalIgnoreCase));
                 }
 
                 targetChap ??= quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
@@ -2049,6 +2062,7 @@ public partial class LibraryViewModel : ViewModelBase
                 if (pageToJump >= 0)
                 {
                     ReadProgressStore.Instance.SaveProgress(targetChap.EffectiveProgressKey, pageToJump);
+                    targetChap.LastReadPage = pageToJump + 1;
                 }
 
                 await OpenChapterInternalAsync(quickComic, targetChap);

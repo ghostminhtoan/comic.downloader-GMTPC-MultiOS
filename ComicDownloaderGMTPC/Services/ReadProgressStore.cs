@@ -565,6 +565,20 @@ public sealed class ReadProgressStore
         string title = !string.IsNullOrWhiteSpace(comicTitle) ? comicTitle.Trim() : string.Empty;
         string path = !string.IsNullOrWhiteSpace(comicRootOrFilePath) ? NormalizeKey(comicRootOrFilePath) : string.Empty;
 
+        // Nếu path hoặc title trỏ vào thư mục chương con (có parent comic root), tự động quy về parent comic root
+        if (!string.IsNullOrEmpty(path) && (Directory.Exists(path) || File.Exists(path)))
+        {
+            if (LibraryScannerService.TryGetParentComicRoot(path, out string parentRoot, out string chName))
+            {
+                path = NormalizeKey(parentRoot);
+                title = Path.GetFileName(parentRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (string.IsNullOrWhiteSpace(chapterTitle) || string.Equals(chapterTitle, title, StringComparison.OrdinalIgnoreCase))
+                {
+                    chapterTitle = chName;
+                }
+            }
+        }
+
         if (string.IsNullOrEmpty(title) && !string.IsNullOrEmpty(path))
         {
             title = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -645,6 +659,7 @@ public sealed class ReadProgressStore
     /// <summary>
     /// Ghi nhận một bộ truyện (thư mục truyện hoặc file .pdf/.zip/.cbz) vào danh mục Lịch sử Đọc toàn cục
     /// để hiển thị xuyên suốt bất kể người dùng đang chọn thư mục thư viện nào.
+    /// Tự động quy về Thư mục cha tổng nếu đường dẫn truyền vào là thư mục/tệp chương con.
     /// </summary>
     public void RegisterReadComic(string comicRootOrFilePath, bool touchTimestamp = false)
     {
@@ -653,6 +668,15 @@ public sealed class ReadProgressStore
         int sep = cleanPath.IndexOf("::", StringComparison.Ordinal);
         if (sep > 0) cleanPath = cleanPath.Substring(0, sep);
         if (string.IsNullOrWhiteSpace(cleanPath)) return;
+
+        // Nếu cleanPath là một thư mục chương con (có thư mục cha là comic root), tự động quy về thư mục cha
+        if (Directory.Exists(cleanPath) || File.Exists(cleanPath))
+        {
+            if (LibraryScannerService.TryGetParentComicRoot(cleanPath, out string parentRoot, out _))
+            {
+                cleanPath = NormalizeKey(parentRoot);
+            }
+        }
 
         string histKey = HistoryPrefix + cleanPath;
         if (touchTimestamp || !_progressMap.ContainsKey(histKey))
@@ -719,6 +743,7 @@ public sealed class ReadProgressStore
 
     /// <summary>
     /// Trả về danh sách toàn bộ đường dẫn truyện trong Lịch sử Đọc (tùy chọn có lọc tồn tại file hay không).
+    /// Tự động loại bỏ các thư mục chương con trùng lặp nếu đã có thư mục truyện cha.
     /// </summary>
     public List<string> GetAllHistoryPaths(bool checkPathExists = false)
     {
@@ -735,11 +760,64 @@ public sealed class ReadProgressStore
             }
         }
 
-        return entries
+        var sorted = entries
             .OrderByDescending(e => e.Order)
             .Select(e => e.Path)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        var cleanPaths = new List<string>();
+        var keysToRemove = new List<string>();
+
+        foreach (var path in sorted)
+        {
+            // 1. Kiểm tra xem path có phải là subfolder của một path khác trong sorted không
+            bool isSubfolder = false;
+            foreach (var other in sorted)
+            {
+                if (string.Equals(path, other, StringComparison.OrdinalIgnoreCase)) continue;
+                string cleanOther = other.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (path.StartsWith(cleanOther, StringComparison.OrdinalIgnoreCase))
+                {
+                    isSubfolder = true;
+                    break;
+                }
+            }
+
+            // 2. Kiểm tra nếu path là một chương con có parent comic root tồn tại
+            if (!isSubfolder && (Directory.Exists(path) || File.Exists(path)))
+            {
+                if (LibraryScannerService.TryGetParentComicRoot(path, out string parentRoot, out _))
+                {
+                    isSubfolder = true;
+                    string parentKey = HistoryPrefix + NormalizeKey(parentRoot);
+                    if (!_progressMap.ContainsKey(parentKey))
+                    {
+                        _progressMap[parentKey] = GetComicLastReadOrder(path);
+                    }
+                }
+            }
+
+            if (!isSubfolder)
+            {
+                cleanPaths.Add(path);
+            }
+            else
+            {
+                keysToRemove.Add(HistoryPrefix + path);
+            }
+        }
+
+        if (keysToRemove.Count > 0)
+        {
+            foreach (var k in keysToRemove)
+            {
+                _progressMap.TryRemove(k, out _);
+            }
+            MarkDirtyAndScheduleFlush();
+        }
+
+        return cleanPaths;
     }
 
     public int GetBookmarkCount()
@@ -1148,7 +1226,9 @@ public sealed class ReadProgressStore
             // Đồng bộ tiến trình đọc dở từ _crossDeviceEntries (từ resume.md) nếu có
             lock (_crossDeviceLock)
             {
-                var matchEntry = _crossDeviceEntries.FirstOrDefault(e => string.Equals(e.ComicTitle, title, StringComparison.OrdinalIgnoreCase));
+                var matchEntry = _crossDeviceEntries.FirstOrDefault(e =>
+                    string.Equals(e.ComicTitle, title, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(NormalizeChapterName(e.ComicTitle), NormalizeChapterName(title), StringComparison.OrdinalIgnoreCase));
                 if (matchEntry != null)
                 {
                     if (matchEntry.LastReadPage > 0) lastPage = matchEntry.LastReadPage;
@@ -1159,6 +1239,27 @@ public sealed class ReadProgressStore
                             ? matchEntry.ChapterTitle
                             : $"Chương {matchEntry.ChapterIndex}";
                     }
+                }
+            }
+
+            // Nếu subTitle đang dạng thô "Chương X", thử tra cứu tên thư mục chương thực tế nếu có
+            if (string.IsNullOrWhiteSpace(subTitle) || subTitle.StartsWith("Chương ", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Directory.Exists(path))
+                {
+                    try
+                    {
+                        var subs = Directory.GetDirectories(path).NaturalSort();
+                        if (lastChap > 0 && lastChap <= subs.Count)
+                        {
+                            string realChapDirName = Path.GetFileName(subs[lastChap - 1]);
+                            if (!string.IsNullOrWhiteSpace(realChapDirName))
+                            {
+                                subTitle = realChapDirName;
+                            }
+                        }
+                    }
+                    catch { }
                 }
             }
 

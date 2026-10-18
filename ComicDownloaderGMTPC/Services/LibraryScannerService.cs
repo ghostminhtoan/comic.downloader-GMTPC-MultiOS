@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using ComicDownloaderGMTPC.Models;
@@ -872,6 +873,110 @@ public sealed class LibraryScannerService
         return parts[^1];
     }
 
+    /// <summary>
+    /// Kiểm tra tên thư mục có khớp với định dạng chương truyện (Chap, Chapter, Vol, Số thứ tự...) hay không.
+    /// </summary>
+    public static bool IsChapterNamePattern(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        string clean = name.Trim();
+        if (Regex.IsMatch(clean, @"^(chap|ch|chapter|vol|volume|tập|tap|hồi|hoi|bài|bai|ep|episode)(\b|\s|_|-|\.|\d)", RegexOptions.IgnoreCase))
+            return true;
+        if (Regex.IsMatch(clean, @"^\d+$"))
+            return true;
+        if (Regex.IsMatch(clean, @"^[cvep]\d+$", RegexOptions.IgnoreCase))
+            return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Nhận diện xem một đường dẫn tệp ảnh hoặc thư mục chương có thuộc về một thư mục truyện cha hay không.
+    /// Giúp nhận diện chính xác Comic Root (folder tổng của truyện) và Chapter, tránh ghi nhận các chương con
+    /// (như 'chap 0410', 'chap 0401') thành các truyện độc lập riêng lẻ làm rác danh sách History.
+    /// </summary>
+    public static bool TryGetParentComicRoot(string targetPath, out string parentComicRoot, out string chapterName)
+    {
+        parentComicRoot = string.Empty;
+        chapterName = string.Empty;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(targetPath)) return false;
+            string dir = Directory.Exists(targetPath) ? targetPath : (Path.GetDirectoryName(targetPath) ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return false;
+
+            string cleanDir = dir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string? parent = Path.GetDirectoryName(cleanDir);
+            if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent)) return false;
+
+            // Không coi Root của ổ đĩa (C:\, D:\, /) là Comic Root
+            string? rootOfParent = Path.GetPathRoot(parent);
+            if (string.Equals(parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                              rootOfParent?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                              StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            // Tránh nhận diện nhầm thư mục quét thư viện chính làm Comic Root
+            string? lastLibRoot = ReadProgressStore.Instance.GetLastLibraryRootPath();
+            if (!string.IsNullOrWhiteSpace(lastLibRoot) &&
+                string.Equals(parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                              lastLibRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                              StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string currentFolderName = Path.GetFileName(cleanDir);
+            bool isChapterName = IsChapterNamePattern(currentFolderName);
+
+            var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
+            var siblingDirs = Directory.GetDirectories(parent, "*", enumOpts);
+            int siblingWithImages = 0;
+            int siblingChapterCount = 0;
+
+            foreach (var sib in siblingDirs)
+            {
+                string sibName = Path.GetFileName(sib);
+                if (sibName.StartsWith(".", StringComparison.Ordinal)) continue;
+                if (IsChapterNamePattern(sibName)) siblingChapterCount++;
+
+                try
+                {
+                    if (Directory.EnumerateFiles(sib, "*", enumOpts).Any(IsImageFile))
+                    {
+                        siblingWithImages++;
+                    }
+                }
+                catch { }
+            }
+
+            // Kiểm tra thêm các file archive anh em (.zip, .cbz, .pdf...) trong parent
+            int siblingArchives = 0;
+            try
+            {
+                siblingArchives = Directory.EnumerateFiles(parent, "*", enumOpts).Count(f => IsArchiveFile(f) || IsPdfFile(f) || IsMobiFile(f));
+            }
+            catch { }
+
+            // Điều kiện xác định parent là Comic Root:
+            // 1. Tên folder là chapter pattern VÀ parent có chứa các sibling khác (hoặc chính nó là chapter)
+            // 2. Hoặc trong parent có từ 2 chapter con trở lên có ảnh
+            // 3. Hoặc có từ 2 sibling mang tên chapter
+            if ((isChapterName && (siblingDirs.Length > 1 || siblingArchives > 0 || Directory.Exists(cleanDir))) ||
+                siblingWithImages >= 2 ||
+                siblingChapterCount >= 2)
+            {
+                parentComicRoot = parent;
+                chapterName = currentFolderName;
+                return true;
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
     public LibraryComicItem? CreateQuickComicFromPath(string targetPath)
     {
         if (string.IsNullOrWhiteSpace(targetPath)) return null;
@@ -917,16 +1022,37 @@ public sealed class LibraryScannerService
                 string? dir = Path.GetDirectoryName(targetPath);
                 if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
                 {
-                    var siblingImgs = GetDirectImagesSafe(dir);
-                    if (siblingImgs.Count > 0)
+                    // Kiểm tra nếu thư mục chứa ảnh này là một chương con của bộ truyện cha
+                    if (TryGetParentComicRoot(targetPath, out string parentRoot, out string chName))
                     {
-                        int targetIdx = siblingImgs.FindIndex(f => string.Equals(f, targetPath, StringComparison.OrdinalIgnoreCase));
+                        var parentComic = BuildComicFromFolderAllChapters(parentRoot);
+                        if (parentComic != null && parentComic.Chapters.Count > 0)
+                        {
+                            var matchedChap = parentComic.Chapters.FirstOrDefault(c =>
+                                string.Equals(c.Title, chName, StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(c.LocalPath.TrimEnd('\\', '/'), dir.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
+                            matchedChap ??= parentComic.Chapters[0];
+
+                            var siblingImgs = GetDirectImagesSafe(dir);
+                            int targetIdx = siblingImgs.FindIndex(f => string.Equals(f, targetPath, StringComparison.OrdinalIgnoreCase));
+                            matchedChap.LastReadPage = targetIdx >= 0 ? targetIdx + 1 : 1;
+
+                            ReadProgressStore.Instance.SaveLastActiveChapterIndex(parentRoot, matchedChap.Index);
+                            parentComic.SourceLocationLabel = BuildShortLocationBadge(parentComic.RootFolderPath, isExternal: true);
+                            return parentComic;
+                        }
+                    }
+
+                    var directImgs = GetDirectImagesSafe(dir);
+                    if (directImgs.Count > 0)
+                    {
+                        int targetIdx = directImgs.FindIndex(f => string.Equals(f, targetPath, StringComparison.OrdinalIgnoreCase));
                         int initialPage = targetIdx >= 0 ? targetIdx + 1 : 1;
 
                         var comic = BuildComicItem(
                             dir,
                             dir,
-                            new List<(string, List<string>)> { (dir, siblingImgs) },
+                            new List<(string, List<string>)> { (dir, directImgs) },
                             new List<string>(),
                             new List<string>());
                         comic.SourceLocationLabel = BuildShortLocationBadge(comic.RootFolderPath, comic.IsExternalHistoryItem);
@@ -954,6 +1080,24 @@ public sealed class LibraryScannerService
 
         if (Directory.Exists(targetPath))
         {
+            // Kiểm tra nếu thư mục này là một chương con của bộ truyện cha
+            if (TryGetParentComicRoot(targetPath, out string parentRoot, out string chName))
+            {
+                var parentComic = BuildComicFromFolderAllChapters(parentRoot);
+                if (parentComic != null && parentComic.Chapters.Count > 0)
+                {
+                    var matchedChap = parentComic.Chapters.FirstOrDefault(c =>
+                        string.Equals(c.Title, chName, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(c.LocalPath.TrimEnd('\\', '/'), targetPath.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
+                    if (matchedChap != null)
+                    {
+                        ReadProgressStore.Instance.SaveLastActiveChapterIndex(parentRoot, matchedChap.Index);
+                    }
+                    parentComic.SourceLocationLabel = BuildShortLocationBadge(parentComic.RootFolderPath, isExternal: true);
+                    return parentComic;
+                }
+            }
+
             var directImgs = GetDirectImagesSafe(targetPath);
             if (directImgs.Count > 0)
             {

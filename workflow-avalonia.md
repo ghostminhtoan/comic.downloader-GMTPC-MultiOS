@@ -3387,4 +3387,22 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
         - Ưu tiên 5: `Chapters.LastOrDefault(c => c.LastReadPage > 0)` (chương đã đọc gần nhất): nếu đã đọc xong (`IsCompletedRead == true`) và có chương tiếp theo thì tự động mở chương tiếp theo; nếu không có chương tiếp theo thì mở lại chính chương đó.
         - TUYỆT ĐỐI KHÔNG nhảy ngược về chương 1 (`FirstOrDefault(c => !c.IsCompletedRead)`).
 
-
+25. **Tự Động Cập Nhật History Khi Thoát Reader, Ghi Nhận Mở Tệp Từ Ngoài (Open With) Vào History, Tối Ưu Nhận Diện Folder Truyện Cha & Thêm Nút Làm Mới History (`LibraryViewModel.cs`, `LibraryScannerService.cs`, `ReadProgressStore.cs`, `App.axaml.cs`, `LibraryView.axaml`)**:
+    - **Tự động làm mới danh sách Lịch Sử khi thoát Reader (`LibraryViewModel.cs`)**:
+      + Bổ sung lệnh `_ = LoadHistoryItemsAsync();` vào tất cả các điểm callback đóng trình đọc truyện (`win.Closed`, `ActiveExternalReaderClosedCallback` trên Android, `OnInlineClose` khi đọc nội tuyến).
+      + Nhờ đó, ngay khi đóng Reader, màn hình danh sách Lịch Sử Đọc (History) lập tức tự động cập nhật tên chương vừa đọc, trang đang đọc và đưa bộ truyện lên đầu danh sách mà người dùng không cần phải chuyển tab hay khởi động lại app.
+    - **Ghi nhận lịch sử khi mở file từ ngoài qua Open With / Double-click (`App.axaml.cs`)**:
+      + Tại chế độ khởi động trình đọc độc lập (Standalone Reader Mode) từ tham số dòng lệnh OS: Bổ sung lệnh `ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);` và đăng ký sự kiện `readerWin.Closed` để gọi `SaveCurrentReadingSession()`, `Cleanup()` và `FlushImmediately()`.
+      + Các tệp `.pdf`, `.zip`, `.cbz`, `.cbr`, `.rar`, `.mobi` khi mở bằng "Open with" từ bên ngoài hệ điều hành giờ đây được ghi nhận chính xác 100% vào Lịch sử Đọc và lưu trữ bền vững vào `history.md`.
+    - **Nhận diện Folder Tổng (Comic Root) khi mở file ảnh hoặc thư mục chương con (`LibraryScannerService.cs`, `ReadProgressStore.cs`, `LibraryViewModel.cs`)**:
+      + Bổ sung thuật toán `TryGetParentComicRoot(targetPath, out parentComicRoot, out chapterName)` và `IsChapterNamePattern`:
+        Phân tích thông minh tên thư mục theo pattern chương (`chap \d+`, `chapter \d+`, `vol \d+`...) kết hợp kiểm tra các thư mục/tệp anh em trong thư mục cha để nhận diện chính xác đâu là Folder tổng của bộ truyện và đâu là Chapter con.
+      + Khi mở một file ảnh (như `.../History's Strongest Disciple Kenichi-chap 0401-0583/chap 0410/001.jpg`) hoặc mở thư mục chapter con (`chap 0410`):
+        App tự động xác định Comic Root là thư mục cha tổng (`History's Strongest Disciple Kenichi-chap 0401-0583`), nạp toàn bộ danh sách các chương của bộ truyện và mở ngay chương tương ứng.
+      + Trong `ReadProgressStore.GetAllHistoryPaths()`: Tự động phát hiện và loại bỏ triệt để các subfolder chương con trùng lặp khỏi danh sách History, dọn dẹp các key rác trong `_progressMap` để `history.md` chỉ lưu duy nhất 1 mục thư mục cha của bộ truyện.
+      + Trong `RegisterReadComic` và `RecordSessionResume`: Tự động quy đổi đường dẫn chương con về thư mục cha tổng.
+      + Trong `GetUnifiedHistoryItems`: Tự động tra cứu tên chương thực tế từ thư mục cục bộ hoặc `_crossDeviceEntries` để hiển thị tên chương đẹp mắt (như `chap 0410` thay vì chỉ hiển thị `Chương 10`).
+    - **Bổ sung Icon & Nút Làm Mới Lịch Sử Đọc [🔄 Làm Mới] (`LibraryView.axaml`, `LibraryViewModel.cs`)**:
+      + Thêm nút `[🔄 Làm Mới]` tại hàng tiêu đề phụ của tab History (cạnh số lượng mục).
+      + Thêm nút `[🔄 Làm Mới]` tại cụm nút WrapPanel thao tác (đứng đầu danh sách trước nút `[💾 Sao Lưu MD]`).
+      + Gắn với `[RelayCommand] RefreshHistoryCommand` gọi `LoadHistoryItemsAsync()` kèm toast thông báo trạng thái `✓ Đã làm mới danh sách lịch sử đọc`.

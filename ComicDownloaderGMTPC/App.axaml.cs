@@ -113,10 +113,22 @@ public partial class App : Application
                         if (quickComic != null && quickComic.Chapters.Count > 0)
                         {
                             var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
+                            ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
+
                             var readerVm = new ComicReaderViewModel();
                             var readerWin = new ComicReaderWindow
                             {
                                 DataContext = readerVm
+                            };
+                            readerWin.Closed += (_, _) =>
+                            {
+                                try
+                                {
+                                    readerVm.SaveCurrentReadingSession();
+                                    readerVm.Cleanup();
+                                    ReadProgressStore.Instance.FlushImmediately();
+                                }
+                                catch { }
                             };
                             desktop.MainWindow = readerWin;
                             readerWin.Show();
