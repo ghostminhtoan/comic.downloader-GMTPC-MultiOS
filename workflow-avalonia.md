@@ -3346,3 +3346,18 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       * **Lớp 4 (Giữ khóa đồng bộ)**: Trong `LoadChapterInternalAsync`: Giữ `_suppressScrollSync = true;` xuyên suốt quá trình nạp và chỉ mở lại bên trong callback `Loaded` sau khi `RequestScrollToPage(startIndex)` đã cuộn đến đúng vị trí; đồng thời reset `_isNavigatingToPreviousChapter = false;` khi chọn chương từ ComboBox.
       * **Lớp 5 (Chuẩn hóa tọa độ cuộn)**: Trong `OnVmScrollToPageRequested`: Khi `pageIndex == 0`, reset tuyệt đối `sv.Offset = new Vector(0, 0)` cho cuộn dọc và `sv.Offset = new Vector(vm.IsRightToLeft ? maxX : 0, 0)` cho cuộn ngang.
 
+23. **Cơ Chế Smart 2-Way Merge resume.md, Tự Động Khôi Phục Chương Xem Dở Chéo Thiết Bị & Nâng Thời Gian Chờ Quota Exceeded Lên 4 Giây**:
+    - **Smart 2-Way Merge khi sao lưu `resume.md` lên Google Drive (`GoogleDriveSyncService.cs`, `ReadProgressStore.cs`)**:
+      + Khắc phục triệt để tình trạng upload ghi đè (replace) làm mất tiến độ đọc của các thiết bị khác trên Cloud.
+      + Trước khi tải lên, dịch vụ tự động tải tệp `resume.md` hiện hữu trên Google Drive về, phân tích cú pháp và gọi `MergeCloudResumeContent`.
+      + So sánh hai chiều theo `UpdatedAtUnixSeconds`: Giữ nguyên 100% các bộ truyện thuộc thiết bị khác trên Cloud, chỉ cập nhật những bộ truyện máy hiện tại vừa đọc mới hơn.
+      + Sinh nội dung tệp Markdown hợp nhất hoàn chỉnh và cập nhật lên Google Drive, đồng thời lưu trữ ngay vào bộ nhớ và tệp cục bộ.
+    - **Tự động mở đúng chương và trang đã xem từ `resume.md` khi mở truyện trên thiết bị mới (`LibraryComicItem.cs`, `ReadProgressStore.cs`, `ComicReaderViewModel.cs`)**:
+      + Bổ sung phương thức `FindResumeEntryForComic(comicTitle, rootPathOrFileName)` cho phép tra cứu đa chiều linh hoạt (tên truyện, tên thư mục, tên tệp nén/PDF).
+      + Trong `GetBestResumeChapter()`: Khi bộ truyện chưa từng mở trên thiết bị hiện tại (chưa có lịch sử cục bộ), tự động đối chiếu chéo với `resume.md` theo số chương (`ChapterNumber`), tên chương (`ChapterTitle`), hậu tố (`ChapterSuffix`) hoặc chỉ số (`ChapterIndex`). Khi tìm thấy, tự động gán `LastReadPage` và mở thẳng chương đó thay vì mặc định mở `Chapters[0]`.
+      + Trong `LoadChapterInternalAsync`: Khi `savedPageIndex <= 0`, tự động khôi phục vị trí trang từ `resumeEntry.LastReadPage - 1` để cuộn ngay vào đúng trang đang đọc dở.
+    - **Nâng thời gian chờ Quota Exceeded / Rate Limit (403, 429) từ 2 giây lên 4 giây (`GoogleDriveSyncService.cs`)**:
+      + Đổi toàn bộ các lệnh `Task.Delay(2000, ct)` khi gặp Quota Exceeded / Rate Limit (403, 429) và gián đoạn kết nối sang `Task.Delay(4000, ct)` (4 giây).
+      + Đồng bộ các chuỗi thông báo UI và dòng Debug Log thông báo rõ thời gian chờ 4 giây trước khi thử lại tự động.
+
+

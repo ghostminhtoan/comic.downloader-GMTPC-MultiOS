@@ -116,6 +116,58 @@ public partial class LibraryComicItem : ObservableObject
             return reading;
         }
 
+        // Tra cứu trực tiếp từ resume.md (CrossDeviceResumeEntry) dùng chung
+        // Đảm bảo thiết bị mới dù chưa từng mở truyện này trong lịch sử vẫn tự động mở chính xác chương đã xem!
+        var resumeEntry = Services.ReadProgressStore.Instance.FindResumeEntryForComic(Title, RootFolderPath);
+        if (resumeEntry != null)
+        {
+            LibraryChapterItem? matchCh = null;
+
+            // 1. So khớp theo số chương (ChapterNumber)
+            if (resumeEntry.ChapterNumber >= 0)
+            {
+                matchCh = Chapters.FirstOrDefault(c =>
+                    Math.Abs(Services.ReadProgressStore.ExtractChapterNumber(c.Title) - resumeEntry.ChapterNumber) < 0.001);
+            }
+
+            // 2. So khớp theo tên chương (ChapterTitle)
+            if (matchCh == null && !string.IsNullOrWhiteSpace(resumeEntry.ChapterTitle))
+            {
+                string normTarget = Services.ReadProgressStore.NormalizeChapterName(resumeEntry.ChapterTitle);
+                matchCh = Chapters.FirstOrDefault(c =>
+                    string.Equals(Services.ReadProgressStore.NormalizeChapterName(c.Title), normTarget, StringComparison.OrdinalIgnoreCase) ||
+                    c.Title.Contains(resumeEntry.ChapterTitle, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // 3. So khớp theo ChapterSuffix (dành cho file zip/pdf đa chương)
+            if (matchCh == null && !string.IsNullOrWhiteSpace(resumeEntry.ChapterSuffix))
+            {
+                matchCh = Chapters.FirstOrDefault(c =>
+                    (!string.IsNullOrEmpty(c.ProgressKey) && c.ProgressKey.EndsWith(resumeEntry.ChapterSuffix, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrEmpty(c.LocalPath) && c.LocalPath.EndsWith(resumeEntry.ChapterSuffix, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            // 4. So khớp theo chỉ số chương (ChapterIndex)
+            if (matchCh == null && resumeEntry.ChapterIndex > 0)
+            {
+                matchCh = Chapters.FirstOrDefault(c => c.Index == resumeEntry.ChapterIndex);
+            }
+
+            if (matchCh != null)
+            {
+                if (resumeEntry.LastReadPage > 0 && matchCh.LastReadPage <= 0)
+                {
+                    matchCh.LastReadPage = resumeEntry.LastReadPage;
+                }
+                Services.ReadProgressStore.Instance.SaveLastActiveChapterIndex(RootFolderPath, matchCh.Index);
+                if (matchCh.LastReadPage > 0)
+                {
+                    Services.ReadProgressStore.Instance.SaveProgress(matchCh.EffectiveProgressKey, Math.Max(0, matchCh.LastReadPage - 1));
+                }
+                return matchCh;
+            }
+        }
+
         // Mở lần đầu: nếu có mục 'Toàn bộ truyện' ở đầu và có các folder chương con thực sự phía sau,
         // ưu tiên mở folder chương đầu tiên trước thay vì mở toàn bộ!
         if (Chapters.Count > 1 && IsAllPagesChapter(Chapters[0]))

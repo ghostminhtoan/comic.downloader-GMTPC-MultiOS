@@ -399,6 +399,35 @@ public sealed class ReadProgressStore
             if (_progressMap.TryGetValue(normKey, out int pNorm) && pNorm > 0) return pNorm;
         }
 
+        // 4. Đối chiếu thông minh từ resume.md (CrossDeviceResumeEntry) nếu chưa có lịch sử cục bộ
+        if (!string.IsNullOrWhiteSpace(parentName) || !string.IsNullOrWhiteSpace(leaf))
+        {
+            var resumeEntry = FindResumeEntryForComic(parentName, basePath);
+            if (resumeEntry != null && resumeEntry.LastReadPage > 0)
+            {
+                double chNum = ExtractChapterNumber(leaf);
+                bool isMatchingChapter = false;
+                if (chNum >= 0 && resumeEntry.ChapterNumber >= 0 && Math.Abs(chNum - resumeEntry.ChapterNumber) < 0.001)
+                {
+                    isMatchingChapter = true;
+                }
+                else if (!string.IsNullOrWhiteSpace(resumeEntry.ChapterTitle) &&
+                         string.Equals(NormalizeChapterName(leaf), NormalizeChapterName(resumeEntry.ChapterTitle), StringComparison.OrdinalIgnoreCase))
+                {
+                    isMatchingChapter = true;
+                }
+                else if (resumeEntry.ChapterIndex > 0 && chNum == resumeEntry.ChapterIndex)
+                {
+                    isMatchingChapter = true;
+                }
+
+                if (isMatchingChapter)
+                {
+                    return resumeEntry.LastReadPage;
+                }
+            }
+        }
+
         return 0;
     }
 
@@ -477,6 +506,13 @@ public sealed class ReadProgressStore
         {
             string leafKey = $"{PortableIdPrefix}leaf|{leaf}::#last_active_chapter";
             if (_progressMap.TryGetValue(leafKey, out int lIdx) && lIdx > 0) return lIdx;
+
+            // Fallback: tra cứu từ resume.md (CrossDeviceResumeEntry)
+            var resumeEntry = FindResumeEntryForComic(leaf, comicOrFilePath);
+            if (resumeEntry != null && resumeEntry.ChapterIndex > 0)
+            {
+                return resumeEntry.ChapterIndex;
+            }
         }
 
         return 0;
@@ -1060,6 +1096,162 @@ public sealed class ReadProgressStore
         }
 
         return result.OrderByDescending(r => r.OrderStamp).ToList();
+    }
+
+    /// <summary>
+    /// Tra cứu thông tin tiến độ đọc dở chéo thiết bị (từ resume.md) theo tên truyện hoặc đường dẫn/tên file.
+    /// Giúp thiết bị mới dù chưa từng mở truyện trong lịch sử vẫn nhận diện và mở chính xác chương + trang đã xem.
+    /// </summary>
+    public CrossDeviceResumeEntry? FindResumeEntryForComic(string? comicTitle, string? rootPathOrFileName = null)
+    {
+        lock (_crossDeviceLock)
+        {
+            if (_crossDeviceEntries.Count == 0) return null;
+
+            string cleanTitle = !string.IsNullOrWhiteSpace(comicTitle) ? comicTitle.Trim() : string.Empty;
+            string cleanPath = !string.IsNullOrWhiteSpace(rootPathOrFileName) ? NormalizeKey(rootPathOrFileName) : string.Empty;
+            string leaf = !string.IsNullOrWhiteSpace(cleanPath)
+                ? Path.GetFileName(cleanPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                : string.Empty;
+            string leafWithoutExt = !string.IsNullOrWhiteSpace(leaf)
+                ? Path.GetFileNameWithoutExtension(leaf)
+                : string.Empty;
+
+            // 1. So khớp tuyệt đối hoặc so khớp chuẩn hóa theo ComicTitle
+            if (!string.IsNullOrEmpty(cleanTitle))
+            {
+                var match = _crossDeviceEntries.FirstOrDefault(e =>
+                    string.Equals(e.ComicTitle, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(NormalizeChapterName(e.ComicTitle), NormalizeChapterName(cleanTitle), StringComparison.OrdinalIgnoreCase));
+                if (match != null) return match;
+            }
+
+            // 2. So khớp theo tên thư mục hoặc tên file không đuôi (leaf / leafWithoutExt)
+            if (!string.IsNullOrEmpty(leafWithoutExt))
+            {
+                var match = _crossDeviceEntries.FirstOrDefault(e =>
+                    string.Equals(e.ComicTitle, leafWithoutExt, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(e.ComicTitle, leaf, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(NormalizeChapterName(e.ComicTitle), NormalizeChapterName(leafWithoutExt), StringComparison.OrdinalIgnoreCase));
+                if (match != null) return match;
+            }
+
+            // 3. So khớp tương đối nếu tên truyện chứa tên thư mục hoặc ngược lại
+            if (!string.IsNullOrEmpty(cleanTitle))
+            {
+                var match = _crossDeviceEntries.FirstOrDefault(e =>
+                    e.ComicTitle.Contains(cleanTitle, StringComparison.OrdinalIgnoreCase) ||
+                    cleanTitle.Contains(e.ComicTitle, StringComparison.OrdinalIgnoreCase));
+                if (match != null) return match;
+            }
+
+            if (!string.IsNullOrEmpty(leafWithoutExt) && leafWithoutExt.Length >= 3)
+            {
+                var match = _crossDeviceEntries.FirstOrDefault(e =>
+                    e.ComicTitle.Contains(leafWithoutExt, StringComparison.OrdinalIgnoreCase) ||
+                    leafWithoutExt.Contains(e.ComicTitle, StringComparison.OrdinalIgnoreCase));
+                if (match != null) return match;
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Ghép thông minh (Smart 2-Way Merge) nội dung resume.md từ Google Drive với dữ liệu hiện có trên máy.
+    /// Giữ nguyên toàn bộ các bộ truyện của thiết bị khác trên Cloud, cập nhật tiến độ mới hơn theo thời gian,
+    /// triệt tiêu 100% tình trạng upload ghi đè làm mất dữ liệu của thiết bị khác.
+    /// </summary>
+    public int MergeCloudResumeContent(string cloudContent, string currentDeviceName)
+    {
+        if (string.IsNullOrWhiteSpace(cloudContent)) return 0;
+        int mergedCount = 0;
+
+        int beginIdx = cloudContent.IndexOf(ResumeStateBeginMarker, StringComparison.Ordinal);
+        int endIdx = beginIdx >= 0 ? cloudContent.IndexOf(ResumeStateEndMarker, beginIdx, StringComparison.Ordinal) : -1;
+        if (beginIdx < 0 || endIdx <= beginIdx) return 0;
+
+        int fenceStart = cloudContent.IndexOf("```json", beginIdx, StringComparison.OrdinalIgnoreCase);
+        if (fenceStart < 0 || fenceStart >= endIdx) return 0;
+
+        int lineEnd = cloudContent.IndexOf('\n', fenceStart);
+        if (lineEnd < 0 || lineEnd >= endIdx) return 0;
+
+        int jsonStart = lineEnd + 1;
+        int fenceEnd = cloudContent.IndexOf("```", jsonStart, StringComparison.Ordinal);
+        if (fenceEnd < 0 || fenceEnd > endIdx) return 0;
+
+        string json = cloudContent.Substring(jsonStart, fenceEnd - jsonStart).Trim();
+        if (string.IsNullOrWhiteSpace(json)) return 0;
+
+        try
+        {
+            var cloudPayload = JsonSerializer.Deserialize<ComicResumePayload>(json, _jsonOptions);
+            if (cloudPayload?.Entries == null || cloudPayload.Entries.Count == 0) return 0;
+
+            lock (_crossDeviceLock)
+            {
+                foreach (var cloudEntry in cloudPayload.Entries)
+                {
+                    if (string.IsNullOrWhiteSpace(cloudEntry.ComicTitle)) continue;
+
+                    int exIdx = _crossDeviceEntries.FindIndex(e =>
+                        string.Equals(e.ComicTitle, cloudEntry.ComicTitle, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(NormalizeChapterName(e.ComicTitle), NormalizeChapterName(cloudEntry.ComicTitle), StringComparison.OrdinalIgnoreCase));
+
+                    if (exIdx >= 0)
+                    {
+                        var localEntry = _crossDeviceEntries[exIdx];
+                        // Nếu cloudEntry có thời gian cập nhật mới hơn -> cập nhật localEntry
+                        if (cloudEntry.UpdatedAtUnixSeconds > localEntry.UpdatedAtUnixSeconds)
+                        {
+                            _crossDeviceEntries[exIdx] = cloudEntry;
+                            mergedCount++;
+                        }
+                    }
+                    else
+                    {
+                        // Truyện trên cloud máy này chưa có -> nạp vào danh sách
+                        _crossDeviceEntries.Add(cloudEntry);
+                        mergedCount++;
+                    }
+
+                    // Tự động sinh portable keys vào _progressMap
+                    if (cloudEntry.ChapterIndex > 0)
+                    {
+                        string chKey = $"{PortableIdPrefix}leaf|{cloudEntry.ComicTitle}::#last_active_chapter";
+                        _progressMap[chKey] = cloudEntry.ChapterIndex;
+                    }
+                    if (cloudEntry.LastReadPage > 0)
+                    {
+                        if (cloudEntry.ChapterNumber >= 0)
+                        {
+                            _progressMap[$"{PortableIdPrefix}num|{cloudEntry.ComicTitle}/chap_{cloudEntry.ChapterNumber.ToString(CultureInfo.InvariantCulture)}"] = cloudEntry.LastReadPage;
+                            _progressMap[$"{PortableIdPrefix}num|{cloudEntry.ComicTitle}/chap_{((int)cloudEntry.ChapterNumber).ToString(CultureInfo.InvariantCulture)}"] = cloudEntry.LastReadPage;
+                        }
+                        if (!string.IsNullOrWhiteSpace(cloudEntry.ChapterTitle))
+                        {
+                            _progressMap[$"{PortableIdPrefix}pair|{cloudEntry.ComicTitle}/{cloudEntry.ChapterTitle}"] = cloudEntry.LastReadPage;
+                            _progressMap[$"{PortableIdPrefix}norm|{cloudEntry.ComicTitle}/{NormalizeChapterName(cloudEntry.ChapterTitle)}"] = cloudEntry.LastReadPage;
+                        }
+                        _progressMap[$"{PortableIdPrefix}file|{cloudEntry.ComicTitle}"] = cloudEntry.LastReadPage;
+                    }
+                }
+            }
+
+            if (mergedCount > 0)
+            {
+                AutoResolveAndRemapLocalPaths(cloudPayload.Entries);
+                MarkDirtyAndScheduleFlush();
+            }
+
+            return mergedCount;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ReadProgressStore] MergeCloudResumeContent error: {ex.Message}");
+            return 0;
+        }
     }
 
     public void SaveLastLibraryRootPath(string folderPath)

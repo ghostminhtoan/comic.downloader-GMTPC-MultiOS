@@ -2539,6 +2539,44 @@ public partial class ComicReaderViewModel : ViewModelBase
             int savedPageIndex = _isNavigatingToPreviousChapter
                 ? Math.Max(0, TotalPages - 1)
                 : _progressStore.GetLastPageIndex(chapter.EffectiveProgressKey, TotalPages);
+
+            // Nếu máy hiện tại chưa có tiến độ đọc cục bộ cho chapter này (savedPageIndex <= 0),
+            // kiểm tra xem chapter.LastReadPage hoặc resume.md có ghi nhận trang đọc dở không
+            if (!_isNavigatingToPreviousChapter && savedPageIndex <= 0)
+            {
+                if (chapter.LastReadPage > 1)
+                {
+                    savedPageIndex = Math.Clamp(chapter.LastReadPage - 1, 0, Math.Max(0, TotalPages - 1));
+                }
+                else
+                {
+                    var resumeEntry = _progressStore.FindResumeEntryForComic(ParentComic?.Title ?? ComicTitle, chapter.LocalPath);
+                    if (resumeEntry != null && resumeEntry.LastReadPage > 1)
+                    {
+                        double chNum = ReadProgressStore.ExtractChapterNumber(chapter.Title);
+                        bool isMatching = false;
+                        if (chNum >= 0 && resumeEntry.ChapterNumber >= 0 && Math.Abs(chNum - resumeEntry.ChapterNumber) < 0.001)
+                        {
+                            isMatching = true;
+                        }
+                        else if (!string.IsNullOrWhiteSpace(resumeEntry.ChapterTitle) &&
+                                 string.Equals(ReadProgressStore.NormalizeChapterName(chapter.Title), ReadProgressStore.NormalizeChapterName(resumeEntry.ChapterTitle), StringComparison.OrdinalIgnoreCase))
+                        {
+                            isMatching = true;
+                        }
+                        else if (resumeEntry.ChapterIndex > 0 && chapter.Index == resumeEntry.ChapterIndex)
+                        {
+                            isMatching = true;
+                        }
+
+                        if (isMatching)
+                        {
+                            savedPageIndex = Math.Clamp(resumeEntry.LastReadPage - 1, 0, Math.Max(0, TotalPages - 1));
+                        }
+                    }
+                }
+            }
+
             _isNavigatingToPreviousChapter = false;
             int startIndex = Math.Clamp(savedPageIndex, 0, Math.Max(0, TotalPages - 1));
 
