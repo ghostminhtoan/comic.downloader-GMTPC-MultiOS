@@ -73,6 +73,11 @@ public partial class LibraryComicItem : ObservableObject
         if (Chapters.Count == 0) return null;
 
         int savedActiveIdx = Services.ReadProgressStore.Instance.GetLastActiveChapterIndex(RootFolderPath);
+        if (savedActiveIdx <= 0 && !string.IsNullOrWhiteSpace(Title))
+        {
+            savedActiveIdx = Services.ReadProgressStore.Instance.GetLastActiveChapterIndex(Title);
+        }
+
         if (savedActiveIdx > 0)
         {
             var savedCh = Chapters.FirstOrDefault(c => c.Index == savedActiveIdx);
@@ -105,15 +110,6 @@ public partial class LibraryComicItem : ObservableObject
                     }
                 }
             }
-        }
-
-        var reading = Chapters.LastOrDefault(c => c.LastReadPage > 0 && !c.IsCompletedRead)
-               ?? (Chapters.Any(c => c.LastReadPage > 0) ? Chapters.FirstOrDefault(c => !c.IsCompletedRead) : null)
-               ?? Chapters.LastOrDefault(c => c.LastReadPage > 0);
-
-        if (reading != null)
-        {
-            return reading;
         }
 
         // Tra cứu trực tiếp từ resume.md (CrossDeviceResumeEntry) dùng chung
@@ -160,12 +156,36 @@ public partial class LibraryComicItem : ObservableObject
                     matchCh.LastReadPage = resumeEntry.LastReadPage;
                 }
                 Services.ReadProgressStore.Instance.SaveLastActiveChapterIndex(RootFolderPath, matchCh.Index);
+                if (!string.IsNullOrWhiteSpace(Title))
+                {
+                    Services.ReadProgressStore.Instance.SaveLastActiveChapterForTitle(Title, matchCh.Index);
+                }
                 if (matchCh.LastReadPage > 0)
                 {
                     Services.ReadProgressStore.Instance.SaveProgress(matchCh.EffectiveProgressKey, Math.Max(0, matchCh.LastReadPage - 1));
                 }
                 return matchCh;
             }
+        }
+
+        // Ưu tiên chương đang đọc dở (LastReadPage > 0 và chưa hoàn thành)
+        var inProgress = Chapters.LastOrDefault(c => c.LastReadPage > 0 && !c.IsCompletedRead);
+        if (inProgress != null)
+        {
+            return inProgress;
+        }
+
+        // Nếu các chương đã đọc đều đã hoàn thành 100%, ưu tiên mở chương kế tiếp sau chương đã đọc cuối cùng;
+        // nếu đã là chương cuối cùng của bộ truyện, mở lại chính chương đó
+        var lastReadChapter = Chapters.LastOrDefault(c => c.LastReadPage > 0);
+        if (lastReadChapter != null)
+        {
+            int lastIdx = Chapters.IndexOf(lastReadChapter);
+            if (lastReadChapter.IsCompletedRead && lastIdx >= 0 && lastIdx + 1 < Chapters.Count)
+            {
+                return Chapters[lastIdx + 1];
+            }
+            return lastReadChapter;
         }
 
         // Mở lần đầu: nếu có mục 'Toàn bộ truyện' ở đầu và có các folder chương con thực sự phía sau,

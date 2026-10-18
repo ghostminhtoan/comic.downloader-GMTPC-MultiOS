@@ -638,6 +638,16 @@ public class ComicReaderActivity : AvaloniaActivity
         return base.OnKeyUp(keyCode, e);
     }
 
+    protected override void OnPause()
+    {
+        base.OnPause();
+        try
+        {
+            _subscribedVm?.SaveCurrentReadingSession();
+        }
+        catch { }
+    }
+
     private void CloseReaderTask()
     {
         if (_isClosingTask) return;
@@ -648,6 +658,7 @@ public class ComicReaderActivity : AvaloniaActivity
             try
             {
                 var vm = _subscribedVm;
+                try { vm?.SaveCurrentReadingSession(); } catch { }
                 AttachViewModel(null);
                 vm?.Cleanup();
 
@@ -690,8 +701,9 @@ public class ComicReaderActivity : AvaloniaActivity
             try
             {
                 var vm = _subscribedVm;
+                try { vm?.SaveCurrentReadingSession(); } catch { }
                 AttachViewModel(null);
-                vm.Cleanup();
+                vm?.Cleanup();
                 if (ReferenceEquals(ComicReaderService.Instance.ActiveExternalReaderViewModel, vm))
                 {
                     ComicReaderService.Instance.ActiveExternalReaderViewModel = null;

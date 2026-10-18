@@ -3360,4 +3360,31 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + Đổi toàn bộ các lệnh `Task.Delay(2000, ct)` khi gặp Quota Exceeded / Rate Limit (403, 429) và gián đoạn kết nối sang `Task.Delay(4000, ct)` (4 giây).
       + Đồng bộ các chuỗi thông báo UI và dòng Debug Log thông báo rõ thời gian chờ 4 giây trước khi thử lại tự động.
 
+24. **Kiến Trúc Tự Động Lưu & Nhớ Chương Vừa Đọc Khi Thoát Reader Trên Toàn Bộ Nền Tảng (Windows, Android, Linux) (`ComicReaderViewModel.cs`, `ReadProgressStore.cs`, `LibraryComicItem.cs`, `ComicReaderWindow.axaml.cs`, `ComicReaderActivity.cs`)**:
+    - **Nguyên nhân cốt lõi trước đây**:
+      + Khi người dùng thoát Reader (bấm nút Close, nút Back Android, đóng cửa sổ Desktop, hoặc vuốt thoát app), `Cleanup()` và `CloseReader()` chỉ gọi `_progressStore.FlushImmediately()` mà KHÔNG HỀ lưu phiên đọc của chương và trang hiện tại.
+      + `RecordReadingProgress` bị guard `IsLoadingChapter || _suppressScrollSync` chặn trong lúc nạp chương, và sau khi nạp xong nếu người dùng chỉ xem lướt hoặc không cuộn trang thì sự kiện đổi trang không bắn ra, dẫn đến `SaveLastActiveChapterIndex` chưa từng được ghi nhận cho chương mới nạp.
+      + Nếu mở file trực tiếp hoặc từ Recent/History, `ParentComic` có thể null; app bỏ lọt việc ghi nhận theo tên truyện (`Title`) và thư mục cha của chương.
+      + Trong `LibraryComicItem.GetBestResumeChapter()`: Khi người dùng đọc xong 1 chương (`IsCompletedRead == true`), nhánh `Chapters.FirstOrDefault(c => !c.IsCompletedRead)` chạy trước nhánh chương đã đọc cuối cùng, khiến app nhảy ngược về Chương 1 thay vì nhớ chương vừa đọc.
+    - **Kiến trúc giải pháp triệt để 5 lớp bảo toàn phiên đọc**:
+      * **Lớp 1 (SaveCurrentReadingSession toàn diện)**:
+        - Bổ sung phương thức `SaveCurrentReadingSession()` trong `ComicReaderViewModel`. Tự động thu thập `CurrentChapter.Index`, `CurrentPageIndex`, `TotalPages`, suy luận thông minh `comicTitle` và `comicRoot` kể cả khi `ParentComic` null.
+        - Gọi đồng thời `SaveProgress`, `SaveLastActiveChapterIndex` cho cả thư mục gốc và file con, `SaveLastActiveChapterForTitle` cho tên truyện, và `RecordSessionResume` cập nhật trực tiếp vào danh sách `_crossDeviceEntries` độc lập nền tảng của `resume.md`.
+      * **Lớp 2 (Kích hoạt tức thì ngay sau khi nạp chương & trước khi đổi chương)**:
+        - Gọi `SaveCurrentReadingSession()` ngay trong khối `finally` của `LoadChapterInternalAsync` (đảm bảo chương vừa mở luôn được nhớ là chương active gần nhất dù người dùng chưa kịp cuộn).
+        - Gọi `SaveCurrentReadingSession()` trong `OnCurrentChapterChanged` trước khi gán chương mới để không bao giờ mất tiến độ của chương cũ.
+      * **Lớp 3 (Đồng bộ đa điểm thoát Reader trên Desktop & Android)**:
+        - Desktop: Gọi `SaveCurrentReadingSession()` trong `CloseReader()`, `Cleanup()` và sự kiện `OnClosed` của `ComicReaderWindow.axaml.cs`.
+        - Android: Override `OnPause()` trong `ComicReaderActivity.cs` để tự động lưu ngay khi người dùng vuốt Home hoặc chuyển app; đồng thời gọi trong `CloseReaderTask()` và `OnDestroy()`.
+      * **Lớp 4 (Cơ chế tra cứu đa chiều trong ReadProgressStore)**:
+        - Bổ sung `SaveLastActiveChapterForTitle` lưu các khóa `@id|leaf|{title}::#last_active_chapter` và `@id|norm|{norm}::#last_active_chapter`.
+        - Mở rộng `GetLastActiveChapterIndex` tự động fallback tra cứu theo cả đường dẫn tuyệt đối, portable keys, tên thư mục (leaf), tên chuẩn hóa (norm), và trực tiếp từ các thực thể `_crossDeviceEntries` của `resume.md`.
+      * **Lớp 5 (Chuẩn hóa thứ tự ưu tiên trong GetBestResumeChapter)**:
+        - Ưu tiên 1: `GetLastActiveChapterIndex` theo `RootFolderPath` hoặc `Title`.
+        - Ưu tiên 2: `GetLastActiveChapterIndex` theo `firstLocalPath`.
+        - Ưu tiên 3: `FindResumeEntryForComic` từ `resume.md` dùng chung chéo thiết bị.
+        - Ưu tiên 4: `Chapters.LastOrDefault(c => c.LastReadPage > 0 && !c.IsCompletedRead)` (chương đang đọc dở).
+        - Ưu tiên 5: `Chapters.LastOrDefault(c => c.LastReadPage > 0)` (chương đã đọc gần nhất): nếu đã đọc xong (`IsCompletedRead == true`) và có chương tiếp theo thì tự động mở chương tiếp theo; nếu không có chương tiếp theo thì mở lại chính chương đó.
+        - TUYỆT ĐỐI KHÔNG nhảy ngược về chương 1 (`FirstOrDefault(c => !c.IsCompletedRead)`).
+
 

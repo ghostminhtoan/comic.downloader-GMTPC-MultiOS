@@ -507,6 +507,9 @@ public sealed class ReadProgressStore
             string leafKey = $"{PortableIdPrefix}leaf|{leaf}::#last_active_chapter";
             if (_progressMap.TryGetValue(leafKey, out int lIdx) && lIdx > 0) return lIdx;
 
+            string normKey = $"{PortableIdPrefix}norm|{NormalizeChapterName(leaf)}::#last_active_chapter";
+            if (_progressMap.TryGetValue(normKey, out int nIdx) && nIdx > 0) return nIdx;
+
             // Fallback: tra cứu từ resume.md (CrossDeviceResumeEntry)
             var resumeEntry = FindResumeEntryForComic(leaf, comicOrFilePath);
             if (resumeEntry != null && resumeEntry.ChapterIndex > 0)
@@ -515,7 +518,128 @@ public sealed class ReadProgressStore
             }
         }
 
+        // Tra cứu trực tiếp theo comicOrFilePath như tên truyện (Title) trong resume.md
+        var directResume = FindResumeEntryForComic(comicOrFilePath);
+        if (directResume != null && directResume.ChapterIndex > 0)
+        {
+            return directResume.ChapterIndex;
+        }
+
         return 0;
+    }
+
+    /// <summary>
+    /// Lưu chỉ số chương đang đọc gần nhất theo Tên truyện (Title), đảm bảo nhận diện chính xác
+    /// kể cả khi mở truyện từ các đường dẫn khác nhau hoặc khi ParentComic null.
+    /// </summary>
+    public void SaveLastActiveChapterForTitle(string comicTitle, int chapterIndex1Based)
+    {
+        if (string.IsNullOrWhiteSpace(comicTitle) || chapterIndex1Based <= 0) return;
+        string cleanTitle = comicTitle.Trim();
+        string key = $"{PortableIdPrefix}leaf|{cleanTitle}::#last_active_chapter";
+        _progressMap[key] = chapterIndex1Based;
+
+        string normTitle = NormalizeChapterName(cleanTitle);
+        if (!string.IsNullOrEmpty(normTitle))
+        {
+            _progressMap[$"{PortableIdPrefix}norm|{normTitle}::#last_active_chapter"] = chapterIndex1Based;
+        }
+
+        MarkDirtyAndScheduleFlush();
+    }
+
+    /// <summary>
+    /// Ghi nhận phiên đọc hiện tại vào danh mục đồng bộ dùng chung (_crossDeviceEntries) cho resume.md.
+    /// Đảm bảo tự động nhớ chính xác chương và trang vừa đọc trên toàn bộ thiết bị ngay khi thoát Reader.
+    /// </summary>
+    public void RecordSessionResume(
+        string? comicTitle,
+        string? comicRootOrFilePath,
+        string? chapterTitle,
+        int chapterIndex,
+        double chapterNumber,
+        int pageIndex,
+        int totalPages,
+        string? currentDeviceName = null)
+    {
+        string title = !string.IsNullOrWhiteSpace(comicTitle) ? comicTitle.Trim() : string.Empty;
+        string path = !string.IsNullOrWhiteSpace(comicRootOrFilePath) ? NormalizeKey(comicRootOrFilePath) : string.Empty;
+
+        if (string.IsNullOrEmpty(title) && !string.IsNullOrEmpty(path))
+        {
+            title = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        }
+
+        if (string.IsNullOrEmpty(title)) return;
+
+        int page1Based = Math.Max(1, pageIndex + 1);
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        string devName = !string.IsNullOrWhiteSpace(currentDeviceName)
+            ? currentDeviceName
+            : (OperatingSystem.IsAndroid() ? "Android Device" : (OperatingSystem.IsWindows() ? "Windows PC" : "Linux PC"));
+
+        lock (_crossDeviceLock)
+        {
+            var existing = _crossDeviceEntries.FirstOrDefault(e =>
+                string.Equals(e.ComicTitle, title, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(NormalizeChapterName(e.ComicTitle), NormalizeChapterName(title), StringComparison.OrdinalIgnoreCase));
+
+            if (existing != null)
+            {
+                if (chapterIndex > 0) existing.ChapterIndex = chapterIndex;
+                if (!string.IsNullOrWhiteSpace(chapterTitle)) existing.ChapterTitle = chapterTitle;
+                if (chapterNumber >= 0) existing.ChapterNumber = chapterNumber;
+                existing.LastReadPage = page1Based;
+                if (totalPages > 0) existing.TotalPages = totalPages;
+                existing.UpdatedAtUnixSeconds = now;
+                existing.DeviceName = devName;
+                if (!string.IsNullOrEmpty(path))
+                {
+                    existing.RelativePath = GetSafeRelativePath(path);
+                }
+            }
+            else
+            {
+                _crossDeviceEntries.Add(new CrossDeviceResumeEntry
+                {
+                    ComicTitle = title,
+                    RelativePath = !string.IsNullOrEmpty(path) ? GetSafeRelativePath(path) : title,
+                    ChapterTitle = chapterTitle ?? (chapterIndex > 0 ? $"Chương {chapterIndex}" : string.Empty),
+                    ChapterNumber = chapterNumber >= 0 ? chapterNumber : (chapterIndex > 0 ? chapterIndex : -1),
+                    ChapterIndex = chapterIndex > 0 ? chapterIndex : 1,
+                    ChapterSuffix = string.Empty,
+                    LastReadPage = page1Based,
+                    TotalPages = totalPages,
+                    UpdatedAtUnixSeconds = now,
+                    DeviceName = devName
+                });
+            }
+        }
+
+        if (chapterIndex > 0)
+        {
+            _progressMap[$"{PortableIdPrefix}leaf|{title}::#last_active_chapter"] = chapterIndex;
+            string normTitle = NormalizeChapterName(title);
+            if (!string.IsNullOrEmpty(normTitle))
+            {
+                _progressMap[$"{PortableIdPrefix}norm|{normTitle}::#last_active_chapter"] = chapterIndex;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(path))
+        {
+            RegisterReadComic(path, touchTimestamp: true);
+            if (chapterIndex > 0)
+            {
+                _progressMap[path + "::#last_active_chapter"] = chapterIndex;
+                foreach (string pk in BuildPortableIdentityKeys(path + "::#last_active_chapter"))
+                {
+                    _progressMap[pk] = chapterIndex;
+                }
+            }
+        }
+
+        MarkDirtyAndScheduleFlush();
     }
 
     /// <summary>
@@ -2520,15 +2644,40 @@ public sealed class ReadProgressStore
             if (string.IsNullOrWhiteSpace(comicTitle) || seenTitles.Contains(comicTitle)) continue;
             seenTitles.Add(comicTitle);
 
-            int lastChapIdx = GetLastActiveChapterIndex(cleanPath);
-            int order = GetComicLastReadOrder(cleanPath);
-            long updatedTime = order > 0 ? (order + EpochOffsetSeconds) : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
             string bestChapterTitle = string.Empty;
             string bestChapterSuffix = string.Empty;
             double bestChapterNumber = -1;
             int bestPage = 0;
             int bestTotalPages = 0;
+
+            int lastChapIdx = GetLastActiveChapterIndex(cleanPath);
+            if (lastChapIdx <= 0 && !string.IsNullOrWhiteSpace(comicTitle))
+            {
+                lastChapIdx = GetLastActiveChapterIndex(comicTitle);
+            }
+            if (lastChapIdx <= 0)
+            {
+                lock (_crossDeviceLock)
+                {
+                    var matchEntry = _crossDeviceEntries.FirstOrDefault(e =>
+                        string.Equals(e.ComicTitle, comicTitle, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(NormalizeChapterName(e.ComicTitle), NormalizeChapterName(comicTitle), StringComparison.OrdinalIgnoreCase));
+                    if (matchEntry != null && matchEntry.ChapterIndex > 0)
+                    {
+                        lastChapIdx = matchEntry.ChapterIndex;
+                        if (string.IsNullOrEmpty(bestChapterTitle) && !string.IsNullOrEmpty(matchEntry.ChapterTitle))
+                        {
+                            bestChapterTitle = matchEntry.ChapterTitle;
+                        }
+                        if (bestChapterNumber < 0 && matchEntry.ChapterNumber >= 0)
+                        {
+                            bestChapterNumber = matchEntry.ChapterNumber;
+                        }
+                    }
+                }
+            }
+            int order = GetComicLastReadOrder(cleanPath);
+            long updatedTime = order > 0 ? (order + EpochOffsetSeconds) : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
             string prefixSep1 = cleanPath + Path.DirectorySeparatorChar;
             string prefixSep2 = cleanPath + "/";
@@ -2574,6 +2723,36 @@ public sealed class ReadProgressStore
                         bestChapterNumber = chNum;
                         bestPage = kvp.Value;
                         bestTotalPages = GetChapterTotalPages(subPath);
+                    }
+                }
+            }
+
+            lock (_crossDeviceLock)
+            {
+                var matchEntry = _crossDeviceEntries.FirstOrDefault(e =>
+                    string.Equals(e.ComicTitle, comicTitle, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(NormalizeChapterName(e.ComicTitle), NormalizeChapterName(comicTitle), StringComparison.OrdinalIgnoreCase));
+                if (matchEntry != null)
+                {
+                    if (string.IsNullOrEmpty(bestChapterTitle) && !string.IsNullOrEmpty(matchEntry.ChapterTitle))
+                    {
+                        bestChapterTitle = matchEntry.ChapterTitle;
+                    }
+                    if (bestChapterNumber < 0 && matchEntry.ChapterNumber >= 0)
+                    {
+                        bestChapterNumber = matchEntry.ChapterNumber;
+                    }
+                    if (bestPage <= 0 && matchEntry.LastReadPage > 0)
+                    {
+                        bestPage = matchEntry.LastReadPage;
+                    }
+                    if (bestTotalPages <= 0 && matchEntry.TotalPages > 0)
+                    {
+                        bestTotalPages = matchEntry.TotalPages;
+                    }
+                    if (lastChapIdx <= 0 && matchEntry.ChapterIndex > 0)
+                    {
+                        lastChapIdx = matchEntry.ChapterIndex;
                     }
                 }
             }

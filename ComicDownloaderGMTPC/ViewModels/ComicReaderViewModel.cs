@@ -2321,7 +2321,28 @@ public partial class ComicReaderViewModel : ViewModelBase
     public async Task InitializeAsync(LibraryComicItem? comic, LibraryChapterItem targetChapter)
     {
         ParentComic = comic;
-        ComicTitle = comic?.Title ?? targetChapter.Title;
+        if (comic != null && !string.IsNullOrWhiteSpace(comic.Title))
+        {
+            ComicTitle = comic.Title;
+        }
+        else
+        {
+            string inferredTitle = string.Empty;
+            if (!string.IsNullOrWhiteSpace(targetChapter.LocalPath))
+            {
+                try
+                {
+                    string clean = targetChapter.LocalPath.TrimEnd('\\', '/');
+                    string? pDir = Path.GetDirectoryName(clean);
+                    if (!string.IsNullOrWhiteSpace(pDir) && Directory.Exists(pDir))
+                    {
+                        inferredTitle = Path.GetFileName(pDir);
+                    }
+                }
+                catch { }
+            }
+            ComicTitle = !string.IsNullOrWhiteSpace(inferredTitle) ? inferredTitle : targetChapter.Title;
+        }
 
         _suppressChapterSelectionChanged = true;
         ChapterList.Clear();
@@ -2350,6 +2371,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     partial void OnCurrentChapterChanged(LibraryChapterItem? value)
     {
         if (_suppressChapterSelectionChanged || value == null) return;
+        SaveCurrentReadingSession();
         _isNavigatingToPreviousChapter = false;
         ActivePopup = string.Empty;
         RefreshBookmarksList();
@@ -2646,6 +2668,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         finally
         {
             IsLoadingChapter = false;
+            SaveCurrentReadingSession();
             OnPropertyChanged(nameof(CanGoPrevChapter));
             OnPropertyChanged(nameof(CanGoNextChapter));
             OnPropertyChanged(nameof(CanGoPrevPage));
@@ -2711,16 +2734,93 @@ public partial class ComicReaderViewModel : ViewModelBase
         CurrentChapter.LastReadPage = page1Based;
 
         _progressStore.SaveProgress(CurrentChapter.EffectiveProgressKey, pageIndex);
-        if (ParentComic != null && !string.IsNullOrWhiteSpace(ParentComic.RootFolderPath))
+        SaveCurrentReadingSession();
+    }
+
+    /// <summary>
+    /// Lưu toàn diện phiên đọc hiện tại: Chương đang xem, trang đang xem, tổng số trang,
+    /// đồng bộ trực tiếp vào ReadProgressStore và resume.md (CrossDeviceResumeEntry) để ghi nhớ
+    /// chính xác 100% chương vừa đọc khi thoát Reader trên mọi hệ điều hành.
+    /// </summary>
+    public void SaveCurrentReadingSession()
+    {
+        if (CurrentChapter == null) return;
+
+        int totalPages = Math.Max(TotalPages, Pages.Count);
+        int page1Based = totalPages > 0 ? Math.Clamp(CurrentPageIndex + 1, 1, totalPages) : Math.Max(1, CurrentPageIndex + 1);
+
+        CurrentChapter.TotalPages = totalPages;
+        CurrentChapter.LastReadPage = page1Based;
+
+        if (!string.IsNullOrWhiteSpace(CurrentChapter.EffectiveProgressKey))
         {
-            _progressStore.SaveLastActiveChapterIndex(ParentComic.RootFolderPath, CurrentChapter.Index);
+            _progressStore.SaveProgress(CurrentChapter.EffectiveProgressKey, CurrentPageIndex);
+            if (totalPages > 0)
+            {
+                _progressStore.SaveChapterTotalPages(CurrentChapter.EffectiveProgressKey, totalPages);
+            }
+        }
+
+        string? comicRoot = ParentComic?.RootFolderPath;
+        string? title = ParentComic?.Title ?? ComicTitle;
+
+        if (string.IsNullOrWhiteSpace(comicRoot) && !string.IsNullOrWhiteSpace(CurrentChapter.LocalPath))
+        {
+            try
+            {
+                string cleanChPath = CurrentChapter.LocalPath.TrimEnd('\\', '/');
+                string? parentDir = Path.GetDirectoryName(cleanChPath);
+                if (!string.IsNullOrWhiteSpace(parentDir) && Directory.Exists(parentDir))
+                {
+                    comicRoot = parentDir;
+                }
+                else
+                {
+                    comicRoot = cleanChPath;
+                }
+            }
+            catch { }
+        }
+
+        if (string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(comicRoot))
+        {
+            try
+            {
+                title = Path.GetFileName(comicRoot.TrimEnd('\\', '/'));
+            }
+            catch { }
+        }
+
+        if (string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(CurrentChapter.Title))
+        {
+            title = CurrentChapter.Title;
+        }
+
+        if (!string.IsNullOrWhiteSpace(comicRoot))
+        {
+            _progressStore.SaveLastActiveChapterIndex(comicRoot, CurrentChapter.Index);
         }
         if (!string.IsNullOrWhiteSpace(CurrentChapter.LocalPath))
         {
             _progressStore.SaveLastActiveChapterIndex(CurrentChapter.LocalPath, CurrentChapter.Index);
         }
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            _progressStore.SaveLastActiveChapterForTitle(title, CurrentChapter.Index);
+        }
+
+        _progressStore.RecordSessionResume(
+            comicTitle: title,
+            comicRootOrFilePath: comicRoot ?? CurrentChapter.LocalPath,
+            chapterTitle: CurrentChapter.Title,
+            chapterIndex: CurrentChapter.Index,
+            chapterNumber: ReadProgressStore.ExtractChapterNumber(CurrentChapter.Title),
+            pageIndex: CurrentPageIndex,
+            totalPages: totalPages
+        );
 
         ParentComic?.RefreshReadStatus();
+        _progressStore.FlushImmediately();
     }
 
     [ObservableProperty]
@@ -3028,6 +3128,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [RelayCommand]
     public void CloseReader()
     {
+        SaveCurrentReadingSession();
         Cleanup();
         CloseRequested?.Invoke();
     }
@@ -3036,6 +3137,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     {
         try
         {
+            SaveCurrentReadingSession();
             StopAutoScroll();
             _loadCts?.Cancel();
             _prefetchCts?.Cancel();
