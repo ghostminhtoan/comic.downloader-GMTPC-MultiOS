@@ -5463,8 +5463,9 @@
                                         Background="#111827" BorderBrush="#3B82F6" BorderThickness="1" CornerRadius="8" Padding="14,12">
                                     <StackPanel Spacing="10">
                                         <!-- Header & Thư mục đồng bộ đang chọn -->
-                                        <Grid ColumnDefinitions="*, Auto">
-                                            <StackPanel Grid.Column="0">
+                                        <!-- Header & Thư mục đồng bộ đang chọn (Responsive layout) -->
+                                        <Grid RowDefinitions="Auto, Auto" RowSpacing="8">
+                                            <StackPanel Grid.Row="0">
                                                 <TextBlock Text="THƯ MỤC ĐỒNG BỘ ĐANG CHỌN TRÊN GOOGLE DRIVE" Foreground="#9CA3AF" FontSize="10.5" FontWeight="Bold" />
                                                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,3,0,0" VerticalAlignment="Center">
                                                     <TextBlock Text="📁" FontSize="14" VerticalAlignment="Center" />
@@ -5473,32 +5474,32 @@
                                                 </StackPanel>
                                             </StackPanel>
 
-                                            <!-- Cụm nút Thao tác: Đổi tên / Tạo folder mới / Nhập ID / Xóa folder -->
-                                            <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <!-- Cụm nút Thao tác: Đổi tên / Tạo folder mới / Nhập ID / Xóa folder (Tự động Wrap, không bao giờ bị che) -->
+                                            <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <Button Command="{Binding StartRenameDeviceCommand}"
                                                         IsVisible="{Binding !IsRenamingDevice}"
                                                         Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
-                                                        Foreground="#38BDF8" CornerRadius="6" Padding="8,4" Height="26" Margin="0,0,6,0"
+                                                        Foreground="#38BDF8" CornerRadius="6" Padding="9,5" Height="28" Margin="0,0,6,6"
                                                         ToolTip.Tip="Đổi tên thư mục này trực tiếp trên Google Drive">
                                                     <TextBlock Text="✏️ Đổi tên" FontSize="10.5" FontWeight="SemiBold" />
                                                 </Button>
                                                 <Button Command="{Binding StartCreateNewFolderCommand}"
                                                         IsVisible="{Binding !IsCreatingNewFolder}"
                                                         Background="#065F46" BorderBrush="#34D399" BorderThickness="1"
-                                                        Foreground="#A7F3D0" CornerRadius="6" Padding="8,4" Height="26" Margin="0,0,6,0"
+                                                        Foreground="#A7F3D0" CornerRadius="6" Padding="9,5" Height="28" Margin="0,0,6,6"
                                                         ToolTip.Tip="Tạo một thư mục mới trên Google Drive để đồng bộ">
                                                     <TextBlock Text="➕ Tạo folder mới" FontSize="10.5" FontWeight="SemiBold" />
                                                 </Button>
                                                 <Button Command="{Binding StartInputFolderIdCommand}"
                                                         IsVisible="{Binding !IsInputFolderIdVisible}"
                                                         Background="#1E1B4B" BorderBrush="#818CF8" BorderThickness="1"
-                                                        Foreground="#C7D2FE" CornerRadius="6" Padding="8,4" Height="26" Margin="0,0,6,0"
+                                                        Foreground="#C7D2FE" CornerRadius="6" Padding="9,5" Height="28" Margin="0,0,6,6"
                                                         ToolTip.Tip="Nhập trực tiếp Google Drive Folder ID hoặc URL để liên kết đồng bộ">
                                                     <TextBlock Text="🔗 Nhập ID" FontSize="10.5" FontWeight="SemiBold" />
                                                 </Button>
                                                 <Button Command="{Binding DeleteSelectedCloudFolderCommand}"
                                                         Background="#450A0A" BorderBrush="#EF4444" BorderThickness="1"
-                                                        Foreground="#FCA5A5" CornerRadius="6" Padding="8,4" Height="26"
+                                                        Foreground="#FCA5A5" CornerRadius="6" Padding="9,5" Height="28" Margin="0,0,6,6"
                                                         ToolTip.Tip="Xóa thư mục đang chọn trên Google Drive">
                                                     <TextBlock Text="🗑️ Xóa" FontSize="10.5" FontWeight="SemiBold" />
                                                 </Button>

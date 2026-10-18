@@ -374,11 +374,12 @@ public partial class MainViewModel
                     SelectedCloudDevice = slot;
                 }
 
-                UpdateCloudFileInfoDisplay(slot.QueueCloudFile, slot.ReaderCloudFile);
+                UpdateCloudFileInfoDisplay(slot.QueueCloudFile, slot.ReaderCloudFile, _gdriveService.CachedResumeCloudFile);
 
                 GoogleDriveStatusText = "✅ " + msg;
                 AddLog("SUCCESS", $"☁️ {msg}");
                 ShowCenterToast("LIÊN KẾT THƯ MỤC ID", msg, "🔗", "GOOGLE DRIVE", 3000);
+                await RefreshGoogleDriveStatusAsync();
             }
             else
             {

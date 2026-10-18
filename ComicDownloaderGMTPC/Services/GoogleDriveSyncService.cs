@@ -882,6 +882,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
+    /// <summary>
     /// Tìm kiếm thông minh thư mục đã tồn tại trên Google Drive qua 3 tầng bảo vệ.
     /// NẾU ĐÃ CÓ THƯ MỤC -> LẬP TỨC TRẢ VỀ ID VÀ SKIP (BỎ QUA) HOÀN TOÀN VIỆC TẠO MỚI.
     /// </summary>
@@ -892,8 +893,8 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
         try
         {
-            // Tầng 1: Nếu có parentId cụ thể (khác "root"), duyệt danh sách con trực tiếp
-            if (!string.IsNullOrEmpty(parentId) && !parentId.Equals("root", StringComparison.OrdinalIgnoreCase))
+            // Tầng 1: Duyệt danh sách con trực tiếp của parentId (kể cả "root")
+            if (!string.IsNullOrEmpty(parentId))
             {
                 var children = await ListDirectChildrenAsync(parentId, token, ct);
                 var match = children.Where(f => f.IsFolder && string.Equals(f.Name.Trim(), cleanName, StringComparison.OrdinalIgnoreCase))
@@ -905,7 +906,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 }
             }
 
-            // Tầng 2: Tìm kiếm nghiêm ngặt theo truy vấn Scoped Parent Search (Không bao giờ quét toàn Drive)
+            // Tầng 2: Tìm kiếm nghiêm ngặt theo truy vấn Scoped Parent Search
             string escapedName = cleanName.Replace("'", "\\'");
             string parentConstraint = (parentId == "root" || string.IsNullOrEmpty(parentId)) ? "'root' in parents" : $"'{parentId}' in parents";
             string query = $"{parentConstraint} and name = '{escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
@@ -923,6 +924,28 @@ p {{ color: #94A3B8; font-size: 14px; }}
                 {
                     string bestId = files[0].GetProperty("id").GetString() ?? "";
                     if (!string.IsNullOrEmpty(bestId)) return bestId;
+                }
+            }
+
+            // Tầng 3: Nếu là GMTPC hoặc Comic Downloader GMTPC, quét bảo vệ diện rộng chống tạo trùng
+            // (Đảm bảo nếu người dùng đã có folder trên Drive nhưng nằm ngoài root hoặc index search bị trễ)
+            if (cleanName.Equals(RootParentFolderName, StringComparison.OrdinalIgnoreCase) ||
+                cleanName.Equals(AppSubFolderName, StringComparison.OrdinalIgnoreCase))
+            {
+                string fallbackQuery = $"name = '{escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+                string fallbackUrl = $"{GoogleDriveApiBase}/files?q={Uri.EscapeDataString(fallbackQuery)}&fields=files(id, name, modifiedTime)&pageSize=5";
+                using var fbReq = new HttpRequestMessage(HttpMethod.Get, fallbackUrl);
+                fbReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                using var fbRes = await _httpClient.SendAsync(fbReq, ct);
+                if (fbRes.IsSuccessStatusCode)
+                {
+                    string fbJson = await fbRes.Content.ReadAsStringAsync(ct);
+                    using var fbDoc = JsonDocument.Parse(fbJson);
+                    if (fbDoc.RootElement.TryGetProperty("files", out var fbFiles) && fbFiles.GetArrayLength() > 0)
+                    {
+                        string fbId = fbFiles[0].GetProperty("id").GetString() ?? "";
+                        if (!string.IsNullOrEmpty(fbId)) return fbId;
+                    }
                 }
             }
         }
@@ -988,14 +1011,28 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     string checkJson = await checkRes.Content.ReadAsStringAsync(ct);
                     using var checkDoc = JsonDocument.Parse(checkJson);
                     bool trashed = checkDoc.RootElement.TryGetProperty("trashed", out var tr) && tr.GetBoolean();
-                    if (trashed) gmtpcFolderId = null;
+                    if (trashed)
+                    {
+                        gmtpcFolderId = null;
+                        _config.CachedGmtpcFolderId = string.Empty;
+                        SaveConfigToDisk();
+                    }
+                }
+                else if (checkRes.StatusCode == HttpStatusCode.NotFound)
+                {
+                    gmtpcFolderId = null;
+                    _config.CachedGmtpcFolderId = string.Empty;
+                    SaveConfigToDisk();
                 }
                 else
                 {
-                    gmtpcFolderId = null;
+                    // Lỗi 403 Rate Limit / Quota hoặc lỗi mạng: Giữ nguyên gmtpcFolderId từ cache, tuyệt đối không hủy cache!
                 }
             }
-            catch { gmtpcFolderId = null; }
+            catch
+            {
+                // Ngoại lệ mạng: Tiếp tục tin tưởng gmtpcFolderId đã cache
+            }
         }
 
         if (string.IsNullOrEmpty(gmtpcFolderId))
@@ -1452,7 +1489,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
 
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, $"{GoogleDriveApiBase}/files/{folderId}?fields=id,name,mimeType,trashed&supportsAllDrives=true");
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{GoogleDriveApiBase}/files/{folderId}?fields=id,name,mimeType,trashed,parents&supportsAllDrives=true");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var res = await _httpClient.SendAsync(req, ct);
 
@@ -1474,7 +1511,146 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     return (false, null, $"ID/URL được cung cấp là tệp tin ({name}), không phải thư mục Google Drive.");
                 }
 
+                var parentsList = new List<string>();
+                if (doc.RootElement.TryGetProperty("parents", out var pElem) && pElem.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in pElem.EnumerateArray())
+                    {
+                        string p = item.GetString() ?? "";
+                        if (!string.IsNullOrEmpty(p)) parentsList.Add(p);
+                    }
+                }
+
+                // TRƯỜNG HỢP 1: NGƯỜI DÙNG DÁN LINK THƯ MỤC CHA "GMTPC"
+                if (name.Equals(RootParentFolderName, StringComparison.OrdinalIgnoreCase))
+                {
+                    _config.CachedGmtpcFolderId = folderId;
+
+                    // Dò tìm thư mục con Comic Downloader GMTPC bên trong nó
+                    string? subAppId = await FindExistingFolderSmartAsync(AppSubFolderName, folderId, token, ct);
+                    if (!string.IsNullOrEmpty(subAppId))
+                    {
+                        _config.CachedAppFolderId = subAppId;
+                    }
+                    SaveConfigToDisk();
+
+                    var slots = await GetCloudDeviceSlotsAsync(ct);
+                    var matchedSlot = slots.FirstOrDefault(s => s.IsCurrentDevice) ?? slots.FirstOrDefault();
+                    if (matchedSlot == null && !string.IsNullOrEmpty(_config.CachedAppFolderId))
+                    {
+                        string defaultDeviceName = CurrentDeviceName;
+                        matchedSlot = new GoogleDriveDeviceSlot
+                        {
+                            DeviceFolderId = _config.CachedAppFolderId,
+                            DeviceFolderName = defaultDeviceName,
+                            DisplayName = $"⭐ 📁 {defaultDeviceName} (Đang chọn - Thư mục gốc)",
+                            IsCurrentDevice = true
+                        };
+                    }
+
+                    return (true, matchedSlot, $"Đã nhận diện thành công thư mục cha [{name}]. Đã liên kết cả GMTPC và Comic Downloader GMTPC.");
+                }
+
+                // TRƯỜNG HỢP 2: NGƯỜI DÙNG DÁN LINK THƯ MỤC ỨNG DỤNG "Comic Downloader GMTPC"
+                if (name.Equals(AppSubFolderName, StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("Comic Downloader", StringComparison.OrdinalIgnoreCase))
+                {
+                    _config.CachedAppFolderId = folderId;
+
+                    // Truy vết thư mục cha GMTPC từ parents
+                    if (parentsList.Count > 0 && !parentsList[0].Equals("root", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _config.CachedGmtpcFolderId = parentsList[0];
+                    }
+                    SaveConfigToDisk();
+
+                    var slots = await GetCloudDeviceSlotsAsync(ct);
+                    var matchedSlot = slots.FirstOrDefault(s => s.IsCurrentDevice) ?? slots.FirstOrDefault();
+                    if (matchedSlot == null)
+                    {
+                        string defaultDeviceName = CurrentDeviceName;
+                        matchedSlot = new GoogleDriveDeviceSlot
+                        {
+                            DeviceFolderId = folderId,
+                            DeviceFolderName = defaultDeviceName,
+                            DisplayName = $"⭐ 📁 {defaultDeviceName} (Đang chọn - Thư mục ứng dụng)",
+                            IsCurrentDevice = true
+                        };
+                    }
+
+                    return (true, matchedSlot, $"Đã nhận diện thành công thư mục ứng dụng [{name}]. Đã liên kết thư mục gốc GMTPC và Comic Downloader GMTPC.");
+                }
+
+                // TRƯỜNG HỢP 3: NGƯỜI DÙNG DÁN LINK CỦA MỘT CHILD FOLDER (DEVICE FOLDER)
                 SelectActiveFolder(folderId, name);
+
+                // Tự động truy vết ngược lên để lấy CachedAppFolderId và CachedGmtpcFolderId
+                if (parentsList.Count > 0)
+                {
+                    string directParentId = parentsList[0];
+                    try
+                    {
+                        using var pReq = new HttpRequestMessage(HttpMethod.Get, $"{GoogleDriveApiBase}/files/{directParentId}?fields=id,name,parents&supportsAllDrives=true");
+                        pReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                        using var pRes = await _httpClient.SendAsync(pReq, ct);
+                        if (pRes.IsSuccessStatusCode)
+                        {
+                            string pJson = await pRes.Content.ReadAsStringAsync(ct);
+                            using var pDoc = JsonDocument.Parse(pJson);
+                            string pName = pDoc.RootElement.TryGetProperty("name", out var pn) ? pn.GetString() ?? "" : "";
+
+                            var grandParents = new List<string>();
+                            if (pDoc.RootElement.TryGetProperty("parents", out var gpElem) && gpElem.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var gp in gpElem.EnumerateArray())
+                                {
+                                    string s = gp.GetString() ?? "";
+                                    if (!string.IsNullOrEmpty(s)) grandParents.Add(s);
+                                }
+                            }
+
+                            if (pName.Equals(AppSubFolderName, StringComparison.OrdinalIgnoreCase) || pName.Contains("Comic Downloader", StringComparison.OrdinalIgnoreCase))
+                            {
+                                _config.CachedAppFolderId = directParentId;
+                                if (grandParents.Count > 0 && !grandParents[0].Equals("root", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    _config.CachedGmtpcFolderId = grandParents[0];
+                                }
+                            }
+                            else if (pName.Equals(DevicesFolderName, StringComparison.OrdinalIgnoreCase) && grandParents.Count > 0)
+                            {
+                                _config.CachedAppFolderId = grandParents[0];
+                                try
+                                {
+                                    using var gpReq = new HttpRequestMessage(HttpMethod.Get, $"{GoogleDriveApiBase}/files/{grandParents[0]}?fields=id,name,parents&supportsAllDrives=true");
+                                    gpReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                                    using var gpRes = await _httpClient.SendAsync(gpReq, ct);
+                                    if (gpRes.IsSuccessStatusCode)
+                                    {
+                                        string gpJson = await gpRes.Content.ReadAsStringAsync(ct);
+                                        using var gpDoc = JsonDocument.Parse(gpJson);
+                                        if (gpDoc.RootElement.TryGetProperty("parents", out var gppElem) && gppElem.ValueKind == JsonValueKind.Array)
+                                        {
+                                            foreach (var gpp in gppElem.EnumerateArray())
+                                            {
+                                                string s = gpp.GetString() ?? "";
+                                                if (!string.IsNullOrEmpty(s) && !s.Equals("root", StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    _config.CachedGmtpcFolderId = s;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                SaveConfigToDisk();
 
                 string icon = name.Contains("Android") ? "📱"
                     : name.Contains("Linux") ? "🐧"

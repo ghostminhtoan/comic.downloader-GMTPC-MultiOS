@@ -3210,4 +3210,18 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
         * Gom duy nhất 1 truy vấn `'{slot.DeviceFolderId}' in parents and trashed = false` để lấy toàn bộ 3 file con của slot thay vì gọi 3 request rời rạc.
         * `CheckCloudStatusAsync` tận dụng dữ liệu từ cache `AvailableDevices` và `CachedResumeCloudFile` (0 request phụ).
 
+15. **Chuẩn Hóa UI Responsive Thao Tác Thư Mục, Chống Nhân Bản Thư Mục GMTPC & Cơ Chế Dán Link Đa Tầng**:
+    - **Giao diện Responsive cho Cụm Nút Thao Tác Thư Mục (Anti-Clipping WrapPanel)**:
+      + Tái cấu trúc layout thanh điều khiển thư mục trong Google Drive Modal sang `Grid RowDefinitions="Auto, Auto" RowSpacing="8"`.
+      + Tách cụm 4 nút tác vụ (`[✏️ Đổi tên]`, `[➕ Tạo folder mới]`, `[🔗 Nhập ID]`, `[🗑️ Xóa]`) sang một hàng `WrapPanel` độc lập có `Margin="0,0,6,6"`.
+      + Đảm bảo 100% nút `🗑️ Xóa` không bao giờ bị tràn viền hoặc che khuất trên bất kỳ kích thước màn hình nào (kể cả Android màn hình dọc hẹp).
+    - **Cơ chế Chống Tự Động Tạo Trùng Thư Mục `GMTPC` và `Comic Downloader GMTPC`**:
+      + **Bảo vệ Cache Đa Tầng (Cache Retention on Error)**: Khi kiểm tra `CachedGmtpcFolderId` và `CachedAppFolderId`, chỉ hủy bỏ cache khi Google Drive API trả về đúng mã `404 Not Found`. Khi gặp lỗi mạng, timeout, hoặc HTTP 403 Rate Limit / Quota Exceeded, ứng dụng bảo toàn 100% ID đã lưu, ngăn chặn việc xóa nhầm cache dẫn đến tạo trùng thư mục mới.
+      + **Tìm kiếm Thư mục Đa Tầng Thông Minh (3-Tier Folder Search)**: Tầng 1 quét danh sách con trực tiếp (`ListDirectChildrenAsync`), Tầng 2 tìm kiếm có ràng buộc cha (`Scoped Parent Search`), Tầng 3 quét bảo vệ theo tên thư mục. Khi đã tồn tại bất kỳ thư mục nào trên Drive, hệ thống lập tức tái sử dụng và SKIP hoàn toàn việc tạo mới.
+    - **Cơ Chế Dán Link / Folder ID Đa Tầng (Bi-Directional Folder Hierarchy Resolution)**:
+      + **Dán link `Comic Downloader GMTPC`**: Tự động nhận diện thư mục app, truy vết cha từ trường `parents` để liên kết đồng thời cả `CachedGmtpcFolderId` và `CachedAppFolderId`, quét ngay toàn bộ các slot thiết bị và file `resume.md`.
+      + **Dán link `GMTPC`**: Tự động nhận diện thư mục cha gốc, dò tìm thư mục con `Comic Downloader GMTPC` bên trong nó để liên kết cả 2 thư mục.
+      + **Dán link `Device Folder`**: Liên kết slot thiết bị hiện tại, đồng thời tự động truy vết ngược lên để lưu cả `CachedAppFolderId` và `CachedGmtpcFolderId`.
+      + Toàn bộ cây thư mục Google Drive được liên kết hoàn hảo chỉ với 1 thao tác dán link duy nhất.
+
 
