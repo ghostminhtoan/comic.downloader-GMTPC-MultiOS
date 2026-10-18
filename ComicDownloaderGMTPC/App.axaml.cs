@@ -20,6 +20,8 @@ public partial class App : Application
 {
     private static MainViewModel? _sharedMainViewModel;
     public static MainViewModel SharedMainViewModel => _sharedMainViewModel ??= new MainViewModel();
+    public static MainViewModel? TryGetSharedMainViewModel() => _sharedMainViewModel;
+    public static bool HasSharedMainViewModel => _sharedMainViewModel != null;
 
     private static System.Threading.Mutex? _singleInstanceMutex;
 

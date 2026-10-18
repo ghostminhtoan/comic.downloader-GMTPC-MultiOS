@@ -29,63 +29,6 @@ namespace ComicDownloaderGMTPC.Android;
     Exported = true,
     WindowSoftInputMode = SoftInput.AdjustResize,
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Density | ConfigChanges.FontScale)]
-// === CÁC INTENT FILTER CHO PHÉP MỞ APP VỚI FILE .PDF, .ZIP, .RAR, .CBR, .CBZ, .MOBI (CHỌN ỨNG DỤNG ĐỌC) ===
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/pdf")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/zip")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-zip-compressed")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-zip")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-rar-compressed")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/rar")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-rar")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/vnd.rar")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-cbz")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/vnd.comicbook+zip")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-cbr")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/vnd.comicbook-rar")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-mobipocket-ebook")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/vnd.amazon.mobi8-ebook")]
-// Bắt theo Scheme file:// và extension
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.pdf")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.PDF")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.zip")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.ZIP")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.rar")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.RAR")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.cbz")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.CBZ")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.cbr")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.CBR")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.mobi")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.MOBI")]
-// Bắt theo Scheme content:// và extension
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.pdf")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.PDF")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.zip")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.ZIP")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.rar")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.RAR")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.cbz")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.CBZ")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.cbr")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.CBR")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.mobi")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.MOBI")]
-// Bắt theo generic application/octet-stream
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.pdf")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.zip")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.rar")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.cbz")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.cbr")]
-[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.mobi")]
-// Bắt khi người dùng bấm Chia Sẻ (ActionSend)
-[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/pdf")]
-[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/zip")]
-[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/x-zip-compressed")]
-[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/x-rar-compressed")]
-[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/rar")]
-[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/x-cbz")]
-[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/x-cbr")]
-[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/x-mobipocket-ebook")]
 public class MainActivity : AvaloniaMainActivity
 {
     private const int StoragePermissionRequestCode = 1001;
@@ -254,8 +197,9 @@ public class MainActivity : AvaloniaMainActivity
     }
 
     /// <summary>
-    /// Xử lý Intent khi ứng dụng được kích hoạt từ File Manager hoặc nút Chia Sẻ
-    /// để mở trực tiếp các tệp truyện: .pdf, .zip, .rar, .cbr, .cbz, .mobi, v.v.
+    /// Xử lý Intent khi ứng dụng được kích hoạt từ File Manager hoặc nút Chia Sẻ:
+    /// Chuyển tiếp ngay lập tức sang ComicReaderActivity để tải trực tiếp trình đọc,
+    /// loại bỏ hoàn toàn 2 lần load screen và không làm tải chậm app chính.
     /// </summary>
     private void HandleIncomingFileIntent(Intent? intent)
     {
@@ -263,159 +207,20 @@ public class MainActivity : AvaloniaMainActivity
         string? action = intent.Action;
         if (action != Intent.ActionView && action != Intent.ActionSend) return;
 
-        global::Android.Net.Uri? uri = intent.Data;
-#pragma warning disable CA1422
-        if (uri == null && action == Intent.ActionSend)
-        {
-            uri = intent.GetParcelableExtra(Intent.ExtraStream) as global::Android.Net.Uri;
-        }
-#pragma warning restore CA1422
-
-        if (uri == null) return;
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                string? resolvedFilePath = await ResolveUriToFilePathAsync(uri);
-                if (string.IsNullOrWhiteSpace(resolvedFilePath) || !File.Exists(resolvedFilePath))
-                {
-                    RunOnUiThread(() =>
-                    {
-                        Toast.MakeText(this, "Không thể đọc tệp truyện được yêu cầu mở.", ToastLength.Short)?.Show();
-                    });
-                    return;
-                }
-
-                // Đảm bảo môi trường Avalonia & ViewModel đã khởi tạo xong (tối đa 5 giây khi Cold Start)
-                for (int i = 0; i < 25; i++)
-                {
-                    if (App.SharedMainViewModel?.LibraryVm != null) break;
-                    await Task.Delay(200);
-                }
-
-                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
-                {
-                    try
-                    {
-                        if (App.SharedMainViewModel?.LibraryVm != null)
-                        {
-                            await App.SharedMainViewModel.LibraryVm.OpenStandaloneFileDirectlyAsync(resolvedFilePath);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi nạp truyện vào Reader: {ex.Message}");
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi xử lý file intent: {ex.Message}");
-            }
-        });
-    }
-
-    /// <summary>
-    /// Phân giải Intent Uri (file:// hoặc content://) thành đường dẫn tệp thực tế trên Android
-    /// Hỗ trợ cả Zero-Copy cho Documents Storage (Bộ nhớ máy / Thẻ SD) và Stream Copy cho ContentProvider bên thứ 3.
-    /// </summary>
-    private async Task<string?> ResolveUriToFilePathAsync(global::Android.Net.Uri uri)
-    {
-        if (uri == null) return null;
-
-        // 1. Nếu là scheme file:// trực tiếp
-        if (string.Equals(uri.Scheme, "file", StringComparison.OrdinalIgnoreCase))
-        {
-            string? rawPath = uri.Path;
-            if (!string.IsNullOrEmpty(rawPath) && File.Exists(rawPath))
-            {
-                return rawPath;
-            }
-        }
-
-        // 2. Lấy tên tệp gốc từ OpenableColumns.DisplayName
-        string fileName = Path.GetFileName(uri.Path ?? "") ?? "comic_document";
         try
         {
-            using var cursor = ContentResolver?.Query(uri, null, null, null, null);
-            if (cursor != null && cursor.MoveToFirst())
-            {
-                int nameIdx = cursor.GetColumnIndex(global::Android.Provider.IOpenableColumns.DisplayName);
-                if (nameIdx >= 0)
-                {
-                    string? name = cursor.GetString(nameIdx);
-                    if (!string.IsNullOrWhiteSpace(name))
-                    {
-                        fileName = name;
-                    }
-                }
-            }
-        }
-        catch { }
-
-        // 3. Phân giải nhanh Zero-Copy cho DocumentsContract (bộ nhớ trong primary: hoặc thẻ SD)
-        try
-        {
-            string uriStr = uri.ToString() ?? "";
-            if (uriStr.Contains("com.android.externalstorage.documents"))
-            {
-                string? docId = global::Android.Provider.DocumentsContract.GetDocumentId(uri);
-                if (!string.IsNullOrEmpty(docId))
-                {
-                    if (docId.StartsWith("primary:", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string sub = docId.Substring("primary:".Length);
-                        string realPath = Path.Combine("/storage/emulated/0", sub.TrimStart('/', '\\'));
-                        if (File.Exists(realPath)) return realPath;
-                    }
-                    else
-                    {
-                        int colonIdx = docId.IndexOf(':');
-                        if (colonIdx > 0)
-                        {
-                            var sdRoots = AndroidStorageHelper.GetExternalStoragePaths(this);
-                            string rel = docId.Substring(colonIdx + 1).TrimStart('/', '\\');
-                            foreach (var sd in sdRoots)
-                            {
-                                string candidate = Path.Combine(sd, rel);
-                                if (File.Exists(candidate)) return candidate;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch { }
-
-        // 4. Nếu uri.Path là tệp tồn tại
-        if (!string.IsNullOrEmpty(uri.Path) && File.Exists(uri.Path))
-        {
-            return uri.Path;
-        }
-
-        // 5. Fallback hoàn hảo: Sao chép luồng dữ liệu từ ContentResolver sang thư mục tạm của app
-        try
-        {
-            string cacheDir = Path.Combine(CacheDir?.AbsolutePath ?? Path.GetTempPath(), "opened_comics");
-            if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-
-            string destPath = Path.Combine(cacheDir, fileName);
-
-            using var inStream = ContentResolver?.OpenInputStream(uri);
-            if (inStream != null)
-            {
-                using var outStream = File.Create(destPath);
-                await inStream.CopyToAsync(outStream);
-                return destPath;
-            }
+            var readerIntent = new Intent(this, typeof(ComicReaderActivity));
+            readerIntent.SetAction(intent.Action);
+            if (intent.Data != null) readerIntent.SetDataAndType(intent.Data, intent.Type);
+            if (intent.Extras != null) readerIntent.PutExtras(intent.Extras);
+            readerIntent.AddFlags(ActivityFlags.NewTask | ActivityFlags.ClearTop);
+            StartActivity(readerIntent);
+            Finish();
         }
         catch (Exception ex)
         {
-            global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi sao chép stream từ URI ngoài: {ex.Message}");
+            global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi forward file intent sang ComicReaderActivity: {ex.Message}");
         }
-
-        return null;
     }
 
     private void LaunchComicReaderTask(ViewModels.ComicReaderViewModel readerVm)

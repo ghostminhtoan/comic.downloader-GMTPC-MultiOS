@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Android.App;
@@ -7,6 +8,7 @@ using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using Android.Views;
+using Android.Widget;
 using Avalonia.Android;
 using ComicDownloaderGMTPC.Services;
 using ComicDownloaderGMTPC.ViewModels;
@@ -21,7 +23,7 @@ namespace ComicDownloaderGMTPC.Android;
 /// </summary>
 [Activity(
     Name = "com.CompanyName.ComicDownloaderGMTPC.ComicReaderActivity",
-    Label = "📖 Đọc Truyện - GMTPC",
+    Label = "ComicDownloaderGMTPC",
     Theme = "@style/MyTheme.NoActionBar",
     Icon = "@drawable/icon",
     MainLauncher = false,
@@ -31,9 +33,113 @@ namespace ComicDownloaderGMTPC.Android;
     AutoRemoveFromRecents = false,
     SupportsPictureInPicture = true,
     ResizeableActivity = true,
-    Exported = false,
+    Exported = true,
     WindowSoftInputMode = SoftInput.AdjustResize,
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Density | ConfigChanges.FontScale)]
+// === CÁC INTENT FILTER CHO PHÉP MỞ TRỰC TIẾP TRÌNH ĐỌC VỚI TỆP TRUYỆN & HÌNH ẢNH (ZERO DOUBLE LOAD SCREEN) ===
+// 1. MIME Types: Sách & Tệp nén truyện
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/pdf")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/zip")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-zip-compressed")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-zip")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-rar-compressed")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/rar")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-rar")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/vnd.rar")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-cbz")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/vnd.comicbook+zip")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-cbr")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/vnd.comicbook-rar")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/x-mobipocket-ebook")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "application/vnd.amazon.mobi8-ebook")]
+// 2. MIME Types: Hình ảnh (.gif, .webp, .jpg, .png, .bmp)
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "image/gif")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "image/webp")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "image/jpeg")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "image/jpg")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "image/png")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "image/bmp")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "image/x-ms-bmp")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataMimeType = "image/*")]
+// 3. Scheme file:// cho toàn bộ định dạng Sách & Ảnh
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.pdf")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.PDF")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.zip")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.ZIP")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.rar")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.RAR")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.cbz")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.CBZ")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.cbr")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.CBR")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.mobi")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.MOBI")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.gif")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.GIF")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.webp")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.WEBP")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.jpg")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.JPG")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.jpeg")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.JPEG")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.png")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.PNG")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.bmp")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "file", DataHost = "*", DataPathPattern = ".*\\.BMP")]
+// 4. Scheme content:// cho toàn bộ định dạng Sách & Ảnh
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.pdf")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.PDF")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.zip")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.ZIP")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.rar")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.RAR")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.cbz")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.CBZ")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.cbr")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.CBR")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.mobi")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.MOBI")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.gif")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.GIF")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.webp")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.WEBP")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.jpg")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.JPG")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.jpeg")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.JPEG")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.png")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.PNG")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.bmp")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataHost = "*", DataPathPattern = ".*\\.BMP")]
+// 5. Generic application/octet-stream
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.pdf")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.zip")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.rar")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.cbz")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.cbr")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.mobi")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.gif")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.webp")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.jpg")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.jpeg")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.png")]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable }, DataScheme = "content", DataMimeType = "application/octet-stream", DataHost = "*", DataPathPattern = ".*\\.bmp")]
+// 6. ActionSend (Chia Sẻ tệp sang app)
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/pdf")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/zip")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/x-zip-compressed")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/x-rar-compressed")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/rar")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/x-cbz")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/x-cbr")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "application/x-mobipocket-ebook")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "image/gif")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "image/webp")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "image/jpeg")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "image/jpg")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "image/png")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "image/bmp")]
+[IntentFilter(new[] { Intent.ActionSend }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "image/*")]
 public class ComicReaderActivity : AvaloniaActivity
 {
     public const string ExtraComicRootPath = "comic_root_path";
@@ -53,6 +159,7 @@ public class ComicReaderActivity : AvaloniaActivity
         CurrentInstance = this;
 
         AndroidStorageHelper.WakeUpStorage(this);
+        AndroidStorageHelper.RequestAppStoragePermissions(this);
         LibraryScannerService.AndroidGetExternalStoragePaths ??= () => AndroidStorageHelper.GetExternalStoragePaths(this);
 
         ComicReaderService.AndroidSetOrientationMode = ApplyOrientationMode;
@@ -167,55 +274,182 @@ public class ComicReaderActivity : AvaloniaActivity
     {
         var activeVm = ComicReaderService.Instance.ActiveExternalReaderViewModel;
 
-        if (activeVm == null && intent != null)
+        // 1. Nếu mở từ bên trong app (đã gán ViewModel sẵn)
+        if (activeVm != null)
         {
-            // Khôi phục phiên đọc nếu người dùng bấm vào thẻ Đa nhiệm (Recents) sau khi tiến trình nền bị Android thu hồi
+            AttachViewModel(activeVm);
+            return;
+        }
+
+        if (intent != null)
+        {
+            // 2. Mở trực tiếp từ bên ngoài (ActionView / ActionSend): Tải thẳng Reader ngay từ lần đầu!
+            string? action = intent.Action;
+            if (action == Intent.ActionView || action == Intent.ActionSend)
+            {
+                OpenIncomingFileDirectly(intent);
+                return;
+            }
+
+            // 3. Khôi phục phiên đọc nếu người dùng bấm vào thẻ Đa nhiệm (Recents) sau khi tiến trình nền bị Android thu hồi
             string? comicRoot = intent.GetStringExtra(ExtraComicRootPath);
             string? chapterPath = intent.GetStringExtra(ExtraChapterLocalPath);
 
             if (!string.IsNullOrWhiteSpace(comicRoot))
             {
-                activeVm = new ComicReaderViewModel();
-                ComicReaderService.Instance.ActiveExternalReaderViewModel = activeVm;
-                AttachViewModel(activeVm);
-
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var comic = LibraryScannerService.Instance.CreateQuickComicFromPath(comicRoot);
-                        if ((comic == null || comic.Chapters.Count == 0) && comicRoot.Contains("/storage/"))
-                        {
-                            AndroidStorageHelper.WakeUpStorage(CurrentInstance?.ApplicationContext ?? CurrentInstance);
-                            await Task.Delay(150);
-                            comic = LibraryScannerService.Instance.CreateQuickComicFromPath(comicRoot);
-                        }
-
-                        if (comic != null && comic.Chapters.Count > 0)
-                        {
-                            var targetChap = (!string.IsNullOrWhiteSpace(chapterPath)
-                                ? comic.Chapters.FirstOrDefault(c => string.Equals(c.LocalPath, chapterPath, StringComparison.OrdinalIgnoreCase))
-                                : null)
-                                ?? comic.GetBestResumeChapter()
-                                ?? comic.Chapters[0];
-
-                            await activeVm.InitializeAsync(comic, targetChap);
-                        }
-                        else
-                        {
-                            activeVm.ShowTransientToast("Không thể nạp tệp truyện từ thẻ nhớ. Vui lòng mở lại từ Thư viện.");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi khôi phục phiên đọc: {ex.Message}");
-                    }
-                });
+                RestoreReaderSessionFromExtras(comicRoot, chapterPath);
                 return;
             }
         }
 
+        AttachViewModel(null);
+    }
+
+    /// <summary>
+    /// Mở trực tiếp tệp truyện hoặc hình ảnh khi người dùng bấm vào tệp từ File Manager hoặc nút Chia Sẻ.
+    /// Tải thẳng Reader mà không phải đi qua MainActivity, loại bỏ hoàn toàn 2 lần load screen.
+    /// </summary>
+    private void OpenIncomingFileDirectly(Intent intent)
+    {
+        string? action = intent.Action;
+        global::Android.Net.Uri? uri = intent.Data;
+#pragma warning disable CA1422
+        if (uri == null && action == Intent.ActionSend)
+        {
+            uri = intent.GetParcelableExtra(Intent.ExtraStream) as global::Android.Net.Uri;
+        }
+#pragma warning restore CA1422
+
+        if (uri == null)
+        {
+            Toast.MakeText(this, "Không tìm thấy dữ liệu tệp được yêu cầu mở.", ToastLength.Short)?.Show();
+            return;
+        }
+
+        var activeVm = new ComicReaderViewModel();
+        ComicReaderService.Instance.ActiveExternalReaderViewModel = activeVm;
         AttachViewModel(activeVm);
+        activeVm.IsLoadingChapter = true;
+        activeVm.ChapterLoadingStatusText = "⏳ Đang mở tệp...";
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                AndroidStorageHelper.WakeUpStorage(this);
+                string? resolvedFilePath = await AndroidStorageHelper.ResolveUriToFilePathAsync(this, uri);
+
+                if (string.IsNullOrWhiteSpace(resolvedFilePath) || !File.Exists(resolvedFilePath))
+                {
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        activeVm.IsLoadingChapter = false;
+                        activeVm.ShowTransientToast("Không thể đọc tệp truyện hoặc hình ảnh.");
+                        Toast.MakeText(this, "Không thể đọc tệp truyện hoặc hình ảnh.", ToastLength.Short)?.Show();
+                    });
+                    return;
+                }
+
+                var comic = LibraryScannerService.Instance.CreateQuickComicFromPath(resolvedFilePath);
+                if ((comic == null || comic.Chapters.Count == 0) && resolvedFilePath.Contains("/storage/"))
+                {
+                    AndroidStorageHelper.WakeUpStorage(this);
+                    await Task.Delay(150);
+                    comic = LibraryScannerService.Instance.CreateQuickComicFromPath(resolvedFilePath);
+                }
+
+                if (comic != null && comic.Chapters.Count > 0)
+                {
+                    ReadProgressStore.Instance.RegisterReadComic(comic.RootFolderPath, touchTimestamp: true);
+                    var targetChap = comic.GetBestResumeChapter() ?? comic.Chapters[0];
+
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+                    {
+                        try
+                        {
+                            await activeVm.InitializeAsync(comic, targetChap);
+                            UpdateRecentsTaskCardTitle(activeVm);
+
+                            var sharedMainVm = App.TryGetSharedMainViewModel();
+                            if (sharedMainVm?.LibraryVm != null)
+                            {
+                                var libVm = sharedMainVm.LibraryVm;
+                                var existing = libVm.AllComics.FirstOrDefault(c =>
+                                    string.Equals(c.RootFolderPath, comic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
+                                if (existing == null)
+                                {
+                                    libVm.AllComics.Insert(0, comic);
+                                    _ = LibraryScannerService.Instance.LoadCoversAsync(new[] { comic }, System.Threading.CancellationToken.None);
+                                }
+                                libVm.ApplyFilter();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi nạp truyện vào Reader: {ex.Message}");
+                        }
+                    });
+                }
+                else
+                {
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        activeVm.IsLoadingChapter = false;
+                        activeVm.ShowTransientToast("Định dạng tệp không được hỗ trợ hoặc không có trang nào.");
+                        Toast.MakeText(this, "Định dạng tệp không được hỗ trợ hoặc không có trang nào.", ToastLength.Short)?.Show();
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi xử lý file intent: {ex.Message}");
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    activeVm.IsLoadingChapter = false;
+                    activeVm.ShowTransientToast($"Lỗi mở tệp: {ex.Message}");
+                });
+            }
+        });
+    }
+
+    private void RestoreReaderSessionFromExtras(string comicRoot, string? chapterPath)
+    {
+        var activeVm = new ComicReaderViewModel();
+        ComicReaderService.Instance.ActiveExternalReaderViewModel = activeVm;
+        AttachViewModel(activeVm);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var comic = LibraryScannerService.Instance.CreateQuickComicFromPath(comicRoot);
+                if ((comic == null || comic.Chapters.Count == 0) && comicRoot.Contains("/storage/"))
+                {
+                    AndroidStorageHelper.WakeUpStorage(CurrentInstance?.ApplicationContext ?? CurrentInstance);
+                    await Task.Delay(150);
+                    comic = LibraryScannerService.Instance.CreateQuickComicFromPath(comicRoot);
+                }
+
+                if (comic != null && comic.Chapters.Count > 0)
+                {
+                    var targetChap = (!string.IsNullOrWhiteSpace(chapterPath)
+                        ? comic.Chapters.FirstOrDefault(c => string.Equals(c.LocalPath, chapterPath, StringComparison.OrdinalIgnoreCase))
+                        : null)
+                        ?? comic.GetBestResumeChapter()
+                        ?? comic.Chapters[0];
+
+                    await activeVm.InitializeAsync(comic, targetChap);
+                }
+                else
+                {
+                    activeVm.ShowTransientToast("Không thể nạp tệp truyện từ thẻ nhớ. Vui lòng mở lại từ Thư viện.");
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi khôi phục phiên đọc: {ex.Message}");
+            }
+        });
     }
 
     private void AttachViewModel(ComicReaderViewModel? vm)

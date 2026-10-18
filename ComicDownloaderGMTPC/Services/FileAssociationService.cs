@@ -302,9 +302,10 @@ public sealed class FileAssociationService
             string commandStr = $"\"{exePath}\" \"%1\"";
             string iconStr = $"\"{exePath}\",0";
 
-            // 1. Đăng ký context menu cho .zip, .rar, .cbz, .cbr
+            // 1. Đăng ký context menu cho tệp nén, sách và toàn bộ ảnh (.png, .jpg, .jpeg, .bmp, .webp, .gif, .pdf, .mobi, .zip, .rar, .cbz, .cbr)
             // Đăng ký vào cả SystemFileAssociations và Classes/{ext}/shell để tương thích 100% Win 7, 8, 10, 11
-            foreach (var ext in ArchiveContextMenuExtensions)
+            var allExts = ArchiveContextMenuExtensions.Concat(DefaultImageBookExtensions).Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var ext in allExts)
             {
                 // SystemFileAssociations (chuẩn Windows Explorer)
                 string sysKey = $@"Software\Classes\SystemFileAssociations\{ext}\shell\{ContextMenuVerb}";
@@ -333,7 +334,7 @@ public sealed class FileAssociationService
 
             SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero);
 
-            return (true, "✅ Đã thêm menu chuột phải 'Đọc truyện bằng Comic Downloader GMTPC' cho Thư mục và tệp nén (.zip, .rar, .cbz, .cbr)!");
+            return (true, "✅ Đã thêm menu chuột phải 'Đọc truyện bằng Comic Downloader GMTPC' cho Thư mục, tệp nén và hình ảnh (.png, .jpg, .bmp, .webp, .gif, .pdf, .zip, .rar, .cbz, .cbr)!");
         }
         catch (Exception ex)
         {
@@ -345,7 +346,8 @@ public sealed class FileAssociationService
     {
         try
         {
-            foreach (var ext in ArchiveContextMenuExtensions)
+            var allExts = ArchiveContextMenuExtensions.Concat(DefaultImageBookExtensions).Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var ext in allExts)
             {
                 RegDeleteTree(HKEY_CURRENT_USER, $@"Software\Classes\SystemFileAssociations\{ext}\shell\{ContextMenuVerb}");
                 RegDeleteTree(HKEY_CURRENT_USER, $@"Software\Classes\{ext}\shell\{ContextMenuVerb}");
@@ -356,7 +358,7 @@ public sealed class FileAssociationService
 
             SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero);
 
-            return (true, "✅ Đã gỡ bỏ menu chuột phải cho Thư mục và tệp nén (.zip, .rar, .cbz, .cbr)!");
+            return (true, "✅ Đã gỡ bỏ menu chuột phải cho Thư mục, tệp nén và hình ảnh!");
         }
         catch (Exception ex)
         {
@@ -610,12 +612,13 @@ MimeType=image/png;image/jpeg;image/bmp;image/webp;image/gif;application/pdf;app
                 : new List<string>();
 
             // Ghi vào section [Added Associations] (để xuất hiện trong danh sách "Open With", KHÔNG làm default)
-            EnsureLinuxMimeSection(lines, "Added Associations", LinuxArchiveMimeTypes.Keys, LinuxAppDesktopName, isAppendedList: true);
+            var allMimes = LinuxArchiveMimeTypes.Keys.Concat(LinuxImageBookMimeTypes.Keys).Distinct(StringComparer.OrdinalIgnoreCase);
+            EnsureLinuxMimeSection(lines, "Added Associations", allMimes, LinuxAppDesktopName, isAppendedList: true);
 
             File.WriteAllLines(mimePath, lines, new UTF8Encoding(false));
             UpdateLinuxDesktopDatabase();
 
-            return (true, "✅ [Linux] Đã thêm Comic Downloader GMTPC vào menu ngữ cảnh (Open With) cho .zip, .rar, .cbz, .cbr!");
+            return (true, "✅ [Linux] Đã thêm Comic Downloader GMTPC vào menu ngữ cảnh (Open With) cho toàn bộ tệp nén, sách và hình ảnh!");
         }
         catch (Exception ex)
         {
@@ -632,12 +635,13 @@ MimeType=image/png;image/jpeg;image/bmp;image/webp;image/gif;application/pdf;app
                 return (true, "✅ [Linux] Chưa có menu ngữ cảnh nào để gỡ bỏ.");
 
             var lines = File.ReadAllLines(mimePath).ToList();
-            RemoveLinuxMimeAssociations(lines, "Added Associations", LinuxArchiveMimeTypes.Keys, LinuxAppDesktopName);
+            var allMimes = LinuxArchiveMimeTypes.Keys.Concat(LinuxImageBookMimeTypes.Keys).Distinct(StringComparer.OrdinalIgnoreCase);
+            RemoveLinuxMimeAssociations(lines, "Added Associations", allMimes, LinuxAppDesktopName);
 
             File.WriteAllLines(mimePath, lines, new UTF8Encoding(false));
             UpdateLinuxDesktopDatabase();
 
-            return (true, "✅ [Linux] Đã gỡ bỏ menu ngữ cảnh cho các tệp nén!");
+            return (true, "✅ [Linux] Đã gỡ bỏ menu ngữ cảnh cho các tệp nén và hình ảnh!");
         }
         catch (Exception ex)
         {

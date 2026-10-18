@@ -3284,3 +3284,16 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + Các file mở ra sẽ bắt đầu ngay từ Chương 1 hoặc Mở đầu, chống hoàn toàn lỗi cuộn lên bị nhảy ngược về chương chung hàng ngàn trang.
       + `LibraryComicItem`: Bổ sung thuộc tính `TotalPages` tính tổng toàn bộ trang của các chương con, và cập nhật `ChapterCountText` hiển thị rõ ràng tổng số trang (ví dụ `10 chương (250 trang)` hoặc `120 trang`) cho người dùng.
 
+19. **Mở Trực Tiếp Trình Đọc Với Tệp Ảnh (.gif, .webp, .jpg, .png, .bmp) & Tối Ưu Tải Thẳng Reader Trên Android (Triệt Tiêu Hoàn Toàn 2 Lần Load Screen)**:
+    - **Bổ sung các định dạng hình ảnh vào tính năng Mở Bằng App**:
+      + Đăng ký toàn diện các định dạng ảnh: `.gif`, `.webp`, `.jpg`, `.jpeg`, `.png`, `.bmp` vào hệ thống liên kết tệp (File Associations), menu ngữ cảnh chuột phải và bộ xử lý Intent.
+      + Trên Windows & Linux: `FileAssociationService` bổ sung `allExts` và `allMimes` vào cả `SystemFileAssociations`, `Classes\{ext}\shell` và `[Added Associations]` trong `mimeapps.list`, cho phép người dùng click đúp hoặc chuột phải chọn *"📖 Đọc truyện bằng Comic Downloader GMTPC"* cho bất kỳ file ảnh, tệp nén hoặc sách truyện nào.
+      + Xử lý nạp ảnh thông minh: Khi mở 1 file ảnh bất kỳ, ứng dụng tự động nhận diện tất cả các file ảnh cùng thư mục thành một chương hoàn chỉnh và chuyển thẳng tới trang ảnh được mở, cho phép cuộn/lướt xem ảnh kế tiếp siêu mượt.
+    - **Tối ưu tải thẳng Reader trên Android (Triệt tiêu 2 lần load screen)**:
+      + **Nguyên nhân trước đây**: Các `[IntentFilter]` gắn trên `MainActivity` làm Android luôn kích hoạt `MainActivity` trước (gây ra Load Screen 1: App UI / MainView), sau đó `MainActivity` mới nạp xong ViewModel và bắn Intent khởi chạy `ComicReaderActivity` (gây ra Load Screen 2: Reader).
+      + **Kiến trúc giải pháp triệt để**:
+        * Chuyển toàn bộ các `[IntentFilter]` chuyên dụng (MIME Types, Schemes `file://`, `content://`, `octet-stream`, `ActionSend`) sang trực tiếp `ComicReaderActivity` (`Exported = true`, `Label = "ComicDownloaderGMTPC"`).
+        * Gỡ bỏ các `[IntentFilter]` khỏi `MainActivity` để tránh xuất hiện 2 biểu tượng trùng lặp trong hộp thoại "Open With" của Android.
+        * `MainActivity`: Nếu có Intent tệp ngoài lọt vào, lập tức chuyển tiếp (forward) trực tiếp sang `ComicReaderActivity` kèm cờ `ActivityFlags.NewTask | ActivityFlags.ClearTop` rồi `Finish()` ngay, tuyệt đối không nạp `MainView`.
+        * `ComicReaderActivity`: Nhận Intent trực tiếp từ File Manager, kích hoạt ngay lập tức `ComicReaderControl`, giải mã URI qua `AndroidStorageHelper.ResolveUriToFilePathAsync`, nạp `ComicReaderViewModel` và mở ngay trang truyện/ảnh.
+        * Toàn bộ quá trình chỉ trải qua **DUY NHẤT 1 LẦN LOAD READER**, khởi động siêu tốc, giảm tối đa mức chiếm dụng RAM và CPU trên thiết bị Android.
