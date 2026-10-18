@@ -3158,4 +3158,8 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
      2. Linux: Standalone binary (`publish\ComicDownloaderGMTPC`), Portable archive (`publish\ComicDownloaderGMTPC-linux-x64.tar.gz`), Debian package (`publish\comicdownloadergmtpc_1.0.0_amd64.deb`).
      3. Android: Signed Standalone APK (`publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk`).
      4. Tự động Upload GitHub Release Beta: Đẩy trực tiếp 3 tệp phát hành lên GitHub Release tag `beta` (`https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`) thông qua `upload beta.cmd --no-pause`.
-
+8. **Cơ Chế Chọn / Tạo / Đổi Tên Thư Mục Google Drive Đám Mây Linh Hoạt Đa Thiết Bị**:
+   - **Khắc phục lỗi thư mục đã tồn tại không thể sao lưu**: Thay vì cố gắng xóa hoặc ném lỗi khi tên thư mục đã có trên Drive, hàm `CreateOrSelectCloudFolderAsync` tự động nhận diện và liên kết an toàn ngay với thư mục đó, cho phép nhiều thiết bị (Windows, Android, Linux) dễ dàng dùng chung 1 thư mục đồng bộ.
+   - **Tự động nhận diện danh sách thư mục khi đăng nhập**: Quét toàn bộ thư mục có sẵn trên Google Drive, hiển thị danh sách trực quan trên ComboBox để người dùng chọn nhanh thư mục làm việc của thiết bị.
+   - **Tạo thư mục mới linh hoạt**: Nút `➕ Tạo folder mới` cho phép người dùng đặt tên tùy ý (ví dụ `231`, `MayDocTruyen`...). Ứng dụng tự động tạo trên Google Drive và gán thiết bị vào thư mục đó ngay lập tức.
+   - **Đổi tên (Rename) thư mục Google Drive an toàn**: Nút `✏️ Đổi tên` gọi PATCH `files/{folderId}` với tên mới, bảo toàn 100% ID thư mục và các tệp dữ liệu bên trong (`autosave.md`, `saved_reader_bookmarks.md`), đảm bảo mọi thao tác sao lưu và phục hồi sau đó diễn ra hoàn hảo.

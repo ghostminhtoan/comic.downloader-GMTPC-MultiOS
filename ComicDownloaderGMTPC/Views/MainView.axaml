@@ -5420,40 +5420,67 @@
                                 <Border IsVisible="{Binding IsGoogleDriveConnected}"
                                         Background="#111827" BorderBrush="#3B82F6" BorderThickness="1" CornerRadius="8" Padding="14,12">
                                     <StackPanel Spacing="10">
-                                        <!-- Header & Thiết bị hiện tại -->
+                                        <!-- Header & Thư mục đồng bộ đang chọn -->
                                         <Grid ColumnDefinitions="*, Auto">
                                             <StackPanel Grid.Column="0">
-                                                <TextBlock Text="THIẾT BỊ HIỆN TẠI (SLOT SAO LƯU)" Foreground="#9CA3AF" FontSize="10.5" FontWeight="Bold" />
+                                                <TextBlock Text="THƯ MỤC ĐỒNG BỘ ĐANG CHỌN TRÊN GOOGLE DRIVE" Foreground="#9CA3AF" FontSize="10.5" FontWeight="Bold" />
                                                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,3,0,0" VerticalAlignment="Center">
-                                                    <TextBlock Text="🖥️" FontSize="13" VerticalAlignment="Center" />
+                                                    <TextBlock Text="📁" FontSize="14" VerticalAlignment="Center" />
                                                     <TextBlock Text="{Binding CurrentDeviceDisplayName}"
-                                                               FontSize="12.5" FontWeight="Bold" Foreground="#38BDF8" VerticalAlignment="Center" />
+                                                               FontSize="13" FontWeight="Bold" Foreground="#38BDF8" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </StackPanel>
 
-                                            <!-- Nút bắt đầu đổi tên -->
-                                            <Button Grid.Column="1" Command="{Binding StartRenameDeviceCommand}"
-                                                    IsVisible="{Binding !IsRenamingDevice}"
-                                                    Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
-                                                    Foreground="#CBD5E1" CornerRadius="6" Padding="8,4" Height="26" VerticalAlignment="Center"
-                                                    ToolTip.Tip="Đổi tên nhận diện thiết bị này trên Google Drive">
-                                                <TextBlock Text="✏️ Đổi tên" FontSize="10.5" />
-                                            </Button>
+                                            <!-- Cụm nút Thao tác: Đổi tên / Tạo folder mới -->
+                                            <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Button Command="{Binding StartRenameDeviceCommand}"
+                                                        IsVisible="{Binding !IsRenamingDevice}"
+                                                        Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                                        Foreground="#38BDF8" CornerRadius="6" Padding="8,4" Height="26" Margin="0,0,6,0"
+                                                        ToolTip.Tip="Đổi tên thư mục này trực tiếp trên Google Drive">
+                                                    <TextBlock Text="✏️ Đổi tên" FontSize="10.5" FontWeight="SemiBold" />
+                                                </Button>
+                                                <Button Command="{Binding StartCreateNewFolderCommand}"
+                                                        IsVisible="{Binding !IsCreatingNewFolder}"
+                                                        Background="#065F46" BorderBrush="#34D399" BorderThickness="1"
+                                                        Foreground="#A7F3D0" CornerRadius="6" Padding="8,4" Height="26"
+                                                        ToolTip.Tip="Tạo một thư mục mới trên Google Drive để đồng bộ">
+                                                    <TextBlock Text="➕ Tạo folder mới" FontSize="10.5" FontWeight="SemiBold" />
+                                                </Button>
+                                            </WrapPanel>
                                         </Grid>
 
-                                        <!-- Panel nhập đổi tên thiết bị -->
+                                        <!-- Panel nhập đổi tên thư mục -->
                                         <Border IsVisible="{Binding IsRenamingDevice}"
                                                 Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,2,0,0">
                                             <Grid ColumnDefinitions="*, Auto, Auto" ColumnSpacing="6">
                                                 <TextBox Grid.Column="0" Text="{Binding CustomDeviceNameInput}"
-                                                         PlaceholderText="Nhập tên thiết bị (vd: Laptop Dell, Máy Bàn Công Ty...)"
+                                                         PlaceholderText="Nhập tên mới cho thư mục (vd: 231, MayDocTruyen...)"
                                                          Height="28" FontSize="11" Background="#0B0F19" />
                                                 <Button Grid.Column="1" Command="{Binding SaveCustomDeviceNameCommand}"
-                                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="10,4" Height="28">
-                                                    <TextBlock Text="💾 Lưu" FontSize="10.5" />
+                                                         Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="10,4" Height="28">
+                                                    <TextBlock Text="💾 Đổi tên trên Drive" FontSize="10.5" />
                                                 </Button>
                                                 <Button Grid.Column="2" Command="{Binding CancelRenameDeviceCommand}"
-                                                        Background="#334155" Foreground="#94A3B8" CornerRadius="5" Padding="8,4" Height="28">
+                                                         Background="#334155" Foreground="#94A3B8" CornerRadius="5" Padding="8,4" Height="28">
+                                                    <TextBlock Text="✕" FontSize="10.5" />
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Panel nhập tạo thư mục mới -->
+                                        <Border IsVisible="{Binding IsCreatingNewFolder}"
+                                                Background="#064E3B" BorderBrush="#34D399" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,2,0,0">
+                                            <Grid ColumnDefinitions="*, Auto, Auto" ColumnSpacing="6">
+                                                <TextBox Grid.Column="0" Text="{Binding NewFolderNameInput}"
+                                                         PlaceholderText="Nhập tên thư mục mới muốn tạo (vd: 231, Android-Main...)"
+                                                         Height="28" FontSize="11" Background="#0B0F19" />
+                                                <Button Grid.Column="1" Command="{Binding CreateNewCloudFolderCommand}"
+                                                         Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="10,4" Height="28">
+                                                    <TextBlock Text="➕ Tạo thư mục Drive" FontSize="10.5" />
+                                                </Button>
+                                                <Button Grid.Column="2" Command="{Binding CancelCreateNewFolderCommand}"
+                                                         Background="#334155" Foreground="#94A3B8" CornerRadius="5" Padding="8,4" Height="28">
                                                     <TextBlock Text="✕" FontSize="10.5" />
                                                 </Button>
                                             </Grid>
@@ -5461,23 +5488,23 @@
 
                                         <Border Height="1" Background="#1E293B" Margin="0,2" />
 
-                                        <!-- Nguồn phục hồi từ đám mây (Chọn thiết bị muốn lấy dữ liệu) -->
+                                        <!-- Danh sách Thư mục trên Cloud (Chọn thư mục để đồng bộ hoặc phục hồi) -->
                                         <StackPanel Spacing="5">
                                             <Grid ColumnDefinitions="*, Auto">
                                                 <StackPanel Grid.Column="0">
-                                                    <TextBlock Text="NGUỒN PHỤC HỒI TỪ ĐÁM MÂY (TẤT CẢ THIẾT BỊ)" Foreground="#9CA3AF" FontSize="10.5" FontWeight="Bold" />
-                                                    <TextBlock Text="Chọn thiết bị nguồn để tải Queue hoặc Dấu trang về máy này:"
+                                                    <TextBlock Text="DANH SÁCH THƯ MỤC TRÊN GOOGLE DRIVE (CHỌN ĐỂ ĐỒNG BỘ)" Foreground="#9CA3AF" FontSize="10.5" FontWeight="Bold" />
+                                                    <TextBlock Text="Chọn thư mục để liên kết thiết bị này, hoặc tải dữ liệu về máy:"
                                                                Foreground="#64748B" FontSize="10" Margin="0,1,0,0" />
                                                 </StackPanel>
                                                 <Button Grid.Column="1" Command="{Binding RefreshGoogleDriveStatusCommand}"
                                                         Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
                                                         Foreground="#94A3B8" CornerRadius="5" Padding="8,4" Height="26" VerticalAlignment="Center"
-                                                        ToolTip.Tip="Làm mới danh sách thiết bị trên Drive">
-                                                    <TextBlock Text="🔄 Làm mới" FontSize="10.5" />
+                                                        ToolTip.Tip="Quét lại toàn bộ thư mục trên Drive">
+                                                    <TextBlock Text="🔄 Quét lại" FontSize="10.5" />
                                                 </Button>
                                             </Grid>
 
-                                            <!-- ComboBox chọn thiết bị nguồn -->
+                                            <!-- ComboBox chọn thư mục đồng bộ -->
                                             <ComboBox ItemsSource="{Binding AvailableCloudDevices}"
                                                       SelectedItem="{Binding SelectedCloudDevice}"
                                                       HorizontalAlignment="Stretch" Height="30" CornerRadius="6"

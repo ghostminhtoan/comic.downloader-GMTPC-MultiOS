@@ -926,6 +926,10 @@ p {{ color: #94A3B8; font-size: 14px; }}
     /// Đảm bảo và lấy ID thư mục riêng của thiết bị hiện tại trên Google Drive.
     /// Hỗ trợ cả cấu trúc trực tiếp trong \GMTPC\Comic Downloader GMTPC\[DeviceName]\ hoặc \Devices\[DeviceName]\.
     /// </summary>
+    /// <summary>
+    /// Đảm bảo và lấy ID thư mục riêng của thiết bị hiện tại trên Google Drive.
+    /// Hỗ trợ cả cấu trúc trực tiếp trong \GMTPC\Comic Downloader GMTPC\[FolderName]\ hoặc \Devices\[FolderName]\.
+    /// </summary>
     public async Task<string?> EnsureCurrentDeviceFolderAsync(CancellationToken ct = default)
     {
         string? token = await EnsureValidAccessTokenAsync(ct);
@@ -934,7 +938,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
         string? appFolderId = await EnsureTargetFolderAsync(ct);
         if (string.IsNullOrEmpty(appFolderId)) return null;
 
-        // Nếu đã cache device folder id, kiểm tra tính hợp lệ và cập nhật tên nếu cần
+        // Nếu đã cache folder id, kiểm tra tính hợp lệ trên Google Drive
         if (!string.IsNullOrEmpty(_config.CachedDeviceFolderId))
         {
             try
@@ -947,19 +951,9 @@ p {{ color: #94A3B8; font-size: 14px; }}
                     string checkJson = await checkRes.Content.ReadAsStringAsync(ct);
                     using var checkDoc = JsonDocument.Parse(checkJson);
                     bool trashed = checkDoc.RootElement.TryGetProperty("trashed", out var tr) && tr.GetBoolean();
-                    string name = checkDoc.RootElement.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
                     if (!trashed)
                     {
-                        if (name.Equals(CurrentDeviceName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            return _config.CachedDeviceFolderId;
-                        }
-                        else
-                        {
-                            // Tên trên Drive khác CurrentDeviceName -> tự động rename folder trên Drive cho đồng bộ!
-                            await RenameDeviceFolderAsync(CurrentDeviceName, ct);
-                            return _config.CachedDeviceFolderId;
-                        }
+                        return _config.CachedDeviceFolderId;
                     }
                 }
                 _config.CachedDeviceFolderId = string.Empty;
@@ -977,7 +971,7 @@ p {{ color: #94A3B8; font-size: 14px; }}
             return existingFolderId;
         }
 
-        // Nếu chưa có, tạo mới: nếu đã có thư mục Devices thì đặt vào Devices, ngược lại đặt trực tiếp trong appFolderId
+        // Nếu chưa có, tạo mới trực tiếp trong appFolderId (hoặc Devices)
         string? devicesFolderId = await FindFolderByNameAsync(DevicesFolderName, appFolderId, token, ct);
         string parentForNewDevice = !string.IsNullOrEmpty(devicesFolderId) ? devicesFolderId : appFolderId;
 
@@ -992,32 +986,94 @@ p {{ color: #94A3B8; font-size: 14px; }}
     }
 
     /// <summary>
-    /// Đổi tên thiết bị hiện tại đồng thời tự động rename thư mục tương ứng trên Google Drive qua REST API v3.
-    /// Tự động xử lý trường hợp thư mục mới đã tồn tại từ trước (gộp tệp và xóa thư mục trùng lặp cũ).
+    /// Chọn một thư mục đám mây có sẵn làm thư mục đồng bộ hoạt động của thiết bị này.
+    /// Cho phép nhiều thiết bị (Windows, Android, Linux) cùng đồng bộ vào một thư mục chung.
     /// </summary>
-    public async Task<(bool Success, string Message)> RenameDeviceFolderAsync(string newCustomName, CancellationToken ct = default)
+    public void SelectActiveFolder(string folderId, string folderName)
     {
-        string trimmed = newCustomName?.Trim() ?? string.Empty;
-        trimmed = trimmed.Replace("/", "-").Replace("\\", "-").Replace("'", "");
-        if (string.IsNullOrWhiteSpace(trimmed))
+        if (string.IsNullOrEmpty(folderId)) return;
+        string cleanName = folderName?.Trim() ?? string.Empty;
+        cleanName = cleanName.Replace("/", "-").Replace("\\", "-").Replace("'", "");
+
+        _config.CachedDeviceFolderId = folderId;
+        _config.CustomDeviceName = cleanName;
+        SaveConfigToDisk();
+        NotifyStatusChanged($"Đã chọn thư mục đồng bộ: [{cleanName}]");
+    }
+
+    /// <summary>
+    /// Tạo mới một thư mục trên Google Drive hoặc tự động liên kết nếu thư mục đó đã tồn tại.
+    /// Khắc phục triệt để lỗi không thể sao lưu khi thư mục đã tồn tại.
+    /// </summary>
+    public async Task<(bool Success, string FolderId, string Message)> CreateOrSelectCloudFolderAsync(string folderName, CancellationToken ct = default)
+    {
+        string cleanName = folderName?.Trim() ?? string.Empty;
+        cleanName = cleanName.Replace("/", "-").Replace("\\", "-").Replace("'", "");
+        if (string.IsNullOrWhiteSpace(cleanName))
         {
-            return (false, "Tên thiết bị không được để trống.");
+            return (false, "", "Tên thư mục không được để trống.");
         }
 
-        string oldDeviceName = CurrentDeviceName;
-        if (oldDeviceName.Equals(trimmed, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(_config.CachedDeviceFolderId))
+        string? token = await EnsureValidAccessTokenAsync(ct);
+        if (string.IsNullOrEmpty(token)) return (false, "", "Chưa đăng nhập hoặc không lấy được token Google Drive.");
+
+        string? appFolderId = await EnsureTargetFolderAsync(ct);
+        if (string.IsNullOrEmpty(appFolderId)) return (false, "", "Không thể kết nối thư mục chính \\GMTPC\\Comic Downloader GMTPC\\.");
+
+        try
         {
-            return (true, $"Tên thiết bị đã là [{trimmed}].");
+            // Kiểm tra xem trên Google Drive đã có thư mục mang tên này chưa
+            string? existingFolderId = await FindFolderByNameInAppOrDevicesAsync(cleanName, appFolderId, token, ct);
+            if (!string.IsNullOrEmpty(existingFolderId))
+            {
+                // Nếu đã có sẵn trên Drive: Không báo lỗi, mà lập tức liên kết thiết bị với thư mục này!
+                SelectActiveFolder(existingFolderId, cleanName);
+                return (true, existingFolderId, $"Đã nhận diện và liên kết với thư mục [{cleanName}] có sẵn trên Google Drive.");
+            }
+
+            // Nếu chưa có: Tạo mới thư mục trên Google Drive
+            string? createdId = await FindOrCreateFolderAsync(cleanName, appFolderId, token, ct);
+            if (!string.IsNullOrEmpty(createdId))
+            {
+                SelectActiveFolder(createdId, cleanName);
+                return (true, createdId, $"Đã tạo mới thư mục [{cleanName}] trên Google Drive thành công.");
+            }
+
+            return (false, "", $"Không thể tạo thư mục [{cleanName}] trên Google Drive.");
+        }
+        catch (Exception ex)
+        {
+            return (false, "", $"Lỗi xử lý thư mục: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Đổi tên (rename) thư mục Google Drive trực tiếp qua REST API v3 PATCH.
+    /// Bảo toàn toàn bộ dữ liệu tệp tin bên trong và giữ nguyên FolderId để tiếp tục sao lưu / phục hồi.
+    /// </summary>
+    public async Task<(bool Success, string Message)> RenameCloudFolderAsync(string newFolderName, CancellationToken ct = default)
+    {
+        string cleanName = newFolderName?.Trim() ?? string.Empty;
+        cleanName = cleanName.Replace("/", "-").Replace("\\", "-").Replace("'", "");
+        if (string.IsNullOrWhiteSpace(cleanName))
+        {
+            return (false, "Tên thư mục không được để trống.");
         }
 
-        // Cập nhật tên trong config cục bộ
-        _config.CustomDeviceName = trimmed;
+        string oldName = CurrentDeviceName;
+        if (oldName.Equals(cleanName, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(_config.CachedDeviceFolderId))
+        {
+            return (true, $"Tên thư mục đã là [{cleanName}].");
+        }
+
+        // Cập nhật tên trong cấu hình cục bộ
+        _config.CustomDeviceName = cleanName;
         SaveConfigToDisk();
 
         if (!IsConnected)
         {
-            NotifyStatusChanged($"Đã đổi tên thiết bị cục bộ thành: [{trimmed}]");
-            return (true, $"Đã đổi tên thiết bị cục bộ thành [{trimmed}].");
+            NotifyStatusChanged($"Đã đổi tên thiết bị cục bộ thành: [{cleanName}]");
+            return (true, $"Đã đổi tên thiết bị cục bộ thành [{cleanName}].");
         }
 
         string? token = await EnsureValidAccessTokenAsync(ct);
@@ -1026,88 +1082,51 @@ p {{ color: #94A3B8; font-size: 14px; }}
             return (false, "Không thể lấy token xác thực Google Drive.");
         }
 
-        string? appFolderId = await EnsureTargetFolderAsync(ct);
-        if (string.IsNullOrEmpty(appFolderId))
+        string? targetFolderId = _config.CachedDeviceFolderId;
+        if (string.IsNullOrEmpty(targetFolderId))
         {
-            return (false, "Không thể kết nối thư mục chính trên Google Drive.");
+            targetFolderId = await EnsureCurrentDeviceFolderAsync(ct);
+        }
+
+        if (string.IsNullOrEmpty(targetFolderId))
+        {
+            return (false, "Không xác định được ID thư mục cần đổi tên trên Google Drive.");
         }
 
         try
         {
-            // 1. Tìm thư mục hiện tại của thiết bị (dựa vào cached ID hoặc tên cũ)
-            string? currentFolderId = _config.CachedDeviceFolderId;
-            bool currentFolderValid = false;
+            // Đổi tên thư mục trên Google Drive qua REST API v3 PATCH
+            var patchBody = new { name = cleanName };
+            using var patchReq = new HttpRequestMessage(HttpMethod.Patch, $"{GoogleDriveApiBase}/files/{targetFolderId}");
+            patchReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            patchReq.Content = new StringContent(JsonSerializer.Serialize(patchBody), Encoding.UTF8, "application/json");
 
-            if (!string.IsNullOrEmpty(currentFolderId))
+            using var patchRes = await _httpClient.SendAsync(patchReq, ct);
+            if (!patchRes.IsSuccessStatusCode)
             {
-                using var checkReq = new HttpRequestMessage(HttpMethod.Get, $"{GoogleDriveApiBase}/files/{currentFolderId}?fields=id,name,trashed");
-                checkReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                using var checkRes = await _httpClient.SendAsync(checkReq, ct);
-                if (checkRes.IsSuccessStatusCode)
-                {
-                    string checkJson = await checkRes.Content.ReadAsStringAsync(ct);
-                    using var doc = JsonDocument.Parse(checkJson);
-                    bool trashed = doc.RootElement.TryGetProperty("trashed", out var tr) && tr.GetBoolean();
-                    if (!trashed) currentFolderValid = true;
-                }
+                string err = await patchRes.Content.ReadAsStringAsync(ct);
+                return (false, $"Lỗi đổi tên thư mục trên Google Drive ({patchRes.StatusCode}): {err}");
             }
 
-            if (!currentFolderValid)
-            {
-                currentFolderId = await FindFolderByNameInAppOrDevicesAsync(oldDeviceName, appFolderId, token, ct);
-            }
+            _config.CachedDeviceFolderId = targetFolderId;
+            _config.CustomDeviceName = cleanName;
+            SaveConfigToDisk();
 
-            // 2. Kiểm tra xem trên Drive đã có thư mục mang tên mới 'trimmed' chưa
-            string? existingNewFolderId = await FindFolderByNameInAppOrDevicesAsync(trimmed, appFolderId, token, ct);
-
-            if (!string.IsNullOrEmpty(currentFolderId))
-            {
-                if (!string.IsNullOrEmpty(existingNewFolderId) && existingNewFolderId != currentFolderId)
-                {
-                    // Trường hợp cả hai thư mục đều đã tồn tại (ví dụ: đã tạo thư mục mới khi thử đổi tên trước đó)
-                    // Gộp tệp tin từ thư mục cũ sang thư mục mới
-                    await MergeDeviceFoldersAsync(currentFolderId, existingNewFolderId, token, ct);
-
-                    // Chuyển thư mục cũ vào Thùng rác (Trash) để tránh trùng lặp
-                    await TrashFileAsync(currentFolderId, token, ct);
-
-                    _config.CachedDeviceFolderId = existingNewFolderId;
-                    SaveConfigToDisk();
-                }
-                else
-                {
-                    // Đổi tên thư mục cũ trên Google Drive qua lệnh PATCH
-                    var patchBody = new { name = trimmed };
-                    using var patchReq = new HttpRequestMessage(HttpMethod.Patch, $"{GoogleDriveApiBase}/files/{currentFolderId}");
-                    patchReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                    patchReq.Content = new StringContent(JsonSerializer.Serialize(patchBody), Encoding.UTF8, "application/json");
-
-                    using var patchRes = await _httpClient.SendAsync(patchReq, ct);
-                    if (!patchRes.IsSuccessStatusCode)
-                    {
-                        string err = await patchRes.Content.ReadAsStringAsync(ct);
-                        return (false, $"Lỗi đổi tên thư mục trên Google Drive ({patchRes.StatusCode}): {err}");
-                    }
-
-                    _config.CachedDeviceFolderId = currentFolderId;
-                    SaveConfigToDisk();
-                }
-
-                NotifyStatusChanged($"Đã đổi tên thư mục thiết bị trên Google Drive thành: [{trimmed}]");
-                return (true, $"Đã tự động đổi tên thư mục thiết bị trên Google Drive thành [{trimmed}].");
-            }
-            else
-            {
-                // Thư mục chưa có trên Drive, khởi tạo thư mục mới với tên đã đổi
-                string? newId = await EnsureCurrentDeviceFolderAsync(ct);
-                NotifyStatusChanged($"Đã thiết lập tên thiết bị mới: [{trimmed}]");
-                return (true, $"Đã cập nhật tên thiết bị thành [{trimmed}].");
-            }
+            NotifyStatusChanged($"Đã đổi tên thư mục trên Google Drive thành: [{cleanName}]");
+            return (true, $"Đã đổi tên thư mục trên Google Drive thành [{cleanName}] thành công.");
         }
         catch (Exception ex)
         {
             return (false, $"Ngoại lệ khi đổi tên thư mục: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Alias đổi tên thiết bị / thư mục để tương thích ngược.
+    /// </summary>
+    public Task<(bool Success, string Message)> RenameDeviceFolderAsync(string newCustomName, CancellationToken ct = default)
+    {
+        return RenameCloudFolderAsync(newCustomName, ct);
     }
 
     private async Task<string?> FindFolderByNameAsync(string folderName, string parentId, string token, CancellationToken ct)

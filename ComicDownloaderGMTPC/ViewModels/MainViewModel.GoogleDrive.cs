@@ -40,6 +40,12 @@ public partial class MainViewModel
     [ObservableProperty]
     private string _customDeviceNameInput = string.Empty;
 
+    [ObservableProperty]
+    private bool _isCreatingNewFolder;
+
+    [ObservableProperty]
+    private string _newFolderNameInput = string.Empty;
+
     public ObservableCollection<GoogleDriveDeviceSlot> AvailableCloudDevices { get; } = new();
 
     [ObservableProperty]
@@ -91,6 +97,13 @@ public partial class MainViewModel
         if (value != null)
         {
             UpdateCloudFileInfoDisplay(value.QueueCloudFile, value.ReaderCloudFile);
+
+            // Khi người dùng chọn một folder từ danh sách, tự động liên kết thiết bị với thư mục đó
+            if (!string.IsNullOrEmpty(value.DeviceFolderId) && !value.IsLegacyRoot)
+            {
+                _gdriveService.SelectActiveFolder(value.DeviceFolderId, value.DeviceFolderName);
+                CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
+            }
         }
     }
 
@@ -120,10 +133,70 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
+    public void StartCreateNewFolder()
+    {
+        NewFolderNameInput = string.Empty;
+        IsCreatingNewFolder = true;
+        IsRenamingDevice = false;
+    }
+
+    [RelayCommand]
+    public void CancelCreateNewFolder()
+    {
+        IsCreatingNewFolder = false;
+        NewFolderNameInput = string.Empty;
+    }
+
+    [RelayCommand]
+    public async Task CreateNewCloudFolderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewFolderNameInput))
+        {
+            GoogleDriveStatusText = "⚠️ Vui lòng nhập tên thư mục mới.";
+            return;
+        }
+
+        string folderName = NewFolderNameInput.Trim();
+        IsGoogleDriveBusy = true;
+        GoogleDriveStatusText = $"⏳ Đang tạo/nhận diện thư mục [{folderName}] trên Google Drive...";
+        try
+        {
+            var (ok, folderId, msg) = await _gdriveService.CreateOrSelectCloudFolderAsync(folderName);
+            IsCreatingNewFolder = false;
+            NewFolderNameInput = string.Empty;
+            CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
+
+            if (ok)
+            {
+                GoogleDriveStatusText = "✅ " + msg;
+                AddLog("SUCCESS", $"☁️ {msg}");
+                ShowCenterToast("THƯ MỤC GOOGLE DRIVE", msg, "📁", "GOOGLE DRIVE", 3000);
+            }
+            else
+            {
+                GoogleDriveStatusText = "❌ " + msg;
+                AddLog("ERROR", $"☁️ {msg}");
+                ShowCenterToast("LỖI TẠO THƯ MỤC", msg, "❌", "GOOGLE DRIVE", 3200);
+            }
+
+            await RefreshGoogleDriveStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            GoogleDriveStatusText = $"❌ Lỗi: {ex.Message}";
+        }
+        finally
+        {
+            IsGoogleDriveBusy = false;
+        }
+    }
+
+    [RelayCommand]
     public void StartRenameDevice()
     {
         CustomDeviceNameInput = _gdriveService.CurrentDeviceName;
         IsRenamingDevice = true;
+        IsCreatingNewFolder = false;
     }
 
     [RelayCommand]
@@ -139,23 +212,23 @@ public partial class MainViewModel
         }
 
         IsGoogleDriveBusy = true;
-        GoogleDriveStatusText = $"⏳ Đang cập nhật và đổi tên thư mục thiết bị [{newName}] trên Google Drive...";
+        GoogleDriveStatusText = $"⏳ Đang cập nhật và đổi tên thư mục [{newName}] trên Google Drive...";
         try
         {
-            var (ok, msg) = await _gdriveService.RenameDeviceFolderAsync(newName);
+            var (ok, msg) = await _gdriveService.RenameCloudFolderAsync(newName);
             CurrentDeviceDisplayName = _gdriveService.CurrentDeviceName;
             IsRenamingDevice = false;
             if (ok)
             {
                 GoogleDriveStatusText = "✅ " + msg;
                 AddLog("SUCCESS", $"☁️ {msg}");
-                ShowCenterToast("ĐỔI TÊN THIẾT BỊ", msg, "🖥️", "GOOGLE DRIVE", 3000);
+                ShowCenterToast("ĐỔI TÊN THƯ MỤC", msg, "📁", "GOOGLE DRIVE", 3000);
             }
             else
             {
                 GoogleDriveStatusText = "⚠️ " + msg;
                 AddLog("WARN", $"☁️ {msg}");
-                ShowCenterToast("ĐỔI TÊN THIẾT BỊ", msg, "⚠️", "GOOGLE DRIVE", 3000);
+                ShowCenterToast("ĐỔI TÊN THƯ MỤC", msg, "⚠️", "GOOGLE DRIVE", 3000);
             }
             await RefreshGoogleDriveStatusAsync();
         }
