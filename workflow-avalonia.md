@@ -3504,3 +3504,21 @@ ar_pages/ theo LRU (xóa nguyên folder session giải phóng hàng trăm MB đ�
          - Khi mất focus (`IsTypingInTextBox == false`), hoàn trả vùng cử chỉ hệ thống về mặc định.
       3. **Tầng Chặn Phím Điều Hướng & AppSwitch Hệ Thống (`MainActivity.cs`, `ComicReaderActivity.cs`)**:
          - Override `DispatchKeyEvent`: Khi `IsTypingInTextBox == true`, chặn đứng `Keycode.AppSwitch` và các phím `DpadLeft`, `DpadRight`, `DpadUp`, `DpadDown`, `Tab` không để thoát ra ngoài Activity gây kích hoạt task switcher.
+
+29. **Tối Ưu Responsive WrapPanel Tab Gộp File Lẻ & Chuẩn Hóa Mở Trang Đầu Cho Chương Chưa Xem Trong Reader Kèm Làm Mới Seekbar (`MainView.axaml`, `ComicReaderViewModel.cs`, `ComicReaderControl.axaml.cs`, `MainActivity.cs`)**:
+    - **Giao Diện Responsive WrapPanel Tab Gộp File Lẻ (`MainView.axaml`)**:
+      + Bọc toàn bộ vùng điều khiển và cấu hình bên trong `ScrollViewer VerticalScrollBarVisibility="Auto"`, cho phép cuộn tự do và hiển thị đầy đủ mọi nút bấm trên các thiết bị màn hình nhỏ hoặc khi bật bàn phím ảo.
+      + Tiêu đề thư mục nguồn và thư mục đích được cấu hình `TextWrapping="Wrap"`, cùng với cụm nút "📁 Chọn Thư Mục", "📂 Mở", "🔄 Đổi App Mở" tự động xuống hàng linh hoạt trên Android, triệt tiêu hoàn toàn lỗi bị cắt xén chuỗi `(PDF, ZIP, CB...` và `(Mặc định: thư mục 'merg...`.
+      + Tái thiết kế cụm "Số Chapter mỗi file" và khung tùy chỉnh "Hoặc / Tùy chỉnh: [ 50 ^ v ] chap/file" bằng `WrapPanel`: Căn chỉnh nền `#1E293B`, viền sáng `#38BDF8`, chữ số `NumericUpDown` đậm rõ ràng, tách bạch nhãn `chap/file` màu sáng `#CBD5E1`, giúp người dùng dễ nhìn, dễ tương tác và không bị đè cạnh viền.
+      + Toàn bộ RadioButton định dạng xuất và ghi chú thông minh đều hỗ trợ ngắt dòng co giãn thích ứng.
+    - **Quy Tắc Cốt Lõi: Mở Trang Đầu (Index 0) Cho Chương Chưa Xem (`ComicReaderViewModel.cs`)**:
+      + Nhận diện chính xác trạng thái "Chương chưa xem": Khi `chapter.LastReadPage <= 1` (hoặc `!chapter.HasReadProgress`) và trong `_progressStore` không có tiến độ cục bộ riêng cho chapter này (`GetLastReadPage <= 1`).
+      + Khi người dùng chủ động chọn chương chưa xem từ danh sách chương (Chapter Drawer / ComboBox / Next Chapter): Bắt buộc gán `savedPageIndex = 0` và `startIndex = 0`, triệt tiêu hoàn toàn việc lấy nhầm tiến độ đọc dở của chương khác từ `resumeEntry` của toàn bộ truyện.
+      + Ngay khi bắt đầu nạp chương (`LoadChapterInternalAsync`), lập tức reset `CurrentPageIndex = 0`, làm sạch visual cũ và triệt tiêu quán tính cuộn.
+    - **Làm Mới & Đồng Bộ Tuyệt Đối Thanh Seekbar / Slider Trong Reader (`ComicReaderViewModel.cs`, `ComicReaderControl.axaml.cs`)**:
+      + Bổ sung event `RefreshScrubberRequested` trong `ComicReaderViewModel` và hàm xử lý `RefreshScrubberSlider()` trong `ComicReaderControl.axaml.cs`.
+      + `RefreshScrubberSlider()` đồng bộ cưỡng bức `scrubber.Minimum = 0`, `scrubber.Maximum = Math.Max(0, vm.TotalPages - 1)` và `scrubber.Value = vm.CurrentPageIndex`, gọi `InvalidateVisual()` và `InvalidateArrange()` để Thumb của thanh trượt luôn hiển thị chuẩn xác 100% tại trang 1 ngay khi chuyển sang chương mới.
+      + Lắng nghe đồng bộ tự động khi `CurrentPageIndex`, `TotalPages`, `MaxPageIndex` thay đổi hoặc khi hoàn tất nạp chapter (`IsLoadingChapter == false`).
+    - **Sửa Lỗi Khởi Tạo AlertDialog & FileCreationMode Trên Android (`MainActivity.cs`)**:
+      + Thay thế đúng enum chuẩn `FileCreationMode.Private` cho `GetSharedPreferences`.
+      + Bổ sung null check an toàn `dialog?.Show()`, đảm bảo biên dịch đạt chuẩn tuyệt đối 0 Error, 0 Warning trên toàn bộ các nền tảng.

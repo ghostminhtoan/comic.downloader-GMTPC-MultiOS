@@ -3107,85 +3107,91 @@
                             <!-- ========================================================================= -->
                             <TabItem Header="📚 Gộp File Lẻ (Merger)" FontSize="12" FontWeight="SemiBold">
                                 <Grid RowDefinitions="Auto, *">
-                                    <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
-                                        <StackPanel Spacing="10">
-                                            <!-- Hàng 1: Thư mục nguồn chứa các file chương lẻ (PDF, ZIP, CBZ, RAR, CBR, MOBI) -->
-                                            <StackPanel Spacing="3">
-                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="📥 Thư mục chứa các file chương lẻ (PDF, ZIP, CBZ, RAR, CBR, MOBI):" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                    <Button Command="{Binding BrowseMergeInputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Chọn thư mục chứa các file chapter lẻ của bộ truyện" />
-                                                    <Button Command="{Binding OpenMergeInputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
-                                                </WrapPanel>
-                                                <TextBox Text="{Binding MergeInputFolderPath}" PlaceholderText="Chọn thư mục chứa các file chương lẻ (.pdf, .zip, .cbz, .rar, .cbr, .mobi)..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
-                                            </StackPanel>
-
-                                            <!-- Hàng 2: Thư mục lưu kết quả gộp -->
-                                            <StackPanel Spacing="3">
-                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="📤 Thư mục lưu file gộp (Mặc định: thư mục 'merged' cùng cấp với nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                    <Button Command="{Binding BrowseMergeOutputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
-                                                    <Button Command="{Binding OpenMergeOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu file sau khi gộp" />
-                                                    <Button Command="{Binding ResetAndroidFolderOpenerCommand}" Content="🔄 Đổi App Mở" Background="#1E293B" Foreground="#F59E0B" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="6,0,0,0" ToolTip.Tip="Đặt lại ứng dụng mở thư mục mặc định trên Android để chọn app khác" />
-                                                </WrapPanel>
-                                                <TextBox Text="{Binding MergeOutputFolderPath}" PlaceholderText="Chọn thư mục lưu file gộp (để trống sẽ tự tạo thư mục 'merged')..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
-                                            </StackPanel>
-
-                                            <!-- Hàng 3: Cấu hình mốc chapter gom nhóm & Định dạng xuất -->
-                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <!-- Mốc gom nhóm Chapter -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="10,6" Margin="0,0,8,6" VerticalAlignment="Center">
+                                    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <Border Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                                            <StackPanel Spacing="10">
+                                                <!-- Hàng 1: Thư mục nguồn chứa các file chương lẻ (PDF, ZIP, CBZ, RAR, CBR, MOBI) -->
+                                                <StackPanel Spacing="3">
                                                     <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <TextBlock Text="Số Chapter mỗi file:" Foreground="#F59E0B" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                        <Button Command="{Binding SetMergeChunk100Command}" Content="100 Chap" Background="#1E293B" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,0,4,0" ToolTip.Tip="Gộp 100 chap/file (1-100, 101-200, 201-300... file cuối biến thiên theo chap cuối)" />
-                                                        <Button Command="{Binding SetMergeChunk200Command}" Content="200 Chap" Background="#1E293B" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,0,4,0" ToolTip.Tip="Gộp 200 chap/file (1-200, 201-400, 401-600... file cuối biến thiên theo chap cuối)" />
-                                                        <Button Command="{Binding SetMergeChunk300Command}" Content="300 Chap" Background="#1E293B" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,0,4,0" ToolTip.Tip="Gộp 300 chap/file (1-300, 301-600, 601-900... file cuối biến thiên theo chap cuối)" />
-                                                        <Button Command="{Binding SetMergeChunkAllCommand}" Content="Tất cả (1 File)" Background="#1E293B" Foreground="#10B981" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Gộp toàn bộ các chương của truyện vào duy nhất 1 file lớn" />
-                                                        
-                                                        <Border Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="4,0,0,0" VerticalAlignment="Center">
-                                                            <Border.Styles>
-                                                                <Style Selector="NumericUpDown /template/ TextBox#PART_TextBox">
-                                                                    <Setter Property="Foreground" Value="#38BDF8" />
-                                                                    <Setter Property="Background" Value="Transparent" />
-                                                                    <Setter Property="VerticalContentAlignment" Value="Center" />
-                                                                    <Setter Property="HorizontalContentAlignment" Value="Center" />
-                                                                    <Setter Property="FontWeight" Value="Bold" />
-                                                                </Style>
-                                                            </Border.Styles>
-                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
-                                                                <TextBlock Text="Hoặc" Foreground="#FBBF24" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
-                                                                <CheckBox IsChecked="{Binding IsMergeCustomChunk}" Content="Tùy chỉnh:" Foreground="#FFFFFF" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
-                                                                <NumericUpDown Value="{Binding MergeCustomChunkInput}" Minimum="1" Maximum="9999" Increment="10" FormatString="0" ParsingNumberStyle="Integer"
-                                                                               Width="95" Height="28" FontSize="12" FontWeight="Bold"
-                                                                               Foreground="#38BDF8" Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4"
-                                                                               HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                                                               VerticalAlignment="Center" ToolTip.Tip="Nhập số chapter tùy ý cho mỗi file gộp (ví dụ: 50, 150...)" />
-                                                                <TextBlock Text="chap/file" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
-                                                            </StackPanel>
-                                                        </Border>
+                                                        <TextBlock Text="📥 Thư mục chứa các file chương lẻ (PDF, ZIP, CBZ, RAR, CBR, MOBI):" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" TextWrapping="Wrap" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+                                                            <Button Command="{Binding BrowseMergeInputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Chọn thư mục chứa các file chapter lẻ của bộ truyện" />
+                                                            <Button Command="{Binding OpenMergeInputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
+                                                        </WrapPanel>
+                                                    </WrapPanel>
+                                                    <TextBox Text="{Binding MergeInputFolderPath}" PlaceholderText="Chọn thư mục chứa các file chương lẻ (.pdf, .zip, .cbz, .rar, .cbr, .mobi)..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                </StackPanel>
+
+                                                <!-- Hàng 2: Thư mục lưu kết quả gộp -->
+                                                <StackPanel Spacing="3">
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="📤 Thư mục lưu file gộp (Mặc định: thư mục 'merged' cùng cấp với nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" TextWrapping="Wrap" />
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+                                                            <Button Command="{Binding BrowseMergeOutputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                            <Button Command="{Binding OpenMergeOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu file sau khi gộp" />
+                                                            <Button Command="{Binding ResetAndroidFolderOpenerCommand}" Content="🔄 Đổi App Mở" Background="#1E293B" Foreground="#F59E0B" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="6,0,0,0" ToolTip.Tip="Đặt lại ứng dụng mở thư mục mặc định trên Android để chọn app khác" />
+                                                        </WrapPanel>
+                                                    </WrapPanel>
+                                                    <TextBox Text="{Binding MergeOutputFolderPath}" PlaceholderText="Chọn thư mục lưu file gộp (để trống sẽ tự tạo thư mục 'merged')..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                </StackPanel>
+
+                                                <!-- Hàng 3: Cấu hình mốc chapter gom nhóm & Định dạng xuất -->
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <!-- Mốc gom nhóm Chapter -->
+                                                    <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="10,6" Margin="0,0,8,6" VerticalAlignment="Center">
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="Số Chapter mỗi file:" Foreground="#F59E0B" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,2,8,2" />
+                                                            <Button Command="{Binding SetMergeChunk100Command}" Content="100 Chap" Background="#1E293B" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,2,4,2" ToolTip.Tip="Gộp 100 chap/file (1-100, 101-200, 201-300... file cuối biến thiên theo chap cuối)" />
+                                                            <Button Command="{Binding SetMergeChunk200Command}" Content="200 Chap" Background="#1E293B" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,2,4,2" ToolTip.Tip="Gộp 200 chap/file (1-200, 201-400, 401-600... file cuối biến thiên theo chap cuối)" />
+                                                            <Button Command="{Binding SetMergeChunk300Command}" Content="300 Chap" Background="#1E293B" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,2,4,2" ToolTip.Tip="Gộp 300 chap/file (1-300, 301-600, 601-900... file cuối biến thiên theo chap cuối)" />
+                                                            <Button Command="{Binding SetMergeChunkAllCommand}" Content="Tất cả (1 File)" Background="#1E293B" Foreground="#10B981" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,2,6,2" ToolTip.Tip="Gộp toàn bộ các chương của truyện vào duy nhất 1 file lớn" />
+                                                            
+                                                            <Border Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1.5" CornerRadius="5" Padding="8,3" Margin="2,2,0,2" VerticalAlignment="Center">
+                                                                <Border.Styles>
+                                                                    <Style Selector="NumericUpDown /template/ TextBox#PART_TextBox">
+                                                                        <Setter Property="Foreground" Value="#38BDF8" />
+                                                                        <Setter Property="Background" Value="#0F172A" />
+                                                                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                                        <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                                                        <Setter Property="FontWeight" Value="Bold" />
+                                                                        <Setter Property="FontSize" Value="12" />
+                                                                    </Style>
+                                                                </Border.Styles>
+                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <TextBlock Text="Hoặc" Foreground="#FBBF24" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                                    <CheckBox IsChecked="{Binding IsMergeCustomChunk}" Content="Tùy chỉnh:" Foreground="#FFFFFF" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                                    <NumericUpDown Value="{Binding MergeCustomChunkInput}" Minimum="1" Maximum="9999" Increment="10" FormatString="0" ParsingNumberStyle="Integer"
+                                                                                   Width="80" Height="28" FontSize="12" FontWeight="Bold"
+                                                                                   Foreground="#38BDF8" Background="#0F172A" BorderBrush="#0284C7" BorderThickness="1.5" CornerRadius="4"
+                                                                                   HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                                                                   VerticalAlignment="Center" Margin="0,0,6,0" ToolTip.Tip="Nhập số chapter tùy ý cho mỗi file gộp (ví dụ: 50, 150...)" />
+                                                                    <TextBlock Text="chap/file" Foreground="#CBD5E1" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                </WrapPanel>
+                                                            </Border>
+                                                        </WrapPanel>
+                                                    </Border>
+
+                                                    <!-- Định dạng xuất -->
+                                                    <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="10,6" Margin="0,0,8,6" VerticalAlignment="Center">
+                                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="Định dạng xuất:" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,2,8,2" />
+                                                            <RadioButton Content="CBZ (.cbz)" IsChecked="{Binding IsMergeFormatCbz}" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,2,10,2" ToolTip.Tip="Định dạng Comic Book Archive chuẩn quốc tế (được hỗ trợ bởi mọi app đọc truyện)" />
+                                                            <RadioButton Content="ZIP (.zip)" IsChecked="{Binding IsMergeFormatZip}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,2,10,2" ToolTip.Tip="Định dạng file nén ZIP tiêu chuẩn" />
+                                                            <RadioButton Content="PDF (.pdf)" IsChecked="{Binding IsMergeFormatPdf}" Foreground="#EC4899" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,2,10,2" ToolTip.Tip="Tài liệu PDF kèm Mục Lục Bookmarks từng chapter (Đọc trên mọi thiết bị)" />
+                                                            <RadioButton Content="MOBI (.mobi)" IsChecked="{Binding IsMergeFormatMobi}" Foreground="#10B981" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,2,0,2" ToolTip.Tip="Định dạng sách điện tử Kindle MOBI đa chương chuẩn quốc tế" />
+                                                        </WrapPanel>
+                                                    </Border>
+                                                </WrapPanel>
+
+                                                <!-- Hàng 4: Ghi chú tiêu chuẩn xử lý thông minh -->
+                                                <Border Background="#0B132B" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,5">
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="💡 Ghi chú thông minh:" Foreground="#FBBF24" FontSize="10" FontWeight="Bold" Margin="0,2,8,2" VerticalAlignment="Center" />
+                                                        <TextBlock Text="• Giữ nguyên từng thư mục chapter bên trong file nén để dễ đọc, không xả ảnh lung tung." Foreground="#94A3B8" FontSize="10" Margin="0,2,12,2" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                                        <TextBlock Text="• Gom theo số chapter thực tế (chap số thập phân 100.1, 100.5 đều nằm gọn ở mốc 1-100)." Foreground="#94A3B8" FontSize="10" Margin="0,2,12,2" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                                        <TextBlock Text="• File cuối cùng luôn tự động biến thiên theo chap cuối thực tế (ví dụ: 201-330 hoặc 201-351)." Foreground="#94A3B8" FontSize="10" Margin="0,2,0,2" VerticalAlignment="Center" TextWrapping="Wrap" />
                                                     </WrapPanel>
                                                 </Border>
-
-                                                <!-- Định dạng xuất -->
-                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="10,6" Margin="0,0,8,6" VerticalAlignment="Center">
-                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <TextBlock Text="Định dạng xuất:" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                        <RadioButton Content="CBZ (.cbz)" IsChecked="{Binding IsMergeFormatCbz}" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Định dạng Comic Book Archive chuẩn quốc tế (được hỗ trợ bởi mọi app đọc truyện)" />
-                                                        <RadioButton Content="ZIP (.zip)" IsChecked="{Binding IsMergeFormatZip}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Định dạng file nén ZIP tiêu chuẩn" />
-                                                        <RadioButton Content="PDF (.pdf)" IsChecked="{Binding IsMergeFormatPdf}" Foreground="#EC4899" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Tài liệu PDF kèm Mục Lục Bookmarks từng chapter (Đọc trên mọi thiết bị)" />
-                                                        <RadioButton Content="MOBI (.mobi)" IsChecked="{Binding IsMergeFormatMobi}" Foreground="#10B981" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" ToolTip.Tip="Định dạng sách điện tử Kindle MOBI đa chương chuẩn quốc tế" />
-                                                    </WrapPanel>
-                                                </Border>
-                                            </WrapPanel>
-
-                                            <!-- Hàng 4: Ghi chú tiêu chuẩn xử lý thông minh -->
-                                            <Border Background="#0B132B" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,5">
-                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="💡 Ghi chú thông minh:" Foreground="#FBBF24" FontSize="10" FontWeight="Bold" Margin="0,0,8,0" VerticalAlignment="Center" />
-                                                    <TextBlock Text="• Giữ nguyên từng thư mục chapter bên trong file nén để dễ đọc, không xả ảnh lung tung." Foreground="#94A3B8" FontSize="10" Margin="0,0,12,0" VerticalAlignment="Center" />
-                                                    <TextBlock Text="• Gom theo số chapter thực tế (chap số thập phân 100.1, 100.5 đều nằm gọn ở mốc 1-100)." Foreground="#94A3B8" FontSize="10" Margin="0,0,12,0" VerticalAlignment="Center" />
-                                                    <TextBlock Text="• File cuối cùng luôn tự động biến thiên theo chap cuối thực tế (ví dụ: 201-330 hoặc 201-351)." Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
-                                                </WrapPanel>
-                                            </Border>
 
                                             <!-- Hàng 5: Nút hành động -->
                                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -3232,6 +3238,7 @@
                                             </Border>
                                         </StackPanel>
                                     </Border>
+                                </ScrollViewer>
 
                                     <!-- Log chi tiết -->
                                     <Border Grid.Row="1" Background="#0A0E17" Padding="6" MinHeight="180">

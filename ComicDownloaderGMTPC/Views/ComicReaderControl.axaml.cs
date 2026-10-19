@@ -1182,6 +1182,7 @@ public partial class ComicReaderControl : UserControl
             _subscribedVm.ScrollToPageRequested -= OnVmScrollToPageRequested;
             _subscribedVm.AutoScrollStepRequested -= OnVmAutoScrollStepRequested;
             _subscribedVm.PageButtonAreaScrollRequested -= OnVmPageButtonAreaScrollRequested;
+            _subscribedVm.RefreshScrubberRequested -= OnVmRefreshScrubberRequested;
             _subscribedVm.PropertyChanged -= OnVmPropertyChanged;
             _subscribedVm = null;
         }
@@ -1192,6 +1193,7 @@ public partial class ComicReaderControl : UserControl
             vm.ScrollToPageRequested += OnVmScrollToPageRequested;
             vm.AutoScrollStepRequested += OnVmAutoScrollStepRequested;
             vm.PageButtonAreaScrollRequested += OnVmPageButtonAreaScrollRequested;
+            vm.RefreshScrubberRequested += OnVmRefreshScrubberRequested;
             vm.PropertyChanged += OnVmPropertyChanged;
             if (Bounds.Width > 0 && Bounds.Height > 0)
             {
@@ -1201,30 +1203,80 @@ public partial class ComicReaderControl : UserControl
             {
                 OnVmScrollToPageRequested(vm.CurrentPageIndex);
             }
+            RefreshScrubberSlider();
         }
+    }
+
+    private void OnVmRefreshScrubberRequested()
+    {
+        RefreshScrubberSlider();
+    }
+
+    /// <summary>
+    /// Đồng bộ và làm mới thanh seekbar (Slider) theo đúng chỉ số trang và tổng số trang hiện tại của ViewModel.
+    /// Triệt tiêu hoàn toàn lỗi lệch thanh trượt khi đổi chương hoặc khi mở chương chưa xem.
+    /// </summary>
+    public void RefreshScrubberSlider()
+    {
+        if (_isUserDraggingScrubber) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_isUserDraggingScrubber) return;
+            var scrubber = this.FindControl<Slider>("PageScrubberSlider");
+            if (scrubber != null && DataContext is ComicReaderViewModel vm)
+            {
+                double max = Math.Max(0, vm.TotalPages - 1);
+                double targetVal = Math.Clamp(vm.CurrentPageIndex, 0, max);
+                scrubber.Minimum = 0;
+                if (Math.Abs(scrubber.Maximum - max) > 0.001)
+                {
+                    scrubber.Maximum = max;
+                }
+                if (Math.Abs(scrubber.Value - targetVal) > 0.001)
+                {
+                    scrubber.Value = targetVal;
+                }
+                scrubber.InvalidateVisual();
+                scrubber.InvalidateArrange();
+            }
+        }, DispatcherPriority.Render);
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ComicReaderViewModel.IsLoadingChapter))
+        if (e.PropertyName == nameof(ComicReaderViewModel.CurrentPageIndex) ||
+            e.PropertyName == nameof(ComicReaderViewModel.TotalPages) ||
+            e.PropertyName == nameof(ComicReaderViewModel.MaxPageIndex))
         {
-            if (DataContext is ComicReaderViewModel vm && vm.IsLoadingChapter)
+            RefreshScrubberSlider();
+        }
+        else if (e.PropertyName == nameof(ComicReaderViewModel.IsLoadingChapter))
+        {
+            if (DataContext is ComicReaderViewModel vm)
             {
-                StopKineticScroll();
-                _isProgrammaticScroll = true;
-                _suppressScrollChangedUntilTick = Environment.TickCount64 + 2500;
-                var sv = GetReaderScrollViewer();
-                if (sv != null)
+                if (vm.IsLoadingChapter)
                 {
-                    sv.Offset = Vector.Zero;
+                    StopKineticScroll();
+                    _isProgrammaticScroll = true;
+                    _suppressScrollChangedUntilTick = Environment.TickCount64 + 2500;
+                    var sv = GetReaderScrollViewer();
+                    if (sv != null)
+                    {
+                        sv.Offset = Vector.Zero;
+                    }
+                    var flipSv = GetFlipScrollViewer();
+                    if (flipSv != null)
+                    {
+                        flipSv.Offset = Vector.Zero;
+                    }
+                    _cumulativeOverscrollX = 0;
+                    _cumulativeOverscrollY = 0;
+                    RefreshScrubberSlider();
                 }
-                var flipSv = GetFlipScrollViewer();
-                if (flipSv != null)
+                else
                 {
-                    flipSv.Offset = Vector.Zero;
+                    RefreshScrubberSlider();
                 }
-                _cumulativeOverscrollX = 0;
-                _cumulativeOverscrollY = 0;
             }
         }
         else if (e.PropertyName == nameof(ComicReaderViewModel.IsOverlayVisible))
@@ -1597,6 +1649,7 @@ public partial class ComicReaderControl : UserControl
                     if (reqVersion == _scrollRequestVersion)
                     {
                         _isProgrammaticScroll = false;
+                        RefreshScrubberSlider();
                     }
                 },
                 Avalonia.Threading.DispatcherPriority.Background);

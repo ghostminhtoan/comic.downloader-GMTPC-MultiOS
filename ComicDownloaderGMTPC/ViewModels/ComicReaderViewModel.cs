@@ -2317,6 +2317,9 @@ public partial class ComicReaderViewModel : ViewModelBase
     public event Action<int>? ScrollToPageRequested;
     public event Action<bool>? FullScreenChangedRequested;
     public event Action? CloseRequested;
+    public event Action? RefreshScrubberRequested;
+
+    public void RequestRefreshScrubber() => RefreshScrubberRequested?.Invoke();
 
     public async Task InitializeAsync(LibraryComicItem? comic, LibraryChapterItem targetChapter)
     {
@@ -2504,6 +2507,17 @@ public partial class ComicReaderViewModel : ViewModelBase
         Pages.Clear();
         TotalPages = 0;
 
+        // Reset ngay lập tức CurrentPageIndex = 0 khi bắt đầu tải chương mới,
+        // tránh lưu giữ chỉ số trang của chương trước đó gây lệch seekbar hoặc hiển thị sai
+        _suppressScrollSync = true;
+        CurrentPageIndex = 0;
+        OnPropertyChanged(nameof(CurrentPageIndex));
+        OnPropertyChanged(nameof(MaxPageIndex));
+        OnPropertyChanged(nameof(TotalPages));
+        OnPropertyChanged(nameof(ComicScreenPageBadgeText));
+        OnPropertyChanged(nameof(PageCounterText));
+        RequestRefreshScrubber();
+
         _suppressPdfBookmarkSelectionChanged = true;
         PdfBookmarks.Clear();
         SelectedPdfBookmark = null;
@@ -2558,42 +2572,61 @@ public partial class ComicReaderViewModel : ViewModelBase
                 }
             }
 
-            int savedPageIndex = _isNavigatingToPreviousChapter
-                ? Math.Max(0, TotalPages - 1)
-                : _progressStore.GetLastPageIndex(chapter.EffectiveProgressKey, TotalPages);
+            int savedPageIndex = 0;
 
-            // Nếu máy hiện tại chưa có tiến độ đọc cục bộ cho chapter này (savedPageIndex <= 0),
-            // kiểm tra xem chapter.LastReadPage hoặc resume.md có ghi nhận trang đọc dở không
-            if (!_isNavigatingToPreviousChapter && savedPageIndex <= 0)
+            if (_isNavigatingToPreviousChapter)
             {
-                if (chapter.LastReadPage > 1)
+                // Khi người dùng bấm nút Quay lại chương trước: mở trang cuối của chương
+                savedPageIndex = Math.Max(0, TotalPages - 1);
+            }
+            else
+            {
+                // Quy tắc cốt lõi: Kiểm tra xem chương này có phải là chương CHƯA XEM không
+                // Một chương là CHƯA XEM khi:
+                // 1. chapter.LastReadPage <= 1 (hoặc chưa từng có tiến độ đọc)
+                // 2. VÀ trong progress store không có tiến độ đọc cục bộ riêng cho chapter này (> 1)
+                bool isUnreadChapter = (chapter.LastReadPage <= 1 || !chapter.HasReadProgress) &&
+                                       (_progressStore.GetLastReadPage(chapter.EffectiveProgressKey) <= 1);
+
+                if (isUnreadChapter)
                 {
-                    savedPageIndex = Math.Clamp(chapter.LastReadPage - 1, 0, Math.Max(0, TotalPages - 1));
+                    // Các chương truyện chưa xem khi được chọn PHẢI LUÔN MỞ TRANG ĐẦU (trang 1, index 0)!
+                    savedPageIndex = 0;
                 }
                 else
                 {
-                    var resumeEntry = _progressStore.FindResumeEntryForComic(ParentComic?.Title ?? ComicTitle, chapter.LocalPath);
-                    if (resumeEntry != null && resumeEntry.LastReadPage > 1)
-                    {
-                        double chNum = ReadProgressStore.ExtractChapterNumber(chapter.Title);
-                        bool isMatching = false;
-                        if (chNum >= 0 && resumeEntry.ChapterNumber >= 0 && Math.Abs(chNum - resumeEntry.ChapterNumber) < 0.001)
-                        {
-                            isMatching = true;
-                        }
-                        else if (!string.IsNullOrWhiteSpace(resumeEntry.ChapterTitle) &&
-                                 string.Equals(ReadProgressStore.NormalizeChapterName(chapter.Title), ReadProgressStore.NormalizeChapterName(resumeEntry.ChapterTitle), StringComparison.OrdinalIgnoreCase))
-                        {
-                            isMatching = true;
-                        }
-                        else if (resumeEntry.ChapterIndex > 0 && chapter.Index == resumeEntry.ChapterIndex)
-                        {
-                            isMatching = true;
-                        }
+                    // Chương ĐÃ ĐỌC: Khôi phục lại đúng trang đang đọc dở
+                    savedPageIndex = _progressStore.GetLastPageIndex(chapter.EffectiveProgressKey, TotalPages);
 
-                        if (isMatching)
+                    if (savedPageIndex <= 0 && chapter.LastReadPage > 1)
+                    {
+                        savedPageIndex = Math.Clamp(chapter.LastReadPage - 1, 0, Math.Max(0, TotalPages - 1));
+                    }
+                    else if (savedPageIndex <= 0)
+                    {
+                        var resumeEntry = _progressStore.FindResumeEntryForComic(ParentComic?.Title ?? ComicTitle, chapter.LocalPath);
+                        if (resumeEntry != null && resumeEntry.LastReadPage > 1)
                         {
-                            savedPageIndex = Math.Clamp(resumeEntry.LastReadPage - 1, 0, Math.Max(0, TotalPages - 1));
+                            double chNum = ReadProgressStore.ExtractChapterNumber(chapter.Title);
+                            bool isMatching = false;
+                            if (chNum >= 0 && resumeEntry.ChapterNumber >= 0 && Math.Abs(chNum - resumeEntry.ChapterNumber) < 0.001)
+                            {
+                                isMatching = true;
+                            }
+                            else if (!string.IsNullOrWhiteSpace(resumeEntry.ChapterTitle) &&
+                                     string.Equals(ReadProgressStore.NormalizeChapterName(chapter.Title), ReadProgressStore.NormalizeChapterName(resumeEntry.ChapterTitle), StringComparison.OrdinalIgnoreCase))
+                            {
+                                isMatching = true;
+                            }
+                            else if (resumeEntry.ChapterIndex > 0 && chapter.Index == resumeEntry.ChapterIndex)
+                            {
+                                isMatching = true;
+                            }
+
+                            if (isMatching)
+                            {
+                                savedPageIndex = Math.Clamp(resumeEntry.LastReadPage - 1, 0, Math.Max(0, TotalPages - 1));
+                            }
                         }
                     }
                 }
@@ -2618,6 +2651,17 @@ public partial class ComicReaderViewModel : ViewModelBase
                 CurrentChapter.TotalPages = TotalPages;
                 CurrentChapter.LastReadPage = startIndex + 1;
             }
+
+            // Đồng bộ toàn bộ thông báo thuộc tính trang & seekbar
+            OnPropertyChanged(nameof(CurrentPageIndex));
+            OnPropertyChanged(nameof(TotalPages));
+            OnPropertyChanged(nameof(MaxPageIndex));
+            OnPropertyChanged(nameof(ComicScreenPageBadgeText));
+            OnPropertyChanged(nameof(PageCounterText));
+            OnPropertyChanged(nameof(ProgressPercentText));
+            OnPropertyChanged(nameof(CanGoPrevPage));
+            OnPropertyChanged(nameof(CanGoNextPage));
+            RequestRefreshScrubber();
 
             if (TotalPages > 0)
             {
@@ -2654,6 +2698,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                 {
                     RequestScrollToPage(startIndex);
                     _suppressScrollSync = false;
+                    RequestRefreshScrubber();
                 }, DispatcherPriority.Loaded);
             }
             else
@@ -2662,6 +2707,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                 {
                     RequestScrollToPage(0);
                     _suppressScrollSync = false;
+                    RequestRefreshScrubber();
                 }, DispatcherPriority.Loaded);
             }
         }
@@ -2673,6 +2719,7 @@ public partial class ComicReaderViewModel : ViewModelBase
             OnPropertyChanged(nameof(CanGoNextChapter));
             OnPropertyChanged(nameof(CanGoPrevPage));
             OnPropertyChanged(nameof(CanGoNextPage));
+            RequestRefreshScrubber();
         }
     }
 
