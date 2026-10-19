@@ -101,6 +101,10 @@ Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ,
   - Cột missing integer chapter: word wrap.
   - Progress scan song song: hiện số hoàn thành thật và số hàng vừa xong; cột `#` có checkbox + số thứ tự hàng.
   - Scan missing integer chapter: phân biệt truyện bằng link/domain; cùng link chia task chỉ quét 1 lần.
+  - Scan chap thiếu: ngoại lệ chapter số thập phân mang phần nguyên (như 16.1, 16.5) luôn phủ mốc số nguyên tương ứng (16), không bao giờ báo thiếu oan chap nguyên khi đã có các chap thập phân con.
+  - Tab Tool - Gộp File Lẻ Truyện (Archive Merger): hỗ trợ gộp các file lẻ (.pdf, .zip, .cbz, .rar, .cbr, .mobi) thành một hoặc nhiều file lớn.
+  - Cấu trúc file gộp: bắt buộc giữ từng folder chapter riêng biệt bên trong archive để đọc thuận tiện, không xả ảnh lung tung ra root.
+  - Gom nhóm theo mốc chapter cấu hình (100, 200, 300, tất cả): không tính theo tổng count; các chap thập phân (như 100.1, 100.2, 100.5) đều gom về mốc 100; tên file cuối cùng luôn biến thiên theo chapter cuối thực tế (ví dụ: 201-330 hoặc 201-351).
   - Nhiều domain cùng tên truyện: token missing integer chapter trùng giữa các domain tô màu vàng; chỉ thiếu ở 1 domain tô màu trắng.
   - Cột chap thập phân có toggle `WRAP`: tắt để tránh hàng cao (màu đỏ, không wrap); bật màu xanh (chỉ cột chap thập phân xuống dòng).
   - Cấm giữ bitmap RAM toàn cục cho preview.
@@ -3414,10 +3418,12 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + Trên Android, Path.GetTempPath() trỏ về /data/user/0/<pkg>/cache/, được hệ điều hành Android tính 100% vào mục **Bộ nhớ đệm (Cache)**. Trong khi đó, ComicDiskCacheService cũ lại đặt cache ở iles/Download/.cache (thuộc phân vùng User Data), dẫn đến việc app báo dung lượng rất nhỏ trong khi Cài đặt Android hiển thị tới 15.4 GB, và các nút dọn dẹp trong app hoàn toàn không chạm tới thư mục temp.
     - **Kiến trúc Thống Nhất Thư Mục Cache Chuẩn Hệ Điều Hành**:
       + Trên Android: _cacheRootDir được định tuyến trực tiếp vào Path.Combine(Path.GetTempPath(), 'gmtpc_cache'). Đảm bảo toàn bộ dung lượng bộ nhớ đệm của app nằm trong phân vùng Cache chính thức của Android OS, giúp số liệu trong app khớp 100% với mục Bộ nhớ đệm trong Cài đặt Android và xóa sạch tức thì khi người dùng bấm Xóa bộ nhớ đệm trong hệ thống.
-      + Cấu trúc 4 thư mục phân vùng tập trung: 	humbnails/ (ảnh bìa thư viện), preview_cache/ (ảnh preview hover), rchive_pages/ (trang .pagecache của ZIP/CBZ/PDF/MOBI), và ar_pages/ (các session giải nén RAR/CBR).
+      + Cấu trúc 4 thư mục phân vùng tập trung: 	humbnails/ (ảnh bìa thư viện), preview_cache/ (ảnh preview hover), rchive_pages/ (trang .pagecache của ZIP/CBZ/PDF/MOBI), và 
+ar_pages/ (các session giải nén RAR/CBR).
     - **Cơ chế Thực Thi Hạn Mức Cứng (Hard Quota Enforcement: EnforceGlobalCacheQuota)**:
       + Quy tắc cứng: Tổng dung lượng cache thực tế tuyệt đối KHÔNG ĐƯỢC VƯỢT QUÁ (ZipCacheQuotaMb + ThumbnailQuotaMb) được thiết lập trong app.
-      + PruneArchivePagesIfOverQuota: Khi dung lượng vượt hạn mức ZipCacheQuotaMb, hệ thống ưu tiên cắt tỉa các session RAR cũ nhất trong ar_pages/ theo LRU (xóa nguyên folder session giải phóng hàng trăm MB đến hàng GB ngay lập tức), sau đó cắt tỉa các file .pagecache cũ nhất về 85% quota.
+      + PruneArchivePagesIfOverQuota: Khi dung lượng vượt hạn mức ZipCacheQuotaMb, hệ thống ưu tiên cắt tỉa các session RAR cũ nhất trong 
+ar_pages/ theo LRU (xóa nguyên folder session giải phóng hàng trăm MB đến hàng GB ngay lập tức), sau đó cắt tỉa các file .pagecache cũ nhất về 85% quota.
       + PruneThumbnailsIfOverQuota: Quét cả 	humbnails/ và preview_cache/, sắp xếp theo LastAccessTimeUtc, tự động xóa các file ảnh cũ nhất về 85% quota khi vượt quá ThumbnailQuotaMb.
       + Nếu tổng dung lượng toàn cục vẫn vượt quá ZipCacheQuotaMb + ThumbnailQuotaMb: Kích hoạt Deep Pruning đưa cả 2 phân vùng xuống mức 80% quota.
     - **Tối Ưu Single Entry Memory Extraction Cho RAR Thumbnail (RarArchivePool.cs)**:

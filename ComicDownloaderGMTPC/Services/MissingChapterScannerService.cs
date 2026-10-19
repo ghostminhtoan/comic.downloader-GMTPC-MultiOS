@@ -39,23 +39,29 @@ public class MissingChapterScannerService
             ParseChapterLabel(ch.Title, integerChapters, decimalChapters);
         }
 
-        if (integerChapters.Count == 0)
+        var coveredChapters = new HashSet<int>(integerChapters);
+        foreach (var d in decimalChapters)
+        {
+            coveredChapters.Add((int)Math.Truncate(d));
+        }
+
+        if (coveredChapters.Count == 0)
         {
             item.MissingIntegerChapters = "Complete";
-            item.DecimalChapters = decimalChapters.Count > 0 ? string.Join(", ", decimalChapters.OrderBy(x => x)) : "None";
+            item.DecimalChapters = decimalChapters.Count > 0 ? string.Join(", ", decimalChapters.OrderBy(x => x).Distinct()) : "None";
             item.Status = "Complete";
             return item;
         }
 
-        int min = integerChapters.Min();
-        int max = integerChapters.Max();
+        int min = coveredChapters.Min();
+        int max = coveredChapters.Max();
 
         var missing = new List<int>();
         // Scan missing from 1 to max (or min to max if min > 1)
         int start = min <= 3 ? 1 : min;
         for (int i = start; i <= max; i++)
         {
-            if (!integerChapters.Contains(i))
+            if (!coveredChapters.Contains(i))
             {
                 missing.Add(i);
             }

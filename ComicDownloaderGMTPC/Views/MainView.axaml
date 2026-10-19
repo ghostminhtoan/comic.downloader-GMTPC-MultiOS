@@ -3103,6 +3103,131 @@
                             </TabItem>
 
                             <!-- ========================================================================= -->
+                            <!-- CHILD TAB: GỘP FILE LẺ TRUYỆN (ARCHIVE MERGER: PDF, ZIP, CBZ, RAR, CBR, MOBI) -->
+                            <!-- ========================================================================= -->
+                            <TabItem Header="📚 Gộp File Lẻ (Merger)" FontSize="12" FontWeight="SemiBold">
+                                <Grid RowDefinitions="Auto, *">
+                                    <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                                        <StackPanel Spacing="10">
+                                            <!-- Hàng 1: Thư mục nguồn chứa các file chương lẻ (PDF, ZIP, CBZ, RAR, CBR, MOBI) -->
+                                            <StackPanel Spacing="3">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="📥 Thư mục chứa các file chương lẻ (PDF, ZIP, CBZ, RAR, CBR, MOBI):" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowseMergeInputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Chọn thư mục chứa các file chapter lẻ của bộ truyện" />
+                                                    <Button Command="{Binding OpenMergeInputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding MergeInputFolderPath}" PlaceholderText="Chọn thư mục chứa các file chương lẻ (.pdf, .zip, .cbz, .rar, .cbr, .mobi)..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                            </StackPanel>
+
+                                            <!-- Hàng 2: Thư mục lưu kết quả gộp -->
+                                            <StackPanel Spacing="3">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="📤 Thư mục lưu file gộp (Mặc định: thư mục 'merged' cùng cấp với nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <Button Command="{Binding BrowseMergeOutputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+                                                    <Button Command="{Binding OpenMergeOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu file sau khi gộp" />
+                                                </WrapPanel>
+                                                <TextBox Text="{Binding MergeOutputFolderPath}" PlaceholderText="Chọn thư mục lưu file gộp (để trống sẽ tự tạo thư mục 'merged')..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                            </StackPanel>
+
+                                            <!-- Hàng 3: Cấu hình mốc chapter gom nhóm & Định dạng xuất -->
+                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <!-- Mốc gom nhóm Chapter -->
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="10,6" Margin="0,0,8,6" VerticalAlignment="Center">
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="Số Chapter mỗi file:" Foreground="#F59E0B" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                        <Button Command="{Binding SetMergeChunkSizeCommand}" CommandParameter="100" Content="100 Chap" Background="#1E293B" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,0,4,0" ToolTip.Tip="Gộp 100 chap/file (1-100, 101-200, 201-300... file cuối biến thiên theo chap cuối)" />
+                                                        <Button Command="{Binding SetMergeChunkSizeCommand}" CommandParameter="200" Content="200 Chap" Background="#1E293B" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,0,4,0" ToolTip.Tip="Gộp 200 chap/file (1-200, 201-400, 401-600... file cuối biến thiên theo chap cuối)" />
+                                                        <Button Command="{Binding SetMergeChunkSizeCommand}" CommandParameter="300" Content="300 Chap" Background="#1E293B" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,0,4,0" ToolTip.Tip="Gộp 300 chap/file (1-300, 301-600, 601-900... file cuối biến thiên theo chap cuối)" />
+                                                        <Button Command="{Binding SetMergeChunkSizeCommand}" CommandParameter="0" Content="Tất cả (1 File)" Background="#1E293B" Foreground="#10B981" FontSize="10" FontWeight="SemiBold" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Gộp toàn bộ các chương của truyện vào duy nhất 1 file lớn" />
+                                                        
+                                                        <TextBlock Text="Hoặc:" Foreground="#64748B" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                        <CheckBox IsChecked="{Binding IsMergeCustomChunk}" Content="Tùy chỉnh:" Foreground="#E2E8F0" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                        <NumericUpDown Value="{Binding MergeCustomChunkInput}" Minimum="1" Maximum="1000" Increment="10" Width="80" Height="26" FontSize="10" VerticalAlignment="Center" ToolTip.Tip="Nhập số chapter tùy ý cho mỗi file gộp" />
+                                                    </WrapPanel>
+                                                </Border>
+
+                                                <!-- Định dạng xuất -->
+                                                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="10,6" Margin="0,0,8,6" VerticalAlignment="Center">
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="Định dạng xuất:" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                        <RadioButton Content="CBZ (.cbz)" IsChecked="{Binding IsMergeFormatCbz}" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Định dạng Comic Book Archive chuẩn quốc tế (được hỗ trợ bởi mọi app đọc truyện)" />
+                                                        <RadioButton Content="ZIP (.zip)" IsChecked="{Binding IsMergeFormatZip}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" ToolTip.Tip="Định dạng file nén ZIP tiêu chuẩn" />
+                                                    </WrapPanel>
+                                                </Border>
+                                            </WrapPanel>
+
+                                            <!-- Hàng 4: Ghi chú tiêu chuẩn xử lý thông minh -->
+                                            <Border Background="#0B132B" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="8,5">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="💡 Ghi chú thông minh:" Foreground="#FBBF24" FontSize="10" FontWeight="Bold" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                                    <TextBlock Text="• Giữ nguyên từng thư mục chapter bên trong file nén để dễ đọc, không xả ảnh lung tung." Foreground="#94A3B8" FontSize="10" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                                    <TextBlock Text="• Gom theo số chapter thực tế (chap số thập phân 100.1, 100.5 đều nằm gọn ở mốc 1-100)." Foreground="#94A3B8" FontSize="10" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                                    <TextBlock Text="• File cuối cùng luôn tự động biến thiên theo chap cuối thực tế (ví dụ: 201-330 hoặc 201-351)." Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
+                                                </WrapPanel>
+                                            </Border>
+
+                                            <!-- Hàng 5: Nút hành động -->
+                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Button Command="{Binding StartArchiveMergeCommand}" IsEnabled="{Binding !IsMergingArchives}"
+                                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,6" Height="34" CornerRadius="4" Margin="0,0,8,6">
+                                                    <TextBlock Text="▶ BẮT ĐẦU GỘP FILE LẺ" />
+                                                </Button>
+
+                                                <Button Command="{Binding StopArchiveMergeCommand}" IsEnabled="{Binding IsMergingArchives}"
+                                                        Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,6" Height="34" CornerRadius="4" Margin="0,0,8,6">
+                                                    <TextBlock Text="⏹ DỪNG" />
+                                                </Button>
+
+                                                <Button Command="{Binding ClearMergeLogsCommand}"
+                                                        Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="10,6" Height="34" CornerRadius="4" Margin="0,0,0,6">
+                                                    <TextBlock Text="🧹 Xóa log" />
+                                                </Button>
+                                            </WrapPanel>
+
+                                            <!-- Thanh tiến trình & Trạng thái -->
+                                            <StackPanel Spacing="4">
+                                                <ProgressBar Value="{Binding MergeProgress}" Maximum="100" Height="6" CornerRadius="3" Foreground="#10B981" Background="#0F172A" />
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding MergeStatusText}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Margin="0,0,12,0" TextTrimming="CharacterEllipsis" MaxWidth="500" />
+                                                    <TextBlock Text="{Binding MergeProgressText}" Foreground="#10B981" FontWeight="Bold" FontSize="10" />
+                                                </WrapPanel>
+                                            </StackPanel>
+
+                                            <!-- Banner thông báo khi hoàn tất -->
+                                            <Border Background="#064E3B" BorderBrush="#10B981" BorderThickness="1.5" CornerRadius="6" Padding="12,8" Margin="0,4,0,0" IsVisible="{Binding IsMergeCompletedVisible}">
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,12,6">
+                                                        <TextBlock Text="🎉" FontSize="18" VerticalAlignment="Center" />
+                                                        <StackPanel VerticalAlignment="Center">
+                                                            <TextBlock Text="GỘP FILE LẺ HOÀN TẤT THÀNH CÔNG!" FontWeight="Bold" FontSize="12" Foreground="#34D399" />
+                                                            <TextBlock Text="{Binding MergeCompletedMessage}" FontSize="11" Foreground="#E2E8F0" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,0,6">
+                                                        <Button Command="{Binding OpenMergeOutputFolderCommand}" Content="📂 Mở Thư Mục Chứa File" Background="#10B981" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="10,6" CornerRadius="4" />
+                                                        <Button Command="{Binding DismissMergeCompletedCommand}" Content="✕" Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="8,6" CornerRadius="4" />
+                                                    </StackPanel>
+                                                </WrapPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Log chi tiết -->
+                                    <Border Grid.Row="1" Background="#0A0E17" Padding="6" MinHeight="180">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto" BringIntoViewOnFocusChange="False">
+                                            <ItemsControl ItemsSource="{Binding MergeLogs}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding}" Foreground="#CBD5E1" FontSize="10" FontFamily="Consolas, Monospace" Margin="2,1" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </TabItem>
+
+                            <!-- ========================================================================= -->
                             <!-- CHILD TAB 3.5: QUÉT CHAP THIẾU OFFLINE (OFFLINE MISSING CHAPTERS) -->
                             <!-- ========================================================================= -->
                             <TabItem Header="🔍 Quét Chap Thiếu Offline" FontSize="12" FontWeight="SemiBold">
