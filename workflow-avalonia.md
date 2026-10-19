@@ -3455,3 +3455,21 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
         * `[📖 Phục Hồi Resume ▼]`: Option 1 `📁 Cục bộ (resume.md)` & Option 2 `☁️ Google Drive`.
     - **Hỗ trợ Đa Nền Tảng Chặt Chẽ (Desktop & Android)**:
       + Tương thích cả cơ chế StorageProvider hiện đại (Avalonia StorageProvider API) lẫn fallback luồng dữ liệu (Stream) khi chạy trên môi trường Android SAF, giữ nguyên tính độc lập của `autosave.md` cho từng thiết bị và tính đồng bộ của `resume.md` cho toàn bộ các thiết bị.
+
+28. **Bảo Vệ Con Trỏ Nhập Liệu & Chống Thoát/Chuyển Ứng Dụng Khi Giữ Phím Spacebar Trên Android (`TextEditingProtectionService.cs`, `App.axaml.cs`, `MainActivity.cs`, `ComicReaderActivity.cs`)**:
+    - **Nguyên nhân cốt lõi**:
+      + Khi người dùng ấn giữ phím Spacebar trên bàn phím ảo Android (Gboard, Samsung Keyboard...) để di chuyển con trỏ trong ô TextBox:
+        Khi con trỏ đã đến kịch đầu (vị trí 0) hoặc kịch cuối (Text.Length) của ô TextBox, nếu người dùng tiếp tục vuốt sang trái/phải, phím điều hướng (Left/Right/DpadLeft/DpadRight) không được TextBox xử lý sẽ bubble lên và kích hoạt Focus Navigation làm mất Focus của TextBox. Khi mất Focus, bàn phím ảo lập tức đóng lại, ngón tay người dùng chạm thẳng vào Navigation Bar ở đáy hoặc mép màn hình, kích hoạt cử chỉ Quick Switch App của Android và làm ứng dụng bị nhảy sang app khác!
+    - **Kiến trúc Bảo Vệ 3 Lớp Toàn Diện**:
+      1. **Tầng Avalonia Global Handler (`TextEditingProtectionService.cs`, `App.axaml.cs`)**:
+         - Đăng ký `InputElement.KeyDownEvent.AddClassHandler<TextBox>` ở cả hai tầng `Tunneling` và `Bubbling` cho toàn bộ TextBox trong app.
+         - Khi con trỏ ở đầu (`CaretIndex <= 0`) và nhận thao tác sang trái (`Key.Left`, `Home`, `PageUp`, `Up`): Giữ chặt `CaretIndex = 0` và set `e.Handled = true`, triệt tiêu hoàn toàn sự kiện bubble ra ngoài, không làm mất focus.
+         - Khi con trỏ ở cuối (`CaretIndex >= Text.Length`) và nhận thao tác sang phải (`Key.Right`, `End`, `PageDown`, `Down`): Giữ chặt `CaretIndex = Text.Length` và set `e.Handled = true`, triệt tiêu hoàn toàn sự kiện bubble ra ngoài, không làm mất focus.
+         - TextBox không bao giờ mất focus, con trỏ luôn luôn đứng yên ở đầu/cuối ô nhập đúng như mong đợi.
+      2. **Tầng Android System Gesture Exclusion (`MainActivity.cs`, `ComicReaderActivity.cs`)**:
+         - Khi có bất kỳ TextBox nào nhận focus (`IsTypingInTextBox == true`), tự động kích hoạt `SetSystemGestureExclusionRects` trên Android (API 29+):
+           Bảo vệ 120dp mép trái, 120dp mép phải và 75dp mép đáy màn hình (vùng thanh điều hướng Navigation Bar).
+           Hệ điều hành Android sẽ bỏ qua cử chỉ Back và Quick Switch App khi người dùng vuốt trên bàn phím.
+         - Khi mất focus (`IsTypingInTextBox == false`), hoàn trả vùng cử chỉ hệ thống về mặc định.
+      3. **Tầng Chặn Phím Điều Hướng & AppSwitch Hệ Thống (`MainActivity.cs`, `ComicReaderActivity.cs`)**:
+         - Override `DispatchKeyEvent`: Khi `IsTypingInTextBox == true`, chặn đứng `Keycode.AppSwitch` và các phím `DpadLeft`, `DpadRight`, `DpadUp`, `DpadDown`, `Tab` không để thoát ra ngoài Activity gây kích hoạt task switcher.

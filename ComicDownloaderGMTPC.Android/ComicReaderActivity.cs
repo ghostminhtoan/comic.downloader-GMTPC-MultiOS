@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -164,9 +165,9 @@ public class ComicReaderActivity : AvaloniaActivity
 
         ComicReaderService.AndroidSetOrientationMode = ApplyOrientationMode;
         ComicReaderService.AndroidApplyDisplaySettings = ApplyDisplaySettings;
-        ComicReaderViewModel.AndroidOverlayVisibilityChanged += OnAndroidOverlayVisibilityChanged;
-
         BackRequested += OnActivityBackRequested;
+        ComicReaderViewModel.AndroidOverlayVisibilityChanged += OnAndroidOverlayVisibilityChanged;
+        Services.TextEditingProtectionService.TypingStateChanged += OnTypingStateChanged;
 
         _readerControl = new ComicReaderControl();
         Content = _readerControl;
@@ -691,10 +692,80 @@ public class ComicReaderActivity : AvaloniaActivity
         // triệt tiêu hoàn toàn hiện tượng lệch trang, nhảy trang hoặc co méo ảnh.
     }
 
+    private void OnTypingStateChanged(bool isTyping)
+    {
+        RunOnUiThread(() =>
+        {
+            UpdateSystemGestureExclusion(isTyping);
+        });
+    }
+
+    private void UpdateSystemGestureExclusion(bool isTyping)
+    {
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(29) && Window?.DecorView != null)
+            {
+                if (isTyping)
+                {
+                    var decorView = Window.DecorView;
+                    int width = decorView.Width;
+                    int height = decorView.Height;
+                    if (width <= 0 || height <= 0)
+                    {
+                        var dm = Resources?.DisplayMetrics;
+                        width = dm?.WidthPixels ?? 1080;
+                        height = dm?.HeightPixels ?? 2400;
+                    }
+
+                    int keyboardTop = Math.Max(0, (int)(height * 0.45));
+                    int edgeWidth = (int)((Resources?.DisplayMetrics?.Density ?? 2.5f) * 120);
+                    int bottomBarHeight = (int)((Resources?.DisplayMetrics?.Density ?? 2.5f) * 75);
+
+                    var rects = new List<global::Android.Graphics.Rect>
+                    {
+                        new global::Android.Graphics.Rect(0, keyboardTop, edgeWidth, height),
+                        new global::Android.Graphics.Rect(Math.Max(0, width - edgeWidth), keyboardTop, width, height),
+                        new global::Android.Graphics.Rect(0, Math.Max(0, height - bottomBarHeight), width, height)
+                    };
+
+                    decorView.SystemGestureExclusionRects = rects;
+                }
+                else
+                {
+                    Window.DecorView.SystemGestureExclusionRects = new List<global::Android.Graphics.Rect>();
+                }
+            }
+        }
+        catch { }
+    }
+
+    public override bool DispatchKeyEvent(KeyEvent? e)
+    {
+        if (Services.TextEditingProtectionService.IsTypingInTextBox && e != null)
+        {
+            if (e.KeyCode == Keycode.AppSwitch)
+            {
+                return true;
+            }
+
+            if (e.KeyCode == Keycode.DpadLeft || e.KeyCode == Keycode.DpadRight ||
+                e.KeyCode == Keycode.DpadUp || e.KeyCode == Keycode.DpadDown ||
+                e.KeyCode == Keycode.Tab)
+            {
+                base.DispatchKeyEvent(e);
+                return true;
+            }
+        }
+
+        return base.DispatchKeyEvent(e);
+    }
+
     protected override void OnDestroy()
     {
         BackRequested -= OnActivityBackRequested;
         ComicReaderViewModel.AndroidOverlayVisibilityChanged -= OnAndroidOverlayVisibilityChanged;
+        Services.TextEditingProtectionService.TypingStateChanged -= OnTypingStateChanged;
 
         if (!_isClosingTask && _subscribedVm != null)
         {

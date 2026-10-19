@@ -185,6 +185,9 @@ public class MainActivity : AvaloniaMainActivity
             catch { }
         });
 
+        // Bảo vệ cử chỉ hệ thống và vùng điều hướng đáy khi đang gõ trong TextBox
+        Services.TextEditingProtectionService.TypingStateChanged += OnTypingStateChanged;
+
         // Xử lý mở tệp truyện nếu app được kích hoạt từ ứng dụng ngoài qua Intent
         HandleIncomingFileIntent(Intent);
     }
@@ -323,8 +326,90 @@ public class MainActivity : AvaloniaMainActivity
         Services.DownloadEngineService.OpenStorageSettingsRequested -= OnOpenStorageSettingsRequested;
         Services.DownloadEngineService.AndroidOpenFolderRequested -= OnOpenFolderRequested;
         Services.AppUpdateService.InstallApkRequested -= OnInstallApkRequested;
+        Services.TextEditingProtectionService.TypingStateChanged -= OnTypingStateChanged;
         if (CurrentInstance == this) CurrentInstance = null;
         base.OnDestroy();
+    }
+
+    private void OnTypingStateChanged(bool isTyping)
+    {
+        RunOnUiThread(() =>
+        {
+            UpdateSystemGestureExclusion(isTyping);
+        });
+    }
+
+    /// <summary>
+    /// Bảo vệ vùng bàn phím và thanh điều hướng đáy:
+    /// Khi đang nhập văn bản trong TextBox, loại trừ cử chỉ hệ thống (Back gesture, Quick switch app gesture)
+    /// ở hai mép bên và đáy màn hình, đảm bảo khi người dùng giữ phím space vuốt vượt quá đầu/cuối
+    /// thì con trỏ vẫn đứng yên ở đầu/cuối và KHÔNG BAO GIỜ bị nhảy qua ứng dụng khác.
+    /// </summary>
+    private void UpdateSystemGestureExclusion(bool isTyping)
+    {
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(29) && Window?.DecorView != null)
+            {
+                if (isTyping)
+                {
+                    var decorView = Window.DecorView;
+                    int width = decorView.Width;
+                    int height = decorView.Height;
+                    if (width <= 0 || height <= 0)
+                    {
+                        var dm = Resources?.DisplayMetrics;
+                        width = dm?.WidthPixels ?? 1080;
+                        height = dm?.HeightPixels ?? 2400;
+                    }
+
+                    int keyboardTop = Math.Max(0, (int)(height * 0.45));
+                    int edgeWidth = (int)((Resources?.DisplayMetrics?.Density ?? 2.5f) * 120); // 120dp
+                    int bottomBarHeight = (int)((Resources?.DisplayMetrics?.Density ?? 2.5f) * 75); // 75dp thanh điều hướng đáy
+
+                    var rects = new List<global::Android.Graphics.Rect>
+                    {
+                        // 1. Mép trái vùng bàn phím (ngăn cử chỉ Back khi vuốt sang trái)
+                        new global::Android.Graphics.Rect(0, keyboardTop, edgeWidth, height),
+                        // 2. Mép phải vùng bàn phím (ngăn cử chỉ Back khi vuốt sang phải)
+                        new global::Android.Graphics.Rect(Math.Max(0, width - edgeWidth), keyboardTop, width, height),
+                        // 3. Mép đáy màn hình (ngăn cử chỉ vuốt chuyển ứng dụng trên thanh navigation bar)
+                        new global::Android.Graphics.Rect(0, Math.Max(0, height - bottomBarHeight), width, height)
+                    };
+
+                    decorView.SystemGestureExclusionRects = rects;
+                }
+                else
+                {
+                    Window.DecorView.SystemGestureExclusionRects = new List<global::Android.Graphics.Rect>();
+                }
+            }
+        }
+        catch { }
+    }
+
+    public override bool DispatchKeyEvent(KeyEvent? e)
+    {
+        if (Services.TextEditingProtectionService.IsTypingInTextBox && e != null)
+        {
+            // Chặn tuyệt đối phím chuyển đổi ứng dụng (AppSwitch) khi đang gõ văn bản
+            if (e.KeyCode == Keycode.AppSwitch)
+            {
+                return true;
+            }
+
+            // Chặn các phím điều hướng hướng ra ngoài khi đang gõ để không làm mất Focus hay trigger launcher
+            if (e.KeyCode == Keycode.DpadLeft || e.KeyCode == Keycode.DpadRight ||
+                e.KeyCode == Keycode.DpadUp || e.KeyCode == Keycode.DpadDown ||
+                e.KeyCode == Keycode.Tab)
+            {
+                base.DispatchKeyEvent(e);
+                // Luôn tiêu thụ để hệ điều hành Android không can thiệp chuyển app
+                return true;
+            }
+        }
+
+        return base.DispatchKeyEvent(e);
     }
 
     public override void OnBackPressed()

@@ -28,6 +28,7 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        TextEditingProtectionService.RegisterGlobalTextBoxProtection();
 #if DEBUG
         this.AttachDeveloperTools();
 #endif
