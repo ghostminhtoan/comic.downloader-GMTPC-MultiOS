@@ -38,13 +38,23 @@ public partial class MainViewModel
     private bool _isMergeCustomChunk = false;
 
     [ObservableProperty]
-    private int _mergeCustomChunkInput = 50;
+    private decimal _mergeCustomChunkInput = 50m;
 
     [ObservableProperty]
     private bool _isMergeFormatCbz = true;
 
     [ObservableProperty]
     private bool _isMergeFormatZip = false;
+
+    partial void OnIsMergeFormatCbzChanged(bool value)
+    {
+        if (value && IsMergeFormatZip) IsMergeFormatZip = false;
+    }
+
+    partial void OnIsMergeFormatZipChanged(bool value)
+    {
+        if (value && IsMergeFormatCbz) IsMergeFormatCbz = false;
+    }
 
     // ==========================================
     // TRẠNG THÁI & TIẾN TRÌNH
@@ -72,55 +82,59 @@ public partial class MainViewModel
 
     public void InitArchiveMerger()
     {
-        // 1. Nhận log từ service đưa vào Queue an toàn đa luồng
-        _archiveMergeService.LogEmitted = (lvl, msg) =>
+        try
         {
-            try
+            // 1. Nhận log từ service đưa vào Queue an toàn đa luồng
+            _archiveMergeService.LogEmitted = (lvl, msg) =>
             {
-                _mergeLogBuffer.Enqueue($"[{DateTime.Now:HH:mm:ss}] [{lvl}] {msg}");
-            }
-            catch { }
-        };
-
-        // 2. Timer xả log định kỳ (200ms) theo mẻ để UI Thread luôn mượt mà
-        _mergeLogFlushTimer = new System.Threading.Timer(_ =>
-        {
-            try
-            {
-                if (_mergeLogBuffer.IsEmpty) return;
-
-                var batch = new List<string>();
-                while (batch.Count < 20 && _mergeLogBuffer.TryDequeue(out var logItem))
+                try
                 {
-                    batch.Add(logItem);
+                    _mergeLogBuffer.Enqueue($"[{DateTime.Now:HH:mm:ss}] [{lvl}] {msg}");
                 }
+                catch { }
+            };
 
-                if (batch.Count > 0)
+            // 2. Timer xả log định kỳ (200ms) theo mẻ để UI Thread luôn mượt mà
+            _mergeLogFlushTimer = new System.Threading.Timer(_ =>
+            {
+                try
                 {
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    if (_mergeLogBuffer.IsEmpty) return;
+
+                    var batch = new List<string>();
+                    while (batch.Count < 20 && _mergeLogBuffer.TryDequeue(out var logItem))
                     {
-                        try
-                        {
-                            for (int i = 0; i < batch.Count; i++)
-                            {
-                                MergeLogs.Insert(0, batch[i]);
-                            }
-                            while (MergeLogs.Count > 150)
-                            {
-                                MergeLogs.RemoveAt(MergeLogs.Count - 1);
-                            }
-                        }
-                        catch { }
-                    }, Avalonia.Threading.DispatcherPriority.Background);
-                }
-            }
-            catch { }
-        }, null, 200, 200);
+                        batch.Add(logItem);
+                    }
 
-        if (string.IsNullOrEmpty(MergeInputFolderPath))
-        {
-            MergeInputFolderPath = _downloadEngine.DownloadRoot;
+                    if (batch.Count > 0)
+                    {
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            try
+                            {
+                                for (int i = 0; i < batch.Count; i++)
+                                {
+                                    MergeLogs.Insert(0, batch[i]);
+                                }
+                                while (MergeLogs.Count > 150)
+                                {
+                                    MergeLogs.RemoveAt(MergeLogs.Count - 1);
+                                }
+                            }
+                            catch { }
+                        }, Avalonia.Threading.DispatcherPriority.Background);
+                    }
+                }
+                catch { }
+            }, null, 200, 200);
+
+            if (string.IsNullOrEmpty(MergeInputFolderPath))
+            {
+                MergeInputFolderPath = _downloadEngine.DownloadRoot;
+            }
         }
+        catch { }
     }
 
     [RelayCommand]
@@ -204,7 +218,18 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
-    public void SetMergeChunkSize(int size)
+    public void SetMergeChunk100() => SetMergeChunk(100);
+
+    [RelayCommand]
+    public void SetMergeChunk200() => SetMergeChunk(200);
+
+    [RelayCommand]
+    public void SetMergeChunk300() => SetMergeChunk(300);
+
+    [RelayCommand]
+    public void SetMergeChunkAll() => SetMergeChunk(0);
+
+    public void SetMergeChunk(int size)
     {
         MergeChapterChunkSize = size;
         IsMergeCustomChunk = false;
@@ -231,7 +256,7 @@ public partial class MainViewModel
             return;
         }
 
-        int finalChunk = IsMergeCustomChunk ? Math.Max(1, MergeCustomChunkInput) : MergeChapterChunkSize;
+        int finalChunk = IsMergeCustomChunk ? Math.Max(1, (int)MergeCustomChunkInput) : MergeChapterChunkSize;
 
         IsMergingArchives = true;
         MergeProgress = 0;

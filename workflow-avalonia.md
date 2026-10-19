@@ -2417,6 +2417,15 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 6. **Chuẩn Hóa Song Ngữ Quốc Tế**:
    - Bổ sung Section `## 18. Dual Picture Sort (Lọc Ảnh Song Song)` đầy đủ trong `languages.md`.
 
+### 15.110 Khắc Phục Lỗi Crash Khởi Động (Cold Start) Trên Android Cho Tính Năng Gộp File Lẻ & TextEditingProtectionService (2026-10-19)
+1. **Triệt Tiêu Hoàn Toàn CommandParameter Cho Các Mốc Gộp Chapter**:
+   - Thay thế SetMergeChunkSize(int) bằng 4 RelayCommand không tham số: SetMergeChunk100Command, SetMergeChunk200Command, SetMergeChunk300Command, SetMergeChunkAllCommand.
+   - Bỏ hoàn toàn CommandParameter khỏi MainView.axaml, triệt tiêu tận gốc lỗi ArgumentException ép kiểu ngầm String sang Int32 khi khởi tạo view trên Android AOT.
+2. **Chuẩn Hóa Kiểu Dữ Liệu Cho NumericUpDown**:
+   - Chuyển _mergeCustomChunkInput từ int sang decimal để tương thích hoàn toàn hai chiều với NumericUpDown.Value (decimal?), ngăn chặn lỗi InvalidCastException.
+3. **Bọc Bảo Vệ Toàn Diện Khởi Tạo & Bắt Phím Android**:
+   - Bọc 	ry-catch trong TextEditingProtectionService.RegisterGlobalTextBoxProtection(), App.Initialize(), InitArchiveMerger(), và sự kiện DispatchKeyEvent, OnTypingStateChanged trong MainActivity.cs & ComicReaderActivity.cs.
+
 ### 15.104 Khắc Phục Lỗi Crash Khởi Động (Cold Start) Trên Android Cho Tính Năng Dual Picture Sort (2026-10-15)
 1. **triệt tiêu `CommandParameter` Bằng 2 Command Riêng Biệt**:
    - Trong `MainViewModel.DualPictureSort.cs`: Thay thế `SwitchDualSortMobileTab(int)` bằng hai RelayCommand không tham số độc lập và an toàn tuyệt đối 100%:

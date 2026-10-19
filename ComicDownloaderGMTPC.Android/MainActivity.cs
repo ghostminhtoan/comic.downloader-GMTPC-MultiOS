@@ -333,10 +333,18 @@ public class MainActivity : AvaloniaMainActivity
 
     private void OnTypingStateChanged(bool isTyping)
     {
-        RunOnUiThread(() =>
+        try
         {
-            UpdateSystemGestureExclusion(isTyping);
-        });
+            RunOnUiThread(() =>
+            {
+                try
+                {
+                    UpdateSystemGestureExclusion(isTyping);
+                }
+                catch { }
+            });
+        }
+        catch { }
     }
 
     /// <summary>
@@ -390,24 +398,28 @@ public class MainActivity : AvaloniaMainActivity
 
     public override bool DispatchKeyEvent(KeyEvent? e)
     {
-        if (Services.TextEditingProtectionService.IsTypingInTextBox && e != null)
+        try
         {
-            // Chặn tuyệt đối phím chuyển đổi ứng dụng (AppSwitch) khi đang gõ văn bản
-            if (e.KeyCode == Keycode.AppSwitch)
+            if (Services.TextEditingProtectionService.IsTypingInTextBox && e != null)
             {
-                return true;
-            }
+                // Chặn tuyệt đối phím chuyển đổi ứng dụng (AppSwitch) khi đang gõ văn bản
+                if (e.KeyCode == Keycode.AppSwitch)
+                {
+                    return true;
+                }
 
-            // Chặn các phím điều hướng hướng ra ngoài khi đang gõ để không làm mất Focus hay trigger launcher
-            if (e.KeyCode == Keycode.DpadLeft || e.KeyCode == Keycode.DpadRight ||
-                e.KeyCode == Keycode.DpadUp || e.KeyCode == Keycode.DpadDown ||
-                e.KeyCode == Keycode.Tab)
-            {
-                base.DispatchKeyEvent(e);
-                // Luôn tiêu thụ để hệ điều hành Android không can thiệp chuyển app
-                return true;
+                // Chặn các phím điều hướng hướng ra ngoài khi đang gõ để không làm mất Focus hay trigger launcher
+                if (e.KeyCode == Keycode.DpadLeft || e.KeyCode == Keycode.DpadRight ||
+                    e.KeyCode == Keycode.DpadUp || e.KeyCode == Keycode.DpadDown ||
+                    e.KeyCode == Keycode.Tab)
+                {
+                    base.DispatchKeyEvent(e);
+                    // Luôn tiêu thụ để hệ điều hành Android không can thiệp chuyển app
+                    return true;
+                }
             }
         }
+        catch { }
 
         return base.DispatchKeyEvent(e);
     }

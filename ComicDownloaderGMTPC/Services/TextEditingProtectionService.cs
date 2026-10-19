@@ -38,51 +38,56 @@ public static class TextEditingProtectionService
         if (_isRegistered) return;
         _isRegistered = true;
 
-        // 1. Lắng nghe GotFocus và LostFocus trên toàn bộ TextBox trong ứng dụng
-        InputElement.GotFocusEvent.AddClassHandler<TextBox>((_, _) =>
+        try
         {
-            NotifyTypingState(true);
-        }, RoutingStrategies.Bubble);
-
-        InputElement.LostFocusEvent.AddClassHandler<TextBox>((_, _) =>
-        {
-            NotifyTypingState(false);
-        }, RoutingStrategies.Bubble);
-
-        // 2. Can thiệp KeyDownEvent ở cả hai tầng Tunneling (trước khi xử lý) và Bubbling (sau khi xử lý)
-        // để bảo vệ tuyệt đối con trỏ ở đầu / cuối ô văn bản
-        InputElement.KeyDownEvent.AddClassHandler<TextBox>((tb, e) =>
-        {
-            if (!tb.IsFocused) return;
-
-            int textLen = tb.Text?.Length ?? 0;
-            int caret = tb.CaretIndex;
-
-            // Trường hợp 1: Con trỏ đang ở đầu ô (CaretIndex <= 0)
-            if (caret <= 0 && tb.SelectionStart == tb.SelectionEnd)
+            // 1. Lắng nghe GotFocus và LostFocus trên toàn bộ TextBox trong ứng dụng
+            InputElement.GotFocusEvent.AddClassHandler<TextBox>((_, _) =>
             {
-                // Các phím điều hướng sang trái hoặc về đầu
-                if (e.Key == Key.Left || e.Key == Key.Home || e.Key == Key.PageUp ||
-                    (!tb.AcceptsReturn && e.Key == Key.Up))
-                {
-                    tb.CaretIndex = 0;
-                    e.Handled = true; // Chặn đứng sự kiện, giữ nguyên con trỏ ở đầu ô, không bubble, không chuyển app
-                    return;
-                }
-            }
+                try { NotifyTypingState(true); } catch { }
+            }, RoutingStrategies.Bubble);
 
-            // Trường hợp 2: Con trỏ đang ở cuối ô (CaretIndex >= textLen)
-            if (caret >= textLen && tb.SelectionStart == tb.SelectionEnd)
+            InputElement.LostFocusEvent.AddClassHandler<TextBox>((_, _) =>
             {
-                // Các phím điều hướng sang phải hoặc về cuối
-                if (e.Key == Key.Right || e.Key == Key.End || e.Key == Key.PageDown ||
-                    (!tb.AcceptsReturn && e.Key == Key.Down))
+                try { NotifyTypingState(false); } catch { }
+            }, RoutingStrategies.Bubble);
+
+            // 2. Can thiệp KeyDownEvent ở tầng Tunneling (trước khi xử lý) để bảo vệ tuyệt đối con trỏ ở đầu / cuối ô văn bản
+            InputElement.KeyDownEvent.AddClassHandler<TextBox>((tb, e) =>
+            {
+                try
                 {
-                    tb.CaretIndex = textLen;
-                    e.Handled = true; // Chặn đứng sự kiện, giữ nguyên con trỏ ở cuối ô, không bubble, không chuyển app
-                    return;
+                    if (tb == null || !tb.IsFocused) return;
+
+                    int textLen = tb.Text?.Length ?? 0;
+                    int caret = tb.CaretIndex;
+
+                    // Trường hợp 1: Con trỏ đang ở đầu ô (CaretIndex <= 0)
+                    if (caret <= 0 && tb.SelectionStart == tb.SelectionEnd)
+                    {
+                        if (e.Key == Key.Left || e.Key == Key.Home || e.Key == Key.PageUp ||
+                            (!tb.AcceptsReturn && e.Key == Key.Up))
+                        {
+                            tb.CaretIndex = 0;
+                            e.Handled = true; // Chặn đứng sự kiện, giữ nguyên con trỏ ở đầu ô, không bubble, không chuyển app
+                            return;
+                        }
+                    }
+
+                    // Trường hợp 2: Con trỏ đang ở cuối ô (CaretIndex >= textLen)
+                    if (caret >= textLen && tb.SelectionStart == tb.SelectionEnd)
+                    {
+                        if (e.Key == Key.Right || e.Key == Key.End || e.Key == Key.PageDown ||
+                            (!tb.AcceptsReturn && e.Key == Key.Down))
+                        {
+                            tb.CaretIndex = textLen;
+                            e.Handled = true; // Chặn đứng sự kiện, giữ nguyên con trỏ ở cuối ô, không bubble, không chuyển app
+                            return;
+                        }
+                    }
                 }
-            }
-        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+                catch { }
+            }, RoutingStrategies.Tunnel);
+        }
+        catch { }
     }
 }

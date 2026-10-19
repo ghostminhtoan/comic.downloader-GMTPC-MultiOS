@@ -694,10 +694,18 @@ public class ComicReaderActivity : AvaloniaActivity
 
     private void OnTypingStateChanged(bool isTyping)
     {
-        RunOnUiThread(() =>
+        try
         {
-            UpdateSystemGestureExclusion(isTyping);
-        });
+            RunOnUiThread(() =>
+            {
+                try
+                {
+                    UpdateSystemGestureExclusion(isTyping);
+                }
+                catch { }
+            });
+        }
+        catch { }
     }
 
     private void UpdateSystemGestureExclusion(bool isTyping)
@@ -742,21 +750,25 @@ public class ComicReaderActivity : AvaloniaActivity
 
     public override bool DispatchKeyEvent(KeyEvent? e)
     {
-        if (Services.TextEditingProtectionService.IsTypingInTextBox && e != null)
+        try
         {
-            if (e.KeyCode == Keycode.AppSwitch)
+            if (Services.TextEditingProtectionService.IsTypingInTextBox && e != null)
             {
-                return true;
-            }
+                if (e.KeyCode == Keycode.AppSwitch)
+                {
+                    return true;
+                }
 
-            if (e.KeyCode == Keycode.DpadLeft || e.KeyCode == Keycode.DpadRight ||
-                e.KeyCode == Keycode.DpadUp || e.KeyCode == Keycode.DpadDown ||
-                e.KeyCode == Keycode.Tab)
-            {
-                base.DispatchKeyEvent(e);
-                return true;
+                if (e.KeyCode == Keycode.DpadLeft || e.KeyCode == Keycode.DpadRight ||
+                    e.KeyCode == Keycode.DpadUp || e.KeyCode == Keycode.DpadDown ||
+                    e.KeyCode == Keycode.Tab)
+                {
+                    base.DispatchKeyEvent(e);
+                    return true;
+                }
             }
         }
+        catch { }
 
         return base.DispatchKeyEvent(e);
     }
