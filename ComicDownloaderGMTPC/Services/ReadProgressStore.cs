@@ -2938,7 +2938,50 @@ public sealed class ReadProgressStore
     }
 
     /// <summary>
-    /// Phục hồi và Smart Merge tiến trình đọc dở từ file resume.md trên đám mây.
+    /// Lưu tiến trình đọc truyện dùng chung (resume.md) ra tệp Markdown cục bộ.
+    /// </summary>
+    public async Task<string> SaveResumeToMarkdownAsync(string? customPath = null)
+    {
+        string targetPath = string.IsNullOrWhiteSpace(customPath) ? GetStoreFilePath() : customPath;
+        string deviceName = string.Empty;
+        try { deviceName = GoogleDriveSyncService.Instance.CurrentDeviceName; } catch { }
+        if (string.IsNullOrWhiteSpace(deviceName)) deviceName = Environment.MachineName;
+
+        string content = BuildResumeMarkdownContent(deviceName);
+
+        await Task.Run(() =>
+        {
+            lock (_saveLock)
+            {
+                string? dir = Path.GetDirectoryName(targetPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    try { Directory.CreateDirectory(dir); } catch { }
+                }
+
+                string tmpPath = targetPath + ".tmp";
+                File.WriteAllText(tmpPath, content, Encoding.UTF8);
+                File.Move(tmpPath, targetPath, overwrite: true);
+            }
+        }).ConfigureAwait(false);
+
+        return targetPath;
+    }
+
+    /// <summary>
+    /// Phục hồi tiến trình đọc truyện dùng chung (resume.md) từ tệp Markdown cục bộ.
+    /// </summary>
+    public async Task<ResumeRestoreResult> LoadResumeFromMarkdownAsync(string? customPath = null, bool mergeWithExisting = true)
+    {
+        string targetPath = string.IsNullOrWhiteSpace(customPath) ? GetStoreFilePath() : customPath;
+        if (!File.Exists(targetPath)) return new ResumeRestoreResult { Message = $"Tệp {targetPath} không tồn tại." };
+
+        string content = await File.ReadAllTextAsync(targetPath, Encoding.UTF8).ConfigureAwait(false);
+        return ParseResumeMarkdownContent(content, mergeWithExisting);
+    }
+
+    /// <summary>
+    /// Phục hồi và Smart Merge tiến trình đọc dở từ file resume.md trên đám mây hoặc cục bộ.
     /// Tự động sinh Portable Keys, đối chiếu chéo nền tảng và ánh xạ vào các đường dẫn cục bộ khả dụng.
     /// </summary>
     public ResumeRestoreResult ParseResumeMarkdownContent(string content, bool mergeWithExisting = true)

@@ -541,17 +541,61 @@
                                         ToolTip.Tip="Làm mới danh sách lịch sử đọc gần đây">
                                     <TextBlock Text="🔄 Làm Mới" FontSize="10.5" />
                                 </Button>
-                                <Button Command="{Binding BackupReaderDataCommand}"
-                                        Background="#1E293B" BorderBrush="#0284C7" BorderThickness="1" Foreground="#38BDF8" FontWeight="SemiBold"
+                                <Button Background="#1E293B" BorderBrush="#0284C7" BorderThickness="1" Foreground="#38BDF8" FontWeight="SemiBold"
                                         Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
-                                        ToolTip.Tip="Sao lưu dấu trang và lịch sử đọc truyện ra file .md">
-                                    <TextBlock Text="💾 Sao Lưu MD" FontSize="10.5" />
+                                        ToolTip.Tip="Sao lưu dấu trang và lịch sử đọc truyện (Cục bộ .md hoặc Google Drive)">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="Bottom">
+                                            <MenuItem Header="📁 Cục bộ (bookmarks.md &amp; history.md)" Command="{Binding BackupReaderDataCommand}" />
+                                            <MenuItem Header="☁️ Google Drive" Command="{Binding BackupReaderToGoogleDriveCommand}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="💾 Sao Lưu MD" FontSize="10.5" />
+                                        <TextBlock Text="▼" FontSize="8.5" VerticalAlignment="Center" Foreground="#38BDF8" />
+                                    </StackPanel>
                                 </Button>
-                                <Button Command="{Binding RestoreReaderDataCommand}"
-                                        Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                <Button Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
                                         Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
-                                        ToolTip.Tip="Phục hồi dấu trang và lịch sử đọc từ file .md">
-                                    <TextBlock Text="📂 Phục Hồi MD" FontSize="10.5" />
+                                        ToolTip.Tip="Phục hồi dấu trang và lịch sử đọc (Cục bộ .md hoặc Google Drive)">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="Bottom">
+                                            <MenuItem Header="📁 Cục bộ (bookmarks.md &amp; history.md)" Command="{Binding RestoreReaderDataCommand}" />
+                                            <MenuItem Header="☁️ Google Drive" Command="{Binding RestoreReaderFromGoogleDriveCommand}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="📂 Phục Hồi MD" FontSize="10.5" />
+                                        <TextBlock Text="▼" FontSize="8.5" VerticalAlignment="Center" Foreground="#CCFBF1" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Background="#1E293B" BorderBrush="#10B981" BorderThickness="1" Foreground="#34D399" FontWeight="SemiBold"
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
+                                        ToolTip.Tip="Sao lưu trang đọc dở dang (resume.md) ra file cục bộ hoặc Google Drive">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="Bottom">
+                                            <MenuItem Header="📁 Cục bộ (resume.md)" Command="{Binding BackupResumeDataCommand}" />
+                                            <MenuItem Header="☁️ Google Drive" Command="{Binding BackupResumeToGoogleDriveCommand}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="📖 Sao Lưu Resume" FontSize="10.5" />
+                                        <TextBlock Text="▼" FontSize="8.5" VerticalAlignment="Center" Foreground="#34D399" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
+                                        ToolTip.Tip="Phục hồi trang đọc dở dang (resume.md) từ file cục bộ hoặc Google Drive">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="Bottom">
+                                            <MenuItem Header="📁 Cục bộ (resume.md)" Command="{Binding RestoreResumeDataCommand}" />
+                                            <MenuItem Header="☁️ Google Drive" Command="{Binding RestoreResumeFromGoogleDriveCommand}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="📖 Phục Hồi Resume" FontSize="10.5" />
+                                        <TextBlock Text="▼" FontSize="8.5" VerticalAlignment="Center" Foreground="#A7F3D0" />
+                                    </StackPanel>
                                 </Button>
                                 <Button Command="{Binding OpenGoogleDriveCommand}"
                                         Background="#4F46E5" BorderBrush="#818CF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold"
@@ -670,17 +714,61 @@
 
                             <!-- Hàng dưới: Cụm nút tác vụ dạng WrapPanel responsive -->
                             <WrapPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Command="{Binding BackupReaderDataCommand}"
-                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                <Button Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold"
                                         Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
-                                        ToolTip.Tip="Sao lưu dấu trang và lịch sử đọc truyện ra file .md">
-                                    <TextBlock Text="💾 Sao Lưu MD" FontSize="10.5" />
+                                        ToolTip.Tip="Sao lưu dấu trang và lịch sử đọc truyện (Cục bộ .md hoặc Google Drive)">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="Bottom">
+                                            <MenuItem Header="📁 Cục bộ (bookmarks.md &amp; history.md)" Command="{Binding BackupReaderDataCommand}" />
+                                            <MenuItem Header="☁️ Google Drive" Command="{Binding BackupReaderToGoogleDriveCommand}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="💾 Sao Lưu MD" FontSize="10.5" />
+                                        <TextBlock Text="▼" FontSize="8.5" VerticalAlignment="Center" Foreground="#E0F2FE" />
+                                    </StackPanel>
                                 </Button>
-                                <Button Command="{Binding RestoreReaderDataCommand}"
-                                        Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                <Button Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold"
                                         Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
-                                        ToolTip.Tip="Phục hồi dấu trang và lịch sử đọc từ file .md">
-                                    <TextBlock Text="📂 Phục Hồi MD" FontSize="10.5" />
+                                        ToolTip.Tip="Phục hồi dấu trang và lịch sử đọc (Cục bộ .md hoặc Google Drive)">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="Bottom">
+                                            <MenuItem Header="📁 Cục bộ (bookmarks.md &amp; history.md)" Command="{Binding RestoreReaderDataCommand}" />
+                                            <MenuItem Header="☁️ Google Drive" Command="{Binding RestoreReaderFromGoogleDriveCommand}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="📂 Phục Hồi MD" FontSize="10.5" />
+                                        <TextBlock Text="▼" FontSize="8.5" VerticalAlignment="Center" Foreground="#CCFBF1" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Background="#1E293B" BorderBrush="#10B981" BorderThickness="1" Foreground="#34D399" FontWeight="SemiBold"
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
+                                        ToolTip.Tip="Sao lưu trang đọc dở dang (resume.md) ra file cục bộ hoặc Google Drive">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="Bottom">
+                                            <MenuItem Header="📁 Cục bộ (resume.md)" Command="{Binding BackupResumeDataCommand}" />
+                                            <MenuItem Header="☁️ Google Drive" Command="{Binding BackupResumeToGoogleDriveCommand}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="📖 Sao Lưu Resume" FontSize="10.5" />
+                                        <TextBlock Text="▼" FontSize="8.5" VerticalAlignment="Center" Foreground="#34D399" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold"
+                                        Padding="8,4" CornerRadius="5" Margin="0,0,6,4"
+                                        ToolTip.Tip="Phục hồi trang đọc dở dang (resume.md) từ file cục bộ hoặc Google Drive">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="Bottom">
+                                            <MenuItem Header="📁 Cục bộ (resume.md)" Command="{Binding RestoreResumeDataCommand}" />
+                                            <MenuItem Header="☁️ Google Drive" Command="{Binding RestoreResumeFromGoogleDriveCommand}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="📖 Phục Hồi Resume" FontSize="10.5" />
+                                        <TextBlock Text="▼" FontSize="8.5" VerticalAlignment="Center" Foreground="#A7F3D0" />
+                                    </StackPanel>
                                 </Button>
                                 <Button Command="{Binding OpenGoogleDriveCommand}"
                                         Background="#4F46E5" BorderBrush="#818CF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold"
@@ -954,21 +1042,70 @@
                                             <TextBlock Grid.Column="0" Text="📑" FontSize="17" VerticalAlignment="Center" Margin="0,0,8,0" />
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0">
                                                 <TextBlock Text="Backup &amp; Restore Reader (.md)" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                                <TextBlock Text="Sao lưu hoặc phục hồi Dấu trang &amp; Lịch sử đọc từ file Markdown (.md)" Foreground="#94A3B8" FontSize="10.5" TextWrapping="Wrap" />
+                                                <TextBlock Text="Sao lưu hoặc phục hồi Dấu trang &amp; Lịch sử đọc (Cục bộ .md hoặc Google Drive)" Foreground="#94A3B8" FontSize="10.5" TextWrapping="Wrap" />
                                             </StackPanel>
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                                <Button Command="{Binding BackupReaderDataCommand}"
-                                                        Background="#0284C7" Foreground="#FFFFFF"
+                                                <Button Background="#0284C7" Foreground="#FFFFFF"
                                                         CornerRadius="6" Padding="9,4" FontWeight="SemiBold" FontSize="10.5"
-                                                        Content="💾 Sao lưu" ToolTip.Tip="Sao lưu ra file .md" />
-                                                <Button Command="{Binding RestoreReaderDataCommand}"
-                                                        Background="#0D9488" Foreground="#FFFFFF"
+                                                        ToolTip.Tip="Sao lưu Dấu trang &amp; Lịch sử đọc">
+                                                    <Button.Flyout>
+                                                        <MenuFlyout Placement="Bottom">
+                                                            <MenuItem Header="📁 Cục bộ (bookmarks.md &amp; history.md)" Command="{Binding BackupReaderDataCommand}" />
+                                                            <MenuItem Header="☁️ Google Drive" Command="{Binding BackupReaderToGoogleDriveCommand}" />
+                                                        </MenuFlyout>
+                                                    </Button.Flyout>
+                                                    <TextBlock Text="💾 Sao lưu ▼" />
+                                                </Button>
+                                                <Button Background="#0D9488" Foreground="#FFFFFF"
                                                         CornerRadius="6" Padding="9,4" FontWeight="SemiBold" FontSize="10.5"
-                                                        Content="📂 Phục hồi" ToolTip.Tip="Phục hồi từ file .md" />
+                                                        ToolTip.Tip="Phục hồi Dấu trang &amp; Lịch sử đọc">
+                                                    <Button.Flyout>
+                                                        <MenuFlyout Placement="Bottom">
+                                                            <MenuItem Header="📁 Cục bộ (bookmarks.md &amp; history.md)" Command="{Binding RestoreReaderDataCommand}" />
+                                                            <MenuItem Header="☁️ Google Drive" Command="{Binding RestoreReaderFromGoogleDriveCommand}" />
+                                                        </MenuFlyout>
+                                                    </Button.Flyout>
+                                                    <TextBlock Text="📂 Phục hồi ▼" />
+                                                </Button>
                                                 <Button Command="{Binding OpenGoogleDriveCommand}"
                                                         Background="#4F46E5" Foreground="#FFFFFF"
                                                         CornerRadius="6" Padding="9,4" FontWeight="SemiBold" FontSize="10.5"
                                                         Content="☁️ Google Drive" ToolTip.Tip="Đồng bộ Google Drive (\GMTPC\Comic Downloader GMTPC\)" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- ITEM: BACKUP & RESTORE RESUME MARKDOWN -->
+                                    <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="7" Padding="10,7">
+                                        <Grid ColumnDefinitions="Auto, *, Auto">
+                                            <TextBlock Grid.Column="0" Text="📖" FontSize="17" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0">
+                                                <TextBlock Text="Backup &amp; Restore Resume (.md)" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Text="Sao lưu hoặc phục hồi trang đang đọc dở (resume.md) Cục bộ hoặc Google Drive" Foreground="#94A3B8" FontSize="10.5" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                <Button Background="#0284C7" Foreground="#FFFFFF"
+                                                        CornerRadius="6" Padding="9,4" FontWeight="SemiBold" FontSize="10.5"
+                                                        ToolTip.Tip="Sao lưu resume.md">
+                                                    <Button.Flyout>
+                                                        <MenuFlyout Placement="Bottom">
+                                                            <MenuItem Header="📁 Cục bộ (resume.md)" Command="{Binding BackupResumeDataCommand}" />
+                                                            <MenuItem Header="☁️ Google Drive" Command="{Binding BackupResumeToGoogleDriveCommand}" />
+                                                        </MenuFlyout>
+                                                    </Button.Flyout>
+                                                    <TextBlock Text="💾 Sao lưu ▼" />
+                                                </Button>
+                                                <Button Background="#0D9488" Foreground="#FFFFFF"
+                                                        CornerRadius="6" Padding="9,4" FontWeight="SemiBold" FontSize="10.5"
+                                                        ToolTip.Tip="Phục hồi resume.md">
+                                                    <Button.Flyout>
+                                                        <MenuFlyout Placement="Bottom">
+                                                            <MenuItem Header="📁 Cục bộ (resume.md)" Command="{Binding RestoreResumeDataCommand}" />
+                                                            <MenuItem Header="☁️ Google Drive" Command="{Binding RestoreResumeFromGoogleDriveCommand}" />
+                                                        </MenuFlyout>
+                                                    </Button.Flyout>
+                                                    <TextBlock Text="📂 Phục hồi ▼" />
+                                                </Button>
                                             </StackPanel>
                                         </Grid>
                                     </Border>

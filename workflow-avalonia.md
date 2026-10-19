@@ -3427,3 +3427,31 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + CleanupLegacyCacheDirectories(): Quét và xóa sạch các thư mục mồ côi cũ Path.GetTempPath()/comic-screen-rar, comic-preview-cache, và thư mục .cache cũ tại phân vùng User Data trên Android. Ngay khi mở app, 15.4 GB rác sẽ được dọn dẹp sạch sẽ tức thì.
       + Kích hoạt EnforceGlobalCacheQuota() tự động: khi khởi động app, khi thoát Reader (ComicReaderViewModel.Cleanup()), khi người dùng chỉnh sửa Quota trong cài đặt, và định kỳ sau các đợt ghi cache trang truyện mới.
       + ClearArchiveCache(), ClearThumbnails(), ClearAllCache(): Nâng cấp dọn dẹp triệt để cả 4 phân vùng cache, giải phóng file lock của RarArchivePool.Clear() và trả lại dung lượng bộ nhớ đệm sạch sẽ 100%.
+
+27. **Tích Hợp Tùy Chọn Kép Local & Google Drive Cho Sao Lưu / Phục Hồi Queue, History, Bookmarks và Bổ Sung Nút Sao Lưu / Phục Hồi Riêng Biệt Cho Resume.md (`MainView.axaml`, `LibraryView.axaml`, `LibraryViewModel.cs`, `ReadProgressStore.cs`)**:
+    - **Tích hợp MenuFlyout 2 Tùy Chọn (Cục bộ & Google Drive) cho Hàng Chờ Tải (Queue / Tab Download)**:
+      + Nút `[💾 SAO LƯU MD ▼]`: Bấm vào sẽ mở menu dropdown gồm:
+        * `📁 Cục bộ (Local autosave.md)` -> Gọi `BackupQueueCommand` (lưu file ra đĩa hoặc mở hộp thoại SaveFilePicker).
+        * `☁️ Google Drive` -> Gọi `BackupQueueToGoogleDriveCommand` (tải trực tiếp lên thư mục Google Drive của thiết bị hiện tại).
+      + Nút `[📂 PHỤC HỒI MD ▼]`: Bấm vào sẽ mở menu dropdown gồm:
+        * `📁 Cục bộ (Local autosave.md)` -> Gọi `RestoreQueueCommand` (phục hồi từ file autosave.md cục bộ hoặc OpenFilePicker).
+        * `☁️ Google Drive` -> Gọi `RestoreQueueFromGoogleDriveCommand` (phục hồi trực tiếp từ đám mây Google Drive).
+    - **Tích hợp MenuFlyout 2 Tùy Chọn cho Dấu Trang & Lịch Sử Đọc (History & Bookmarks / Tab Thư Viện)**:
+      + Nút `[💾 Sao Lưu MD ▼]`:
+        * `📁 Cục bộ (bookmarks.md & history.md)` -> Gọi `BackupReaderDataCommand`.
+        * `☁️ Google Drive` -> Gọi `BackupReaderToGoogleDriveCommand` (đẩy bookmarks.md và history.md lên Google Drive).
+      + Nút `[📂 Phục Hồi MD ▼]`:
+        * `📁 Cục bộ (bookmarks.md & history.md)` -> Gọi `RestoreReaderDataCommand`.
+        * `☁️ Google Drive` -> Gọi `RestoreReaderFromGoogleDriveCommand` (kéo về và tự động làm mới trạng thái thư viện).
+    - **Bổ sung Nút & Chức Năng Sao Lưu / Phục Hồi Tiến Độ Đọc Dùng Chung (resume.md) Riêng Biệt**:
+      + `ReadProgressStore.cs`: Bổ sung 2 phương thức xử lý độc lập `SaveResumeToMarkdownAsync(customPath)` và `LoadResumeFromMarkdownAsync(customPath, mergeWithExisting: true)`.
+      + `LibraryViewModel.cs`: Bổ sung 4 RelayCommand:
+        * `BackupResumeDataCommand`: Mở hộp thoại chọn nơi lưu `resume.md` cục bộ.
+        * `RestoreResumeDataCommand`: Mở hộp thoại chọn tệp `resume.md` cục bộ và hợp nhất tiến độ đọc.
+        * `BackupResumeToGoogleDriveCommand`: Đẩy trực tiếp `resume.md` lên Google Drive chung.
+        * `RestoreResumeFromGoogleDriveCommand`: Tải và hợp nhất `resume.md` từ Google Drive chung về thiết bị.
+      + `LibraryView.axaml`: Bổ sung 2 nút giao diện tại cả thanh công cụ Lịch Sử Đọc, thanh công cụ Dấu Trang, và trong Modal Cài đặt Bộ nhớ đệm:
+        * `[📖 Sao Lưu Resume ▼]`: Option 1 `📁 Cục bộ (resume.md)` & Option 2 `☁️ Google Drive`.
+        * `[📖 Phục Hồi Resume ▼]`: Option 1 `📁 Cục bộ (resume.md)` & Option 2 `☁️ Google Drive`.
+    - **Hỗ trợ Đa Nền Tảng Chặt Chẽ (Desktop & Android)**:
+      + Tương thích cả cơ chế StorageProvider hiện đại (Avalonia StorageProvider API) lẫn fallback luồng dữ liệu (Stream) khi chạy trên môi trường Android SAF, giữ nguyên tính độc lập của `autosave.md` cho từng thiết bị và tính đồng bộ của `resume.md` cho toàn bộ các thiết bị.

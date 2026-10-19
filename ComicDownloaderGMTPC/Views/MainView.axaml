@@ -1479,11 +1479,29 @@
                                     <Button Command="{Binding ClearQueueCommand}" Background="#374151" Foreground="#E5E7EB" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3">
                                         <TextBlock Text="🧹 XÓA QUEUE" FontSize="11" />
                                     </Button>
-                                    <Button Command="{Binding BackupQueueCommand}" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Sao lưu danh sách hàng chờ và tiến độ hiện tại sang file .md">
-                                        <TextBlock Text="💾 SAO LƯU MD" FontSize="11" />
+                                    <Button Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Sao lưu danh sách hàng chờ và tiến độ (Cục bộ hoặc Google Drive)">
+                                        <Button.Flyout>
+                                            <MenuFlyout Placement="Bottom">
+                                                <MenuItem Header="📁 Cục bộ (Local autosave.md)" Command="{Binding BackupQueueCommand}" />
+                                                <MenuItem Header="☁️ Google Drive" Command="{Binding BackupQueueToGoogleDriveCommand}" />
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="💾 SAO LƯU MD" FontSize="11" />
+                                            <TextBlock Text="▼" FontSize="8" VerticalAlignment="Center" Foreground="#E0F2FE" />
+                                        </StackPanel>
                                     </Button>
-                                    <Button Command="{Binding RestoreQueueCommand}" Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Phục hồi danh sách hàng chờ và tiến độ từ file .md">
-                                        <TextBlock Text="📂 PHỤC HỒI MD" FontSize="11" />
+                                    <Button Background="#0D9488" Foreground="#FFFFFF" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Phục hồi danh sách hàng chờ và tiến độ (Cục bộ hoặc Google Drive)">
+                                        <Button.Flyout>
+                                            <MenuFlyout Placement="Bottom">
+                                                <MenuItem Header="📁 Cục bộ (Local autosave.md)" Command="{Binding RestoreQueueCommand}" />
+                                                <MenuItem Header="☁️ Google Drive" Command="{Binding RestoreQueueFromGoogleDriveCommand}" />
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="📂 PHỤC HỒI MD" FontSize="11" />
+                                            <TextBlock Text="▼" FontSize="8" VerticalAlignment="Center" Foreground="#CCFBF1" />
+                                        </StackPanel>
                                     </Button>
                                     <Button Command="{Binding OpenGoogleDriveModalCommand}" Background="#4F46E5" BorderBrush="#818CF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Đồng bộ Hàng chờ tải &amp; Dấu trang / Lịch sử đọc lên Google Drive (\GMTPC\Comic Downloader GMTPC\)">
                                         <TextBlock Text="☁️ GOOGLE DRIVE" FontSize="11" />

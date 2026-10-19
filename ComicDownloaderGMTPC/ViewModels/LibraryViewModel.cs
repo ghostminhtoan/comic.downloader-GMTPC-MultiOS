@@ -1979,6 +1979,259 @@ public partial class LibraryViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task BackupReaderToGoogleDriveAsync()
+    {
+        if (!GoogleDriveSyncService.Instance.IsConnected)
+        {
+            StatusMessage = "⚠️ Vui lòng đăng nhập Google Drive trước khi sao lưu.";
+            OpenGoogleDrive();
+            return;
+        }
+
+        StatusMessage = "⏳ Đang tải bookmarks.md và history.md lên Google Drive...";
+        try
+        {
+            var (ok, msg) = await GoogleDriveSyncService.Instance.BackupReaderToCloudAsync();
+            StatusMessage = ok ? "✅ " + msg : "❌ " + msg;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi sao lưu Reader lên Google Drive: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task RestoreReaderFromGoogleDriveAsync()
+    {
+        if (!GoogleDriveSyncService.Instance.IsConnected)
+        {
+            StatusMessage = "⚠️ Vui lòng đăng nhập Google Drive trước khi phục hồi.";
+            OpenGoogleDrive();
+            return;
+        }
+
+        StatusMessage = "⏳ Đang tải bookmarks.md và history.md từ Google Drive...";
+        try
+        {
+            var (ok, res, msg) = await GoogleDriveSyncService.Instance.RestoreReaderFromCloudAsync();
+            if (ok && res != null)
+            {
+                await ReloadAllLibraryStateAsync();
+                StatusMessage = $"✅ {msg}";
+            }
+            else
+            {
+                StatusMessage = "❌ " + msg;
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi phục hồi Reader từ Google Drive: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task BackupResumeDataAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanSave)
+            {
+                IStorageFolder? suggestedFolder = null;
+                try
+                {
+                    string autoDir = QueueBackupService.GetAutoSaveDirectory();
+                    if (Directory.Exists(autoDir))
+                    {
+                        suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(autoDir);
+                    }
+                }
+                catch { }
+
+                var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+                {
+                    Title = "Chọn nơi lưu file sao lưu tiến độ đọc dùng chung (resume.md)",
+                    SuggestedFileName = ReadProgressStore.ResumeFileName,
+                    DefaultExtension = "md",
+                    ShowOverwritePrompt = true,
+                    SuggestedStartLocation = suggestedFolder,
+                    FileTypeChoices = new List<FilePickerFileType>
+                    {
+                        new("Markdown Resume Backup (*.md)") { Patterns = new[] { "*.md" } },
+                        new("All Files (*.*)") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (file == null)
+                {
+                    StatusMessage = "Đã hủy chọn nơi lưu file resume.md.";
+                    return;
+                }
+
+                string? localPath = file.TryGetLocalPath();
+                if (!string.IsNullOrWhiteSpace(localPath))
+                {
+                    string savedPath = await ReadProgressStore.Instance.SaveResumeToMarkdownAsync(localPath);
+                    StatusMessage = $"💾 Đã sao lưu thành công tiến độ đọc dùng chung ra: {Path.GetFileName(savedPath)}";
+                }
+                else
+                {
+                    string deviceName = GoogleDriveSyncService.Instance.CurrentDeviceName;
+                    string content = ReadProgressStore.Instance.BuildResumeMarkdownContent(deviceName);
+                    await using var stream = await file.OpenWriteAsync();
+                    stream.SetLength(0);
+                    await using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8);
+                    await writer.WriteAsync(content);
+                    await writer.FlushAsync();
+                    StatusMessage = $"💾 Đã sao lưu thành công tiến độ đọc dùng chung ra: {file.Name}";
+                }
+                return;
+            }
+
+            string path = await ReadProgressStore.Instance.SaveResumeToMarkdownAsync();
+            StatusMessage = $"💾 Đã sao lưu tiến độ đọc dùng chung ra file: {path}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi khi sao lưu tiến độ đọc (resume.md): {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task RestoreResumeDataAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanOpen)
+            {
+                IStorageFolder? suggestedFolder = null;
+                try
+                {
+                    string autoDir = QueueBackupService.GetAutoSaveDirectory();
+                    if (Directory.Exists(autoDir))
+                    {
+                        suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(autoDir);
+                    }
+                }
+                catch { }
+
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = "Chọn file Markdown (resume.md) để phục hồi tiến độ đọc dùng chung",
+                    AllowMultiple = false,
+                    SuggestedStartLocation = suggestedFolder,
+                    FileTypeFilter = new List<FilePickerFileType>
+                    {
+                        new("Markdown Resume Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
+                        new("All Files (*.*)") { Patterns = new[] { "*" } }
+                    }
+                });
+
+                if (files == null || files.Count == 0)
+                {
+                    StatusMessage = "Đã hủy chọn file phục hồi resume.md.";
+                    return;
+                }
+
+                var selectedFile = files[0];
+                string? localPath = selectedFile.TryGetLocalPath();
+                ResumeRestoreResult res;
+
+                if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
+                {
+                    res = await ReadProgressStore.Instance.LoadResumeFromMarkdownAsync(localPath, mergeWithExisting: true);
+                }
+                else
+                {
+                    await using var stream = await selectedFile.OpenReadAsync();
+                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
+                    string content = await reader.ReadToEndAsync();
+                    res = ReadProgressStore.Instance.ParseResumeMarkdownContent(content, mergeWithExisting: true);
+                }
+
+                if (res.HasValidStructure)
+                {
+                    await ReloadAllLibraryStateAsync();
+                    string detail = res.RestoredCrossDeviceComics > 0
+                        ? $"{res.RestoredCrossDeviceComics} bộ truyện và {res.RestoredProgressEntries} tiến trình"
+                        : $"{res.RestoredProgressEntries} tiến trình";
+                    StatusMessage = $"✅ Đã phục hồi thành công {detail} từ tệp resume.md!";
+                }
+                else
+                {
+                    StatusMessage = "⚠️ File Markdown không đúng định dạng của resume.md.";
+                }
+                return;
+            }
+
+            var fallbackRes = await ReadProgressStore.Instance.LoadResumeFromMarkdownAsync(null, mergeWithExisting: true);
+            if (fallbackRes.HasValidStructure)
+            {
+                await ReloadAllLibraryStateAsync();
+                StatusMessage = $"✅ Đã phục hồi thành công tiến độ đọc dùng chung từ resume.md!";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi khi phục hồi tiến độ đọc (resume.md): {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task BackupResumeToGoogleDriveAsync()
+    {
+        if (!GoogleDriveSyncService.Instance.IsConnected)
+        {
+            StatusMessage = "⚠️ Vui lòng đăng nhập Google Drive trước khi sao lưu.";
+            OpenGoogleDrive();
+            return;
+        }
+
+        StatusMessage = "⏳ Đang sao lưu tiến độ đọc dùng chung (resume.md) lên thư mục gốc Google Drive...";
+        try
+        {
+            var (ok, msg) = await GoogleDriveSyncService.Instance.BackupResumeToCloudAsync();
+            StatusMessage = ok ? "✅ " + msg : "❌ " + msg;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi sao lưu resume.md lên Google Drive: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task RestoreResumeFromGoogleDriveAsync()
+    {
+        if (!GoogleDriveSyncService.Instance.IsConnected)
+        {
+            StatusMessage = "⚠️ Vui lòng đăng nhập Google Drive trước khi phục hồi.";
+            OpenGoogleDrive();
+            return;
+        }
+
+        StatusMessage = "⏳ Đang tải và hợp nhất tiến độ đọc dùng chung (resume.md) từ Google Drive...";
+        try
+        {
+            var (ok, res, msg) = await GoogleDriveSyncService.Instance.RestoreResumeFromCloudAsync();
+            if (ok && res != null)
+            {
+                await ReloadAllLibraryStateAsync();
+                StatusMessage = $"✅ {msg}";
+            }
+            else
+            {
+                StatusMessage = "❌ " + msg;
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Lỗi phục hồi resume.md từ Google Drive: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
     public async Task OpenMostRecentComicAsync()
     {
         var recentPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();
