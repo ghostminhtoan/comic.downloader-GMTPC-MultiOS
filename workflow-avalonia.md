@@ -2417,6 +2417,22 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
 6. **Chuẩn Hóa Song Ngữ Quốc Tế**:
    - Bổ sung Section `## 18. Dual Picture Sort (Lọc Ảnh Song Song)` đầy đủ trong `languages.md`.
 
+### 15.111 Tích Hợp Gộp File PDF & MOBI, Khắc Phục Lỗi Mở Thư Mục Android (Hộp Thoại Mặc Định) & Tinh Chỉnh Giao Diện Tùy Chọn Chapter (2026-10-19)
+1. **Gộp File Thành Định Dạng PDF & MOBI Chuẩn Quốc Tế**:
+   - **Tích hợp `MobiWriterService`**: Xây dựng bộ tạo sách điện tử Kindle MOBI đa chương chuẩn Palm PDB bằng 100% C# Managed Code, streaming trực tiếp O(1) RAM. Tự động biên soạn cây mục lục chương HTML với thẻ ngắt trang `<mbp:pagebreak/>` và nhúng ảnh `<img recindex="..." />`. Tích hợp đầy đủ PalmDOC Header, MOBI Header (`first_image_index = 2`), EXTH Records (Title, Author, Image Count) và các bản ghi chuẩn FLIS, FCIS, EOF. Tương thích 100% với `MobiComicParser` và mọi ứng dụng đọc sách điện tử quốc tế (Kindle, Comic Screen, Moon+ Reader, Calibre...).
+   - **Tích hợp `FilePackerService.CreatePdfFromImages`**: Tạo file PDF chuẩn ISO 32000-1 với cơ chế Zero-Conversion Native Direct Streaming, tự động tạo Bookmarks Tree (Mục lục chương) tiếng Việt UTF-16BE cho từng chapter để đọc giả nhảy trang tức thì khi mở trong PDF Reader.
+   - **Đa dạng hóa nguồn vào**: Hỗ trợ quét và giải nén mọi định dạng tệp truyện nguồn: folder ảnh, `.zip`, `.cbz`, `.pdf`, `.mobi`, `.rar`, `.cbr`.
+2. **Khắc Phục Triệt Để Lỗi Mở Thư Mục Trên Android & Loại Bỏ Trùng Lặp Ứng Dụng**:
+   - Loại bỏ hoàn toàn cơ chế cũ đẩy multiple mixed intents (`*/*`) vào `Intent.CreateChooser` vốn khiến Android hiển thị 4 icon "ES Duyệt Tập Tin" và gây hỏi mở dạng "văn bản, hình ảnh...".
+   - Triệt để sử dụng intent chuẩn `resource/folder` và package đích danh `com.estrongs.android.pop` cho ES File Explorer để mở trực tiếp vào thư mục.
+   - Bổ sung hộp thoại native Android `AlertDialog` với danh sách đơn nhất các ứng dụng quản lý file thực tế trên máy (System Files / DocumentsUI, ES File Explorer, ZArchiver, Ứng dụng khác...), kèm Checkbox `[x] Đặt làm mặc định (Luôn mở bằng ứng dụng này)`.
+   - Lưu lựa chọn vào `SharedPreferences`, từ lần sau chạm nút "Mở" sẽ kích hoạt ngay lập tức ứng dụng đã chọn mà không cần hỏi lại.
+   - Thêm nút "🔄 Đổi App Mở" (`ResetAndroidFolderOpenerCommand`) để người dùng có thể dễ dàng đặt lại hoặc thay đổi ứng dụng mặc định bất cứ lúc nào.
+3. **Nâng Cấp Trực Quan Cho Khối Tùy Chọn Chapter & Định Dạng Xuất**:
+   - Đặt cụm "Hoặc" và "Tùy chỉnh:" trong khung Border viền sáng `#38BDF8`, nền `#1E293B`, chữ "Hoặc" vàng nổi bật `#FBBF24`, "Tùy chỉnh:" chữ trắng sáng `#FFFFFF` đậm nét.
+   - Tinh chỉnh `NumericUpDown` với màu số `#38BDF8`, nền tối `#0F172A`, viền `#38BDF8`, căn giữa số, kèm nhãn "chap/file", bổ sung Style nội tại cho `PART_TextBox` triệt tiêu lỗi mất số / tối màu trên Android.
+   - Bổ sung 2 nút RadioButton cho định dạng `PDF (.pdf)` (màu hồng `#EC4899`) và `MOBI (.mobi)` (màu xanh ngọc `#10B981`) trong "Định dạng xuất".
+
 ### 15.110 Khắc Phục Lỗi Crash Khởi Động (Cold Start) Trên Android Cho Tính Năng Gộp File Lẻ & TextEditingProtectionService (2026-10-19)
 1. **Triệt Tiêu Hoàn Toàn CommandParameter Cho Các Mốc Gộp Chapter**:
    - Thay thế SetMergeChunkSize(int) bằng 4 RelayCommand không tham số: SetMergeChunk100Command, SetMergeChunk200Command, SetMergeChunk300Command, SetMergeChunkAllCommand.

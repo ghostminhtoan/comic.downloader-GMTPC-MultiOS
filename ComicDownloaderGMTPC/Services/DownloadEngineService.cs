@@ -38,6 +38,7 @@ public class DownloadEngineService
     public event Action<bool>? DownloadingStateChanged;
     public static event Action<string>? AndroidOpenFolderRequested;
     public static event Action? OpenStorageSettingsRequested;
+    public static event Action? ResetAndroidFolderOpenerRequested;
 
     public bool AutoSplitLongImages { get; set; } = false;
     public int AutoSplitHeight { get; set; } = 5000;
@@ -62,6 +63,7 @@ public class DownloadEngineService
     }
 
     public void RequestOpenStorageSettings() => OpenStorageSettingsRequested?.Invoke();
+    public void RequestResetAndroidFolderOpener() => ResetAndroidFolderOpenerRequested?.Invoke();
 
     public DownloadEngineService()
     {

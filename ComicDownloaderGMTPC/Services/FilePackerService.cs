@@ -397,7 +397,7 @@ public class FilePackerService
     /// Tốc độ tương đương đóng gói ZIP, tiêu thụ RAM phẳng < 5MB cho tài liệu hàng nghìn trang.
     /// Tự động đính kèm cây mục lục chương (PDF Bookmarks/Outlines) tiếng Việt UTF-16BE.
     /// </summary>
-    private static void CreatePdfFromImages(
+    public static void CreatePdfFromImages(
         List<string> images,
         string pdfPath,
         List<(string Title, int PageIndex)> bookmarks,

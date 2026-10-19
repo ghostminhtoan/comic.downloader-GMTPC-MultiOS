@@ -46,14 +46,50 @@ public partial class MainViewModel
     [ObservableProperty]
     private bool _isMergeFormatZip = false;
 
+    [ObservableProperty]
+    private bool _isMergeFormatPdf = false;
+
+    [ObservableProperty]
+    private bool _isMergeFormatMobi = false;
+
     partial void OnIsMergeFormatCbzChanged(bool value)
     {
-        if (value && IsMergeFormatZip) IsMergeFormatZip = false;
+        if (value)
+        {
+            if (IsMergeFormatZip) IsMergeFormatZip = false;
+            if (IsMergeFormatPdf) IsMergeFormatPdf = false;
+            if (IsMergeFormatMobi) IsMergeFormatMobi = false;
+        }
     }
 
     partial void OnIsMergeFormatZipChanged(bool value)
     {
-        if (value && IsMergeFormatCbz) IsMergeFormatCbz = false;
+        if (value)
+        {
+            if (IsMergeFormatCbz) IsMergeFormatCbz = false;
+            if (IsMergeFormatPdf) IsMergeFormatPdf = false;
+            if (IsMergeFormatMobi) IsMergeFormatMobi = false;
+        }
+    }
+
+    partial void OnIsMergeFormatPdfChanged(bool value)
+    {
+        if (value)
+        {
+            if (IsMergeFormatCbz) IsMergeFormatCbz = false;
+            if (IsMergeFormatZip) IsMergeFormatZip = false;
+            if (IsMergeFormatMobi) IsMergeFormatMobi = false;
+        }
+    }
+
+    partial void OnIsMergeFormatMobiChanged(bool value)
+    {
+        if (value)
+        {
+            if (IsMergeFormatCbz) IsMergeFormatCbz = false;
+            if (IsMergeFormatZip) IsMergeFormatZip = false;
+            if (IsMergeFormatPdf) IsMergeFormatPdf = false;
+        }
     }
 
     // ==========================================
@@ -218,6 +254,13 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
+    public void ResetAndroidFolderOpener()
+    {
+        _downloadEngine.RequestResetAndroidFolderOpener();
+        AddLog("INFO", "[Android] Đã đặt lại cấu hình ứng dụng mở thư mục mặc định.");
+    }
+
+    [RelayCommand]
     public void SetMergeChunk100() => SetMergeChunk(100);
 
     [RelayCommand]
@@ -282,12 +325,17 @@ public partial class MainViewModel
 
         try
         {
+            string chosenFormat = IsMergeFormatPdf ? ".pdf"
+                : IsMergeFormatMobi ? ".mobi"
+                : IsMergeFormatZip ? ".zip"
+                : ".cbz";
+
             var options = new ArchiveMergeOptions
             {
                 InputFolder = MergeInputFolderPath,
                 OutputFolder = MergeOutputFolderPath,
                 ChapterChunkSize = finalChunk,
-                OutputFormat = IsMergeFormatZip ? ".zip" : ".cbz",
+                OutputFormat = chosenFormat,
                 Compression = System.IO.Compression.CompressionLevel.Fastest
             };
 

@@ -105,7 +105,10 @@ public class ArchiveMergeService
             progress?.Report((0, totalSteps, $"Chuẩn bị gộp {sourceItems.Count} chương thành {totalGroups} file archive..."));
 
             string ext = options.OutputFormat.StartsWith('.') ? options.OutputFormat : $".{options.OutputFormat}";
-            if (!ext.Equals(".zip", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".cbz", StringComparison.OrdinalIgnoreCase))
+            if (!ext.Equals(".zip", StringComparison.OrdinalIgnoreCase) &&
+                !ext.Equals(".cbz", StringComparison.OrdinalIgnoreCase) &&
+                !ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase) &&
+                !ext.Equals(".mobi", StringComparison.OrdinalIgnoreCase))
             {
                 ext = ".cbz";
             }
@@ -127,27 +130,113 @@ public class ArchiveMergeService
                         File.Delete(outFilePath);
                     }
 
-                    using (var zipFs = new FileStream(outFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 65536))
-                    using (var zipArchive = new ZipArchive(zipFs, ZipArchiveMode.Create))
+                    if (ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase))
                     {
-                        for (int i = 0; i < group.Items.Count; i++)
+                        // Gộp thành tài liệu PDF kèm Bookmarks mục lục từng chapter
+                        string tempDir = Path.Combine(Path.GetTempPath(), "comic_merge_pdf_" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(tempDir);
+                        try
                         {
-                            if (ct.IsCancellationRequested) break;
-                            var item = group.Items[i];
+                            var allImages = new List<string>();
+                            var bookmarks = new List<(string Title, int PageIndex)>();
 
-                            string chapterFolderName = MakeSafeFolderName(item);
-                            LogEmitted?.Invoke("INFO", $"  -> Đang đóng gói chương [{item.FormattedChapterLabel}]: {item.Name}...");
+                            for (int i = 0; i < group.Items.Count; i++)
+                            {
+                                if (ct.IsCancellationRequested) break;
+                                var item = group.Items[i];
+                                string chapterLabel = MakeSafeFolderName(item);
+                                LogEmitted?.Invoke("INFO", $"  -> Đang nạp chương [{item.FormattedChapterLabel}]: {item.Name}...");
 
-                            // Trích xuất toàn bộ ảnh từ file chương nguồn đưa vào thư mục chapter bên trong zipArchive
-                            ExtractAndAppendImages(item, chapterFolderName, zipArchive, options.Compression, ct);
+                                int startPage = allImages.Count;
+                                var chapterImages = ExtractChapterImagesToTemp(item, tempDir, ct);
+                                if (chapterImages.Count > 0)
+                                {
+                                    allImages.AddRange(chapterImages);
+                                    bookmarks.Add((chapterLabel, startPage));
+                                }
 
-                            currentStep++;
-                            progress?.Report((currentStep, totalSteps, $"[{currentStep}/{totalSteps}] Đã gom: {item.Name}"));
+                                currentStep++;
+                                progress?.Report((currentStep, totalSteps, $"[{currentStep}/{totalSteps}] Đã nạp: {item.Name}"));
+                            }
+
+                            if (allImages.Count > 0 && !ct.IsCancellationRequested)
+                            {
+                                int dummyUnit = 0;
+                                FilePackerService.CreatePdfFromImages(allImages, outFilePath, bookmarks, allImages.Count, ref dummyUnit, null, ct);
+                                successFiles++;
+                                LogEmitted?.Invoke("SUCCESS", $"Đã hoàn thành file PDF ({gIdx + 1}/{totalGroups}): {outFileName} ({allImages.Count} trang, {bookmarks.Count} chương)");
+                            }
+                        }
+                        finally
+                        {
+                            try { Directory.Delete(tempDir, true); } catch { }
                         }
                     }
+                    else if (ext.Equals(".mobi", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Gộp thành sách điện tử Kindle MOBI đa chương
+                        string tempDir = Path.Combine(Path.GetTempPath(), "comic_merge_mobi_" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(tempDir);
+                        try
+                        {
+                            var chapterData = new List<(string ChapterName, List<string> Images)>();
 
-                    successFiles++;
-                    LogEmitted?.Invoke("SUCCESS", $"Đã hoàn thành file gộp ({gIdx + 1}/{totalGroups}): {outFileName}");
+                            for (int i = 0; i < group.Items.Count; i++)
+                            {
+                                if (ct.IsCancellationRequested) break;
+                                var item = group.Items[i];
+                                string chapterLabel = MakeSafeFolderName(item);
+                                LogEmitted?.Invoke("INFO", $"  -> Đang nạp chương [{item.FormattedChapterLabel}]: {item.Name}...");
+
+                                var chapterImages = ExtractChapterImagesToTemp(item, tempDir, ct);
+                                if (chapterImages.Count > 0)
+                                {
+                                    chapterData.Add((chapterLabel, chapterImages));
+                                }
+
+                                currentStep++;
+                                progress?.Report((currentStep, totalSteps, $"[{currentStep}/{totalSteps}] Đã nạp: {item.Name}"));
+                            }
+
+                            if (chapterData.Count > 0 && !ct.IsCancellationRequested)
+                            {
+                                string bookTitle = Path.GetFileNameWithoutExtension(outFileName);
+                                MobiWriterService.CreateMobiFromImages(outFilePath, bookTitle, chapterData, null, ct);
+                                successFiles++;
+                                int totalImgs = chapterData.Sum(c => c.Images.Count);
+                                LogEmitted?.Invoke("SUCCESS", $"Đã hoàn thành file MOBI ({gIdx + 1}/{totalGroups}): {outFileName} ({totalImgs} trang, {chapterData.Count} chương)");
+                            }
+                        }
+                        finally
+                        {
+                            try { Directory.Delete(tempDir, true); } catch { }
+                        }
+                    }
+                    else
+                    {
+                        // Gộp thành CBZ hoặc ZIP
+                        using (var zipFs = new FileStream(outFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 65536))
+                        using (var zipArchive = new ZipArchive(zipFs, ZipArchiveMode.Create))
+                        {
+                            for (int i = 0; i < group.Items.Count; i++)
+                            {
+                                if (ct.IsCancellationRequested) break;
+                                var item = group.Items[i];
+
+                                string chapterFolderName = MakeSafeFolderName(item);
+                                LogEmitted?.Invoke("INFO", $"  -> Đang đóng gói chương [{item.FormattedChapterLabel}]: {item.Name}...");
+
+                                // Trích xuất toàn bộ ảnh từ file chương nguồn đưa vào thư mục chapter bên trong zipArchive
+                                ExtractAndAppendImages(item, chapterFolderName, zipArchive, options.Compression, ct);
+
+                                currentStep++;
+                                progress?.Report((currentStep, totalSteps, $"[{currentStep}/{totalSteps}] Đã gom: {item.Name}"));
+                            }
+                        }
+
+                        successFiles++;
+                        LogEmitted?.Invoke("SUCCESS", $"Đã hoàn thành file gộp ({gIdx + 1}/{totalGroups}): {outFileName}");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -587,5 +676,136 @@ public class ArchiveMergeService
             }
         }
     }
+
+    /// <summary>
+    /// Trích xuất toàn bộ ảnh của một chapter nguồn ra thư mục tạm hoặc lấy danh sách ảnh có sẵn.
+    /// Hỗ trợ đầy đủ: folder ảnh, .zip, .cbz, .pdf, .mobi, .rar, .cbr.
+    /// </summary>
+    private List<string> ExtractChapterImagesToTemp(ArchiveMergeSourceItem item, string tempDir, CancellationToken ct)
+    {
+        var result = new List<string>();
+
+        if (item.IsDirectory)
+        {
+            if (!Directory.Exists(item.FullPath)) return result;
+            return Directory.EnumerateFiles(item.FullPath, "*.*", SearchOption.AllDirectories)
+                .Where(f => ValidImageExtensions.Contains(Path.GetExtension(f)))
+                .OrderBy(f => f, NaturalSortComparer.Instance)
+                .ToList();
+        }
+
+        string subDir = Path.Combine(tempDir, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(subDir);
+
+        // 1. Nguồn là PDF
+        if (LibraryScannerService.IsPdfFile(item.FullPath))
+        {
+            var pdfMeta = PdfComicParser.Instance.InspectPdf(item.FullPath);
+            int totalPages = pdfMeta.Pages.Count;
+            for (int p = 0; p < totalPages; p++)
+            {
+                if (ct.IsCancellationRequested) break;
+                try
+                {
+                    byte[]? imgBytes = PdfComicParser.Instance.ExtractPageImageBytes(item.FullPath, p, out string imgExt);
+                    if (imgBytes != null && imgBytes.Length > 0)
+                    {
+                        string outPath = Path.Combine(subDir, $"p_{p + 1:D4}{imgExt}");
+                        File.WriteAllBytes(outPath, imgBytes);
+                        result.Add(outPath);
+                    }
+                }
+                catch { }
+            }
+            return result;
+        }
+
+        // 2. Nguồn là MOBI
+        if (LibraryScannerService.IsMobiFile(item.FullPath))
+        {
+            var meta = MobiComicParser.Instance.InspectMobi(item.FullPath);
+            int totalPages = meta.Pages.Count;
+            for (int p = 0; p < totalPages; p++)
+            {
+                if (ct.IsCancellationRequested) break;
+                try
+                {
+                    byte[]? imgBytes = MobiComicParser.Instance.ReadPageBytes(item.FullPath, p);
+                    if (imgBytes != null && imgBytes.Length > 0)
+                    {
+                        string outPath = Path.Combine(subDir, $"p_{p + 1:D4}.jpg");
+                        File.WriteAllBytes(outPath, imgBytes);
+                        result.Add(outPath);
+                    }
+                }
+                catch { }
+            }
+            return result;
+        }
+
+        // 3. Nguồn là RAR / CBR
+        if (LibraryScannerService.IsRarFile(item.FullPath))
+        {
+            var entries = RarArchivePool.Instance.GetImageEntriesInfo(item.FullPath);
+            var sortedEntries = entries.OrderBy(e => e.FullName, NaturalSortComparer.Instance).ToList();
+            int pIdx = 1;
+            foreach (var e in sortedEntries)
+            {
+                if (ct.IsCancellationRequested) break;
+                try
+                {
+                    byte[]? imgBytes = RarArchivePool.Instance.ReadEntryBytes(item.FullPath, e.FullName);
+                    if (imgBytes != null && imgBytes.Length > 0)
+                    {
+                        string ext = Path.GetExtension(e.Name);
+                        if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
+                        string outPath = Path.Combine(subDir, $"p_{pIdx:D4}{ext}");
+                        File.WriteAllBytes(outPath, imgBytes);
+                        result.Add(outPath);
+                        pIdx++;
+                    }
+                }
+                catch { }
+            }
+            return result;
+        }
+
+        // 4. Nguồn là ZIP / CBZ
+        if (LibraryScannerService.IsArchiveFile(item.FullPath))
+        {
+            try
+            {
+                using var sourceFs = new FileStream(item.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536);
+                using var sourceZip = new ZipArchive(sourceFs, ZipArchiveMode.Read);
+                var imgEntries = sourceZip.Entries
+                    .Where(e => !e.FullName.EndsWith('/') && ValidImageExtensions.Contains(Path.GetExtension(e.Name)))
+                    .OrderBy(e => e.FullName, NaturalSortComparer.Instance)
+                    .ToList();
+
+                int pIdx = 1;
+                foreach (var se in imgEntries)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    try
+                    {
+                        string ext = Path.GetExtension(se.Name);
+                        if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
+                        string outPath = Path.Combine(subDir, $"p_{pIdx:D4}{ext}");
+                        using var es = se.Open();
+                        using var fs = new FileStream(outPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536);
+                        es.CopyTo(fs);
+                        result.Add(outPath);
+                        pIdx++;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        return result;
+    }
 }
+
 
