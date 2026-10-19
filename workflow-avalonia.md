@@ -3522,3 +3522,16 @@ ar_pages/ theo LRU (xóa nguyên folder session giải phóng hàng trăm MB đ�
     - **Sửa Lỗi Khởi Tạo AlertDialog & FileCreationMode Trên Android (`MainActivity.cs`)**:
       + Thay thế đúng enum chuẩn `FileCreationMode.Private` cho `GetSharedPreferences`.
       + Bổ sung null check an toàn `dialog?.Show()`, đảm bảo biên dịch đạt chuẩn tuyệt đối 0 Error, 0 Warning trên toàn bộ các nền tảng.
+
+30. **Tự Động Điền Thư Mục Lưu Cho Tab Gộp File Lẻ (Archive Merger) Khi Chọn Thư Mục Nguồn (`MainViewModel.ArchiveMerger.cs`)**:
+    - **Thuật Toán Tính Thư Mục Lưu Mặc Định (`ComputeDefaultMergeOutputFolder`)**:
+      + Tự động xác định thư mục `merged` cùng cấp với thư mục nguồn chứa các chương truyện lẻ: `Directory.GetParent(inputFolder)/merged`.
+      + Nếu thư mục nguồn là ổ đĩa gốc không có thư mục cha (ví dụ `D:\`), tự động fallback sang `inputFolder/merged`.
+    - **Tự Động Điền Thư Mục Lưu Ngay Khi Chọn Nguồn (`BrowseMergeInputFolderAsync`)**:
+      + Ngay khi người dùng chọn xong thư mục nguồn từ hộp thoại duyệt file, ô `MergeOutputFolderPath` được tự động điền đường dẫn thư mục `merged` chuẩn xác.
+    - **Tự Động Cập Nhật Khi Dán Hoặc Nhập Thủ Công (`OnMergeInputFolderPathChanged`)**:
+      + Lắng nghe sự kiện thay đổi đường dẫn nguồn: Nếu ô thư mục lưu đang để trống hoặc đang là thư mục `merged` tự sinh trước đó, hệ thống sẽ tự động cập nhật lại đường dẫn `merged` mới tương ứng với thư mục nguồn mới.
+    - **Điền Sẵn Thư Mục Mặc Định Khi Khởi Động (`InitArchiveMerger`)**:
+      + Khởi tạo sẵn đường dẫn `merged` ngay khi mở ứng dụng, triệt tiêu trạng thái ô nhập bị bỏ trống.
+    - **Tự Động Tạo Thư Mục Khi Bấm Mở (`OpenMergeOutputFolder`)**:
+      + Kiểm tra và tự động tạo thư mục trên đĩa nếu chưa tồn tại trước khi gọi mở trong trình quản lý tệp của hệ điều hành.

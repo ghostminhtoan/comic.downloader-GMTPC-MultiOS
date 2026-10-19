@@ -169,8 +169,47 @@ public partial class MainViewModel
             {
                 MergeInputFolderPath = _downloadEngine.DownloadRoot;
             }
+            if (string.IsNullOrEmpty(MergeOutputFolderPath) && !string.IsNullOrWhiteSpace(MergeInputFolderPath))
+            {
+                MergeOutputFolderPath = ComputeDefaultMergeOutputFolder(MergeInputFolderPath);
+            }
         }
         catch { }
+    }
+
+    public static string ComputeDefaultMergeOutputFolder(string inputFolder)
+    {
+        if (string.IsNullOrWhiteSpace(inputFolder)) return string.Empty;
+        try
+        {
+            string clean = inputFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var parent = Directory.GetParent(clean);
+            if (parent != null && !string.IsNullOrWhiteSpace(parent.FullName))
+            {
+                return Path.Combine(parent.FullName, "merged");
+            }
+            return Path.Combine(clean, "merged");
+        }
+        catch
+        {
+            return Path.Combine(inputFolder, "merged");
+        }
+    }
+
+    partial void OnMergeInputFolderPathChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        // Tự động điền thư mục lưu 'merged' nếu ô lưu đang trống hoặc đang là thư mục merged tự động sinh trước đó
+        if (string.IsNullOrWhiteSpace(MergeOutputFolderPath) ||
+            MergeOutputFolderPath.EndsWith(Path.DirectorySeparatorChar + "merged", StringComparison.OrdinalIgnoreCase) ||
+            MergeOutputFolderPath.EndsWith(Path.AltDirectorySeparatorChar + "merged", StringComparison.OrdinalIgnoreCase))
+        {
+            string autoMerge = ComputeDefaultMergeOutputFolder(value);
+            if (!string.IsNullOrWhiteSpace(autoMerge))
+            {
+                MergeOutputFolderPath = autoMerge;
+            }
+        }
     }
 
     [RelayCommand]
@@ -195,7 +234,9 @@ public partial class MainViewModel
                 if (!string.IsNullOrWhiteSpace(normalized))
                 {
                     MergeInputFolderPath = normalized;
+                    MergeOutputFolderPath = ComputeDefaultMergeOutputFolder(normalized);
                     AddLog("INFO", $"[Gộp File Lẻ] Đã chọn thư mục nguồn: {MergeInputFolderPath}");
+                    AddLog("INFO", $"[Gộp File Lẻ] Đã tự động điền thư mục lưu file gộp: {MergeOutputFolderPath}");
                 }
             }
         }
@@ -248,8 +289,18 @@ public partial class MainViewModel
     public void OpenMergeOutputFolder()
     {
         string path = string.IsNullOrWhiteSpace(MergeOutputFolderPath)
-            ? (string.IsNullOrWhiteSpace(MergeInputFolderPath) ? _downloadEngine.DownloadRoot : Path.Combine(MergeInputFolderPath, "merged"))
+            ? (string.IsNullOrWhiteSpace(MergeInputFolderPath) ? _downloadEngine.DownloadRoot : ComputeDefaultMergeOutputFolder(MergeInputFolderPath))
             : MergeOutputFolderPath;
+
+        try
+        {
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+        }
+        catch { }
+
         _downloadEngine.OpenDirectoryInExplorer(path);
     }
 
