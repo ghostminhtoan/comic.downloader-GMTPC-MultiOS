@@ -219,6 +219,7 @@ public sealed class RarArchivePool : IDisposable
                 }
 
                 IsExtractionCompleted = true;
+                ComicDiskCacheService.Instance.NotifyArchiveCacheActivity();
             }
             catch { }
             finally
@@ -297,7 +298,11 @@ public sealed class RarArchivePool : IDisposable
             try
             {
                 var bytes = File.ReadAllBytes(diskPath);
-                if (bytes.Length > 0) return bytes;
+                if (bytes.Length > 0)
+                {
+                    try { Directory.SetLastWriteTimeUtc(session.CacheDir, DateTime.UtcNow); } catch { }
+                    return bytes;
+                }
             }
             catch { }
         }
@@ -345,7 +350,9 @@ public sealed class RarArchivePool : IDisposable
         var entries = GetImageEntriesInfo(archivePath);
         if (entries.Count == 0) return null;
 
-        byte[]? rawBytes = ReadEntryBytes(archivePath, entries[0].FullName);
+        // Trích xuất trực tiếp duy nhất trang bìa đầu tiên vào bộ nhớ RAM,
+        // TUYỆT ĐỐI KHÔNG kích hoạt worker giải nén toàn bộ tập truyện ra đĩa!
+        byte[]? rawBytes = ExtractSingleEntryBytes(archivePath, entries[0].FullName);
         if (rawBytes == null || rawBytes.Length == 0) return null;
 
         try
@@ -444,7 +451,7 @@ public sealed class RarArchivePool : IDisposable
             }
 
             string safeHash = Math.Abs(normPath.GetHashCode()).ToString("X8");
-            string cacheDir = Path.Combine(Path.GetTempPath(), "comic-screen-rar", safeHash);
+            string cacheDir = Path.Combine(ComicDiskCacheService.Instance.RarCacheDirectory, safeHash);
             string tocPath = Path.Combine(cacheDir, "toc.bin");
 
             List<RarItemInfo>? entries = null;
@@ -582,6 +589,35 @@ public sealed class RarArchivePool : IDisposable
             File.Move(tmpPath, tocPath);
         }
         catch { }
+    }
+
+    private static byte[]? ExtractSingleEntryBytes(string archivePath, string targetCleanKey)
+    {
+        string leaf = Path.GetFileName(targetCleanKey);
+        try
+        {
+            using var fs = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, StreamBufferSize, FileOptions.SequentialScan);
+            using var reader = RarReader.Open(fs);
+
+            while (reader.MoveToNextEntry())
+            {
+                if (reader.Entry.IsDirectory) continue;
+                string k = reader.Entry.Key?.Replace('\\', '/').TrimStart('/') ?? string.Empty;
+                if (string.IsNullOrEmpty(k) || !LibraryScannerService.IsImageFile(k)) continue;
+
+                if (string.Equals(k, targetCleanKey, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(Path.GetFileName(k), leaf, StringComparison.OrdinalIgnoreCase))
+                {
+                    using var es = reader.OpenEntryStream();
+                    using var ms = new MemoryStream();
+                    es.CopyTo(ms);
+                    return ms.ToArray();
+                }
+            }
+        }
+        catch { }
+
+        return null;
     }
 
     private static byte[]? DirectExtractSingleEntry(string archivePath, string targetCleanKey, string diskPath)

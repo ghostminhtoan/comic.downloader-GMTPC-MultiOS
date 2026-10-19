@@ -3406,3 +3406,24 @@ un.sh: Tự động nhận diện thư mục cài đặt, tự cấp quyền th�
       + Thêm nút `[🔄 Làm Mới]` tại hàng tiêu đề phụ của tab History (cạnh số lượng mục).
       + Thêm nút `[🔄 Làm Mới]` tại cụm nút WrapPanel thao tác (đứng đầu danh sách trước nút `[💾 Sao Lưu MD]`).
       + Gắn với `[RelayCommand] RefreshHistoryCommand` gọi `LoadHistoryItemsAsync()` kèm toast thông báo trạng thái `✓ Đã làm mới danh sách lịch sử đọc`.
+
+26. **Kiểm Soát Hạn Mức Bộ Nhớ Đệm Toàn Diện (Hard Cache Quota Enforcement) Chuẩn 100% Comic Screen: Tuyệt Đối Không Vượt Quá Zip Cache + Thumbnail Cache, Tự Động Dọn Rác RAR & Preview, Đồng Bộ Bộ Nhớ Đệm Hệ Điều Hành Android (ComicDiskCacheService.cs, RarArchivePool.cs, ThumbnailPreviewService.cs, ComicReaderViewModel.cs)**:
+    - **Nguyên nhân gốc rễ hiện tượng Cache phình to 15.4 GB trên Android**:
+      + RarArchivePool.cs: Trước đây, khi giải mã ảnh bìa (DecodeCoverThumbnail) hoặc đọc truyện RAR/CBR, hệ thống gọi ReadEntryBytes kích hoạt worker giải nén TOÀN BỘ các trang ảnh của tất cả các file RAR vào Path.GetTempPath()/comic-screen-rar/{safeHash} mà không có bất kỳ cơ chế xóa, cắt tỉa LRU hay kiểm soát Quota nào.
+      + ThumbnailPreviewService.cs: Lưu ảnh preview vào Path.GetTempPath()/comic-preview-cache rải rác ngoài tầm kiểm soát của ComicDiskCacheService.
+      + Trên Android, Path.GetTempPath() trỏ về /data/user/0/<pkg>/cache/, được hệ điều hành Android tính 100% vào mục **Bộ nhớ đệm (Cache)**. Trong khi đó, ComicDiskCacheService cũ lại đặt cache ở iles/Download/.cache (thuộc phân vùng User Data), dẫn đến việc app báo dung lượng rất nhỏ trong khi Cài đặt Android hiển thị tới 15.4 GB, và các nút dọn dẹp trong app hoàn toàn không chạm tới thư mục temp.
+    - **Kiến trúc Thống Nhất Thư Mục Cache Chuẩn Hệ Điều Hành**:
+      + Trên Android: _cacheRootDir được định tuyến trực tiếp vào Path.Combine(Path.GetTempPath(), 'gmtpc_cache'). Đảm bảo toàn bộ dung lượng bộ nhớ đệm của app nằm trong phân vùng Cache chính thức của Android OS, giúp số liệu trong app khớp 100% với mục Bộ nhớ đệm trong Cài đặt Android và xóa sạch tức thì khi người dùng bấm Xóa bộ nhớ đệm trong hệ thống.
+      + Cấu trúc 4 thư mục phân vùng tập trung: 	humbnails/ (ảnh bìa thư viện), preview_cache/ (ảnh preview hover), rchive_pages/ (trang .pagecache của ZIP/CBZ/PDF/MOBI), và ar_pages/ (các session giải nén RAR/CBR).
+    - **Cơ chế Thực Thi Hạn Mức Cứng (Hard Quota Enforcement: EnforceGlobalCacheQuota)**:
+      + Quy tắc cứng: Tổng dung lượng cache thực tế tuyệt đối KHÔNG ĐƯỢC VƯỢT QUÁ (ZipCacheQuotaMb + ThumbnailQuotaMb) được thiết lập trong app.
+      + PruneArchivePagesIfOverQuota: Khi dung lượng vượt hạn mức ZipCacheQuotaMb, hệ thống ưu tiên cắt tỉa các session RAR cũ nhất trong ar_pages/ theo LRU (xóa nguyên folder session giải phóng hàng trăm MB đến hàng GB ngay lập tức), sau đó cắt tỉa các file .pagecache cũ nhất về 85% quota.
+      + PruneThumbnailsIfOverQuota: Quét cả 	humbnails/ và preview_cache/, sắp xếp theo LastAccessTimeUtc, tự động xóa các file ảnh cũ nhất về 85% quota khi vượt quá ThumbnailQuotaMb.
+      + Nếu tổng dung lượng toàn cục vẫn vượt quá ZipCacheQuotaMb + ThumbnailQuotaMb: Kích hoạt Deep Pruning đưa cả 2 phân vùng xuống mức 80% quota.
+    - **Tối Ưu Single Entry Memory Extraction Cho RAR Thumbnail (RarArchivePool.cs)**:
+      + Viết mới ExtractSingleEntryBytes(archivePath, targetCleanKey): Chỉ mở luồng và trích xuất DUY NHẤT trang bìa đầu tiên thẳng vào mảng byte trong RAM (MemoryStream) để resize sang Bitmap.
+      + TUYỆT ĐỐI KHÔNG kích hoạt background worker và không giải nén các trang khác ra đĩa, triệt tiêu 100% nguyên nhân làm phình đĩa khi quét thư viện.
+    - **Tự Động Dọn Dẹp Rác Legacy Khi Khởi Động & Thoát Reader**:
+      + CleanupLegacyCacheDirectories(): Quét và xóa sạch các thư mục mồ côi cũ Path.GetTempPath()/comic-screen-rar, comic-preview-cache, và thư mục .cache cũ tại phân vùng User Data trên Android. Ngay khi mở app, 15.4 GB rác sẽ được dọn dẹp sạch sẽ tức thì.
+      + Kích hoạt EnforceGlobalCacheQuota() tự động: khi khởi động app, khi thoát Reader (ComicReaderViewModel.Cleanup()), khi người dùng chỉnh sửa Quota trong cài đặt, và định kỳ sau các đợt ghi cache trang truyện mới.
+      + ClearArchiveCache(), ClearThumbnails(), ClearAllCache(): Nâng cấp dọn dẹp triệt để cả 4 phân vùng cache, giải phóng file lock của RarArchivePool.Clear() và trả lại dung lượng bộ nhớ đệm sạch sẽ 100%.

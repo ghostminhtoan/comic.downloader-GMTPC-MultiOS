@@ -26,11 +26,16 @@ public sealed class ComicDiskCacheService
     private readonly object _settingsLock = new();
     private readonly string _cacheRootDir;
     private readonly string _thumbnailsDir;
+    private readonly string _previewCacheDir;
     private readonly string _archivePagesDir;
+    private readonly string _rarCacheDir;
     private readonly string _settingsFilePath;
 
+    public string CacheRootDir => _cacheRootDir;
     public string ThumbnailsDirectory => _thumbnailsDir;
+    public string PreviewCacheDirectory => _previewCacheDir;
     public string ArchivePagesDirectory => _archivePagesDir;
+    public string RarCacheDirectory => _rarCacheDir;
 
     public sealed class CacheSettingsData
     {
@@ -51,7 +56,7 @@ public sealed class ComicDiskCacheService
                 _settings.ThumbnailQuotaMb = Math.Clamp(value, 100, 10000);
                 SaveSettings();
             }
-            _ = Task.Run(PruneThumbnailsIfOverQuota);
+            _ = Task.Run(EnforceGlobalCacheQuota);
         }
     }
 
@@ -65,7 +70,7 @@ public sealed class ComicDiskCacheService
                 _settings.ZipCacheQuotaMb = Math.Clamp(value, 100, 200000);
                 SaveSettings();
             }
-            _ = Task.Run(PruneArchivePagesIfOverQuota);
+            _ = Task.Run(EnforceGlobalCacheQuota);
         }
     }
 
@@ -79,36 +84,50 @@ public sealed class ComicDiskCacheService
                 _settings.RetentionDays = Math.Clamp(value, 0, 365); // 0 = Không bao giờ hết hạn
                 SaveSettings();
             }
-            _ = Task.Run(PruneExpiredArchiveCache);
+            _ = Task.Run(EnforceGlobalCacheQuota);
         }
     }
 
     private ComicDiskCacheService()
     {
         string baseConfigDir = ComicScraperService.GetConfigDirectory();
-        _cacheRootDir = Path.Combine(baseConfigDir, ".cache");
+        if (OperatingSystem.IsAndroid())
+        {
+            // Trên Android: Path.GetTempPath() trỏ về /data/user/0/<pkg>/cache/
+            // Đây là phân vùng Cache chuẩn của hệ điều hành Android, giúp số liệu trong app
+            // khớp 100% với mục "Bộ nhớ đệm" trong Cài đặt hệ điều hành Android.
+            _cacheRootDir = Path.Combine(Path.GetTempPath(), "gmtpc_cache");
+        }
+        else
+        {
+            _cacheRootDir = Path.Combine(baseConfigDir, ".cache");
+        }
+
         _thumbnailsDir = Path.Combine(_cacheRootDir, "thumbnails");
+        _previewCacheDir = Path.Combine(_cacheRootDir, "preview_cache");
         _archivePagesDir = Path.Combine(_cacheRootDir, "archive_pages");
+        _rarCacheDir = Path.Combine(_cacheRootDir, "rar_pages");
         _settingsFilePath = Path.Combine(baseConfigDir, "cache_settings.json");
 
         EnsureDirectories();
         LoadSettings();
 
-        // Tự động dọn dẹp cache hết hạn và kiểm tra hạn mức khi khởi động
+        // Tự động dọn dẹp rác legacy và kiểm tra hạn mức toàn diện khi khởi động
         _ = Task.Run(() =>
         {
-            PruneExpiredArchiveCache();
-            PruneThumbnailsIfOverQuota();
-            PruneArchivePagesIfOverQuota();
+            CleanupLegacyCacheDirectories();
+            EnforceGlobalCacheQuota();
         });
     }
 
-    private void EnsureDirectories()
+    public void EnsureDirectories()
     {
         try
         {
             if (!Directory.Exists(_thumbnailsDir)) Directory.CreateDirectory(_thumbnailsDir);
+            if (!Directory.Exists(_previewCacheDir)) Directory.CreateDirectory(_previewCacheDir);
             if (!Directory.Exists(_archivePagesDir)) Directory.CreateDirectory(_archivePagesDir);
+            if (!Directory.Exists(_rarCacheDir)) Directory.CreateDirectory(_rarCacheDir);
         }
         catch { }
     }
@@ -212,16 +231,20 @@ public sealed class ComicDiskCacheService
                 File.Move(tmpFile, targetFile, overwrite: true);
                 File.SetLastAccessTimeUtc(targetFile, DateTime.UtcNow);
 
-                // Debounce prune quota: chỉ kiểm tra định kỳ mỗi 5 phút (300.000 ms), loại bỏ hoàn toàn Disk Thrashing trên Flash
-                long now = Environment.TickCount64;
-                if (now - _lastDiskPruneTick > 300000)
-                {
-                    _lastDiskPruneTick = now;
-                    PruneArchivePagesIfOverQuota();
-                }
+                NotifyArchiveCacheActivity();
             }
             catch { }
         });
+    }
+
+    public void NotifyArchiveCacheActivity()
+    {
+        long now = Environment.TickCount64;
+        if (now - _lastDiskPruneTick > 60000)
+        {
+            _lastDiskPruneTick = now;
+            _ = Task.Run(EnforceGlobalCacheQuota);
+        }
     }
 
     // =========================================================================
@@ -293,7 +316,7 @@ public sealed class ComicDiskCacheService
                 File.SetLastAccessTimeUtc(targetFile, DateTime.UtcNow);
 
                 long now = Environment.TickCount64;
-                if (now - _lastThumbPruneTick > 300000)
+                if (now - _lastThumbPruneTick > 60000)
                 {
                     _lastThumbPruneTick = now;
                     PruneThumbnailsIfOverQuota();
@@ -309,12 +332,24 @@ public sealed class ComicDiskCacheService
 
     public long GetThumbnailsSizeBytes()
     {
-        return CalculateDirectorySizeSafe(_thumbnailsDir);
+        long total = CalculateDirectorySizeSafe(_thumbnailsDir) + CalculateDirectorySizeSafe(_previewCacheDir);
+        string legacyPreview = Path.Combine(Path.GetTempPath(), "comic-preview-cache");
+        if (Directory.Exists(legacyPreview))
+        {
+            total += CalculateDirectorySizeSafe(legacyPreview);
+        }
+        return total;
     }
 
     public long GetArchiveCacheSizeBytes()
     {
-        return CalculateDirectorySizeSafe(_archivePagesDir);
+        long total = CalculateDirectorySizeSafe(_archivePagesDir) + CalculateDirectorySizeSafe(_rarCacheDir);
+        string legacyRar = Path.Combine(Path.GetTempPath(), "comic-screen-rar");
+        if (Directory.Exists(legacyRar))
+        {
+            total += CalculateDirectorySizeSafe(legacyRar);
+        }
+        return total;
     }
 
     public long GetTotalCacheSizeBytes()
@@ -392,7 +427,7 @@ public sealed class ComicDiskCacheService
     }
 
     // =========================================================================
-    // 4. CẮT TỈA TỰ ĐỘNG (AUTO PRUNING: QUOTA & RETENTION DAYS)
+    // 4. CẮT TỈA TỰ ĐỘNG & KIỂM SOÁT HẠN MỨC TOÀN CỤC (HARD QUOTA ENFORCEMENT)
     // =========================================================================
 
     public void PruneExpiredArchiveCache()
@@ -420,28 +455,112 @@ public sealed class ComicDiskCacheService
         catch { }
     }
 
-    public void PruneThumbnailsIfOverQuota()
+    public void PruneThumbnailsIfOverQuota(double targetRatio = 0.85)
     {
-        if (!Directory.Exists(_thumbnailsDir)) return;
         long maxBytes = (long)ThumbnailQuotaMb * 1024L * 1024L;
+        long currentTotal = GetThumbnailsSizeBytes();
+        if (currentTotal <= maxBytes) return;
+
+        long targetBytes = (long)(maxBytes * targetRatio);
 
         try
         {
-            var enumOptions = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
-            var files = Directory.EnumerateFiles(_thumbnailsDir, "*.thumb", enumOptions)
-                .Select(f =>
-                {
-                    try { return new FileInfo(f); } catch { return null; }
-                })
-                .Where(fi => fi != null && fi.Exists)
-                .OrderBy(fi => fi!.LastAccessTimeUtc) // Cũ nhất trước
-                .ToList();
-
-            long currentTotal = files.Sum(f => f!.Length);
-            long targetBytes = (long)(maxBytes * 0.85); // Xả về 85% hạn mức
-
-            if (currentTotal > maxBytes)
+            // Xóa legacy preview trước nếu có
+            string legacyPreview = Path.Combine(Path.GetTempPath(), "comic-preview-cache");
+            if (Directory.Exists(legacyPreview))
             {
+                try { Directory.Delete(legacyPreview, recursive: true); } catch { }
+                currentTotal = GetThumbnailsSizeBytes();
+                if (currentTotal <= targetBytes) return;
+            }
+
+            var enumOptions = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = true };
+            var fileList = new List<FileInfo>();
+
+            if (Directory.Exists(_previewCacheDir))
+            {
+                foreach (var f in Directory.EnumerateFiles(_previewCacheDir, "*", enumOptions))
+                {
+                    try { var fi = new FileInfo(f); if (fi.Exists) fileList.Add(fi); } catch { }
+                }
+            }
+
+            if (Directory.Exists(_thumbnailsDir))
+            {
+                foreach (var f in Directory.EnumerateFiles(_thumbnailsDir, "*.thumb", enumOptions))
+                {
+                    try { var fi = new FileInfo(f); if (fi.Exists) fileList.Add(fi); } catch { }
+                }
+            }
+
+            // Sắp xếp LRU: cũ nhất trước
+            fileList.Sort((a, b) => a.LastAccessTimeUtc.CompareTo(b.LastAccessTimeUtc));
+
+            foreach (var fi in fileList)
+            {
+                if (currentTotal <= targetBytes) break;
+                try
+                {
+                    long len = fi.Length;
+                    fi.Delete();
+                    currentTotal -= len;
+                }
+                catch { }
+            }
+        }
+        catch { }
+    }
+
+    public void PruneArchivePagesIfOverQuota(double targetRatio = 0.85)
+    {
+        long maxBytes = (long)ZipCacheQuotaMb * 1024L * 1024L;
+        long currentTotal = GetArchiveCacheSizeBytes();
+        if (currentTotal <= maxBytes) return;
+
+        long targetBytes = (long)(maxBytes * targetRatio);
+
+        try
+        {
+            // 1. Xóa legacy rar nếu có
+            string legacyRar = Path.Combine(Path.GetTempPath(), "comic-screen-rar");
+            if (Directory.Exists(legacyRar))
+            {
+                try { Directory.Delete(legacyRar, recursive: true); } catch { }
+                currentTotal = GetArchiveCacheSizeBytes();
+                if (currentTotal <= targetBytes) return;
+            }
+
+            // 2. Ưu tiên cắt tỉa các session RAR cũ nhất (giải phóng dung lượng cực lớn ngay tức khắc)
+            if (Directory.Exists(_rarCacheDir))
+            {
+                var dirInfo = new DirectoryInfo(_rarCacheDir);
+                var subDirs = dirInfo.GetDirectories()
+                    .OrderBy(d => d.LastWriteTimeUtc)
+                    .ToList();
+
+                foreach (var sub in subDirs)
+                {
+                    if (currentTotal <= targetBytes) break;
+                    try
+                    {
+                        long subSize = CalculateDirectorySizeSafe(sub.FullName);
+                        sub.Delete(recursive: true);
+                        currentTotal -= subSize;
+                    }
+                    catch { }
+                }
+            }
+
+            // 3. Nếu vẫn vượt target: cắt tỉa các file .pagecache trong _archivePagesDir theo LRU
+            if (currentTotal > targetBytes && Directory.Exists(_archivePagesDir))
+            {
+                var enumOptions = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
+                var files = Directory.EnumerateFiles(_archivePagesDir, "*.pagecache", enumOptions)
+                    .Select(f => { try { return new FileInfo(f); } catch { return null; } })
+                    .Where(fi => fi != null && fi.Exists)
+                    .OrderBy(fi => fi!.LastAccessTimeUtc)
+                    .ToList();
+
                 foreach (var fi in files)
                 {
                     if (currentTotal <= targetBytes) break;
@@ -458,40 +577,79 @@ public sealed class ComicDiskCacheService
         catch { }
     }
 
-    public void PruneArchivePagesIfOverQuota()
+    /// <summary>
+    /// Thực thi quy định kiểm soát cứng toàn cục: Dung lượng cache tuyệt đối KHÔNG ĐƯỢC VƯỢT QUÁ
+    /// (ZipCacheQuotaMb + ThumbnailQuotaMb) trong app.
+    /// </summary>
+    public void EnforceGlobalCacheQuota()
     {
-        if (!Directory.Exists(_archivePagesDir)) return;
-        long maxBytes = (long)ZipCacheQuotaMb * 1024L * 1024L;
-
         try
         {
-            var enumOptions = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
-            var files = Directory.EnumerateFiles(_archivePagesDir, "*.pagecache", enumOptions)
-                .Select(f =>
-                {
-                    try { return new FileInfo(f); } catch { return null; }
-                })
-                .Where(fi => fi != null && fi.Exists)
-                .OrderBy(fi => fi!.LastAccessTimeUtc) // Cũ nhất trước (LRU)
-                .ToList();
+            // 1. Dọn dẹp các thư mục mồ côi cũ
+            CleanupLegacyCacheDirectories();
 
-            long currentTotal = files.Sum(f => f!.Length);
-            long targetBytes = (long)(maxBytes * 0.85); // Xả về 85% hạn mức
+            // 2. Dọn cache hết hạn theo ngày
+            PruneExpiredArchiveCache();
 
-            if (currentTotal > maxBytes)
+            // 3. Cắt tỉa theo phân vùng riêng
+            PruneThumbnailsIfOverQuota(0.85);
+            PruneArchivePagesIfOverQuota(0.85);
+
+            // 4. Kiểm tra tổng toàn cục
+            long maxAllowedTotal = (long)(ThumbnailQuotaMb + ZipCacheQuotaMb) * 1024L * 1024L;
+            long currentTotal = GetTotalCacheSizeBytes();
+
+            if (currentTotal > maxAllowedTotal)
             {
-                foreach (var fi in files)
+                // Cắt tỉa sâu hơn xuống 80% quota để bảo đảm an toàn tuyệt đối
+                PruneThumbnailsIfOverQuota(0.80);
+                PruneArchivePagesIfOverQuota(0.80);
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Dọn dẹp sạch sẽ các thư mục cache rác từ các phiên bản trước bị bỏ quên
+    /// (như comic-screen-rar, comic-preview-cache, .tmp mồ côi).
+    /// </summary>
+    public void CleanupLegacyCacheDirectories()
+    {
+        try
+        {
+            string legacyRar = Path.Combine(Path.GetTempPath(), "comic-screen-rar");
+            if (Directory.Exists(legacyRar))
+            {
+                try { Directory.Delete(legacyRar, recursive: true); } catch { }
+            }
+
+            string legacyPreview = Path.Combine(Path.GetTempPath(), "comic-preview-cache");
+            if (Directory.Exists(legacyPreview))
+            {
+                try { Directory.Delete(legacyPreview, recursive: true); } catch { }
+            }
+
+            if (OperatingSystem.IsAndroid())
+            {
+                string oldConfigDir = DownloadEngineService.GetAppSpecificExternalPath();
+                string oldCache = Path.Combine(oldConfigDir, ".cache");
+                if (Directory.Exists(oldCache))
                 {
-                    if (currentTotal <= targetBytes) break;
-                    try
-                    {
-                        long len = fi!.Length;
-                        fi.Delete();
-                        currentTotal -= len;
-                    }
-                    catch { }
+                    try { Directory.Delete(oldCache, recursive: true); } catch { }
                 }
             }
+
+            // Dọn dẹp script update cũ
+            try
+            {
+                string tempDir = Path.GetTempPath();
+                var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
+                foreach (var f in Directory.EnumerateFiles(tempDir, "gmtpc_updater_*.cmd", enumOpts))
+                {
+                    try { File.Delete(f); } catch { }
+                }
+            }
+            catch { }
         }
         catch { }
     }
@@ -504,12 +662,13 @@ public sealed class ComicDiskCacheService
     {
         try
         {
-            if (Directory.Exists(_thumbnailsDir))
+            DeleteDirectoryContentsSafe(_thumbnailsDir);
+            DeleteDirectoryContentsSafe(_previewCacheDir);
+
+            string legacyPreview = Path.Combine(Path.GetTempPath(), "comic-preview-cache");
+            if (Directory.Exists(legacyPreview))
             {
-                foreach (var f in Directory.EnumerateFiles(_thumbnailsDir, "*", SearchOption.AllDirectories))
-                {
-                    try { File.Delete(f); } catch { }
-                }
+                try { Directory.Delete(legacyPreview, recursive: true); } catch { }
             }
         }
         catch { }
@@ -519,12 +678,33 @@ public sealed class ComicDiskCacheService
     {
         try
         {
-            if (Directory.Exists(_archivePagesDir))
+            // Giải phóng mọi handle/waiters đang mở trong RAR session
+            RarArchivePool.Instance.Clear();
+
+            DeleteDirectoryContentsSafe(_archivePagesDir);
+            DeleteDirectoryContentsSafe(_rarCacheDir);
+
+            string legacyRar = Path.Combine(Path.GetTempPath(), "comic-screen-rar");
+            if (Directory.Exists(legacyRar))
             {
-                foreach (var f in Directory.EnumerateFiles(_archivePagesDir, "*", SearchOption.AllDirectories))
-                {
-                    try { File.Delete(f); } catch { }
-                }
+                try { Directory.Delete(legacyRar, recursive: true); } catch { }
+            }
+        }
+        catch { }
+    }
+
+    private static void DeleteDirectoryContentsSafe(string dir)
+    {
+        if (!Directory.Exists(dir)) return;
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+            {
+                try { File.Delete(f); } catch { }
+            }
+            foreach (var sub in Directory.EnumerateDirectories(dir, "*", SearchOption.TopDirectoryOnly))
+            {
+                try { Directory.Delete(sub, recursive: true); } catch { }
             }
         }
         catch { }
@@ -552,6 +732,7 @@ public sealed class ComicDiskCacheService
         ClearResumeCache();
         ClearBookmarks();
         ClearHistory();
+        CleanupLegacyCacheDirectories();
     }
 }
 

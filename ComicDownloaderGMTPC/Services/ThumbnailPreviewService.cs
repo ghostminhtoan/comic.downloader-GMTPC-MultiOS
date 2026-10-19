@@ -71,15 +71,7 @@ public sealed class ThumbnailPreviewService
         };
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
 
-        string baseDir = OperatingSystem.IsAndroid()
-            ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
-            : AppContext.BaseDirectory;
-        if (string.IsNullOrWhiteSpace(baseDir))
-        {
-            baseDir = Path.GetTempPath();
-        }
-
-        _cacheRoot = Path.Combine(baseDir, ".tmp", "preview-cache");
+        _cacheRoot = ComicDiskCacheService.Instance.PreviewCacheDirectory;
         try
         {
             if (!Directory.Exists(_cacheRoot))
@@ -87,18 +79,7 @@ public sealed class ThumbnailPreviewService
                 Directory.CreateDirectory(_cacheRoot);
             }
         }
-        catch
-        {
-            try
-            {
-                _cacheRoot = Path.Combine(Path.GetTempPath(), "comic-preview-cache");
-                if (!Directory.Exists(_cacheRoot))
-                {
-                    Directory.CreateDirectory(_cacheRoot);
-                }
-            }
-            catch { }
-        }
+        catch { }
     }
 
     public bool SupportsPreview(ComicBookItem? item)
@@ -999,18 +980,7 @@ public sealed class ThumbnailPreviewService
                 Directory.CreateDirectory(folder);
             }
         }
-        catch
-        {
-            try
-            {
-                folder = Path.Combine(Path.GetTempPath(), "comic-preview-cache", safeDomain, hash);
-                if (!Directory.Exists(folder))
-                {
-                    Directory.CreateDirectory(folder);
-                }
-            }
-            catch { }
-        }
+        catch { }
         return folder;
     }
 

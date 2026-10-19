@@ -3145,6 +3145,7 @@ public partial class ComicReaderViewModel : ViewModelBase
             _progressStore.FlushImmediately();
             DisposeLoadedBitmaps();
             _readerService.SetReaderActive(false);
+            _ = Task.Run(() => ComicDiskCacheService.Instance.EnforceGlobalCacheQuota());
             if (OperatingSystem.IsAndroid() || IsEcoMode)
             {
                 Task.Run(() =>
