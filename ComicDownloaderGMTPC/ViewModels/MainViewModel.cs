@@ -134,6 +134,14 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isBubbleMode = false;
 
+    partial void OnIsBubbleModeChanged(bool value)
+    {
+        if (BackgroundExecutionService.Instance.IsBubbleMode != value)
+        {
+            BackgroundExecutionService.Instance.SetBubbleMode(value);
+        }
+    }
+
     [ObservableProperty]
     private bool _isExitConfirmOpen = false;
 
@@ -1725,7 +1733,10 @@ public partial class MainViewModel : ViewModelBase
     {
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            IsBubbleMode = enabled;
+            if (IsBubbleMode != enabled)
+            {
+                IsBubbleMode = enabled;
+            }
         });
     }
 

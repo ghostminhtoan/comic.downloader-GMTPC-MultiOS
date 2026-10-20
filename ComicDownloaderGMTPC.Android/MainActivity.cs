@@ -39,6 +39,7 @@ public class MainActivity : AvaloniaMainActivity
         CurrentInstance = this;
         AndroidStorageHelper.WakeUpStorage(this);
 
+
         // Cung cấp danh sách đường dẫn Root của toàn bộ thẻ nhớ ngoài (SD Card)
         Services.LibraryScannerService.AndroidGetExternalStoragePaths = () =>
             AndroidStorageHelper.GetExternalStoragePaths(CurrentInstance?.ApplicationContext ?? CurrentInstance);
@@ -88,12 +89,21 @@ public class MainActivity : AvaloniaMainActivity
         };
         Services.BackgroundExecutionService.NativeRequestEnterBubbleMode = () =>
         {
-            var ctx = ApplicationContext ?? this;
-            ComicBackgroundService.StartOrUpdate(ctx, "bubble_task", "Comic Downloader GMTPC", "Ứng dụng đang chạy ngầm...", 0, false, false, "⏹️ Dừng", "📱 Mở ứng dụng");
-            MoveTaskToBack(true);
+            RunOnUiThread(() =>
+            {
+                var ctx = ApplicationContext ?? this;
+                ComicBackgroundService.StartOrUpdate(ctx, "bubble_task", "Comic Downloader GMTPC", "Bong bóng chạy ngầm đang hoạt động...", 0, false, false, "⏹️ Dừng", "📱 Mở ứng dụng");
+                FloatingBubbleManager.ShowBubble(this);
+            });
         };
-        Services.BackgroundExecutionService.NativeRequestExitBubbleMode = null;
-        Services.BackgroundExecutionService.NativeIsBubbleOrPipSupported = () => false;
+        Services.BackgroundExecutionService.NativeRequestExitBubbleMode = () =>
+        {
+            RunOnUiThread(() =>
+            {
+                FloatingBubbleManager.HideBubble();
+            });
+        };
+        Services.BackgroundExecutionService.NativeIsBubbleOrPipSupported = () => true;
 
         Services.BackgroundExecutionService.NativeMinimizeOrHide = () =>
         {
@@ -107,6 +117,7 @@ public class MainActivity : AvaloniaMainActivity
         {
             RunOnUiThread(() =>
             {
+                FloatingBubbleManager.HideBubble();
                 ComicBackgroundService.Stop(this);
                 FinishAffinity();
                 global::Android.OS.Process.KillProcess(global::Android.OS.Process.MyPid());
@@ -268,6 +279,19 @@ public class MainActivity : AvaloniaMainActivity
         base.OnResume();
         CurrentInstance = this;
         AndroidStorageHelper.WakeUpStorage(this);
+
+        // Tự động kích hoạt lại Bong bóng nổi nếu người dùng vừa cấp quyền từ màn hình Cài đặt hệ thống
+        try
+        {
+            if (Services.BackgroundExecutionService.Instance.IsBubbleMode && !FloatingBubbleManager.IsShowing)
+            {
+                if (FloatingBubbleManager.CanDrawOverlays(this))
+                {
+                    FloatingBubbleManager.ShowBubble(this);
+                }
+            }
+        }
+        catch { }
 
         // Tự động làm mới danh sách Thẻ SD & Storage khi người dùng quay lại từ màn hình Cài đặt cấp quyền
         try

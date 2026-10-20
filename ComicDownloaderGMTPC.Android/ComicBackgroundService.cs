@@ -280,6 +280,43 @@ public class ComicBackgroundService : Service
             builder.SetContentIntent(_cachedOpenPendingIntent);
         }
 
+        // Tích hợp Android Bubble API (Hệ thống Bong bóng Android 10+ / 11+)
+        if (OperatingSystem.IsAndroidVersionAtLeast(29) && BackgroundExecutionService.Instance.IsBubbleMode)
+        {
+            try
+            {
+                var bubbleIntent = new Intent(context, typeof(MainActivity));
+                bubbleIntent.SetAction(Intent.ActionView);
+                var bubbleFlags = PendingIntentFlags.UpdateCurrent;
+                if (OperatingSystem.IsAndroidVersionAtLeast(31))
+                {
+                    bubbleFlags |= PendingIntentFlags.Mutable;
+                }
+                var bubblePendingIntent = PendingIntent.GetActivity(context, 2002, bubbleIntent, bubbleFlags);
+
+                if (bubblePendingIntent != null)
+                {
+                    var iconCompat = AndroidX.Core.Graphics.Drawable.IconCompat.CreateWithResource(context, Resource.Drawable.Icon);
+                    if (iconCompat != null)
+                    {
+                        var bubbleBuilder = new NotificationCompat.BubbleMetadata.Builder(bubblePendingIntent, iconCompat);
+                        bubbleBuilder.SetDesiredHeight(600);
+                        bubbleBuilder.SetAutoExpandBubble(false);
+                        bubbleBuilder.SetSuppressNotification(false);
+                        var bubbleData = bubbleBuilder.Build();
+                        if (bubbleData != null)
+                        {
+                            builder.SetBubbleMetadata(bubbleData);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Warn("ComicGMTPC_Bubble", $"Lỗi đính kèm BubbleMetadata: {ex.Message}");
+            }
+        }
+
         if (progress >= 0 && progress <= 100)
         {
             builder.SetProgress(100, progress, false);
