@@ -1,4 +1,4 @@
-# Workflow hiện tại - Comic Downloader GMTPC Avalonia Multi-OS
+﻿# Workflow hiện tại - Comic Downloader GMTPC Avalonia Multi-OS
 Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ, ít file, build sạch, không phá lane khác, sau khi build luôn luôn upload beta.
 
 ## 1. Quy tắc nền

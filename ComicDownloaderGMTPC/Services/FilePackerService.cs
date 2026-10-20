@@ -1,3 +1,17 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: FilePackerService.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÃ’ & Má»¤C ÄÃCH:
+//   Dá»‹ch vá»¥ Ä‘Ã³ng gÃ³i tÃ i liá»‡u vÃ  lÆ°u trá»¯ truyá»‡n tranh (Archive & Document Packer) sang cÃ¡c Ä‘á»‹nh dáº¡ng
+//   ZIP, CBZ, PDF vÃ  chuyá»ƒn Ä‘á»•i ngÆ°á»£c tá»« PDF sang CBZ/ZIP.
+//
+// CÃC TÃNH NÄ‚NG & THÃ€NH PHáº¦N CHÃNH:
+//   - ÄÃ³ng gÃ³i thÆ° má»¥c truyá»‡n thÃ nh ZIP / CBZ vá»›i nhiá»u cáº¥p Ä‘á»™ nÃ©n (Fastest chá»‘ng ngháº½n mÃ¡y yáº¿u).
+//   - Táº¡o tÃ i liá»‡u PDF chuáº©n quá»‘c táº¿ ISO 32000-1 vá»›i Native Direct Streaming cho Baseline RGB JPEG
+//     vÃ  tá»± Ä‘á»™ng chuáº©n hÃ³a sang Baseline JPEG 95% chá»‘ng lá»—i tráº¯ng trang (Blank Image) trÃªn ComicScreen.
+//   - Tá»± Ä‘á»™ng biÃªn soáº¡n má»¥c lá»¥c chÆ°Æ¡ng PDF Bookmarks Tree (Outlines) há»— trá»£ tiáº¿ng Viá»‡t UTF-16BE.
+//   - Chuyá»ƒn Ä‘á»•i ngÆ°á»£c tá»« PDF sang Archive (PDF to CBZ/ZIP) vá»›i bá»™ giáº£i nÃ©n in-memory khÃ´ng táº¡o file rÃ¡c.
+// ====================================================================================================
 using System;
 using System.Collections.Generic;
 using System.IO;

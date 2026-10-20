@@ -1,3 +1,18 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: UniversalImageDecoder.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÃ’ & Má»¤C ÄÃCH:
+//   Bá»™ giáº£i mÃ£, chuyá»ƒn Ä‘á»•i vÃ  phÃ¢n tÃ­ch Ä‘á»‹nh dáº¡ng hÃ¬nh áº£nh Ä‘a nÄƒng Ä‘á»™c láº­p 100% (Universal Image Codec)
+//   há»— trá»£ WebP (VP8/VP8L/VP8X), PNG, JPEG (Baseline & Progressive), BMP, GIF, TIFF.
+//
+// CÃC TÃNH NÄ‚NG & THÃ€NH PHáº¦N CHÃNH:
+//   - TrÃ­ch xuáº¥t kÃ­ch thÆ°á»›c áº£nh siÃªu tá»‘c tá»« header JPEG/WebP/PNG mÃ  khÃ´ng giáº£i mÃ£ pixel (0ms, 0 byte RAM).
+//   - Nháº­n diá»‡n vÃ  kiá»ƒm Ä‘á»‹nh kháº¯t khe chuáº©n Baseline Sequential RGB JPEG (SOF0, 3 components, 8-bit)
+//     nháº±m tÆ°Æ¡ng thÃ­ch 100% vá»›i ComicScreen vÃ  PDFium di Ä‘á»™ng, trÃ¡nh lá»—i tráº¯ng trang (Blank Image).
+//   - Chuáº©n hÃ³a má»i Ä‘á»‹nh dáº¡ng áº£nh (WebP, Progressive JPEG, Grayscale, PNG, BMP) thÃ nh luá»“ng JPEG chuáº©n
+//     vá»›i ná»n tráº¯ng vÃ  RGB 24-bit thÃ´ng qua SkiaSharp SIMD / ImageSharp Ä‘a ná»n táº£ng.
+//   - Giáº£i mÃ£ an toÃ n thÃ nh SKBitmap há»— trá»£ xá»­ lÃ½ bá»™ nhá»› lá»›n (LOH avoidance).
+// ====================================================================================================
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -54,6 +69,134 @@ public static class UniversalImageDecoder
     /// <summary>
     /// Đọc kích thước ảnh JPEG trực tiếp từ SOF markers trong FileStream cực nhanh (0.0001ms, 0 byte RAM allocated).
     /// </summary>
+    /// <summary>
+    /// Äá»c thÃ´ng tin tá»‡p JPEG trá»±c tiáº¿p tá»« Ä‘Ä©a vÃ  chá»‰ cháº¥p nháº­n Baseline Sequential DCT (SOF0) 3-component RGB 8-bit.
+    /// Loáº¡i bá» hoÃ n toÃ n Progressive JPEG (SOF2 - 0xC2) vÃ  Grayscale (1 kÃªnh) Ä‘á»ƒ triá»‡t tiÃªu lá»—i tráº¯ng toÃ n bá»™ mÃ n hÃ¬nh (blank) trÃªn ComicScreen.
+    /// </summary>
+    public static bool TryGetFastBaselineRgbJpegInfo(string filePath, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return false;
+
+        try
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096);
+            if (fs.Length < 4) return false;
+
+            int b0 = fs.ReadByte();
+            int b1 = fs.ReadByte();
+            if (b0 != 0xFF || b1 != 0xD8) return false;
+
+            Span<byte> header = stackalloc byte[4];
+            while (fs.Position < fs.Length - 4)
+            {
+                int markerLead = fs.ReadByte();
+                while (markerLead == 0xFF && fs.Position < fs.Length)
+                {
+                    markerLead = fs.ReadByte();
+                }
+                if (markerLead == -1) break;
+                byte marker = (byte)markerLead;
+
+                // CHá»ˆ CHáº¤P NHáº¬N SOF0 (0xC0 - Baseline DCT)
+                if (marker == 0xC0)
+                {
+                    Span<byte> sof = stackalloc byte[8];
+                    if (fs.Read(sof) < 8) break;
+                    int precision = sof[2];
+                    height = (sof[3] << 8) | sof[4];
+                    width = (sof[5] << 8) | sof[6];
+                    int components = sof[7];
+
+                    if (precision == 8 && components == 3 && width > 0 && height > 0)
+                    {
+                        return true;
+                    }
+                    return false;
+                }
+
+                // Náº¿u gáº·p Progressive (SOF2 - 0xC2) hoáº·c Extended (0xC1) -> Tráº£ vá» false Ä‘á»ƒ kÃ­ch hoáº¡t fallback chuáº©n hÃ³a
+                if (marker == 0xC1 || marker == 0xC2 || (marker >= 0xC3 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC))
+                {
+                    return false;
+                }
+
+                if (marker == 0xD8 || marker == 0xD9 || (marker >= 0xD0 && marker <= 0xD7))
+                {
+                    continue;
+                }
+
+                if (fs.Read(header.Slice(0, 2)) < 2) break;
+                int segLen = (header[0] << 8) | header[1];
+                if (segLen < 2) break;
+                fs.Seek(segLen - 2, SeekOrigin.Current);
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Kiá»ƒm tra áº£nh JPEG trong máº£ng byte cÃ³ pháº£i lÃ  Baseline Sequential DCT (SOF0 - 0xC0) chuáº©n 8-bit vÃ  3 components (RGB/YCbCr).
+    /// </summary>
+    public static bool IsBaselineRgbJpeg(ReadOnlySpan<byte> rawBytes, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (rawBytes.Length < 4 || rawBytes[0] != 0xFF || rawBytes[1] != 0xD8) return false;
+
+        int i = 2;
+        int len = rawBytes.Length;
+        while (i < len - 9)
+        {
+            if (rawBytes[i] != 0xFF)
+            {
+                i++;
+                continue;
+            }
+
+            while (i < len && rawBytes[i] == 0xFF)
+            {
+                i++;
+            }
+            if (i >= len) break;
+            byte marker = rawBytes[i];
+            i++;
+
+            // SOF0 (0xC0 - Baseline Sequential DCT)
+            if (marker == 0xC0)
+            {
+                if (i + 8 > len) break;
+                int precision = rawBytes[i + 2];
+                height = (rawBytes[i + 3] << 8) | rawBytes[i + 4];
+                width = (rawBytes[i + 5] << 8) | rawBytes[i + 6];
+                int components = rawBytes[i + 7];
+
+                return precision == 8 && components == 3 && width > 0 && height > 0;
+            }
+
+            // Náº¿u gáº·p SOF1, SOF2 (Progressive) hoáº·c báº¥t ká»³ SOF khÃ¡c -> KhÃ´ng pháº£i Baseline
+            if (marker == 0xC1 || marker == 0xC2 || (marker >= 0xC3 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC))
+            {
+                return false;
+            }
+
+            // Bá» qua marker khÃ´ng cÃ³ length (RST, SOI, EOI)
+            if (marker == 0xD8 || marker == 0xD9 || (marker >= 0xD0 && marker <= 0xD7))
+            {
+                continue;
+            }
+
+            if (i + 2 > len) break;
+            int segLen = (rawBytes[i] << 8) | rawBytes[i + 1];
+            if (segLen < 2) break;
+            i += segLen;
+        }
+
+        return false;
+    }
     public static bool TryGetFastJpegInfo(string filePath, out int width, out int height)
     {
         width = 0;

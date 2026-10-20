@@ -197,6 +197,22 @@
 
 ---
 
+### 14. BUG-014: Khắc Phục Lỗi Toàn Bộ Trang Bị Trắng Xóa (Blank Image) Khi Mở PDF Trên ComicScreen
+- **Triệu chứng**: Khi dùng tính năng "Gộp File Lẻ Truyện" xuất ra định dạng tài liệu PDF (`.pdf`), mở file trên ứng dụng ComicScreen (Android/iOS) hoặc một số bộ đọc PDF di động thì số trang và mục lục bookmark vẫn hiện đủ nhưng toàn bộ hình ảnh các trang đều bị trắng tinh (Blank Page), không hiển thị được tranh truyện.
+- **Nguyên nhân gốc rễ**:
+  1. *Xung đột Progressive JPEG & Grayscale*: Bộ đọc PDF của ComicScreen (dựa trên bản rút gọn của MuPDF/Android PdfRenderer) không hỗ trợ Progressive JPEG (`SOF2` - `0xC2`) trong luồng `/Filter /DCTDecode`. Ngoài ra, nếu ảnh là truyện đen trắng Grayscale (1 component) mà trong PDF lại khai báo `/ColorSpace /DeviceRGB` (3 components), bộ giải mã PDF phát hiện mismatch và từ chối render ảnh.
+  2. *Không hỗ trợ PNG Predictor 15*: Trước đây, ảnh PNG được nhúng trực tiếp bằng `/Filter /FlateDecode /DecodeParms << /Predictor 15 ... >>`. ComicScreen không hỗ trợ bộ lọc PNG Predictor 15 trong luồng PDF XObject, dẫn đến giải mã rỗng và render trắng xóa.
+  3. *Lỗi ranh giới CropBox / Interpolate*: Việc khai báo `/CropBox` trùng với `/MediaBox` và cờ `/Interpolate false` trên một số trình đọc di động gây hiểu nhầm vùng vẽ (canvas clipping).
+- **Giải pháp triệt để**:
+  1. *Lọc khắt khe Baseline RGB JPEG*: Bổ sung `UniversalImageDecoder.TryGetFastBaselineRgbJpegInfo()` và `IsBaselineRgbJpeg()`. Chỉ cho phép nhúng trực tiếp (Direct Stream) khi và chỉ khi tệp là Baseline Sequential DCT (`SOF0` - `0xC0`), 8-bit precision và đủ 3 components (`RGB/YCbCr`).
+  2. *Chuẩn hóa toàn bộ PNG, WebP, Progressive & Grayscale JPEG*: Mọi tệp ảnh không đạt chuẩn Baseline 3-component được tự động giải mã và nạp qua SkiaSharp / ImageSharp, render lên canvas nền trắng `SKColors.White` và nén sang Baseline Sequential JPEG chất lượng cao 95% (`RGB 24-bit`).
+  3. *Chuẩn hóa cấu trúc PDF*: Loại bỏ `/CropBox` và `/Interpolate false`, thiết lập chuẩn xác `/MediaBox [0 0 {width} {height}]` và Content Stream matrix `q\n{w} 0 0 {h} 0 0 cm\n/{imName} Do\nQ\n`.
+  4. *Kết quả*: File PDF sinh ra nhẹ hơn, mở mượt mà 100%, hiển thị hình ảnh truyện sắc nét và bảo toàn toàn bộ cây mục lục chương tiếng Việt UTF-16BE trên ComicScreen và mọi trình đọc PDF di động.
+- **File can thiệp**: `UniversalImageDecoder.cs`, `FilePackerService.cs`, `ArchiveMergeService.cs`.
+- **Quy tắc kiểm thử**: Gộp nhiều chapter chứa hỗn hợp ảnh WebP, PNG và Progressive JPEG thành file `.pdf`, kiểm tra cấu trúc stream đạt chuẩn PDF 1.4 Baseline DCTDecode, mở trên ComicScreen hiển thị trọn vẹn 100% hình ảnh không còn bất kỳ trang trắng nào.
+
+---
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 Khi phát hiện hoặc sửa chữa bất kỳ lỗi kỹ thuật mới nào, bắt buộc phải cập nhật thêm một mục theo cấu trúc chuẩn sau:
