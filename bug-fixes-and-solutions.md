@@ -213,6 +213,22 @@
 
 ---
 
+### 15. BUG-015: Khắc Phục Vỡ Giao Diện Ô Nhập Số Chương Tùy Chỉnh Trên Android (Archive Merger Responsive Layout)
+- **Triệu chứng**: Trong Tab Gộp File Lẻ (Archive Merger), trên màn hình điện thoại Android có chiều rộng hạn chế (~320dp - 400dp), ô nhập số chương tùy chỉnh bị bẻ gãy dòng thành 3 tầng bên trong khung viền xanh `#38BDF8`. Các nút tăng giảm số (spinner buttons) quá nhỏ, khó bấm bằng ngón tay trên màn hình cảm ứng.
+- **Nguyên nhân gốc rễ**:
+  1. *Lồng WrapPanel bên trong Border*: Khối tùy chỉnh nằm trong `Border` viền xanh lại sử dụng `<WrapPanel Orientation="Horizontal">` bên trong. Khi màn hình hẹp, `WrapPanel` nội bộ này bẻ gãy 4 phần tử ("Hoặc", "Tùy chỉnh:", `NumericUpDown`, "chap/file") thành từng dòng rời rạc, làm khung viền phình to méo mó.
+  2. *Kích thước ButtonSpinner và NumericUpDown chưa tối ưu cảm ứng*: Nút spinner chỉ rộng `16px`, icon quá bé (`6x3.5px`), gây khó khăn khi thao tác cảm ứng trên Android. Ô nhập rộng `105px` chiếm nhiều diện tích ngang không cần thiết cho số chapter 1-4 chữ số.
+- **Giải pháp triệt để**:
+  1. *Nguyên tử hóa hàng tùy chỉnh (Atomic Row)*: Thay `WrapPanel` bên trong `Border` bằng `<StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4">` để đảm bảo 4 phần tử luôn nằm trên cùng 1 hàng nguyên khối. Khi màn hình hẹp, `WrapPanel` cha bên ngoài sẽ tự động đưa nguyên vẹn cả khối Border xuống hàng mới cân đối, không bao giờ bị bẻ gãy nội bộ.
+  2. *Tối ưu Touch Target & Width*:
+     - Tăng chiều rộng cột `ButtonSpinner` từ `16px` lên `20px`, phóng to icon Path lên `7x4px` giúp chạm tăng/giảm số cực kỳ nhạy và chính xác trên màn hình cảm ứng.
+     - Tinh chỉnh `NumericUpDown`: giảm `Width` từ `105px` xuống `86px` (vừa vặn hoàn hảo cho số 1-9999), tăng `Height` từ `28px` lên `30px` chuẩn touch target di động.
+     - Tinh chỉnh `Border`: `Padding="6,3" Margin="0,2,0,2"` giúp khối tùy chỉnh tự rớt dòng nằm ngay ngắn, cách đều các nút preset `50 Chap`, `100 Chap`...
+- **File can thiệp**: `MainView.axaml`.
+- **Quy tắc kiểm thử**: Mở ứng dụng trên Android (cả màn hình dọc portrait ~360dp lẫn xoay ngang landscape) và co giãn cửa sổ trên Desktop về chiều rộng tối thiểu 400px; xác nhận khối tùy chỉnh hiển thị gọn gàng trên 1 hàng, tự rớt dòng nguyên khối, các nút spinner to rõ dễ bấm và giá trị nhảy chính xác.
+
+---
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 Khi phát hiện hoặc sửa chữa bất kỳ lỗi kỹ thuật mới nào, bắt buộc phải cập nhật thêm một mục theo cấu trúc chuẩn sau:
