@@ -40,6 +40,11 @@ public partial class MainViewModel
     [ObservableProperty]
     private decimal _mergeCustomChunkInput = 50m;
 
+    partial void OnMergeCustomChunkInputChanged(decimal value)
+    {
+        IsMergeCustomChunk = true;
+    }
+
     [ObservableProperty]
     private bool _isMergeFormatCbz = true;
 

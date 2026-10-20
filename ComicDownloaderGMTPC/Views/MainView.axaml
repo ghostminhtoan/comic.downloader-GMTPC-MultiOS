@@ -3150,18 +3150,64 @@
                                                                 <Border.Styles>
                                                                     <Style Selector="NumericUpDown /template/ TextBox#PART_TextBox">
                                                                         <Setter Property="Foreground" Value="#38BDF8" />
-                                                                        <Setter Property="Background" Value="#0F172A" />
+                                                                        <Setter Property="Background" Value="Transparent" />
                                                                         <Setter Property="VerticalContentAlignment" Value="Center" />
                                                                         <Setter Property="HorizontalContentAlignment" Value="Center" />
                                                                         <Setter Property="FontWeight" Value="Bold" />
                                                                         <Setter Property="FontSize" Value="12" />
+                                                                        <Setter Property="Padding" Value="4,0" />
+                                                                        <Setter Property="MinHeight" Value="0" />
+                                                                    </Style>
+                                                                    <Style Selector="NumericUpDown /template/ ButtonSpinner#PART_Spinner">
+                                                                        <Setter Property="Background" Value="Transparent" />
+                                                                        <Setter Property="BorderThickness" Value="0" />
+                                                                        <Setter Property="Padding" Value="0" />
+                                                                        <Setter Property="Margin" Value="0" />
+                                                                    </Style>
+                                                                    <Style Selector="ButtonSpinner">
+                                                                        <Setter Property="Background" Value="Transparent" />
+                                                                        <Setter Property="BorderThickness" Value="0" />
+                                                                        <Setter Property="Padding" Value="0" />
+                                                                        <Setter Property="Template">
+                                                                            <ControlTemplate TargetType="ButtonSpinner">
+                                                                                <Border Background="{TemplateBinding Background}"
+                                                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                        CornerRadius="{TemplateBinding CornerRadius}">
+                                                                                    <Grid ColumnDefinitions="*, 16">
+                                                                                        <ContentPresenter Name="PART_ContentPresenter"
+                                                                                                          Grid.Column="0"
+                                                                                                          Content="{TemplateBinding Content}"
+                                                                                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                                                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                                                                          Padding="{TemplateBinding Padding}" />
+                                                                                        <Grid Grid.Column="1" RowDefinitions="*,*" Width="16" Margin="0" VerticalAlignment="Stretch">
+                                                                                            <RepeatButton Name="PART_IncreaseButton"
+                                                                                                          Grid.Row="0" Width="16" Padding="0" Margin="0,0,0,0.5"
+                                                                                                          BorderThickness="0" Background="#1E293B" Foreground="#94A3B8"
+                                                                                                          CornerRadius="0,2,0,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                                                                                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                                                                                <Path Data="M 0 3.5 L 3 0.5 L 6 3.5 Z" Fill="#94A3B8" Width="6" Height="3.5" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                            </RepeatButton>
+                                                                                            <RepeatButton Name="PART_DecreaseButton"
+                                                                                                          Grid.Row="1" Width="16" Padding="0" Margin="0,0.5,0,0"
+                                                                                                          BorderThickness="0" Background="#1E293B" Foreground="#94A3B8"
+                                                                                                          CornerRadius="0,0,2,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                                                                                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                                                                                <Path Data="M 0 0.5 L 3 3.5 L 6 0.5 Z" Fill="#94A3B8" Width="6" Height="3.5" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                            </RepeatButton>
+                                                                                        </Grid>
+                                                                                    </Grid>
+                                                                                </Border>
+                                                                            </ControlTemplate>
+                                                                        </Setter>
                                                                     </Style>
                                                                 </Border.Styles>
                                                                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                                     <TextBlock Text="Hoặc" Foreground="#FBBF24" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0" />
                                                                     <CheckBox IsChecked="{Binding IsMergeCustomChunk}" Content="Tùy chỉnh:" Foreground="#FFFFFF" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0" />
                                                                     <NumericUpDown Value="{Binding MergeCustomChunkInput}" Minimum="1" Maximum="9999" Increment="10" FormatString="0" ParsingNumberStyle="Integer"
-                                                                                   Width="80" Height="28" FontSize="12" FontWeight="Bold"
+                                                                                   Width="105" Height="28" FontSize="12" FontWeight="Bold"
                                                                                    Foreground="#38BDF8" Background="#0F172A" BorderBrush="#0284C7" BorderThickness="1.5" CornerRadius="4"
                                                                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                                                                                    VerticalAlignment="Center" Margin="0,0,6,0" ToolTip.Tip="Nhập số chapter tùy ý cho mỗi file gộp (ví dụ: 50, 150...)" />

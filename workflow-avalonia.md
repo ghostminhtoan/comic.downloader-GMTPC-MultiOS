@@ -3535,3 +3535,12 @@ ar_pages/ theo LRU (xóa nguyên folder session giải phóng hàng trăm MB đ�
       + Khởi tạo sẵn đường dẫn `merged` ngay khi mở ứng dụng, triệt tiêu trạng thái ô nhập bị bỏ trống.
     - **Tự Động Tạo Thư Mục Khi Bấm Mở (`OpenMergeOutputFolder`)**:
       + Kiểm tra và tự động tạo thư mục trên đĩa nếu chưa tồn tại trước khi gọi mở trong trình quản lý tệp của hệ điều hành.
+
+
+31. **Tối Ưu Kích Thước Ô Nhập Số Chapter Tùy Chỉnh Trong Tab Gộp File Lẻ (`MainView.axaml`, `MainViewModel.ArchiveMerger.cs`)**:
+    - **Khắc Phục Lỗi Khuất Số Hiển Thị Trên NumericUpDown**:
+      + Tăng chiều rộng ô `NumericUpDown` từ `80` lên `105`, triệt tiêu hoàn toàn hiện tượng 2 nút mũi tên tăng/giảm nuốt trọn diện tích hiển thị của ô số.
+      + Tái cấu trúc template `ButtonSpinner` sang layout 2 nút mũi tên dọc (`Grid RowDefinitions="*,*" Width="16"`) chuẩn phong cách XnConvert / Desktop & Mobile, chỉ chiếm đúng 16px mép phải thay vì chiếm tới 56px như giao diện ngang mặc định của FluentTheme.
+      + Thiết lập `Padding="4,0"` và `Background="Transparent"` cho `TextBox#PART_TextBox`, giúp số hiển thị to rõ, căn giữa chuẩn xác, màu xanh cyan `#38BDF8` nổi bật, không bị che khuất bởi padding thừa.
+    - **Tự Động Kích Hoạt Tùy Chỉnh Khi Nhập Số (`OnMergeCustomChunkInputChanged`)**:
+      + Tự động bật `IsMergeCustomChunk = true` ngay khi người dùng gõ số hoặc bấm mũi tên tăng/giảm trên ô nhập số tùy chỉnh, đem lại trải nghiệm mượt mà, tiện lợi.
