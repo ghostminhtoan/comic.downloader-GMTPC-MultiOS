@@ -36,7 +36,24 @@ public static class FloatingBubbleManager
     private static ImageView? _iconImageView;
 
     private static readonly Handler _mainHandler = new(Looper.MainLooper!);
-    private static Action? _idleDockRunnable;
+    
+    private class IdleDockRunnable : Java.Lang.Object, Java.Lang.IRunnable
+    {
+        public void Run()
+        {
+            try
+            {
+                PerformAutoDockAndFade();
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Warn("ComicGMTPC_Bubble", $"Lỗi PerformAutoDockAndFade: {ex.Message}");
+            }
+        }
+    }
+    private static readonly IdleDockRunnable _idleDockRunnableInstance = new();
+    private static ValueAnimator? _activeSystemAnimator;
+
     private static bool _isDocked;
     private static bool _isRightSide = true;
     private static int _bubbleSizePx;
@@ -205,6 +222,7 @@ public static class FloatingBubbleManager
 
             var flags = WindowManagerFlags.NotFocusable |
                         WindowManagerFlags.NotTouchModal |
+                        WindowManagerFlags.LayoutNoLimits |
                         WindowManagerFlags.HardwareAccelerated;
 
             _systemLayoutParams = new WindowManagerLayoutParams(
@@ -398,23 +416,15 @@ public static class FloatingBubbleManager
         return container;
     }
 
-    private static void StartIdleTimer()
+    private static void StartIdleTimer(long delayMs = 3500)
     {
         CancelIdleTimer();
-        _idleDockRunnable = () =>
-        {
-            PerformAutoDockAndFade();
-        };
-        _mainHandler.PostDelayed(_idleDockRunnable, 3500); // 3.5 giây nhàn rỗi
+        _mainHandler.PostDelayed(_idleDockRunnableInstance, delayMs);
     }
 
     private static void CancelIdleTimer()
     {
-        if (_idleDockRunnable != null)
-        {
-            _mainHandler.RemoveCallbacks(_idleDockRunnable);
-            _idleDockRunnable = null;
-        }
+        _mainHandler.RemoveCallbacks(_idleDockRunnableInstance);
     }
 
     private static void PerformAutoDockAndFade()
@@ -441,17 +451,16 @@ public static class FloatingBubbleManager
                     ?.Start();
             });
         }
-        else if (!_isSystemOverlay && _inAppLayoutParams != null)
+        else if (!_isSystemOverlay && _bubbleView != null)
         {
-            int targetLeft = _isRightSide ? (screenWidth - _bubbleSizePx + dockOffset) : (-dockOffset);
-            AnimateInAppX(_inAppLayoutParams.LeftMargin, targetLeft, 280, () =>
-            {
-                _bubbleView?.Animate()
-                    ?.Alpha(0.45f)
-                    ?.SetDuration(300)
-                    ?.SetInterpolator(new DecelerateInterpolator())
-                    ?.Start();
-            });
+            // In-App Bubble: RenderNode GPU TranslationX siêu mượt 120fps, không phụ thuộc layout/margin
+            float targetTransX = _isRightSide ? dockOffset : (-dockOffset);
+            _bubbleView.Animate()
+                ?.TranslationX(targetTransX)
+                ?.Alpha(0.45f)
+                ?.SetDuration(280)
+                ?.SetInterpolator(new DecelerateInterpolator())
+                ?.Start();
         }
     }
 
@@ -481,13 +490,18 @@ public static class FloatingBubbleManager
                     StartIdleTimer();
                 });
             }
-            else if (!_isSystemOverlay && _inAppLayoutParams != null)
+            else if (!_isSystemOverlay && _bubbleView != null)
             {
-                int targetLeft = _isRightSide ? (screenWidth - _bubbleSizePx) : 0;
-                AnimateInAppX(_inAppLayoutParams.LeftMargin, targetLeft, 200, () =>
-                {
-                    StartIdleTimer();
-                });
+                // In-App Bubble: Trượt bung ra TranslationX = 0 ngay tức thì
+                _bubbleView.Animate()
+                    ?.TranslationX(0f)
+                    ?.SetDuration(200)
+                    ?.SetInterpolator(new DecelerateInterpolator())
+                    ?.WithEndAction(new Java.Lang.Runnable(() =>
+                    {
+                        StartIdleTimer();
+                    }))
+                    ?.Start();
             }
         }
         else
@@ -504,11 +518,13 @@ public static class FloatingBubbleManager
             return;
         }
 
+        _activeSystemAnimator?.Cancel();
+
         var anim = ValueAnimator.OfInt(startX, endX);
-        anim?.SetDuration(duration);
-        anim?.SetInterpolator(new DecelerateInterpolator());
         if (anim != null)
         {
+            anim.SetDuration(duration);
+            anim.SetInterpolator(new DecelerateInterpolator());
             anim.Update += (s, e) =>
             {
                 try
@@ -523,8 +539,10 @@ public static class FloatingBubbleManager
             };
             anim.AnimationEnd += (s, e) =>
             {
+                _activeSystemAnimator = null;
                 onEnd?.Invoke();
             };
+            _activeSystemAnimator = anim;
             anim.Start();
         }
         else
@@ -535,44 +553,7 @@ public static class FloatingBubbleManager
         }
     }
 
-    private static void AnimateInAppX(int startLeft, int endLeft, long duration, Action? onEnd = null)
-    {
-        if (_bubbleView == null || _inAppLayoutParams == null)
-        {
-            onEnd?.Invoke();
-            return;
-        }
 
-        var anim = ValueAnimator.OfInt(startLeft, endLeft);
-        anim?.SetDuration(duration);
-        anim?.SetInterpolator(new DecelerateInterpolator());
-        if (anim != null)
-        {
-            anim.Update += (s, e) =>
-            {
-                try
-                {
-                    if (_bubbleView != null && _inAppLayoutParams != null)
-                    {
-                        _inAppLayoutParams.LeftMargin = (int)e.Animation.AnimatedValue!;
-                        _bubbleView.LayoutParameters = _inAppLayoutParams;
-                    }
-                }
-                catch { }
-            };
-            anim.AnimationEnd += (s, e) =>
-            {
-                onEnd?.Invoke();
-            };
-            anim.Start();
-        }
-        else
-        {
-            _inAppLayoutParams.LeftMargin = endLeft;
-            try { _bubbleView.LayoutParameters = _inAppLayoutParams; } catch { }
-            onEnd?.Invoke();
-        }
-    }
 
     private static void OnTaskProgressChanged(BackgroundTaskInfo task)
     {
@@ -591,7 +572,6 @@ public static class FloatingBubbleManager
                     if (_isDocked)
                     {
                         _bubbleView.Animate()?.Alpha(0.85f)?.SetDuration(200)?.Start();
-                        CancelIdleTimer();
                         _mainHandler.PostDelayed(() =>
                         {
                             if (_isDocked && _bubbleView != null)
@@ -839,6 +819,15 @@ public static class FloatingBubbleManager
             switch (e.Action)
             {
                 case MotionEventActions.Down:
+                    CancelIdleTimer();
+                    if (_isDocked)
+                    {
+                        WakeUpAndRestore();
+                    }
+                    else
+                    {
+                        _bubbleView?.Animate()?.Alpha(1.0f)?.SetDuration(100)?.Start();
+                    }
                     _startLeft = _lp.LeftMargin;
                     _startTop = _lp.TopMargin;
                     _touchX = e.RawX;
