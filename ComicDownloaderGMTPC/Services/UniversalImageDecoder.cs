@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: UniversalImageDecoder.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÃ’ & Má»¤C ÄÃCH:
@@ -250,6 +250,79 @@ public static class UniversalImageDecoder
     }
 
     /// <summary>
+    /// Đọc thông tin tệp JPEG trực tiếp từ đĩa và kiểm tra tính tương thích khắt khe với PDF XObject:
+    /// - Chỉ chấp nhận Baseline Sequential DCT (SOF0 - 0xC0) chuẩn 8-bit precision.
+    /// - Loại bỏ Progressive JPEG (SOF2 - 0xC2) và Extended JPEG (SOF1 - 0xC1) để chống lỗi trắng trang trên ComicScreen và Adobe PDF.
+    /// - Trả về số components (1 = Grayscale, 3 = RGB/YCbCr). Loại bỏ CMYK (4 components) để tránh xung đột màu.
+    /// </summary>
+    public static bool TryGetPdfDirectJpegInfo(string filePath, out int width, out int height, out int components)
+    {
+        width = 0;
+        height = 0;
+        components = 0;
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return false;
+
+        try
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096);
+            if (fs.Length < 4) return false;
+
+            int b0 = fs.ReadByte();
+            int b1 = fs.ReadByte();
+            if (b0 != 0xFF || b1 != 0xD8) return false;
+
+            Span<byte> header = stackalloc byte[4];
+            while (fs.Position < fs.Length - 4)
+            {
+                int markerLead = fs.ReadByte();
+                while (markerLead == 0xFF && fs.Position < fs.Length)
+                {
+                    markerLead = fs.ReadByte();
+                }
+                if (markerLead == -1) break;
+                byte marker = (byte)markerLead;
+
+                // CHỈ CHẤP NHẬN SOF0 (0xC0 - Baseline Sequential DCT)
+                if (marker == 0xC0)
+                {
+                    Span<byte> sof = stackalloc byte[8];
+                    if (fs.Read(sof) < 8) break;
+                    int precision = sof[2];
+                    height = (sof[3] << 8) | sof[4];
+                    width = (sof[5] << 8) | sof[6];
+                    components = sof[7];
+
+                    // PDF DCTDecode tương thích 100% với 8-bit và 1 kênh (Grayscale) hoặc 3 kênh (RGB/YCbCr)
+                    if (precision == 8 && (components == 1 || components == 3) && width > 0 && height > 0)
+                    {
+                        return true;
+                    }
+                    return false;
+                }
+
+                // Nếu gặp Progressive (SOF2 - 0xC2) hoặc Extended (0xC1) hoặc SOF khác -> Trả về false để SkiaSharp convert
+                if (marker == 0xC1 || marker == 0xC2 || (marker >= 0xC3 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC))
+                {
+                    return false;
+                }
+
+                if (marker == 0xD8 || marker == 0xD9 || (marker >= 0xD0 && marker <= 0xD7))
+                {
+                    continue;
+                }
+
+                if (fs.Read(header.Slice(0, 2)) < 2) break;
+                int segLen = (header[0] << 8) | header[1];
+                if (segLen < 2) break;
+                fs.Seek(segLen - 2, SeekOrigin.Current);
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    /// <summary>
     /// Đọc kích thước ảnh WebP (VP8 lossy, VP8L lossless, VP8X extended/animated) trực tiếp từ header 30 bytes
     /// với tốc độ 0.0001ms, 0 byte RAM allocation.
     /// </summary>
@@ -304,7 +377,6 @@ public static class UniversalImageDecoder
 
         return false;
     }
-
     /// <summary>
     /// Đọc kích thước ảnh WebP trực tiếp từ file trên đĩa mà không giải mã toàn bộ tệp.
     /// </summary>

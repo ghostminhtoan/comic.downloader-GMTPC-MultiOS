@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: ArchiveMergeService.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -616,7 +616,8 @@ public class ArchiveMergeService
                     byte[]? imgBytes = MobiComicParser.Instance.ReadPageBytes(item.FullPath, p);
                     if (imgBytes != null && imgBytes.Length > 0)
                     {
-                        string entryPath = $"{chapterFolderName}/page_{p + 1:D4}.jpg";
+                        string imgExt = DetectImageExtension(imgBytes);
+                        string entryPath = $"{chapterFolderName}/page_{p + 1:D4}{imgExt}";
                         var entry = destinationArchive.CreateEntry(entryPath, compressionLevel);
                         using var es = entry.Open();
                         es.Write(imgBytes, 0, imgBytes.Length);
@@ -752,7 +753,8 @@ public class ArchiveMergeService
                     byte[]? imgBytes = MobiComicParser.Instance.ReadPageBytes(item.FullPath, p);
                     if (imgBytes != null && imgBytes.Length > 0)
                     {
-                        string outPath = Path.Combine(subDir, $"p_{p + 1:D4}.jpg");
+                        string imgExt = DetectImageExtension(imgBytes);
+                        string outPath = Path.Combine(subDir, $"p_{p + 1:D4}{imgExt}");
                         File.WriteAllBytes(outPath, imgBytes);
                         result.Add(outPath);
                     }
@@ -825,6 +827,17 @@ public class ArchiveMergeService
 
         return result;
     }
+
+    private static string DetectImageExtension(byte[] bytes)
+    {
+        if (bytes == null || bytes.Length < 4) return ".jpg";
+        if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return ".jpg";
+        if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) return ".png";
+        if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) return ".gif";
+        if (bytes.Length >= 12 && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 &&
+            bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) return ".webp";
+        if (bytes[0] == 0x42 && bytes[1] == 0x4D) return ".bmp";
+        return ".jpg";
+    }
+
 }
-
-

@@ -229,6 +229,40 @@
 
 ---
 
+### 16. BUG-016: Khắc Phục Lỗi PDF Tạo Từ MOBI Bị Lỗi Trên Adobe Acrobat & ComicScreen (ColorSpace Grayscale Mismatch & Multi-Format Extraction)
+- **Triệu chứng**: Khi gộp các tập truyện lẻ từ định dạng MOBI (`.mobi`) sang PDF (`.pdf`), app nội bộ vẫn đọc được nhưng khi mở bằng Adobe Acrobat Reader hoặc ComicScreen (Android/iOS) thì file bị báo lỗi cấu trúc, trang bị hỏng hoặc toàn bộ trang bị trắng xóa không hiển thị được tranh.
+- **Nguyên nhân gốc rễ**:
+  1. *Lệch chuẩn ColorSpace (DeviceRGB vs DeviceGray)*: Các file truyện tranh đen trắng trong MOBI (như bộ truyện Itto) lưu trữ ảnh ở định dạng JPEG 1 kênh màu Grayscale (`SOF0` có `components == 1`). Tuy nhiên, trình tạo PDF `FilePackerService` trước đây luôn khai báo cứng `/ColorSpace /DeviceRGB` (yêu cầu 3 kênh màu). Adobe Acrobat phát hiện mismatch nghiêm trọng và từ chối render; ComicScreen (dựa trên PdfRenderer di động) ném ngoại lệ ColorSpace mismatch dẫn đến lỗi trang.
+  2. *Không nhận diện định dạng ảnh thực tế từ MOBI*: Trong `ArchiveMergeService`, khi trích xuất trang từ MOBI ra đĩa tạm, app luôn đặt đuôi tệp cứng `.jpg` thay vì kiểm tra magic bytes của ảnh thực tế (`.jpg`, `.png`, `.gif`, `.webp`).
+  3. *Lỗi tồn dư CropBox & Interpolate*: Thẻ `/CropBox` trùng với `/MediaBox` và cờ `/Interpolate false` gây lỗi hiển thị canvas trên các trình đọc di động.
+- **Giải pháp triệt để**:
+  1. *Kiểm tra khắt khe chuẩn JPEG cho PDF*: Bổ sung `UniversalImageDecoder.TryGetPdfDirectJpegInfo()`:
+     - Nhận diện chính xác Baseline Sequential DCT (`SOF0`) và trích xuất số kênh màu `components`.
+     - Phân định chuẩn xác: Nếu `components == 1` thì khai báo `/ColorSpace /DeviceGray`; nếu `components == 3` thì khai báo `/ColorSpace /DeviceRGB`.
+     - Tuyệt đối từ chối Progressive JPEG (`SOF2` - `0xC2`) và CMYK 4 kênh để kích hoạt fallback SkiaSharp chuẩn hóa sang Baseline JPEG 95% có nền trắng.
+  2. *Loại bỏ CropBox & Interpolate thừa*: Chuẩn hóa Page Object và Image Object đạt chuẩn ISO 32000-1 tinh giản, tương thích 100% với Adobe Acrobat Reader và mọi app di động.
+  3. *Trích xuất ảnh đa định dạng từ MOBI*: Bổ sung hàm `DetectImageExtension()` trong `ArchiveMergeService` để đặt đuôi tệp chuẩn xác (`.jpg`, `.png`, `.gif`, `.webp`) dựa trên magic bytes của dữ liệu thô.
+- **File can thiệp**: `UniversalImageDecoder.cs`, `FilePackerService.cs`, `ArchiveMergeService.cs`.
+- **Quy tắc kiểm thử**: Gộp các file `.mobi` chứa ảnh Grayscale 1 kênh từ `C:\Users\Admin\Downloads\itto` thành file `.pdf`. Kiểm tra header stream hiển thị `/ColorSpace /DeviceGray`, mở file trên Adobe Acrobat Reader và ComicScreen hiển thị trọn vẹn 100% tranh truyện sắc nét, không có trang trắng, không báo lỗi.
+
+---
+
+### 17. CẢI TIẾN: Quy Trình Upload Release Beta An Toàn Tuyệt Đối (Safe Asset Rotation & 6s 10Mbps Speed Guard)
+- **Mục tiêu**: Loại bỏ rủi ro mất file cài đặt cũ khi upload release beta gặp lỗi mạng, đồng thời đảm bảo đường truyền luôn đạt tốc độ cao.
+- **Quy trình mới 3 bước (Flow mới)**:
+  1. *Bước 1 (Rotate & Backup asset cũ)*:
+     - Trường hợp a: Nếu chưa có bản backup với timestamp cũ, tiến hành đổi tên (rename qua GitHub API) asset tên gốc thành tên kèm hậu tố date time chuẩn (ví dụ: `ComicDownloaderGMTPC.Desktop-2026-10-20-11.56.58.AM.Tuesday.exe`).
+     - Trường hợp b: Nếu đã có asset cũ mang hậu tố date time từ lần build trước, tự động xóa asset có date time cũ đó, sau đó rename asset tên gốc thành asset mang date time mới.
+     - *Lợi ích*: Giải phóng tên gốc để chuẩn bị upload asset mới, đồng thời lưu giữ 1 bản backup an toàn gần nhất trên GitHub Release; nếu upload asset mới bị ngắt quãng hay lỗi thì file cũ vẫn còn nguyên vẹn.
+  2. *Bước 2 (Upload asset mới với tên gốc)*:
+     - Tải lên 3 file cài đặt mới mang tên gốc chuẩn xác (`ComicDownloaderGMTPC.Desktop.exe`, `.apk`, `.tar.gz`) qua công nghệ Direct-to-S3 siêu tốc.
+  3. *Bước 3 (Speed Guard 6s < 10 Mbps)*:
+     - Trong 6 giây đầu tiên (`elapsed >= 6s`), nếu tốc độ upload trung bình dưới 10 Megabit/s (`avg_mbps < 10.0`), hệ thống tự động hủy upload (`window.stop()`) và khởi động lại lượt upload mới liên tục cho đến khi hoàn thành 100% mới thôi (`MAX_RETRIES = 50`).
+- **File can thiệp**: `upload_beta_browser.py`.
+- **Quy tắc kiểm thử**: Chạy script upload, quan sát log: asset cũ được rename thành backup có hậu tố time date, asset mới được upload trực tiếp với tên gốc, và kiểm soát tốc độ đạt > 10 Mbps chuẩn xác.
+
+---
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 Khi phát hiện hoặc sửa chữa bất kỳ lỗi kỹ thuật mới nào, bắt buộc phải cập nhật thêm một mục theo cấu trúc chuẩn sau:

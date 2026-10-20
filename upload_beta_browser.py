@@ -16,6 +16,8 @@ import requests
 import ctypes
 import subprocess
 import json
+import datetime
+import re
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
@@ -37,9 +39,9 @@ TARGET_FILES = [
 ]
 
 # Cau hinh giam sat toc do va retry
-MIN_UPLOAD_SPEED_MBPS = 0.0  # Dat 0.0 de khong tu dong huy upload khi toc do mang thap, chi huy khi bi treo (stall)
-MAX_RETRIES = 5              # So lan thu lai neu bi stall
-GRACE_PERIOD_SEC = 25        # Thoi gian khoi tao ban dau (cho handshake S3) truoc khi kiem tra stall
+MIN_UPLOAD_SPEED_MBPS = 10.0  # Nguong toc do toi thieu 10 Mbps (duoi 10 Mbps se tu dong huy va thu lai)
+MAX_RETRIES = 50              # Thu lai lien tuc den khi hoan tat moi thoi
+GRACE_PERIOD_SEC = 6          # Kiem tra toc do sau 6 giay theo yeu cau flow moi
 
 
 def disable_quick_edit_mode():
@@ -182,10 +184,26 @@ def load_github_token():
     return get_git_credential_token()
 
 
-def delete_existing_release_assets_via_api(target_names):
+def split_asset_name_ext(filename):
+    if filename.endswith(".tar.gz"):
+        return filename[:-7], ".tar.gz"
+    p = Path(filename)
+    return p.stem, p.suffix
+
+
+def rotate_and_backup_existing_assets(target_names):
+    """
+    Quy trinh bao toan asset Release Beta theo flow moi:
+    1. Co 2 truong hop:
+       a. Neu chua co asset voi timedate cu thi rename asset voi ten goc kem hau to time date,
+          vi du: ComicDownloaderGMTPC.Desktop-2026-10-20-11.56.58.AM.Tuesday.exe
+       b. Neu da co asset cu voi timedate cu thi xoa asset co timedate cu do,
+          roi rename asset ten goc thanh asset co time date moi.
+    2. Giai phong ten goc de upload asset moi; neu upload bi loi thi ban cu van con nguyen ven lam backup.
+    """
     token = load_github_token()
     if not token:
-        print("[API] Khong tim thay GitHub token, bo qua buoc don dep asset truoc.")
+        print("[API] Khong tim thay GitHub token, bo qua buoc backup asset.")
         return
 
     headers = {
@@ -198,19 +216,64 @@ def delete_existing_release_assets_via_api(target_names):
         url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/tags/{RELEASE_TAG}"
         res = requests.get(url, headers=headers, timeout=15)
         if res.status_code != 200:
+            print(f"[API] Khong lay duoc release beta: status {res.status_code}")
             return
 
         assets = res.json().get("assets", [])
-        for asset in assets:
-            a_name = asset.get("name")
-            a_id = asset.get("id")
-            if a_name in target_names:
-                print(f"[API] Xoa asset cu tren Release Beta: '{a_name}' (ID: {a_id})...")
-                del_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/assets/{a_id}"
-                requests.delete(del_url, headers=headers, timeout=15)
-                print(f"[API] -> Da xoa '{a_name}' thanh cong.")
+
+        # Tao chuoi timestamp chuan: 2026-10-20-11.56.58.AM.Tuesday
+        now = datetime.datetime.now()
+        timestamp_str = now.strftime("%Y-%m-%d-%I.%M.%S.%p.%A")
+
+        for target_name in target_names:
+            base_stem, ext = split_asset_name_ext(target_name)
+
+            # Regex nhan dien asset backup mang date time: <stem>-YYYY-MM-DD-...<ext>
+            backup_regex = re.compile(
+                r"^" + re.escape(base_stem) + r"-\d{4}-\d{2}-\d{2}-.*" + re.escape(ext) + r"$",
+                re.IGNORECASE
+            )
+
+            old_backup_assets = []
+            exact_target_asset = None
+
+            for a in assets:
+                a_name = a.get("name", "")
+                if a_name.lower() == target_name.lower():
+                    exact_target_asset = a
+                elif backup_regex.match(a_name):
+                    old_backup_assets.append(a)
+
+            # TH 1b: Neu da co asset cu voi timedate cu -> Xoa asset co timedate cu do
+            for old_a in old_backup_assets:
+                old_name = old_a.get("name")
+                old_id = old_a.get("id")
+                print(f"[API] Phat hien asset backup cu '{old_name}' (ID: {old_id}). Dang xoa...")
+                del_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/assets/{old_id}"
+                try:
+                    del_res = requests.delete(del_url, headers=headers, timeout=15)
+                    print(f"[API] -> Da xoa asset backup cu '{old_name}' (Status: {del_res.status_code}).")
+                except Exception as ex:
+                    print(f"[API] Loi khi xoa asset backup cu '{old_name}': {ex}")
+
+            # TH 1a & 1b: Rename asset ten goc thanh asset co time date moi
+            if exact_target_asset:
+                target_id = exact_target_asset.get("id")
+                target_curr_name = exact_target_asset.get("name")
+                new_backup_name = f"{base_stem}-{timestamp_str}{ext}"
+                print(f"[API] Dang rename asset goc '{target_curr_name}' (ID: {target_id}) -> '{new_backup_name}' (Backup an toan)...")
+                patch_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/assets/{target_id}"
+                try:
+                    patch_res = requests.patch(patch_url, headers=headers, json={"name": new_backup_name}, timeout=15)
+                    if patch_res.status_code == 200:
+                        print(f"[API] -> Da rename thanh '{new_backup_name}' thanh cong (Backup da san sang)!")
+                    else:
+                        print(f"[API] Rename asset that bai: status {patch_res.status_code} - {patch_res.text}")
+                except Exception as ex:
+                    print(f"[API] Loi khi rename asset goc '{target_curr_name}': {ex}")
+
     except Exception as ex:
-        print(f"[API] Chu y khi don dep asset qua API: {ex}")
+        print(f"[API] Chu y trong qua trinh rotate va backup asset: {ex}")
 
 
 class ProgressFileReader:
@@ -600,6 +663,10 @@ def perform_browser_upload(force_login=False, min_speed_mbps=0.0, max_wait_sec=9
             upload_success = False
             assets_cleaned = False
 
+            # BƯỚC 1 FLOW MỚI: ROTATE VÀ BACKUP ASSET TRƯỚC KHI BẮT ĐẦU UPLOAD
+            print("\n[BACKUP] Kiem tra va rotate asset cu thanh ban backup dinh kem time date...")
+            rotate_and_backup_existing_assets(target_names)
+
             for attempt in range(1, MAX_RETRIES + 1):
                 print("\n====================================================================")
                 print(f"  [LAN THU {attempt}/{MAX_RETRIES}] Khoi dong quy trinh upload Release Beta...")
@@ -626,11 +693,9 @@ def perform_browser_upload(force_login=False, min_speed_mbps=0.0, max_wait_sec=9
                     page.wait_for_selector('input[type="file"]:not(#fc-release_body)', state="attached", timeout=15000)
                     file_input = page.locator('input[type="file"]:not(#fc-release_body)').first
 
-                # CHI XOA ASSET CU KHI TRANG EDIT DA MO THANH CONG VA FILE INPUT SAN SANG!
-                # Phong thu tuyet doi: Neu trang chua san sang, khong bao gio duoc xoa file cu!
+                # KHONG XOA ASSET GOC NUA - ASSET DA DUOC RENAME BACKUP TRUOC DO AN TOAN
                 if not assets_cleaned:
-                    print("[CLEANUP] Trang Edit da san sang. Don dep asset cu tren Release Beta truoc khi truyen file moi...")
-                    delete_existing_release_assets_via_api(target_names)
+                    print("[BACKUP] Cac asset cu da duoc luu tru backup co dinh kem time date tren Release Beta.")
                     assets_cleaned = True
 
                 # Reset bo dem upload tracker trong browser
@@ -699,16 +764,15 @@ def perform_browser_upload(force_login=False, min_speed_mbps=0.0, max_wait_sec=9
                     status_desc = f"{loaded_mb:.1f}/{total_target_mb:.1f} MB ({pct:.1f}%) | TB: {avg_mbps:.1f} Mbps | Tuc thoi: {instant_mbps:.1f} Mbps | {elapsed:.1f}s"
                     print(f" [TIEN DO] {status_desc}")
 
-                    # 1. SPEED GUARD
-                    effective_min_speed = min_speed_mbps if min_speed_mbps is not None else MIN_UPLOAD_SPEED_MBPS
+                    # 1. SPEED GUARD: Trong 6 giay neu upload speed duoi 10 Megabit -> Huy va thu lai
+                    effective_min_speed = min_speed_mbps if min_speed_mbps is not None and min_speed_mbps > 0 else MIN_UPLOAD_SPEED_MBPS
                     if elapsed >= GRACE_PERIOD_SEC:
-                        is_stalled = (elapsed >= 30 and total_loaded == 0)
-                        is_below_threshold = (effective_min_speed > 0 and avg_mbps < effective_min_speed and total_loaded > 0)
+                        is_stalled = (total_loaded == 0)
+                        is_below_threshold = (effective_min_speed > 0 and avg_mbps < effective_min_speed)
 
                         if is_stalled or is_below_threshold:
-                            threshold_label = f"{effective_min_speed} Mbps" if effective_min_speed > 0 else "stalled (0 bytes)"
-                            print(f"\n[CANH BAO TOC DO] Toc do upload trung binh dat {avg_mbps:.2f} Mbps (< nguong yeu cau {threshold_label})!")
-                            print(f"[KILL & RETRY] Tu dong huy upload (window.stop) va chuan bi thu lai lan {attempt + 1}/{MAX_RETRIES}...")
+                            print(f"\n[CANH BAO TOC DO] Sau {elapsed:.1f}s, toc do upload trung binh dat {avg_mbps:.2f} Mbps (< nguong yeu cau {effective_min_speed:.1f} Mbps)!")
+                            print(f"[KILL & RETRY] Tu dong huy upload (window.stop) va upload lai den khi xong moi thoi (Lan {attempt + 1}/{MAX_RETRIES})...")
                             try:
                                 page.evaluate("() => window.stop()")
                             except Exception:
@@ -804,7 +868,7 @@ if __name__ == "__main__":
     parser.add_argument("--login", action="store_true", help="Mo trinh duyet de dang nhap lai GitHub")
     parser.add_argument("--no-pause", action="store_true", help="Khong dung man hinh sau khi upload")
     parser.add_argument("--skip-pause", action="store_true", help="Khong dung man hinh sau khi upload")
-    parser.add_argument("--min-speed", "--min-speed-mbps", type=float, default=0.0, help="Nguong toc do toi thieu (Mbps), mac dinh 0 = khong huy vi toc do thap")
+    parser.add_argument("--min-speed", "--min-speed-mbps", type=float, default=10.0, help="Nguong toc do toi thieu (Mbps), mac dinh 10.0 Mbps")
     parser.add_argument("--max-wait", type=int, default=900, help="Thoi gian cho toi da (giay), mac dinh 900s")
     args, _ = parser.parse_known_args()
 

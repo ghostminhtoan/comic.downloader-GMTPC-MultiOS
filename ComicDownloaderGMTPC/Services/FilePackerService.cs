@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: FilePackerService.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÃ’ & Má»¤C ÄÃCH:
@@ -533,6 +533,7 @@ public class FilePackerService
             // 1: PNG Native FlateDecode IDAT Direct Stream
             // 2: Fallback (WebP / RGBA có alpha / Interlaced...) qua SkiaSharp
             int embedMode = 2;
+            int jpegComponents = 3;
             UniversalImageDecoder.FastPngInfo? pngInfo = null;
             byte[]? fallbackBytes = null;
             long fileLength = 0;
@@ -544,7 +545,7 @@ public class FilePackerService
                 {
                     fileLength = fi.Length;
                     // Kiểm tra định dạng nhanh:
-                    if (UniversalImageDecoder.TryGetFastJpegInfo(imgPath, out width, out height))
+                    if (UniversalImageDecoder.TryGetPdfDirectJpegInfo(imgPath, out width, out height, out jpegComponents))
                     {
                         embedMode = 0; // JPEG Direct Stream
                     }
@@ -563,6 +564,7 @@ public class FilePackerService
                         fallbackBytes = converted.JpegBytes;
                         width = converted.Width;
                         height = converted.Height;
+                        jpegComponents = 3;
                         embedMode = 2;
                     }
                 }
@@ -590,8 +592,7 @@ public class FilePackerService
                 $"  /Type /Page\n" +
                 $"  /Parent {pagesObjId} 0 R\n" +
                 $"  /MediaBox [0 0 {width} {height}]\n" +
-                $"  /CropBox [0 0 {width} {height}]\n" +
-                $"  /Contents {contentObjId} 0 R\n" +
+                                $"  /Contents {contentObjId} 0 R\n" +
                 $"  /Resources <<\n" +
                 $"    /ProcSet [/PDF /ImageC /ImageI /ImageB]\n" +
                 $"    /XObject << /{imName} {imgObjId} 0 R >>\n" +
@@ -622,10 +623,9 @@ public class FilePackerService
                     $"  /Subtype /Image\n" +
                     $"  /Width {width}\n" +
                     $"  /Height {height}\n" +
-                    $"  /ColorSpace /DeviceRGB\n" +
+                    $"  /ColorSpace {(jpegComponents == 1 ? "/DeviceGray" : "/DeviceRGB")}\n" +
                     $"  /BitsPerComponent 8\n" +
                     $"  /Filter /DCTDecode\n" +
-                    $"  /Interpolate false\n" +
                     $"  /Length {fileLength}\n" +
                     $">>\nstream\n"));
 
@@ -686,10 +686,9 @@ public class FilePackerService
                     $"  /Subtype /Image\n" +
                     $"  /Width {width}\n" +
                     $"  /Height {height}\n" +
-                    $"  /ColorSpace /DeviceRGB\n" +
+                    $"  /ColorSpace {(jpegComponents == 1 ? "/DeviceGray" : "/DeviceRGB")}\n" +
                     $"  /BitsPerComponent 8\n" +
                     $"  /Filter /DCTDecode\n" +
-                    $"  /Interpolate false\n" +
                     $"  /Length {fallbackBytes!.Length}\n" +
                     $">>\nstream\n"));
 
