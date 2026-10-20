@@ -16,17 +16,22 @@ namespace ComicDownloaderGMTPC.Android;
 
 /// <summary>
 /// Trình quản lý Bong bóng nổi chạy ngầm (Floating Bubble) trên Android:
+/// - Kiến trúc kép Dual-Mode:
+///   1. In-App Floating Bubble (trong ứng dụng, 0 quyền, hiển thị ngay lập tức 100%).
+///   2. System Overlay Bubble (toàn hệ thống, hiển thị trên mọi ứng dụng và màn hình chính khi được cấp quyền).
 /// - Tự động thụt 60% vào mép viền (Auto-docking / Half-hide) sau 3.5 giây nhàn rỗi.
-/// - Độ mờ linh hoạt (Dynamic Opacity): mờ 45% khi nhàn rỗi để không che màn hình, 100% khi chạm hoặc có tác vụ mới.
-/// - Kéo thả tự do và hít viền thông minh (Snap to nearest screen edge).
-/// - Chạm nhanh để mở lại ứng dụng tức thì.
-/// - Tích hợp đồng bộ trạng thái với Android Overlay và Android Bubble API.
+/// - Độ mờ linh hoạt (Dynamic Opacity): mờ 45% khi nhàn rỗi, 100% khi chạm hoặc có tiến trình mới.
+/// - Kéo thả tự do và hít viền thông minh (Snap to screen edge).
+/// - Chạm nhanh để mở / đưa ứng dụng lên màn hình chính tức thì.
+/// - Xử lý thông minh quyền Overlay đa tầng (tương thích Xiaomi MIUI, HyperOS, Samsung, Oppo, Vivo).
 /// </summary>
 public static class FloatingBubbleManager
 {
     private static IWindowManager? _windowManager;
     private static View? _bubbleView;
-    private static WindowManagerLayoutParams? _layoutParams;
+    private static WindowManagerLayoutParams? _systemLayoutParams;
+    private static FrameLayout.LayoutParams? _inAppLayoutParams;
+    private static FrameLayout? _inAppContainer;
     private static TextView? _badgeTextView;
     private static ImageView? _iconImageView;
 
@@ -35,47 +40,132 @@ public static class FloatingBubbleManager
     private static bool _isDocked;
     private static bool _isRightSide = true;
     private static int _bubbleSizePx;
+    private static bool _isSystemOverlay;
+    private static bool _isShowing;
 
-    public static bool IsShowing => _bubbleView != null && _bubbleView.IsAttachedToWindow;
+    public static bool IsShowing => _isShowing && _bubbleView != null;
+    public static bool IsSystemOverlayActive => _isShowing && _isSystemOverlay;
 
     public static bool CanDrawOverlays(Context context)
     {
         if (OperatingSystem.IsAndroidVersionAtLeast(23))
         {
-            return Settings.CanDrawOverlays(context);
+            try
+            {
+                var appContext = context.ApplicationContext ?? context;
+                return Settings.CanDrawOverlays(appContext);
+            }
+            catch
+            {
+                return false;
+            }
         }
         return true;
     }
 
+    public static void PromptOverlayPermission(Activity activity)
+    {
+        try
+        {
+            activity.RunOnUiThread(() =>
+            {
+                try
+                {
+                    var builder = new AlertDialog.Builder(activity);
+                    builder.SetTitle("🫧 Kích Hoạt Bong Bóng Nổi");
+                    builder.SetMessage("Để Bong bóng nổi hiển thị được bên ngoài màn hình chính và trên các ứng dụng khác khi thoát ứng dụng, vui lòng bật quyền 'Hiển thị trên ứng dụng khác' (hoặc 'Cửa sổ pop-up' trên Xiaomi/MIUI) cho Comic Downloader GMTPC.\n\nBấm 'CẤP QUYỀN NGAY' để mở trang cài đặt.");
+                    builder.SetPositiveButton("👉 CẤP QUYỀN NGAY", (s, e) =>
+                    {
+                        RequestOverlayPermission(activity);
+                    });
+                    builder.SetNegativeButton("Để Sau", (s, e) => { });
+                    builder.SetCancelable(true);
+                    var dialog = builder.Create();
+                    dialog?.Show();
+                }
+                catch
+                {
+                    RequestOverlayPermission(activity);
+                }
+            });
+        }
+        catch
+        {
+            RequestOverlayPermission(activity);
+        }
+    }
+
     public static void RequestOverlayPermission(Context context)
     {
-        if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(context))
+        if (OperatingSystem.IsAndroidVersionAtLeast(23) && !CanDrawOverlays(context))
         {
+            bool success = false;
+
+            // 1. Thử intent đặc biệt cho Xiaomi / MIUI / HyperOS
             try
             {
-                var intent = new Intent(
-                    Settings.ActionManageOverlayPermission,
-                    global::Android.Net.Uri.Parse("package:" + context.PackageName));
-                intent.AddFlags(ActivityFlags.NewTask);
-                context.StartActivity(intent);
-                Toast.MakeText(context, "Vui lòng bật quyền 'Hiển thị trên ứng dụng khác' để sử dụng Bong bóng nổi", ToastLength.Long)?.Show();
+                var miuiIntent = new Intent("miui.intent.action.APP_PERM_EDITOR");
+                miuiIntent.SetClassName("com.miui.securitycenter", "com.miui.permcenter.permissions.PermissionsEditorActivity");
+                miuiIntent.PutExtra("extra_pkgname", context.PackageName);
+                miuiIntent.AddFlags(ActivityFlags.NewTask);
+                context.StartActivity(miuiIntent);
+                success = true;
             }
-            catch (Exception ex)
+            catch { }
+
+            // 2. Thử intent chuẩn Android kèm package URI
+            if (!success)
             {
-                global::Android.Util.Log.Warn("ComicGMTPC_Bubble", $"Lỗi mở cài đặt overlay: {ex.Message}");
+                try
+                {
+                    var intent = new Intent(
+                        Settings.ActionManageOverlayPermission,
+                        global::Android.Net.Uri.Parse("package:" + context.PackageName));
+                    intent.AddFlags(ActivityFlags.NewTask);
+                    context.StartActivity(intent);
+                    success = true;
+                }
+                catch { }
             }
+
+            // 3. Fallback: Intent chuẩn Android không kèm URI (cho các ROM chặn package URI)
+            if (!success)
+            {
+                try
+                {
+                    var intent = new Intent(Settings.ActionManageOverlayPermission);
+                    intent.AddFlags(ActivityFlags.NewTask);
+                    context.StartActivity(intent);
+                    success = true;
+                }
+                catch { }
+            }
+
+            // 4. Fallback cuối: Mở trang Chi tiết ứng dụng trong Cài đặt
+            if (!success)
+            {
+                try
+                {
+                    var intent = new Intent(Settings.ActionApplicationDetailsSettings);
+                    intent.SetData(global::Android.Net.Uri.Parse("package:" + context.PackageName));
+                    intent.AddFlags(ActivityFlags.NewTask);
+                    context.StartActivity(intent);
+                    success = true;
+                }
+                catch { }
+            }
+
+            try
+            {
+                Toast.MakeText(context, "👉 Vui lòng bật quyền 'Hiển thị trên ứng dụng khác' (hoặc Cửa sổ pop-up) cho Comic Downloader GMTPC", ToastLength.Long)?.Show();
+            }
+            catch { }
         }
     }
 
     public static void ShowBubble(Context context)
     {
-        var appContext = context.ApplicationContext ?? context;
-
-        if (OperatingSystem.IsAndroidVersionAtLeast(23) && !Settings.CanDrawOverlays(appContext))
-        {
-            RequestOverlayPermission(context);
-            return;
-        }
+        var activity = context as Activity ?? MainActivity.CurrentInstance;
 
         if (IsShowing)
         {
@@ -83,24 +173,70 @@ public static class FloatingBubbleManager
             return;
         }
 
+        bool hasOverlayPermission = CanDrawOverlays(context);
+
+        if (hasOverlayPermission)
+        {
+            ShowSystemOverlayBubble(context);
+        }
+        else
+        {
+            // Nếu chưa có quyền Overlay toàn hệ thống:
+            // 1. Hiển thị Bong bóng trong ứng dụng (In-App) ngay lập tức để người dùng thấy bong bóng hoạt động
+            if (activity != null)
+            {
+                ShowInAppBubble(activity);
+                // 2. Nhắc nhở người dùng cấp quyền Overlay để bong bóng bay ra ngoài màn hình chính
+                PromptOverlayPermission(activity);
+            }
+            else
+            {
+                RequestOverlayPermission(context);
+            }
+        }
+    }
+
+    public static void PromoteToSystemOverlay(Context context)
+    {
+        if (CanDrawOverlays(context))
+        {
+            if (_isShowing && !_isSystemOverlay)
+            {
+                // Đang hiển thị In-App, nâng cấp lên System Overlay
+                HideBubble();
+                ShowSystemOverlayBubble(context);
+            }
+            else if (!_isShowing)
+            {
+                ShowSystemOverlayBubble(context);
+            }
+        }
+    }
+
+    public static void ShowSystemOverlayBubble(Context context)
+    {
         try
         {
-            _windowManager = appContext.GetSystemService(Context.WindowService) as IWindowManager;
+            var appContext = context.ApplicationContext ?? context;
+            _windowManager = (context as Activity)?.WindowManager ??
+                             (IWindowManager?)context.GetSystemService(Context.WindowService) ??
+                             (IWindowManager?)appContext.GetSystemService(Context.WindowService);
+
             if (_windowManager == null) return;
 
-            _bubbleSizePx = DpToPx(appContext, 58);
-            int screenWidth = GetScreenWidth(appContext);
-            int screenHeight = GetScreenHeight(appContext);
+            _bubbleSizePx = DpToPx(context, 58);
+            int screenWidth = GetScreenWidth(context);
+            int screenHeight = GetScreenHeight(context);
 
             var windowType = OperatingSystem.IsAndroidVersionAtLeast(26)
                 ? WindowManagerTypes.ApplicationOverlay
                 : WindowManagerTypes.Phone;
 
             var flags = WindowManagerFlags.NotFocusable |
-                        WindowManagerFlags.LayoutNoLimits |
+                        WindowManagerFlags.NotTouchModal |
                         WindowManagerFlags.HardwareAccelerated;
 
-            _layoutParams = new WindowManagerLayoutParams(
+            _systemLayoutParams = new WindowManagerLayoutParams(
                 _bubbleSizePx,
                 _bubbleSizePx,
                 windowType,
@@ -109,18 +245,19 @@ public static class FloatingBubbleManager
             {
                 Gravity = GravityFlags.Top | GravityFlags.Left,
                 X = screenWidth - _bubbleSizePx,
-                Y = screenHeight / 3
+                Y = Math.Max(DpToPx(context, 80), screenHeight / 3)
             };
 
             _isRightSide = true;
             _isDocked = false;
+            _isSystemOverlay = true;
 
-            _bubbleView = CreateBubbleView(appContext);
+            _bubbleView = CreateBubbleView(context);
 
-            var touchListener = new BubbleTouchListener(
-                appContext,
+            var touchListener = new SystemBubbleTouchListener(
+                context,
                 _windowManager,
-                _layoutParams,
+                _systemLayoutParams,
                 _bubbleSizePx,
                 onTouchStart: () =>
                 {
@@ -129,7 +266,7 @@ public static class FloatingBubbleManager
                 },
                 onTap: () =>
                 {
-                    OpenMainActivity(appContext);
+                    OpenMainActivity(context);
                 },
                 onDragEnd: (isRightSide) =>
                 {
@@ -139,7 +276,8 @@ public static class FloatingBubbleManager
 
             _bubbleView.SetOnTouchListener(touchListener);
 
-            _windowManager.AddView(_bubbleView, _layoutParams);
+            _windowManager.AddView(_bubbleView, _systemLayoutParams);
+            _isShowing = true;
 
             // Đăng ký nhận tiến trình để cập nhật badge và đánh thức độ mờ nhẹ
             BackgroundExecutionService.Instance.TaskProgressChanged -= OnTaskProgressChanged;
@@ -149,7 +287,72 @@ public static class FloatingBubbleManager
         }
         catch (Exception ex)
         {
-            global::Android.Util.Log.Error("ComicGMTPC_Bubble", $"Lỗi tạo Bong bóng nổi: {ex.Message}");
+            global::Android.Util.Log.Error("ComicGMTPC_Bubble", $"Lỗi tạo System Overlay Bubble: {ex.Message}");
+            // Nếu tạo System Overlay lỗi, fallback hiển thị In-App nếu có Activity
+            if (context is Activity act)
+            {
+                ShowInAppBubble(act);
+            }
+        }
+    }
+
+    public static void ShowInAppBubble(Activity activity)
+    {
+        try
+        {
+            var decorView = activity.Window?.DecorView as FrameLayout;
+            if (decorView == null) return;
+
+            _bubbleSizePx = DpToPx(activity, 58);
+            int screenWidth = GetScreenWidth(activity);
+            int screenHeight = GetScreenHeight(activity);
+
+            _inAppContainer = decorView;
+            _isRightSide = true;
+            _isDocked = false;
+            _isSystemOverlay = false;
+
+            _inAppLayoutParams = new FrameLayout.LayoutParams(_bubbleSizePx, _bubbleSizePx)
+            {
+                Gravity = GravityFlags.Top | GravityFlags.Left,
+                LeftMargin = screenWidth - _bubbleSizePx,
+                TopMargin = Math.Max(DpToPx(activity, 80), screenHeight / 3)
+            };
+
+            _bubbleView = CreateBubbleView(activity);
+
+            var touchListener = new InAppBubbleTouchListener(
+                activity,
+                _inAppLayoutParams,
+                _bubbleSizePx,
+                onTouchStart: () =>
+                {
+                    CancelIdleTimer();
+                    WakeUpAndRestore();
+                },
+                onTap: () =>
+                {
+                    WakeUpAndRestore();
+                    Toast.MakeText(activity, "🫧 Comic Downloader GMTPC đang hoạt động", ToastLength.Short)?.Show();
+                },
+                onDragEnd: (isRightSide) =>
+                {
+                    _isRightSide = isRightSide;
+                    StartIdleTimer();
+                });
+
+            _bubbleView.SetOnTouchListener(touchListener);
+            decorView.AddView(_bubbleView, _inAppLayoutParams);
+            _isShowing = true;
+
+            BackgroundExecutionService.Instance.TaskProgressChanged -= OnTaskProgressChanged;
+            BackgroundExecutionService.Instance.TaskProgressChanged += OnTaskProgressChanged;
+
+            StartIdleTimer();
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("ComicGMTPC_Bubble", $"Lỗi tạo In-App Bubble: {ex.Message}");
         }
     }
 
@@ -169,12 +372,16 @@ public static class FloatingBubbleManager
 
         if (OperatingSystem.IsAndroidVersionAtLeast(21))
         {
-            container.Elevation = DpToPx(context, 6);
+            container.Elevation = DpToPx(context, 8);
         }
 
         // Icon ứng dụng ở trung tâm
         _iconImageView = new ImageView(context);
-        _iconImageView.SetImageResource(Resource.Drawable.Icon);
+        try
+        {
+            _iconImageView.SetImageResource(Resource.Drawable.Icon);
+        }
+        catch { }
         _iconImageView.SetScaleType(ImageView.ScaleType.FitCenter);
         var iconLp = new FrameLayout.LayoutParams(DpToPx(context, 34), DpToPx(context, 34))
         {
@@ -228,10 +435,7 @@ public static class FloatingBubbleManager
 
     private static void PerformAutoDockAndFade()
     {
-        if (_bubbleView == null || !_bubbleView.IsAttachedToWindow || _layoutParams == null || _windowManager == null)
-            return;
-
-        if (_isDocked) return;
+        if (_bubbleView == null || _isDocked) return;
         _isDocked = true;
 
         var context = _bubbleView.Context;
@@ -240,24 +444,36 @@ public static class FloatingBubbleManager
 
         // Thụt 60% vào mép màn hình, chừa 40% làm tay cầm chỉ thị
         int dockOffset = (int)(_bubbleSizePx * 0.60f);
-        int targetX = _isRightSide ? (screenWidth - _bubbleSizePx + dockOffset) : (-dockOffset);
 
-        // Animation mượt mà trượt thụt vào mép
-        AnimateX(_layoutParams.X, targetX, 280, () =>
+        if (_isSystemOverlay && _systemLayoutParams != null && _windowManager != null)
         {
-            // Giảm độ mờ linh hoạt xuống 0.45f để không che khuất màn hình phía dưới
-            _bubbleView.Animate()
-                ?.Alpha(0.45f)
-                ?.SetDuration(300)
-                ?.SetInterpolator(new DecelerateInterpolator())
-                ?.Start();
-        });
+            int targetX = _isRightSide ? (screenWidth - _bubbleSizePx + dockOffset) : (-dockOffset);
+            AnimateSystemX(_systemLayoutParams.X, targetX, 280, () =>
+            {
+                _bubbleView?.Animate()
+                    ?.Alpha(0.45f)
+                    ?.SetDuration(300)
+                    ?.SetInterpolator(new DecelerateInterpolator())
+                    ?.Start();
+            });
+        }
+        else if (!_isSystemOverlay && _inAppLayoutParams != null)
+        {
+            int targetLeft = _isRightSide ? (screenWidth - _bubbleSizePx + dockOffset) : (-dockOffset);
+            AnimateInAppX(_inAppLayoutParams.LeftMargin, targetLeft, 280, () =>
+            {
+                _bubbleView?.Animate()
+                    ?.Alpha(0.45f)
+                    ?.SetDuration(300)
+                    ?.SetInterpolator(new DecelerateInterpolator())
+                    ?.Start();
+            });
+        }
     }
 
     public static void WakeUpAndRestore()
     {
-        if (_bubbleView == null || !_bubbleView.IsAttachedToWindow || _layoutParams == null || _windowManager == null)
-            return;
+        if (_bubbleView == null) return;
 
         // Khôi phục độ mờ 100%
         _bubbleView.Animate()
@@ -272,11 +488,23 @@ public static class FloatingBubbleManager
             var context = _bubbleView.Context;
             if (context == null) return;
             int screenWidth = GetScreenWidth(context);
-            int targetX = _isRightSide ? (screenWidth - _bubbleSizePx) : 0;
-            AnimateX(_layoutParams.X, targetX, 200, () =>
+
+            if (_isSystemOverlay && _systemLayoutParams != null && _windowManager != null)
             {
-                StartIdleTimer();
-            });
+                int targetX = _isRightSide ? (screenWidth - _bubbleSizePx) : 0;
+                AnimateSystemX(_systemLayoutParams.X, targetX, 200, () =>
+                {
+                    StartIdleTimer();
+                });
+            }
+            else if (!_isSystemOverlay && _inAppLayoutParams != null)
+            {
+                int targetLeft = _isRightSide ? (screenWidth - _bubbleSizePx) : 0;
+                AnimateInAppX(_inAppLayoutParams.LeftMargin, targetLeft, 200, () =>
+                {
+                    StartIdleTimer();
+                });
+            }
         }
         else
         {
@@ -284,9 +512,9 @@ public static class FloatingBubbleManager
         }
     }
 
-    private static void AnimateX(int startX, int endX, long duration, Action? onEnd = null)
+    private static void AnimateSystemX(int startX, int endX, long duration, Action? onEnd = null)
     {
-        if (_bubbleView == null || !_bubbleView.IsAttachedToWindow || _layoutParams == null || _windowManager == null)
+        if (_bubbleView == null || _systemLayoutParams == null || _windowManager == null)
         {
             onEnd?.Invoke();
             return;
@@ -301,10 +529,10 @@ public static class FloatingBubbleManager
             {
                 try
                 {
-                    if (_bubbleView != null && _bubbleView.IsAttachedToWindow && _layoutParams != null)
+                    if (_bubbleView != null && _systemLayoutParams != null && _windowManager != null)
                     {
-                        _layoutParams.X = (int)e.Animation.AnimatedValue!;
-                        _windowManager?.UpdateViewLayout(_bubbleView, _layoutParams);
+                        _systemLayoutParams.X = (int)e.Animation.AnimatedValue!;
+                        _windowManager.UpdateViewLayout(_bubbleView, _systemLayoutParams);
                     }
                 }
                 catch { }
@@ -317,8 +545,47 @@ public static class FloatingBubbleManager
         }
         else
         {
-            _layoutParams.X = endX;
-            try { _windowManager.UpdateViewLayout(_bubbleView, _layoutParams); } catch { }
+            _systemLayoutParams.X = endX;
+            try { _windowManager.UpdateViewLayout(_bubbleView, _systemLayoutParams); } catch { }
+            onEnd?.Invoke();
+        }
+    }
+
+    private static void AnimateInAppX(int startLeft, int endLeft, long duration, Action? onEnd = null)
+    {
+        if (_bubbleView == null || _inAppLayoutParams == null)
+        {
+            onEnd?.Invoke();
+            return;
+        }
+
+        var anim = ValueAnimator.OfInt(startLeft, endLeft);
+        anim?.SetDuration(duration);
+        anim?.SetInterpolator(new DecelerateInterpolator());
+        if (anim != null)
+        {
+            anim.Update += (s, e) =>
+            {
+                try
+                {
+                    if (_bubbleView != null && _inAppLayoutParams != null)
+                    {
+                        _inAppLayoutParams.LeftMargin = (int)e.Animation.AnimatedValue!;
+                        _bubbleView.LayoutParameters = _inAppLayoutParams;
+                    }
+                }
+                catch { }
+            };
+            anim.AnimationEnd += (s, e) =>
+            {
+                onEnd?.Invoke();
+            };
+            anim.Start();
+        }
+        else
+        {
+            _inAppLayoutParams.LeftMargin = endLeft;
+            try { _bubbleView.LayoutParameters = _inAppLayoutParams; } catch { }
             onEnd?.Invoke();
         }
     }
@@ -329,7 +596,7 @@ public static class FloatingBubbleManager
         {
             try
             {
-                if (_badgeTextView == null || _bubbleView == null || !_bubbleView.IsAttachedToWindow) return;
+                if (_badgeTextView == null || _bubbleView == null) return;
 
                 if (task.IsRunning)
                 {
@@ -343,7 +610,7 @@ public static class FloatingBubbleManager
                         CancelIdleTimer();
                         _mainHandler.PostDelayed(() =>
                         {
-                            if (_isDocked && _bubbleView != null && _bubbleView.IsAttachedToWindow)
+                            if (_isDocked && _bubbleView != null)
                             {
                                 _bubbleView.Animate()?.Alpha(0.45f)?.SetDuration(300)?.Start();
                             }
@@ -377,11 +644,15 @@ public static class FloatingBubbleManager
         {
             try
             {
-                if (_bubbleView != null && _windowManager != null)
+                if (_bubbleView != null)
                 {
-                    if (_bubbleView.IsAttachedToWindow)
+                    if (_isSystemOverlay && _windowManager != null)
                     {
                         _windowManager.RemoveView(_bubbleView);
+                    }
+                    else if (!_isSystemOverlay && _inAppContainer != null)
+                    {
+                        _inAppContainer.RemoveView(_bubbleView);
                     }
                 }
             }
@@ -392,15 +663,18 @@ public static class FloatingBubbleManager
             finally
             {
                 _bubbleView = null;
-                _layoutParams = null;
+                _systemLayoutParams = null;
+                _inAppLayoutParams = null;
+                _inAppContainer = null;
                 _badgeTextView = null;
                 _iconImageView = null;
                 _isDocked = false;
+                _isShowing = false;
             }
         });
     }
 
-    private class BubbleTouchListener : Java.Lang.Object, View.IOnTouchListener
+    private class SystemBubbleTouchListener : Java.Lang.Object, View.IOnTouchListener
     {
         private readonly Context _context;
         private readonly IWindowManager _wm;
@@ -415,7 +689,7 @@ public static class FloatingBubbleManager
         private bool _isDragging;
         private readonly int _touchSlop;
 
-        public BubbleTouchListener(
+        public SystemBubbleTouchListener(
             Context context,
             IWindowManager wm,
             WindowManagerLayoutParams lp,
@@ -462,10 +736,7 @@ public static class FloatingBubbleManager
                         _lp.Y = (int)(_startY + dy);
                         try
                         {
-                            if (v.IsAttachedToWindow)
-                            {
-                                _wm.UpdateViewLayout(v, _lp);
-                            }
+                            _wm.UpdateViewLayout(v, _lp);
                         }
                         catch { }
                     }
@@ -515,7 +786,7 @@ public static class FloatingBubbleManager
                 try
                 {
                     _lp.X = (int)e.Animation.AnimatedValue!;
-                    if (_bubbleView != null && _bubbleView.IsAttachedToWindow)
+                    if (_bubbleView != null)
                     {
                         _wm.UpdateViewLayout(_bubbleView, _lp);
                     }
@@ -528,9 +799,149 @@ public static class FloatingBubbleManager
                 try
                 {
                     _lp.Y = (int)e.Animation.AnimatedValue!;
-                    if (_bubbleView != null && _bubbleView.IsAttachedToWindow)
+                    if (_bubbleView != null)
                     {
                         _wm.UpdateViewLayout(_bubbleView, _lp);
+                    }
+                }
+                catch { }
+            };
+
+            animX.AnimationEnd += (s, e) =>
+            {
+                onEnd?.Invoke();
+            };
+
+            animX.Start();
+            animY.Start();
+        }
+    }
+
+    private class InAppBubbleTouchListener : Java.Lang.Object, View.IOnTouchListener
+    {
+        private readonly Activity _activity;
+        private readonly FrameLayout.LayoutParams _lp;
+        private readonly int _bubbleSize;
+        private readonly Action _onTouchStart;
+        private readonly Action _onTap;
+        private readonly Action<bool> _onDragEnd;
+
+        private float _startLeft, _startTop;
+        private float _touchX, _touchY;
+        private bool _isDragging;
+        private readonly int _touchSlop;
+
+        public InAppBubbleTouchListener(
+            Activity activity,
+            FrameLayout.LayoutParams lp,
+            int bubbleSize,
+            Action onTouchStart,
+            Action onTap,
+            Action<bool> onDragEnd)
+        {
+            _activity = activity;
+            _lp = lp;
+            _bubbleSize = bubbleSize;
+            _onTouchStart = onTouchStart;
+            _onTap = onTap;
+            _onDragEnd = onDragEnd;
+            _touchSlop = ViewConfiguration.Get(activity)?.ScaledTouchSlop ?? 16;
+        }
+
+        public bool OnTouch(View? v, MotionEvent? e)
+        {
+            if (e == null || v == null) return false;
+
+            switch (e.Action)
+            {
+                case MotionEventActions.Down:
+                    _startLeft = _lp.LeftMargin;
+                    _startTop = _lp.TopMargin;
+                    _touchX = e.RawX;
+                    _touchY = e.RawY;
+                    _isDragging = false;
+                    _onTouchStart?.Invoke();
+                    return true;
+
+                case MotionEventActions.Move:
+                    float dx = e.RawX - _touchX;
+                    float dy = e.RawY - _touchY;
+                    if (!_isDragging && (Math.Abs(dx) > _touchSlop || Math.Abs(dy) > _touchSlop))
+                    {
+                        _isDragging = true;
+                    }
+                    if (_isDragging)
+                    {
+                        _lp.LeftMargin = (int)(_startLeft + dx);
+                        _lp.TopMargin = (int)(_startTop + dy);
+                        try
+                        {
+                            v.LayoutParameters = _lp;
+                        }
+                        catch { }
+                    }
+                    return true;
+
+                case MotionEventActions.Up:
+                case MotionEventActions.Cancel:
+                    if (!_isDragging)
+                    {
+                        _onTap?.Invoke();
+                    }
+                    else
+                    {
+                        int screenWidth = GetScreenWidth(_activity);
+                        int screenHeight = GetScreenHeight(_activity);
+                        bool isRightSide = (_lp.LeftMargin + _bubbleSize / 2) > (screenWidth / 2);
+                        int snapLeft = isRightSide ? (screenWidth - _bubbleSize) : 0;
+
+                        int minY = DpToPx(_activity, 40);
+                        int maxY = screenHeight - _bubbleSize - DpToPx(_activity, 40);
+                        int snapTop = Math.Clamp(_lp.TopMargin, minY, Math.Max(minY, maxY));
+
+                        AnimateInAppSnap(_lp.LeftMargin, snapLeft, _lp.TopMargin, snapTop, () =>
+                        {
+                            _onDragEnd?.Invoke(isRightSide);
+                        });
+                    }
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void AnimateInAppSnap(int startLeft, int endLeft, int startTop, int endTop, Action? onEnd)
+        {
+            var animX = ValueAnimator.OfInt(startLeft, endLeft);
+            var animY = ValueAnimator.OfInt(startTop, endTop);
+
+            animX?.SetDuration(220);
+            animY?.SetDuration(220);
+            var interpolator = new DecelerateInterpolator();
+            animX?.SetInterpolator(interpolator);
+            animY?.SetInterpolator(interpolator);
+
+            animX!.Update += (s, e) =>
+            {
+                try
+                {
+                    _lp.LeftMargin = (int)e.Animation.AnimatedValue!;
+                    if (_bubbleView != null)
+                    {
+                        _bubbleView.LayoutParameters = _lp;
+                    }
+                }
+                catch { }
+            };
+
+            animY!.Update += (s, e) =>
+            {
+                try
+                {
+                    _lp.TopMargin = (int)e.Animation.AnimatedValue!;
+                    if (_bubbleView != null)
+                    {
+                        _bubbleView.LayoutParameters = _lp;
                     }
                 }
                 catch { }
@@ -551,6 +962,8 @@ public static class FloatingBubbleManager
         try
         {
             var intent = new Intent(context, typeof(MainActivity));
+            intent.SetAction(Intent.ActionMain);
+            intent.AddCategory(Intent.CategoryLauncher);
             intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop | ActivityFlags.ReorderToFront);
             context.StartActivity(intent);
         }
@@ -562,30 +975,58 @@ public static class FloatingBubbleManager
 
     public static int GetScreenWidth(Context context)
     {
-        if (OperatingSystem.IsAndroidVersionAtLeast(30))
+        try
         {
-            var wm = (IWindowManager?)context.GetSystemService(Context.WindowService);
-            var metrics = wm?.CurrentWindowMetrics;
-            if (metrics != null)
+            if (context is Activity act && OperatingSystem.IsAndroidVersionAtLeast(30))
             {
-                return metrics.Bounds.Width();
+                var metrics = act.WindowManager?.CurrentWindowMetrics;
+                if (metrics != null)
+                {
+                    return metrics.Bounds.Width();
+                }
             }
         }
-        return context.Resources?.DisplayMetrics?.WidthPixels ?? 1080;
+        catch { }
+
+        try
+        {
+            var dm = context.Resources?.DisplayMetrics;
+            if (dm != null && dm.WidthPixels > 0)
+            {
+                return dm.WidthPixels;
+            }
+        }
+        catch { }
+
+        return 1080;
     }
 
     public static int GetScreenHeight(Context context)
     {
-        if (OperatingSystem.IsAndroidVersionAtLeast(30))
+        try
         {
-            var wm = (IWindowManager?)context.GetSystemService(Context.WindowService);
-            var metrics = wm?.CurrentWindowMetrics;
-            if (metrics != null)
+            if (context is Activity act && OperatingSystem.IsAndroidVersionAtLeast(30))
             {
-                return metrics.Bounds.Height();
+                var metrics = act.WindowManager?.CurrentWindowMetrics;
+                if (metrics != null)
+                {
+                    return metrics.Bounds.Height();
+                }
             }
         }
-        return context.Resources?.DisplayMetrics?.HeightPixels ?? 1920;
+        catch { }
+
+        try
+        {
+            var dm = context.Resources?.DisplayMetrics;
+            if (dm != null && dm.HeightPixels > 0)
+            {
+                return dm.HeightPixels;
+            }
+        }
+        catch { }
+
+        return 1920;
     }
 
     public static int DpToPx(Context context, float dp)
@@ -594,4 +1035,3 @@ public static class FloatingBubbleManager
         return (int)Math.Ceiling(dp * density);
     }
 }
-

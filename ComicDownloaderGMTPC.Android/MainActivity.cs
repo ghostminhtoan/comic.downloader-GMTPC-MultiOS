@@ -280,12 +280,16 @@ public class MainActivity : AvaloniaMainActivity
         CurrentInstance = this;
         AndroidStorageHelper.WakeUpStorage(this);
 
-        // Tự động kích hoạt lại Bong bóng nổi nếu người dùng vừa cấp quyền từ màn hình Cài đặt hệ thống
+        // Tự động kích hoạt / nâng cấp Bong bóng nổi nếu người dùng vừa cấp quyền từ màn hình Cài đặt hệ thống
         try
         {
-            if (Services.BackgroundExecutionService.Instance.IsBubbleMode && !FloatingBubbleManager.IsShowing)
+            if (Services.BackgroundExecutionService.Instance.IsBubbleMode)
             {
                 if (FloatingBubbleManager.CanDrawOverlays(this))
+                {
+                    FloatingBubbleManager.PromoteToSystemOverlay(this);
+                }
+                else if (!FloatingBubbleManager.IsShowing)
                 {
                     FloatingBubbleManager.ShowBubble(this);
                 }
