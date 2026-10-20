@@ -773,6 +773,19 @@ public partial class MainView : UserControl
         }
     }
 
+    private void OnBubbleCheckBoxClicked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox cb)
+        {
+            bool isChecked = cb.IsChecked == true;
+            if (DataContext is MainViewModel vm)
+            {
+                vm.IsBubbleMode = isChecked;
+            }
+            ComicDownloaderGMTPC.Services.BackgroundExecutionService.Instance.SetBubbleMode(isChecked);
+        }
+    }
+
     private void PerformAutoScrollToLowestDownloadingItem()
     {
         try

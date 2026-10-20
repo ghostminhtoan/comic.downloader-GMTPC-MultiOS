@@ -17,13 +17,13 @@ namespace ComicDownloaderGMTPC.Android;
 /// <summary>
 /// Trình quản lý Bong bóng nổi chạy ngầm (Floating Bubble) trên Android:
 /// - Kiến trúc kép Dual-Mode:
-///   1. In-App Floating Bubble (trong ứng dụng, 0 quyền, hiển thị ngay lập tức 100%).
-///   2. System Overlay Bubble (toàn hệ thống, hiển thị trên mọi ứng dụng và màn hình chính khi được cấp quyền).
+///   1. In-App Floating Bubble: Gắn trực tiếp vào ViewGroup của Activity (0 cần quyền, hiện ngay 100%).
+///   2. System Overlay Bubble: Toàn hệ thống, hiển thị trên mọi ứng dụng và màn hình chính khi được cấp quyền.
 /// - Tự động thụt 60% vào mép viền (Auto-docking / Half-hide) sau 3.5 giây nhàn rỗi.
 /// - Độ mờ linh hoạt (Dynamic Opacity): mờ 45% khi nhàn rỗi, 100% khi chạm hoặc có tiến trình mới.
 /// - Kéo thả tự do và hít viền thông minh (Snap to screen edge).
-/// - Chạm nhanh để mở / đưa ứng dụng lên màn hình chính tức thì.
-/// - Xử lý thông minh quyền Overlay đa tầng (tương thích Xiaomi MIUI, HyperOS, Samsung, Oppo, Vivo).
+/// - Chạm nhanh để mở lại ứng dụng tức thì.
+/// - Mở trực tiếp trang Cài đặt cấp quyền 'Hiển thị trên ứng dụng khác' chuẩn xác mọi dòng máy.
 /// </summary>
 public static class FloatingBubbleManager
 {
@@ -31,7 +31,7 @@ public static class FloatingBubbleManager
     private static View? _bubbleView;
     private static WindowManagerLayoutParams? _systemLayoutParams;
     private static FrameLayout.LayoutParams? _inAppLayoutParams;
-    private static FrameLayout? _inAppContainer;
+    private static ViewGroup? _inAppContainer;
     private static TextView? _badgeTextView;
     private static ImageView? _iconImageView;
 
@@ -44,6 +44,7 @@ public static class FloatingBubbleManager
     private static bool _isShowing;
 
     public static bool IsShowing => _isShowing && _bubbleView != null;
+    public const int RequestOverlayPermissionCode = 1099;
     public static bool IsSystemOverlayActive => _isShowing && _isSystemOverlay;
 
     public static bool CanDrawOverlays(Context context)
@@ -63,103 +64,71 @@ public static class FloatingBubbleManager
         return true;
     }
 
-    public static void PromptOverlayPermission(Activity activity)
+    public static void OpenOverlaySettings(Context context)
     {
-        try
+        if (OperatingSystem.IsAndroidVersionAtLeast(23))
         {
-            activity.RunOnUiThread(() =>
-            {
-                try
-                {
-                    var builder = new AlertDialog.Builder(activity);
-                    builder.SetTitle("🫧 Kích Hoạt Bong Bóng Nổi");
-                    builder.SetMessage("Để Bong bóng nổi hiển thị được bên ngoài màn hình chính và trên các ứng dụng khác khi thoát ứng dụng, vui lòng bật quyền 'Hiển thị trên ứng dụng khác' (hoặc 'Cửa sổ pop-up' trên Xiaomi/MIUI) cho Comic Downloader GMTPC.\n\nBấm 'CẤP QUYỀN NGAY' để mở trang cài đặt.");
-                    builder.SetPositiveButton("👉 CẤP QUYỀN NGAY", (s, e) =>
-                    {
-                        RequestOverlayPermission(activity);
-                    });
-                    builder.SetNegativeButton("Để Sau", (s, e) => { });
-                    builder.SetCancelable(true);
-                    var dialog = builder.Create();
-                    dialog?.Show();
-                }
-                catch
-                {
-                    RequestOverlayPermission(activity);
-                }
-            });
-        }
-        catch
-        {
-            RequestOverlayPermission(activity);
-        }
-    }
+            var activity = context as Activity ?? MainActivity.CurrentInstance;
+            bool opened = false;
 
-    public static void RequestOverlayPermission(Context context)
-    {
-        if (OperatingSystem.IsAndroidVersionAtLeast(23) && !CanDrawOverlays(context))
-        {
-            bool success = false;
-
-            // 1. Thử intent đặc biệt cho Xiaomi / MIUI / HyperOS
+            // 1. Chuẩn Android: ACTION_MANAGE_OVERLAY_PERMISSION với package URI
             try
             {
-                var miuiIntent = new Intent("miui.intent.action.APP_PERM_EDITOR");
-                miuiIntent.SetClassName("com.miui.securitycenter", "com.miui.permcenter.permissions.PermissionsEditorActivity");
-                miuiIntent.PutExtra("extra_pkgname", context.PackageName);
-                miuiIntent.AddFlags(ActivityFlags.NewTask);
-                context.StartActivity(miuiIntent);
-                success = true;
+                var uri = global::Android.Net.Uri.Parse("package:" + context.PackageName);
+                var intent = new Intent(Settings.ActionManageOverlayPermission, uri);
+                if (activity != null)
+                {
+                    activity.StartActivityForResult(intent, RequestOverlayPermissionCode);
+                }
+                else
+                {
+                    intent.AddFlags(ActivityFlags.NewTask);
+                    context.StartActivity(intent);
+                }
+                opened = true;
             }
             catch { }
 
-            // 2. Thử intent chuẩn Android kèm package URI
-            if (!success)
-            {
-                try
-                {
-                    var intent = new Intent(
-                        Settings.ActionManageOverlayPermission,
-                        global::Android.Net.Uri.Parse("package:" + context.PackageName));
-                    intent.AddFlags(ActivityFlags.NewTask);
-                    context.StartActivity(intent);
-                    success = true;
-                }
-                catch { }
-            }
-
-            // 3. Fallback: Intent chuẩn Android không kèm URI (cho các ROM chặn package URI)
-            if (!success)
+            // 2. Chuẩn Android: ACTION_MANAGE_OVERLAY_PERMISSION không có URI (cho các ROM chặn package URI)
+            if (!opened)
             {
                 try
                 {
                     var intent = new Intent(Settings.ActionManageOverlayPermission);
-                    intent.AddFlags(ActivityFlags.NewTask);
-                    context.StartActivity(intent);
-                    success = true;
+                    if (activity != null)
+                    {
+                        activity.StartActivityForResult(intent, RequestOverlayPermissionCode);
+                    }
+                    else
+                    {
+                        intent.AddFlags(ActivityFlags.NewTask);
+                        context.StartActivity(intent);
+                    }
+                    opened = true;
                 }
                 catch { }
             }
 
-            // 4. Fallback cuối: Mở trang Chi tiết ứng dụng trong Cài đặt
-            if (!success)
+            // 3. Fallback: Trang Cài đặt ứng dụng
+            if (!opened)
             {
                 try
                 {
                     var intent = new Intent(Settings.ActionApplicationDetailsSettings);
                     intent.SetData(global::Android.Net.Uri.Parse("package:" + context.PackageName));
-                    intent.AddFlags(ActivityFlags.NewTask);
-                    context.StartActivity(intent);
-                    success = true;
+                    if (activity != null)
+                    {
+                        activity.StartActivityForResult(intent, RequestOverlayPermissionCode);
+                    }
+                    else
+                    {
+                        intent.AddFlags(ActivityFlags.NewTask);
+                        context.StartActivity(intent);
+                    }
+                    opened = true;
                 }
                 catch { }
             }
-
-            try
-            {
-                Toast.MakeText(context, "👉 Vui lòng bật quyền 'Hiển thị trên ứng dụng khác' (hoặc Cửa sổ pop-up) cho Comic Downloader GMTPC", ToastLength.Long)?.Show();
-            }
-            catch { }
         }
     }
 
@@ -181,18 +150,20 @@ public static class FloatingBubbleManager
         }
         else
         {
-            // Nếu chưa có quyền Overlay toàn hệ thống:
-            // 1. Hiển thị Bong bóng trong ứng dụng (In-App) ngay lập tức để người dùng thấy bong bóng hoạt động
+            // 1. Hiển thị Bong bóng trong ứng dụng (In-App) NGAY LẬP TỨC để người dùng thấy bong bóng hoạt động
             if (activity != null)
             {
                 ShowInAppBubble(activity);
-                // 2. Nhắc nhở người dùng cấp quyền Overlay để bong bóng bay ra ngoài màn hình chính
-                PromptOverlayPermission(activity);
             }
-            else
+
+            // 2. Mở trực tiếp trang cấp quyền Overlay để bong bóng bay ra ngoài màn hình chính
+            try
             {
-                RequestOverlayPermission(context);
+                Toast.MakeText(context, "👉 Vui lòng bật 'Hiển thị trên ứng dụng khác' để bong bóng xuất hiện ngoài màn hình chính!", ToastLength.Long)?.Show();
             }
+            catch { }
+
+            OpenOverlaySettings(context);
         }
     }
 
@@ -202,7 +173,7 @@ public static class FloatingBubbleManager
         {
             if (_isShowing && !_isSystemOverlay)
             {
-                // Đang hiển thị In-App, nâng cấp lên System Overlay
+                // Đang hiển thị In-App, gỡ In-App và nâng cấp lên System Overlay
                 HideBubble();
                 ShowSystemOverlayBubble(context);
             }
@@ -224,7 +195,7 @@ public static class FloatingBubbleManager
 
             if (_windowManager == null) return;
 
-            _bubbleSizePx = DpToPx(context, 58);
+            _bubbleSizePx = DpToPx(context, 60);
             int screenWidth = GetScreenWidth(context);
             int screenHeight = GetScreenHeight(context);
 
@@ -245,7 +216,7 @@ public static class FloatingBubbleManager
             {
                 Gravity = GravityFlags.Top | GravityFlags.Left,
                 X = screenWidth - _bubbleSizePx,
-                Y = Math.Max(DpToPx(context, 80), screenHeight / 3)
+                Y = Math.Max(DpToPx(context, 100), screenHeight / 3)
             };
 
             _isRightSide = true;
@@ -288,7 +259,7 @@ public static class FloatingBubbleManager
         catch (Exception ex)
         {
             global::Android.Util.Log.Error("ComicGMTPC_Bubble", $"Lỗi tạo System Overlay Bubble: {ex.Message}");
-            // Nếu tạo System Overlay lỗi, fallback hiển thị In-App nếu có Activity
+            // Fallback hiển thị In-App nếu tạo System Overlay lỗi
             if (context is Activity act)
             {
                 ShowInAppBubble(act);
@@ -300,14 +271,15 @@ public static class FloatingBubbleManager
     {
         try
         {
-            var decorView = activity.Window?.DecorView as FrameLayout;
-            if (decorView == null) return;
+            var rootContainer = activity.FindViewById<ViewGroup>(global::Android.Resource.Id.Content) ??
+                                (activity.Window?.DecorView as ViewGroup);
+            if (rootContainer == null) return;
 
-            _bubbleSizePx = DpToPx(activity, 58);
+            _bubbleSizePx = DpToPx(activity, 60);
             int screenWidth = GetScreenWidth(activity);
             int screenHeight = GetScreenHeight(activity);
 
-            _inAppContainer = decorView;
+            _inAppContainer = rootContainer;
             _isRightSide = true;
             _isDocked = false;
             _isSystemOverlay = false;
@@ -316,7 +288,7 @@ public static class FloatingBubbleManager
             {
                 Gravity = GravityFlags.Top | GravityFlags.Left,
                 LeftMargin = screenWidth - _bubbleSizePx,
-                TopMargin = Math.Max(DpToPx(activity, 80), screenHeight / 3)
+                TopMargin = Math.Max(DpToPx(activity, 100), screenHeight / 3)
             };
 
             _bubbleView = CreateBubbleView(activity);
@@ -342,7 +314,19 @@ public static class FloatingBubbleManager
                 });
 
             _bubbleView.SetOnTouchListener(touchListener);
-            decorView.AddView(_bubbleView, _inAppLayoutParams);
+            if (_bubbleView.Parent != null)
+            {
+                try { ((ViewGroup)_bubbleView.Parent).RemoveView(_bubbleView); } catch { }
+            }
+            rootContainer.AddView(_bubbleView, _inAppLayoutParams);
+            _bubbleView.BringToFront();
+            if (OperatingSystem.IsAndroidVersionAtLeast(21))
+            {
+                _bubbleView.Elevation = DpToPx(activity, 25);
+                _bubbleView.TranslationZ = DpToPx(activity, 15);
+            }
+            rootContainer.RequestLayout();
+            rootContainer.Invalidate();
             _isShowing = true;
 
             BackgroundExecutionService.Instance.TaskProgressChanged -= OnTaskProgressChanged;
@@ -364,15 +348,15 @@ public static class FloatingBubbleManager
         var bgDrawable = new GradientDrawable();
         bgDrawable.SetShape(ShapeType.Oval);
         bgDrawable.SetColors(new int[] {
-            (int)new Color(0x1E, 0x1B, 0x4B), // #1E1B4B
-            (int)new Color(0x0F, 0x17, 0x2A)  // #0F172A
+            (int)new Color(0x4F, 0x46, 0xE5), // #4F46E5 Indigo
+            (int)new Color(0x0F, 0x17, 0x2A)  // #0F172A Dark Slate
         });
-        bgDrawable.SetStroke(DpToPx(context, 2), new Color(0x8B, 0x5C, 0xF6)); // #8B5CF6
+        bgDrawable.SetStroke(DpToPx(context, 2.5f), new Color(0xC0, 0x84, 0xFC)); // #C084FC Bright Purple
         container.Background = bgDrawable;
 
         if (OperatingSystem.IsAndroidVersionAtLeast(21))
         {
-            container.Elevation = DpToPx(context, 8);
+            container.Elevation = DpToPx(context, 10);
         }
 
         // Icon ứng dụng ở trung tâm
@@ -383,7 +367,7 @@ public static class FloatingBubbleManager
         }
         catch { }
         _iconImageView.SetScaleType(ImageView.ScaleType.FitCenter);
-        var iconLp = new FrameLayout.LayoutParams(DpToPx(context, 34), DpToPx(context, 34))
+        var iconLp = new FrameLayout.LayoutParams(DpToPx(context, 36), DpToPx(context, 36))
         {
             Gravity = GravityFlags.Center
         };

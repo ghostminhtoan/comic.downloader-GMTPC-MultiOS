@@ -12,6 +12,7 @@ namespace ComicDownloaderGMTPC.Android;
 public class ComicBackgroundService : Service
 {
     public const string ChannelId = "comic_gmtpc_bg_progress_channel";
+    public const string ChannelIdBubble = "comic_gmtpc_bubble_channel";
     public const int NotificationId = 1002;
     public const string ActionStartOrUpdate = "ACTION_START_OR_UPDATE";
     public const string ActionStop = "ACTION_STOP";
@@ -242,7 +243,28 @@ public class ComicBackgroundService : Service
             channel.SetSound(null, null);
 
             var nm = (NotificationManager?)GetSystemService(NotificationService);
-            nm?.CreateNotificationChannel(channel);
+            if (nm != null)
+            {
+                nm.CreateNotificationChannel(channel);
+
+                // Kênh thông báo chuyên biệt kích hoạt Android Bubble API (Android 11+)
+                var bubbleChannel = new NotificationChannel(
+                    ChannelIdBubble,
+                    "Comic GMTPC Bong Bóng Nổi (Bubbles)",
+                    NotificationImportance.High)
+                {
+                    Description = "Kênh bong bóng nổi tương tác nhanh trên Android",
+                    LockscreenVisibility = NotificationVisibility.Public
+                };
+                bubbleChannel.SetShowBadge(true);
+                bubbleChannel.EnableVibration(false);
+                bubbleChannel.SetSound(null, null);
+                if (OperatingSystem.IsAndroidVersionAtLeast(30))
+                {
+                    bubbleChannel.SetAllowBubbles(true);
+                }
+                nm.CreateNotificationChannel(bubbleChannel);
+            }
         }
     }
 
@@ -266,7 +288,8 @@ public class ComicBackgroundService : Service
             _cachedOpenPendingIntent = PendingIntent.GetActivity(context, 0, openIntent, flags);
         }
 
-        var builder = new NotificationCompat.Builder(context, ChannelId);
+        bool isBubbleMode = BackgroundExecutionService.Instance.IsBubbleMode;
+        var builder = new NotificationCompat.Builder(context, isBubbleMode ? ChannelIdBubble : ChannelId);
         builder.SetContentTitle(title);
         builder.SetContentText(text);
         builder.SetSmallIcon(Resource.Drawable.Icon);

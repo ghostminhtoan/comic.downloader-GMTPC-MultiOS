@@ -182,7 +182,6 @@ public class BackgroundExecutionService
 
     public void SetBubbleMode(bool enabled)
     {
-        if (IsBubbleMode == enabled) return;
         IsBubbleMode = enabled;
         BubbleModeChanged?.Invoke(enabled);
 

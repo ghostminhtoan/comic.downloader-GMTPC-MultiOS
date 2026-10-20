@@ -274,6 +274,23 @@ public class MainActivity : AvaloniaMainActivity
         });
     }
 
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+        if (requestCode == FloatingBubbleManager.RequestOverlayPermissionCode)
+        {
+            if (FloatingBubbleManager.CanDrawOverlays(this))
+            {
+                FloatingBubbleManager.PromoteToSystemOverlay(this);
+                try
+                {
+                    Toast.MakeText(this, "🎉 Đã kích hoạt Bong bóng nổi trên toàn hệ thống thành công!", ToastLength.Short)?.Show();
+                }
+                catch { }
+            }
+        }
+    }
+
     protected override void OnResume()
     {
         base.OnResume();
