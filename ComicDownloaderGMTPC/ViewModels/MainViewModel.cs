@@ -1,3 +1,21 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   ViewModel trung tâm (Root ViewModel) điều phối toàn bộ các tab chức năng, dịch vụ nền, hàng đợi
+//   và trạng thái giao diện ứng dụng Comic Downloader GMTPC Avalonia trên Windows, Linux và Android.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Quản lý điều hướng tab: Nguồn truyện, Tìm kiếm, Tải về & Hàng đợi, Công cụ Tool, Thư viện đọc truyện.
+//   - Trạng thái hệ thống: Thanh tiến trình tổng thể, trạng thái kết nối mạng, logging chi tiết.
+//   - Quản lý vòng đời ứng dụng: Khởi tạo các dịch vụ nền, lưu cấu hình khi tắt và phục hồi khi mở lại.
+//   - Phím tắt & Sự kiện toàn cục: Điều hướng trang, hủy tác vụ tải, dọn dẹp bộ nhớ đệm.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Là partial class mẹ kết nối với các partial ViewModel chuyên biệt (ArchiveMerger, BatchRename, DualPictureSort...).
+//   - Mọi tương tác từ luồng tải nền lên ObservableCollection giao diện bắt buộc dùng Dispatcher.UIThread.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;

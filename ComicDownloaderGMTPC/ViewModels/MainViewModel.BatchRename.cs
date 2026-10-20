@@ -1,3 +1,19 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.BatchRename.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Partial ViewModel quản lý tính năng Đổi Tên Hàng Loạt (Batch Rename) cho tệp và thư mục truyện tranh.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Các phương thức đổi tên: Thêm tiền tố/hậu tố, Tìm kiếm & Thay thế chuỗi, Đánh số thứ tự tăng dần (Renumber).
+//   - Chuẩn hóa số thứ tự (Zero Padding): Tự động điền số 0 phía trước (ví dụ 1 -> 001, 12 -> 012).
+//   - Xem trước trực tiếp (Live Preview): Hiển thị bảng so sánh tên cũ - tên mới trước khi thực thi.
+//   - Hỗ trợ hoàn tác (Undo) và ghi nhật ký thay đổi chi tiết.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Luôn kiểm tra xung đột trùng tên tệp đích trước khi thực hiện đổi tên thật trên hệ thống tệp.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;

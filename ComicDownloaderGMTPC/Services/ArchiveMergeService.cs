@@ -1,3 +1,22 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: ArchiveMergeService.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Dịch vụ xử lý Gộp & Đóng Gói File Truyện Lẻ (Archive Merger Engine) sang các định dạng CBZ, ZIP,
+//   PDF (kèm bookmarks phân cấp) và sách điện tử MOBI Kindle.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Đọc và giải nén các định dạng đầu vào: PDF, ZIP, CBZ, RAR, CBR, MOBI.
+//   - Tự động gom nhóm chapter theo mốc người dùng chỉ định (100, 200, 300, Tất cả hoặc Tùy chọn).
+//   - Giữ nguyên cấu trúc thư mục chapter bên trong file nén để độc giả tiện theo dõi.
+//   - Tạo tài liệu PDF chuyên nghiệp với SkiaSharp + PDF Outlines tương ứng từng chương truyện.
+//   - Hỗ trợ tạo sách điện tử MOBI đa chương chuẩn Amazon Kindle.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Luôn sử dụng bộ giải nén in-memory hoặc streaming khi có thể để tránh tạo file rác đầy ổ cứng.
+//   - Tôn trọng CancellationToken trên từng vòng lặp ảnh và báo cáo tiến độ chi tiết qua IProgress.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.Globalization;

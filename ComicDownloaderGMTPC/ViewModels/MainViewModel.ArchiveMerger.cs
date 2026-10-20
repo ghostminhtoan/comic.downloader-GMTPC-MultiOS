@@ -1,3 +1,22 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.ArchiveMerger.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Partial ViewModel phụ trách tính năng Gộp File Lẻ Truyện (Archive Merger) - gom các chương truyện
+//   riêng lẻ thành các tập sách lớn hoặc tập nén đa chương chuẩn quốc tế.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Hỗ trợ nguồn vào đa dạng: PDF, ZIP, CBZ, RAR, CBR, MOBI.
+//   - Mốc gom nhóm linh hoạt: 100 chap, 200 chap, 300 chap, Tất cả vào 1 file, hoặc số chapter tùy chỉnh.
+//   - Định dạng xuất chuẩn: CBZ (.cbz), ZIP (.zip), PDF (.pdf có mục lục bookmarks từng chap), MOBI (.mobi Kindle).
+//   - Tự động hóa thông minh: Tự động điền thư mục lưu 'merged' cùng cấp, tự động tạo thư mục khi mở.
+//   - Tự động nhận diện chapter: Gom số thập phân (100.1, 100.5) vào mốc nguyên, biến thiên file cuối theo chap cuối.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Tự động kích hoạt cờ IsMergeCustomChunk = true khi người dùng thay đổi giá trị ô số tùy chỉnh.
+//   - Đảm bảo CancellationTokenSource được truyền xuyên suốt quá trình nén để hỗ trợ dừng tác vụ tức thì.
+// ====================================================================================================
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

@@ -1,3 +1,20 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: DownloadEngineService.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Dịch vụ Tải Truyện Đa Luồng & Quản Lý Hàng Đợi Cốt Lõi (Core Download Engine & Queue Pipeline).
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Tải song song đa luồng có kiểm soát (Parallel HTTP Downloads).
+//   - Đường ống thử lại tự động (Retry Pipeline) khi gặp lỗi mạng hoặc HTTP timeout.
+//   - Tự động cắt ảnh dài khi tải (Auto Split Long Images) nếu được bật.
+//   - Báo cáo tiến độ thời gian thực cho từng trang, từng chapter và toàn bộ bộ truyện.
+//   - Ghi nhận lỗi chi tiết vào thư mục crash log mà không làm gián đoạn toàn bộ hàng đợi tải.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Luôn tôn trọng CancellationToken của từng mục tải để hỗ trợ dừng/tạm dừng tức thì.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;

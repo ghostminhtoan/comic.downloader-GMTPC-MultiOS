@@ -1,10 +1,12 @@
 # Workflow hiện tại - Comic Downloader GMTPC Avalonia Multi-OS
-Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ, ít file, build sạch, không phá lane khác.
+Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ, ít file, build sạch, không phá lane khác, sau khi build luôn luôn upload beta.
 
 ## 1. Quy tắc nền
 - Trả lời tiếng Việt.
 - Dùng emotion phong phú, không lặp lại.
-- Dùng skill `ponyman` khi code, kể cả không tag skill.
+- Dùng skill [SKILL.md](codeContext;file:///c%3A/Users/Admin/source/repos/ghostminhtoan/subtitle%20edit%20nikse/.agents/skills/teamwork-preview-protocol/SKILL.md)[SKILL.md](codeContext;file:///c%3A/Users/Admin/source/repos/ghostminhtoan/subtitle%20edit%20nikse/.agents/skills/prompt-optimizer/SKILL.md)
+
+ khi code, kể cả không tag skill.
 - Sửa tối thiểu, không thêm abstraction thừa.
 - Chuẩn UTF-8, cấm lỗi mobijake.
 - Avalonia UI qua `Dispatcher.UIThread` từ luồng nền.
@@ -380,9 +382,10 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - Cẩn trọng với vòng lặp xử lý chuỗi: luôn kiểm tra độ dài chuỗi marker (`marker.Length == 0`) để tránh rơi vào vòng lặp vô hạn gây đóng băng UI.
 
 
-## 15. Lịch sử Nâng cấp & Kho Lưu trữ Chi tiết (Archive Reference)
-> 📜 **Toàn bộ 28 mục nhật ký và chi tiết kỹ thuật các tính năng trước đây (từ mục 15.1 đến 28) đã được lưu trữ tinh gọn tại [`workflow-history.md`](file:///r:/HDD%20R/ZC%20SYMLINK/USERS/source/repos/ghostminhtoan/COMIC%20DOWNLOADER%20GMTPC%20ALL/Comic%20Downloader%20GMTPC%20AVALONIA/workflow-history.md).**
-> Chỉ tra cứu file lịch sử khi cần đối soát sâu các module cũ. Mặc định chỉ duy trì các quy tắc nền và 3 mục kỹ thuật gần nhất dưới đây để tối ưu hóa context token.
+## 15. Tài Liệu Hướng Dẫn, Sổ Tay Sửa Lỗi & Lưu Trữ (Documentation & Logs)
+> 🛠️ **Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật**: Tra cứu 13 lỗi kinh điển, nguyên nhân gốc rễ và giải pháp triệt để tại [`bug-fixes-and-solutions.md`](file:///r:/HDD%20R/ZC%20SYMLINK/USERS/source/repos/ghostminhtoan/COMIC%20DOWNLOADER%20GMTPC%20ALL/Comic%20Downloader%20GMTPC%20AVALONIA/bug-fixes-and-solutions.md).
+> 📜 **Kho Lưu Trữ Lịch Sử Nâng Cấp**: Tra cứu chi tiết toàn bộ các cập nhật cũ từ mục 15.1 đến mục 28 tại [`workflow-history.md`](file:///r:/HDD%20R/ZC%20SYMLINK/USERS/source/repos/ghostminhtoan/COMIC%20DOWNLOADER%20GMTPC%20ALL/Comic%20Downloader%20GMTPC%20AVALONIA/workflow-history.md).
+> Mặc định chỉ duy trì các quy tắc nền cốt lõi và các mục cập nhật gần nhất dưới đây để tối ưu hóa context token.
 
 ## 16. Các Cập Nhật Kỹ Thuật Gần Nhất (Recent Updates)
 
@@ -430,3 +433,8 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
     - **Tách Lịch Sử Cũ Sang `workflow-history.md`**: Lưu trữ toàn bộ 3.100+ dòng nhật ký từ mục 15.1 đến 28 vào [`workflow-history.md`](file:///r:/HDD%20R/ZC%20SYMLINK/USERS/source/repos/ghostminhtoan/COMIC%20DOWNLOADER%20GMTPC%20ALL/Comic%20Downloader%20GMTPC%20AVALONIA/workflow-history.md) (475 KB).
     - **Tối Ưu 93.6% Dung Lượng `workflow-avalonia.md`**: Giảm từ 507 KB (>3.550 dòng, ~90.000 tokens) xuống còn ~33 KB (~440 dòng, ~5.000 tokens), giữ trọn vẹn 100% quy tắc nền (Mục 1-14) và các bản cập nhật gần nhất.
     - **Tiết Kiệm Token Đột Phá**: Giúp AI đọc hiểu quy tắc nhanh gấp nhiều lần và tiết kiệm hơn 85.000 tokens mỗi lần nạp context.
+
+
+33. **Bổ Sung File Summary Toàn Diện Cho Mã Nguồn & Tạo Sổ Tay Khắc Phục Lỗi (`bug-fixes-and-solutions.md`)**:
+    - **Chuẩn Hóa File Summary Đầu Mỗi File (21 Files Trọng Tâm)**: Đã bổ sung khối chú thích chuẩn hóa ở đầu 14 ViewModel (`ComicReaderViewModel.cs`, `LibraryViewModel.cs`, `MainViewModel.*.cs`...) và 7 Services cốt lõi (`ArchiveMergeService.cs`, `ComicDiskCacheService.cs`, `ComicReaderService.cs`...), định nghĩa rõ: Vai trò & Mục đích, Các tính năng & Thành phần chính, Lưu ý kỹ thuật & Quy tắc bảo trì.
+    - **Sổ Tay Kỹ Thuật Khắc Phục Lỗi (`bug-fixes-and-solutions.md`)**: Lập tài liệu chuyên sâu ghi nhận 13 mã lỗi lớn (BUG-001 đến BUG-013) kèm bảng tra cứu nhanh (Quick Index), phân tích nguyên nhân gốc rễ, giải pháp triệt để, file can thiệp và quy tắc kiểm thử phòng ngừa tái phát.

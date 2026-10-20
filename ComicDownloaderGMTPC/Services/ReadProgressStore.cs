@@ -1,3 +1,19 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: ReadProgressStore.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Dịch vụ Lưu Trữ & Quản Lý Tiến Độ Đọc Dở, Dấu Trang & Lịch Sử (Reading Progress Store).
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Quản lý tệp tiến độ resume.md chuẩn Markdown và chỉ mục JSON tốc độ cao.
+//   - Ghi nhận chính xác vị trí chapter và số trang vừa đọc của từng bộ truyện.
+//   - Hỗ trợ phục hồi tiến độ chéo thiết bị (Cross-Device Resume) giữa Windows, Linux và Android.
+//   - Cung cấp API truy vấn tiến độ nhanh phục vụ hiển thị trên giao diện Thư viện.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Sử dụng khóa đồng bộ thread-safe khi ghi tệp tiến độ để tránh xung đột khi nhiều luồng cùng ghi.
+// ====================================================================================================
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

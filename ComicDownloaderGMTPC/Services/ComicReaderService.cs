@@ -1,3 +1,19 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: ComicReaderService.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Dịch vụ Giải Mã & Nạp Dữ Liệu Truyện Tranh (Comic Archive Decoder & Loader Service).
+//   Chịu trách nhiệm trích xuất và cung cấp danh sách ảnh chương truyện cho trình đọc.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Hỗ trợ toàn diện định dạng: ZIP, CBZ, RAR, CBR, 7Z, PDF, MOBI và Thư mục ảnh rời.
+//   - Tích hợp RarArchivePool và ZipArchivePool cho tốc độ mở file tức thì (0ms latency).
+//   - Tự động sắp xếp ảnh theo thứ tự số tự nhiên (Natural Sort Comparer).
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Quản lý chặt chẽ vòng đời của Stream và Bitmap để tránh rò rỉ bộ nhớ (Memory Leak) khi đọc nhiều chapter liên tiếp.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.IO;

@@ -1,3 +1,20 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.DualPictureSort.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Partial ViewModel quản lý công cụ Lọc & Phân Loại Ảnh Song Song (Dual Picture Sort) trên 2 bảng
+//   thư mục độc lập, tối ưu hóa quy trình lọc ảnh rác, ảnh bìa và phân loại truyện.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Bố cục song song: 2 khung duyệt ảnh độc lập (Parent & Child folders), hỗ trợ chuyển đổi nhanh.
+//   - Hỗ trợ ảnh động: Hiển thị mượt mà cả ảnh tĩnh (.jpg, .png, .webp) và ảnh động (Animated GIF/WebP).
+//   - Thanh công cụ nổi (Floating Batch Toolbar): 9 nút hành động nhanh cho thao tác chuột và cảm ứng.
+//   - Thùng rác hệ điều hành: Tích hợp Recycle Bin (Windows) và Freedesktop Trash (Linux) để xóa ảnh an toàn.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Tối ưu hóa bộ nhớ RAM với SkiaSharp SKCodec streaming, tránh giữ Bitmap kích thước lớn trong bộ nhớ.
+// ====================================================================================================
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

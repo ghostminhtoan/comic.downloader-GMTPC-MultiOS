@@ -1,3 +1,18 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.FileAssociation.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Partial ViewModel quản lý Liên Kết Tệp Tin & Tích Hợp Menu Ngữ Cảnh Hệ Điều Hành (File Association).
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Đăng ký mở mặc định: Hỗ trợ các đuôi file truyện (.cbz, .cbr, .zip, .rar, .pdf, .mobi).
+//   - Menu ngữ cảnh chuột phải: Thêm tùy chọn "Mở bằng Comic Downloader GMTPC" trên Windows và Linux.
+//   - Tự động phát hiện trạng thái liên kết hiện tại của hệ thống.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Xử lý phân quyền quản trị UAC trên Windows và xdg-mime / desktop-file-utils trên Linux an toàn.
+// ====================================================================================================
+
 using System;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;

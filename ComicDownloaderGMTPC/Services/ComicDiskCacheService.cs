@@ -1,3 +1,19 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: ComicDiskCacheService.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Dịch vụ Kiểm Soát Hạn Mức Bộ Nhớ Đệm Đĩa Cứng (Hard Cache Quota Enforcement Service).
+//   Đảm bảo tổng dung lượng cache của ứng dụng tuyệt đối không vượt quá hạn mức người dùng quy định.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Quản lý 2 phân vùng cache chính: Zip Cache (.tmp/ar_pages/) và Thumbnail Cache (.tmp/preview-cache/).
+//   - Thuật toán thanh trừng LRU (Least Recently Used): Xóa các file cũ nhất dựa theo LastAccessTimeUtc.
+//   - Tự động kích hoạt kiểm tra sau mỗi lượt đọc truyện hoặc tải truyện hoàn tất.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Thực thi dọn dẹp trên luồng nền (Task.Run), không bao giờ gây gián đoạn luồng hiển thị UI.
+// ====================================================================================================
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

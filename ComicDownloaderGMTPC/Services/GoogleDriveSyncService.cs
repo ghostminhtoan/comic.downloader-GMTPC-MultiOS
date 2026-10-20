@@ -1,3 +1,19 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: GoogleDriveSyncService.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Dịch vụ Đồng Bộ & Quản Lý Tệp Đám Mây Google Drive (Google Drive Cloud Integration Service).
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Kết nối Google Drive API v3 thông qua OAuth2 Client Secrets.
+//   - Tự động duy trì cấu trúc thư mục chuẩn: \GMTPC\Comic Downloader GMTPC\.
+//   - Tải lên, tải xuống và đồng bộ hóa các tệp cấu hình, sao lưu queue, bookmarks và tiến độ resume.md.
+//   - Cơ chế phòng vệ Rate Limit: Vòng lặp Exponential Backoff tự động khi gặp lỗi Quota Exceeded.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Tự động làm mới Access Token khi hết hạn và xử lý ngoại lệ mạng chập chờn an toàn.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;

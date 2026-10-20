@@ -1,3 +1,19 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: TextEditingProtectionService.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Dịch vụ Bảo Vệ Ô Nhập Liệu & Chống Cử Chỉ Thoát Ứng Dụng Trên Android (Text Editing Protection Service).
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Lắng nghe sự kiện Focus của toàn bộ TextBox trong ứng dụng.
+//   - Trên Android (API 29+): Tự động thiết lập SetSystemGestureExclusionRects loại trừ vùng cử chỉ mép màn hình.
+//   - Chặn phím AppSwitch và các phím điều hướng hệ thống khi người dùng đang ấn giữ phím Spacebar để di chuyển con trỏ.
+//   - Tự động hoàn trả cử chỉ hệ thống về mặc định khi người dùng hoàn tất nhập liệu (LostFocus).
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Triển khai theo mô hình Singleton, tương thích an toàn trên toàn bộ các nền tảng (no-op trên Desktop).
+// ====================================================================================================
+
 using System;
 using Avalonia.Controls;
 using Avalonia.Input;

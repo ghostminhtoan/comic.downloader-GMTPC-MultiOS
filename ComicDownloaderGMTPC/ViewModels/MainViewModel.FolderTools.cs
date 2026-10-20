@@ -1,3 +1,19 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.FolderTools.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Partial ViewModel quản lý Công Cụ Thư Mục (Folder Tools) - Tách & Gộp Thư Mục Truyện Tranh Đa Luồng.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Tách thư mục (Split Chapters): Tách các chương dài thành các phần nhỏ theo số trang chỉ định.
+//   - Gộp chapter (Merge Chapters): Gom nhiều chapter thành 1 tập truyện hoàn chỉnh.
+//   - Gộp theo bảng chữ cái (Merge Alphabet Buckets): Tự động gom truyện vào các thư mục chữ cái (A-C, D-F...).
+//   - Xử lý song song đa luồng tốc độ cao: Tăng tốc độ di chuyển và tái cấu trúc cây thư mục gấp 3x - 10x.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Chống đệ quy 2 chiều, tự động dọn dẹp thư mục rỗng và bảo toàn toàn vẹn dữ liệu gốc của người dùng.
+// ====================================================================================================
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

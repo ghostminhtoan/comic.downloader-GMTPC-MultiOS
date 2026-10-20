@@ -1,3 +1,19 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.GoogleDrive.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Partial ViewModel quản lý Tích Hợp & Đồng Bộ Đám Mây Google Drive (Cloud Backup & Restore Engine).
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Xác thực OAuth2: Đăng nhập tài khoản Google an toàn, lưu trữ token phiên làm việc cục bộ.
+//   - Thư mục chỉ định: Tự động tạo và đồng bộ trong thư mục chuẩn \GMTPC\Comic Downloader GMTPC\.
+//   - Sao lưu & Phục hồi: Hỗ trợ đồng bộ Queue tải, Danh sách History, Bookmarks và tệp resume.md.
+//   - Tùy chọn độc lập: Cung cấp nút sao lưu/phục hồi riêng biệt cho từng loại dữ liệu (Local & Cloud).
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Vòng lặp thử lại 2s-4s với Exponential Backoff tự động khi gặp lỗi Google Drive Quota Exceeded.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;

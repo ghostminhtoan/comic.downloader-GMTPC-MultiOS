@@ -1,3 +1,21 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.DomainAnalyze.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Partial ViewModel phụ trách Phân Tích & Cào Truyện Hàng Loạt Theo Tên / Thể Loại / Tác Giả / Tag
+//   từ các website truyện tranh trực tuyến (Online Scraper & Batch Crawl Pipeline).
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Hỗ trợ đa dạng domain: TruyenQQ, Nettruyen, SayHentai, Damconuong, MangaDex, Hitomi, E-Hentai...
+//   - Phân tích số trang (Analyze): Kiểm tra tổng số trang và danh sách truyện theo phân trang tự động.
+//   - Cào danh sách (Crawl & Crawl More): Cào mới toàn bộ hoặc cào nối tiếp vào hàng đợi tải hiện có.
+//   - Tự động xử lý domain chuyển hướng (Redirect Domain) và xác thực phiên đăng nhập (Session Cookies).
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Ưu tiên API/AJAX trước khi fallback sang WebView ngầm để tối ưu tốc độ và giảm tài nguyên CPU/RAM.
+//   - Xử lý giải mã HTML entities cho các tham số CDN token HMAC tránh lỗi 403 Forbidden.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;

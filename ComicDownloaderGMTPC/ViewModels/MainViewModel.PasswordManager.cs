@@ -1,3 +1,18 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.PasswordManager.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Partial ViewModel quản lý Mật Khẩu & Tài Khoản Tự Động Đăng Nhập Cho Các Website Truyện Có Trả Phí/VIP.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Lưu trữ thông tin đăng nhập: Quản lý tài khoản, mật khẩu cho các domain (Damconuong, v.v.).
+//   - Tự động đăng nhập ngầm: Tự động gửi POST request đăng nhập và nạp cookie vào CookieContainer toàn cục.
+//   - Lưu trữ an toàn: Tự động mã hóa và ghi nhớ vào autosave_password.md để tự động phục hồi khi mở app.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Đảm bảo phiên cookie luôn được làm mới trước khi bắt đầu cào danh sách chapter VIP.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.IO;

@@ -1,3 +1,19 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.DownloadCache.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Partial ViewModel quản lý Bộ Nhớ Đệm Tải Về & Hạn Mức Dung Lượng Lưu Trữ Đĩa Cứng (Storage & Cache Quota).
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Theo dõi dung lượng: Hiển thị thời gian thực dung lượng Zip Cache, Thumbnail Storage, Preview Cache.
+//   - Thiết lập hạn mức: Cấu hình trần dung lượng tối đa cho từng loại cache (1GB - 50GB).
+//   - Dọn dẹp thông minh: Thanh trừng tự động theo thuật toán LRU (Least Recently Used) khi chạm ngưỡng trần.
+//   - Nút dọn dẹp tức thì: Hỗ trợ xóa sạch từng phân vùng cache khi người dùng cần giải phóng bộ nhớ máy.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Tuyệt đối tuân thủ quy tắc Hard Cache Quota: Tổng dung lượng cache không bao giờ vượt ZipCache + ThumbCache.
+// ====================================================================================================
+
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;

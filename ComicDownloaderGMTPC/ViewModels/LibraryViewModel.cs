@@ -1,3 +1,21 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: LibraryViewModel.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   ViewModel quản lý Thư Viện Truyện (Library & Bookshelf), Quản lý Tiến độ Đọc Dở, Dấu Trang
+//   (Bookmarks) và Lịch Sử Đọc (History) đa nền tảng.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Quét tự động thư mục truyện trên đĩa: Nhận diện truyện theo thư mục, tập tin nén, ảnh bìa thumbnail.
+//   - Lưu & Phục hồi tiến độ đọc dở: Quản lý tệp resume.md chuẩn Markdown và cơ sở dữ liệu tiến độ cục bộ.
+//   - Đồng bộ đám mây đa tầng: Tích hợp sao lưu và phục hồi 2 chiều với Google Drive (thư mục \GMTPC\...).
+//   - Phân loại & Tìm kiếm: Lọc theo tên truyện, tác giả, trạng thái đọc dở, đánh dấu yêu thích.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Sử dụng cơ chế Smart 2-Way Merge khi đồng bộ file resume.md để không ghi đè mất tiến độ mới hơn.
+//   - Tự động kiểm soát hạn mức Google Drive API với cơ chế Exponential Backoff khi gặp lỗi Rate Limit.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;

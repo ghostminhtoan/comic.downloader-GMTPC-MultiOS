@@ -1,3 +1,20 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: MainViewModel.OfflineMissingChapter.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   Partial ViewModel quản lý tính năng Quét Thiếu Chapter Offline (Offline Missing Chapters Scanner)
+//   trên toàn bộ kho truyện đã tải về trong máy tính hoặc thiết bị di động.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Quét thông minh: Tự động bóc tách số tập từ tên file/thư mục và phát hiện khoảng chapter bị khuyết.
+//   - Quét song song đa luồng: Cho phép tùy chỉnh số luồng quét song song (1 - 16 tác vụ đồng thời).
+//   - Xử lý ngoại lệ số thập phân: Tự động nhận diện các tập 16.1, 16.5 đại diện hợp lệ cho chap 16 (không báo thiếu).
+//   - Xuất kết quả & Sao chép nhanh: Hỗ trợ sao chép danh sách tập thiếu để tải bổ sung.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Tự động hủy và quét lại khi danh sách thư mục thay đổi, tránh race condition ghi đè kết quả cũ.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;

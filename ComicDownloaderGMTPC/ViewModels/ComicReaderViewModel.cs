@@ -1,3 +1,25 @@
+﻿// ====================================================================================================
+// FILE SUMMARY: ComicReaderViewModel.cs
+// ----------------------------------------------------------------------------------------------------
+// VAI TRÒ & MỤC ĐÍCH:
+//   ViewModel cốt lõi điều khiển toàn bộ trình đọc truyện (Comic Reader Engine) đa nền tảng
+//   (Windows, Linux, Android). Quản lý nạp chương, lật trang, cuộn dọc/ngang, zoom/pinch/pan,
+//   bộ lọc hiệu chỉnh màu sắc/độ nét, âm thanh lật trang và lưu trữ tiến độ đọc dở chéo thiết bị.
+//
+// CÁC TÍNH NĂNG & THÀNH PHẦN CHÍNH:
+//   - Đọc đa định dạng: ZIP, CBZ, RAR, CBR, PDF, MOBI, và Thư mục ảnh rời (.jpg, .png, .webp, .gif, .bmp).
+//   - Chế độ đọc linh hoạt: Single Page, Dual Page (LTR & RTL Manga), Continuous Vertical Webtoon, Horizontal Scroll.
+//   - Điều hướng thông minh: Tự động mở trang 1 cho chương mới, nhớ vị trí đọc dở qua ReadProgressStore.
+//   - Trải nghiệm cảm ứng (Android): Chống tua trang khi pinch zoom, double-tap zoom neo tâm, cuộn mượt mà 60 FPS.
+//   - Bộ lọc xử lý ảnh thời gian thực: Contrast, Brightness, Saturation, Sharpen (Laplacian kernel), Denoise.
+//   - Hoạt ảnh & Tốc độ: Streaming SkiaSharp cho ảnh động GIF/Animated WebP với thanh điều chỉnh tốc độ 0.1x - 8.0x.
+//
+// LƯU Ý KỸ THUẬT & QUY TẮC BẢO TRÌ:
+//   - Cập nhật UI luôn thông qua Dispatcher.UIThread khi chạy từ luồng nền hoặc Task prefetch.
+//   - Luôn tôn trọng CancellationToken (_loadCts, _prefetchCts) khi chuyển chương nhanh để tránh rò rỉ RAM.
+//   - Tự động đồng bộ và lưu tiến độ đọc (history/bookmarks) vào ReadProgressStore khi thoát trình đọc.
+// ====================================================================================================
+
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
