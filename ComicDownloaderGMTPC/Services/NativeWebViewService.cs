@@ -48,7 +48,7 @@ public class NativeWebViewService : INativeWebViewService
     /// <summary>
     /// Tải HTML của trang web chạy ngầm (headless) có thực thi JavaScript đầy đủ.
     /// </summary>
-    public async Task<string?> FetchHtmlAsync(string url, int timeoutSeconds = 15, CancellationToken ct = default)
+    public async Task<string?> FetchHtmlAsync(string url, int timeoutSeconds = 30, CancellationToken ct = default)
     {
         if (!IsAvailable || string.IsNullOrWhiteSpace(url))
         {
@@ -59,19 +59,36 @@ public class NativeWebViewService : INativeWebViewService
         {
             ct.ThrowIfCancellationRequested();
 
+            // Tự động dọn dẹp các file lock cũ của Chromium để chống bị chặn Singleton trên Windows
+            try
+            {
+                if (Directory.Exists(_cacheDirectory))
+                {
+                    string lockFile = Path.Combine(_cacheDirectory, "SingletonLock");
+                    if (File.Exists(lockFile)) File.Delete(lockFile);
+                    string cookieFile = Path.Combine(_cacheDirectory, "SingletonCookie");
+                    if (File.Exists(cookieFile)) File.Delete(cookieFile);
+                    string socketFile = Path.Combine(_cacheDirectory, "SingletonSocket");
+                    if (File.Exists(socketFile)) File.Delete(socketFile);
+                }
+            }
+            catch { }
+
             var startInfo = new ProcessStartInfo
             {
                 FileName = _browserExecutablePath!,
                 Arguments = $"--headless=new --disable-gpu --disable-software-rasterizer --no-sandbox " +
+                            $"--disable-logging --log-level=3 " +
+                            $"--disable-features=Translate,OptimizationHints,MediaRouter " +
                             $"--user-data-dir=\"{_cacheDirectory}\" " +
                             $"--user-agent=\"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36\" " +
-                            $"--virtual-time-budget=5000 " +
+                            $"--virtual-time-budget=6000 " +
                             $"--enable-features=DnsOverHttps " +
                             $"--dns-over-https-templates=\"https://cloudflare-dns.com/dns-query\" " +
                             $"--dump-dom \"{url}\"",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
-                RedirectStandardError = true,
+                RedirectStandardError = false, // Không redirect stderr để chống hoàn toàn lỗi tràn buffer anonymous pipe gây treo deadlock trên Windows
                 CreateNoWindow = true,
                 StandardOutputEncoding = Encoding.UTF8
             };
@@ -86,7 +103,7 @@ public class NativeWebViewService : INativeWebViewService
                     try { process.Kill(entireProcessTree: true); } catch { }
                 });
 
-                string output = process.StandardOutput.ReadToEnd();
+                var readTask = process.StandardOutput.ReadToEndAsync(ct);
                 bool exited = process.WaitForExit(timeoutSeconds * 1000);
 
                 if (!exited)
@@ -94,6 +111,8 @@ public class NativeWebViewService : INativeWebViewService
                     try { process.Kill(entireProcessTree: true); } catch { }
                     return null;
                 }
+
+                string output = readTask.GetAwaiter().GetResult();
 
                 if (string.IsNullOrWhiteSpace(output))
                 {

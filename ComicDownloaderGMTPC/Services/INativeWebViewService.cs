@@ -22,7 +22,7 @@ public interface INativeWebViewService
     /// <summary>
     /// Tải HTML của trang web chạy ngầm (headless) có thực thi JavaScript đầy đủ.
     /// </summary>
-    Task<string?> FetchHtmlAsync(string url, int timeoutSeconds = 15, CancellationToken ct = default);
+    Task<string?> FetchHtmlAsync(string url, int timeoutSeconds = 30, CancellationToken ct = default);
 
     /// <summary>
     /// Tải dữ liệu JSON chạy ngầm (headless) qua native browser engine.
