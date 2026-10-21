@@ -10,6 +10,10 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+
+using Avalonia.LogicalTree;
+
+using ComicDownloaderGMTPC.Services;
 using Avalonia.Media;
 using ComicDownloaderGMTPC.Models;
 using ComicDownloaderGMTPC.ViewModels;
@@ -26,6 +30,7 @@ public partial class MainView : UserControl
         InitializeComponent();
 
         Loaded += OnMainViewLoaded;
+        LanguageService.Instance.LanguageChanged += OnLanguageServiceChanged;
 
         // Tự động nhận diện Landscape (width > height) vs Portrait (width < height)
         SizeChanged += (s, e) =>
@@ -178,6 +183,12 @@ public partial class MainView : UserControl
         }
 
         ScheduleVisibleThumbnailScan(delayMs: 120);
+
+        ApplyLanguage(LanguageService.Instance.CurrentLanguage);
+        AddHandler(TabControl.SelectionChangedEvent, (s, ev) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyLanguage(LanguageService.Instance.CurrentLanguage), Avalonia.Threading.DispatcherPriority.Background);
+        }, RoutingStrategies.Bubble);
 
         SetupFloatingBarDraggable();
         SetupDualSortBatchFloatingDraggable();
@@ -1977,5 +1988,201 @@ public partial class MainView : UserControl
             }
         }
         catch { }
+    }
+    
+    // =========================================================================
+    // DYNAMIC UI LOCALIZATION (CHUYỂN ĐỔI NGÔN NGỮ ĐỘNG TOÀN DIỆN VI / EN)
+    // =========================================================================
+    private readonly Dictionary<object, string> _originalTextMap = new();
+
+    private void OnLanguageServiceChanged()
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            ApplyLanguage(LanguageService.Instance.CurrentLanguage);
+        });
+    }
+
+    public void ApplyLanguage(string lang)
+    {
+        try
+        {
+            bool toVi = string.Equals(lang, "VI", StringComparison.OrdinalIgnoreCase);
+            var visited = new HashSet<object>();
+            TranslateLogicalAndVisual(this, toVi, visited);
+        }
+        catch { }
+    }
+
+    private static bool IsPropertyBound(AvaloniaObject obj, AvaloniaProperty prop)
+    {
+        try
+        {
+            // Trong Avalonia, nếu control thuộc về Template của ItemsControl (danh sách động) thì bỏ qua
+            if (obj is StyledElement se && se.TemplatedParent != null)
+            {
+                return true;
+            }
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void TranslateLogicalAndVisual(object? element, bool toVi, HashSet<object> visited)
+    {
+        if (element == null || !visited.Add(element)) return;
+
+        TranslateElement(element, toVi);
+
+        if (element is ILogical logical)
+        {
+            foreach (var child in logical.LogicalChildren)
+            {
+                TranslateLogicalAndVisual(child, toVi, visited);
+            }
+        }
+
+        if (element is Visual visual)
+        {
+            foreach (var child in visual.GetVisualChildren())
+            {
+                TranslateLogicalAndVisual(child, toVi, visited);
+            }
+        }
+
+        if (element is TabControl tabControl && tabControl.Items != null)
+        {
+            foreach (var item in tabControl.Items)
+            {
+                TranslateLogicalAndVisual(item, toVi, visited);
+            }
+        }
+
+        if (element is Control ctrl)
+        {
+            if (ctrl.ContextMenu != null)
+            {
+                TranslateLogicalAndVisual(ctrl.ContextMenu, toVi, visited);
+            }
+            if (ctrl is Button btn && btn.Flyout is MenuFlyout flyout)
+            {
+                foreach (var item in flyout.Items)
+                {
+                    TranslateLogicalAndVisual(item, toVi, visited);
+                }
+            }
+        }
+    }
+
+    private void TranslateElement(object element, bool toVi)
+    {
+        if (element is TabItem tabItem)
+        {
+            if (tabItem.Header is string hStr && !string.IsNullOrWhiteSpace(hStr))
+            {
+                if (!IsPropertyBound(tabItem, TabItem.HeaderProperty))
+                {
+                    if (!_originalTextMap.TryGetValue(tabItem, out var orig))
+                    {
+                        orig = hStr;
+                        _originalTextMap[tabItem] = orig;
+                    }
+                    tabItem.Header = LanguageService.Instance.Translate(orig, toVi);
+                }
+            }
+        }
+        else if (element is Button btn)
+        {
+            if (btn.Content is string bStr && !string.IsNullOrWhiteSpace(bStr))
+            {
+                if (!IsPropertyBound(btn, ContentControl.ContentProperty))
+                {
+                    if (!_originalTextMap.TryGetValue(btn, out var orig))
+                    {
+                        orig = bStr;
+                        _originalTextMap[btn] = orig;
+                    }
+                    btn.Content = LanguageService.Instance.Translate(orig, toVi);
+                }
+            }
+        }
+        else if (element is CheckBox cb)
+        {
+            if (cb.Content is string cStr && !string.IsNullOrWhiteSpace(cStr))
+            {
+                if (!IsPropertyBound(cb, ContentControl.ContentProperty))
+                {
+                    if (!_originalTextMap.TryGetValue(cb, out var orig))
+                    {
+                        orig = cStr;
+                        _originalTextMap[cb] = orig;
+                    }
+                    cb.Content = LanguageService.Instance.Translate(orig, toVi);
+                }
+            }
+        }
+        else if (element is MenuItem mi)
+        {
+            if (mi.Header is string mStr && !string.IsNullOrWhiteSpace(mStr))
+            {
+                if (!IsPropertyBound(mi, MenuItem.HeaderProperty))
+                {
+                    if (!_originalTextMap.TryGetValue(mi, out var orig))
+                    {
+                        orig = mStr;
+                        _originalTextMap[mi] = orig;
+                    }
+                    mi.Header = LanguageService.Instance.Translate(orig, toVi);
+                }
+            }
+        }
+        else if (element is TextBlock tb)
+        {
+            if (!IsPropertyBound(tb, TextBlock.TextProperty) && !string.IsNullOrWhiteSpace(tb.Text))
+            {
+                if (tb.Text.Length > 1 && tb.Text != "−" && tb.Text != "+")
+                {
+                    if (!_originalTextMap.TryGetValue(tb, out var orig))
+                    {
+                        orig = tb.Text;
+                        _originalTextMap[tb] = orig;
+                    }
+                    tb.Text = LanguageService.Instance.Translate(orig, toVi);
+                }
+            }
+        }
+        else if (element is HeaderedContentControl hcc)
+        {
+            if (hcc.Header is string hcStr && !string.IsNullOrWhiteSpace(hcStr))
+            {
+                if (!IsPropertyBound(hcc, HeaderedContentControl.HeaderProperty))
+                {
+                    if (!_originalTextMap.TryGetValue(hcc, out var orig))
+                    {
+                        orig = hcStr;
+                        _originalTextMap[hcc] = orig;
+                    }
+                    hcc.Header = LanguageService.Instance.Translate(orig, toVi);
+                }
+            }
+        }
+
+        if (element is Control ctrl)
+        {
+            var tip = ToolTip.GetTip(ctrl);
+            if (tip is string tipStr && !string.IsNullOrWhiteSpace(tipStr) && !tipStr.StartsWith("{Binding"))
+            {
+                string tipKey = "tip_" + ctrl.GetHashCode();
+                if (!_originalTextMap.TryGetValue(tipKey, out var origTip))
+                {
+                    origTip = tipStr;
+                    _originalTextMap[tipKey] = origTip;
+                }
+                ToolTip.SetTip(ctrl, LanguageService.Instance.Translate(origTip, toVi));
+            }
+        }
     }
 }

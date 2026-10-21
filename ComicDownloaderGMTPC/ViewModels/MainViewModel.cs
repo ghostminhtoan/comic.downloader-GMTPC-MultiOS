@@ -110,7 +110,10 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [ObservableProperty]
-    private string _modeSelection = "Single comic";
+    private string[] _modeSelections = new[] { "Truyện đơn", "Nhiều truyện" };
+
+    [ObservableProperty]
+    private string _modeSelection = "Truyện đơn";
 
     [ObservableProperty]
     private bool _isAutoDownload;
@@ -143,7 +146,10 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [ObservableProperty]
-    private string _selectedManualDownloadMode = InstanceConfigService.Instance.ManualDownloadMode == "Embedded" ? "Nhúng (Embedded)" : "Trực tiếp (Direct)";
+    private string[] _manualDownloadModes = new[] { "Trực tiếp", "Nhúng" };
+
+    [ObservableProperty]
+    private string _selectedManualDownloadMode = InstanceConfigService.Instance.ManualDownloadMode == "Embedded" ? "Nhúng" : "Trực tiếp";
 
     partial void OnSelectedManualDownloadModeChanged(string value)
     {
@@ -2042,9 +2048,48 @@ public partial class MainViewModel : ViewModelBase
     private void UpdateLanguageStrings()
     {
         CurrentLanguage = _langService.CurrentLanguage;
-        AppTitle = _langService.CurrentLanguage == "VI"
+        bool isVi = _langService.IsVietnamese;
+
+        AppTitle = isVi
             ? "Comic-GMTPC Avalonia v1.0 - Tiếng Việt"
             : "Comic-GMTPC Avalonia v1.0 - English";
+
+        ModeSelections = isVi
+            ? new[] { "Truyện đơn", "Nhiều truyện" }
+            : new[] { "Single comic", "Multi-comic" };
+
+        if (isVi)
+        {
+            if (ModeSelection != null && ModeSelection.Contains("Multi", StringComparison.OrdinalIgnoreCase))
+                ModeSelection = "Nhiều truyện";
+            else
+                ModeSelection = "Truyện đơn";
+        }
+        else
+        {
+            if (ModeSelection != null && ModeSelection.Contains("Nhiều", StringComparison.OrdinalIgnoreCase))
+                ModeSelection = "Multi-comic";
+            else
+                ModeSelection = "Single comic";
+        }
+
+        ManualDownloadModes = isVi
+            ? new[] { "Trực tiếp", "Nhúng" }
+            : new[] { "Direct", "Embedded" };
+
+        bool isEmbedded = SelectedManualDownloadMode != null &&
+            (SelectedManualDownloadMode.Contains("Nhúng", StringComparison.OrdinalIgnoreCase) ||
+             SelectedManualDownloadMode.Contains("Embedded", StringComparison.OrdinalIgnoreCase));
+
+        SelectedManualDownloadMode = isVi
+            ? (isEmbedded ? "Nhúng" : "Trực tiếp")
+            : (isEmbedded ? "Embedded" : "Direct");
+
+        if (!IsUpdating)
+        {
+            UpdateButtonLabel = isVi ? "🚀 CẬP NHẬT RELEASE" : "🚀 UPDATE RELEASE";
+            UpdateBetaButtonLabel = isVi ? "🧪 CẬP NHẬT BETA" : "🧪 UPDATE BETA";
+        }
     }
 
     private int _isProgressUiUpdatePending;

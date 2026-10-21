@@ -854,7 +854,8 @@ public class DownloadEngineService
                 SafeCreateDirectory(currentBookDir);
 
                 string chapterDir;
-                if (string.Equals(mode, "Multi-comic", StringComparison.OrdinalIgnoreCase))
+                bool isMultiMode = mode != null && (mode.Contains("Multi", StringComparison.OrdinalIgnoreCase) || mode.Contains("Nhiều", StringComparison.OrdinalIgnoreCase));
+                if (isMultiMode)
                 {
                     chapterDir = Path.Combine(currentTargetServerDir, MakeSafeFilename($"{safeBookName}-{chapterDirName}", 100));
                 }
