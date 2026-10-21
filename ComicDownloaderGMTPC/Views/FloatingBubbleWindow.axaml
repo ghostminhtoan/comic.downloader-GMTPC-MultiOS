@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ComicDownloaderGMTPC.Views.FloatingBubbleWindow"
+        Title="Comic GMTPC Bubble"
+        Width="76" Height="76"
+        CanResize="False"
+        WindowDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual">
+
+    <Grid Width="76" Height="76" Background="Transparent" ClipToBounds="False">
+        <!-- Vòng tiến trình tròn Circular Progress Ring -->
+        <ContentControl x:Name="RingHost" Width="76" Height="76" IsHitTestVisible="False" />
+
+        <!-- Nền tròn bóng chính -->
+        <Border x:Name="BubbleBody"
+                Width="56" Height="56"
+                CornerRadius="28"
+                BorderBrush="#C084FC"
+                BorderThickness="2.5"
+                ClipToBounds="True"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Cursor="Hand">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="#4F46E5" Offset="0.0" />
+                    <GradientStop Color="#0F172A" Offset="1.0" />
+                </LinearGradientBrush>
+            </Border.Background>
+
+            <!-- Icon app ở tâm -->
+            <Image Source="/Assets/Icon.png"
+                   Width="32" Height="32"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   IsHitTestVisible="False" />
+        </Border>
+
+        <!-- Badge con số tiến trình % động -->
+        <Border x:Name="BadgeBorder"
+                CornerRadius="6"
+                Padding="4,1"
+                Background="#00E5FF"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="2"
+                IsVisible="False"
+                IsHitTestVisible="False"
+                BoxShadow="0 2 6 0 #80000000">
+            <TextBlock x:Name="BadgeText"
+                       Text="0%"
+                       FontSize="9.5"
+                       FontWeight="Bold"
+                       Foreground="#0F172A" />
+        </Border>
+    </Grid>
+</Window>
+

@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using ComicDownloaderGMTPC.Services;
 
@@ -5,9 +6,7 @@ namespace ComicDownloaderGMTPC.Views;
 
 public partial class MainWindow : Window
 {
-    private double _savedWidth = 1100;
-    private double _savedHeight = 750;
-    private bool _inBubbleMode = false;
+    private FloatingBubbleWindow? _bubbleWindow;
 
     public MainWindow()
     {
@@ -26,8 +25,18 @@ public partial class MainWindow : Window
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
+                try
+                {
+                    if (_bubbleWindow != null)
+                    {
+                        _bubbleWindow.Close();
+                        _bubbleWindow = null;
+                    }
+                }
+                catch { }
+
                 Close();
-                System.Environment.Exit(0);
+                Environment.Exit(0);
             });
         };
     }
@@ -36,28 +45,39 @@ public partial class MainWindow : Window
     {
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            if (enabled && !_inBubbleMode)
+            if (enabled)
             {
-                _savedWidth = Width;
-                _savedHeight = Height;
-                _inBubbleMode = true;
+                if (_bubbleWindow == null)
+                {
+                    _bubbleWindow = new FloatingBubbleWindow(this);
+                    _bubbleWindow.Closed += (_, _) =>
+                    {
+                        _bubbleWindow = null;
+                        if (BackgroundExecutionService.Instance.IsBubbleMode)
+                        {
+                            BackgroundExecutionService.Instance.SetBubbleMode(false);
+                        }
+                    };
+                }
 
-                MinWidth = 300;
-                MinHeight = 180;
-                Width = 380;
-                Height = 240;
-                Topmost = true;
-                CanResize = false;
+                _bubbleWindow.Show();
+
+                // Thu nhỏ MainWindow khi bong bóng nổi kích hoạt để giải phóng không gian làm việc cho người dùng
+                WindowState = WindowState.Minimized;
             }
-            else if (!enabled && _inBubbleMode)
+            else
             {
-                _inBubbleMode = false;
-                MinWidth = 850;
-                MinHeight = 550;
-                Width = _savedWidth > 850 ? _savedWidth : 1100;
-                Height = _savedHeight > 550 ? _savedHeight : 750;
-                Topmost = false;
-                CanResize = true;
+                if (_bubbleWindow != null)
+                {
+                    var bw = _bubbleWindow;
+                    _bubbleWindow = null;
+                    try { bw.Close(); } catch { }
+                }
+
+                // Khôi phục hiển thị MainWindow kích thước chuẩn ban đầu
+                Show();
+                WindowState = WindowState.Normal;
+                Activate();
             }
         });
     }
@@ -72,13 +92,24 @@ public partial class MainWindow : Window
         base.OnClosing(e);
     }
 
-    protected override void OnClosed(System.EventArgs e)
+    protected override void OnClosed(EventArgs e)
     {
         try
         {
             App.SharedMainViewModel.FlushAutoSaveImmediately();
         }
         catch { }
+
+        try
+        {
+            if (_bubbleWindow != null)
+            {
+                _bubbleWindow.Close();
+                _bubbleWindow = null;
+            }
+        }
+        catch { }
+
         BackgroundExecutionService.Instance.BubbleModeChanged -= OnBubbleModeChanged;
         base.OnClosed(e);
     }

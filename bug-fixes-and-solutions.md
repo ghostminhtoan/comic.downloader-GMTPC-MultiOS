@@ -51,6 +51,11 @@
 | **BUG-016** | Native WebView & Headless | Lỗi treo (Deadlock) và timeout 15s trên Windows khi cào web khác (Luscious) | Anonymous pipe `StandardError` bị tràn buffer 4KB do Chromium in log nhưng không được đọc | Tắt redirect stderr, đọc async stdout, thêm `--disable-logging`, dọn dẹp Singleton lock và tăng timeout 30s | `NativeWebViewService.cs`, `INativeWebViewService.cs`, `ComicScraperService.cs`, `DomainRoutingService.cs` |
 
 | **BUG-017** | Windows Scraper & Floating UI | Lỗi tải Luscious trên Windows & nút Float Batch Tool không hiện, Floating Bar chưa thu nhỏ trên Android | Profile Chromium cố định gây dính lock trên Windows symlink; Tab Index Batch Tool sai số (6 thay vì 7); thiếu gesture Single-Tap | Bỏ profile cố định, async stream wait, timeout 45s, lọc đúng `albumId`; chỉnh Tab Index = 7; thêm Single-Tap collapse | `NativeWebViewService.cs`, `ComicScraperService.cs`, `MainViewModel.DualPictureSort.cs`, `MainView.axaml`, `MainView.axaml.cs` |
+| **BUG-018** | Floating Quick Bar & Float Batch Tool | Hai thanh cong cu noi cung mau kho phan biet, thu nho bi mat sach nut chuc nang | Dung chung mau nen tim; trang thai thu nho an toan bo panel con | Doi mau Quick Bar (Xanh Slate #1E293B) va Batch Tool (Tim Dam #2E1065); thu nho giu nut Top/Bot va Prev/Next/Start/Preview | `MainView.axaml`, `MainView.axaml.cs` |
+| **BUG-019** | Floating Bubble (Android) | Con so % bi hardcode goc duoi phai bat ke vi tri; bong bong bi ep buoc hit 2 mep vien | Vi tri layout Gravity co dinh goc duoi phai; thuat toan drag luon keo ep x ve mep | Dong hoa vi tri % (trai khi bubble o ben phai, phai khi bubble o ben trai); ho tro dat tu do moi vi tri tren man hinh | `FloatingBubbleManager.cs` |
+| **BUG-020** | Tab Space & Floating Bubble | Giao dien tab chiem dien tich qua lon; thieu thao tac tat bong bong hoac tat app tu bubble | Thieu style toan cuc cho TabItem, tieu de dai 'TAB ...'; bubble thieu long-press menu | Toi uu compact padding/fontSize tab; them su kien nhan giu 3 giay hien thi hop thoai Tat bong bong / Tat app | `App.axaml`, `MainView.axaml`, `FloatingBubbleManager.cs` |
+| **BUG-021** | Archive Merger | Khong the noi tiep chap moi vao file tong hop da dong goi (.pdf, .cbz, .zip, .mobi) | Thieu che do Append Mode va trich xuat/giu cau truc chapter/bookmarks muc luc cu | Xay dung engine Append Chapters voi Safe Atomic Overwrite, bao toan Bookmarks PDF va folder structure CBZ/ZIP | `ArchiveMergeService.cs`, `MainViewModel.ArchiveMerger.cs`, `MainView.axaml`, `LanguageService.cs` |
+| **BUG-022** | Floating Bubble (Windows & Linux) | Bat bong bong noi tren Desktop lam co rum cua so chinh thanh 380x240 vo nat layout | `MainWindow.axaml.cs` cuong buc ep kich thuoc MainWindow co lai thay vi tao Floating Window chuyen dung | Xay dung `FloatingBubbleWindow` doc lap (76x76, Transparent, Topmost), Circular Progress Ring doi mau theo task, auto-dock/fade 3.5s, dynamic badge % | `FloatingBubbleWindow.axaml`, `FloatingBubbleWindow.axaml.cs`, `MainWindow.axaml.cs` |
 
 
 
@@ -869,6 +874,35 @@
   - Chọn file PDF/CBZ/ZIP đã có (ví dụ chap 1-100), chọn thư mục chứa chap 101-200 mới tải.
   - Bấm '⚡ BẮT ĐẦU NỐI CHAP VÀO TỆP': Tiến trình đọc file cũ, bóc tách và ghép nối các chap mới diễn ra mượt mà theo thời gian thực.
   - Mở file kết quả: Tệp chứa đầy đủ từ chap 1 đến chap 200, mỗi chap là một thư mục riêng (đối với CBZ/ZIP) hoặc có Bookmarks mục lục nhảy từng chương chuẩn xác (đối với PDF).
+
+
+### 22. BUG-022: Khắc Phục Lỗi Cửa Sổ Bị Co Rúm Trên Windows & Linux, Xây Dựng Cửa Sổ Bong Bóng Nổi Độc Lập Chuẩn Android (True Floating Bubble Window)
+
+- **Triệu chứng**:
+  - Khi người dùng tích chọn '🫧 Bong bóng' trên Windows hoặc Linux, cửa sổ chính `MainWindow` bị co rút méo mó thành một khối kích thước nhỏ 380x240 px, chữ và các nút bấm bị dồn đè lên nhau, vỡ tanh bành giao diện người dùng.
+  - Không có Bong bóng nổi (Floating Bubble) tròn độc lập lơ lửng trên màn hình desktop như trải nghiệm hoàn hảo trên Android.
+- **Nguyên nhân gốc rễ**:
+  - Trong `MainWindow.axaml.cs`, sự kiện `OnBubbleModeChanged(true)` trước đây xử lý giải pháp tạm bợ bằng cách ép trực tiếp kích thước của `MainWindow` co lại: `Width = 380; Height = 240; Topmost = true; CanResize = false;`. Do `MainWindow` chứa toàn bộ `MainView` đồ sộ với hàng chục tab, bảng biểu và thanh công cụ, việc ép co rúm dẫn đến phá vỡ hoàn toàn layout Responsive.
+- **Giải pháp triệt để**:
+  1. *Xóa bỏ triệt để đoạn mã co rúm `MainWindow`*: Giữ nguyên kích thước và vị trí ban đầu của `MainWindow`. Khi bật Bong bóng nổi, `MainWindow` tự động thu nhỏ (`WindowState = WindowState.Minimized`) để giải phóng không gian màn hình cho người dùng làm việc khác.
+  2. *Xây dựng Cửa sổ Bong bóng nổi chuyên dụng (`FloatingBubbleWindow.axaml` & `FloatingBubbleWindow.axaml.cs`)*:
+     - Kích thước chuẩn 76x76 px, không viền (`WindowDecorations="None"`), nền trong suốt (`Background="Transparent"`, `TransparencyLevelHint="Transparent"`), luôn nổi trên cùng (`Topmost="True"`), không chiếm chỗ taskbar (`ShowInTaskbar="False"`).
+     - **Vòng tròn tiến trình Circular / Radial Progress Ring**: Tự vẽ bằng Avalonia `DrawingContext` và `StreamGeometry` với bút vẽ bo tròn (`PenLineCap.Round`), đường ray mờ 360 độ và cung tiến trình quét chính xác theo %. Tự động đổi màu viền theo loại tác vụ: Cyber Cyan (`#00E5FF`) cho Download, Purple Neon (`#C084FC`) cho Image Enhancer/Convert, Amber Cam (`#F59E0B`) cho File Packer, Rose Hồng (`#F43F5E`) cho Image Splitter, Emerald Xanh (`#10B981`) cho Folder Tools, Sky Blue (`#38BDF8`) cho Archive Merger.
+     - **Con số % động (Dynamic Percentage Badge)**: Tự động đảo góc hiển thị: khi Bubble ở nửa bên phải màn hình thì Badge nằm ở góc dưới bên trái; khi Bubble ở nửa bên trái màn hình thì Badge nằm ở góc dưới bên phải (tuân thủ 100% yêu cầu).
+     - **Kéo thả tự do bằng chuột (Window Dragging)**: Người dùng có thể kéo thả Bubble đặt ở bất kỳ vị trí nào trên màn hình (cả ở giữa màn hình lẫn các góc). Nếu kéo gần sát mép màn hình (< 30px), Bubble tự động hít nhẹ vào mép viền (Snap to edge).
+     - **Tự động thụt mép & làm mờ khi nhàn rỗi (Auto-dock & Fade after 3.5s)**: Sau 3.5 giây không tương tác, nếu Bubble đang ở mép viền, hệ thống tự động thụt 55% thân bóng vào viền màn hình và giảm độ mờ còn 45%. Khi chuột rê vào (`PointerEntered`) hoặc click chạm, lập tức khôi phục 100% độ rõ và thụt ra ngoài hoàn chỉnh.
+     - **Nhấp nhanh để khôi phục ứng dụng (Single-Click Restore)**: Nhấp chuột trái vào Bubble lập tức mở lại và kích hoạt cửa sổ chính `MainWindow` nguyên vẹn kích thước ban đầu.
+     - **Nhấn giữ 3 giây hoặc Click chuột phải (Long-Press / Right-Click Menu)**: Hiển thị menu tùy chọn nổi bật với 2 lựa chọn: 🚫 *Tắt bong bóng* (đóng bubble, khôi phục app) và 🛑 *Tắt app hoàn toàn* (`ForceExit`).
+- **File can thiệp**: `FloatingBubbleWindow.axaml`, `FloatingBubbleWindow.axaml.cs`, `MainWindow.axaml.cs`, `bug-fixes-and-solutions.md`, `workflow-avalonia.md`.
+- **Quy tắc kiểm thử**:
+  - Khởi động app trên Windows hoặc Linux, tick chọn '🫧 Bong bóng' trong Cài đặt hoặc thanh điều khiển.
+  - Xác nhận: Cửa sổ chính thu nhỏ, một Bong bóng tròn công nghệ cao 76x76 px xuất hiện độc lập trên màn hình desktop.
+  - Thử kéo thả chuột đến giữa màn hình và mép viền -> Bubble di chuyển mượt mà, Badge % tự động đổi góc trái/phải theo nửa màn hình.
+  - Chờ 3.5s -> Bubble tự động mờ và thụt mép. Rê chuột vào -> Bubble sáng rõ và thụt ra tức thì.
+  - Bấm chuột trái -> `MainWindow` khôi phục to đẹp, không bị co rúm. Nhấn giữ 3s hoặc bấm chuột phải -> Menu hiện rõ 2 tùy chọn tắt bubble / tắt app.
+
+---
+
 
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 

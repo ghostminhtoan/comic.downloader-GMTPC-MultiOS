@@ -448,3 +448,14 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
       + **MOBI (.mobi)**: Tái tạo luồng ảnh cũ qua MobiComicParser và kết hợp các chương mới qua MobiWriterService.
       + **Atomic Safe Overwrite**: Tự động tạo bản sao lưu .bak trước khi ghi đè, bảo vệ tệp gốc tuyệt đối chống hỏng hóc nếu quá trình ghi bị ngắt quãng.
     - **ViewModel & UI Reactive**: Thiết kế thanh chuyển đổi 2 chế độ (Mode Selector: Gộp Hàng Loạt vs Nối Chap Vào File), quy trình 3 bước trực quan (Chọn tệp gốc ➔ Chọn folder chapter mới ➔ Tùy chọn ghi đè & bảo tồn Bookmarks), hiển thị thông số phân tích dung lượng/số trang/số chap theo thời gian thực và đồng bộ tiến trình % lên Bubble/Notification.
+
+
+35. **Khắc Phục Lỗi Bubble Trên Windows & Linux, Xây Dựng Cửa Sổ Bong Bóng Nổi Độc Lập Chuẩn Android (`FloatingBubbleWindow.axaml`, `FloatingBubbleWindow.axaml.cs`, `MainWindow.axaml.cs`, `bug-fixes-and-solutions.md`)**:
+    - **Triệt Tiêu Lỗi Co Rúm Cửa Sổ Chính (BUG-022)**: Loại bỏ hoàn toàn mã ép kích thước MainWindow thành 380x240 px gây vỡ nát giao diện; tự động thu nhỏ MainWindow khi bật Bong bóng để giải phóng không gian làm việc.
+    - **Cửa Sổ Bong Bóng Nổi Độc Lập (`FloatingBubbleWindow`)**:
+      + Cửa sổ tròn 76x76 px, không viền (`WindowDecorations="None"`), nền trong suốt, luôn nổi trên cùng (`Topmost="True"`), không chiếm chỗ taskbar.
+      + **Circular Progress Ring**: Tự vẽ bằng Avalonia `StreamGeometry` và `DrawingContext`, góc quét -90 độ theo chiều kim đồng hồ, nét bo tròn `PenLineCap.Round`, đổi màu theo tác vụ (Download: Cyber Cyan, Enhancer: Purple Neon, Packer: Amber Cam, Splitter: Rose Hồng, Folder: Emerald Xanh, Merger: Sky Blue).
+      + **Badge % Động**: Tự động chuyển vị trí: ở nửa bên phải màn hình thì Badge nằm ở góc dưới bên trái; ở nửa bên trái màn hình thì Badge nằm ở góc dưới bên phải.
+      + **Kéo Thả Tự Do & Hít Mép**: Người dùng có thể kéo đặt ở bất kỳ đâu trên màn hình desktop (cả ở giữa màn hình lẫn mép); tự động hít nhẹ vào mép viền khi kéo sát mép (< 30px).
+      + **Tự Động Thụt Mép & Làm Mờ (Auto-dock & Fade 3.5s)**: Sau 3.5 giây nhàn rỗi, tự động thụt 55% vào mép và làm mờ 45%; chuột rê vào (`PointerEntered`) hoặc chạm lập tức khôi phục 100% độ rõ và thụt ra ngoài.
+      + **Nhấn Nhanh Mở Lại App & Menu 3 Giây / Chuột Phải**: Click đơn khôi phục MainWindow nguyên vẹn kích thước ban đầu; nhấn giữ 3s hoặc click chuột phải mở menu tùy chọn nổi (🚫 Tắt bong bóng / 🛑 Tắt app hoàn toàn).
