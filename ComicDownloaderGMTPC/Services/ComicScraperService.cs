@@ -506,6 +506,47 @@ public class ComicScraperService
 
         try
         {
+            bool isManual = InstanceConfigService.Instance.IsManualDownloadMode;
+            string manualMode = InstanceConfigService.Instance.ManualDownloadMode;
+
+            // 1. Nếu người dùng BẬT chế độ tải thủ công và chọn "Trực tiếp" (Direct):
+            // Bất kể web gì cũng sẽ tự tải trực tiếp ảnh/thumbnail từ trang web thay vì bóc tách trang viewer/reader nhúng
+            if (isManual && string.Equals(manualMode, "Direct", StringComparison.OrdinalIgnoreCase))
+            {
+                if (domain.Contains("mangadex"))
+                {
+                    return await ExtractMangaDexChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
+                }
+
+                if (domain.Contains("suicaodex"))
+                {
+                    return await ExtractSuicaodexChapterImageUrlsAsync(chapterUrl, ct).ConfigureAwait(false);
+                }
+
+                if (domain.Contains("hentaiforce"))
+                {
+                    return await ExtractHentaiforceChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
+                }
+
+                if (domain.Contains("e-hentai") || domain.Contains("exhentai"))
+                {
+                    return await ExtractEHentaiDirectThumbnailsAsync(chapterUrl, ct).ConfigureAwait(false);
+                }
+
+                // Với mọi trang web thông thường: Tải trực tiếp các thẻ ảnh hiển thị trên trang
+                using var directReq = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
+                string directBaseDomain = DomainRoutingService.NormalizeUrl(chapterUrl);
+                directReq.Headers.Add("Referer", directBaseDomain);
+                using var directRes = await _httpClient.SendAsync(directReq, ct).ConfigureAwait(false);
+                if (directRes.IsSuccessStatusCode)
+                {
+                    string directHtml = await directRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    var directImgs = ExtractDirectImagesFromHtml(directHtml, chapterUrl);
+                    if (directImgs.Count > 0) return directImgs;
+                }
+            }
+
+            // 2. Chế độ Mặc định (khi tắt thủ công) hoặc Chế độ Nhúng (Embedded):
             if (domain.Contains("mangadex"))
             {
                 return await ExtractMangaDexChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
@@ -538,6 +579,29 @@ public class ComicScraperService
             if (!res.IsSuccessStatusCode) return images;
 
             string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            // Bổ sung cho Chế độ Nhúng (Embedded): Kiểm tra nếu trang có nhúng iframe viewer
+            if (isManual && string.Equals(manualMode, "Embedded", StringComparison.OrdinalIgnoreCase))
+            {
+                var iframeMatch = Regex.Match(html, @"<iframe[^>]+src=[""'](?<src>[^""']+)[""']", RegexOptions.IgnoreCase);
+                if (iframeMatch.Success)
+                {
+                    string iframeSrc = MakeAbsoluteUrl(iframeMatch.Groups["src"].Value, chapterUrl);
+                    try
+                    {
+                        using var iframeReq = new HttpRequestMessage(HttpMethod.Get, iframeSrc);
+                        iframeReq.Headers.Add("Referer", chapterUrl);
+                        using var iframeRes = await _httpClient.SendAsync(iframeReq, ct).ConfigureAwait(false);
+                        if (iframeRes.IsSuccessStatusCode)
+                        {
+                            string iframeHtml = await iframeRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                            var iframeImgs = ExtractDirectImagesFromHtml(iframeHtml, iframeSrc);
+                            if (iframeImgs.Count > 0) return iframeImgs;
+                        }
+                    }
+                    catch { }
+                }
+            }
 
             // 1. Phân loại theo Domain chuyên sâu
             if (domain.Contains("loppytoonn"))
@@ -4539,6 +4603,18 @@ public class ComicScraperService
 
             string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
+            // Kiểm tra chế độ tải thủ công
+            bool isManual = InstanceConfigService.Instance.IsManualDownloadMode;
+            string manualMode = InstanceConfigService.Instance.ManualDownloadMode;
+
+            // Nếu người dùng BẬT chế độ tải thủ công và chọn "Trực tiếp" (Direct):
+            // "đối với một số web, ví dụ như hentaiforce chỉ có thumbnail, thì độ phân giải rất thấp nếu tải trực tiếp"
+            if (isManual && string.Equals(manualMode, "Direct", StringComparison.OrdinalIgnoreCase))
+            {
+                var directThumbs = ExtractDirectImagesFromHtml(html, galleryUrl);
+                if (directThumbs.Count > 0) return directThumbs;
+            }
+
             // 1. Total pages
             int totalPages = 1;
             var pagesMatch = Regex.Match(html, @"Pages:\s*(\d+)", RegexOptions.IgnoreCase);
@@ -4558,35 +4634,39 @@ public class ComicScraperService
                 }
             }
 
-            // 2. Fast Path: Identify prefix & extension from thumbnail URL (bỏ 't' để lấy ảnh gốc)
-            string prefix = string.Empty;
-            string ext = "jpg";
-            var patternMatch = Regex.Match(html, @"(?<prefix>https?://[a-zA-Z0-9.-]+/img/\d+-)1t\.(?<ext>[a-zA-Z0-9]+)", RegexOptions.IgnoreCase);
-            if (patternMatch.Success)
+            // 2. Fast Path: Bỏ qua khi người dùng BẬT thủ công "Nhúng" (Embedded).
+            // Khi chọn "Nhúng", BẮT BUỘC bỏ qua Fast Path để cào từng trang reader nhúng (/view/id/page) lấy ảnh gốc độ phân giải cao nhất!
+            if (!isManual || !string.Equals(manualMode, "Embedded", StringComparison.OrdinalIgnoreCase))
             {
-                prefix = patternMatch.Groups["prefix"].Value;
-                ext = patternMatch.Groups["ext"].Value;
-            }
-            else
-            {
-                var generalMatch = Regex.Match(html, @"(https?://[a-zA-Z0-9.-]+/img/\d+-)\d+t\.(jpg|png|jpeg|webp)", RegexOptions.IgnoreCase);
-                if (generalMatch.Success)
+                string prefix = string.Empty;
+                string ext = "jpg";
+                var patternMatch = Regex.Match(html, @"(?<prefix>https?://[a-zA-Z0-9.-]+/img/\d+-)1t\.(?<ext>[a-zA-Z0-9]+)", RegexOptions.IgnoreCase);
+                if (patternMatch.Success)
                 {
-                    prefix = generalMatch.Groups[1].Value;
-                    ext = generalMatch.Groups[2].Value;
+                    prefix = patternMatch.Groups["prefix"].Value;
+                    ext = patternMatch.Groups["ext"].Value;
+                }
+                else
+                {
+                    var generalMatch = Regex.Match(html, @"(https?://[a-zA-Z0-9.-]+/img/\d+-)\d+t\.(jpg|png|jpeg|webp)", RegexOptions.IgnoreCase);
+                    if (generalMatch.Success)
+                    {
+                        prefix = generalMatch.Groups[1].Value;
+                        ext = generalMatch.Groups[2].Value;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(prefix))
+                {
+                    for (int p = 1; p <= totalPages; p++)
+                    {
+                        imageUrls.Add($"{prefix}{p}.{ext}");
+                    }
+                    return imageUrls;
                 }
             }
 
-            if (!string.IsNullOrEmpty(prefix))
-            {
-                for (int p = 1; p <= totalPages; p++)
-                {
-                    imageUrls.Add($"{prefix}{p}.{ext}");
-                }
-                return imageUrls;
-            }
-
-            // 3. Fallback Slow Path: Fetch reader pages in parallel
+            // 3. Fallback Slow Path / Chế độ Nhúng (Embedded): Fetch reader pages in parallel để lấy ảnh gốc độ phân giải cao
             string cleanGalleryUrl = galleryUrl.TrimEnd('/');
             var pageImageDict = new System.Collections.Concurrent.ConcurrentDictionary<int, string>();
             int readerConcurrency = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
@@ -4635,5 +4715,35 @@ public class ComicScraperService
         catch {}
 
         return imageUrls;
+    }
+
+    public List<string> ExtractDirectImagesFromHtml(string html, string pageUrl)
+    {
+        var images = new List<string>();
+        if (string.IsNullOrWhiteSpace(html)) return images;
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var imgTags = Regex.Matches(html, @"<(?:img|source)\s+[^>]*>", RegexOptions.IgnoreCase);
+        foreach (Match m in imgTags)
+        {
+            string tag = m.Value;
+            string? imgUrl = ExtractImageUrlFromTag(tag);
+            if (string.IsNullOrWhiteSpace(imgUrl) || IsIgnoredImage(imgUrl)) continue;
+
+            string fullUrl = MakeAbsoluteUrl(imgUrl.Trim(), pageUrl);
+            if (seen.Add(fullUrl))
+            {
+                images.Add(fullUrl);
+            }
+        }
+        return images;
+    }
+
+    private async Task<List<string>> ExtractEHentaiDirectThumbnailsAsync(string galleryUrl, CancellationToken ct)
+    {
+        var imageUrls = new List<string>();
+        string firstHtml = await FetchEHentaiHtmlAsync(galleryUrl, ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(firstHtml)) return imageUrls;
+        return ExtractDirectImagesFromHtml(firstHtml, galleryUrl);
     }
 }

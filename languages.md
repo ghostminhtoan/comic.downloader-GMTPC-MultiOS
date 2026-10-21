@@ -875,3 +875,6 @@
 | Shared Resume Progress (All Devices) | Tiến độ đọc dùng chung (Tất cả thiết bị) |
 | Backup All (Queue + Reader + Resume) | Sao lưu tất cả (Queue + Reader + Resume) |
 
+| Manual download mode | Chế độ tải thủ công |
+| Direct (Trực tiếp) | Trực tiếp (Direct) |
+| Embedded (Nhúng) | Nhúng (Embedded) |

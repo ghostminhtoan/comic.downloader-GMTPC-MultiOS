@@ -130,6 +130,35 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isCompactRow;
 
+    // CHẾ ĐỘ TẢI THỦ CÔNG (TRỰC TIẾP / NHÚNG)
+    [ObservableProperty]
+    private bool _isManualDownloadMode = InstanceConfigService.Instance.IsManualDownloadMode;
+
+    partial void OnIsManualDownloadModeChanged(bool value)
+    {
+        InstanceConfigService.Instance.IsManualDownloadMode = value;
+        AddLog("INFO", value
+            ? (_langService.CurrentLanguage == "VI" ? $"Đã BẬT chế độ tải thủ công ({SelectedManualDownloadMode})." : $"Manual download mode ENABLED ({SelectedManualDownloadMode}).")
+            : (_langService.CurrentLanguage == "VI" ? "Đã TẮT chế độ tải thủ công (sử dụng mặc định của ứng dụng)." : "Manual download mode DISABLED (using app defaults)."));
+    }
+
+    [ObservableProperty]
+    private string _selectedManualDownloadMode = InstanceConfigService.Instance.ManualDownloadMode == "Embedded" ? "Nhúng (Embedded)" : "Trực tiếp (Direct)";
+
+    partial void OnSelectedManualDownloadModeChanged(string value)
+    {
+        string mode = (value != null && (value.Contains("Nhúng", StringComparison.OrdinalIgnoreCase) || value.Contains("Embedded", StringComparison.OrdinalIgnoreCase)))
+            ? "Embedded"
+            : "Direct";
+        InstanceConfigService.Instance.ManualDownloadMode = mode;
+        if (IsManualDownloadMode)
+        {
+            AddLog("INFO", _langService.CurrentLanguage == "VI"
+                ? $"Đã đổi chế độ tải cài sẵn sang: {value}"
+                : $"Changed manual download preset to: {value}");
+        }
+    }
+
     // BACKGROUND EXECUTION & BUBBLE MODE (BONG BÓNG CHẠY NGẦM)
     [ObservableProperty]
     private bool _isBubbleMode = false;
