@@ -180,6 +180,9 @@ public class LanguageService
         AddPair("Archive Merger", "Gộp File Lẻ");
         AddPair("Merge / Append Chapters", "Gộp File / Nối Chap");
         AddPair("Append Chapters", "Nối Chap Vào File");
+        AddPair("Overwrite existing file", "Ghi đè vào file cũ");
+        AddPair("Create new file", "Tạo file mới độc lập");
+        AddPair("Preserve bookmarks", "Bảo tồn Bookmarks");
         AddPair("Offline Missing Scanner", "Quét Chap Thiếu Offline");
         AddPair("Batch Rename", "Đổi Tên Hàng Loạt");
         AddPair("Dual Picture Sort", "Phân Loại Ảnh Kép");

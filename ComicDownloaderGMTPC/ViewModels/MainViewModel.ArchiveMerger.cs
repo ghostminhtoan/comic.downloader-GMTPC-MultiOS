@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: MainViewModel.ArchiveMerger.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -488,6 +488,9 @@ public partial class MainViewModel
     private bool _isMergeAppendOverwrite = true;
 
     [ObservableProperty]
+    private bool _isMergeAppendCreateNew = false;
+
+    [ObservableProperty]
     private string _mergeAppendOutputFilePath = string.Empty;
 
     [ObservableProperty]
@@ -498,6 +501,36 @@ public partial class MainViewModel
 
     [RelayCommand]
     public void SetMergeModeAppend() => IsMergeAppendMode = true;
+
+    [RelayCommand]
+    public void SelectMergeAppendOverwrite()
+    {
+        IsMergeAppendOverwrite = true;
+        IsMergeAppendCreateNew = false;
+    }
+
+    [RelayCommand]
+    public void SelectMergeAppendCreateNew()
+    {
+        IsMergeAppendOverwrite = false;
+        IsMergeAppendCreateNew = true;
+    }
+
+    partial void OnIsMergeAppendOverwriteChanged(bool value)
+    {
+        if (IsMergeAppendCreateNew == value)
+        {
+            IsMergeAppendCreateNew = !value;
+        }
+    }
+
+    partial void OnIsMergeAppendCreateNewChanged(bool value)
+    {
+        if (IsMergeAppendOverwrite == value)
+        {
+            IsMergeAppendOverwrite = !value;
+        }
+    }
 
     partial void OnMergeAppendBaseFilePathChanged(string value)
     {

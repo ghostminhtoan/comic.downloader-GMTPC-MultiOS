@@ -459,3 +459,10 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
       + **Kéo Thả Tự Do & Hít Mép**: Người dùng có thể kéo đặt ở bất kỳ đâu trên màn hình desktop (cả ở giữa màn hình lẫn mép); tự động hít nhẹ vào mép viền khi kéo sát mép (< 30px).
       + **Tự Động Thụt Mép & Làm Mờ (Auto-dock & Fade 3.5s)**: Sau 3.5 giây nhàn rỗi, tự động thụt 55% vào mép và làm mờ 45%; chuột rê vào (`PointerEntered`) hoặc chạm lập tức khôi phục 100% độ rõ và thụt ra ngoài.
       + **Nhấn Nhanh Mở Lại App & Menu 3 Giây / Chuột Phải**: Click đơn khôi phục MainWindow nguyên vẹn kích thước ban đầu; nhấn giữ 3s hoặc click chuột phải mở menu tùy chọn nổi (🚫 Tắt bong bóng / 🛑 Tắt app hoàn toàn).
+
+
+36. **Bổ Sung Tùy Chọn Ghi Đè Giữ Bookmark vs Tạo File Mới Kèm Chuẩn Hóa Responsive Android Cho Chức Năng Nối Chap (`MainView.axaml`, `MainViewModel.ArchiveMerger.cs`, `LanguageService.cs`, `bug-fixes-and-solutions.md`)**:
+    - **Ý Tưởng & Giải Pháp Kỹ Thuật (BUG-023)**: Phân tách rõ ràng 2 kịch bản xuất file khi nối chapter:
+      + **Option 1 (Mặc định & Khuyên dùng)**: "⚡ Ghi đè vào file cũ" (giữ nguyên bookmark & tiến độ trang đọc dở của app đọc truyện theo File Path). Tự động sao lưu bản dự phòng `.bak` trước khi cập nhật.
+      + **Option 2**: "📄 Tạo file mới độc lập" (cảnh báo bookmark app đọc truyện có thể bị mất do thay đổi đường dẫn tệp mới). Khung đổi vị trí lưu chỉ xuất hiện khi chọn Option này.
+    - **Responsive Toàn Diện Trên Android**: Toàn bộ TextBlock trong cụm tùy chọn đều kích hoạt `TextWrapping="Wrap"` và nằm trong layout `StackPanel`/`WrapPanel` co giãn thích ứng, giải quyết triệt để lỗi chữ dài bị tràn viền hoặc cắt xén trên màn hình điện thoại di động.
