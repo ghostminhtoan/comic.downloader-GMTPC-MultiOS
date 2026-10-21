@@ -4765,11 +4765,12 @@
                         Background="#1E293B" CornerRadius="8"
                         Width="44" Height="14" Margin="0,1,0,2"
                         Cursor="SizeAll"
-                        ToolTip.Tip="Chạm giữ &amp; kéo để di chuyển vị trí cụm nút nổi này">
+                        ToolTip.Tip="Chạm giữ &amp; kéo để di chuyển. Chạm nhẹ để thu nhỏ/mở rộng cụm nút nổi này">
                     <TextBlock Text="⋮⋮⋮" Foreground="#38BDF8" FontSize="9" FontWeight="Bold"
                                HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
                 </Border>
 
+                <StackPanel x:Name="FloatingButtonsPanel" Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
                 <!-- 1. Toggle Button Tải / Dừng tải -->
                 <Button Command="{Binding DownloadAllCommand}" IsVisible="{Binding !IsDownloading}"
                         Background="#4F46E5" Foreground="#FFFFFF" FontWeight="Bold"
@@ -4835,6 +4836,7 @@
                         <TextBlock Text="BOT" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+                </StackPanel>
             </StackPanel>
         </Border>
         </Panel>
@@ -5029,16 +5031,16 @@
             </Border.RenderTransform>
             <StackPanel Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
                 <!-- Thanh Grip kéo thả di chuyển vị trí (Move Handle) & Nút Đóng Nhanh -->
-                <Grid ColumnDefinitions="*, Auto" Width="92" Margin="0,1,0,2">
+                <Grid x:Name="DualSortBatchHeaderGrid" ColumnDefinitions="*, Auto" Width="92" Margin="0,1,0,2">
                     <Border Grid.Column="0" x:Name="DualSortBatchGripBar"
                             Background="#1E293B" CornerRadius="8"
                             Height="16" Margin="0,0,3,0"
                             Cursor="SizeAll"
-                            ToolTip.Tip="Chạm giữ &amp; kéo để di chuyển vị trí thanh công cụ Batch">
-                        <TextBlock Text="⋮⋮ BATCH TOOL ⋮⋮" Foreground="#38BDF8" FontSize="8.5" FontWeight="Bold"
+                            ToolTip.Tip="Chạm giữ &amp; kéo để di chuyển. Chạm nhẹ để thu nhỏ/mở rộng thanh Batch Tool">
+                        <TextBlock x:Name="DualSortBatchGripText" Text="⋮⋮ BATCH TOOL ⋮⋮" Foreground="#38BDF8" FontSize="8.5" FontWeight="Bold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
                     </Border>
-                    <Button Grid.Column="1" Command="{Binding ToggleDualSortBatchToolbarVisibleCommand}"
+                    <Button Grid.Column="1" x:Name="DualSortBatchCloseBtn" Command="{Binding ToggleDualSortBatchToolbarVisibleCommand}"
                             Background="#334155" Foreground="#CBD5E1"
                             Padding="0" Width="16" Height="16" CornerRadius="8"
                             ToolTip.Tip="Tắt thanh công cụ Batch (Có thể mở lại ở Header Bar)">
@@ -5046,6 +5048,7 @@
                     </Button>
                 </Grid>
 
+                <StackPanel x:Name="DualSortBatchButtonsPanel" Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
                 <!-- Điều hướng Thư mục: Previous Folder (Trước) & Next Folder (Tiếp) -->
                 <Grid ColumnDefinitions="*, 4, *" Width="92" Margin="0,1,0,1">
                     <Button Grid.Column="0" Command="{Binding DualSortPreviousFolderCommand}"
@@ -5180,6 +5183,7 @@
                         <TextBlock Text="Redo" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+                </StackPanel>
             </StackPanel>
         </Border>
 

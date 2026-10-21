@@ -220,10 +220,13 @@ public partial class MainView : UserControl
     /// Kéo thả di chuyển tự do cụm phím nổi (Floating Quick Control Bar) quanh màn hình
     /// để không bao giờ bị che khuất nút Đọc truyện hay các nút bấm khác bên dưới.
     /// </summary>
+    private bool _isFloatingBarCollapsed = false;
+
     private void SetupFloatingBarDraggable()
     {
         var gripBar = this.FindControl<Border>("FloatingGripBar");
         var border = this.FindControl<Border>("FloatingQuickControlBorder");
+        var buttonsPanel = this.FindControl<StackPanel>("FloatingButtonsPanel");
         if (border == null) return;
 
         var transform = border.RenderTransform as TranslateTransform;
@@ -232,6 +235,8 @@ public partial class MainView : UserControl
             transform = new TranslateTransform();
             border.RenderTransform = transform;
         }
+
+        bool hasMoved = false;
 
         void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
@@ -242,6 +247,7 @@ public partial class MainView : UserControl
             if (prop.IsLeftButtonPressed)
             {
                 _isFloatingBarDragging = true;
+                hasMoved = false;
                 _floatingDragStartPointer = e.GetPosition(this);
                 _floatingStartTransformX = transform.X;
                 _floatingStartTransformY = transform.Y;
@@ -257,6 +263,11 @@ public partial class MainView : UserControl
             var currentPoint = e.GetPosition(this);
             double deltaX = currentPoint.X - _floatingDragStartPointer.X;
             double deltaY = currentPoint.Y - _floatingDragStartPointer.Y;
+
+            if (Math.Abs(deltaX) > 6 || Math.Abs(deltaY) > 6)
+            {
+                hasMoved = true;
+            }
 
             double minX = -Math.Max(0, Bounds.Width - 70);
             double maxX = 20;
@@ -275,6 +286,15 @@ public partial class MainView : UserControl
                 _isFloatingBarDragging = false;
                 e.Pointer.Capture(null);
                 e.Handled = true;
+
+                // Single Tap detection (không di chuyển hoặc di chuyển < 6px): Toggle thu nhỏ / mở rộng
+                if (!hasMoved && buttonsPanel != null)
+                {
+                    _isFloatingBarCollapsed = !_isFloatingBarCollapsed;
+                    buttonsPanel.IsVisible = !_isFloatingBarCollapsed;
+                    border.Padding = _isFloatingBarCollapsed ? new Thickness(2) : new Thickness(4, 5);
+                    border.CornerRadius = _isFloatingBarCollapsed ? new CornerRadius(10) : new CornerRadius(16);
+                }
             }
         }
 
@@ -301,6 +321,7 @@ public partial class MainView : UserControl
     private Point _dualSortBatchDragStartPointer;
     private double _dualSortBatchStartTransformX = 0;
     private double _dualSortBatchStartTransformY = 0;
+    private bool _isDualSortBatchCollapsed = false;
 
     /// <summary>
     /// Kéo thả di chuyển tự do Floating Batch Toolbar trong tab Dual Picture Sort
@@ -309,6 +330,10 @@ public partial class MainView : UserControl
     {
         var gripBar = this.FindControl<Border>("DualSortBatchGripBar");
         var border = this.FindControl<Border>("DualSortFloatingBatchToolbar");
+        var buttonsPanel = this.FindControl<StackPanel>("DualSortBatchButtonsPanel");
+        var headerGrid = this.FindControl<Grid>("DualSortBatchHeaderGrid");
+        var closeBtn = this.FindControl<Button>("DualSortBatchCloseBtn");
+        var gripText = this.FindControl<TextBlock>("DualSortBatchGripText");
         if (border == null) return;
 
         var transform = border.RenderTransform as TranslateTransform;
@@ -317,6 +342,8 @@ public partial class MainView : UserControl
             transform = new TranslateTransform();
             border.RenderTransform = transform;
         }
+
+        bool hasMoved = false;
 
         void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
@@ -327,6 +354,7 @@ public partial class MainView : UserControl
             if (prop.IsLeftButtonPressed)
             {
                 _isDualSortBatchDragging = true;
+                hasMoved = false;
                 _dualSortBatchDragStartPointer = e.GetPosition(this);
                 _dualSortBatchStartTransformX = transform.X;
                 _dualSortBatchStartTransformY = transform.Y;
@@ -342,6 +370,11 @@ public partial class MainView : UserControl
             var currentPoint = e.GetPosition(this);
             double deltaX = currentPoint.X - _dualSortBatchDragStartPointer.X;
             double deltaY = currentPoint.Y - _dualSortBatchDragStartPointer.Y;
+
+            if (Math.Abs(deltaX) > 6 || Math.Abs(deltaY) > 6)
+            {
+                hasMoved = true;
+            }
 
             double minX = -Math.Max(0, Bounds.Width - 95);
             double maxX = 20;
@@ -360,6 +393,19 @@ public partial class MainView : UserControl
                 _isDualSortBatchDragging = false;
                 e.Pointer.Capture(null);
                 e.Handled = true;
+
+                // Single Tap detection (không di chuyển hoặc di chuyển < 6px): Toggle thu nhỏ / mở rộng
+                if (!hasMoved && buttonsPanel != null)
+                {
+                    _isDualSortBatchCollapsed = !_isDualSortBatchCollapsed;
+                    buttonsPanel.IsVisible = !_isDualSortBatchCollapsed;
+                    if (closeBtn != null) closeBtn.IsVisible = !_isDualSortBatchCollapsed;
+                    if (headerGrid != null) headerGrid.Width = _isDualSortBatchCollapsed ? 44 : 92;
+                    if (gripBar != null) gripBar.Width = _isDualSortBatchCollapsed ? 44 : double.NaN;
+                    if (gripText != null) gripText.Text = _isDualSortBatchCollapsed ? "⋮⋮⋮" : "⋮⋮ BATCH TOOL ⋮⋮";
+                    border.Padding = _isDualSortBatchCollapsed ? new Thickness(2) : new Thickness(4, 5);
+                    border.CornerRadius = _isDualSortBatchCollapsed ? new CornerRadius(10) : new CornerRadius(16);
+                }
             }
         }
 

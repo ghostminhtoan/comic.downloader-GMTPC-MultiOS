@@ -476,7 +476,7 @@ public class ComicScraperService
             // Nếu HttpClient bị Cloudflare 403, 503 hoặc network block, tự động fallback sang NativeWebView headless browser
             if (string.IsNullOrWhiteSpace(html) && NativeWebViewService.Instance.IsAvailable)
             {
-                html = await NativeWebViewService.Instance.FetchHtmlAsync(url, 30, ct).ConfigureAwait(false);
+                html = await NativeWebViewService.Instance.FetchHtmlAsync(url, 45, ct).ConfigureAwait(false);
             }
 
             if (string.IsNullOrWhiteSpace(html))
@@ -565,7 +565,7 @@ public class ComicScraperService
 
                 if (string.IsNullOrWhiteSpace(directHtml) && NativeWebViewService.Instance.IsAvailable)
                 {
-                    directHtml = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 30, ct).ConfigureAwait(false);
+                    directHtml = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 45, ct).ConfigureAwait(false);
                 }
 
                 if (!string.IsNullOrWhiteSpace(directHtml))
@@ -617,7 +617,7 @@ public class ComicScraperService
 
             if (string.IsNullOrWhiteSpace(html) && NativeWebViewService.Instance.IsAvailable)
             {
-                html = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 30, ct).ConfigureAwait(false);
+                html = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 45, ct).ConfigureAwait(false);
             }
 
             if (string.IsNullOrWhiteSpace(html)) return images;
@@ -4784,7 +4784,12 @@ public class ComicScraperService
 
         foreach (var img in rawImages)
         {
-            if (IsIgnoredImage(img) || img.Contains("/avatars/") || img.Contains("avatars-cdn")) continue;
+            if (IsIgnoredImage(img) || img.Contains("/avatars/") || img.Contains("avatars-cdn") || img.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)) continue;
+            if (pageUrl.Contains("luscious.net", StringComparison.OrdinalIgnoreCase))
+            {
+                var albMatch = Regex.Match(pageUrl, @"_(\d+)/?", RegexOptions.IgnoreCase);
+                if (albMatch.Success && !img.Contains($"/{albMatch.Groups[1].Value}/")) continue;
+            }
             // Nếu có các trang truyện được đánh số, lọc bỏ các ảnh bìa cover/thumb rác trùng lặp
             if (hasNumberedPages)
             {

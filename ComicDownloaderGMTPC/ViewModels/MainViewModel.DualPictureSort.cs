@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: MainViewModel.DualPictureSort.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -82,7 +82,7 @@ public partial class MainViewModel
     private bool _isDualSortBatchToolbarVisible = true;
 
     public bool IsDualSortBatchToolbarRealVisible =>
-        SelectedRootTabIndex == 3 && SelectedToolsTabIndex == 6 && IsDualSortBatchToolbarVisible;
+        SelectedRootTabIndex == 3 && SelectedToolsTabIndex == 7 && IsDualSortBatchToolbarVisible;
 
     public string DualSortBatchToggleBtnText => IsDualSortBatchToolbarVisible ? "⚡ BATCH TOOL: BẬT" : "⚡ BATCH TOOL: TẮT";
     public string DualSortBatchToggleBtnBg => IsDualSortBatchToolbarVisible ? "#0284C7" : "#1E293B";

@@ -13,6 +13,7 @@ namespace ComicDownloaderGMTPC.Services;
 /// <summary>
 /// Hiện thực dịch vụ Native WebView / Headless Browser đa nền tảng.
 /// Hỗ trợ chạy trình duyệt ngầm trên Windows (Edge/Chrome), Linux (Chrome/Chromium), macOS (Chrome/Edge).
+/// Tối ưu 100% không bị khóa Singleton lock hay nghẽn anonymous pipe trên Windows.
 /// Không cần thư viện bên thứ ba, bảo đảm 100% không cảnh báo (0 Warnings, 0 Errors) khi build.
 /// </summary>
 public class NativeWebViewService : INativeWebViewService
@@ -22,73 +23,44 @@ public class NativeWebViewService : INativeWebViewService
 
     private readonly string? _browserExecutablePath;
     private readonly string _engineName;
-    private readonly string _cacheDirectory;
 
     public bool IsAvailable => !string.IsNullOrEmpty(_browserExecutablePath) && File.Exists(_browserExecutablePath);
     public string EngineName => _engineName;
 
     public NativeWebViewService()
     {
-        _cacheDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".tmp", "webview_cache");
-        try
-        {
-            if (!Directory.Exists(_cacheDirectory))
-            {
-                Directory.CreateDirectory(_cacheDirectory);
-            }
-        }
-        catch
-        {
-            // Ignore directory creation failure in read-only environment
-        }
-
         _browserExecutablePath = DetectBrowserExecutable(out _engineName);
     }
 
     /// <summary>
     /// Tải HTML của trang web chạy ngầm (headless) có thực thi JavaScript đầy đủ.
+    /// Tối ưu không gán profile cố định nhằm chống tuyệt đối xung đột SingletonLock và quyền thư mục.
     /// </summary>
-    public async Task<string?> FetchHtmlAsync(string url, int timeoutSeconds = 30, CancellationToken ct = default)
+    public async Task<string?> FetchHtmlAsync(string url, int timeoutSeconds = 45, CancellationToken ct = default)
     {
         if (!IsAvailable || string.IsNullOrWhiteSpace(url))
         {
             return null;
         }
 
-        return await Task.Run(() =>
+        return await Task.Run(async () =>
         {
             ct.ThrowIfCancellationRequested();
-
-            // Tự động dọn dẹp các file lock cũ của Chromium để chống bị chặn Singleton trên Windows
-            try
-            {
-                if (Directory.Exists(_cacheDirectory))
-                {
-                    string lockFile = Path.Combine(_cacheDirectory, "SingletonLock");
-                    if (File.Exists(lockFile)) File.Delete(lockFile);
-                    string cookieFile = Path.Combine(_cacheDirectory, "SingletonCookie");
-                    if (File.Exists(cookieFile)) File.Delete(cookieFile);
-                    string socketFile = Path.Combine(_cacheDirectory, "SingletonSocket");
-                    if (File.Exists(socketFile)) File.Delete(socketFile);
-                }
-            }
-            catch { }
 
             var startInfo = new ProcessStartInfo
             {
                 FileName = _browserExecutablePath!,
                 Arguments = $"--headless=new --disable-gpu --disable-software-rasterizer --no-sandbox " +
+                            $"--no-first-run --no-default-browser-check " +
+                            $"--disable-background-networking --disable-sync --disable-default-apps " +
                             $"--disable-logging --log-level=3 " +
                             $"--disable-features=Translate,OptimizationHints,MediaRouter " +
-                            $"--user-data-dir=\"{_cacheDirectory}\" " +
                             $"--user-agent=\"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36\" " +
-                            $"--virtual-time-budget=6000 " +
-                            $"--enable-features=DnsOverHttps " +
-                            $"--dns-over-https-templates=\"https://cloudflare-dns.com/dns-query\" " +
+                            $"--virtual-time-budget=8000 " +
                             $"--dump-dom \"{url}\"",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
-                RedirectStandardError = false, // Không redirect stderr để chống hoàn toàn lỗi tràn buffer anonymous pipe gây treo deadlock trên Windows
+                RedirectStandardError = false,
                 CreateNoWindow = true,
                 StandardOutputEncoding = Encoding.UTF8
             };
@@ -104,15 +76,17 @@ public class NativeWebViewService : INativeWebViewService
                 });
 
                 var readTask = process.StandardOutput.ReadToEndAsync(ct);
-                bool exited = process.WaitForExit(timeoutSeconds * 1000);
+                var waitTask = process.WaitForExitAsync(ct);
 
-                if (!exited)
+                var completed = await Task.WhenAny(Task.WhenAll(readTask, waitTask), Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), ct)).ConfigureAwait(false);
+
+                if (completed != Task.WhenAll(readTask, waitTask))
                 {
                     try { process.Kill(entireProcessTree: true); } catch { }
                     return null;
                 }
 
-                string output = readTask.GetAwaiter().GetResult();
+                string output = await readTask.ConfigureAwait(false);
 
                 if (string.IsNullOrWhiteSpace(output))
                 {
