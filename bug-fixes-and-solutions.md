@@ -23,6 +23,7 @@
 | **BUG-013** | Release Deploy | Xung đột Chromium singleton lock khi upload release beta | Thư mục profile Edge bị giữ lockfile bởi phiên chạy trước | Tự động quét dọn file `Singleton*` và `lockfile` trước khi khởi động | `upload beta.cmd`, `upload_beta_browser.py` |
 | **BUG-014** | Settings UI (Avalonia) | ComboBox chế độ tải thủ công bị đóng băng hiển thị khi đổi lựa chọn | `TranslateLogicalAndVisual` đè LocalValue vào TextBlock template | Bỏ qua ComboBox và visual children trong cơ chế dịch ngôn ngữ | `MainView.axaml.cs`, `MainView.axaml` |
 | **BUG-015** | Scraper & Download Engine | Lỗi 403 trên Windows/Linux với web khác & chế độ Nhúng tải thumbnail thay vì ảnh gốc | HttpClient bị Cloudflare chặn trên PC; scraper chưa phân tách URL Full-Res vs Thumbnail | Headless browser giả lập Android User-Agent & thuật toán nâng cấp URL Full-Resolution | `NativeWebViewService.cs`, `ComicScraperService.cs`, `DownloadEngineService.cs` |
+| **BUG-016** | Native WebView & Headless | Lỗi treo (Deadlock) và timeout 15s trên Windows khi cào web khác (Luscious) | Anonymous pipe `StandardError` bị tràn buffer 4KB do Chromium in log nhưng không được đọc | Tắt redirect stderr, đọc async stdout, thêm `--disable-logging`, dọn dẹp Singleton lock và tăng timeout 30s | `NativeWebViewService.cs`, `INativeWebViewService.cs`, `ComicScraperService.cs`, `DomainRoutingService.cs` |
 
 ---
 
@@ -302,6 +303,26 @@
 - **Quy tắc kiểm thử**: Chạy test trực tiếp trên hai website `https://nhentai.to/g/690129/` và `https://www.luscious.net/albums/jizoku-the-amazing-digital-c_619112/`. Xác nhận:
   - Vượt rào cản Cloudflare thành công 100%, trích xuất đầy đủ tiêu đề và chương truyện.
   - Chế độ Trực tiếp tải thumbnail (~30 KB), Chế độ Nhúng tải ảnh full-resolution (~120 KB - 300 KB).
+
+
+---
+
+### 20. BUG-016: Khắc Phục Triệt Để Lỗi Treo Deadlock Pipe & Singleton Lock Trên Windows Khi Cào Truyện Web Khác (Luscious.net)
+- **Triệu chứng**: Trên Android tải mượt mà nhưng trên Windows khi dán link `luscious.net` và bấm tải thì app tạo thư mục rỗng rồi dừng lại, không tải được bất kỳ ảnh nào, hoặc bị treo một lúc rồi báo lỗi 0 chương.
+- **Nguyên nhân gốc rễ**: 
+  - Trong `NativeWebViewService.cs`, `ProcessStartInfo` bật `RedirectStandardError = true` nhưng luồng C# chỉ đọc `StandardOutput.ReadToEnd()` mà không đọc `StandardError`.
+  - Trên Windows, anonymous pipe của tiến trình con có buffer giới hạn 4096 bytes (4 KB). Khi Chromium/Edge headless in hàng loạt log cảnh báo vào `StandardError`, pipe bị tràn buffer dẫn đến tiến trình Edge bị đóng băng (deadlock) không thể tiếp tục thực thi.
+  - Sau đó, `process.WaitForExit(15000)` bị quá hạn (timeout 15 giây), tiến trình Edge bị kill cưỡng bức và trả về `null`.
+  - Ngoài ra, nếu thư mục cache còn lưu file `SingletonLock`, Edge từ chối mở instance headless mới; đồng thời ảnh avatar người dùng (`avatars-cdn.luscious.net`) bị cào nhầm làm trang truyện 1.
+- **Giải pháp triệt để**:
+  1. *Triệt Tiêu Deadlock Pipe*: Đặt `RedirectStandardError = false` và đọc `StandardOutput.ReadToEndAsync()` bất đồng bộ an toàn, bổ sung cờ `--disable-logging --log-level=3` để tắt hoàn toàn logging của Chromium.
+  2. *Dọn Dẹp Singleton Lock*: Tự động xóa các file `SingletonLock`, `SingletonCookie`, `SingletonSocket` trước khi khởi chạy Edge headless.
+  3. *Tăng Ngưỡng Timeout*: Tăng timeout từ 15s lên 30s (`timeoutSeconds = 30`) để đảm bảo các trang truyện nặng hình ảnh tải hoàn tất 100%.
+  4. *Lọc Ảnh Chuẩn Xác & Phân Vùng Domain*: Bổ sung `avatars-cdn.luscious.net` vào danh sách đen `IsIgnoredImage` và định tuyến máy chủ `luscious.net` vào folder `luscious` trong `DomainRoutingService.cs`.
+- **File can thiệp**: `NativeWebViewService.cs`, `INativeWebViewService.cs`, `ComicScraperService.cs`, `DomainRoutingService.cs`.
+- **Quy tắc kiểm thử**: Chạy tải thực tế trên Windows với URL `https://www.luscious.net/albums/jizoku-the-amazing-digital-c_619112/`. Xác nhận:
+  - Lấy link ngay lập tức, không còn deadlock hoặc timeout.
+  - Lọc bỏ hoàn toàn avatar, tải đủ trọn vẹn 26/26 trang truyện full-resolution (~300 KB - 1.8 MB/trang) vào đúng thư mục `publish\Downloads\luscious\[default]\[Jizoku] The Amazing Digital Circus...`.
 
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
