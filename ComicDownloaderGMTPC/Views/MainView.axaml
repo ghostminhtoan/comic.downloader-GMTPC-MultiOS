@@ -6603,27 +6603,29 @@
                                                     <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12,10">
                                                         <StackPanel Spacing="10">
                                                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                <TextBlock Text="⚙️ Bước 3: Chế Độ Xuất File &amp; Quản Lý Bookmark:" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" TextWrapping="Wrap" />
+                                                                <TextBlock Text="⚙️ Bước 3: Chế Độ Xuất File &amp; Quản Lý Tiến Độ:" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" TextWrapping="Wrap" />
                                                                 <Border Background="#3B1E08" CornerRadius="3" Padding="5,1" VerticalAlignment="Center" Margin="0,0,0,4">
-                                                                    <TextBlock Text="AN TOÀN TIẾN ĐỘ" FontSize="9" FontWeight="Bold" Foreground="#FBBF24" />
+                                                                    <TextBlock Text="BẢO TỒN FOLDER &amp; BOOKMARK" FontSize="8.5" FontWeight="Bold" Foreground="#FBBF24" />
                                                                 </Border>
                                                             </WrapPanel>
 
-                                                            <!-- Hai lựa chọn cốt lõi: Ghi đè vào file cũ VS Tạo file mới -->
+                                                            <!-- Hai lựa chọn cốt lõi: Ghi đè vào file cũ VS Tạo file mới (Responsive Android) -->
                                                             <StackPanel Spacing="8">
                                                                 <!-- Option 1: Ghi đè vào file cũ (MẶC ĐỊNH & KHUYÊN DÙNG) -->
-                                                                <Border CornerRadius="6" Padding="10,8" Background="#131B2E" BorderThickness="1" BorderBrush="#1E293B">
+                                                                <Border CornerRadius="6" Padding="10,8" Background="#131B2E" BorderThickness="1" BorderBrush="#38BDF8">
                                                                     <RadioButton GroupName="MergeAppendOutputMode"
                                                                                  IsChecked="{Binding IsMergeAppendOverwrite, Mode=TwoWay}"
+                                                                                 Command="{Binding SetMergeAppendOverwriteModeCommand}"
+                                                                                 HorizontalAlignment="Stretch"
                                                                                  VerticalAlignment="Center">
-                                                                        <StackPanel Orientation="Vertical" Spacing="3">
+                                                                        <StackPanel Orientation="Vertical" Spacing="4">
                                                                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                                <TextBlock Text="⚡ Ghi đè vào file cũ" FontWeight="Bold" FontSize="11" Foreground="#38BDF8" VerticalAlignment="Center" TextWrapping="Wrap" />
-                                                                                <Border Background="#064E3B" CornerRadius="3" Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center">
-                                                                                    <TextBlock Text="MẶC ĐỊNH &amp; GIỮ BOOKMARK" FontSize="8.5" FontWeight="Bold" Foreground="#34D399" />
+                                                                                <TextBlock Text="⚡ Ghi đè vào file cũ" FontWeight="Bold" FontSize="11" Foreground="#38BDF8" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,6,2" />
+                                                                                <Border Background="#064E3B" CornerRadius="3" Padding="5,1" Margin="0,0,0,2" VerticalAlignment="Center">
+                                                                                    <TextBlock Text="MẶC ĐỊNH &amp; GIỮ FOLDER / BOOKMARK" FontSize="8.5" FontWeight="Bold" Foreground="#34D399" />
                                                                                 </Border>
                                                                             </WrapPanel>
-                                                                            <TextBlock Text="(Giữ nguyên bookmark &amp; tiến độ trang đọc dở của app đọc truyện)"
+                                                                            <TextBlock Text="(Giữ nguyên 100% cấu trúc folder từng chapter, bookmark mục lục &amp; tiến độ trang đọc dở của app đọc truyện)"
                                                                                        FontSize="10" Foreground="#CBD5E1" TextWrapping="Wrap" />
                                                                             <TextBlock Text="• Tự động sao lưu bản dự phòng .bak an toàn 100% trước khi cập nhật"
                                                                                        FontSize="9" Foreground="#64748B" TextWrapping="Wrap" />
@@ -6635,16 +6637,20 @@
                                                                 <Border CornerRadius="6" Padding="10,8" Background="#131B2E" BorderThickness="1" BorderBrush="#1E293B">
                                                                     <RadioButton GroupName="MergeAppendOutputMode"
                                                                                  IsChecked="{Binding IsMergeAppendCreateNew, Mode=TwoWay}"
+                                                                                 Command="{Binding SetMergeAppendCreateNewModeCommand}"
+                                                                                 HorizontalAlignment="Stretch"
                                                                                  VerticalAlignment="Center">
-                                                                        <StackPanel Orientation="Vertical" Spacing="3">
+                                                                        <StackPanel Orientation="Vertical" Spacing="4">
                                                                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                                <TextBlock Text="📄 Tạo file mới độc lập" FontWeight="Bold" FontSize="11" Foreground="#F59E0B" VerticalAlignment="Center" TextWrapping="Wrap" />
-                                                                                <Border Background="#374151" CornerRadius="3" Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center">
-                                                                                    <TextBlock Text="TỆP RIÊNG BIỆT" FontSize="8.5" FontWeight="Bold" Foreground="#D1D5DB" />
+                                                                                <TextBlock Text="📄 Tạo file mới độc lập" FontWeight="Bold" FontSize="11" Foreground="#F59E0B" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,6,2" />
+                                                                                <Border Background="#374151" CornerRadius="3" Padding="5,1" Margin="0,0,0,2" VerticalAlignment="Center">
+                                                                                    <TextBlock Text="TỆP MỚI RIÊNG BIỆT" FontSize="8.5" FontWeight="Bold" Foreground="#D1D5DB" />
                                                                                 </Border>
                                                                             </WrapPanel>
-                                                                            <TextBlock Text="(Bookmark app đọc truyện có thể bị mất do đổi đường dẫn tệp mới)"
-                                                                                       FontSize="10" Foreground="#94A3B8" TextWrapping="Wrap" />
+                                                                            <TextBlock Text="(Tạo tệp mới riêng biệt, vẫn giữ nguyên 100% cấu trúc folder từng chapter &amp; bookmark mục lục nối tiếp)"
+                                                                                       FontSize="10" Foreground="#CBD5E1" TextWrapping="Wrap" />
+                                                                            <TextBlock Text="• File gốc ban đầu được bảo toàn nguyên vẹn 100%, không bị sửa đổi"
+                                                                                       FontSize="9" Foreground="#94A3B8" TextWrapping="Wrap" />
                                                                         </StackPanel>
                                                                     </RadioButton>
                                                                 </Border>
@@ -6657,7 +6663,7 @@
                                                                         <TextBlock Text="💾 Vị trí lưu tệp mới sau khi nối:" Foreground="#38BDF8" FontSize="10.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,4" TextWrapping="Wrap" />
                                                                         <Button Command="{Binding BrowseMergeAppendOutputFileCommand}" Content="📁 Đổi Vị Trí Lưu..." Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="8,3" CornerRadius="3" Margin="0,0,0,4" />
                                                                     </WrapPanel>
-                                                                    <TextBox Text="{Binding MergeAppendOutputFilePath}" Height="28" CornerRadius="4" Background="#020617" Foreground="#F8FAFC" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                                    <TextBox Text="{Binding MergeAppendOutputFilePath}" Height="28" CornerRadius="4" Background="#020617" Foreground="#F8FAFC" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" TextWrapping="NoWrap" />
                                                                 </StackPanel>
                                                             </Border>
 

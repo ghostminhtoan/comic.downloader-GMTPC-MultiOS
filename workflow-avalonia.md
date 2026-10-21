@@ -461,8 +461,9 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
       + **Nhấn Nhanh Mở Lại App & Menu 3 Giây / Chuột Phải**: Click đơn khôi phục MainWindow nguyên vẹn kích thước ban đầu; nhấn giữ 3s hoặc click chuột phải mở menu tùy chọn nổi (🚫 Tắt bong bóng / 🛑 Tắt app hoàn toàn).
 
 
-36. **Bổ Sung Tùy Chọn Ghi Đè Giữ Bookmark vs Tạo File Mới Kèm Chuẩn Hóa Responsive Android Cho Chức Năng Nối Chap (`MainView.axaml`, `MainViewModel.ArchiveMerger.cs`, `LanguageService.cs`, `bug-fixes-and-solutions.md`)**:
+36. **Bổ Sung Tùy Chọn Ghi Đè Giữ Bookmark vs Tạo File Mới, Bảo Toàn Cấu Trúc Folder Từng Chapter Kèm Chuẩn Hóa Responsive Android Cho Chức Năng Nối Chap (`MainView.axaml`, `MainViewModel.ArchiveMerger.cs`, `LanguageService.cs`, `bug-fixes-and-solutions.md`)**:
     - **Ý Tưởng & Giải Pháp Kỹ Thuật (BUG-023)**: Phân tách rõ ràng 2 kịch bản xuất file khi nối chapter:
-      + **Option 1 (Mặc định & Khuyên dùng)**: "⚡ Ghi đè vào file cũ" (giữ nguyên bookmark & tiến độ trang đọc dở của app đọc truyện theo File Path). Tự động sao lưu bản dự phòng `.bak` trước khi cập nhật.
-      + **Option 2**: "📄 Tạo file mới độc lập" (cảnh báo bookmark app đọc truyện có thể bị mất do thay đổi đường dẫn tệp mới). Khung đổi vị trí lưu chỉ xuất hiện khi chọn Option này.
-    - **Responsive Toàn Diện Trên Android**: Toàn bộ TextBlock trong cụm tùy chọn đều kích hoạt `TextWrapping="Wrap"` và nằm trong layout `StackPanel`/`WrapPanel` co giãn thích ứng, giải quyết triệt để lỗi chữ dài bị tràn viền hoặc cắt xén trên màn hình điện thoại di động.
+      + **Option 1 (Mặc định & Khuyên dùng)**: "⚡ Ghi đè vào file cũ" (giữ nguyên cấu trúc folder, bookmark & tiến độ trang đọc dở của app đọc truyện theo File Path). Tự động sao lưu bản dự phòng `.bak` an toàn 100% trước khi cập nhật.
+      + **Option 2**: "📄 Tạo file mới độc lập" (xuất file riêng biệt, tự động điền đường dẫn gợi ý `_updated`). Khung đổi vị trí lưu chỉ xuất hiện khi chọn Option này.
+    - **Bảo Toàn 100% Cấu Trúc Folder & Bookmarks**: Dù ghi đè hay tạo file mới, toàn bộ các chapter cũ và mới trong file CBZ/ZIP đều được trích xuất và phân tách vào từng thư mục con độc lập (`extractDir/Chap_XXX/`), triệt tiêu hoàn toàn nguy cơ xáo trộn hoặc làm phẳng bừa bãi. Đối với PDF, tự động đánh số Bookmarks mục lục nối tiếp từng chapter.
+    - **Responsive Toàn Diện Trên Android**: Toàn bộ TextBlock trong cụm tùy chọn đều kích hoạt `TextWrapping="Wrap"` và nằm trong layout `StackPanel`/`WrapPanel` co giãn thích ứng, thẻ RadioButton mở rộng vùng chạm `HorizontalAlignment="Stretch"`, giải quyết triệt để lỗi chữ dài bị tràn viền hoặc cắt xén trên màn hình điện thoại di động.

@@ -487,8 +487,38 @@ public partial class MainViewModel
     [ObservableProperty]
     private bool _isMergeAppendOverwrite = true;
 
+    partial void OnIsMergeAppendOverwriteChanged(bool value)
+    {
+        if (_isMergeAppendCreateNew == value)
+        {
+            IsMergeAppendCreateNew = !value;
+        }
+    }
+
     [ObservableProperty]
     private bool _isMergeAppendCreateNew = false;
+
+    partial void OnIsMergeAppendCreateNewChanged(bool value)
+    {
+        if (_isMergeAppendOverwrite == value)
+        {
+            IsMergeAppendOverwrite = !value;
+        }
+    }
+
+    [RelayCommand]
+    public void SetMergeAppendOverwriteMode()
+    {
+        IsMergeAppendOverwrite = true;
+        IsMergeAppendCreateNew = false;
+    }
+
+    [RelayCommand]
+    public void SetMergeAppendCreateNewMode()
+    {
+        IsMergeAppendOverwrite = false;
+        IsMergeAppendCreateNew = true;
+    }
 
     [ObservableProperty]
     private string _mergeAppendOutputFilePath = string.Empty;
@@ -501,36 +531,6 @@ public partial class MainViewModel
 
     [RelayCommand]
     public void SetMergeModeAppend() => IsMergeAppendMode = true;
-
-    [RelayCommand]
-    public void SelectMergeAppendOverwrite()
-    {
-        IsMergeAppendOverwrite = true;
-        IsMergeAppendCreateNew = false;
-    }
-
-    [RelayCommand]
-    public void SelectMergeAppendCreateNew()
-    {
-        IsMergeAppendOverwrite = false;
-        IsMergeAppendCreateNew = true;
-    }
-
-    partial void OnIsMergeAppendOverwriteChanged(bool value)
-    {
-        if (IsMergeAppendCreateNew == value)
-        {
-            IsMergeAppendCreateNew = !value;
-        }
-    }
-
-    partial void OnIsMergeAppendCreateNewChanged(bool value)
-    {
-        if (IsMergeAppendOverwrite == value)
-        {
-            IsMergeAppendOverwrite = !value;
-        }
-    }
 
     partial void OnMergeAppendBaseFilePathChanged(string value)
     {

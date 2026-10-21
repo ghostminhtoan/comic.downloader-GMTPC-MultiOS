@@ -905,6 +905,37 @@
 ---
 
 
+
+### 23. BUG-023: Bổ Sung Tùy Chọn "Ghi Đè Vào File Cũ" & "Tạo File Mới", Bảo Toàn Cấu Trúc Folder Từng Chapter Và Responsive Giao Diện Trên Android (Archive Merger Append Mode)
+
+- **Triệu chứng & Nhu cầu**:
+  - Trong Subtab **Nối Chap Vào File Có Sẵn (Append Mode)**, người dùng mong muốn có 2 lựa chọn rõ ràng:
+    1. *Ghi đè vào file cũ*: Cập nhật trực tiếp vào file ban đầu (Mặc định).
+    2. *Tạo file mới*: Xuất ra một tệp riêng biệt độc lập mà không can thiệp vào file gốc.
+  - **Yêu cầu cốt lõi**: Dù ghi đè hay tạo file mới, hệ thống BẮT BUỘC phải giữ nguyên 100% cấu trúc thư mục (subfolder) cho từng chapter riêng biệt (đối với CBZ / ZIP) và bảo toàn Bookmarks mục lục nối tiếp từng chapter (đối với PDF).
+  - **Yêu cầu giao diện**: Các đoạn văn bản giải thích tính năng và tùy chọn dài phải tự động co giãn, ngắt dòng (Responsive) trên màn hình dọc nhỏ của điện thoại Android, không bị che khuất hay cắt xén chữ.
+- **Nguyên nhân gốc rễ**:
+  - `MainViewModel.ArchiveMerger.cs` trước đó thiếu thuộc tính `IsMergeAppendCreateNew` đồng bộ hai chiều với `IsMergeAppendOverwrite`. Khi giao diện RadioButton binding vào `IsMergeAppendCreateNew`, Avalonia không tìm thấy property dẫn đến việc chọn chế độ Tạo file mới không phản hồi và khung chọn vị trí lưu mới không hiển thị.
+  - Vùng chọn RadioButton trước đó chỉ nhận chạm khi bấm trúng vòng tròn nhỏ của RadioButton thay vì mở rộng toàn bộ diện tích Card; lề `Margin` của nhãn badge chưa tách dòng khiến text bị dính sát khi hiển thị trên màn hình Android hẹp.
+- **Giải pháp triệt để**:
+  1. *Đồng bộ hai chiều trong ViewModel (`MainViewModel.ArchiveMerger.cs`)*:
+     - Bổ sung `IsMergeAppendCreateNew` và logic `OnIsMergeAppendOverwriteChanged` / `OnIsMergeAppendCreateNewChanged` tự động đảo chiều đồng bộ.
+     - Mặc định khởi tạo: `IsMergeAppendOverwrite = true; IsMergeAppendCreateNew = false;` (chuẩn theo yêu cầu tự chọn ghi đè vào file cũ).
+     - Bổ sung các lệnh chuyển đổi nhanh: `SetMergeAppendOverwriteModeCommand` và `SetMergeAppendCreateNewModeCommand`.
+  2. *Bảo toàn 100% cấu trúc Folder & Bookmarks (`ArchiveMergeService.cs`)*:
+     - Dù ghi đè hay tạo file mới: Mọi chapter cũ và chapter mới trong file CBZ/ZIP đều được trích xuất và gom vào từng thư mục con độc lập (`extractDir/Chap_XXX/`), triệt tiêu hoàn toàn nguy cơ xáo trộn hoặc làm phẳng bừa bãi.
+     - Đối với PDF: Giữ nguyên toàn bộ cây Bookmarks mục lục ban đầu và tự động đánh số Bookmarks nối tiếp cho từng chapter mới nạp thêm.
+  3. *Tối ưu giao diện Responsive Android (`MainView.axaml`)*:
+     - Tái cấu trúc 2 Card lựa chọn bằng `RadioButton HorizontalAlignment="Stretch"`, người dùng có thể chạm vào bất kỳ vị trí nào trên Card để kích hoạt lựa chọn.
+     - Thẻ Card khi được chọn có viền sáng nổi bật (`BorderBrush="#38BDF8"` cho Ghi đè, `#F59E0B` cho Tạo file mới).
+     - Toàn bộ TextBlock đều cấu hình `TextWrapping="Wrap"` và `Margin` thoáng đãng, tự động xuống dòng mượt mà trên mọi kích cỡ màn hình Android (từ màn hình nhỏ 360px đến tablet màn hình ngang).
+- **File can thiệp**: `MainViewModel.ArchiveMerger.cs`, `MainView.axaml`, `ArchiveMergeService.cs`, `bug-fixes-and-solutions.md`, `workflow-avalonia.md`.
+- **Quy tắc kiểm thử**:
+  - Mở Subtab Nối Chap: Mặc định tùy chọn "⚡ Ghi đè vào file cũ" được chọn sẵn.
+  - Chạm vào card "📄 Tạo file mới độc lập" -> Tùy chọn được kích hoạt tức thì, khung "💾 Vị trí lưu tệp mới" mở ra và tự động điền đường dẫn gợi ý `_updated`.
+  - Tiến hành nối chap ở cả 2 chế độ (ghi đè và tạo file mới): Mở file kết quả ra kiểm tra bằng WinRAR / ComicScreen / Trình đọc PDF, xác nhận 100% từng chapter đều nằm trong từng thư mục riêng hoặc có bookmark mục lục nhảy từng chương chuẩn xác.
+
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 
