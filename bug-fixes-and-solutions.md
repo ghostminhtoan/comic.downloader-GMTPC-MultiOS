@@ -24,6 +24,7 @@
 | **BUG-014** | Settings UI (Avalonia) | ComboBox chế độ tải thủ công bị đóng băng hiển thị khi đổi lựa chọn | `TranslateLogicalAndVisual` đè LocalValue vào TextBlock template | Bỏ qua ComboBox và visual children trong cơ chế dịch ngôn ngữ | `MainView.axaml.cs`, `MainView.axaml` |
 | **BUG-015** | Scraper & Download Engine | Lỗi 403 trên Windows/Linux với web khác & chế độ Nhúng tải thumbnail thay vì ảnh gốc | HttpClient bị Cloudflare chặn trên PC; scraper chưa phân tách URL Full-Res vs Thumbnail | Headless browser giả lập Android User-Agent & thuật toán nâng cấp URL Full-Resolution | `NativeWebViewService.cs`, `ComicScraperService.cs`, `DownloadEngineService.cs` |
 | **BUG-016** | Native WebView & Headless | Lỗi treo (Deadlock) và timeout 15s trên Windows khi cào web khác (Luscious) | Anonymous pipe `StandardError` bị tràn buffer 4KB do Chromium in log nhưng không được đọc | Tắt redirect stderr, đọc async stdout, thêm `--disable-logging`, dọn dẹp Singleton lock và tăng timeout 30s | `NativeWebViewService.cs`, `INativeWebViewService.cs`, `ComicScraperService.cs`, `DomainRoutingService.cs` |
+| **BUG-017** | Windows Scraper & Floating UI | Lỗi tải Luscious trên Windows & nút Float Batch Tool không hiện, Floating Bar chưa thu nhỏ trên Android | Profile Chromium cố định gây dính lock trên Windows symlink; Tab Index Batch Tool sai số (6 thay vì 7); thiếu gesture Single-Tap | Bỏ profile cố định, async stream wait, timeout 45s, lọc đúng `albumId`; chỉnh Tab Index = 7; thêm Single-Tap collapse | `NativeWebViewService.cs`, `ComicScraperService.cs`, `MainViewModel.DualPictureSort.cs`, `MainView.axaml`, `MainView.axaml.cs` |
 
 ---
 
@@ -323,6 +324,41 @@
 - **Quy tắc kiểm thử**: Chạy tải thực tế trên Windows với URL `https://www.luscious.net/albums/jizoku-the-amazing-digital-c_619112/`. Xác nhận:
   - Lấy link ngay lập tức, không còn deadlock hoặc timeout.
   - Lọc bỏ hoàn toàn avatar, tải đủ trọn vẹn 26/26 trang truyện full-resolution (~300 KB - 1.8 MB/trang) vào đúng thư mục `publish\Downloads\luscious\[default]\[Jizoku] The Amazing Digital Circus...`.
+
+
+
+---
+
+### 21. BUG-017: Khắc Phục Triệt Để Lỗi Tải Luscious Trên Windows & Tích Hợp Cử Chỉ Thu Nhỏ Nổi (Floating Bar & Batch Tool)
+- **Triệu chứng**:
+  1. Trên Android tải được truyện Luscious nhưng trên Windows dán link `https://www.luscious.net/albums/jizoku-the-amazing-digital-c_619112/` thì không tải được, bị timeout hoặc dừng lại.
+  2. Trên Android, trong Tab Công cụ ➔ Phân Loại Ảnh Kép, nút "⚡ BATCH TOOL: BẬT" đã bật nhưng không thấy hiển thị thanh công cụ nổi (Float Batch Tool).
+  3. Cả thanh Floating Quick Control Bar và Float Batch Tool chưa có tính năng chạm nhẹ (Single Tap) vào núm ngăn kéo (dock handle 6 chấm `:::`) để thu nhỏ gọn thành viên thuốc bo tròn nhỏ.
+- **Nguyên nhân gốc rễ**:
+  1. *Lỗi tải Luscious trên Windows*:
+     - `NativeWebViewService` truyền `--user-data-dir` trỏ vào thư mục ứng dụng trên ổ symlink NTFS (`r:\HDD R\ZC SYMLINK\...`). Chromium khi gặp thư mục symlink có khoảng trắng gặp lỗi quyền hoặc bị khóa Singleton lock bởi các phiên Edge khác đang mở.
+     - `process.WaitForExit(timeout)` đồng bộ gây xung đột với việc drain pipe stream khiến tiến trình bị treo hoặc bị kill timeout trước khi kịp dump DOM.
+     - Thiếu bộ lọc `albumId` khiến các ảnh của mục Related Albums và file video `.mp4` bị cào lẫn vào danh sách.
+  2. *Lỗi Batch Tool không hiện*:
+     - Trong `MainViewModel.DualPictureSort.cs`, cờ `IsDualSortBatchToolbarRealVisible` kiểm tra `SelectedToolsTabIndex == 6`, nhưng thực tế Tab "Phân Loại Ảnh Kép" nằm ở **Index 7** (Index 6 là Tab Đổi Tên Rename).
+  3. *Thiếu tương tác Single-Tap*:
+     - `SetupFloatingBarDraggable` và `SetupDualSortBatchFloatingDraggable` chỉ bắt sự kiện Drag mà không phân biệt Single Tap (khoảng cách di chuyển < 6px) để kích hoạt trạng thái Collapse/Expand.
+- **Giải pháp triệt để**:
+  1. *Khắc phục Windows NativeWebView*:
+     - Loại bỏ `--user-data-dir` cố định để Edge headless sử dụng profile sạch độc lập, triệt tiêu 100% xung đột Singleton lock và lỗi symlink.
+     - Chuyển toàn bộ luồng sang hoàn toàn bất đồng bộ: `await Task.WhenAll(readTask, waitTask)` kết hợp `Task.Delay(timeoutSeconds * 1000)`. Nâng timeout lên 45 giây cho các trang SPA/Cloudflare nặng.
+     - Trong `ComicScraperService.cs`, bóc tách `albumId` từ URL Luscious và lọc chỉ nhận các ảnh chứa `/{albumId}/`, tự động nâng cấp lên full resolution `.1280x0.jpg`, loại bỏ hoàn toàn `.mp4` và album gợi ý.
+  2. *Sửa Tab Index Batch Tool*:
+     - Sửa điều kiện hiển thị thành `SelectedRootTabIndex == 3 && SelectedToolsTabIndex == 7 && IsDualSortBatchToolbarVisible`.
+  3. *Hiện thực cơ chế Single-Tap Collapse*:
+     - Trong `MainView.axaml`, bọc các nút điều khiển của Floating Bar vào `FloatingButtonsPanel` và Batch Tool vào `DualSortBatchButtonsPanel`.
+     - Trong `MainView.axaml.cs`, đo lường độ dời con trỏ khi nhả (`OnPointerReleased`): nếu `Math.Abs(deltaX) <= 6 && Math.Abs(deltaY) <= 6` (Single Tap), tự động đảo cờ thu nhỏ/mở rộng. Khi thu nhỏ: ẩn toàn bộ nút con, thanh nổi co lại chỉ còn duy nhất núm 6 chấm `⋮⋮⋮` dạng viên thuốc nhỏ bo tròn xinh xắn; chạm nhẹ lần nữa sẽ mở rộng ra đầy đủ.
+- **File can thiệp**: `NativeWebViewService.cs`, `ComicScraperService.cs`, `MainViewModel.DualPictureSort.cs`, `MainView.axaml`, `MainView.axaml.cs`.
+- **Quy tắc kiểm thử**:
+  - Test tải Luscious trên Windows: Lấy link trong 18s, cào trọn vẹn 13/13 ảnh gốc full resolution (~300 KB - 1.8 MB/ảnh) và tải thành công 100%.
+  - Mở Tab Phân Loại Ảnh Kép: Float Batch Tool hiển thị ngay lập tức khi bật BATCH TOOL: BẬT.
+  - Chạm nhẹ vào núm 6 chấm: Thanh nổi co lại chỉ còn núm nhỏ; chạm lại mở rộng đầy đủ. Kéo thả vẫn di chuyển mượt mà tự do không bị thu nhỏ nhầm.
+
 
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
