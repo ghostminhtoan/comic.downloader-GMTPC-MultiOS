@@ -34,9 +34,75 @@ public static class FloatingBubbleManager
     private static ViewGroup? _inAppContainer;
     private static TextView? _badgeTextView;
     private static ImageView? _iconImageView;
+    private static CircularProgressRingView? _progressRingView;
+    private static GradientDrawable? _badgeBg;
 
     private static readonly Handler _mainHandler = new(Looper.MainLooper!);
     
+    /*
+     Vòng tròn tiến trình Circular / Radial Progress Ring bao quanh Bubble:
+     - Vẽ đường ray nền mờ (Track) 360 độ.
+     - Vẽ vòng cung tiến trình (DrawArc) theo góc quét % (0 đến 360 độ).
+     - Tự động đổi màu viền và nét vẽ theo từng loại tác vụ (Download, Convert/Enhancer, Packer, Splitter, Folders).
+    */
+    private class CircularProgressRingView : View
+    {
+        private readonly Paint _trackPaint = new() { AntiAlias = true };
+        private readonly Paint _progressPaint = new() { AntiAlias = true };
+        private readonly RectF _boundsRect = new();
+        private float _strokeWidth;
+        private float _progress = 0;
+        private bool _isActive = false;
+
+        public CircularProgressRingView(Context context) : base(context)
+        {
+            Init(context);
+        }
+
+        public CircularProgressRingView(IntPtr javaReference, global::Android.Runtime.JniHandleOwnership transfer) 
+            : base(javaReference, transfer)
+        {
+        }
+
+        private void Init(Context context)
+        {
+            _strokeWidth = DpToPx(context, 3.5f);
+
+            _trackPaint.SetStyle(Paint.Style.Stroke);
+            _trackPaint.StrokeWidth = _strokeWidth;
+            _trackPaint.Color = new Color(0x35, 0xFF, 0xFF, 0xFF);
+
+            _progressPaint.SetStyle(Paint.Style.Stroke);
+            _progressPaint.StrokeWidth = _strokeWidth;
+            _progressPaint.StrokeCap = Paint.Cap.Round;
+            _progressPaint.Color = new Color(0x00, 0xE5, 0xFF);
+        }
+
+        public void UpdateProgress(double progressPct, string taskId, bool isRunning)
+        {
+            _isActive = isRunning;
+            _progress = (float)Math.Clamp(progressPct, 0, 100);
+            _progressPaint.Color = GetTaskColor(taskId);
+            Invalidate();
+        }
+
+        protected override void OnDraw(Canvas? canvas)
+        {
+            if (canvas == null) return;
+            base.OnDraw(canvas);
+
+            float halfStroke = _strokeWidth / 2f + 2f;
+            _boundsRect.Set(halfStroke, halfStroke, Width - halfStroke, Height - halfStroke);
+
+            if (_isActive && _progress > 0)
+            {
+                canvas.DrawArc(_boundsRect, 0, 360, false, _trackPaint);
+                float sweepAngle = (_progress / 100f) * 360f;
+                canvas.DrawArc(_boundsRect, -90, sweepAngle, false, _progressPaint);
+            }
+        }
+    }
+
     private class IdleDockRunnable : Java.Lang.Object, Java.Lang.IRunnable
     {
         public void Run()
@@ -392,16 +458,22 @@ public static class FloatingBubbleManager
         container.AddView(_iconImageView, iconLp);
 
         // Badge trạng thái / tiến trình ở góc dưới
+        // Circular Progress Ring bao quanh mép ngoài Bubble
+        _progressRingView = new CircularProgressRingView(context);
+        var ringLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MatchParent, FrameLayout.LayoutParams.MatchParent);
+        container.AddView(_progressRingView, ringLp);
+
+        // Badge trạng thái / tiến trình ở góc dưới
         _badgeTextView = new TextView(context);
         _badgeTextView.SetTextColor(Color.White);
-        _badgeTextView.SetTextSize(ComplexUnitType.Dip, 9);
+        _badgeTextView.SetTextSize(ComplexUnitType.Dip, 8.5f);
         _badgeTextView.Gravity = GravityFlags.Center;
         _badgeTextView.SetTypeface(null, TypefaceStyle.Bold);
 
-        var badgeBg = new GradientDrawable();
-        badgeBg.SetShape(ShapeType.Oval);
-        badgeBg.SetColor((int)new Color(0x10, 0xB9, 0x81)); // Green #10B981
-        _badgeTextView.Background = badgeBg;
+        _badgeBg = new GradientDrawable();
+        _badgeBg.SetShape(ShapeType.Oval);
+        _badgeBg.SetColor((int)new Color(0x10, 0xB9, 0x81));
+        _badgeTextView.Background = _badgeBg;
 
         int badgeSize = DpToPx(context, 16);
         var badgeLp = new FrameLayout.LayoutParams(badgeSize, badgeSize)
@@ -561,17 +633,23 @@ public static class FloatingBubbleManager
         {
             try
             {
-                if (_badgeTextView == null || _bubbleView == null) return;
+                if (_bubbleView == null) return;
 
                 if (task.IsRunning)
                 {
-                    _badgeTextView.Visibility = ViewStates.Visible;
-                    _badgeTextView.Text = task.ProgressPercentage > 0 ? $"{task.ProgressPercentage:0}" : "●";
+                    if (_badgeTextView != null)
+                    {
+                        _badgeTextView.Visibility = ViewStates.Visible;
+                        _badgeTextView.Text = task.ProgressPercentage > 0 ? $"{task.ProgressPercentage:0}" : "●";
+                        int badgeColor = (int)GetTaskColor(task.Id);
+                        _badgeBg?.SetColor(badgeColor);
+                    }
 
-                    // Khi có tiến trình đang chạy, tạm thời tăng độ rõ lên 0.85f trong 2.5 giây rồi mới mờ lại nếu đang docked
+                    _progressRingView?.UpdateProgress(task.ProgressPercentage, task.Id, true);
+
                     if (_isDocked)
                     {
-                        _bubbleView.Animate()?.Alpha(0.85f)?.SetDuration(200)?.Start();
+                        _bubbleView.Animate()?.Alpha(0.90f)?.SetDuration(200)?.Start();
                         _mainHandler.PostDelayed(() =>
                         {
                             if (_isDocked && _bubbleView != null)
@@ -586,17 +664,47 @@ public static class FloatingBubbleManager
                     var primary = BackgroundExecutionService.Instance.GetPrimaryTask();
                     if (primary != null)
                     {
-                        _badgeTextView.Visibility = ViewStates.Visible;
-                        _badgeTextView.Text = $"{primary.ProgressPercentage:0}";
+                        if (_badgeTextView != null)
+                        {
+                            _badgeTextView.Visibility = ViewStates.Visible;
+                            _badgeTextView.Text = $"{primary.ProgressPercentage:0}";
+                            _badgeBg?.SetColor((int)GetTaskColor(primary.Id));
+                        }
+                        _progressRingView?.UpdateProgress(primary.ProgressPercentage, primary.Id, true);
                     }
                     else
                     {
-                        _badgeTextView.Visibility = ViewStates.Gone;
+                        if (_badgeTextView != null)
+                        {
+                            _badgeTextView.Visibility = ViewStates.Gone;
+                        }
+                        _progressRingView?.UpdateProgress(0, string.Empty, false);
                     }
                 }
             }
             catch { }
         });
+    }
+
+    private static Color GetTaskColor(string taskId)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+            return new Color(0x00, 0xE5, 0xFF);
+
+        if (taskId.Contains("download", StringComparison.OrdinalIgnoreCase))
+            return new Color(0x00, 0xE5, 0xFF); // Cyber Cyan
+        if (taskId.Contains("image_enhancer", StringComparison.OrdinalIgnoreCase) || taskId.Contains("convert", StringComparison.OrdinalIgnoreCase))
+            return new Color(0xC0, 0x84, 0xFC); // Purple Neon
+        if (taskId.Contains("file_packer", StringComparison.OrdinalIgnoreCase))
+            return new Color(0xF5, 0x9E, 0x0B); // Amber Cam
+        if (taskId.Contains("image_splitter", StringComparison.OrdinalIgnoreCase))
+            return new Color(0xF4, 0x3F, 0x5E); // Rose Hồng
+        if (taskId.Contains("folder_tools", StringComparison.OrdinalIgnoreCase))
+            return new Color(0x10, 0xB9, 0x81); // Emerald Xanh
+        if (taskId.Contains("archive_merger", StringComparison.OrdinalIgnoreCase))
+            return new Color(0x38, 0xBD, 0xF8); // Sky Blue
+
+        return new Color(0x00, 0xE5, 0xFF);
     }
 
     public static void HideBubble()
