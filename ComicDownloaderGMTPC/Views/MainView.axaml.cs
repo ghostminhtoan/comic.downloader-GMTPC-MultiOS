@@ -2035,6 +2035,11 @@ public partial class MainView : UserControl
     {
         if (element == null || !visited.Add(element)) return;
 
+        // Bỏ qua toàn bộ ComboBox và các element bên trong ComboBox, TextBox, NumericUpDown
+        // để không ghi đè LocalValue làm đóng băng Text hiển thị của SelectedItem trong ComboBox
+        if (element is ComboBox || element is TextBox || element is NumericUpDown) return;
+        if (element is Visual visualElement && visualElement.FindAncestorOfType<ComboBox>() != null) return;
+
         TranslateElement(element, toVi);
 
         if (element is ILogical logical)

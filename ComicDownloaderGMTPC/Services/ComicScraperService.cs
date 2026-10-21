@@ -459,18 +459,33 @@ public class ComicScraperService
                 return await ScrapeHitomiBookAsync(url, index, domain, ct).ConfigureAwait(false);
             }
 
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            string? html = null;
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                string baseDomain = DomainRoutingService.NormalizeUrl(url);
+                req.Headers.Add("Referer", baseDomain);
+                using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                if (res.IsSuccessStatusCode)
+                {
+                    html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                }
+            }
+            catch { }
 
-            if (!res.IsSuccessStatusCode)
+            // Nếu HttpClient bị Cloudflare 403, 503 hoặc network block, tự động fallback sang NativeWebView headless browser
+            if (string.IsNullOrWhiteSpace(html) && NativeWebViewService.Instance.IsAvailable)
+            {
+                html = await NativeWebViewService.Instance.FetchHtmlAsync(url, 15, ct).ConfigureAwait(false);
+            }
+
+            if (string.IsNullOrWhiteSpace(html))
             {
                 item.Title = ExtractFallbackTitleFromUrl(url);
                 item.Status = "Error";
-                item.StatusMessage = $"HTTP {(int)res.StatusCode}";
+                item.StatusMessage = "HTTP Forbidden (403) or Connection Failed";
                 return item;
             }
-
-            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
             item.Title = ExtractTitle(html, url);
             item.CoverUrl = ExtractCoverUrl(html, url);
@@ -534,13 +549,27 @@ public class ComicScraperService
                 }
 
                 // Với mọi trang web thông thường: Tải trực tiếp các thẻ ảnh hiển thị trên trang
-                using var directReq = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
-                string directBaseDomain = DomainRoutingService.NormalizeUrl(chapterUrl);
-                directReq.Headers.Add("Referer", directBaseDomain);
-                using var directRes = await _httpClient.SendAsync(directReq, ct).ConfigureAwait(false);
-                if (directRes.IsSuccessStatusCode)
+                string? directHtml = null;
+                try
                 {
-                    string directHtml = await directRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var directReq = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
+                    string directBaseDomain = DomainRoutingService.NormalizeUrl(chapterUrl);
+                    directReq.Headers.Add("Referer", directBaseDomain);
+                    using var directRes = await _httpClient.SendAsync(directReq, ct).ConfigureAwait(false);
+                    if (directRes.IsSuccessStatusCode)
+                    {
+                        directHtml = await directRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    }
+                }
+                catch { }
+
+                if (string.IsNullOrWhiteSpace(directHtml) && NativeWebViewService.Instance.IsAvailable)
+                {
+                    directHtml = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 15, ct).ConfigureAwait(false);
+                }
+
+                if (!string.IsNullOrWhiteSpace(directHtml))
+                {
                     var directImgs = ExtractDirectImagesFromHtml(directHtml, chapterUrl);
                     if (directImgs.Count > 0) return directImgs;
                 }
@@ -572,13 +601,26 @@ public class ComicScraperService
                 return await ExtractHitomiChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
             }
 
-            using var req = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
-            string baseDomain = DomainRoutingService.NormalizeUrl(chapterUrl);
-            req.Headers.Add("Referer", baseDomain);
-            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-            if (!res.IsSuccessStatusCode) return images;
+            string? html = null;
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
+                string baseDomain = DomainRoutingService.NormalizeUrl(chapterUrl);
+                req.Headers.Add("Referer", baseDomain);
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                if (res.IsSuccessStatusCode)
+                {
+                    html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                }
+            }
+            catch { }
 
-            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(html) && NativeWebViewService.Instance.IsAvailable)
+            {
+                html = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 15, ct).ConfigureAwait(false);
+            }
+
+            if (string.IsNullOrWhiteSpace(html)) return images;
 
             // Bổ sung cho Chế độ Nhúng (Embedded): Kiểm tra nếu trang có nhúng iframe viewer
             if (isManual && string.Equals(manualMode, "Embedded", StringComparison.OrdinalIgnoreCase))
@@ -690,6 +732,16 @@ public class ComicScraperService
                 if (seen.Add(fullUrl))
                 {
                     images.Add(fullUrl);
+                }
+            }
+
+            // Nếu không tìm thấy ảnh trong searchScope hoặc ở chế độ Nhúng/Trực tiếp:
+            if (images.Count == 0 || (isManual && string.Equals(manualMode, "Embedded", StringComparison.OrdinalIgnoreCase)) || !isManual)
+            {
+                var embeddedImgs = ExtractEmbeddedImagesFromHtml(html, chapterUrl);
+                if (embeddedImgs.Count > 0)
+                {
+                    return embeddedImgs;
                 }
             }
         }
@@ -4715,6 +4767,82 @@ public class ComicScraperService
         catch {}
 
         return imageUrls;
+    }
+
+    public List<string> ExtractEmbeddedImagesFromHtml(string html, string pageUrl)
+    {
+        var rawImages = ExtractDirectImagesFromHtml(html, pageUrl);
+        if (rawImages.Count == 0) return rawImages;
+
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Kiểm tra xem danh sách có các trang truyện được đánh số hay không (ví dụ 1t.webp, 2t.webp...)
+        bool hasNumberedPages = rawImages.Any(u => Regex.IsMatch(u, @"(?:^|/|)\d+(?:t)?\.(?:webp|jpg|jpeg|png|avif|gif)", RegexOptions.IgnoreCase));
+
+        foreach (var img in rawImages)
+        {
+            // Nếu có các trang truyện được đánh số, lọc bỏ các ảnh bìa cover/thumb rác trùng lặp
+            if (hasNumberedPages)
+            {
+                try
+                {
+                    string fileName = Path.GetFileName(new Uri(img).AbsolutePath).ToLowerInvariant();
+                    if (fileName.StartsWith("cover.") || fileName.StartsWith("thumb.") || fileName.Contains("avatar") || fileName.Contains("banner"))
+                    {
+                        continue;
+                    }
+                }
+                catch { }
+            }
+
+            // Nâng cấp lên Full Resolution URL cho chế độ Nhúng
+            string upgraded = UpgradeToFullResolutionUrl(img);
+            if (seen.Add(upgraded))
+            {
+                result.Add(upgraded);
+            }
+        }
+
+        return result.Count > 0 ? result : rawImages;
+    }
+
+    public static string UpgradeToFullResolutionUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return url;
+
+        // 1. luscious.net: đổi .315x0. hoặc .640x0. thành .1280x0. (ảnh gốc độ phân giải cao nhất)
+        if (url.Contains(".315x0.") || url.Contains(".640x0."))
+        {
+            return Regex.Replace(url, @"\.(?:315x0|640x0)\.", ".1280x0.");
+        }
+
+        // 2. nhentai / hentaiforce / các web gallery đánh số trang có chữ 't' sau số:
+        // ví dụ: /galleries/4256488/1t.webp -> /galleries/4256488/1.webp
+        if (Regex.IsMatch(url, @"(?<=\d)t(?=\.(?:webp|jpg|jpeg|png|avif|gif))", RegexOptions.IgnoreCase))
+        {
+            return Regex.Replace(url, @"(?<=\d)t(?=\.(?:webp|jpg|jpeg|png|avif|gif))", "");
+        }
+
+        // 3. /thumbs/ hoặc /thumbnails/ -> /images/
+        if (url.Contains("/thumbs/") || url.Contains("/thumbnails/"))
+        {
+            return Regex.Replace(url, @"/(?:thumbs|thumbnails)/", "/images/", RegexOptions.IgnoreCase);
+        }
+
+        // 4. Các hậu tố thumbnail: -thumb, _thumb, -small, _small, -preview, _preview, -150x, _300x
+        if (Regex.IsMatch(url, @"[-_](?:thumb|small|preview|150x|300x)(?=\.(?:webp|jpg|jpeg|png|avif|gif))", RegexOptions.IgnoreCase))
+        {
+            return Regex.Replace(url, @"[-_](?:thumb|small|preview|150x|300x)(?=\.(?:webp|jpg|jpeg|png|avif|gif))", "");
+        }
+
+        // 5. Hitomi / E-Hentai thumbnail: _m.jpg -> .jpg
+        if (Regex.IsMatch(url, @"_m(?=\.(?:webp|jpg|jpeg|png|avif|gif))", RegexOptions.IgnoreCase))
+        {
+            return Regex.Replace(url, @"_m(?=\.(?:webp|jpg|jpeg|png|avif|gif))", "");
+        }
+
+        return url;
     }
 
     public List<string> ExtractDirectImagesFromHtml(string html, string pageUrl)

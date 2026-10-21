@@ -54,7 +54,7 @@
                         <!-- Chọn kiểu thư mục -->
                         <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
                             <TextBlock Text="📁 Thư mục:" Foreground="#9CA3AF" VerticalAlignment="Center" FontSize="11" />
-                            <ComboBox ItemsSource="{Binding ModeSelections}" SelectedItem="{Binding ModeSelection}" Width="120" Height="28" FontSize="11" />
+                            <ComboBox ItemsSource="{Binding ModeSelections}" SelectedItem="{Binding ModeSelection, Mode=TwoWay}" Width="120" Height="28" FontSize="11" />
                         </StackPanel>
 
                         <!-- Đổi ngôn ngữ -->
@@ -1597,7 +1597,7 @@
                                                       FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" 
                                                       VerticalAlignment="Center"
                                                       ToolTip.Tip="Bật/tắt chế độ tải thủ công (mặc định TẮT). Khi tắt, app sẽ tải mặc định theo từng web như hiện có. Khi bật, bất kể web gì cũng sẽ tự động tải theo chế độ cài sẵn bên cạnh." />
-                                            <ComboBox ItemsSource="{Binding ManualDownloadModes}" SelectedItem="{Binding SelectedManualDownloadMode}"
+                                            <ComboBox ItemsSource="{Binding ManualDownloadModes}" SelectedItem="{Binding SelectedManualDownloadMode, Mode=TwoWay}"
                                                       Width="140" Height="28" FontSize="11" VerticalContentAlignment="Center"
                                                       ToolTip.Tip="Chế độ tải cài sẵn khi bật tải thủ công:&#x0a;• Trực tiếp: Tải trực tiếp các ảnh/thumbnail có sẵn trên trang.&#x0a;• Nhúng: Tải bóc tách sâu qua các trang viewer/reader nhúng để lấy ảnh gốc độ phân giải cao nhất." />
                                         </StackPanel>

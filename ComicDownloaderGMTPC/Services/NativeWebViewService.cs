@@ -64,7 +64,8 @@ public class NativeWebViewService : INativeWebViewService
                 FileName = _browserExecutablePath!,
                 Arguments = $"--headless=new --disable-gpu --disable-software-rasterizer --no-sandbox " +
                             $"--user-data-dir=\"{_cacheDirectory}\" " +
-                            $"--virtual-time-budget=3000 " +
+                            $"--user-agent=\"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36\" " +
+                            $"--virtual-time-budget=5000 " +
                             $"--enable-features=DnsOverHttps " +
                             $"--dns-over-https-templates=\"https://cloudflare-dns.com/dns-query\" " +
                             $"--dump-dom \"{url}\"",

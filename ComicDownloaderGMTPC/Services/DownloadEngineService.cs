@@ -854,7 +854,8 @@ public class DownloadEngineService
                 SafeCreateDirectory(currentBookDir);
 
                 string chapterDir;
-                bool isMultiMode = mode != null && (mode.Contains("Multi", StringComparison.OrdinalIgnoreCase) || mode.Contains("Nhiều", StringComparison.OrdinalIgnoreCase));
+                bool isMultiMode = mode != null && (mode.Contains("Multi", StringComparison.OrdinalIgnoreCase) || mode.Contains("Nhiều", StringComparison.OrdinalIgnoreCase));
+
                 if (isMultiMode)
                 {
                     chapterDir = Path.Combine(currentTargetServerDir, MakeSafeFilename($"{safeBookName}-{chapterDirName}", 100));
@@ -1203,6 +1204,36 @@ public class DownloadEngineService
             }
         }
 
+        // Candidate fallback cho Luscious (full-res 1280x0 -> 640x0 -> 315x0)
+        if (imageUrl.Contains(".1280x0."))
+        {
+            string c640 = imageUrl.Replace(".1280x0.", ".640x0.");
+            string c315 = imageUrl.Replace(".1280x0.", ".315x0.");
+            if (!candidateUrls.Contains(c640, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(c640);
+            if (!candidateUrls.Contains(c315, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(c315);
+        }
+
+        // Candidate fallback cho nhentai / hentaiforce / galleries khi tải ảnh full-res
+        var numPageMatch = System.Text.RegularExpressions.Regex.Match(imageUrl, @"(?<prefix>https?://[^/]+/galleries/\d+/(?<page>\d+))\.(?<ext>webp|jpg|jpeg|png)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (numPageMatch.Success)
+        {
+            string pPrefix = numPageMatch.Groups["prefix"].Value;
+            string pExt = numPageMatch.Groups["ext"].Value.ToLowerInvariant();
+            string pPage = numPageMatch.Groups["page"].Value;
+            string[] otherExts = ["jpg", "png", "webp"];
+            foreach (var ext in otherExts)
+            {
+                if (!string.Equals(ext, pExt, StringComparison.OrdinalIgnoreCase))
+                {
+                    string altUrl = $"{pPrefix}.{ext}";
+                    if (!candidateUrls.Contains(altUrl, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(altUrl);
+                }
+            }
+            // Thêm cả thumbnail URL làm fallback an toàn cuối cùng
+            string thumbFallback = $"{pPrefix.Substring(0, pPrefix.Length - pPage.Length)}{pPage}t.{pExt}";
+            if (!candidateUrls.Contains(thumbFallback, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(thumbFallback);
+        }
+
         for (int attempt = 1; attempt <= 4; attempt++)
         {
             if (ct.IsCancellationRequested) return false;
@@ -1270,10 +1301,21 @@ public class DownloadEngineService
                         effectiveReferer = "https://hentaiforce.net/";
                     }
 
+                    if (string.IsNullOrEmpty(effectiveReferer))
+                    {
+                        if (Uri.TryCreate(targetUrl, UriKind.Absolute, out var targetUri))
+                        {
+                            effectiveReferer = $"{targetUri.Scheme}://{targetUri.Host}/";
+                        }
+                    }
+
                     if (!string.IsNullOrEmpty(effectiveReferer))
                     {
                         req.Headers.Add("Referer", effectiveReferer);
                     }
+
+                    req.Headers.TryAddWithoutValidation("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
+                    req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
 
                     using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
                     if (res.IsSuccessStatusCode)
