@@ -1,4 +1,4 @@
-﻿# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
+# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
 
 > **Dự án**: Comic Downloader GMTPC Avalonia Multi-OS (Windows, Linux, Android)  
 
@@ -935,6 +935,46 @@
   - Chạm vào card "📄 Tạo file mới độc lập" -> Tùy chọn được kích hoạt tức thì, khung "💾 Vị trí lưu tệp mới" mở ra và tự động điền đường dẫn gợi ý `_updated`.
   - Tiến hành nối chap ở cả 2 chế độ (ghi đè và tạo file mới): Mở file kết quả ra kiểm tra bằng WinRAR / ComicScreen / Trình đọc PDF, xác nhận 100% từng chapter đều nằm trong từng thư mục riêng hoặc có bookmark mục lục nhảy từng chương chuẩn xác.
 
+
+### 24. BUG-024: Sửa Lỗi Tự Động Gộp Chapter Có Số Thập Phân (3.1, 3.2...) Vào Chapter 3 Và Bảo Toàn Cấu Trúc Folder Chapter Khi Nối Vào PDF
+
+- **Triệu chứng & Nhu cầu**:
+  - Khi sử dụng tính năng "Nối chap vào file có sẵn" (Append Mode) trong Subtab Gộp File Lẻ (Archive Merger):
+    1. Khi folder hoặc file có số thập phân (ví dụ: `3.1`, `3.2`, `100.5`...), hệ thống tự động gộp các chapter này vào chung một thư mục `chapter 3`, khiến toàn bộ ảnh của `3.1` và `3.2` bị ném chung vào một chỗ và mất tên chapter gốc.
+    2. Khi nối folder vào file PDF: Các folder chapter bên trong bị mất, toàn bộ nội dung bị biến thành 1 chapter duy nhất hoặc bị mất bookmarks phân đoạn chapter.
+- **Nguyên nhân gốc rễ**:
+  1. *Lỗi gộp sai số thập phân*:
+     - Trong .NET, phương thức `Path.GetFileNameWithoutExtension("3.1")` coi `.1` là phần mở rộng file (file extension) và tự động cắt bỏ `.1`, trả về `"3"`.
+     - Tương tự, `Path.GetFileNameWithoutExtension("Chap 3.2")` trả về `"Chap 3"`.
+     - Trong `ArchiveMergeService.cs`:
+       + Hàm `ParseChapterInfo` gọi `Path.GetFileNameWithoutExtension(name)`, dẫn đến regex chỉ đọc được số nguyên `3`, biến `3.1` và `3.2` thành cùng chapter số 3.
+       + Hàm `MakeSafeFolderName` gọi `Path.GetFileNameWithoutExtension(item.Name)`, biến thư mục `3.1` và `3.2` thành tên thư mục `"3"`. Khi đóng gói vào file nén `.cbz`/`.zip`, cả 2 rơi vào cùng folder `"3"`. Khi nạp vào PDF, bookmark của cả hai đều bị ghi thành `"3"`.
+  2. *Lỗi mất cấu trúc folder khi nối vào PDF*:
+     - Hàm `CollectSourceItems` chỉ quét các thư mục con ở cấp 1 (`TopDirectoryOnly`). Nếu người dùng chọn thư mục cha của bộ truyện hoặc cấu trúc lồng nhau (ví dụ: `Conan/Volume 1/Chap 101`), hệ thống nhận diện cả thư mục `Conan` là 1 item duy nhất, sau đó quét đệ quy toàn bộ ảnh bên trong gộp thành 1 chapter duy nhất -> Mất sạch các folder chapter con!
+     - File PDF sau khi ghi đè bị giữ lại bản ghi cũ trong bộ nhớ đệm `_metadataCache` của `PdfComicParser` do NTFS File Tunneling giữ nguyên LastWriteTimeUtc, khiến ứng dụng hiển thị thông tin cũ không có chapter mới.
+- **Giải pháp triệt để**:
+  1. *Xây dựng hàm `StripArchiveOrDocExtension` thông minh*:
+     - Chỉ bóc tách phần mở rộng tệp nếu nó thực sự nằm trong danh sách các đuôi file hợp lệ (`.zip`, `.cbz`, `.rar`, `.cbr`, `.pdf`, `.mobi`, `.jpg`, `.png`, `.webp`...).
+     - Nếu tên không có đuôi file sách/ảnh hợp lệ (ví dụ `"3.1"`, `"3.2"`, `"Chap 3.5"`), hàm giữ nguyên 100% tên gốc.
+     - Cập nhật `ParseChapterInfo` sử dụng `StripArchiveOrDocExtension`, nhận diện chuẩn xác số thập phân `3.1` (ParsedChapterNumber = 3.1, FormattedLabel = "3.1").
+  2. *Bảo toàn 100% tên folder gốc trong `MakeSafeFolderName`*:
+     - Nếu `item.IsDirectory == true`: Lấy nguyên vẹn `item.Name` (chỉ khử ký tự cấm OS `[\\/:*?""<>|]`). Tuyệt đối không gọi `GetFileNameWithoutExtension`.
+     - Đảm bảo folder `3.1` xuất ra đúng là `3.1`, folder `3.2` xuất ra đúng là `3.2`.
+  3. *Thuật toán quét đệ quy `CollectChapterFoldersRecursive`*:
+     - Tự động đào sâu qua các tầng thư mục cha để tìm chính xác các thư mục chapter thực sự chứa ảnh trực tiếp (leaf chapter folders).
+     - Hỗ trợ toàn diện mọi cấu trúc: thư mục phẳng, thư mục lồng 2-4 cấp, hoặc thư mục chỉ chứa ảnh trực tiếp.
+  4. *Bảo toàn Bookmarks PDF & Vô hiệu hóa cache*:
+     - Bổ sung hàm `PdfComicParser.Instance.InvalidateCache(pdfPath)`.
+     - Sau khi nối xong file PDF, xóa cache lập tức để giao diện Thư viện và Reader đọc file mới nhất với đầy đủ các mục mục lục Bookmarks từng chapter riêng biệt.
+- **File can thiệp**: `ArchiveMergeService.cs`, `PdfComicParser.cs`, `bug-fixes-and-solutions.md`, `workflow-avalonia.md`.
+- **Quy tắc kiểm thử**:
+  - Tạo bộ folder test chứa `Chap 3.1` và `Chap 3.2` nằm trong thư mục lồng nhau `Conan/Volume 1/`.
+  - Thực hiện nối vào file PDF có sẵn:
+    + Log xác nhận: `Đang ghép nối chương mới [3.1]: Chap 3.1...` và `Đang ghép nối chương mới [3.2]: Chap 3.2...`.
+    + Đọc lại cấu trúc PDF bằng `PdfComicParser.InspectPdf`: Xác nhận các Bookmarks cũ được giữ nguyên, và 2 bookmark mới `Chap 3.1` và `Chap 3.2` nằm riêng biệt tại đúng vị trí trang tương ứng.
+  - Kiểm tra nối vào file `.cbz`/`.zip`: Thư mục con bên trong file nén giữ nguyên tên `Chap 3.1` và `Chap 3.2` riêng biệt, không bị gộp vào `chapter 3`.
+
+---
 
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 

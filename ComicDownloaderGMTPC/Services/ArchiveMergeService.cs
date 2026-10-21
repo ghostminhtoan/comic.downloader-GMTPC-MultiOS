@@ -65,6 +65,28 @@ public class ArchiveMergeService
         ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".jfif", ".gif"
     };
 
+    private static readonly HashSet<string> ValidArchiveAndDocExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".zip", ".cbz", ".rar", ".cbr", ".7z", ".tar", ".gz",
+        ".pdf", ".mobi", ".prc", ".azw", ".azw3",
+        ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".jfif", ".gif"
+    };
+
+    /// <summary>
+    /// Chỉ bóc tách phần mở rộng tệp nếu nó thực sự là một định dạng file nén, tài liệu hoặc ảnh đã biết.
+    /// Tuyệt đối giữ nguyên vẹn tên chapter có số thập phân như "3.1", "3.2", "Chap 3.5".
+    /// </summary>
+    public static string StripArchiveOrDocExtension(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+        string ext = Path.GetExtension(name);
+        if (!string.IsNullOrEmpty(ext) && ValidArchiveAndDocExtensions.Contains(ext))
+        {
+            return Path.GetFileNameWithoutExtension(name);
+        }
+        return name;
+    }
+
     public Action<string, string>? LogEmitted { get; set; }
 
     /// <summary>
@@ -269,7 +291,8 @@ public class ArchiveMergeService
     }
 
     /// <summary>
-    /// Thu thập các file chapter lẻ (.pdf, .zip, .cbz, .rar, .cbr, .mobi) hoặc thư mục con chứa ảnh
+    /// Thu thập các file chapter lẻ (.pdf, .zip, .cbz, .rar, .cbr, .mobi) hoặc thư mục con chứa ảnh.
+    /// Tự động đào sâu qua các thư mục cha lồng nhau để bóc tách chính xác từng thư mục chapter chứa ảnh.
     /// </summary>
     private List<ArchiveMergeSourceItem> CollectSourceItems(string inputFolder)
     {
@@ -280,7 +303,6 @@ public class ArchiveMergeService
             var files = Directory.GetFiles(inputFolder, "*.*", SearchOption.TopDirectoryOnly);
             foreach (var f in files)
             {
-                string extension = Path.GetExtension(f);
                 bool isSupported = LibraryScannerService.IsArchiveFile(f) ||
                                    LibraryScannerService.IsPdfFile(f) ||
                                    LibraryScannerService.IsMobiFile(f);
@@ -301,30 +323,8 @@ public class ArchiveMergeService
                 });
             }
 
-            // Quét cả các folder chapter con (nếu có)
-            var dirs = Directory.GetDirectories(inputFolder, "*", SearchOption.TopDirectoryOnly);
-            foreach (var d in dirs)
-            {
-                string dirName = Path.GetFileName(d);
-                if (dirName.Equals("merged", StringComparison.OrdinalIgnoreCase) ||
-                    dirName.Equals("packed", StringComparison.OrdinalIgnoreCase) ||
-                    dirName.StartsWith('.'))
-                {
-                    continue;
-                }
-
-                ParseChapterInfo(dirName, out double num, out int baseInt, out string formatted);
-
-                list.Add(new ArchiveMergeSourceItem
-                {
-                    FullPath = d,
-                    Name = dirName,
-                    IsDirectory = true,
-                    ParsedChapterNumber = num,
-                    IntegerBaseNumber = baseInt,
-                    FormattedChapterLabel = formatted
-                });
-            }
+            // Quét các folder chapter con (hỗ trợ cả cấu trúc thư mục phẳng lẫn lồng nhau)
+            CollectChapterFoldersRecursive(inputFolder, list, currentDepth: 0, maxDepth: 4);
         }
         catch { }
 
@@ -341,12 +341,62 @@ public class ArchiveMergeService
         return list;
     }
 
+    private void CollectChapterFoldersRecursive(string currentFolder, List<ArchiveMergeSourceItem> list, int currentDepth, int maxDepth)
+    {
+        if (currentDepth > maxDepth) return;
+
+        string[] dirs;
+        try { dirs = Directory.GetDirectories(currentFolder, "*", SearchOption.TopDirectoryOnly); }
+        catch { dirs = Array.Empty<string>(); }
+
+        foreach (var d in dirs)
+        {
+            string dirName = Path.GetFileName(d);
+            if (dirName.Equals("merged", StringComparison.OrdinalIgnoreCase) ||
+                dirName.Equals("packed", StringComparison.OrdinalIgnoreCase) ||
+                dirName.StartsWith('.'))
+            {
+                continue;
+            }
+
+            // Kiểm tra xem thư mục này có chứa file ảnh trực tiếp không
+            bool hasDirectImages = false;
+            try
+            {
+                hasDirectImages = Directory.EnumerateFiles(d, "*.*", SearchOption.TopDirectoryOnly)
+                    .Any(f => ValidImageExtensions.Contains(Path.GetExtension(f)));
+            }
+            catch { }
+
+            if (hasDirectImages)
+            {
+                ParseChapterInfo(dirName, out double num, out int baseInt, out string formatted);
+
+                list.Add(new ArchiveMergeSourceItem
+                {
+                    FullPath = d,
+                    Name = dirName,
+                    IsDirectory = true,
+                    ParsedChapterNumber = num,
+                    IntegerBaseNumber = baseInt,
+                    FormattedChapterLabel = formatted
+                });
+            }
+            else
+            {
+                // Thư mục này không có ảnh trực tiếp, có thể là thư mục cha (ví dụ "Conan" hoặc "Season 1")
+                // Tiếp tục đào sâu xuống các thư mục con bên trong để tìm các thư mục chapter thực sự chứa ảnh
+                CollectChapterFoldersRecursive(d, list, currentDepth + 1, maxDepth);
+            }
+        }
+    }
+
     /// <summary>
-    /// Trích xuất số chương từ tên file/folder (nhận diện cả chap số nguyên và chap số thập phân như 100.1, 100.5)
+    /// Trích xuất số chương từ tên file/folder (nhận diện cả chap số nguyên và chap số thập phân như 3.1, 3.2, 100.1, 100.5)
     /// </summary>
     public static void ParseChapterInfo(string name, out double chapterNumber, out int baseInteger, out string formattedLabel)
     {
-        string nameWithoutExt = Path.GetFileNameWithoutExtension(name);
+        string nameWithoutExt = StripArchiveOrDocExtension(name);
 
         // Regex ưu tiên nhận diện từ khóa chapter: chap, chapter, c, chương, tập, ep, vol
         var match = Regex.Match(nameWithoutExt, @"(?:chap(?:ter)?|chương|tập|ep|c)\s*[:\-–]?\s*([0-9]+(?:\.[0-9]+)?)", RegexOptions.IgnoreCase);
@@ -516,11 +566,12 @@ public class ArchiveMergeService
     }
 
     /// <summary>
-    /// Đặt tên an toàn cho folder con bên trong file nén (ví dụ "Chap 001", "Chap 016.1", "Chương 100")
+    /// Đặt tên an toàn cho folder con bên trong file nén (ví dụ "Chap 001", "3.1", "3.2", "Chap 016.1", "Chương 100").
+    /// Giữ nguyên vẹn 100% tên chapter gốc và các số thập phân.
     /// </summary>
     private string MakeSafeFolderName(ArchiveMergeSourceItem item)
     {
-        string raw = Path.GetFileNameWithoutExtension(item.Name);
+        string raw = item.IsDirectory ? item.Name : StripArchiveOrDocExtension(item.Name);
         raw = Regex.Replace(raw, @"[\\/:*?""<>|]", "_").Trim();
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -961,7 +1012,9 @@ public class ArchiveMergeService
                         }
                         else
                         {
-                            bookmarks.Add((Path.GetFileNameWithoutExtension(baseFilePath), 0));
+                            string baseTitle = StripArchiveOrDocExtension(Path.GetFileName(baseFilePath));
+                            if (string.IsNullOrWhiteSpace(baseTitle)) baseTitle = "Phần gốc";
+                            bookmarks.Add((baseTitle, 0));
                         }
                     }
 
@@ -1026,6 +1079,9 @@ public class ArchiveMergeService
                         if (File.Exists(outFilePath)) File.Delete(outFilePath);
                         File.Move(tempPdfOut, outFilePath);
                     }
+
+                    PdfComicParser.Instance.InvalidateCache(baseFilePath);
+                    PdfComicParser.Instance.InvalidateCache(outFilePath);
 
                     progress?.Report((100, 100, "Hoàn tất nối chapter vào PDF!"));
                     string msg = $"Đã nối thành công {totalNew} chương mới vào file PDF! (Tổng: {allImages.Count} trang, {bookmarks.Count} mục bookmarks)";

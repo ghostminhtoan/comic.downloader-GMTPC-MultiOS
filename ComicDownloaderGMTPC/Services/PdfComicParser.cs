@@ -121,6 +121,20 @@ public sealed class PdfComicParser
         return parsed;
     }
 
+    public void InvalidateCache(string pdfPath)
+    {
+        if (string.IsNullOrWhiteSpace(pdfPath)) return;
+        try
+        {
+            string fullPath = Path.GetFullPath(pdfPath);
+            _metadataCache.TryRemove(fullPath, out _);
+        }
+        catch
+        {
+            _metadataCache.TryRemove(pdfPath, out _);
+        }
+    }
+
     private static PdfDocumentMetadata ParsePdfStructure(string fullPath, DateTime lastWriteUtc)
     {
         var result = new PdfDocumentMetadata

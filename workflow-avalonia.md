@@ -1,4 +1,4 @@
-﻿# Workflow hiện tại - Comic Downloader GMTPC Avalonia Multi-OS
+# Workflow hiện tại - Comic Downloader GMTPC Avalonia Multi-OS
 Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ, ít file, build sạch, không phá lane khác, sau khi build luôn luôn upload beta.
 
 ## 1. Quy tắc nền
@@ -467,3 +467,8 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
       + **Option 2**: "📄 Tạo file mới độc lập" (xuất file riêng biệt, tự động điền đường dẫn gợi ý `_updated`). Khung đổi vị trí lưu chỉ xuất hiện khi chọn Option này.
     - **Bảo Toàn 100% Cấu Trúc Folder & Bookmarks**: Dù ghi đè hay tạo file mới, toàn bộ các chapter cũ và mới trong file CBZ/ZIP đều được trích xuất và phân tách vào từng thư mục con độc lập (`extractDir/Chap_XXX/`), triệt tiêu hoàn toàn nguy cơ xáo trộn hoặc làm phẳng bừa bãi. Đối với PDF, tự động đánh số Bookmarks mục lục nối tiếp từng chapter.
     - **Responsive Toàn Diện Trên Android**: Toàn bộ TextBlock trong cụm tùy chọn đều kích hoạt `TextWrapping="Wrap"` và nằm trong layout `StackPanel`/`WrapPanel` co giãn thích ứng, thẻ RadioButton mở rộng vùng chạm `HorizontalAlignment="Stretch"`, giải quyết triệt để lỗi chữ dài bị tràn viền hoặc cắt xén trên màn hình điện thoại di động.
+
+37. **Khắc Phục Lỗi Gộp Số Thập Phân (3.1, 3.2...) & Bảo Toàn Cấu Trúc Folder Chapter Khi Nối Vào PDF (`ArchiveMergeService.cs`, `PdfComicParser.cs`, `bug-fixes-and-solutions.md`)**:
+    - **Ý Tưởng & Giải Pháp Kỹ Thuật (BUG-024)**:
+      + **Fix Lỗi Bị Gộp Vào Chapter 3**: Khắc phục hành vi mặc định của .NET `Path.GetFileNameWithoutExtension("3.1")` coi `.1` là file extension và cắt bỏ. Xây dựng hàm `StripArchiveOrDocExtension` thông minh chỉ bóc tách đuôi file nén/tài liệu hợp lệ, bảo toàn 100% số thập phân trong `ParseChapterInfo` (`ParsedChapterNumber = 3.1`, `FormattedLabel = "3.1"`) và `MakeSafeFolderName` (giữ nguyên tên folder `3.1`, `3.2` riêng biệt trong CBZ/ZIP/MOBI/PDF).
+      + **Fix Lỗi Mất Cấu Trúc Folder Khi Nối Vào PDF**: Triển khai thuật toán quét đệ quy `CollectChapterFoldersRecursive` tự động đào sâu qua các tầng thư mục cha để bóc tách chính xác từng leaf chapter folder chứa ảnh trực tiếp, ngăn chặn việc gom cả thư mục mẹ thành 1 chapter duy nhất; đồng thời bảo toàn toàn bộ hệ thống Bookmarks phân đoạn chapter cũ/mới và bổ sung cơ chế `PdfComicParser.Instance.InvalidateCache` xóa cache ngay sau khi ghi đè để giao diện Thư viện và Reader luôn cập nhật dữ liệu mới nhất.
