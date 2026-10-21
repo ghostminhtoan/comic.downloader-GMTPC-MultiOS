@@ -803,6 +803,117 @@ public static class FloatingBubbleManager
         });
     }
 
+    /// <summary>
+    /// Hiển thị menu tùy chọn khi ấn giữ Bong bóng trong 3 giây:
+    /// 1. Tắt bong bóng
+    /// 2. Tắt app hoàn toàn
+    /// </summary>
+    public static void ShowBubbleOptionsDialog(Context context)
+    {
+        _mainHandler.Post(() =>
+        {
+            try
+            {
+                var activity = context as Activity ?? MainActivity.CurrentInstance;
+                bool isActivityValid = activity != null && !activity.IsFinishing && !activity.IsDestroyed;
+
+                Context dialogCtx = isActivityValid
+                    ? (Context)activity!
+                    : new ContextThemeWrapper(context.ApplicationContext ?? context, global::Android.Resource.Style.ThemeDeviceDefaultDialogAlert);
+
+                var builder = new AlertDialog.Builder(dialogCtx);
+                builder.SetTitle("🫧 Tùy chọn Bong bóng GMTPC");
+
+                string[] options = new string[]
+                {
+                    "🚫 Tắt bong bóng",
+                    "🛑 Tắt app hoàn toàn"
+                };
+
+                builder.SetItems(options, (sender, args) =>
+                {
+                    int selected = args.Which;
+                    if (selected == 0)
+                    {
+                        HideBubble();
+                        try
+                        {
+                            Toast.MakeText(dialogCtx, "Đã tắt bong bóng", ToastLength.Short)?.Show();
+                        }
+                        catch { }
+                    }
+                    else if (selected == 1)
+                    {
+                        ExitAppCompletely(dialogCtx);
+                    }
+                });
+
+                builder.SetNegativeButton("Hủy", (sender, args) => { });
+
+                var dialog = builder.Create();
+                if (dialog?.Window != null)
+                {
+                    if (!isActivityValid || _isSystemOverlay)
+                    {
+                        if (CanDrawOverlays(context))
+                        {
+                            var windowType = OperatingSystem.IsAndroidVersionAtLeast(26)
+                                ? WindowManagerTypes.ApplicationOverlay
+                                : WindowManagerTypes.Phone;
+                            dialog.Window.SetType(windowType);
+                        }
+                    }
+                    dialog.Show();
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("ComicGMTPC_Bubble", $"Lỗi hiển thị dialog tùy chọn bubble: {ex.Message}");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Đóng hoàn toàn ứng dụng, dừng Foreground Service và giải phóng tiến trình.
+    /// </summary>
+    public static void ExitAppCompletely(Context context)
+    {
+        try
+        {
+            HideBubble();
+        }
+        catch { }
+
+        try
+        {
+            BackgroundExecutionService.NativeForceExit?.Invoke();
+            return;
+        }
+        catch { }
+
+        try
+        {
+            var act = context as Activity ?? MainActivity.CurrentInstance;
+            if (act != null)
+            {
+                ComicBackgroundService.Stop(act);
+                act.FinishAffinity();
+            }
+            else
+            {
+                ComicBackgroundService.Stop(context);
+            }
+        }
+        catch { }
+
+        try
+        {
+            global::Android.OS.Process.KillProcess(global::Android.OS.Process.MyPid());
+            Java.Lang.JavaSystem.Exit(0);
+        }
+        catch { }
+    }
+
     private class SystemBubbleTouchListener : Java.Lang.Object, View.IOnTouchListener
     {
         private readonly Context _context;
@@ -816,6 +927,8 @@ public static class FloatingBubbleManager
         private float _startX, _startY;
         private float _touchX, _touchY;
         private bool _isDragging;
+        private bool _isLongPressed;
+        private Java.Lang.Runnable? _longPressRunnable;
         private readonly int _touchSlop;
 
         public SystemBubbleTouchListener(
@@ -835,6 +948,7 @@ public static class FloatingBubbleManager
             _onTap = onTap;
             _onDragEnd = onDragEnd;
             _touchSlop = ViewConfiguration.Get(context)?.ScaledTouchSlop ?? 16;
+            _isLongPressed = false;
         }
 
         public bool OnTouch(View? v, MotionEvent? e)
@@ -849,7 +963,27 @@ public static class FloatingBubbleManager
                     _touchX = e.RawX;
                     _touchY = e.RawY;
                     _isDragging = false;
+                    _isLongPressed = false;
                     _onTouchStart?.Invoke();
+
+                    if (_longPressRunnable != null)
+                    {
+                        _mainHandler.RemoveCallbacks(_longPressRunnable);
+                    }
+                    _longPressRunnable = new Java.Lang.Runnable(() =>
+                    {
+                        if (!_isDragging)
+                        {
+                            _isLongPressed = true;
+                            try
+                            {
+                                v?.PerformHapticFeedback(FeedbackConstants.LongPress);
+                            }
+                            catch { }
+                            ShowBubbleOptionsDialog(_context);
+                        }
+                    });
+                    _mainHandler.PostDelayed(_longPressRunnable, 3000);
                     return true;
 
                 case MotionEventActions.Move:
@@ -858,6 +992,11 @@ public static class FloatingBubbleManager
                     if (!_isDragging && (Math.Abs(dx) > _touchSlop || Math.Abs(dy) > _touchSlop))
                     {
                         _isDragging = true;
+                        if (_longPressRunnable != null)
+                        {
+                            _mainHandler.RemoveCallbacks(_longPressRunnable);
+                            _longPressRunnable = null;
+                        }
                     }
                     if (_isDragging)
                     {
@@ -873,6 +1012,18 @@ public static class FloatingBubbleManager
 
                 case MotionEventActions.Up:
                 case MotionEventActions.Cancel:
+                    if (_longPressRunnable != null)
+                    {
+                        _mainHandler.RemoveCallbacks(_longPressRunnable);
+                        _longPressRunnable = null;
+                    }
+
+                    if (_isLongPressed)
+                    {
+                        _isLongPressed = false;
+                        return true;
+                    }
+
                     if (!_isDragging)
                     {
                         _onTap?.Invoke();
@@ -966,6 +1117,8 @@ public static class FloatingBubbleManager
         private float _startLeft, _startTop;
         private float _touchX, _touchY;
         private bool _isDragging;
+        private bool _isLongPressed;
+        private Java.Lang.Runnable? _longPressRunnable;
         private readonly int _touchSlop;
 
         public InAppBubbleTouchListener(
@@ -983,6 +1136,7 @@ public static class FloatingBubbleManager
             _onTap = onTap;
             _onDragEnd = onDragEnd;
             _touchSlop = ViewConfiguration.Get(activity)?.ScaledTouchSlop ?? 16;
+            _isLongPressed = false;
         }
 
         public bool OnTouch(View? v, MotionEvent? e)
@@ -1006,7 +1160,27 @@ public static class FloatingBubbleManager
                     _touchX = e.RawX;
                     _touchY = e.RawY;
                     _isDragging = false;
+                    _isLongPressed = false;
                     _onTouchStart?.Invoke();
+
+                    if (_longPressRunnable != null)
+                    {
+                        _mainHandler.RemoveCallbacks(_longPressRunnable);
+                    }
+                    _longPressRunnable = new Java.Lang.Runnable(() =>
+                    {
+                        if (!_isDragging)
+                        {
+                            _isLongPressed = true;
+                            try
+                            {
+                                v?.PerformHapticFeedback(FeedbackConstants.LongPress);
+                            }
+                            catch { }
+                            ShowBubbleOptionsDialog(_activity);
+                        }
+                    });
+                    _mainHandler.PostDelayed(_longPressRunnable, 3000);
                     return true;
 
                 case MotionEventActions.Move:
@@ -1015,6 +1189,11 @@ public static class FloatingBubbleManager
                     if (!_isDragging && (Math.Abs(dx) > _touchSlop || Math.Abs(dy) > _touchSlop))
                     {
                         _isDragging = true;
+                        if (_longPressRunnable != null)
+                        {
+                            _mainHandler.RemoveCallbacks(_longPressRunnable);
+                            _longPressRunnable = null;
+                        }
                     }
                     if (_isDragging)
                     {
@@ -1030,6 +1209,18 @@ public static class FloatingBubbleManager
 
                 case MotionEventActions.Up:
                 case MotionEventActions.Cancel:
+                    if (_longPressRunnable != null)
+                    {
+                        _mainHandler.RemoveCallbacks(_longPressRunnable);
+                        _longPressRunnable = null;
+                    }
+
+                    if (_isLongPressed)
+                    {
+                        _isLongPressed = false;
+                        return true;
+                    }
+
                     if (!_isDragging)
                     {
                         _onTap?.Invoke();

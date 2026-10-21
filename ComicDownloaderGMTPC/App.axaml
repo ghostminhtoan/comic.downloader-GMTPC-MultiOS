@@ -33,13 +33,25 @@
             <Setter Property="CornerRadius" Value="4" />
         </Style>
 
-        <!-- Cho phép các Header của TabControl tự động xuống hàng (Wrap) linh hoạt trên màn hình hẹp / Android -->
+        <!-- Cho phép các Header của TabControl tự động xuống hàng (Wrap) linh hoạt trên màn hình hẹp / Android và tối ưu không gian -->
         <Style Selector="TabControl">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
             <Setter Property="ItemsPanel">
                 <ItemsPanelTemplate>
                     <WrapPanel />
                 </ItemsPanelTemplate>
             </Setter>
+        </Style>
+
+        <!-- Tối ưu không gian các TabItem: thanh thoát, gọn gàng, tăng diện tích hiển thị nội dung truyện -->
+        <Style Selector="TabItem">
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="0,0,2,2" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
         </Style>
 
         <!-- Style ScrollBar to bản, dễ drag / nắm kéo chuột và cảm ứng trên mọi nền tảng -->

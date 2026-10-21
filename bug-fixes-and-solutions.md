@@ -1,4 +1,4 @@
-# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
+﻿# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
 
 > **Dự án**: Comic Downloader GMTPC Avalonia Multi-OS (Windows, Linux, Android)  
 
@@ -811,6 +811,29 @@
   - Trên Android: Kéo Bubble sang bên phải màn hình -> số phần trăm nhảy sang góc dưới bên trái; kéo Bubble sang bên trái màn hình -> số phần trăm nhảy sang góc dưới bên phải.
   - Thả Bubble ở giữa màn hình hoặc bất kỳ vị trí nào bên trong -> Bubble nằm yên tại vị trí đó, không bị giật hay nhảy vào mép. Khi hết thời gian chờ, Bubble mờ nhẹ tại chỗ; chạm vào sáng rõ lại ngay tức thì.
 
+
+### 20. BUG-020: Tối ưu không gian các Tab cho gọn gàng và Thêm menu nhấn giữ 3 giây trên Floating Bubble (Tắt bong bóng / Tắt app)
+- **Triệu chứng**:
+  1. Các tab chính (Nguồn, Tìm truyện, Tải về, Công cụ, Thư viện) và các subtabs có tiêu đề lặp lại từ 'TAB ', font size và padding mặc định to bè của FluentTheme khiến không gian hiển thị nội dung bị thu hẹp, chữ dễ bị rớt dòng (wrap) trên màn hình điện thoại Android và laptop nhỏ.
+  2. Floating Bubble trước đây chỉ hỗ trợ Chạm (Tap) để mở ứng dụng hoặc Kéo thả (Drag), người dùng không có thao tác nhanh để tắt bong bóng hoặc đóng hẳn toàn bộ ứng dụng từ bên ngoài màn hình chính.
+- **Nguyên nhân gốc rễ**:
+  1. Thiếu bộ Style toàn cục cho TabItem và TabControl trong App.axaml. Header các tab dùng chữ in hoa dài 'TAB NGUỒN', 'TAB TÌM TRUYỆN'... và padding của các Border container quá lớn (10px - 14px).
+  2. FloatingBubbleManager.cs chưa bắt sự kiện giữ ngón tay liên tục 3000ms (Long Press 3s) trong SystemBubbleTouchListener và InAppBubbleTouchListener để kích hoạt Haptic Feedback và hiển thị menu chức năng của Bong bóng.
+- **Giải pháp triệt để**:
+  1. Trong App.axaml: Bổ sung Style toàn cục cho TabItem (MinHeight="28", Height="28", Padding="8,2", Margin="0,0,2,2", căn giữa) và TabControl (Padding="0", Margin="0").
+  2. Trong MainView.axaml: Tinh gọn 5 TabItem header thành 🌐 Nguồn, 🔍 Tìm truyện, 📥 Tải về, 🛠️ Công cụ, 📚 Thư viện (FontSize="12"). Tối ưu padding các Border bao quanh từ 10-14px xuống 6,3px hoặc 6,4px.
+  3. Trong LanguageService.cs: Bổ sung các cặp song ngữ cho tiêu đề tab rút gọn (Source <-> Nguồn, Search <-> Tìm truyện, Download <-> Tải về, Tools <-> Công cụ, Library <-> Thư viện).
+  4. Trong FloatingBubbleManager.cs:
+     - Thiết lập cơ chế hẹn giờ 3000ms bằng _mainHandler.PostDelayed(_longPressRunnable, 3000) trong cả SystemBubbleTouchListener và InAppBubbleTouchListener.
+     - Hủy hẹn giờ ngay khi ngón tay di chuyển vượt quá _touchSlop hoặc khi nhả tay trước 3s.
+     - Khi giữ đủ 3 giây: Kích hoạt rung Haptic Feedback (FeedbackConstants.LongPress), gán cờ _isLongPressed = true và hiển thị hộp thoại ShowBubbleOptionsDialog với 2 lựa chọn:
+       + 🚫 Tắt bong bóng: gọi HideBubble().
+       + 🛑 Tắt app hoàn toàn: gọi ExitAppCompletely(context) (dừng foreground service, FinishAffinity, diệt process PID và thoát hoàn toàn).
+     - Hỗ trợ hiển thị Dialog an toàn trên System Overlay bằng cờ WindowManagerTypes.ApplicationOverlay.
+- **File can thiệp**: App.axaml, MainView.axaml, LanguageService.cs, FloatingBubbleManager.cs, ug-fixes-and-solutions.md.
+- **Quy tắc kiểm thử**:
+  - Giao diện: Toàn bộ thanh tab và subtabs hiển thị thanh thoát, không gian hiển thị truyện được mở rộng tối đa, chuyển đổi song ngữ Anh - Việt mượt mà.
+  - Chạm và giữ Bubble 3 giây: Rung nhẹ phản hồi và bảng chọn xuất hiện lập tức. Chọn tắt bong bóng -> bong bóng ẩn ngay; chọn tắt app -> app dừng hoàn toàn không còn chạy ngầm.
 
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 

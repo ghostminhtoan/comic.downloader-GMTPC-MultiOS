@@ -221,11 +221,11 @@
                 <!-- ========================================================================= -->
                 <!-- [TAB 1 LỚN] TAB SOURCE: MANGA SOURCE, SOURCE HENTAI, NOVEL SOURCE, SEARCH, PASSWORD -->
                 <!-- ========================================================================= -->
-                <TabItem Header="🌐 TAB NGUỒN" FontSize="13" FontWeight="Bold">
-                    <Border Background="#0F172A" CornerRadius="8" Padding="10" Margin="0,6,0,0">
+                <TabItem Header="🌐 Nguồn" FontSize="12" FontWeight="Bold">
+                    <Border Background="#0F172A" CornerRadius="6" Padding="6,3" Margin="0,2,0,0">
                         <TabControl Background="Transparent">
                             <!-- 1.1 MANGA SOURCE (SUBTABS DOMAIN) -->
-                            <TabItem Header="📖 Manga Source" FontSize="12" FontWeight="SemiBold">
+                            <TabItem Header="📖 Manga Source" FontSize="11.5" FontWeight="SemiBold">
                                 <Border Background="#131B2E" CornerRadius="6" Padding="10" Margin="0,4,0,0">
                                     <TabControl Background="Transparent">
                                         <!-- TruyenQQ -->
@@ -705,7 +705,7 @@
                             </TabItem>
 
                             <!-- 1.2 SOURCE HENTAI (SUBTABS DOMAIN) -->
-                            <TabItem Header="🔞 Source Hentai" FontSize="12" FontWeight="SemiBold">
+                            <TabItem Header="🔞 Source Hentai" FontSize="11.5" FontWeight="SemiBold">
                                 <Border Background="#131B2E" CornerRadius="6" Padding="10" Margin="0,4,0,0">
                                     <TabControl Background="Transparent">
                                         <!-- vi-hentai -->
@@ -1163,7 +1163,7 @@
                             </TabItem>
 
                             <!-- 1.3 NOVEL SOURCE -->
-                            <TabItem Header="📚 Novel Source" FontSize="12" FontWeight="SemiBold">
+                            <TabItem Header="📚 Novel Source" FontSize="11.5" FontWeight="SemiBold">
                                 <Border Background="#131B2E" CornerRadius="6" Padding="10" Margin="0,4,0,0">
                                     <StackPanel Spacing="8">
                                         <TextBlock Text="Nguồn Tiểu Thuyết (Hako / Docln)" FontWeight="Bold" Foreground="#10B981" FontSize="12" />
@@ -1306,8 +1306,8 @@
                 <!-- ========================================================================= -->
                 <!-- [TAB 2 LỚN] TAB SEARCH: TÌM TRUYỆN HÀNG LOẠT (BATCH COMIC SEARCH) -->
                 <!-- ========================================================================= -->
-                <TabItem Header="🔍 TAB TÌM TRUYỆN" FontSize="13" FontWeight="Bold">
-                    <Border Background="#0F172A" Padding="14,12">
+                <TabItem Header="🔍 Tìm truyện" FontSize="12" FontWeight="Bold">
+                    <Border Background="#0F172A" CornerRadius="6" Padding="6,4" Margin="0,2,0,0">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,0,70">
                             <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="16">
                                 <Grid RowDefinitions="Auto, *, Auto">
@@ -1429,10 +1429,10 @@
                 <!-- ========================================================================= -->
                 <!-- [TAB 3 LỚN] TAB DOWNLOAD: DOWNLOAD MANGA, SCAN, LOGS -->
                 <!-- ========================================================================= -->
-                <TabItem Header="📥 TAB TẢI VỀ" FontSize="13" FontWeight="Bold">
+                <TabItem Header="📥 Tải về" FontSize="12" FontWeight="Bold">
                     <Grid RowDefinitions="Auto, *">
                         <!-- Toolbar điều khiển tải chung -->
-                        <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="12,8">
+                        <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="6,4">
                             <Grid RowDefinitions="Auto, Auto, Auto">
                                 <!-- Main Download Action Buttons -->
                                 <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
@@ -2183,8 +2183,8 @@
                 <!-- ========================================================================= -->
                 <!-- [TAB 3 LỚN] TAB TOOL: CÔNG CỤ (SPLIT/MERGE, CẮT ẢNH DÀI, XỬ LÝ ẢNH, ĐÓNG GÓI) -->
                 <!-- ========================================================================= -->
-                <TabItem Header="🛠️ TAB CÔNG CỤ" FontSize="13" FontWeight="Bold">
-                    <Border Background="#0F172A" Padding="8">
+                <TabItem Header="🛠️ Công cụ" FontSize="12" FontWeight="Bold">
+                    <Border Background="#0F172A" CornerRadius="6" Padding="6,3" Margin="0,2,0,0">
                         <TabControl SelectedIndex="{Binding SelectedToolsTabIndex}" Background="Transparent" Margin="0">
 
                             <!-- CHILD TAB 3.1: FOLDER TOOLS (TÁCH / GỘP FOLDER) -->
@@ -4064,7 +4064,7 @@
                             <!-- CHILD TAB 3.7: FILE ASSOCIATION & CONTEXT MENU (WINDOWS & LINUX) -->
                             <TabItem Header="🔗 Liên Kết Tệp (File Association)" FontSize="12" FontWeight="SemiBold">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                    <Border Background="#0F172A" Padding="14,12">
+                                    <Border Background="#0F172A" CornerRadius="6" Padding="6,4" Margin="0,2,0,0">
                                         <StackPanel Spacing="16" MaxWidth="1050" HorizontalAlignment="Stretch">
 
                                             <!-- TIÊU ĐỀ & MÔ TẢ TỔNG QUAN -->
@@ -4240,7 +4240,7 @@
                 <!-- ========================================================================= -->
                 <!-- [TAB 5 LỚN] TAB THƯ VIỆN: ĐỌC TRUYỆN OFFLINE (COMIC READER & LIBRARY) -->
                 <!-- ========================================================================= -->
-                <TabItem Header="📚 TAB THƯ VIỆN" FontSize="13" FontWeight="Bold">
+                <TabItem Header="📚 Thư viện" FontSize="12" FontWeight="Bold">
                     <views:LibraryView DataContext="{Binding LibraryVm}" />
                 </TabItem>
             </TabControl>
@@ -4362,7 +4362,7 @@
 
                 <Grid RowDefinitions="Auto, Auto, Auto, *">
                     <!-- ROW 0: Header Toolbar (FastStone Style) -->
-                    <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="12,8">
+                    <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="6,4">
                         <Grid ColumnDefinitions="Auto, Auto, *, Auto">
                             <!-- Cột 0: Title -->
                             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,12,0">

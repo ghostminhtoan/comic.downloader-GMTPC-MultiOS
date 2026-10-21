@@ -149,6 +149,12 @@ public class LanguageService
         AddPair("TAB TOOL", "TAB CÔNG CỤ");
         AddPair("TAB TOOLS", "TAB CÔNG CỤ");
         AddPair("TAB LIBRARY", "TAB THƯ VIỆN");
+        AddPair("Source", "Nguồn");
+        AddPair("Search", "Tìm truyện");
+        AddPair("Download", "Tải về");
+        AddPair("Tools", "Công cụ");
+        AddPair("Tool", "Công cụ");
+        AddPair("Library", "Thư viện");
 
         // Subtabs
         AddPair("Manga Source", "Nguồn Manga");
