@@ -122,6 +122,7 @@ public static class FloatingBubbleManager
 
     private static bool _isDocked;
     private static bool _isRightSide = true;
+    private static bool _isAtEdge = true;
     private static int _bubbleSizePx;
     private static bool _isSystemOverlay;
     private static bool _isShowing;
@@ -323,9 +324,11 @@ public static class FloatingBubbleManager
                 {
                     OpenMainActivity(context);
                 },
-                onDragEnd: (isRightSide) =>
+                onDragEnd: (isRightSide, isAtEdge) =>
                 {
                     _isRightSide = isRightSide;
+                    _isAtEdge = isAtEdge;
+                    UpdateBadgePosition(_isRightSide);
                     StartIdleTimer();
                 });
 
@@ -391,9 +394,11 @@ public static class FloatingBubbleManager
                     WakeUpAndRestore();
                     Toast.MakeText(activity, "🫧 Comic Downloader GMTPC đang hoạt động", ToastLength.Short)?.Show();
                 },
-                onDragEnd: (isRightSide) =>
+                onDragEnd: (isRightSide, isAtEdge) =>
                 {
                     _isRightSide = isRightSide;
+                    _isAtEdge = isAtEdge;
+                    UpdateBadgePosition(_isRightSide);
                     StartIdleTimer();
                 });
 
@@ -476,16 +481,49 @@ public static class FloatingBubbleManager
         _badgeTextView.Background = _badgeBg;
 
         int badgeSize = DpToPx(context, 16);
+        int margin = DpToPx(context, 3);
+        var initialGravity = _isRightSide ? (GravityFlags.Bottom | GravityFlags.Left) : (GravityFlags.Bottom | GravityFlags.Right);
         var badgeLp = new FrameLayout.LayoutParams(badgeSize, badgeSize)
         {
-            Gravity = GravityFlags.Bottom | GravityFlags.Right,
-            RightMargin = DpToPx(context, 3),
-            BottomMargin = DpToPx(context, 3)
+            Gravity = initialGravity,
+            LeftMargin = _isRightSide ? margin : 0,
+            RightMargin = _isRightSide ? 0 : margin,
+            BottomMargin = margin
         };
         _badgeTextView.Visibility = ViewStates.Gone; // Chỉ hiện khi có tiến trình
         container.AddView(_badgeTextView, badgeLp);
 
         return container;
+    }
+
+    /*
+     Điều chỉnh vị trí con số phần trăm (% badge) theo nửa màn hình Bubble đang ngự trị:
+     - Khi Bubble ở nửa bên PHẢI: Badge nằm ở góc dưới bên TRÁI.
+     - Khi Bubble ở nửa bên TRÁI: Badge nằm ở góc dưới bên PHẢI.
+    */
+    private static void UpdateBadgePosition(bool isRightSide)
+    {
+        if (_badgeTextView == null) return;
+        var context = _badgeTextView.Context;
+        if (context == null) return;
+
+        int badgeSize = DpToPx(context, 16);
+        int margin = DpToPx(context, 3);
+
+        var gravity = isRightSide
+            ? (GravityFlags.Bottom | GravityFlags.Left)
+            : (GravityFlags.Bottom | GravityFlags.Right);
+
+        var lp = new FrameLayout.LayoutParams(badgeSize, badgeSize)
+        {
+            Gravity = gravity,
+            LeftMargin = isRightSide ? margin : 0,
+            RightMargin = isRightSide ? 0 : margin,
+            BottomMargin = margin
+        };
+
+        _badgeTextView.LayoutParameters = lp;
+        _badgeTextView.RequestLayout();
     }
 
     private static void StartIdleTimer(long delayMs = 3500)
@@ -508,29 +546,40 @@ public static class FloatingBubbleManager
         if (context == null) return;
         int screenWidth = GetScreenWidth(context);
 
-        // Thụt 60% vào mép màn hình, chừa 40% làm tay cầm chỉ thị
-        int dockOffset = (int)(_bubbleSizePx * 0.60f);
-
-        if (_isSystemOverlay && _systemLayoutParams != null && _windowManager != null)
+        // Nếu Bubble ở sát mép viền màn hình: thụt 60% vào mép, chừa 40% làm tay cầm
+        if (_isAtEdge)
         {
-            int targetX = _isRightSide ? (screenWidth - _bubbleSizePx + dockOffset) : (-dockOffset);
-            AnimateSystemX(_systemLayoutParams.X, targetX, 280, () =>
+            int dockOffset = (int)(_bubbleSizePx * 0.60f);
+
+            if (_isSystemOverlay && _systemLayoutParams != null && _windowManager != null)
             {
-                _bubbleView?.Animate()
+                int targetX = _isRightSide ? (screenWidth - _bubbleSizePx + dockOffset) : (-dockOffset);
+                AnimateSystemX(_systemLayoutParams.X, targetX, 280, () =>
+                {
+                    _bubbleView?.Animate()
+                        ?.Alpha(0.45f)
+                        ?.SetDuration(300)
+                        ?.SetInterpolator(new DecelerateInterpolator())
+                        ?.Start();
+                });
+            }
+            else if (!_isSystemOverlay && _bubbleView != null)
+            {
+                float targetTransX = _isRightSide ? dockOffset : (-dockOffset);
+                _bubbleView.Animate()
+                    ?.TranslationX(targetTransX)
                     ?.Alpha(0.45f)
-                    ?.SetDuration(300)
+                    ?.SetDuration(280)
                     ?.SetInterpolator(new DecelerateInterpolator())
                     ?.Start();
-            });
+            }
         }
-        else if (!_isSystemOverlay && _bubbleView != null)
+        else
         {
-            // In-App Bubble: RenderNode GPU TranslationX siêu mượt 120fps, không phụ thuộc layout/margin
-            float targetTransX = _isRightSide ? dockOffset : (-dockOffset);
+            // Bubble nằm tự do ở bên trong màn hình: giữ nguyên vị trí X, Y, chỉ fade mờ nhẹ để không che tầm nhìn
             _bubbleView.Animate()
-                ?.TranslationX(targetTransX)
                 ?.Alpha(0.45f)
-                ?.SetDuration(280)
+                ?.SetDuration(300)
                 ?.SetInterpolator(new DecelerateInterpolator())
                 ?.Start();
         }
@@ -554,26 +603,32 @@ public static class FloatingBubbleManager
             if (context == null) return;
             int screenWidth = GetScreenWidth(context);
 
-            if (_isSystemOverlay && _systemLayoutParams != null && _windowManager != null)
+            if (_isAtEdge)
             {
-                int targetX = _isRightSide ? (screenWidth - _bubbleSizePx) : 0;
-                AnimateSystemX(_systemLayoutParams.X, targetX, 200, () =>
+                if (_isSystemOverlay && _systemLayoutParams != null && _windowManager != null)
                 {
-                    StartIdleTimer();
-                });
-            }
-            else if (!_isSystemOverlay && _bubbleView != null)
-            {
-                // In-App Bubble: Trượt bung ra TranslationX = 0 ngay tức thì
-                _bubbleView.Animate()
-                    ?.TranslationX(0f)
-                    ?.SetDuration(200)
-                    ?.SetInterpolator(new DecelerateInterpolator())
-                    ?.WithEndAction(new Java.Lang.Runnable(() =>
+                    int targetX = _isRightSide ? (screenWidth - _bubbleSizePx) : 0;
+                    AnimateSystemX(_systemLayoutParams.X, targetX, 200, () =>
                     {
                         StartIdleTimer();
-                    }))
-                    ?.Start();
+                    });
+                }
+                else if (!_isSystemOverlay && _bubbleView != null)
+                {
+                    _bubbleView.Animate()
+                        ?.TranslationX(0f)
+                        ?.SetDuration(200)
+                        ?.SetInterpolator(new DecelerateInterpolator())
+                        ?.WithEndAction(new Java.Lang.Runnable(() =>
+                        {
+                            StartIdleTimer();
+                        }))
+                        ?.Start();
+                }
+            }
+            else
+            {
+                StartIdleTimer();
             }
         }
         else
@@ -739,6 +794,8 @@ public static class FloatingBubbleManager
                 _inAppLayoutParams = null;
                 _inAppContainer = null;
                 _badgeTextView = null;
+                _progressRingView = null;
+                _badgeBg = null;
                 _iconImageView = null;
                 _isDocked = false;
                 _isShowing = false;
@@ -754,7 +811,7 @@ public static class FloatingBubbleManager
         private readonly int _bubbleSize;
         private readonly Action _onTouchStart;
         private readonly Action _onTap;
-        private readonly Action<bool> _onDragEnd;
+        private readonly Action<bool, bool> _onDragEnd;
 
         private float _startX, _startY;
         private float _touchX, _touchY;
@@ -768,7 +825,7 @@ public static class FloatingBubbleManager
             int bubbleSize,
             Action onTouchStart,
             Action onTap,
-            Action<bool> onDragEnd)
+            Action<bool, bool> onDragEnd)
         {
             _context = context;
             _wm = wm;
@@ -824,16 +881,24 @@ public static class FloatingBubbleManager
                     {
                         int screenWidth = GetScreenWidth(_context);
                         int screenHeight = GetScreenHeight(_context);
-                        bool isRightSide = (_lp.X + _bubbleSize / 2) > (screenWidth / 2);
-                        int snapX = isRightSide ? (screenWidth - _bubbleSize) : 0;
 
+                        // Cho phép người dùng đặt Bubble tự do ở bên trong màn hình
                         int minY = DpToPx(_context, 40);
                         int maxY = screenHeight - _bubbleSize - DpToPx(_context, 40);
-                        int snapY = Math.Clamp(_lp.Y, minY, Math.Max(minY, maxY));
+                        int targetX = Math.Clamp(_lp.X, 0, screenWidth - _bubbleSize);
+                        int targetY = Math.Clamp(_lp.Y, minY, Math.Max(minY, maxY));
 
-                        AnimateSnap(_lp.X, snapX, _lp.Y, snapY, () =>
+                        bool isRightSide = (targetX + _bubbleSize / 2) > (screenWidth / 2);
+
+                        // Nếu thả sát mép màn hình (phạm vi 16dp), hỗ trợ hít sát mép viền
+                        int snapEdgeThreshold = DpToPx(_context, 16);
+                        bool isAtEdge = targetX <= snapEdgeThreshold || targetX >= (screenWidth - _bubbleSize - snapEdgeThreshold);
+                        if (targetX <= snapEdgeThreshold) targetX = 0;
+                        else if (targetX >= (screenWidth - _bubbleSize - snapEdgeThreshold)) targetX = screenWidth - _bubbleSize;
+
+                        AnimateSnap(_lp.X, targetX, _lp.Y, targetY, () =>
                         {
-                            _onDragEnd?.Invoke(isRightSide);
+                            _onDragEnd?.Invoke(isRightSide, isAtEdge);
                         });
                     }
                     return true;
@@ -896,7 +961,7 @@ public static class FloatingBubbleManager
         private readonly int _bubbleSize;
         private readonly Action _onTouchStart;
         private readonly Action _onTap;
-        private readonly Action<bool> _onDragEnd;
+        private readonly Action<bool, bool> _onDragEnd;
 
         private float _startLeft, _startTop;
         private float _touchX, _touchY;
@@ -909,7 +974,7 @@ public static class FloatingBubbleManager
             int bubbleSize,
             Action onTouchStart,
             Action onTap,
-            Action<bool> onDragEnd)
+            Action<bool, bool> onDragEnd)
         {
             _activity = activity;
             _lp = lp;
@@ -973,16 +1038,24 @@ public static class FloatingBubbleManager
                     {
                         int screenWidth = GetScreenWidth(_activity);
                         int screenHeight = GetScreenHeight(_activity);
-                        bool isRightSide = (_lp.LeftMargin + _bubbleSize / 2) > (screenWidth / 2);
-                        int snapLeft = isRightSide ? (screenWidth - _bubbleSize) : 0;
 
+                        // Cho phép người dùng đặt Bubble tự do ở bên trong màn hình
                         int minY = DpToPx(_activity, 40);
                         int maxY = screenHeight - _bubbleSize - DpToPx(_activity, 40);
-                        int snapTop = Math.Clamp(_lp.TopMargin, minY, Math.Max(minY, maxY));
+                        int targetLeft = Math.Clamp(_lp.LeftMargin, 0, screenWidth - _bubbleSize);
+                        int targetTop = Math.Clamp(_lp.TopMargin, minY, Math.Max(minY, maxY));
 
-                        AnimateInAppSnap(_lp.LeftMargin, snapLeft, _lp.TopMargin, snapTop, () =>
+                        bool isRightSide = (targetLeft + _bubbleSize / 2) > (screenWidth / 2);
+
+                        // Nếu thả sát mép màn hình (phạm vi 16dp), hỗ trợ hít sát mép viền
+                        int snapEdgeThreshold = DpToPx(_activity, 16);
+                        bool isAtEdge = targetLeft <= snapEdgeThreshold || targetLeft >= (screenWidth - _bubbleSize - snapEdgeThreshold);
+                        if (targetLeft <= snapEdgeThreshold) targetLeft = 0;
+                        else if (targetLeft >= (screenWidth - _bubbleSize - snapEdgeThreshold)) targetLeft = screenWidth - _bubbleSize;
+
+                        AnimateInAppSnap(_lp.LeftMargin, targetLeft, _lp.TopMargin, targetTop, () =>
                         {
-                            _onDragEnd?.Invoke(isRightSide);
+                            _onDragEnd?.Invoke(isRightSide, isAtEdge);
                         });
                     }
                     return true;
