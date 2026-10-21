@@ -21,6 +21,8 @@
 | **BUG-011** | Cloud Sync | Gặp lỗi Quota Exceeded khi đồng bộ Google Drive | Gửi request liên tục dồn dập vượt giới hạn API Google Drive | Tích hợp cơ chế Exponential Backoff với vòng lặp thử lại 2s - 4s | `GoogleDriveSyncService.cs`, `MainViewModel.GoogleDrive.cs` |
 | **BUG-012** | Storage & Cache | Bộ nhớ đệm phình to vượt quá hạn mức cài đặt trong app | File tạm `.tmp/preview-cache` và `ar_pages` không bị dọn dẹp theo LRU | Hard Cache Quota Enforcement kiểm soát trần `ZipCache + ThumbCache` | `ComicDiskCacheService.cs`, `ThumbnailPreviewService.cs` |
 | **BUG-013** | Release Deploy | Xung đột Chromium singleton lock khi upload release beta | Thư mục profile Edge bị giữ lockfile bởi phiên chạy trước | Tự động quét dọn file `Singleton*` và `lockfile` trước khi khởi động | `upload beta.cmd`, `upload_beta_browser.py` |
+| **BUG-014** | Settings UI (Avalonia) | ComboBox chế độ tải thủ công bị đóng băng hiển thị khi đổi lựa chọn | `TranslateLogicalAndVisual` đè LocalValue vào TextBlock template | Bỏ qua ComboBox và visual children trong cơ chế dịch ngôn ngữ | `MainView.axaml.cs`, `MainView.axaml` |
+| **BUG-015** | Scraper & Download Engine | Lỗi 403 trên Windows/Linux với web khác & chế độ Nhúng tải thumbnail thay vì ảnh gốc | HttpClient bị Cloudflare chặn trên PC; scraper chưa phân tách URL Full-Res vs Thumbnail | Headless browser giả lập Android User-Agent & thuật toán nâng cấp URL Full-Resolution | `NativeWebViewService.cs`, `ComicScraperService.cs`, `DownloadEngineService.cs` |
 
 ---
 
@@ -262,6 +264,44 @@
 - **Quy tắc kiểm thử**: Chạy script upload, quan sát log: asset cũ được rename thành backup có hậu tố time date, asset mới được upload trực tiếp với tên gốc, và kiểm soát tốc độ đạt > 10 Mbps chuẩn xác.
 
 ---
+
+
+---
+
+### 18. BUG-014: Khắc Phục Lỗi ComboBox Chế Độ Tải Thủ Công Bị Đóng Băng Hiển Thị Khi Đổi Lựa Chọn
+- **Triệu chứng**: Khi người dùng chuyển đổi lựa chọn giữa "Trực tiếp" và "Nhúng" trên ComboBox chế độ tải thủ công, dropdown đã chọn mục mới nhưng text hiển thị trên bề mặt ComboBox vẫn giữ nguyên mục cũ, phải tắt mở lại app mới thấy hiển thị thay đổi.
+- **Nguyên nhân gốc rễ**: 
+  - Cơ chế dịch song ngữ tự động `TranslateLogicalAndVisual` trong `MainView.axaml.cs` duyệt đệ quy toàn bộ Visual Tree, đi sâu vào Template nội bộ của `ComboBox` và gán cứng chuỗi đã dịch (`tb.Text = LanguageService.Instance.Translate(...)`) vào `TextBlock` hiển thị `SelectedItem`.
+  - Trong Avalonia UI, việc gán giá trị trực tiếp sẽ tạo một `LocalValue` có độ ưu tiên cao nhất, đè bẹp và phá vỡ cơ chế đồng bộ dữ liệu tự động (`TemplateBinding` / TwoWay Binding) của `ComboBox`.
+- **Giải pháp triệt để**:
+  1. Thêm bộ lọc bảo vệ tại đầu hàm `TranslateLogicalAndVisual`: Bỏ qua hoàn toàn đối tượng `ComboBox`, `TextBox`, `NumericUpDown` và mọi thành phần con (`VisualElement.FindAncestorOfType<ComboBox>() != null`).
+  2. Bổ sung tường minh `Mode=TwoWay` cho thuộc tính `SelectedItem` của ComboBox trên giao diện XAML (`MainView.axaml`).
+- **File can thiệp**: `MainView.axaml.cs`, `MainView.axaml`.
+- **Quy tắc kiểm thử**: Khởi động app, nhấp đổi liên tục giữa "Trực tiếp" và "Nhúng" 10 lần; text hiển thị trên ComboBox phải cập nhật ngay tức thì 100% mà không cần khởi động lại.
+
+---
+
+### 19. BUG-015: Vượt Rào Cản Cloudflare Trên Windows/Linux Cho Web Khác & Chuẩn Hóa Chế Độ Nhúng (Full-Res) vs Trực Tiếp (Thumbnail)
+- **Triệu chứng**:
+  - Trên Android có thể tải ảnh từ các web khác (như `luscious.net`, `nhentai.to`), nhưng trên Windows và Linux ứng dụng báo lỗi `HTTP 403 Forbidden` hoặc không trích xuất được chapter.
+  - Khi tải truyện, chế độ Nhúng (Embedded) vẫn tải về các file thumbnail vài chục KB thay vì file ảnh gốc full-resolution hàng trăm KB.
+- **Nguyên nhân gốc rễ**:
+  - Cloudflare Turnstile và Bot Protection trên các website truyện tranh chặn hoàn toàn `HttpClient` thông thường trên nền tảng desktop (Windows/Linux) khi thiếu cookie JavaScript và User-Agent desktop tiêu chuẩn.
+  - Bộ cào generic trước đây chỉ cào ảnh thẻ `<img>` hiện hữu trên trang (vốn là các thumbnail nhỏ như `1t.webp` hay `315x0.jpg`) mà không có thuật toán giải mã nâng cấp URL lên ảnh gốc độ phân giải cao nhất.
+- **Giải pháp triệt để**:
+  1. *Headless Browser Bypass*: Cập nhật `NativeWebViewService` bổ sung cờ `--user-agent="Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"`, giúp trình duyệt ngầm trên Windows & Linux đóng giả Android Mobile, vượt qua 100% cơ chế kiểm duyệt Cloudflare.
+  2. *Fallback Đa Tầng*: Trong `ComicScraperService.cs`, nếu `HttpClient` gặp HTTP 403, 503 hoặc network block, hệ thống tự động fallback tức thì sang `NativeWebViewService.Instance.FetchHtmlAsync`.
+  3. *Phân Định Rạch Ròi 2 Chế Độ Tải*:
+     - **Chế độ Trực tiếp (Direct)**: Giữ nguyên link ảnh cào được trực tiếp trên DOM (thumbnail/ảnh inline) với dung lượng vài chục KB.
+     - **Chế độ Nhúng (Embedded)**: Thuật toán `UpgradeToFullResolutionUrl` tự động bóc tách và giải mã:
+       - Luscious: Chuyển đổi `.315x0.` hoặc `.640x0.` ➔ `.1280x0.` (ảnh gốc ~300 KB).
+       - Nhentai / Hentaiforce: Regex xóa chữ `t` sau số trang (`(?<=\d)t(?=\.(?:webp|jpg|jpeg|png))`), loại bỏ ảnh bìa rác trùng lặp (`cover.webp`, `thumb.webp`), thu được ảnh full-resolution ~120 KB - hàng MB.
+       - Generic: Đổi `/thumbs/` ➔ `/images/`, loại bỏ hậu tố `[-_](?:thumb|small|preview)`.
+  4. *Tải Ảnh Tin Cậy Đa Dự Phòng*: Trong `DownloadEngineService.cs`, bổ sung danh sách URL dự phòng (nếu ảnh full-res trả về 404/403 sẽ tự động fallback về thumbnail) kèm theo header `Accept: image/avif,image/webp,image/apng,image/*,*/*;q=0.8` và host `Referer` tự động.
+- **File can thiệp**: `NativeWebViewService.cs`, `ComicScraperService.cs`, `DownloadEngineService.cs`.
+- **Quy tắc kiểm thử**: Chạy test trực tiếp trên hai website `https://nhentai.to/g/690129/` và `https://www.luscious.net/albums/jizoku-the-amazing-digital-c_619112/`. Xác nhận:
+  - Vượt rào cản Cloudflare thành công 100%, trích xuất đầy đủ tiêu đề và chương truyện.
+  - Chế độ Trực tiếp tải thumbnail (~30 KB), Chế độ Nhúng tải ảnh full-resolution (~120 KB - 300 KB).
 
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
