@@ -3117,12 +3117,34 @@
                             <!-- ========================================================================= -->
                             <!-- CHILD TAB: GỘP FILE LẺ TRUYỆN (ARCHIVE MERGER: PDF, ZIP, CBZ, RAR, CBR, MOBI) -->
                             <!-- ========================================================================= -->
-                            <TabItem Header="📚 Gộp File Lẻ (Merger)" FontSize="12" FontWeight="SemiBold">
+                            <TabItem Header="📚 Gộp File / Nối Chap (Merger)" FontSize="12" FontWeight="SemiBold">
                                 <Grid RowDefinitions="Auto, *">
                                     <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                         <Border Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                                             <StackPanel Spacing="10">
-                                                <!-- Hàng 1: Thư mục nguồn chứa các file chương lẻ (PDF, ZIP, CBZ, RAR, CBR, MOBI) -->
+                                                                                                <!-- Bộ chuyển chế độ: Gộp Hàng Loạt vs Nối Chap Vào File Cũ -->
+                                                <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="6,4">
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <RadioButton IsChecked="{Binding !IsMergeAppendMode}" Command="{Binding SetMergeModeBatchCommand}" GroupName="MergeModeGroup" Margin="0,0,16,0" VerticalContentAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                                <TextBlock Text="📦" FontSize="13" VerticalAlignment="Center" />
+                                                                <TextBlock Text="Chế độ 1: Gộp hàng loạt file / thư mục lẻ" FontWeight="SemiBold" FontSize="11" Foreground="#38BDF8" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                        </RadioButton>
+                                                        <RadioButton IsChecked="{Binding IsMergeAppendMode}" Command="{Binding SetMergeModeAppendCommand}" GroupName="MergeModeGroup" VerticalContentAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                                <TextBlock Text="➕" FontSize="13" VerticalAlignment="Center" />
+                                                                <TextBlock Text="Chế độ 2: Nối Chap vào File có sẵn (Append Mode)" FontWeight="SemiBold" FontSize="11" Foreground="#10B981" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                        </RadioButton>
+                                                    </WrapPanel>
+                                                </Border>
+
+                                                <!-- ========================================================================= -->
+                                                <!-- CHẾ ĐỘ 1: GỘP HÀNG LOẠT FILE / THƯ MỤC LẺ -->
+                                                <!-- ========================================================================= -->
+                                                <StackPanel Spacing="10" IsVisible="{Binding !IsMergeAppendMode}">
+<!-- Hàng 1: Thư mục nguồn chứa các file chương lẻ (PDF, ZIP, CBZ, RAR, CBR, MOBI) -->
                                                 <StackPanel Spacing="3">
                                                     <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                         <TextBlock Text="📥 Thư mục chứa các file chương lẻ (PDF, ZIP, CBZ, RAR, CBR, MOBI):" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" TextWrapping="Wrap" />
@@ -3269,6 +3291,87 @@
                                                 </Button>
                                             </WrapPanel>
 
+                                            
+                                                </StackPanel>
+
+                                                <!-- ========================================================================= -->
+                                                <!-- CHẾ ĐỘ 2: NỐI CHƯƠNG VÀO TỆP CÓ SẴN (APPEND MODE) -->
+                                                <!-- ========================================================================= -->
+                                                <StackPanel Spacing="10" IsVisible="{Binding IsMergeAppendMode}">
+                                                    <!-- BƯỚC 1: CHỌN FILE GỐC CẦN NỐI -->
+                                                    <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8">
+                                                        <StackPanel Spacing="4">
+                                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <TextBlock Text="📄 Bước 1: Chọn Tệp Gốc Cần Nối Chap (.pdf, .cbz, .zip, .mobi):" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" TextWrapping="Wrap" />
+                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+                                                                    <Button Command="{Binding BrowseMergeAppendBaseFileCommand}" Content="📁 Chọn Tệp Gốc" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Chọn file truyện đã có cần nối thêm các chapter mới" />
+                                                                    <Button Command="{Binding OpenMergeAppendBaseFileFolderCommand}" Content="📂 Mở Thư Mục" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục chứa file gốc" />
+                                                                </WrapPanel>
+                                                            </WrapPanel>
+                                                            <TextBox Text="{Binding MergeAppendBaseFilePath}" PlaceholderText="Chọn hoặc dán đường dẫn file gốc (.pdf, .cbz, .zip, .mobi)..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#38BDF8" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                            <TextBlock Text="{Binding MergeAppendBaseFileInfoText}" IsVisible="{Binding MergeAppendBaseFileInfoText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Foreground="#38BDF8" FontSize="10.5" FontWeight="SemiBold" Margin="2,2,0,0" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <!-- BƯỚC 2: CHỌN THƯ MỤC CHỨA CÁC CHAP MỚI -->
+                                                    <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8">
+                                                        <StackPanel Spacing="4">
+                                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <TextBlock Text="📁 Bước 2: Chọn Thư Mục Chứa Các Chap Mới Cần Nối:" Foreground="#10B981" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,4" TextWrapping="Wrap" />
+                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+                                                                    <Button Command="{Binding BrowseMergeAppendNewFolderCommand}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Chọn thư mục chứa các chapter mới vừa tải về" />
+                                                                    <Button Command="{Binding OpenMergeAppendNewFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục chap mới" />
+                                                                </WrapPanel>
+                                                            </WrapPanel>
+                                                            <TextBox Text="{Binding MergeAppendNewFolderPath}" PlaceholderText="Chọn thư mục chứa các chapter mới..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                            <TextBlock Text="{Binding MergeAppendNewFolderInfoText}" IsVisible="{Binding MergeAppendNewFolderInfoText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Foreground="#10B981" FontSize="10.5" FontWeight="SemiBold" Margin="2,2,0,0" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <!-- BƯỚC 3: TÙY CHỌN XUẤT XƯỞNG & BẢO TỒN CẤU TRÚC -->
+                                                    <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,8">
+                                                        <StackPanel Spacing="8">
+                                                            <TextBlock Text="⚙️ Tùy Chọn Xuất &amp; Bảo Tồn Cấu Trúc:" Foreground="#F59E0B" FontWeight="Bold" FontSize="11" />
+                                                            <WrapPanel Orientation="Horizontal">
+                                                                <CheckBox IsChecked="{Binding IsMergeAppendOverwrite}" Margin="0,0,16,4" ToolTip.Tip="Ghi đè trực tiếp lên file gốc (tự động sao lưu bản dự phòng .bak an toàn 100%)">
+                                                                    <TextBlock Text="⚡ Ghi đè lên tệp gốc (Tự sao lưu dự phòng .bak an toàn)" FontSize="10.5" Foreground="#E2E8F0" VerticalAlignment="Center" />
+                                                                </CheckBox>
+                                                                <CheckBox IsChecked="{Binding IsMergeAppendPreserveBookmarks}" Margin="0,0,16,4" ToolTip.Tip="Tự động giữ nguyên cây Bookmarks cũ và thêm Bookmarks mới cho từng chapter nối tiếp">
+                                                                    <TextBlock Text="🔖 Tự động tạo và bảo tồn Bookmarks mục lục chương (đối với PDF)" FontSize="10.5" Foreground="#38BDF8" VerticalAlignment="Center" />
+                                                                </CheckBox>
+                                                            </WrapPanel>
+
+                                                            <!-- Chọn vị trí xuất tùy chỉnh nếu không ghi đè -->
+                                                            <StackPanel Spacing="3" IsVisible="{Binding !IsMergeAppendOverwrite}">
+                                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <TextBlock Text="💾 Vị trí lưu tệp mới sau khi nối:" Foreground="#94A3B8" FontSize="10.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                    <Button Command="{Binding BrowseMergeAppendOutputFileCommand}" Content="📁 Đổi Vị Trí Lưu" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="6,2" CornerRadius="3" />
+                                                                </WrapPanel>
+                                                                <TextBox Text="{Binding MergeAppendOutputFilePath}" Height="28" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <!-- Nút hành động cho Chế độ Nối Chap -->
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Button Command="{Binding StartMergeAppendCommand}" IsEnabled="{Binding !IsMergingArchives}"
+                                                                Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,6" Height="34" CornerRadius="4" Margin="0,0,8,6">
+                                                            <TextBlock Text="⚡ BẮT ĐẦU NỐI CHAP VÀO TỆP" />
+                                                        </Button>
+
+                                                        <Button Command="{Binding StopArchiveMergeCommand}" IsEnabled="{Binding IsMergingArchives}"
+                                                                Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,6" Height="34" CornerRadius="4" Margin="0,0,8,6">
+                                                            <TextBlock Text="⏹ DỪNG" />
+                                                        </Button>
+
+                                                        <Button Command="{Binding ClearMergeLogsCommand}"
+                                                                Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="10,6" Height="34" CornerRadius="4" Margin="0,0,0,6">
+                                                            <TextBlock Text="🧹 Xóa log" />
+                                                        </Button>
+                                                    </WrapPanel>
+                                                </StackPanel>
+
+
                                             <!-- Thanh tiến trình & Trạng thái -->
                                             <StackPanel Spacing="4">
                                                 <ProgressBar Value="{Binding MergeProgress}" Maximum="100" Height="6" CornerRadius="3" Foreground="#10B981" Background="#0F172A" />

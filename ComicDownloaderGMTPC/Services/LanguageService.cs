@@ -177,6 +177,9 @@ public class LanguageService
         AddPair("Split Long Images", "Cắt Ảnh Dài");
         AddPair("Image Enhancer", "Nâng Cấp Ảnh");
         AddPair("Package & Convert", "Đóng Gói & Chuyển Đổi");
+        AddPair("Archive Merger", "Gộp File Lẻ");
+        AddPair("Merge / Append Chapters", "Gộp File / Nối Chap");
+        AddPair("Append Chapters", "Nối Chap Vào File");
         AddPair("Offline Missing Scanner", "Quét Chap Thiếu Offline");
         AddPair("Batch Rename", "Đổi Tên Hàng Loạt");
         AddPair("Dual Picture Sort", "Phân Loại Ảnh Kép");

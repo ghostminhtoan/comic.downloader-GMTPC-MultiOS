@@ -835,6 +835,41 @@
   - Giao diện: Toàn bộ thanh tab và subtabs hiển thị thanh thoát, không gian hiển thị truyện được mở rộng tối đa, chuyển đổi song ngữ Anh - Việt mượt mà.
   - Chạm và giữ Bubble 3 giây: Rung nhẹ phản hồi và bảng chọn xuất hiện lập tức. Chọn tắt bong bóng -> bong bóng ẩn ngay; chọn tắt app -> app dừng hoàn toàn không còn chạy ngầm.
 
+### 21. BUG-021: Tích hợp Chế độ Nối Chapter vào Tệp đóng gói có sẵn (Append Mode) cho Subtab Gộp File Lẻ (Merger)
+- **Triệu chứng & Nhu cầu**:
+  1. Người dùng thường tải và đóng gói truyện tranh dài tập theo từng đợt (ví dụ: đợt 1 tải chap 1-100 đóng gói thành file 'tử thần conan.pdf' hoặc '.cbz', '.zip', '.mobi' rồi xóa thư mục ảnh thô để giải phóng dung lượng ổ cứng).
+  2. Khi có các chương mới (đợt 2: tải chap 101-200 vào thư mục mới), người dùng muốn chọn tệp gốc đã đóng gói từ trước và chọn thư mục chứa các chap mới tải về để nối tiếp (Append) thành tệp hoàn chỉnh từ chap 1 đến chap 200.
+  3. Yêu cầu khắt khe: Bảo tồn 100% cấu trúc từng chapter riêng biệt (không gộp phẳng bừa bãi làm mất ranh giới chương) và bảo tồn cây Bookmarks mục lục nhảy từng chương (đối với PDF).
+- **Nguyên nhân gốc rễ**:
+  - Subtab '📚 Gộp File Lẻ (Merger)' trước đây chỉ hỗ trợ chế độ gom hàng loạt các file chương lẻ nằm trong 1 thư mục từ đầu thành các file lớn (Batch Chunking), chưa có giao diện và engine bóc tách file đóng gói cũ để nối thêm chapter mới vào sau mà vẫn bảo toàn cây thư mục chương và Bookmarks.
+- **Giải pháp triệt để**:
+  1. *Engine Core (ArchiveMergeService.cs)*:
+     - Hiện thực hàm AppendChaptersToFileAsync:
+       + **Đối với PDF (.pdf)**: Bóc tách toàn bộ trang ảnh cũ bằng PdfComicParser.Instance.ExtractPageImageBytes, đọc toàn bộ cây Bookmarks mục lục cũ (pdfMeta.Bookmarks). Sau đó bóc tách tiếp các chapter mới, tự động đánh chỉ mục Bookmarks mới nối tiếp từ startPage = allImages.Count. Gọi FilePackerService.CreatePdfFromImages để đóng gói thành tệp PDF sắc nét kèm mục lục nhảy từng chapter đầy đủ.
+       + **Đối với CBZ / ZIP (.cbz, .zip)**: Giải nén cấu trúc chapter cũ ra thư mục tạm. Nạp tiếp các chapter mới vào các subfolder riêng biệt. Tự động sắp xếp Natural Sort theo thứ tự số học tự nhiên và nén lại thành file hoàn chỉnh.
+       + **Đối với MOBI (.mobi)**: Bóc tách ảnh cũ bằng MobiComicParser.Instance.ReadPageBytes, nạp tiếp các chapter mới và gọi MobiWriterService.CreateMobiFromImages.
+     - *Cơ chế ghi đè an toàn (Safe Atomic Overwrite)*: Tự động sao lưu bản dự phòng .bak trước khi thay thế tệp gốc, chỉ xóa bản backup khi tệp mới đã ghi thành công 100%.
+     - Bổ sung hàm tiện ích AnalyzeBaseFile và AnalyzeNewFolder để hiển thị tóm tắt thông số trực quan ngay khi người dùng chọn tệp/thư mục.
+  2. *ViewModel (MainViewModel.ArchiveMerger.cs)*:
+     - Thêm các thuộc tính Observable: IsMergeAppendMode, MergeAppendBaseFilePath, MergeAppendBaseFileInfoText, MergeAppendNewFolderPath, MergeAppendNewFolderInfoText, IsMergeAppendOverwrite, MergeAppendOutputFilePath, IsMergeAppendPreserveBookmarks.
+     - Thêm các Command: BrowseMergeAppendBaseFileCommand, OpenMergeAppendBaseFileFolderCommand, BrowseMergeAppendNewFolderCommand, OpenMergeAppendNewFolderCommand, BrowseMergeAppendOutputFileCommand, StartMergeAppendCommand.
+     - Kết nối mượt mà với hàng đợi Log an toàn đa luồng (_mergeLogBuffer), thanh tiến trình % và BackgroundExecutionService (đồng bộ cả Floating Bubble và thông báo âm thanh).
+  3. *Giao diện (MainView.axaml)*:
+     - Đổi tiêu đề subtab thành 📚 Gộp File / Nối Chap (Merger).
+     - Bổ sung thanh chọn chế độ (Mode Selector) phẳng đẹp:
+       + Chế độ 1: Gộp hàng loạt file / thư mục lẻ
+       + Chế độ 2: Nối Chap vào File có sẵn (Append Mode)
+     - Thiết kế quy trình 3 bước trực quan:
+       + Bước 1: Chọn Tệp gốc (.pdf, .cbz, .zip, .mobi) kèm thông tin phân tích số trang/dung lượng/bookmarks.
+       + Bước 2: Chọn Thư mục chứa các chap mới kèm thông tin quét dải chapter.
+       + Bước 3: Tùy chọn Ghi đè an toàn (kèm .bak) / Chọn vị trí lưu mới & Tùy chọn bảo tồn Bookmarks.
+  4. *Đồng bộ song ngữ (LanguageService.cs)*: Bổ sung từ khóa chuyển ngữ cho 'Gộp File / Nối Chap (Merger)' và 'Nối Chap Vào File'.
+- **File can thiệp**: ArchiveMergeService.cs, MainViewModel.ArchiveMerger.cs, MainView.axaml, LanguageService.cs, ug-fixes-and-solutions.md.
+- **Quy tắc kiểm thử**:
+  - Chọn file PDF/CBZ/ZIP đã có (ví dụ chap 1-100), chọn thư mục chứa chap 101-200 mới tải.
+  - Bấm '⚡ BẮT ĐẦU NỐI CHAP VÀO TỆP': Tiến trình đọc file cũ, bóc tách và ghép nối các chap mới diễn ra mượt mà theo thời gian thực.
+  - Mở file kết quả: Tệp chứa đầy đủ từ chap 1 đến chap 200, mỗi chap là một thư mục riêng (đối với CBZ/ZIP) hoặc có Bookmarks mục lục nhảy từng chương chuẩn xác (đối với PDF).
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 

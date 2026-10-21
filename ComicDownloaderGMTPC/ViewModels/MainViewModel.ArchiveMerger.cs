@@ -465,5 +465,310 @@ public partial class MainViewModel
     {
         IsMergeCompletedVisible = false;
     }
-}
 
+    // ==========================================
+    // CẤU HÌNH CHẾ ĐỘ NỐI CHAP (APPEND MODE)
+    // ==========================================
+    [ObservableProperty]
+    private bool _isMergeAppendMode = false;
+
+    [ObservableProperty]
+    private string _mergeAppendBaseFilePath = string.Empty;
+
+    [ObservableProperty]
+    private string _mergeAppendBaseFileInfoText = string.Empty;
+
+    [ObservableProperty]
+    private string _mergeAppendNewFolderPath = string.Empty;
+
+    [ObservableProperty]
+    private string _mergeAppendNewFolderInfoText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isMergeAppendOverwrite = true;
+
+    [ObservableProperty]
+    private string _mergeAppendOutputFilePath = string.Empty;
+
+    [ObservableProperty]
+    private bool _isMergeAppendPreserveBookmarks = true;
+
+    [RelayCommand]
+    public void SetMergeModeBatch() => IsMergeAppendMode = false;
+
+    [RelayCommand]
+    public void SetMergeModeAppend() => IsMergeAppendMode = true;
+
+    partial void OnMergeAppendBaseFilePathChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !File.Exists(value))
+        {
+            MergeAppendBaseFileInfoText = string.Empty;
+            return;
+        }
+
+        try
+        {
+            MergeAppendBaseFileInfoText = _archiveMergeService.AnalyzeBaseFile(value);
+            string dir = Path.GetDirectoryName(value) ?? string.Empty;
+            string nameNoExt = Path.GetFileNameWithoutExtension(value);
+            string ext = Path.GetExtension(value);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                MergeAppendOutputFilePath = Path.Combine(dir, $"{nameNoExt}_updated{ext}");
+            }
+        }
+        catch { }
+    }
+
+    partial void OnMergeAppendNewFolderPathChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !Directory.Exists(value))
+        {
+            MergeAppendNewFolderInfoText = string.Empty;
+            return;
+        }
+
+        try
+        {
+            MergeAppendNewFolderInfoText = _archiveMergeService.AnalyzeNewFolder(value);
+        }
+        catch { }
+    }
+
+    [RelayCommand]
+    public async Task BrowseMergeAppendBaseFileAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider == null) return;
+
+            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = _langService.CurrentLanguage == "VI"
+                    ? "Chọn file gốc cần nối chapter (.pdf, .cbz, .zip, .mobi)"
+                    : "Select Base Comic File To Append Chapters (.pdf, .cbz, .zip, .mobi)",
+                AllowMultiple = false,
+                FileTypeFilter = new List<FilePickerFileType>
+                {
+                    new FilePickerFileType("Tệp truyện đóng gói (*.pdf, *.cbz, *.zip, *.mobi)")
+                    {
+                        Patterns = new[] { "*.pdf", "*.cbz", "*.zip", "*.mobi" }
+                    },
+                    FilePickerFileTypes.All
+                }
+            });
+
+            if (files != null && files.Count > 0)
+            {
+                var selected = files[0];
+                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    MergeAppendBaseFilePath = normalized;
+                    AddLog("INFO", $"[Nối Chap] Đã chọn tệp gốc: {MergeAppendBaseFilePath}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"[Nối Chap] Lỗi khi chọn tệp gốc: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public void OpenMergeAppendBaseFileFolder()
+    {
+        if (string.IsNullOrWhiteSpace(MergeAppendBaseFilePath) || !File.Exists(MergeAppendBaseFilePath))
+        {
+            _downloadEngine.OpenDirectoryInExplorer(_downloadEngine.DownloadRoot);
+            return;
+        }
+
+        string? dir = Path.GetDirectoryName(MergeAppendBaseFilePath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            _downloadEngine.OpenDirectoryInExplorer(dir);
+        }
+    }
+
+    [RelayCommand]
+    public async Task BrowseMergeAppendNewFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider == null) return;
+
+            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = _langService.CurrentLanguage == "VI"
+                    ? "Chọn thư mục chứa các chapter mới cần nối vào file"
+                    : "Select Folder Containing New Chapters To Append",
+                AllowMultiple = false
+            });
+
+            if (folders != null && folders.Count > 0)
+            {
+                var selected = folders[0];
+                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    MergeAppendNewFolderPath = normalized;
+                    AddLog("INFO", $"[Nối Chap] Đã chọn thư mục chapter mới: {MergeAppendNewFolderPath}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"[Nối Chap] Lỗi khi chọn thư mục chapter mới: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public void OpenMergeAppendNewFolder()
+    {
+        string path = string.IsNullOrWhiteSpace(MergeAppendNewFolderPath) ? _downloadEngine.DownloadRoot : MergeAppendNewFolderPath;
+        _downloadEngine.OpenDirectoryInExplorer(path);
+    }
+
+    [RelayCommand]
+    public async Task BrowseMergeAppendOutputFileAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider == null) return;
+
+            string ext = !string.IsNullOrWhiteSpace(MergeAppendBaseFilePath)
+                ? Path.GetExtension(MergeAppendBaseFilePath).TrimStart('.')
+                : "pdf";
+
+            var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = _langService.CurrentLanguage == "VI" ? "Chọn vị trí lưu tệp kết quả sau khi nối" : "Select Output Location For Appended File",
+                DefaultExtension = ext,
+                SuggestedFileName = !string.IsNullOrWhiteSpace(MergeAppendBaseFilePath)
+                    ? $"{Path.GetFileNameWithoutExtension(MergeAppendBaseFilePath)}_updated.{ext}"
+                    : $"comic_updated.{ext}"
+            });
+
+            if (file != null)
+            {
+                string? raw = file.TryGetLocalPath() ?? file.Path?.LocalPath ?? file.Path?.ToString();
+                string normalized = DownloadEngineService.NormalizeStoragePath(raw, file.Name);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    MergeAppendOutputFilePath = normalized;
+                    AddLog("INFO", $"[Nối Chap] Đã chọn vị trí lưu tệp kết quả: {MergeAppendOutputFilePath}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"[Nối Chap] Lỗi khi chọn vị trí lưu: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task StartMergeAppendAsync()
+    {
+        if (IsMergingArchives)
+        {
+            AddLog("WARN", "[Nối Chap] Đang có tiến trình gộp file đang chạy!");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(MergeAppendBaseFilePath) || !File.Exists(MergeAppendBaseFilePath))
+        {
+            AddLog("WARN", "[Nối Chap] Vui lòng chọn tệp gốc (.pdf, .cbz, .zip, .mobi) hợp lệ!");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(MergeAppendNewFolderPath) || !Directory.Exists(MergeAppendNewFolderPath))
+        {
+            AddLog("WARN", "[Nối Chap] Vui lòng chọn thư mục chứa các chapter mới hợp lệ!");
+            return;
+        }
+
+        IsMergingArchives = true;
+        MergeProgress = 0;
+        MergeProgressText = "0%";
+        MergeStatusText = "Đang khởi tạo tiến trình nối chapter...";
+        IsMergeCompletedVisible = false;
+        _mergeCts = new CancellationTokenSource();
+
+        BackgroundExecutionService.Instance.ReportProgress("archive_merger", "Nối Chap Vào File", "Bắt đầu nối chapter...", 0, true);
+
+        var progressHandler = new Progress<(int current, int total, string message)>(p =>
+        {
+            double pct = p.total > 0 ? Math.Clamp((double)p.current / p.total * 100.0, 0, 100) : 0;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                MergeProgress = pct;
+                MergeProgressText = $"{pct:F0}%";
+                MergeStatusText = p.message;
+            }, Avalonia.Threading.DispatcherPriority.Background);
+
+            BackgroundExecutionService.Instance.ReportProgress("archive_merger", "Nối Chap Vào File", p.message, pct, true);
+        });
+
+        try
+        {
+            AddLog("INFO", $"[Nối Chap] Bắt đầu nối chapter từ [{Path.GetFileName(MergeAppendNewFolderPath)}] vào tệp [{Path.GetFileName(MergeAppendBaseFilePath)}]...");
+
+            var (success, msg, outPath) = await _archiveMergeService.AppendChaptersToFileAsync(
+                MergeAppendBaseFilePath,
+                MergeAppendNewFolderPath,
+                IsMergeAppendOverwrite,
+                MergeAppendOutputFilePath,
+                IsMergeAppendPreserveBookmarks,
+                progressHandler,
+                _mergeCts.Token);
+
+            if (success)
+            {
+                MergeProgress = 100;
+                MergeProgressText = "100%";
+                MergeStatusText = $"Hoàn tất: {msg}";
+                MergeCompletedMessage = $"Nối chương thành công!\n\n{msg}\n\nVị trí tệp:\n{outPath}";
+                IsMergeCompletedVisible = true;
+
+                // Tự động phân tích lại tệp sau khi ghi đè để cập nhật UI
+                if (IsMergeAppendOverwrite)
+                {
+                    MergeAppendBaseFileInfoText = _archiveMergeService.AnalyzeBaseFile(MergeAppendBaseFilePath);
+                }
+
+                AddLog("SUCCESS", $"[Nối Chap] Hoàn tất! Tệp: {outPath}");
+                try { SoundNotificationService.Instance.PlayDownloadFinish(); } catch { }
+            }
+            else
+            {
+                MergeStatusText = $"Thất bại: {msg}";
+                AddLog("ERROR", $"[Nối Chap Thất Bại] {msg}");
+                try { SoundNotificationService.Instance.PlayDownloadError(); } catch { }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            MergeStatusText = "Đã dừng bởi người dùng.";
+            AddLog("WARN", "[Nối Chap] Người dùng đã dừng tiến trình.");
+        }
+        catch (Exception ex)
+        {
+            MergeStatusText = "Lỗi: " + ex.Message;
+            AddLog("ERROR", $"[Nối Chap Lỗi] {ex.Message}");
+            try { SoundNotificationService.Instance.PlayDownloadError(); } catch { }
+        }
+        finally
+        {
+            IsMergingArchives = false;
+            BackgroundExecutionService.Instance.CompleteTask("archive_merger", "Nối Chap Vào File", "Hoàn tất");
+        }
+    }
+
+}

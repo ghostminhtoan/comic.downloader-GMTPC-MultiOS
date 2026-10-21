@@ -439,3 +439,12 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 33. **Bổ Sung File Summary Toàn Diện Cho Mã Nguồn & Tạo Sổ Tay Khắc Phục Lỗi (`bug-fixes-and-solutions.md`)**:
     - **Chuẩn Hóa File Summary Đầu Mỗi File (21 Files Trọng Tâm)**: Đã bổ sung khối chú thích chuẩn hóa ở đầu 14 ViewModel (`ComicReaderViewModel.cs`, `LibraryViewModel.cs`, `MainViewModel.*.cs`...) và 7 Services cốt lõi (`ArchiveMergeService.cs`, `ComicDiskCacheService.cs`, `ComicReaderService.cs`...), định nghĩa rõ: Vai trò & Mục đích, Các tính năng & Thành phần chính, Lưu ý kỹ thuật & Quy tắc bảo trì.
     - **Sổ Tay Kỹ Thuật Khắc Phục Lỗi (`bug-fixes-and-solutions.md`)**: Lập tài liệu chuyên sâu ghi nhận 13 mã lỗi lớn (BUG-001 đến BUG-013) kèm bảng tra cứu nhanh (Quick Index), phân tích nguyên nhân gốc rễ, giải pháp triệt để, file can thiệp và quy tắc kiểm thử phòng ngừa tái phát.
+
+34. **Tích Hợp Chế Độ Nối Chap Vào Tệp Đóng Gói Có Sẵn (Append Chapters to Existing Archive Mode) Cho Tab Gộp File Lẻ (ArchiveMergeService.cs, MainViewModel.ArchiveMerger.cs, MainView.axaml, LanguageService.cs, bug-fixes-and-solutions.md)**:
+    - **Ý Tưởng & Giải Pháp Kỹ Thuật (BUG-021)**: Cho phép người dùng đã có tệp truyện tổng hợp trước đó (.pdf, .cbz, .zip, .mobi) nối tiếp các chapter mới tải về mà không làm mất cấu trúc thư mục chương hay hệ thống Bookmarks mục lục ban đầu.
+    - **Core Service (ArchiveMergeService.AppendChaptersToFileAsync)**:
+      + **PDF (.pdf)**: Bóc tách ảnh trang cũ, lưu giữ toàn bộ Bookmarks cũ (pdfMeta.Bookmarks), nạp tiếp các chapter mới theo Natural Sort và tự động tạo Bookmarks nối tiếp chuẩn trang.
+      + **CBZ / ZIP (.cbz, .zip)**: Giải nén cấu trúc chapter cũ ra thư mục tạm, nạp thêm các folder chapter mới, bảo toàn 100% cấu trúc thư mục con riêng biệt và nén lại thành file đóng gói chuẩn.
+      + **MOBI (.mobi)**: Tái tạo luồng ảnh cũ qua MobiComicParser và kết hợp các chương mới qua MobiWriterService.
+      + **Atomic Safe Overwrite**: Tự động tạo bản sao lưu .bak trước khi ghi đè, bảo vệ tệp gốc tuyệt đối chống hỏng hóc nếu quá trình ghi bị ngắt quãng.
+    - **ViewModel & UI Reactive**: Thiết kế thanh chuyển đổi 2 chế độ (Mode Selector: Gộp Hàng Loạt vs Nối Chap Vào File), quy trình 3 bước trực quan (Chọn tệp gốc ➔ Chọn folder chapter mới ➔ Tùy chọn ghi đè & bảo tồn Bookmarks), hiển thị thông số phân tích dung lượng/số trang/số chap theo thời gian thực và đồng bộ tiến trình % lên Bubble/Notification.
