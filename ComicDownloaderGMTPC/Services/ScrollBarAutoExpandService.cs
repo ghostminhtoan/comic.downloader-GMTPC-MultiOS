@@ -117,6 +117,10 @@ public static class ScrollBarAutoExpandService
     {
         if (!_hookedBars.Add(bar)) return;
 
+        // Cấu hình Track để núm trượt Thumb luôn có kích thước gọn gàng cố định dạng Slider capsule
+        // và trượt từ 0% đến 100% mượt mà chuẩn Comic Screen
+        ConfigureTrack(bar);
+
         bar.PointerEntered += (s, e) =>
         {
             lock (_syncLock)
@@ -139,6 +143,12 @@ public static class ScrollBarAutoExpandService
             lock (_syncLock)
             {
                 _hoveredBars.Add(bar);
+                bar.Classes.Set("scroll-active", true);
+                if (bar.TemplatedParent is ScrollViewer sv)
+                {
+                    sv.Classes.Set("scroll-active", true);
+                }
+                _activeExpandedBars.Add(bar);
             }
         }, RoutingStrategies.Bubble | RoutingStrategies.Tunnel);
 
@@ -153,6 +163,57 @@ public static class ScrollBarAutoExpandService
             }
             ScheduleDelayedCollapse();
         }, RoutingStrategies.Bubble | RoutingStrategies.Tunnel);
+
+        // Bắt đầu kéo Thumb: Giữ thanh cuộn luôn phóng to để người dùng kéo thả mượt mà
+        bar.AddHandler(Thumb.DragStartedEvent, (s, e) =>
+        {
+            lock (_syncLock)
+            {
+                _hoveredBars.Add(bar);
+                bar.Classes.Set("scroll-active", true);
+                if (bar.TemplatedParent is ScrollViewer sv)
+                {
+                    sv.Classes.Set("scroll-active", true);
+                }
+                _activeExpandedBars.Add(bar);
+            }
+        }, RoutingStrategies.Bubble | RoutingStrategies.Tunnel);
+
+        // Kết thúc kéo Thumb: Bắt đầu đếm ngược 3 giây để thu nhỏ lại
+        bar.AddHandler(Thumb.DragCompletedEvent, (s, e) =>
+        {
+            lock (_syncLock)
+            {
+                _hoveredBars.Remove(bar);
+            }
+            ScheduleDelayedCollapse();
+        }, RoutingStrategies.Bubble | RoutingStrategies.Tunnel);
+    }
+
+    private static void ConfigureTrack(ScrollBar bar)
+    {
+        void ApplyTrackConfig()
+        {
+            var track = bar.GetVisualDescendants().OfType<Track>().FirstOrDefault();
+            if (track != null)
+            {
+                if (!double.IsNaN(track.ViewportSize))
+                {
+                    track.ViewportSize = double.NaN;
+                }
+            }
+        }
+
+        ApplyTrackConfig();
+        bar.Loaded += (s, e) => ApplyTrackConfig();
+        bar.TemplateApplied += (s, e) => ApplyTrackConfig();
+        bar.PropertyChanged += (s, e) =>
+        {
+            if (e.Property == ScrollBar.ViewportSizeProperty)
+            {
+                ApplyTrackConfig();
+            }
+        };
     }
 
     private static void ScheduleDelayedCollapse()
@@ -209,6 +270,17 @@ public static class ScrollBarAutoExpandService
     public static void AttachGlobalScrollListeners(Control rootControl)
     {
         if (rootControl == null) return;
+
+        rootControl.Loaded += (s, e) =>
+        {
+            var bars = rootControl.GetVisualDescendants()
+                .OfType<ScrollBar>()
+                .Where(sb => sb.Orientation == Orientation.Vertical && !IsInsideReader(sb));
+            foreach (var b in bars)
+            {
+                HookScrollBarPointerEvents(b);
+            }
+        };
 
         // 1. Bắt thao tác lăn chuột trên Windows & Linux (kể cả khi nội dung không thể cuộn thêm)
         rootControl.AddHandler(InputElement.PointerWheelChangedEvent, (s, e) =>

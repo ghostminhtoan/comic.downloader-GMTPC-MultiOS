@@ -69,11 +69,10 @@
             </Setter>
         </Style>
         <Style Selector="ScrollBar:vertical /template/ Thumb">
-            <Setter Property="MinWidth" Value="6" />
-            <Setter Property="Width" Value="6" />
-            <Setter Property="MinHeight" Value="36" />
-            <Setter Property="MaxHeight" Value="48" />
-            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="MinWidth" Value="8" />
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="CornerRadius" Value="4" />
             <Setter Property="Background" Value="#64748B" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="Transitions">
@@ -85,28 +84,26 @@
             </Setter>
         </Style>
 
-        <!-- Khi phóng to (khi cuộn hoặc hover hoặc được kích hoạt scroll-active) - Núm kéo Comic Screen to và gọn gàng -->
-        <Style Selector="ScrollBar:vertical.scroll-active, ScrollViewer.scroll-active /template/ ScrollBar:vertical, ScrollBar:vertical:pointerover">
+        <!-- Khi phóng to (khi cuộn hoặc hover hoặc được kích hoạt scroll-active hoặc nhấn giữ kéo thumb) - Núm kéo Comic Screen to và gọn gàng -->
+        <Style Selector="ScrollBar:vertical.scroll-active, ScrollViewer.scroll-active /template/ ScrollBar:vertical, ScrollBar:vertical:pointerover, ScrollBar:vertical:pressed">
             <Setter Property="MinWidth" Value="36" />
             <Setter Property="Width" Value="36" />
             <Setter Property="Opacity" Value="1.0" />
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="ScrollBar:vertical.scroll-active /template/ Thumb, ScrollViewer.scroll-active /template/ ScrollBar:vertical /template/ Thumb, ScrollBar:vertical:pointerover /template/ Thumb">
-            <Setter Property="MinWidth" Value="32" />
-            <Setter Property="Width" Value="32" />
-            <Setter Property="MinHeight" Value="48" />
-            <Setter Property="MaxHeight" Value="56" />
+            <Setter Property="MinWidth" Value="36" />
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="56" />
             <Setter Property="CornerRadius" Value="20, 0, 0, 20" />
             <Setter Property="Background" Value="#38BDF8" />
             <Setter Property="HorizontalAlignment" Value="Right" />
         </Style>
-        <Style Selector="ScrollBar:vertical /template/ Thumb:pressed">
+        <Style Selector="ScrollBar:vertical /template/ Thumb:pressed, ScrollBar:vertical.scroll-active /template/ Thumb:pressed">
             <Setter Property="MinWidth" Value="36" />
             <Setter Property="Width" Value="36" />
-            <Setter Property="MinHeight" Value="50" />
-            <Setter Property="MaxHeight" Value="60" />
-            <Setter Property="CornerRadius" Value="22, 0, 0, 22" />
+            <Setter Property="Height" Value="56" />
+            <Setter Property="CornerRadius" Value="20, 0, 0, 20" />
             <Setter Property="Background" Value="#0284C7" />
             <Setter Property="HorizontalAlignment" Value="Right" />
         </Style>
