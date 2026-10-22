@@ -968,35 +968,60 @@ public class ArchiveMergeService
                 Directory.CreateDirectory(tempDir);
                 try
                 {
-                    var allImages = new List<string>();
+                    var pageSources = new List<FilePackerService.PdfPageSourceItem>();
                     var bookmarks = new List<(string Title, int PageIndex)>();
 
-                    LogEmitted?.Invoke("INFO", $"Đang nạp file PDF gốc: {Path.GetFileName(baseFilePath)}...");
-                    progress?.Report((0, 100, "Đang đọc cấu trúc file PDF gốc..."));
+                    LogEmitted?.Invoke("INFO", $"Đang nạp cấu trúc file PDF gốc: {Path.GetFileName(baseFilePath)}...");
+                    progress?.Report((0, 100, "Đang nạp nhanh cấu trúc file PDF gốc..."));
 
                     var pdfMeta = PdfComicParser.Instance.InspectPdf(baseFilePath);
                     int oldTotalPages = pdfMeta.Pages.Count;
 
-                    // Bóc tách trang ảnh cũ từ PDF gốc
-                    for (int p = 0; p < oldTotalPages; p++)
+                    // Mở FileStream 1 lần để đảm bảo toàn bộ stream offset và kích thước của các trang cũ được resolve siêu tốc (0ms decode, 0 file tạm)
+                    using (var baseFs = new FileStream(baseFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 131072))
                     {
-                        if (ct.IsCancellationRequested) break;
-                        try
+                        for (int p = 0; p < oldTotalPages; p++)
                         {
-                            byte[]? imgBytes = PdfComicParser.Instance.ExtractPageImageBytes(baseFilePath, p, out string imgExt);
-                            if (imgBytes != null && imgBytes.Length > 0)
-                            {
-                                string pPath = Path.Combine(tempDir, $"old_p_{p + 1:D5}{imgExt}");
-                                File.WriteAllBytes(pPath, imgBytes);
-                                allImages.Add(pPath);
-                            }
-                        }
-                        catch { }
+                            if (ct.IsCancellationRequested) break;
+                            var pInfo = pdfMeta.Pages[p];
+                            bool resolved = PdfComicParser.EnsureImageStreamResolved(baseFs, pInfo, pdfMeta);
 
-                        if (p % 10 == 0 || p == oldTotalPages - 1)
-                        {
-                            int pct = (int)((double)(p + 1) / Math.Max(1, oldTotalPages) * 35.0);
-                            progress?.Report((pct, 100, $"Đang nạp trang cũ ({p + 1}/{oldTotalPages})..."));
+                            if (resolved && pInfo.StreamLength > 0)
+                            {
+                                pageSources.Add(new FilePackerService.PdfPageSourceItem
+                                {
+                                    IsFromExistingPdf = true,
+                                    ExistingPdfPath = baseFilePath,
+                                    StreamOffset = pInfo.StreamOffset,
+                                    StreamLength = pInfo.StreamLength,
+                                    Width = pInfo.Width > 0 ? pInfo.Width : 1080,
+                                    Height = pInfo.Height > 0 ? pInfo.Height : 1920,
+                                    Filter = string.IsNullOrEmpty(pInfo.Filter) ? "DCTDecode" : pInfo.Filter,
+                                    ColorSpace = string.IsNullOrEmpty(pInfo.ColorSpace) ? "/DeviceRGB" : pInfo.ColorSpace,
+                                    BitsPerComponent = pInfo.BitsPerComponent > 0 ? pInfo.BitsPerComponent : 8,
+                                    Colors = pInfo.Colors > 0 ? pInfo.Colors : 3,
+                                    Predictor = pInfo.Predictor > 0 ? pInfo.Predictor : 1,
+                                    PaletteBytes = pInfo.PaletteBytes
+                                });
+                            }
+                            else
+                            {
+                                try
+                                {
+                                    byte[]? imgBytes = PdfComicParser.Instance.ExtractPageImageBytes(baseFilePath, p, out string imgExt);
+                                    if (imgBytes != null && imgBytes.Length > 0)
+                                    {
+                                        string pPath = Path.Combine(tempDir, $"fallback_p_{p + 1:D5}{imgExt}");
+                                        File.WriteAllBytes(pPath, imgBytes);
+                                        pageSources.Add(new FilePackerService.PdfPageSourceItem
+                                        {
+                                            IsFromExistingPdf = false,
+                                            ImageFilePath = pPath
+                                        });
+                                    }
+                                }
+                                catch { }
+                            }
                         }
                     }
 
@@ -1018,36 +1043,44 @@ public class ArchiveMergeService
                         }
                     }
 
-                    // Nạp các chapter mới
+                    // Nạp các chapter mới từ folder (giữ nguyên cấu trúc thư mục, số thập phân 3.1, 3.2...)
                     int totalNew = newItems.Count;
                     for (int i = 0; i < totalNew; i++)
                     {
                         if (ct.IsCancellationRequested) break;
                         var item = newItems[i];
                         string chapterLabel = MakeSafeFolderName(item);
-                        LogEmitted?.Invoke("INFO", $"  -> Đang ghép nối chương mới [{item.FormattedChapterLabel}]: {item.Name}...");
+                        LogEmitted?.Invoke("INFO", $"  -> Đang nạp chương mới [{item.FormattedChapterLabel}]: {item.Name}...");
 
-                        int startPage = allImages.Count;
+                        int startPage = pageSources.Count;
                         var chapterImages = ExtractChapterImagesToTemp(item, tempDir, ct);
                         if (chapterImages.Count > 0)
                         {
-                            allImages.AddRange(chapterImages);
+                            foreach (var img in chapterImages)
+                            {
+                                pageSources.Add(new FilePackerService.PdfPageSourceItem
+                                {
+                                    IsFromExistingPdf = false,
+                                    ImageFilePath = img
+                                });
+                            }
+
                             if (preserveBookmarks)
                             {
                                 bookmarks.Add((chapterLabel, startPage));
                             }
                         }
 
-                        int pct = 35 + (int)((double)(i + 1) / totalNew * 50.0);
+                        int pct = 20 + (int)((double)(i + 1) / totalNew * 40.0);
                         progress?.Report((pct, 100, $"[{i + 1}/{totalNew}] Đã nạp chương mới: {item.Name}"));
                     }
 
-                    if (allImages.Count == 0 || ct.IsCancellationRequested)
+                    if (pageSources.Count == 0 || ct.IsCancellationRequested)
                     {
-                        return (false, "Đã hủy hoặc không có ảnh nào được xuất.", string.Empty);
+                        return (false, "Đã hủy hoặc không có trang nào được nạp.", string.Empty);
                     }
 
-                    progress?.Report((90, 100, "Đang biên soạn và đóng gói file PDF hoàn chỉnh..."));
+                    progress?.Report((65, 100, "Đang đóng gói file PDF hoàn chỉnh (Zero-Conversion Streaming)..."));
 
                     string outFilePath;
                     string tempPdfOut = Path.Combine(tempDir, "output.pdf");
@@ -1064,7 +1097,14 @@ public class ArchiveMergeService
                     }
 
                     int dummy = 0;
-                    FilePackerService.CreatePdfFromImages(allImages, tempPdfOut, preserveBookmarks ? bookmarks : new List<(string Title, int PageIndex)>(), allImages.Count, ref dummy, null, ct);
+                    FilePackerService.CreatePdfFromPageSources(
+                        pageSources,
+                        tempPdfOut,
+                        preserveBookmarks ? bookmarks : new List<(string Title, int PageIndex)>(),
+                        pageSources.Count,
+                        ref dummy,
+                        progress,
+                        ct);
 
                     if (overwriteOriginal)
                     {
@@ -1084,7 +1124,7 @@ public class ArchiveMergeService
                     PdfComicParser.Instance.InvalidateCache(outFilePath);
 
                     progress?.Report((100, 100, "Hoàn tất nối chapter vào PDF!"));
-                    string msg = $"Đã nối thành công {totalNew} chương mới vào file PDF! (Tổng: {allImages.Count} trang, {bookmarks.Count} mục bookmarks)";
+                    string msg = $"Đã nối thành công {totalNew} chương mới vào file PDF! (Tổng: {pageSources.Count} trang, {bookmarks.Count} mục bookmarks)";
                     LogEmitted?.Invoke("SUCCESS", msg);
                     return (true, msg, outFilePath);
                 }
@@ -1093,6 +1133,7 @@ public class ArchiveMergeService
                     try { Directory.Delete(tempDir, true); } catch { }
                 }
             }
+
             else if (ext == ".cbz" || ext == ".zip")
             {
                 string tempDir = Path.Combine(Path.GetTempPath(), "comic_append_archive_" + Guid.NewGuid().ToString("N"));

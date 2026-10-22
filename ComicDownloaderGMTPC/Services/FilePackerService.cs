@@ -411,6 +411,36 @@ public class FilePackerService
     /// Tốc độ tương đương đóng gói ZIP, tiêu thụ RAM phẳng < 5MB cho tài liệu hàng nghìn trang.
     /// Tự động đính kèm cây mục lục chương (PDF Bookmarks/Outlines) tiếng Việt UTF-16BE.
     /// </summary>
+    /// <summary>
+    /// Đối tượng mô tả nguồn của một trang trong tài liệu PDF (Zero-Conversion Streaming Engine):
+    /// - Có thể là một file ảnh trên đĩa (JPEG, PNG, WebP...)
+    /// - Hoặc là một trang cũ trích xuất trực tiếp từ file PDF có sẵn (Zero-copy stream từ PDF cũ sang PDF mới).
+    /// </summary>
+    public sealed class PdfPageSourceItem
+    {
+        public bool IsFromExistingPdf { get; set; }
+        public string? ExistingPdfPath { get; set; }
+        public long StreamOffset { get; set; }
+        public long StreamLength { get; set; }
+        public string Filter { get; set; } = "DCTDecode";
+        public string ColorSpace { get; set; } = "/DeviceRGB";
+        public int BitsPerComponent { get; set; } = 8;
+        public int Colors { get; set; } = 3;
+        public int Predictor { get; set; } = 1;
+        public byte[]? PaletteBytes { get; set; }
+
+        public string? ImageFilePath { get; set; }
+        public byte[]? PreEncodedJpegBytes { get; set; }
+
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public int Components { get; set; } = 3;
+    }
+
+    /// <summary>
+    /// Tạo tài liệu PDF đa trang chuẩn ISO 32000-1 với cơ chế Zero-Conversion Native Direct Streaming.
+    /// Giữ nguyên 100% kích thước pixel Width, Height và dung lượng ảnh gốc.
+    /// </summary>
     public static void CreatePdfFromImages(
         List<string> images,
         string pdfPath,
@@ -420,12 +450,94 @@ public class FilePackerService
         IProgress<(int current, int total, string currentFile)>? progress,
         CancellationToken ct)
     {
+        var sources = images.Select(img => new PdfPageSourceItem
+        {
+            IsFromExistingPdf = false,
+            ImageFilePath = img
+        }).ToList();
+
+        CreatePdfFromPageSources(sources, pdfPath, bookmarks, totalUnits, ref currentUnit, progress, ct);
+    }
+
+    /// <summary>
+    /// Tạo tài liệu PDF đa trang hỗ trợ kết hợp siêu tốc giữa các trang cũ từ file PDF có sẵn và các file ảnh mới từ thư mục.
+    /// - Với trang cũ từ PDF có sẵn: Copy trực tiếp raw byte stream từ offset gốc, 0ms decode, 0 file tạm, bảo toàn 100% chất lượng và kích thước.
+    /// - Với ảnh JPEG (.jpg, .jpeg, .jfif): Stream trực tiếp 100% file gốc vào PDF (DCTDecode), không convert, giữ nguyên kích thước pixel gốc.
+    /// - Với ảnh PNG: Stream trực tiếp chunk IDAT (FlateDecode), không convert sang JPEG.
+    /// - Với ảnh WebP/khác: Tiền xử lý song song đa luồng (Parallel) trên toàn bộ nhân CPU, giữ nguyên 100% kích thước pixel gốc Width x Height.
+    /// </summary>
+    public static void CreatePdfFromPageSources(
+        List<PdfPageSourceItem> pageSources,
+        string pdfPath,
+        List<(string Title, int PageIndex)> bookmarks,
+        int totalUnits,
+        ref int currentUnit,
+        IProgress<(int current, int total, string currentFile)>? progress,
+        CancellationToken ct)
+    {
         if (File.Exists(pdfPath)) File.Delete(pdfPath);
+        if (pageSources == null || pageSources.Count == 0) return;
+
+        // 1. Phân loại định dạng nhanh và tiền xử lý song song đa luồng cho các ảnh cần nén (WebP / BMP / PNG RGBA...)
+        var unencodedIndices = new List<int>();
+        for (int i = 0; i < pageSources.Count; i++)
+        {
+            var src = pageSources[i];
+            if (src.IsFromExistingPdf) continue;
+            if (string.IsNullOrEmpty(src.ImageFilePath) || !File.Exists(src.ImageFilePath)) continue;
+
+            // Kiểm tra ảnh JPEG trực tiếp (nhận diện cả SOF0 Baseline và SOF2 Progressive)
+            if (UniversalImageDecoder.TryGetFastJpegInfo(src.ImageFilePath, out int jw, out int jh, out int jc))
+            {
+                src.Width = jw;
+                src.Height = jh;
+                src.Components = jc;
+                src.Filter = "DCTDecode";
+            }
+            // Kiểm tra ảnh PNG trực tiếp (FlateDecode IDAT stream)
+            else if (UniversalImageDecoder.TryGetFastPngInfo(src.ImageFilePath, out var pInfo) && pInfo.IsSupportedDirect)
+            {
+                src.Width = pInfo.Width;
+                src.Height = pInfo.Height;
+                src.Filter = "FlateDecode";
+            }
+            else
+            {
+                // Cần giải mã song song đa luồng
+                unencodedIndices.Add(i);
+            }
+        }
+
+        if (unencodedIndices.Count > 0 && !ct.IsCancellationRequested)
+        {
+            var pOptions = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount),
+                CancellationToken = ct
+            };
+
+            Parallel.ForEach(unencodedIndices, pOptions, idx =>
+            {
+                if (ct.IsCancellationRequested) return;
+                var src = pageSources[idx];
+                if (!string.IsNullOrEmpty(src.ImageFilePath))
+                {
+                    var (encodedBytes, w, h) = UniversalImageDecoder.FastEncodeToJpegStream(src.ImageFilePath, quality: 90);
+                    src.PreEncodedJpegBytes = encodedBytes;
+                    src.Width = w;
+                    src.Height = h;
+                    src.Components = 3;
+                    src.Filter = "DCTDecode";
+                }
+            });
+        }
+
+        if (ct.IsCancellationRequested) return;
 
         using var fs = new FileStream(pdfPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 131072);
         using var bw = new BinaryWriter(fs, System.Text.Encoding.Latin1);
 
-        // 1. PDF Header chuẩn 1.4
+        // Header chuẩn 1.4
         bw.Write(System.Text.Encoding.Latin1.GetBytes("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n"));
 
         var objectOffsets = new Dictionary<int, long>();
@@ -435,7 +547,6 @@ public class FilePackerService
         int outlinesObjId = (bookmarks != null && bookmarks.Count > 0) ? objIdCounter++ : 0;
         int pagesObjId = objIdCounter++;
 
-        // Danh sách ID cho từng mục Bookmark
         var bookmarkObjIds = new List<int>();
         if (bookmarks != null && bookmarks.Count > 0)
         {
@@ -445,7 +556,7 @@ public class FilePackerService
             }
         }
 
-        int totalPages = images.Count;
+        int totalPages = pageSources.Count;
         var pageObjIds = new List<int>(totalPages);
         var contentObjIds = new List<int>(totalPages);
         var imgObjIds = new List<int>(totalPages);
@@ -456,8 +567,6 @@ public class FilePackerService
             contentObjIds.Add(objIdCounter++);
             imgObjIds.Add(objIdCounter++);
         }
-
-        if (totalPages == 0) return;
 
         // 2. Ghi Root Catalog Object
         objectOffsets[catalogObjId] = fs.Position;
@@ -486,21 +595,15 @@ public class FilePackerService
                 sb.Append($"{bObjId} 0 obj\n<<\n");
                 sb.Append($"  /Title {ToPdfHexString(bm.Title)}\n");
                 sb.Append($"  /Parent {outlinesObjId} 0 R\n");
-                if (i > 0)
-                {
-                    sb.Append($"  /Prev {bookmarkObjIds[i - 1]} 0 R\n");
-                }
-                if (i < bookmarks.Count - 1)
-                {
-                    sb.Append($"  /Next {bookmarkObjIds[i + 1]} 0 R\n");
-                }
+                if (i > 0) sb.Append($"  /Prev {bookmarkObjIds[i - 1]} 0 R\n");
+                if (i < bookmarks.Count - 1) sb.Append($"  /Next {bookmarkObjIds[i + 1]} 0 R\n");
                 sb.Append($"  /Dest [{targetPageObjId} 0 R /XYZ null null null]\n");
                 sb.Append(">>\nendobj\n");
                 bw.Write(System.Text.Encoding.Latin1.GetBytes(sb.ToString()));
             }
         }
 
-        // 4. Ghi Pages Object (ghi theo buffer khối StringBuilder)
+        // 4. Ghi Pages Object
         objectOffsets[pagesObjId] = fs.Position;
         var pagesSb = new System.Text.StringBuilder();
         pagesSb.Append($"{pagesObjId} 0 obj\n<<\n  /Type /Pages\n  /Count {pageObjIds.Count}\n  /Kids [");
@@ -514,199 +617,198 @@ public class FilePackerService
         long lastReportTicks = 0;
         byte[] copyBuffer = new byte[65536];
 
-        // 5. Ghi từng Trang theo Native Direct Streaming (không convert, giữ nguyên 100% dung lượng gốc)
-        for (int i = 0; i < totalPages; i++)
+        // Mở sẵn kết nối FileStream đến các file PDF nguồn nếu có trang cũ để tái sử dụng
+        var openedPdfStreams = new Dictionary<string, FileStream>(StringComparer.OrdinalIgnoreCase);
+
+        try
         {
-            if (ct.IsCancellationRequested) return;
-
-            string imgPath = images[i];
-            int pageObjId = pageObjIds[i];
-            int contentObjId = contentObjIds[i];
-            int imgObjId = imgObjIds[i];
-            string imName = $"Im{i + 1}";
-
-            int width = 0;
-            int height = 0;
-
-            // Nhánh xử lý:
-            // 0: JPEG Native Direct Stream
-            // 1: PNG Native FlateDecode IDAT Direct Stream
-            // 2: Fallback (WebP / RGBA có alpha / Interlaced...) qua SkiaSharp
-            int embedMode = 2;
-            int jpegComponents = 3;
-            UniversalImageDecoder.FastPngInfo? pngInfo = null;
-            byte[]? fallbackBytes = null;
-            long fileLength = 0;
-
-            try
+            // 5. Ghi từng Trang
+            for (int i = 0; i < totalPages; i++)
             {
-                var fi = new FileInfo(imgPath);
-                if (fi.Exists)
+                if (ct.IsCancellationRequested) return;
+
+                var src = pageSources[i];
+                int pageObjId = pageObjIds[i];
+                int contentObjId = contentObjIds[i];
+                int imgObjId = imgObjIds[i];
+                string imName = $"Im{i + 1}";
+
+                int width = src.Width > 0 ? src.Width : 1080;
+                int height = src.Height > 0 ? src.Height : 1920;
+
+                // A. Page Object
+                objectOffsets[pageObjId] = fs.Position;
+                bw.Write(System.Text.Encoding.Latin1.GetBytes(
+                    $"{pageObjId} 0 obj\n<<\n" +
+                    $"  /Type /Page\n" +
+                    $"  /Parent {pagesObjId} 0 R\n" +
+                    $"  /MediaBox [0 0 {width} {height}]\n" +
+                    $"  /Contents {contentObjId} 0 R\n" +
+                    $"  /Resources <<\n" +
+                    $"    /ProcSet [/PDF /ImageC /ImageI /ImageB]\n" +
+                    $"    /XObject << /{imName} {imgObjId} 0 R >>\n" +
+                    $"  >>\n" +
+                    $">>\nendobj\n"));
+
+                // B. Content Stream Object (vẽ vừa khít toàn trang theo đúng kích thước gốc)
+                string contentOps = $"q\n{width} 0 0 {height} 0 0 cm\n/{imName} Do\nQ\n";
+                byte[] contentBytes = System.Text.Encoding.Latin1.GetBytes(contentOps);
+
+                objectOffsets[contentObjId] = fs.Position;
+                bw.Write(System.Text.Encoding.Latin1.GetBytes(
+                    $"{contentObjId} 0 obj\n<<\n" +
+                    $"  /Length {contentBytes.Length}\n" +
+                    $">>\nstream\n"));
+                bw.Write(contentBytes);
+                bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
+
+                // C. Image XObject
+                objectOffsets[imgObjId] = fs.Position;
+
+                if (src.IsFromExistingPdf && !string.IsNullOrEmpty(src.ExistingPdfPath) && src.StreamLength > 0)
                 {
-                    fileLength = fi.Length;
-                    // Kiểm tra định dạng nhanh:
-                    if (UniversalImageDecoder.TryGetPdfDirectJpegInfo(imgPath, out width, out height, out jpegComponents))
+                    // TRƯỜNG HỢP 1: TRANG CŨ TỪ PDF GỐC - ZERO-COPY DIRECT STREAM TỪ PDF CŨ
+                    if (!openedPdfStreams.TryGetValue(src.ExistingPdfPath, out var srcPdfFs))
                     {
-                        embedMode = 0; // JPEG Direct Stream
+                        srcPdfFs = new FileStream(src.ExistingPdfPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 131072);
+                        openedPdfStreams[src.ExistingPdfPath] = srcPdfFs;
                     }
-                    else if (UniversalImageDecoder.TryGetFastPngInfo(imgPath, out var pInfo) && pInfo.IsSupportedDirect)
+
+                    string filterStr = string.IsNullOrEmpty(src.Filter) ? "/DCTDecode" : $"/{src.Filter}";
+                    string csStr = string.IsNullOrEmpty(src.ColorSpace) ? "/DeviceRGB" : src.ColorSpace;
+                    if (src.PaletteBytes != null && src.PaletteBytes.Length > 0)
                     {
-                        pngInfo = pInfo;
-                        width = pInfo.Width;
-                        height = pInfo.Height;
-                        embedMode = 1; // PNG Direct FlateDecode IDAT Stream
+                        int numColors = src.PaletteBytes.Length / 3;
+                        string plteHex = Convert.ToHexString(src.PaletteBytes);
+                        csStr = $"[/Indexed /DeviceRGB {numColors - 1} <{plteHex}>]";
+                    }
+
+                    var xObjSb = new System.Text.StringBuilder();
+                    xObjSb.Append($"{imgObjId} 0 obj\n<<\n");
+                    xObjSb.Append("  /Type /XObject\n  /Subtype /Image\n");
+                    xObjSb.Append($"  /Width {width}\n  /Height {height}\n");
+                    xObjSb.Append($"  /ColorSpace {csStr}\n");
+                    xObjSb.Append($"  /BitsPerComponent {src.BitsPerComponent}\n");
+                    xObjSb.Append($"  /Filter {filterStr}\n");
+                    if (src.Predictor > 1)
+                    {
+                        xObjSb.Append($"  /DecodeParms << /Predictor {src.Predictor} /Columns {width} /Colors {src.Colors} /BitsPerComponent {src.BitsPerComponent} >>\n");
+                    }
+                    xObjSb.Append($"  /Length {src.StreamLength}\n");
+                    xObjSb.Append(">>\nstream\n");
+                    bw.Write(System.Text.Encoding.Latin1.GetBytes(xObjSb.ToString()));
+
+                    srcPdfFs.Seek(src.StreamOffset, SeekOrigin.Begin);
+                    long rem = src.StreamLength;
+                    while (rem > 0)
+                    {
+                        int toRead = (int)Math.Min(rem, copyBuffer.Length);
+                        int r = srcPdfFs.Read(copyBuffer, 0, toRead);
+                        if (r <= 0) break;
+                        fs.Write(copyBuffer, 0, r);
+                        rem -= r;
+                    }
+
+                    bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
+                }
+                else if (src.PreEncodedJpegBytes != null)
+                {
+                    // TRƯỜNG HỢP 2: ẢNH ĐÃ TIỀN XỬ LÝ SONG SONG (WebP / BMP / PNG RGBA...)
+                    bw.Write(System.Text.Encoding.Latin1.GetBytes(
+                        $"{imgObjId} 0 obj\n<<\n" +
+                        $"  /Type /XObject\n" +
+                        $"  /Subtype /Image\n" +
+                        $"  /Width {width}\n" +
+                        $"  /Height {height}\n" +
+                        $"  /ColorSpace /DeviceRGB\n" +
+                        $"  /BitsPerComponent 8\n" +
+                        $"  /Filter /DCTDecode\n" +
+                        $"  /Length {src.PreEncodedJpegBytes.Length}\n" +
+                        $">>\nstream\n"));
+
+                    bw.Write(src.PreEncodedJpegBytes);
+                    bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
+                    src.PreEncodedJpegBytes = null; // Giải phóng bộ nhớ ngay
+                }
+                else if (!string.IsNullOrEmpty(src.ImageFilePath) && File.Exists(src.ImageFilePath))
+                {
+                    // TRƯỜNG HỢP 3: ẢNH FILE TỪ ĐĨA (JPEG HOẶC DIRECT PNG)
+                    var fi = new FileInfo(src.ImageFilePath);
+                    long fileLen = fi.Length;
+
+                    if (src.Filter == "FlateDecode" && UniversalImageDecoder.TryGetFastPngInfo(src.ImageFilePath, out var pngInfo) && pngInfo.IsSupportedDirect)
+                    {
+                        // PNG Direct IDAT Stream (0% CPU, 100% giữ nguyên kích thước và dung lượng gốc)
+                        string colorSpaceStr = pngInfo.ColorType switch
+                        {
+                            0 => "/DeviceGray",
+                            2 => "/DeviceRGB",
+                            3 when pngInfo.PaletteData != null && pngInfo.PaletteData.Length > 0 =>
+                                $"[/Indexed /DeviceRGB {pngInfo.PaletteData.Length / 3 - 1} <{Convert.ToHexString(pngInfo.PaletteData)}>]",
+                            _ => "/DeviceRGB"
+                        };
+
+                        bw.Write(System.Text.Encoding.Latin1.GetBytes(
+                            $"{imgObjId} 0 obj\n<<\n" +
+                            $"  /Type /XObject\n" +
+                            $"  /Subtype /Image\n" +
+                            $"  /Width {width}\n" +
+                            $"  /Height {height}\n" +
+                            $"  /ColorSpace {colorSpaceStr}\n" +
+                            $"  /BitsPerComponent {pngInfo.BitDepth}\n" +
+                            $"  /Filter /FlateDecode\n" +
+                            $"  /DecodeParms << /Predictor 15 /Columns {width} /Colors {pngInfo.Colors} /BitsPerComponent {pngInfo.BitDepth} >>\n" +
+                            $"  /Interpolate false\n" +
+                            $"  /Length {pngInfo.TotalIdatLength}\n" +
+                            $">>\nstream\n"));
+
+                        UniversalImageDecoder.StreamPngIdatChunks(src.ImageFilePath, fs, copyBuffer);
+                        bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
                     }
                     else
                     {
-                        // Fallback sang SkiaSharp (chỉ cho WebP, PNG RGBA có alpha, PNG Interlaced, BMP, v.v.)
-                        byte[] rawBytes = File.ReadAllBytes(imgPath);
-                        var converted = UniversalImageDecoder.ConvertToStandardJpeg(rawBytes, 95);
-                        fallbackBytes = converted.JpegBytes;
-                        width = converted.Width;
-                        height = converted.Height;
-                        jpegComponents = 3;
-                        embedMode = 2;
+                        // JPEG Direct Stream (100% không convert, giữ nguyên kích thước và dung lượng gốc)
+                        int comps = src.Components > 0 ? src.Components : 3;
+                        bw.Write(System.Text.Encoding.Latin1.GetBytes(
+                            $"{imgObjId} 0 obj\n<<\n" +
+                            $"  /Type /XObject\n" +
+                            $"  /Subtype /Image\n" +
+                            $"  /Width {width}\n" +
+                            $"  /Height {height}\n" +
+                            $"  /ColorSpace {(comps == 1 ? "/DeviceGray" : "/DeviceRGB")}\n" +
+                            $"  /BitsPerComponent 8\n" +
+                            $"  /Filter /DCTDecode\n" +
+                            $"  /Length {fileLen}\n" +
+                            $">>\nstream\n"));
+
+                        using (var imgFs = new FileStream(src.ImageFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536))
+                        {
+                            imgFs.CopyTo(fs, 65536);
+                        }
+
+                        bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
                     }
                 }
-            }
-            catch
-            {
-                embedMode = 2;
-            }
 
-            if (width <= 0) width = 1080;
-            if (height <= 0) height = 1920;
-
-            if (embedMode == 2 && (fallbackBytes == null || fallbackBytes.Length == 0))
-            {
-                var blank = UniversalImageDecoder.ConvertToStandardJpeg(Array.Empty<byte>(), 95);
-                fallbackBytes = blank.JpegBytes;
-                width = blank.Width;
-                height = blank.Height;
-            }
-
-            // A. Page Object
-            objectOffsets[pageObjId] = fs.Position;
-            bw.Write(System.Text.Encoding.Latin1.GetBytes(
-                $"{pageObjId} 0 obj\n<<\n" +
-                $"  /Type /Page\n" +
-                $"  /Parent {pagesObjId} 0 R\n" +
-                $"  /MediaBox [0 0 {width} {height}]\n" +
-                                $"  /Contents {contentObjId} 0 R\n" +
-                $"  /Resources <<\n" +
-                $"    /ProcSet [/PDF /ImageC /ImageI /ImageB]\n" +
-                $"    /XObject << /{imName} {imgObjId} 0 R >>\n" +
-                $"  >>\n" +
-                $">>\nendobj\n"));
-
-            // B. Content Stream Object (vẽ vừa khít toàn trang)
-            string contentOps = $"q\n{width} 0 0 {height} 0 0 cm\n/{imName} Do\nQ\n";
-            byte[] contentBytes = System.Text.Encoding.Latin1.GetBytes(contentOps);
-
-            objectOffsets[contentObjId] = fs.Position;
-            bw.Write(System.Text.Encoding.Latin1.GetBytes(
-                $"{contentObjId} 0 obj\n<<\n" +
-                $"  /Length {contentBytes.Length}\n" +
-                $">>\nstream\n"));
-            bw.Write(contentBytes);
-            bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
-
-            // C. Image XObject
-            objectOffsets[imgObjId] = fs.Position;
-
-            if (embedMode == 0)
-            {
-                // NHÁNH 1: JPEG DIRECT I/O STREAMING (100% dung lượng gốc, 0ms CPU)
-                bw.Write(System.Text.Encoding.Latin1.GetBytes(
-                    $"{imgObjId} 0 obj\n<<\n" +
-                    $"  /Type /XObject\n" +
-                    $"  /Subtype /Image\n" +
-                    $"  /Width {width}\n" +
-                    $"  /Height {height}\n" +
-                    $"  /ColorSpace {(jpegComponents == 1 ? "/DeviceGray" : "/DeviceRGB")}\n" +
-                    $"  /BitsPerComponent 8\n" +
-                    $"  /Filter /DCTDecode\n" +
-                    $"  /Length {fileLength}\n" +
-                    $">>\nstream\n"));
-
-                using (var imgFs = new FileStream(imgPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536))
+                int cur = Interlocked.Increment(ref currentUnit);
+                long now = Environment.TickCount64;
+                if (cur == totalUnits || now - Volatile.Read(ref lastReportTicks) >= 150)
                 {
-                    imgFs.CopyTo(fs, 65536);
+                    Volatile.Write(ref lastReportTicks, now);
+                    string name = src.IsFromExistingPdf ? $"Trang cũ #{i + 1}" : Path.GetFileName(src.ImageFilePath ?? string.Empty);
+                    progress?.Report((cur, totalUnits, $"[PDF] Đang ghi {name} ({cur}/{totalUnits})"));
                 }
-
-                bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
             }
-            else if (embedMode == 1 && pngInfo != null)
+        }
+        finally
+        {
+            foreach (var kvp in openedPdfStreams)
             {
-                // NHÁNH 2: PNG DIRECT FLATEDECODE IDAT STREAMING (ISO 32000-1 Predictor 15, 100% dung lượng IDAT gốc, 0ms CPU)
-                string colorSpaceStr;
-                if (pngInfo.ColorType == 0)
-                {
-                    colorSpaceStr = "/DeviceGray";
-                }
-                else if (pngInfo.ColorType == 2)
-                {
-                    colorSpaceStr = "/DeviceRGB";
-                }
-                else if (pngInfo.ColorType == 3 && pngInfo.PaletteData != null && pngInfo.PaletteData.Length > 0)
-                {
-                    int numColors = pngInfo.PaletteData.Length / 3;
-                    var plteHex = Convert.ToHexString(pngInfo.PaletteData);
-                    colorSpaceStr = $"[/Indexed /DeviceRGB {numColors - 1} <{plteHex}>]";
-                }
-                else
-                {
-                    colorSpaceStr = "/DeviceRGB";
-                }
-
-                bw.Write(System.Text.Encoding.Latin1.GetBytes(
-                    $"{imgObjId} 0 obj\n<<\n" +
-                    $"  /Type /XObject\n" +
-                    $"  /Subtype /Image\n" +
-                    $"  /Width {width}\n" +
-                    $"  /Height {height}\n" +
-                    $"  /ColorSpace {colorSpaceStr}\n" +
-                    $"  /BitsPerComponent {pngInfo.BitDepth}\n" +
-                    $"  /Filter /FlateDecode\n" +
-                    $"  /DecodeParms << /Predictor 15 /Columns {width} /Colors {pngInfo.Colors} /BitsPerComponent {pngInfo.BitDepth} >>\n" +
-                    $"  /Interpolate false\n" +
-                    $"  /Length {pngInfo.TotalIdatLength}\n" +
-                    $">>\nstream\n"));
-
-                UniversalImageDecoder.StreamPngIdatChunks(imgPath, fs, copyBuffer);
-
-                bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
-            }
-            else
-            {
-                // NHÁNH 3: FALLBACK CONVERT (WebP/RGBA có alpha) QUA SKIASHARP SIÊU TỐC
-                bw.Write(System.Text.Encoding.Latin1.GetBytes(
-                    $"{imgObjId} 0 obj\n<<\n" +
-                    $"  /Type /XObject\n" +
-                    $"  /Subtype /Image\n" +
-                    $"  /Width {width}\n" +
-                    $"  /Height {height}\n" +
-                    $"  /ColorSpace {(jpegComponents == 1 ? "/DeviceGray" : "/DeviceRGB")}\n" +
-                    $"  /BitsPerComponent 8\n" +
-                    $"  /Filter /DCTDecode\n" +
-                    $"  /Length {fallbackBytes!.Length}\n" +
-                    $">>\nstream\n"));
-
-                bw.Write(fallbackBytes!);
-                bw.Write(System.Text.Encoding.Latin1.GetBytes("\nendstream\nendobj\n"));
-                fallbackBytes = null;
-            }
-
-            int cur = Interlocked.Increment(ref currentUnit);
-            long now = Environment.TickCount64;
-            if (cur == totalUnits || now - Volatile.Read(ref lastReportTicks) >= 150)
-            {
-                Volatile.Write(ref lastReportTicks, now);
-                progress?.Report((cur, totalUnits, $"[PDF] Trang {Path.GetFileName(imgPath)} ({cur}/{totalUnits})"));
+                try { kvp.Value.Dispose(); } catch { }
             }
         }
 
-        // 6. Ghi bảng Cross-Reference (xref) theo khối đệm lớn (tránh nghẽn syscall)
+        // 6. Ghi bảng Cross-Reference (xref) theo khối đệm lớn
         long xrefOffset = fs.Position;
         var xrefSb = new System.Text.StringBuilder();
         xrefSb.Append($"xref\n0 {objIdCounter}\n");
@@ -738,6 +840,7 @@ public class FilePackerService
             $"{xrefOffset}\n" +
             $"%%EOF\n"));
     }
+
 
     /// <summary>
     /// Chuyển chuỗi Unicode tiếng Việt thành PDF Hexadecimal String chuẩn UTF-16BE kèm Byte Order Mark FEFF.

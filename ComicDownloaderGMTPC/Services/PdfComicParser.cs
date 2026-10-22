@@ -698,7 +698,7 @@ public sealed class PdfComicParser
         }
     }
 
-    private static bool EnsureImageStreamResolved(FileStream fs, PdfPageStreamInfo pageInfo, PdfDocumentMetadata? meta = null)
+    public static bool EnsureImageStreamResolved(FileStream fs, PdfPageStreamInfo pageInfo, PdfDocumentMetadata? meta = null)
     {
         if (pageInfo.StreamOffset > 0 && pageInfo.StreamLength > 0)
         {
