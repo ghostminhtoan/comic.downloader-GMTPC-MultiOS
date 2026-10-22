@@ -28,11 +28,12 @@
 
         <!-- Style ScrollBar dọc to bản cho Dual Picture Sort hỗ trợ chạm vuốt cảm ứng ngón tay -->
 
-        <!-- Style ScrollBar dọc tự động phóng to 3 giây khi cuộn cho Dual Picture Sort -->
+        <!-- Style ScrollBar dọc tự động phóng to 3 giây khi cuộn cho Dual Picture Sort - Gọn gàng và to rộng kiểu Comic Screen -->
         <Style Selector="ScrollViewer.dualSortScroll /template/ ScrollBar:vertical">
             <Setter Property="Width" Value="8" />
             <Setter Property="MinWidth" Value="8" />
-            <Setter Property="Opacity" Value="0.5" />
+            <Setter Property="Opacity" Value="0.4" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Transitions">
                 <Transitions>
                     <DoubleTransition Property="Width" Duration="0:0:0.2" />
@@ -42,10 +43,13 @@
             </Setter>
         </Style>
         <Style Selector="ScrollViewer.dualSortScroll /template/ ScrollBar:vertical /template/ Thumb">
-            <Setter Property="MinHeight" Value="50" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="MaxHeight" Value="48" />
             <Setter Property="Width" Value="6" />
+            <Setter Property="MinWidth" Value="6" />
             <Setter Property="Background" Value="#64748B" />
             <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="Transitions">
                 <Transitions>
                     <DoubleTransition Property="Width" Duration="0:0:0.2" />
@@ -54,23 +58,30 @@
                 </Transitions>
             </Setter>
         </Style>
-        <!-- Khi phóng to (cuộn hoặc hover) - to thêm 5 pixel (27px) -->
+        <!-- Khi phóng to (cuộn hoặc hover) - Gọn gàng và to rộng kiểu Comic Screen -->
         <Style Selector="ScrollViewer.dualSortScroll /template/ ScrollBar:vertical.scroll-active, ScrollViewer.dualSortScroll.scroll-active /template/ ScrollBar:vertical, ScrollViewer.dualSortScroll /template/ ScrollBar:vertical:pointerover">
-            <Setter Property="Width" Value="27" />
-            <Setter Property="MinWidth" Value="27" />
+            <Setter Property="Width" Value="36" />
+            <Setter Property="MinWidth" Value="36" />
             <Setter Property="Opacity" Value="1.0" />
+            <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="ScrollViewer.dualSortScroll /template/ ScrollBar:vertical.scroll-active /template/ Thumb, ScrollViewer.dualSortScroll.scroll-active /template/ ScrollBar:vertical /template/ Thumb, ScrollViewer.dualSortScroll /template/ ScrollBar:vertical:pointerover /template/ Thumb">
-            <Setter Property="Width" Value="23" />
-            <Setter Property="MinWidth" Value="23" />
+            <Setter Property="Width" Value="32" />
+            <Setter Property="MinWidth" Value="32" />
+            <Setter Property="MinHeight" Value="48" />
+            <Setter Property="MaxHeight" Value="56" />
             <Setter Property="Background" Value="#38BDF8" />
-            <Setter Property="CornerRadius" Value="11" />
+            <Setter Property="CornerRadius" Value="20, 0, 0, 20" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
         </Style>
         <Style Selector="ScrollViewer.dualSortScroll /template/ ScrollBar:vertical /template/ Thumb:pressed">
-            <Setter Property="Width" Value="27" />
-            <Setter Property="MinWidth" Value="27" />
+            <Setter Property="Width" Value="36" />
+            <Setter Property="MinWidth" Value="36" />
+            <Setter Property="MinHeight" Value="50" />
+            <Setter Property="MaxHeight" Value="60" />
             <Setter Property="Background" Value="#0284C7" />
-            <Setter Property="CornerRadius" Value="13" />
+            <Setter Property="CornerRadius" Value="22, 0, 0, 22" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
         </Style>
     </UserControl.Styles>
 
