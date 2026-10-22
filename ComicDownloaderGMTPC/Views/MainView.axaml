@@ -54,21 +54,23 @@
                 </Transitions>
             </Setter>
         </Style>
-        <!-- Khi phóng to (cuộn hoặc hover) -->
-        <Style Selector="ScrollViewer.dualSortScroll /template/ ScrollBar:vertical.scroll-active, ScrollViewer.dualSortScroll /template/ ScrollBar:vertical:pointerover">
-            <Setter Property="Width" Value="24" />
-            <Setter Property="MinWidth" Value="24" />
+        <!-- Khi phóng to (cuộn hoặc hover) - to thêm 5 pixel (27px) -->
+        <Style Selector="ScrollViewer.dualSortScroll /template/ ScrollBar:vertical.scroll-active, ScrollViewer.dualSortScroll.scroll-active /template/ ScrollBar:vertical, ScrollViewer.dualSortScroll /template/ ScrollBar:vertical:pointerover">
+            <Setter Property="Width" Value="27" />
+            <Setter Property="MinWidth" Value="27" />
             <Setter Property="Opacity" Value="1.0" />
         </Style>
-        <Style Selector="ScrollViewer.dualSortScroll /template/ ScrollBar:vertical.scroll-active /template/ Thumb, ScrollViewer.dualSortScroll /template/ ScrollBar:vertical:pointerover /template/ Thumb">
-            <Setter Property="Width" Value="20" />
+        <Style Selector="ScrollViewer.dualSortScroll /template/ ScrollBar:vertical.scroll-active /template/ Thumb, ScrollViewer.dualSortScroll.scroll-active /template/ ScrollBar:vertical /template/ Thumb, ScrollViewer.dualSortScroll /template/ ScrollBar:vertical:pointerover /template/ Thumb">
+            <Setter Property="Width" Value="23" />
+            <Setter Property="MinWidth" Value="23" />
             <Setter Property="Background" Value="#38BDF8" />
-            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="CornerRadius" Value="11" />
         </Style>
         <Style Selector="ScrollViewer.dualSortScroll /template/ ScrollBar:vertical /template/ Thumb:pressed">
-            <Setter Property="Width" Value="24" />
+            <Setter Property="Width" Value="27" />
+            <Setter Property="MinWidth" Value="27" />
             <Setter Property="Background" Value="#0284C7" />
-            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="CornerRadius" Value="13" />
         </Style>
     </UserControl.Styles>
 

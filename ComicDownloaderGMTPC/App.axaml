@@ -87,7 +87,7 @@
             <Setter Property="Width" Value="27" />
             <Setter Property="Opacity" Value="1.0" />
         </Style>
-        <Style Selector="ScrollBar:vertical.scroll-active /template/ Thumb, ScrollBar:vertical:pointerover /template/ Thumb">
+        <Style Selector="ScrollBar:vertical.scroll-active /template/ Thumb, ScrollViewer.scroll-active /template/ ScrollBar:vertical /template/ Thumb, ScrollBar:vertical:pointerover /template/ Thumb">
             <Setter Property="MinWidth" Value="23" />
             <Setter Property="Width" Value="23" />
             <Setter Property="CornerRadius" Value="11" />
