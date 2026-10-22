@@ -225,26 +225,24 @@ public static class ScrollBarAutoExpandService
             }
         }, RoutingStrategies.Bubble, handledEventsToo: true);
 
-        // 3. Bắt cử chỉ vuốt chạm cảm ứng (Touch swipe trên Android)
+        // 3. Bắt cử chỉ vuốt chạm cảm ứng ngón tay (Touch swipe toàn màn hình trên Android)
         Point? touchStart = null;
         bool isTouchMoving = false;
 
+        Avalonia.Interactivity.Interactive? topLevel = TopLevel.GetTopLevel(rootControl) ?? rootControl;
+
         rootControl.AddHandler(InputElement.PointerPressedEvent, (s, e) =>
         {
-            var pt = e.GetCurrentPoint(rootControl);
-            if (pt.Properties.IsLeftButtonPressed)
-            {
-                touchStart = pt.Position;
-                isTouchMoving = true;
-            }
+            touchStart = e.GetPosition(rootControl);
+            isTouchMoving = true;
         }, RoutingStrategies.Tunnel, handledEventsToo: true);
 
         rootControl.AddHandler(InputElement.PointerMovedEvent, (s, e) =>
         {
             if (isTouchMoving && touchStart.HasValue)
             {
-                var cur = e.GetCurrentPoint(rootControl).Position;
-                if (Math.Abs(cur.Y - touchStart.Value.Y) > 6)
+                var cur = e.GetPosition(rootControl);
+                if (Math.Abs(cur.Y - touchStart.Value.Y) > 4 || Math.Abs(cur.X - touchStart.Value.X) > 4)
                 {
                     TriggerGlobalScrollExpand(rootControl);
                 }
@@ -256,6 +254,39 @@ public static class ScrollBarAutoExpandService
             isTouchMoving = false;
             touchStart = null;
         }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        rootControl.AddHandler(InputElement.PointerCaptureLostEvent, (s, e) =>
+        {
+            isTouchMoving = false;
+            touchStart = null;
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        if (topLevel != null && topLevel != rootControl)
+        {
+            topLevel.AddHandler(InputElement.PointerPressedEvent, (s, e) =>
+            {
+                touchStart = e.GetPosition(rootControl);
+                isTouchMoving = true;
+            }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+            topLevel.AddHandler(InputElement.PointerMovedEvent, (s, e) =>
+            {
+                if (isTouchMoving && touchStart.HasValue)
+                {
+                    var cur = e.GetPosition(rootControl);
+                    if (Math.Abs(cur.Y - touchStart.Value.Y) > 4 || Math.Abs(cur.X - touchStart.Value.X) > 4)
+                    {
+                        TriggerGlobalScrollExpand(rootControl);
+                    }
+                }
+            }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+            topLevel.AddHandler(InputElement.PointerReleasedEvent, (s, e) =>
+            {
+                isTouchMoving = false;
+                touchStart = null;
+            }, RoutingStrategies.Tunnel, handledEventsToo: true);
+        }
     }
 
     /// <summary>

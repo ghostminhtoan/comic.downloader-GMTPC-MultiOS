@@ -326,6 +326,14 @@ public partial class MainView : UserControl
 
 
 
+    private void OnCenterToastOverlayPointerPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        if (e.Source == sender && DataContext is MainViewModel vm)
+        {
+            vm.DismissCenterToast();
+        }
+    }
+
     private void OnMainViewLoaded(object? sender, RoutedEventArgs e)
 
     {
@@ -375,6 +383,16 @@ public partial class MainView : UserControl
             AddHandler(ScrollViewer.ScrollChangedEvent, OnAnyScrollViewerScrollChanged, RoutingStrategies.Bubble);
 
         }
+
+        // Tự động kiểm tra bản cập nhật Beta / Release mới nhất sau khi mở app 2.8s
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(2800);
+            if (DataContext is MainViewModel vm)
+            {
+                await vm.CheckAutoUpdateOnStartupAsync();
+            }
+        });
 
 
 
@@ -2058,6 +2076,8 @@ public partial class MainView : UserControl
     private void OnAnyScrollViewerScrollChanged(object? sender, ScrollChangedEventArgs e)
 
     {
+
+        ScrollBarAutoExpandService.TriggerGlobalScrollExpand(this);
 
         if (sender is ScrollViewer sv)
 
@@ -4125,6 +4145,14 @@ public partial class MainView : UserControl
 
         {
 
+            if (LanguageToggleTextBlock != null)
+
+            {
+
+                LanguageToggleTextBlock.Text = $"🌐 {lang}";
+
+            }
+
             bool toVi = string.Equals(lang, "VI", StringComparison.OrdinalIgnoreCase);
 
             var visited = new HashSet<object>();
@@ -4278,6 +4306,8 @@ public partial class MainView : UserControl
     private void TranslateElement(object element, bool toVi)
 
     {
+
+        if (element == LanguageToggleTextBlock) return;
 
         if (element is TabItem tabItem)
 

@@ -45,7 +45,11 @@ public record PictureSortHistoryEntry(
     string SourceFilePath,
     string DestinationFilePath,
     bool IsMove,
-    bool WasFromSourceToSorted
+    bool WasFromSourceToSorted,
+    Bitmap? Thumbnail = null,
+    int Width = 0,
+    int Height = 0,
+    string ResolutionText = ""
 );
 
 public partial class MainViewModel
@@ -877,6 +881,12 @@ public partial class MainViewModel
         catch { }
     }
 
+    private void RestoreItemThumbnailIfNeeded(PictureSortItem item)
+    {
+        if (item.Thumbnail != null) return;
+        _ = Task.Run(() => LoadThumbnailsBackgroundAsync(new List<PictureSortItem> { item }, CancellationToken.None));
+    }
+
     private void UpdateDualSortStatusText()
     {
         DualSortStatusText = $"Đã tải {DualSortSourceCount} ảnh gốc, {DualSortSortedCount} ảnh đã lọc.";
@@ -1044,12 +1054,12 @@ public partial class MainViewModel
                     if (IsSortMoveMode)
                     {
                         File.Move(sourceFile, destFile, overwrite: true);
-                        batchHistory.Add(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: true));
+                        batchHistory.Add(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: true, item.Thumbnail, item.Width, item.Height, item.ResolutionText));
                     }
                     else
                     {
                         File.Copy(sourceFile, destFile, overwrite: true);
-                        batchHistory.Add(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: false, WasFromSourceToSorted: true));
+                        batchHistory.Add(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: false, WasFromSourceToSorted: true, item.Thumbnail, item.Width, item.Height, item.ResolutionText));
                     }
 
                     DualSortSourceItems.Remove(item);
@@ -1134,12 +1144,12 @@ public partial class MainViewModel
                     if (IsSortMoveMode)
                     {
                         File.Move(sourceFile, destFile, overwrite: true);
-                        batchHistory.Add(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: false));
+                        batchHistory.Add(new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: false, item.Thumbnail, item.Width, item.Height, item.ResolutionText));
                     }
                     else
                     {
                         File.Delete(sourceFile);
-                        batchHistory.Add(new PictureSortHistoryEntry(destFile, sourceFile, IsMove: false, WasFromSourceToSorted: false));
+                        batchHistory.Add(new PictureSortHistoryEntry(destFile, sourceFile, IsMove: false, WasFromSourceToSorted: false, item.Thumbnail, item.Width, item.Height, item.ResolutionText));
                     }
 
                     DualSortSortedItems.Remove(item);
@@ -1206,12 +1216,12 @@ public partial class MainViewModel
             if (IsSortMoveMode)
             {
                 File.Move(sourceFile, destFile, overwrite: true);
-                historyEntry = new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: true);
+                historyEntry = new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: true, item.Thumbnail, item.Width, item.Height, item.ResolutionText);
             }
             else
             {
                 File.Copy(sourceFile, destFile, overwrite: true);
-                historyEntry = new PictureSortHistoryEntry(sourceFile, destFile, IsMove: false, WasFromSourceToSorted: true);
+                historyEntry = new PictureSortHistoryEntry(sourceFile, destFile, IsMove: false, WasFromSourceToSorted: true, item.Thumbnail, item.Width, item.Height, item.ResolutionText);
             }
 
             _dualSortUndoBatches.Push(new List<PictureSortHistoryEntry> { historyEntry });
@@ -1277,12 +1287,12 @@ public partial class MainViewModel
             if (IsSortMoveMode)
             {
                 File.Move(sourceFile, destFile, overwrite: true);
-                historyEntry = new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: false);
+                historyEntry = new PictureSortHistoryEntry(sourceFile, destFile, IsMove: true, WasFromSourceToSorted: false, item.Thumbnail, item.Width, item.Height, item.ResolutionText);
             }
             else
             {
                 File.Delete(sourceFile);
-                historyEntry = new PictureSortHistoryEntry(destFile, sourceFile, IsMove: false, WasFromSourceToSorted: false);
+                historyEntry = new PictureSortHistoryEntry(destFile, sourceFile, IsMove: false, WasFromSourceToSorted: false, item.Thumbnail, item.Width, item.Height, item.ResolutionText);
             }
 
             _dualSortUndoBatches.Push(new List<PictureSortHistoryEntry> { historyEntry });
@@ -1366,8 +1376,15 @@ public partial class MainViewModel
                         DualSortSortedItems.Remove(itemInSorted);
                     }
 
-                    var restoredItem = new PictureSortItem(entry.SourceFilePath);
+                    var restoredItem = new PictureSortItem(entry.SourceFilePath)
+                    {
+                        Thumbnail = entry.Thumbnail,
+                        Width = entry.Width,
+                        Height = entry.Height,
+                        ResolutionText = entry.ResolutionText
+                    };
                     DualSortSourceItems.Add(restoredItem);
+                    RestoreItemThumbnailIfNeeded(restoredItem);
                 }
                 else
                 {
@@ -1386,8 +1403,15 @@ public partial class MainViewModel
                         DualSortSourceItems.Remove(itemInSource);
                     }
 
-                    var restoredItem = new PictureSortItem(entry.SourceFilePath);
+                    var restoredItem = new PictureSortItem(entry.SourceFilePath)
+                    {
+                        Thumbnail = entry.Thumbnail,
+                        Width = entry.Width,
+                        Height = entry.Height,
+                        ResolutionText = entry.ResolutionText
+                    };
                     DualSortSortedItems.Add(restoredItem);
+                    RestoreItemThumbnailIfNeeded(restoredItem);
                 }
 
                 redoList.Add(entry);
@@ -1449,8 +1473,15 @@ public partial class MainViewModel
                         DualSortSourceItems.Remove(itemInSource);
                     }
 
-                    var newItem = new PictureSortItem(entry.DestinationFilePath);
+                    var newItem = new PictureSortItem(entry.DestinationFilePath)
+                    {
+                        Thumbnail = entry.Thumbnail,
+                        Width = entry.Width,
+                        Height = entry.Height,
+                        ResolutionText = entry.ResolutionText
+                    };
                     DualSortSortedItems.Insert(0, newItem);
+                    RestoreItemThumbnailIfNeeded(newItem);
                 }
                 else
                 {
@@ -1476,8 +1507,15 @@ public partial class MainViewModel
                         DualSortSortedItems.Remove(itemInSorted);
                     }
 
-                    var newItem = new PictureSortItem(entry.DestinationFilePath);
+                    var newItem = new PictureSortItem(entry.DestinationFilePath)
+                    {
+                        Thumbnail = entry.Thumbnail,
+                        Width = entry.Width,
+                        Height = entry.Height,
+                        ResolutionText = entry.ResolutionText
+                    };
                     DualSortSourceItems.Add(newItem);
+                    RestoreItemThumbnailIfNeeded(newItem);
                 }
 
                 undoList.Add(entry);

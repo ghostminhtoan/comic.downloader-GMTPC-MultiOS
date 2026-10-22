@@ -1503,6 +1503,9 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty] private string _centerToastMessage = string.Empty;
     [ObservableProperty] private string _centerToastIcon = "✨";
     [ObservableProperty] private string _centerToastBadge = "THÔNG BÁO";
+    [ObservableProperty] private bool _hasAvailableUpdateInToast;
+    [ObservableProperty] private string _toastUpdateButtonText = "⚡ CẬP NHẬT NGAY";
+    [ObservableProperty] private string _toastUpdateTarget = "";
     private CancellationTokenSource? _toastCts;
 
     public void ShowCenterToast(string title, string message, string icon = "✨", string badge = "THÔNG BÁO", int durationMs = 3200)
@@ -1519,21 +1522,25 @@ public partial class MainViewModel : ViewModelBase
             CenterToastBadge = badge;
             IsCenterToastVisible = true;
 
-            Task.Run(async () =>
+            if (durationMs > 0)
             {
-                try
+                Task.Run(async () =>
                 {
-                    await Task.Delay(durationMs, token);
-                    if (!token.IsCancellationRequested)
+                    try
                     {
-                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        await Task.Delay(durationMs, token);
+                        if (!token.IsCancellationRequested)
                         {
-                            IsCenterToastVisible = false;
-                        });
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                IsCenterToastVisible = false;
+                                HasAvailableUpdateInToast = false;
+                            });
+                        }
                     }
-                }
-                catch (OperationCanceledException) { }
-            }, token);
+                    catch (OperationCanceledException) { }
+                }, token);
+            }
         });
     }
 
@@ -1542,6 +1549,24 @@ public partial class MainViewModel : ViewModelBase
     {
         _toastCts?.Cancel();
         IsCenterToastVisible = false;
+        HasAvailableUpdateInToast = false;
+    }
+
+    [RelayCommand]
+    public async Task ConfirmUpdateFromToastAsync()
+    {
+        IsCenterToastVisible = false;
+        string target = ToastUpdateTarget;
+        HasAvailableUpdateInToast = false;
+
+        if (string.Equals(target, "beta", StringComparison.OrdinalIgnoreCase))
+        {
+            await AutoUpdateBetaAsync();
+        }
+        else
+        {
+            await AutoUpdateAsync();
+        }
     }
 
     partial void OnSearchBookNamesInputChanged(string value)
@@ -3606,8 +3631,11 @@ public partial class MainViewModel : ViewModelBase
                 if (check.HasUpdate)
                 {
                     HasAvailableReleaseUpdate = true;
+                    HasAvailableUpdateInToast = true;
+                    ToastUpdateButtonText = "🚀 CẬP NHẬT RELEASE NGAY";
+                    ToastUpdateTarget = "release";
                     AddLog("SUCCESS", $"🚀 [Release] {check.Message}");
-                    ShowCenterToast("CẬP NHẬT RELEASE", check.Message + "\nĐã xuất hiện nút [⚡ CẬP NHẬT RELEASE NGAY] trên thanh công cụ!", "🚀", "UPDATE RELEASE", 5000);
+                    ShowCenterToast("CẬP NHẬT RELEASE", check.Message, "🚀", "UPDATE RELEASE", 0);
                 }
                 else
                 {
@@ -3658,8 +3686,11 @@ public partial class MainViewModel : ViewModelBase
                 if (check.HasUpdate)
                 {
                     HasAvailableBetaUpdate = true;
+                    HasAvailableUpdateInToast = true;
+                    ToastUpdateButtonText = "⚡ CẬP NHẬT BETA NGAY";
+                    ToastUpdateTarget = "beta";
                     AddLog("SUCCESS", $"🧪 [Beta] {check.Message}");
-                    ShowCenterToast("CẬP NHẬT BETA", check.Message + "\nĐã xuất hiện nút [⚡ CẬP NHẬT BETA NGAY] trên thanh công cụ!", "🧪", "UPDATE BETA", 5000);
+                    ShowCenterToast("CẬP NHẬT BETA", check.Message, "🧪", "UPDATE BETA", 0);
                 }
                 else
                 {
@@ -3681,6 +3712,48 @@ public partial class MainViewModel : ViewModelBase
             UpdateBetaButtonLabel = "🧪 UPDATE BETA";
             AddLog("ERROR", $"Lỗi kiểm tra Beta: {ex.Message}");
         }
+    }
+
+    public async Task CheckAutoUpdateOnStartupAsync()
+    {
+        try
+        {
+            string[] betaUrls = OperatingSystem.IsAndroid()
+                ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/com.CompanyName.ComicDownloaderGMTPC-Signed.apk" }
+                : (OperatingSystem.IsLinux()
+                    ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC-linux-x64.tar.gz" }
+                    : new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC.Desktop.exe" });
+
+            var checkBeta = await AppUpdateService.Instance.CheckUpdateAsync(betaUrls, "beta");
+            if (checkBeta.Success && checkBeta.HasUpdate)
+            {
+                HasAvailableBetaUpdate = true;
+                HasAvailableUpdateInToast = true;
+                ToastUpdateButtonText = "⚡ CẬP NHẬT BETA NGAY";
+                ToastUpdateTarget = "beta";
+                AddLog("INFO", $"🔔 [Tự động kiểm tra] Phát hiện bản cập nhật Beta mới: {checkBeta.Message}");
+                ShowCenterToast("BẢN CẬP NHẬT BETA MỚI", checkBeta.Message, "🧪", "UPDATE BETA", 0);
+                return;
+            }
+
+            string[] releaseUrls = OperatingSystem.IsAndroid()
+                ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/com.CompanyName.ComicDownloaderGMTPC-Signed.apk" }
+                : (OperatingSystem.IsLinux()
+                    ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/ComicDownloaderGMTPC-linux-x64.tar.gz" }
+                    : new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/ComicDownloaderGMTPC.Desktop.exe" });
+
+            var checkRelease = await AppUpdateService.Instance.CheckUpdateAsync(releaseUrls, "release");
+            if (checkRelease.Success && checkRelease.HasUpdate)
+            {
+                HasAvailableReleaseUpdate = true;
+                HasAvailableUpdateInToast = true;
+                ToastUpdateButtonText = "🚀 CẬP NHẬT RELEASE NGAY";
+                ToastUpdateTarget = "release";
+                AddLog("INFO", $"🔔 [Tự động kiểm tra] Phát hiện bản cập nhật Release mới: {checkRelease.Message}");
+                ShowCenterToast("BẢN CẬP NHẬT RELEASE MỚI", checkRelease.Message, "🚀", "UPDATE RELEASE", 0);
+            }
+        }
+        catch { }
     }
 
     [RelayCommand]

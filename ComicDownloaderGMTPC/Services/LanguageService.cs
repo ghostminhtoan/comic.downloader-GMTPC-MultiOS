@@ -20,10 +20,47 @@ public class LanguageService
 
     public event Action? LanguageChanged;
 
+    private const string ConfigFileName = "language.cfg";
+
     public LanguageService()
     {
         LoadBuiltinDictionary();
         LoadFromLanguagesFiles();
+        LoadSavedLanguage();
+    }
+
+    private void LoadSavedLanguage()
+    {
+        try
+        {
+            string dir = ComicScraperService.GetConfigDirectory();
+            string file = Path.Combine(dir, ConfigFileName);
+            if (File.Exists(file))
+            {
+                string content = File.ReadAllText(file).Trim();
+                if (string.Equals(content, "EN", StringComparison.OrdinalIgnoreCase))
+                {
+                    CurrentLanguage = "EN";
+                }
+                else
+                {
+                    CurrentLanguage = "VI";
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void SaveLanguagePreference(string lang)
+    {
+        try
+        {
+            string dir = ComicScraperService.GetConfigDirectory();
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            string file = Path.Combine(dir, ConfigFileName);
+            File.WriteAllText(file, lang);
+        }
+        catch { }
     }
 
     public void SetLanguage(string lang)
@@ -31,6 +68,7 @@ public class LanguageService
         string normalized = string.Equals(lang, "EN", StringComparison.OrdinalIgnoreCase) ? "EN" : "VI";
         if (string.Equals(CurrentLanguage, normalized, StringComparison.OrdinalIgnoreCase)) return;
         CurrentLanguage = normalized;
+        SaveLanguagePreference(normalized);
         LanguageChanged?.Invoke();
     }
 

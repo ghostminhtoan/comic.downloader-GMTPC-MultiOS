@@ -138,7 +138,7 @@
 
                                 CornerRadius="6" Padding="8,3" Height="28" Margin="0,0,6,4">
 
-                            <TextBlock Text="{Binding CurrentLanguage, StringFormat='{}🌐 {0}'}" FontWeight="SemiBold" Foreground="#38BDF8" FontSize="11" />
+                            <TextBlock x:Name="LanguageToggleTextBlock" Text="{Binding CurrentLanguage, StringFormat='{}🌐 {0}'}" FontWeight="SemiBold" Foreground="#38BDF8" FontSize="11" />
 
                         </Button>
 
@@ -9650,6 +9650,8 @@
 
                 Background="#99000000"
 
+                PointerPressed="OnCenterToastOverlayPointerPressed"
+
                 ZIndex="9999"
 
                 HorizontalAlignment="Stretch"
@@ -9702,7 +9704,41 @@
 
 
 
+                    <!-- NÚT CẬP NHẬT TRỰC TIẾP KHI CÓ BẢN MỚI -->
+
+                    <Grid ColumnDefinitions="*, *" Margin="0,4,0,0" IsVisible="{Binding HasAvailableUpdateInToast}">
+
+                        <Button Grid.Column="0" Command="{Binding ConfirmUpdateFromToastCommand}"
+
+                                Background="#10B981" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11"
+
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+
+                                Padding="12,8" CornerRadius="6" Margin="0,0,6,0">
+
+                            <TextBlock Text="{Binding ToastUpdateButtonText}" />
+
+                        </Button>
+
+                        <Button Grid.Column="1" Command="{Binding DismissCenterToastCommand}"
+
+                                Background="#334155" Foreground="#CBD5E1" FontWeight="Bold" FontSize="11"
+
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+
+                                Padding="12,8" CornerRadius="6">
+
+                            <TextBlock Text="✕ ĐỂ SAU" />
+
+                        </Button>
+
+                    </Grid>
+
+
+
                     <Button Command="{Binding DismissCenterToastCommand}"
+
+                            IsVisible="{Binding !HasAvailableUpdateInToast}"
 
                             Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11"
 
