@@ -40,6 +40,9 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Tự động kiểm tra và di dời dữ liệu cũ từ ComicDownloaderGMTPC sang autosaveComicDownloaderGMTPC trên Android
+        // trước khi bất kỳ ViewModel hay Service nào khởi tạo và đọc dữ liệu
+        QueueBackupService.EnsureAutoSaveMigration();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // 1. Kiểm tra cờ kiểm thử tự động CLI

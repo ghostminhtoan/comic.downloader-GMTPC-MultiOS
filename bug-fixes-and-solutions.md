@@ -1002,6 +1002,43 @@
 
 ---
 
+
+### 26. BUG-026: Tối Ưu Hiển Thị Landscape Cho Dual Picture Sort (Grid 1 - 3), Bỏ Tự Động Tick Checkbox Ảnh Đầu Tiên, Và Đổi Tên Thư Mục Dữ Liệu Android Tránh Trùng Lặp Sang autosaveComicDownloaderGMTPC
+- **Triệu chứng**:
+  + Trên Windows và Linux, các thumbnail ảnh trong Dual Picture Sort bị cố định kích thước hẹp (Width 116, Height 192, Row 138), khiến các ảnh landscape (16:9, widescreen, 1216x832...) bị co nhỏ thành 108x74 px và tạo ra hai dải đen lớn phía trên và dưới. Người dùng không có tùy chọn thay đổi số cột hiển thị (Grid 1 - 3).
+  + Khi vừa nạp xong thư mục gốc vào Dual Picture Sort, checkbox của ảnh đầu tiên luôn bị tự động tick chọn (IsSelected = true), gây phiền toái khi người dùng chỉ muốn xem mà chưa muốn chọn.
+  + Trên Android, thư mục dữ liệu ứng dụng ComicDownloaderGMTPC và thư mục tải truyện ComicDownloads nằm cạnh nhau trong /storage/emulated/0/Download, rất dễ gây nhầm lẫn cho người dùng.
+- **Nguyên nhân gốc rễ**:
+  1. *Khung card dọc và WrapPanel cố định*: Cả 4 ItemsControl trong MainView.axaml đều sử dụng WrapPanel Orientation="Horizontal" với kích thước card cố định Width="116" Height="192" (Desktop) hoặc Width="110" Height="185" (Mobile). Khung hình có tỷ lệ dọc (portrait) khiến ảnh ngang (landscape) bị bóp nghẹt ở giữa.
+  2. *Tự động tick IsSelected khi nạp thư mục*: LoadFoldersAsync gọi trực tiếp SelectDualSortItem(srcItems[0]), phương thức này gán cứng item.IsSelected = true; dẫn đến ảnh đầu tiên bị tick ngay khi mở thư mục.
+  3. *Tên thư mục dữ liệu Android dễ nhầm lẫn*: Đường dẫn lưu trữ mặc định trên Android trong QueueBackupService.cs đang trỏ vào /storage/emulated/0/Download/ComicDownloaderGMTPC, trùng tiền tố với ComicDownloads.
+- **Giải pháp triệt để**:
+  1. *Tách rời cơ chế nạp xem trước và chọn item (LoadPreviewItem vs SelectDualSortItem)*:
+     + Xây dựng phương thức LoadPreviewItem(PictureSortItem? item) độc lập chỉ nạp DualSortSelectedPreview và tải Bitmap full-size lên khung xem trước to ở giữa mà **hoàn toàn không chạm vào item.IsSelected** (giữ nguyên alse).
+     + Trong LoadFoldersAsync: Thay thế lệnh gọi SelectDualSortItem bằng LoadPreviewItem(srcItems[0]). Nhờ đó, ảnh đầu tiên được nạp lên xem trước to rõ nhưng checkbox của nó tuyệt đối không bị tự động tick.
+  2. *Chuyển đổi sang UniformGrid đa cột co giãn linh hoạt (DualSortGridColumns: 1 | 2 | 3)*:
+     + Chuyển đổi toàn bộ 4 danh sách ItemsControl sang <UniformGrid Columns="{Binding DualSortGridColumns}" HorizontalAlignment="Stretch" />.
+     + Bỏ các thuộc tính Width="116/110" và Height="192/185" cố định, cho phép thẻ card tự động giãn nở khít 100% độ rộng cột.
+     + Thêm thuộc tính động DualSortThumbHeight tính toán tỷ lệ landscape chuẩn widescreen (16:9 / 16:10) tương ứng:
+       * Desktop (!IsPortraitMode): Grid 1: 380px, Grid 2: 220px, Grid 3: 150px.
+       * Mobile (IsPortraitMode): Grid 1: 210px, Grid 2: 120px, Grid 3: 85px.
+     + Tăng kích thước decode thumbnail trong luồng nền từ 240px lên 480px (Bitmap.DecodeToWidth(imgStream, 480)), đảm bảo ảnh siêu sắc nét khi phóng to ở Grid 1 và Grid 2.
+     + Bổ sung cụm nút chọn Grid trực quan ⊞ Grid: [ 1 | 2 | 3 ] trên cả Toolbar Desktop và Switcher Tabs Mobile với phản hồi màu active/inactive tức thì.
+  3. *Đổi tên thư mục Android sang utosaveComicDownloaderGMTPC & Di dời tự động không mất dữ liệu*:
+     + Đổi đường dẫn lưu trữ công khai trên Android trong QueueBackupService.GetAutoSaveDirectory() thành /storage/emulated/0/Download/autosaveComicDownloaderGMTPC.
+     + Thiết kế phương thức an toàn QueueBackupService.EnsureAutoSaveMigration():
+       * Chạy ngay tại đầu phương thức App.OnFrameworkInitializationCompleted() trước khi bất kỳ ViewModel hay Service nào khởi tạo và đọc dữ liệu.
+       * Kiểm tra nếu thư mục cũ ComicDownloaderGMTPC tồn tại: tự động tạo thư mục mới utosaveComicDownloaderGMTPC nếu chưa có, di chuyển toàn bộ file (utosave.md, ookmarks.md, history.md, esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có dung lượng lớn hơn hoặc thời gian sửa đổi mới hơn).
+       * Xóa thư mục cũ sau khi dọn sạch file để người dùng không còn nhầm lẫn với ComicDownloads.
+- **File can thiệp**: MainViewModel.DualPictureSort.cs, MainViewModel.cs, MainView.axaml, QueueBackupService.cs, App.axaml.cs, ug-fixes-and-solutions.md, workflow-avalonia.md.
+- **Quy tắc kiểm thử**:
+  - Khởi động app trên Windows/Linux: Dual Picture Sort mở ảnh mặc định 2 cột landscape to rõ, không có viền đen thừa trên dưới.
+  - Bấm chọn các nút Grid 1, 2, 3: Layout chuyển đổi mượt mà giữa 1 cột (ảnh siêu to), 2 cột (cân đối landscape), và 3 cột (xem nhiều ảnh).
+  - Chọn thư mục gốc mới: Ảnh đầu tiên được hiển thị trên khung preview to nhưng checkbox của ảnh không bị tick chọn.
+  - Trên Android: Dữ liệu cũ trong ComicDownloaderGMTPC được tự động di chuyển sang utosaveComicDownloaderGMTPC ngay khi mở app, không mất mát bất kỳ file autosave hay bookmark nào. Thư mục cũ được xóa sạch.
+
+---
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 

@@ -24,6 +24,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -72,8 +73,45 @@ public partial class MainViewModel
     [ObservableProperty]
     private bool _isDualSortSelectAllActive = false;
 
-    [ObservableProperty]
+        [ObservableProperty]
     private bool _canRedoSort = false;
+
+    // ==========================================
+    // CHỌN GRID CỘT (1, 2, 3) & LANDSCAPE ASPECT CHO CẢ WINDOWS, LINUX, ANDROID
+    // ==========================================
+    [ObservableProperty]
+    private int _dualSortGridColumns = 2; // Mặc định 2 cột cân đối
+
+    public double DualSortThumbHeight => IsPortraitMode
+        ? (DualSortGridColumns switch { 1 => 210, 2 => 120, 3 => 85, _ => 120 })
+        : (DualSortGridColumns switch { 1 => 380, 2 => 220, 3 => 150, _ => 220 });
+
+    partial void OnDualSortGridColumnsChanged(int value)
+    {
+        OnPropertyChanged(nameof(DualSortThumbHeight));
+        OnPropertyChanged(nameof(DualSortGrid1Bg));
+        OnPropertyChanged(nameof(DualSortGrid1Fg));
+        OnPropertyChanged(nameof(DualSortGrid2Bg));
+        OnPropertyChanged(nameof(DualSortGrid2Fg));
+        OnPropertyChanged(nameof(DualSortGrid3Bg));
+        OnPropertyChanged(nameof(DualSortGrid3Fg));
+    }
+
+    [RelayCommand]
+    public void SetDualSortGridColumns(string? colStr)
+    {
+        if (int.TryParse(colStr, out int cols) && cols >= 1 && cols <= 3)
+        {
+            DualSortGridColumns = cols;
+        }
+    }
+
+    public IBrush DualSortGrid1Bg => DualSortGridColumns == 1 ? Brush.Parse("#0284C7") : Brush.Parse("#1E293B");
+    public IBrush DualSortGrid1Fg => DualSortGridColumns == 1 ? Brush.Parse("#FFFFFF") : Brush.Parse("#94A3B8");
+    public IBrush DualSortGrid2Bg => DualSortGridColumns == 2 ? Brush.Parse("#0284C7") : Brush.Parse("#1E293B");
+    public IBrush DualSortGrid2Fg => DualSortGridColumns == 2 ? Brush.Parse("#FFFFFF") : Brush.Parse("#94A3B8");
+    public IBrush DualSortGrid3Bg => DualSortGridColumns == 3 ? Brush.Parse("#0284C7") : Brush.Parse("#1E293B");
+    public IBrush DualSortGrid3Fg => DualSortGridColumns == 3 ? Brush.Parse("#FFFFFF") : Brush.Parse("#94A3B8");
 
     // ==========================================
     // FLOATING BATCH TOOLBAR ẨN / HIỆN
@@ -695,14 +733,14 @@ public partial class MainViewModel
             OnPropertyChanged(nameof(FilteredDualSortSourceItems));
             OnPropertyChanged(nameof(FilteredDualSortSortedItems));
 
-            // Tự động chọn ảnh đầu tiên nếu có
+            // Tự động xem trước ảnh đầu tiên nếu có (không tự động tick checkbox IsSelected)
             if (srcItems.Count > 0)
             {
-                SelectDualSortItem(srcItems[0]);
+                LoadPreviewItem(srcItems[0]);
             }
             else if (srtItems.Count > 0)
             {
-                SelectDualSortItem(srtItems[0]);
+                LoadPreviewItem(srtItems[0]);
             }
             else
             {
@@ -789,7 +827,7 @@ public partial class MainViewModel
                     try
                     {
                         using var imgStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                        thumbBmp = Bitmap.DecodeToWidth(imgStream, 240);
+                        thumbBmp = Bitmap.DecodeToWidth(imgStream, 480);
                     }
                     catch
                     {
@@ -831,6 +869,33 @@ public partial class MainViewModel
     // ==========================================
     // CHỌN ITEM & XEM TRƯỚC CHI TIẾT
     // ==========================================
+    public void LoadPreviewItem(PictureSortItem? item)
+    {
+        if (item == null) return;
+        DualSortSelectedPreview = item;
+
+        // Tải ảnh xem trước chi tiết (Full size)
+        Task.Run(() =>
+        {
+            try
+            {
+                if (File.Exists(item.FilePath))
+                {
+                    using var fs = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    var fullBmp = new Bitmap(fs);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (DualSortSelectedPreview == item)
+                        {
+                            DualSortPreviewBitmap = fullBmp;
+                        }
+                    });
+                }
+            }
+            catch { }
+        });
+    }
+
     [RelayCommand]
     public void SelectDualSortItem(PictureSortItem? item)
     {
@@ -1891,4 +1956,3 @@ public partial class MainViewModel
         return candidate;
     }
 }
-

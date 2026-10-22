@@ -109,13 +109,105 @@ public class QueueBackupService
         ? 3
         : Math.Min(4, CpuTopologyHelper.GetMaxLogicalProcessorCount());
 
+    private static readonly object _migrationLock = new object();
+    private static bool _migrationExecuted = false;
+
+    /// <summary>
+    /// Di chuyển toàn bộ dữ liệu từ thư mục cũ ComicDownloaderGMTPC sang autosaveComicDownloaderGMTPC trên Android
+    /// Đảm bảo không mất mát dữ liệu trước khi app đọc file autosave, bookmarks, history...
+    /// </summary>
+    public static void EnsureAutoSaveMigration()
+    {
+        if (_migrationExecuted) return;
+        lock (_migrationLock)
+        {
+            if (_migrationExecuted) return;
+            try
+            {
+                if (OperatingSystem.IsAndroid())
+                {
+                    string oldDir = "/storage/emulated/0/Download/ComicDownloaderGMTPC";
+                    string newDir = "/storage/emulated/0/Download/autosaveComicDownloaderGMTPC";
+
+                    if (Directory.Exists(oldDir))
+                    {
+                        if (!Directory.Exists(newDir))
+                        {
+                            Directory.CreateDirectory(newDir);
+                        }
+
+                        // 1. Di chuyển toàn bộ file (.md, .json, .txt, ...)
+                        var files = Directory.GetFiles(oldDir);
+                        foreach (var file in files)
+                        {
+                            try
+                            {
+                                string fileName = Path.GetFileName(file);
+                                string destPath = Path.Combine(newDir, fileName);
+
+                                if (File.Exists(destPath))
+                                {
+                                    var srcInfo = new FileInfo(file);
+                                    var dstInfo = new FileInfo(destPath);
+                                    // Ưu tiên file có dung lượng lớn hơn hoặc thời gian sửa đổi mới hơn
+                                    if (srcInfo.Length > dstInfo.Length || srcInfo.LastWriteTimeUtc > dstInfo.LastWriteTimeUtc)
+                                    {
+                                        File.Copy(file, destPath, overwrite: true);
+                                    }
+                                    File.Delete(file);
+                                }
+                                else
+                                {
+                                    File.Move(file, destPath);
+                                }
+                            }
+                            catch { }
+                        }
+
+                        // 2. Di chuyển các thư mục con nếu có
+                        var subDirs = Directory.GetDirectories(oldDir);
+                        foreach (var subDir in subDirs)
+                        {
+                            try
+                            {
+                                string dirName = Path.GetFileName(subDir);
+                                string destSubDir = Path.Combine(newDir, dirName);
+                                if (!Directory.Exists(destSubDir))
+                                {
+                                    Directory.Move(subDir, destSubDir);
+                                }
+                            }
+                            catch { }
+                        }
+
+                        // 3. Xóa thư mục cũ sau khi đã dọn sạch để người dùng không nhầm lẫn với ComicDownloads
+                        try
+                        {
+                            if (!Directory.EnumerateFileSystemEntries(oldDir).Any())
+                            {
+                                Directory.Delete(oldDir, recursive: false);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+            finally
+            {
+                _migrationExecuted = true;
+            }
+        }
+    }
+
     public static string GetAutoSaveDirectory()
     {
         try
         {
             if (OperatingSystem.IsAndroid())
             {
-                string publicDownload = "/storage/emulated/0/Download/ComicDownloaderGMTPC";
+                EnsureAutoSaveMigration();
+                string publicDownload = "/storage/emulated/0/Download/autosaveComicDownloaderGMTPC";
                 if (Directory.Exists("/storage/emulated/0/Download"))
                 {
                     if (!Directory.Exists(publicDownload)) Directory.CreateDirectory(publicDownload);

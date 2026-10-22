@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: MainViewModel.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -1016,6 +1016,7 @@ public partial class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(EnhanceDualColumns));
         OnPropertyChanged(nameof(EnhanceDualRows));
+        OnPropertyChanged(nameof(DualSortThumbHeight));
         UpdateSplitOrientation();
     }
 
