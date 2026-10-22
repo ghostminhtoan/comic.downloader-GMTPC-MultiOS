@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
 
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 
@@ -28,34 +28,48 @@
 
         <!-- Style ScrollBar dọc to bản cho Dual Picture Sort hỗ trợ chạm vuốt cảm ứng ngón tay -->
 
+        <!-- Style ScrollBar dọc tự động phóng to 3 giây khi cuộn cho Dual Picture Sort -->
         <Style Selector="ScrollViewer.dualSortScroll ScrollBar:vertical">
-
-            <Setter Property="Width" Value="28" />
-
-            <Setter Property="MinWidth" Value="28" />
-
-            <Setter Property="Opacity" Value="0.9" />
-
+            <Setter Property="Width" Value="8" />
+            <Setter Property="MinWidth" Value="8" />
+            <Setter Property="Opacity" Value="0.5" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.2" />
+                    <DoubleTransition Property="MinWidth" Duration="0:0:0.2" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                </Transitions>
+            </Setter>
         </Style>
-
         <Style Selector="ScrollViewer.dualSortScroll ScrollBar:vertical /template/ Thumb">
-
-            <Setter Property="MinHeight" Value="60" />
-
-            <Setter Property="Width" Value="22" />
-
+            <Setter Property="MinHeight" Value="50" />
+            <Setter Property="Width" Value="6" />
+            <Setter Property="Background" Value="#64748B" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.2" />
+                    <DoubleTransition Property="MinWidth" Duration="0:0:0.2" />
+                    <BrushTransition Property="Background" Duration="0:0:0.2" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <!-- Khi phóng to (cuộn hoặc hover) -->
+        <Style Selector="ScrollViewer.dualSortScroll ScrollBar:vertical.scroll-active, ScrollViewer.dualSortScroll.scroll-active ScrollBar:vertical, ScrollViewer.dualSortScroll ScrollBar:vertical:pointerover">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="MinWidth" Value="24" />
+            <Setter Property="Opacity" Value="1.0" />
+        </Style>
+        <Style Selector="ScrollViewer.dualSortScroll ScrollBar:vertical.scroll-active /template/ Thumb, ScrollViewer.dualSortScroll.scroll-active ScrollBar:vertical /template/ Thumb, ScrollViewer.dualSortScroll ScrollBar:vertical:pointerover /template/ Thumb">
+            <Setter Property="Width" Value="20" />
             <Setter Property="Background" Value="#38BDF8" />
-
-            <Setter Property="CornerRadius" Value="11" />
-
+            <Setter Property="CornerRadius" Value="10" />
         </Style>
-
-        <Style Selector="ScrollViewer.dualSortScroll ScrollBar:vertical /template/ Thumb:pointerover">
-
+        <Style Selector="ScrollViewer.dualSortScroll ScrollBar:vertical /template/ Thumb:pressed">
+            <Setter Property="Width" Value="24" />
             <Setter Property="Background" Value="#0284C7" />
-
+            <Setter Property="CornerRadius" Value="12" />
         </Style>
-
     </UserControl.Styles>
 
 
@@ -7681,24 +7695,23 @@
                                                 </Button>
 
                                                 <!-- Cá»¥m chá»n Grid 1 - 3 (Windows & Linux) -->
-                                                <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="2" Margin="0,0,0,6" VerticalAlignment="Center">
-                                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                                        <TextBlock Text="âŠž Grid:" FontSize="10.5" FontWeight="Bold" Foreground="#94A3B8" VerticalAlignment="Center" Margin="4,0,4,0" />
-                                                        <Button Command="{Binding SetDualSortGridColumnsCommand}" CommandParameter="1"
-                                                                Background="{Binding DualSortGrid1Bg}" Foreground="{Binding DualSortGrid1Fg}"
-                                                                Padding="8,3" CornerRadius="3" FontWeight="Bold" FontSize="11" ToolTip.Tip="Hiá»ƒn thá»‹ 1 cá»™t (áº¢nh landscape siÃªu to)">
-                                                            <TextBlock Text="1" />
-                                                        </Button>
-                                                        <Button Command="{Binding SetDualSortGridColumnsCommand}" CommandParameter="2"
-                                                                Background="{Binding DualSortGrid2Bg}" Foreground="{Binding DualSortGrid2Fg}"
-                                                                Padding="8,3" CornerRadius="3" FontWeight="Bold" FontSize="11" ToolTip.Tip="Hiá»ƒn thá»‹ 2 cá»™t (CÃ¢n Ä‘á»‘i landscape chuáº©n)">
-                                                            <TextBlock Text="2" />
-                                                        </Button>
-                                                        <Button Command="{Binding SetDualSortGridColumnsCommand}" CommandParameter="3"
-                                                                Background="{Binding DualSortGrid3Bg}" Foreground="{Binding DualSortGrid3Fg}"
-                                                                Padding="8,3" CornerRadius="3" FontWeight="Bold" FontSize="11" ToolTip.Tip="Hiá»ƒn thá»‹ 3 cá»™t (Nhiá»u áº£nh)">
-                                                            <TextBlock Text="3" />
-                                                        </Button>
+                                                <!-- Cụm chọn Grid (ComboBox từ 1 đến 6 trên Desktop, có Icon Grid vector) -->
+                                                <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="4,2" Margin="0,0,0,6" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                        <PathIcon Data="M3 3h7v7H3V3zm11 0h7v7h-7V3zm0 11h7v7h-7v-7zm-11 0h7v7H3v-7z"
+                                                                  Width="13" Height="13" Foreground="#38BDF8" VerticalAlignment="Center" Margin="2,0,2,0" />
+                                                        <TextBlock Text="Grid:" FontSize="11" FontWeight="Bold" Foreground="#94A3B8" VerticalAlignment="Center" />
+                                                        <ComboBox ItemsSource="{Binding DualSortGridOptions}"
+                                                                  SelectedItem="{Binding DualSortGridColumns, Mode=TwoWay}"
+                                                                  Height="26" MinWidth="54" Padding="6,1" FontSize="11" FontWeight="Bold"
+                                                                  Background="#1E293B" Foreground="#F8FAFC" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="3"
+                                                                  VerticalContentAlignment="Center" ToolTip.Tip="Chọn số cột hiển thị ảnh (Grid 1 - 6)">
+                                                            <ComboBox.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding}" HorizontalAlignment="Center" FontWeight="Bold" />
+                                                                </DataTemplate>
+                                                            </ComboBox.ItemTemplate>
+                                                        </ComboBox>
                                                     </StackPanel>
                                                 </Border>
 
@@ -8079,23 +8092,22 @@
                                                 </Button>
 
                                                 <!-- Cá»¥m chá»n Grid 1 - 3 trÃªn Mobile -->
-                                                <Border Grid.Column="2" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="2" Margin="6,0,0,0" VerticalAlignment="Center">
-                                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                                        <Button Command="{Binding SetDualSortGridColumnsCommand}" CommandParameter="1"
-                                                                Background="{Binding DualSortGrid1Bg}" Foreground="{Binding DualSortGrid1Fg}"
-                                                                Padding="7,2" CornerRadius="3" FontWeight="Bold" FontSize="10" ToolTip.Tip="1 Cá»™t">
-                                                            <TextBlock Text="1" />
-                                                        </Button>
-                                                        <Button Command="{Binding SetDualSortGridColumnsCommand}" CommandParameter="2"
-                                                                Background="{Binding DualSortGrid2Bg}" Foreground="{Binding DualSortGrid2Fg}"
-                                                                Padding="7,2" CornerRadius="3" FontWeight="Bold" FontSize="10" ToolTip.Tip="2 Cá»™t">
-                                                            <TextBlock Text="2" />
-                                                        </Button>
-                                                        <Button Command="{Binding SetDualSortGridColumnsCommand}" CommandParameter="3"
-                                                                Background="{Binding DualSortGrid3Bg}" Foreground="{Binding DualSortGrid3Fg}"
-                                                                Padding="7,2" CornerRadius="3" FontWeight="Bold" FontSize="10" ToolTip.Tip="3 Cá»™t">
-                                                            <TextBlock Text="3" />
-                                                        </Button>
+                                                <!-- Cụm chọn Grid trên Mobile (ComboBox từ 1 đến 3) -->
+                                                <Border Grid.Column="2" Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="3,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                                                        <PathIcon Data="M3 3h7v7H3V3zm11 0h7v7h-7V3zm0 11h7v7h-7v-7zm-11 0h7v7H3v-7z"
+                                                                  Width="12" Height="12" Foreground="#38BDF8" VerticalAlignment="Center" Margin="2,0,1,0" />
+                                                        <ComboBox ItemsSource="{Binding DualSortGridOptions}"
+                                                                  SelectedItem="{Binding DualSortGridColumns, Mode=TwoWay}"
+                                                                  Height="26" MinWidth="48" Padding="4,1" FontSize="10.5" FontWeight="Bold"
+                                                                  Background="#1E293B" Foreground="#F8FAFC" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="3"
+                                                                  VerticalContentAlignment="Center">
+                                                            <ComboBox.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding}" HorizontalAlignment="Center" FontWeight="Bold" />
+                                                                </DataTemplate>
+                                                            </ComboBox.ItemTemplate>
+                                                        </ComboBox>
                                                     </StackPanel>
                                                 </Border>
 

@@ -54,21 +54,49 @@
             <Setter Property="HorizontalContentAlignment" Value="Center" />
         </Style>
 
-        <!-- Style ScrollBar to bản, dễ drag / nắm kéo chuột và cảm ứng trên mọi nền tảng -->
+        <!-- Style ScrollBar chuẩn toàn hệ thống: Tự động phóng to 3 giây khi cuộn bằng bất kỳ thao tác nào -->
         <Style Selector="ScrollBar:vertical">
-            <Setter Property="MinWidth" Value="14" />
-            <Setter Property="Width" Value="14" />
+            <Setter Property="MinWidth" Value="8" />
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Opacity" Value="0.5" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.2" />
+                    <DoubleTransition Property="MinWidth" Duration="0:0:0.2" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                </Transitions>
+            </Setter>
         </Style>
         <Style Selector="ScrollBar:vertical /template/ Thumb">
-            <Setter Property="MinWidth" Value="12" />
-            <Setter Property="Width" Value="12" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Background" Value="#475569" />
+            <Setter Property="MinWidth" Value="6" />
+            <Setter Property="Width" Value="6" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Background" Value="#64748B" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.2" />
+                    <DoubleTransition Property="MinWidth" Duration="0:0:0.2" />
+                    <BrushTransition Property="Background" Duration="0:0:0.2" />
+                </Transitions>
+            </Setter>
         </Style>
-        <Style Selector="ScrollBar:vertical /template/ Thumb:pointerover">
+
+        <!-- Khi phóng to (khi cuộn hoặc hover hoặc được kích hoạt scroll-active) -->
+        <Style Selector="ScrollBar:vertical.scroll-active, ScrollViewer.scroll-active ScrollBar:vertical, ScrollBar:vertical:pointerover">
+            <Setter Property="MinWidth" Value="22" />
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Opacity" Value="1.0" />
+        </Style>
+        <Style Selector="ScrollBar:vertical.scroll-active /template/ Thumb, ScrollViewer.scroll-active ScrollBar:vertical /template/ Thumb, ScrollBar:vertical:pointerover /template/ Thumb">
+            <Setter Property="MinWidth" Value="18" />
+            <Setter Property="Width" Value="18" />
+            <Setter Property="CornerRadius" Value="9" />
             <Setter Property="Background" Value="#38BDF8" />
         </Style>
         <Style Selector="ScrollBar:vertical /template/ Thumb:pressed">
+            <Setter Property="MinWidth" Value="22" />
+            <Setter Property="Width" Value="22" />
+            <Setter Property="CornerRadius" Value="11" />
             <Setter Property="Background" Value="#0284C7" />
         </Style>
 

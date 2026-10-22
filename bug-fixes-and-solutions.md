@@ -1,4 +1,4 @@
-# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
+﻿# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
 
 > **Dự án**: Comic Downloader GMTPC Avalonia Multi-OS (Windows, Linux, Android)  
 
@@ -1036,6 +1036,34 @@
   - Bấm chọn các nút Grid 1, 2, 3: Layout chuyển đổi mượt mà giữa 1 cột (ảnh siêu to), 2 cột (cân đối landscape), và 3 cột (xem nhiều ảnh).
   - Chọn thư mục gốc mới: Ảnh đầu tiên được hiển thị trên khung preview to nhưng checkbox của ảnh không bị tick chọn.
   - Trên Android: Dữ liệu cũ trong ComicDownloaderGMTPC được tự động di chuyển sang utosaveComicDownloaderGMTPC ngay khi mở app, không mất mát bất kỳ file autosave hay bookmark nào. Thư mục cũ được xóa sạch.
+
+---
+
+
+### 27. BUG-027: Vertical ScrollBar Tự Động Phóng To 3 Giây Khi Cuộn (Mọi Thao Tác Scroll), Sửa Triệt Để Lỗi Mojibake & Nâng Cấp ComboBox Chọn Grid 1-6 Desktop / 1-3 Android
+- **Triệu chứng**:
+  + Thanh cuộn dọc (Vertical ScrollBar) trên Windows, Linux và Android có kích thước cố định hoặc quá mỏng, khi người dùng thực hiện bất kỳ thao tác cuộn nào (lăn chuột, vuốt chạm ngón tay, kéo thanh cuộn, phím bấm...) khó nhận diện vị trí và khó thao tác kéo trên màn hình cảm ứng.
+  + Tiêu đề cụm chọn Grid trên Dual Picture Sort bị lỗi mã hóa ký tự (mojibake) hiển thị thành âŠž Grid: thay vì biểu tượng Grid ô vuông.
+  + Việc dàn trải các nút chọn số Grid riêng lẻ (1, 2, 3...) chiếm quá nhiều diện tích thanh công cụ, chưa hỗ trợ chế độ Grid mở rộng lên đến 6 cột trên Desktop (Windows & Linux) trong khi Android vẫn cần giữ tối đa 3 cột.
+- **Nguyên nhân gốc rễ**:
+  1. *Thiếu cơ chế tương tác động cho ScrollBar*: Avalonia ScrollViewer mặc định chỉ thay đổi visual khi hover chuột (pointerover), không tự động phóng to thanh cuộn khi người dùng lăn chuột, vuốt chạm cảm ứng hoặc bấm phím.
+  2. *Lỗi encoding ký tự Unicode ⊞*: Ký tự ⊞ (U+229E) bị mã hóa sai thành âŠž do xung đột bảng mã ANSI/UTF-8.
+  3. *Layout nút dàn trải*: Việc dùng các Button nối tiếp nhau chiếm chỗ thanh công cụ; ViewModel chưa phân tách giới hạn số cột tối đa theo hệ điều hành (Desktop max 6, Android max 3).
+- **Giải pháp triệt để**:
+  1. *Dịch vụ ScrollBarAutoExpandService & Style Phóng To 3 Giây*:
+     + Xây dựng ScrollBarAutoExpandService lắng nghe sự kiện ScrollChanged, PointerWheelChanged, PointerEntered, PointerExited, PointerPressed, PointerReleased trên toàn bộ các ScrollViewer trong ứng dụng.
+     + Khi có bất kỳ thao tác cuộn nào (lăn chuột, vuốt chạm cảm ứng ngón tay Android, kéo Thumb, click track, phím bấm, code), lập tức kích hoạt class scroll-active: thanh cuộn dọc nở to từ 8px lên 22px (Thumb từ 6px lên 18px, bo tròn CornerRadius="9", đổi sang màu Cyber Cyan sáng rực #38BDF8).
+     + Timer 3.0 giây tự động gia hạn khi tiếp tục cuộn, và sau 3 giây tĩnh sẽ tự động thu nhỏ lại 8px mượt mà thông qua Avalonia Transitions.
+  2. *Triệt tiêu lỗi Mojibake bằng Vector PathIcon*:
+     + Thay thế ký tự Unicode lỗi bằng PathIcon vector hình lưới 4 ô vuông (M3 3h7v7H3V3zm11 0h7v7h-7V3zm0 11h7v7h-7v-7zm-11 0h7v7H3v-7z) chuẩn XML/XAML 100% sắc nét, không bao giờ bị lỗi font hay bảng mã.
+  3. *ComboBox Chọn Grid Gọn Gàng (1-6 Desktop / 1-3 Android)*:
+     + Thêm thuộc tính DualSortGridOptions trả về mảng [1, 2, 3, 4, 5, 6] trên Desktop và [1, 2, 3] trên Android.
+     + Cập nhật DualSortThumbHeight tính toán tỷ lệ landscape widescreen chuẩn 16:9 cho cả 6 cột trên Desktop (Grid 1: 380px, Grid 2: 220px, Grid 3: 150px, Grid 4: 115px, Grid 5: 95px, Grid 6: 80px) và 3 cột trên Android (Grid 1: 210px, Grid 2: 120px, Grid 3: 85px).
+- **File can thiệp**: ScrollBarAutoExpandService.cs, App.axaml, MainView.axaml, MainView.axaml.cs, MainViewModel.DualPictureSort.cs, ug-fixes-and-solutions.md, workflow-avalonia.md.
+- **Quy tắc kiểm thử**:
+  - Khi cuộn bất kỳ danh sách nào trên Windows, Linux, Android bằng lăn chuột, vuốt ngón tay, kéo thumb hay phím: Vertical ScrollBar lập tức phóng to to bản 22px trong 3 giây rồi tự thu nhỏ lại 8px.
+  - Cụm chọn Grid hiển thị biểu tượng lưới vector sắc nét, không còn ký tự mojibake.
+  - Trên Windows & Linux: ComboBox cho phép chọn từ 1 đến 6 cột. Trên Android: ComboBox hiển thị tối đa 3 cột. Ảnh co giãn chuẩn tỷ lệ landscape widescreen ở mọi chế độ cột.
 
 ---
 

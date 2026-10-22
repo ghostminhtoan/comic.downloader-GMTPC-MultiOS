@@ -1,4 +1,4 @@
-// ====================================================================================================
+﻿// ====================================================================================================
 // FILE SUMMARY: MainViewModel.DualPictureSort.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -77,42 +77,38 @@ public partial class MainViewModel
     private bool _canRedoSort = false;
 
     // ==========================================
-    // CHỌN GRID CỘT (1, 2, 3) & LANDSCAPE ASPECT CHO CẢ WINDOWS, LINUX, ANDROID
+    // CHỌN GRID CỘT (1-6 TRÊN DESKTOP, 1-3 TRÊN ANDROID) & LANDSCAPE ASPECT
     // ==========================================
+    public int[] DualSortGridOptions => OperatingSystem.IsAndroid()
+        ? new[] { 1, 2, 3 }
+        : new[] { 1, 2, 3, 4, 5, 6 };
+
     [ObservableProperty]
     private int _dualSortGridColumns = 2; // Mặc định 2 cột cân đối
 
     public double DualSortThumbHeight => IsPortraitMode
-        ? (DualSortGridColumns switch { 1 => 210, 2 => 120, 3 => 85, _ => 120 })
-        : (DualSortGridColumns switch { 1 => 380, 2 => 220, 3 => 150, _ => 220 });
+        ? (DualSortGridColumns switch
+        {
+            1 => 210,
+            2 => 120,
+            3 => 85,
+            _ => 120
+        })
+        : (DualSortGridColumns switch
+        {
+            1 => 380,
+            2 => 220,
+            3 => 150,
+            4 => 115,
+            5 => 95,
+            6 => 80,
+            _ => 150
+        });
 
     partial void OnDualSortGridColumnsChanged(int value)
     {
         OnPropertyChanged(nameof(DualSortThumbHeight));
-        OnPropertyChanged(nameof(DualSortGrid1Bg));
-        OnPropertyChanged(nameof(DualSortGrid1Fg));
-        OnPropertyChanged(nameof(DualSortGrid2Bg));
-        OnPropertyChanged(nameof(DualSortGrid2Fg));
-        OnPropertyChanged(nameof(DualSortGrid3Bg));
-        OnPropertyChanged(nameof(DualSortGrid3Fg));
     }
-
-    [RelayCommand]
-    public void SetDualSortGridColumns(string? colStr)
-    {
-        if (int.TryParse(colStr, out int cols) && cols >= 1 && cols <= 3)
-        {
-            DualSortGridColumns = cols;
-        }
-    }
-
-    public IBrush DualSortGrid1Bg => DualSortGridColumns == 1 ? Brush.Parse("#0284C7") : Brush.Parse("#1E293B");
-    public IBrush DualSortGrid1Fg => DualSortGridColumns == 1 ? Brush.Parse("#FFFFFF") : Brush.Parse("#94A3B8");
-    public IBrush DualSortGrid2Bg => DualSortGridColumns == 2 ? Brush.Parse("#0284C7") : Brush.Parse("#1E293B");
-    public IBrush DualSortGrid2Fg => DualSortGridColumns == 2 ? Brush.Parse("#FFFFFF") : Brush.Parse("#94A3B8");
-    public IBrush DualSortGrid3Bg => DualSortGridColumns == 3 ? Brush.Parse("#0284C7") : Brush.Parse("#1E293B");
-    public IBrush DualSortGrid3Fg => DualSortGridColumns == 3 ? Brush.Parse("#FFFFFF") : Brush.Parse("#94A3B8");
-
     // ==========================================
     // FLOATING BATCH TOOLBAR ẨN / HIỆN
     // ==========================================
