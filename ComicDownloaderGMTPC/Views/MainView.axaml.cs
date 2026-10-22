@@ -347,6 +347,17 @@ public partial class MainView : UserControl
 
             _isSyncScrollSetup = true;
 
+            // Tự động lắng nghe toàn bộ sự kiện cuộn toàn cục (Lăn chuột Windows/Linux, cảm ứng Android, ScrollViewer)
+            ScrollBarAutoExpandService.AttachGlobalScrollListeners(this);
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel != null)
+            {
+                topLevel.AddHandler(InputElement.PointerWheelChangedEvent, (s, ev) =>
+                {
+                    ScrollBarAutoExpandService.TriggerGlobalScrollExpand(this);
+                }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+            }
+
 
 
             // Dual View (Song song Before / After): Pan & ComicScreen Zoom locked-step 100%

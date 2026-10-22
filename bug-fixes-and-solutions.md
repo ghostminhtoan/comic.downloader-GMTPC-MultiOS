@@ -1028,7 +1028,8 @@
      + Đổi đường dẫn lưu trữ công khai trên Android trong QueueBackupService.GetAutoSaveDirectory() thành /storage/emulated/0/Download/autosaveComicDownloaderGMTPC.
      + Thiết kế phương thức an toàn QueueBackupService.EnsureAutoSaveMigration():
        * Chạy ngay tại đầu phương thức App.OnFrameworkInitializationCompleted() trước khi bất kỳ ViewModel hay Service nào khởi tạo và đọc dữ liệu.
-       * Kiểm tra nếu thư mục cũ ComicDownloaderGMTPC tồn tại: tự động tạo thư mục mới utosaveComicDownloaderGMTPC nếu chưa có, di chuyển toàn bộ file (utosave.md, ookmarks.md, history.md, esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có dung lượng lớn hơn hoặc thời gian sửa đổi mới hơn).
+       * Kiểm tra nếu thư mục cũ ComicDownloaderGMTPC tồn tại: tự động tạo thư mục mới utosaveComicDownloaderGMTPC nếu chưa có, di chuyển toàn bộ file (utosave.md, ookmarks.md, history.md, 
+esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có dung lượng lớn hơn hoặc thời gian sửa đổi mới hơn).
        * Xóa thư mục cũ sau khi dọn sạch file để người dùng không còn nhầm lẫn với ComicDownloads.
 - **File can thiệp**: MainViewModel.DualPictureSort.cs, MainViewModel.cs, MainView.axaml, QueueBackupService.cs, App.axaml.cs, ug-fixes-and-solutions.md, workflow-avalonia.md.
 - **Quy tắc kiểm thử**:
@@ -1064,6 +1065,34 @@
   - Khi cuộn bất kỳ danh sách nào trên Windows, Linux, Android bằng lăn chuột, vuốt ngón tay, kéo thumb hay phím: Vertical ScrollBar lập tức phóng to to bản 22px trong 3 giây rồi tự thu nhỏ lại 8px.
   - Cụm chọn Grid hiển thị biểu tượng lưới vector sắc nét, không còn ký tự mojibake.
   - Trên Windows & Linux: ComboBox cho phép chọn từ 1 đến 6 cột. Trên Android: ComboBox hiển thị tối đa 3 cột. Ảnh co giãn chuẩn tỷ lệ landscape widescreen ở mọi chế độ cột.
+
+---
+
+### 28. BUG-028: Nâng Cấp Dual Picture Sort Thành 2 Tab Độc Lập & Tối Ưu Phóng To ScrollBar Toàn Diện Mọi Thao Tác Cuộn (Windows/Linux/Android, Trừ Reader)
+
+- **Triệu chứng**:
+  1. Trong Dual Picture Sort (Phân loại ảnh kép), bố cục 2 panel song song (side-by-side) chia đôi màn hình khiến không gian hiển thị danh sách ảnh bị chật hẹp, đặc biệt khi chọn 3-6 cột ảnh.
+  2. Trên Windows và Linux, khi lăn chuột (mouse wheel) thanh cuộn dọc không tự động phóng to mà phải hover chuột trực tiếp vào thanh cuộn. Người dùng muốn thanh cuộn dọc tự động phóng to 3 giây khi có thao tác cuộn (kể cả có cuộn được nội dung hay không).
+  3. Trên Android, khi vuốt cuộn ở bất kỳ tab nào (trừ Reader), thanh cuộn dọc cũng phải phóng to 3 giây rồi mới thu nhỏ lại nếu không tiếp tục cuộn.
+- **Nguyên nhân gốc rễ**:
+  1. Bố cục cũ trên Desktop chia màn hình thành 2 panel song song (Grid Column 0 và 2) qua GridSplitter, làm giảm 50% độ rộng khả dụng cho mỗi danh sách.
+  2. Thao tác lăn chuột (PointerWheelChanged) không được lắng nghe toàn cục ở cấp độ Window/View mà chỉ gán cục bộ vào ScrollViewer; hơn nữa khi nội dung đã ở đỉnh hoặc đáy trang thì ScrollChanged không phát ra OffsetDelta > 0. Ngoài ra selector XAML thiếu pseudo-combinator `/template/` khiến class `.scroll-active` từ ScrollViewer không thể chọn tới template child ScrollBar/Thumb.
+  3. Thiếu cơ chế nhận diện cử chỉ chạm vuốt cảm ứng Touch Drag trên Android ở cấp độ toàn màn hình để kích hoạt phóng to thanh cuộn trước/trong khi cuộn.
+- **Giải pháp triệt để**:
+  1. *Chuyển 2 panel thành 2 Tab riêng biệt*:
+     + Thống nhất bố cục Dual Picture Sort thành 2 Tab riêng biệt (`📁 THƯ MỤC GỐC` và `✨ ĐÃ LỌC`) trên cả Desktop, Linux và Android.
+     + Mỗi tab chiếm trọn 100% độ rộng màn hình (Full Width), tích hợp thanh tìm kiếm + nút chuyển ảnh nhanh (`➡️ Chuyển sang Sorted` / `⬅️ Trả lại Gốc`) và lưới ảnh 1-6 cột tỷ lệ widescreen 16:9 sắc nét.
+     + Đồng bộ ViewModel `DualSortActiveTab` với các lệnh `SelectDualSortSourceTab` và `SelectDualSortSortedTab`.
+  2. *Lắng nghe cuộn toàn cục & phóng to ScrollBar 3s*:
+     + Nâng cấp `ScrollBarAutoExpandService.cs` với phương thức `AttachGlobalScrollListeners`: bắt sự kiện `PointerWheelChangedEvent` (Tunnel + Bubble + handledEventsToo) trên toàn bộ MainView/TopLevel. Kể cả khi nội dung không thể cuộn thêm, thao tác lăn chuột vẫn lập tức kích hoạt mở to thanh cuộn dọc trong 3 giây.
+     + Bổ sung bộ nhận diện cử chỉ Touch Drag dọc cho Android và bắt sự kiện `ScrollViewer.ScrollChangedEvent` toàn cục.
+     + Cơ chế lọc ngoại trừ thông minh: Toàn bộ các thanh cuộn bên trong trình đọc truyện Reader (`ComicReaderControl` / `ComicReaderWindow`) được bảo vệ nguyên bản, tuyệt đối không bị phóng to để không che khuất trang truyện (`!IsInsideReader(sb)`).
+     + Duy trì bộ đếm lùi 3.0 giây tự động gia hạn khi tiếp tục cuộn, và thu nhỏ mượt mà sau 3 giây tĩnh nếu chuột không hover trên thanh cuộn.
+- **File can thiệp**: `ScrollBarAutoExpandService.cs`, `App.axaml`, `MainView.axaml`, `MainView.axaml.cs`, `MainViewModel.DualPictureSort.cs`, `bug-fixes-and-solutions.md`, `workflow-avalonia.md`.
+- **Quy tắc kiểm thử**:
+  - Mở Dual Picture Sort trên Windows/Linux/Android: Giao diện hiển thị thanh chuyển 2 Tab lớn rõ ràng, mỗi tab chiếm toàn bộ chiều ngang, không còn 2 panel chia đôi màn hình chật chội.
+  - Lăn bánh xe chuột tại bất kỳ vị trí nào trên Windows/Linux (kể cả khi ở đầu trang/cuối trang không cuộn thêm được): Thanh cuộn dọc lập tức mở rộng to bản 22px màu Cyber Cyan trong 3 giây rồi tự thu nhỏ mượt mà về 8px.
+  - Trên Android, vuốt cuộn ở bất kỳ tab nào (trừ Reader): Thanh cuộn dọc tự động phóng to 3 giây rồi nhỏ lại. Khi vào Reader đọc truyện, thanh cuộn giữ nguyên chế độ đọc truyện không bị phóng to che ảnh.
 
 ---
 

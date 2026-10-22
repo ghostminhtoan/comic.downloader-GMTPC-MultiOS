@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: MainViewModel.DualPictureSort.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -96,13 +96,13 @@ public partial class MainViewModel
         })
         : (DualSortGridColumns switch
         {
-            1 => 380,
-            2 => 220,
-            3 => 150,
-            4 => 115,
-            5 => 95,
-            6 => 80,
-            _ => 150
+            1 => 420,
+            2 => 260,
+            3 => 190,
+            4 => 150,
+            5 => 125,
+            6 => 110,
+            _ => 180
         });
 
     partial void OnDualSortGridColumnsChanged(int value)
@@ -185,16 +185,7 @@ public partial class MainViewModel
     [RelayCommand]
     public void ToggleSelectAll()
     {
-        ObservableCollection<PictureSortItem> targetCollection;
-        if (IsPortraitMode)
-        {
-            targetCollection = DualSortMobileActiveTab == 0 ? DualSortSourceItems : DualSortSortedItems;
-        }
-        else
-        {
-            bool hasSortedSelected = DualSortSortedItems.Any(x => x.IsSelected);
-            targetCollection = hasSortedSelected ? DualSortSortedItems : DualSortSourceItems;
-        }
+        ObservableCollection<PictureSortItem> targetCollection = DualSortActiveTab == 0 ? DualSortSourceItems : DualSortSortedItems;
 
         if (targetCollection.Count == 0) return;
 
@@ -358,23 +349,52 @@ public partial class MainViewModel
     private bool _isDualSortLoading = false;
 
     // ==========================================
-    // RESPONSIVE CHO MOBILE / ANDROID
+    // QUẢN LÝ TAB DUAL PICTURE SORT (MỖI PANEL LÀ 1 TAB TRÊN CẢ DESKTOP & ANDROID)
     // ==========================================
     [ObservableProperty]
-    private int _dualSortMobileActiveTab = 0; // 0: Gốc, 1: Đã lọc
+    private int _dualSortActiveTab = 0; // 0: Gốc, 1: Đã lọc
 
-    partial void OnDualSortMobileActiveTabChanged(int value)
+    partial void OnDualSortActiveTabChanged(int value)
     {
+        DualSortMobileActiveTab = value;
+        OnPropertyChanged(nameof(SourceTabBg));
+        OnPropertyChanged(nameof(SortedTabBg));
+        OnPropertyChanged(nameof(SourceTabBorder));
+        OnPropertyChanged(nameof(SortedTabBorder));
+        OnPropertyChanged(nameof(IsSourceTabVisible));
+        OnPropertyChanged(nameof(IsSortedTabVisible));
         OnPropertyChanged(nameof(MobileSourceTabBg));
         OnPropertyChanged(nameof(MobileSortedTabBg));
         OnPropertyChanged(nameof(IsMobileSourceTabVisible));
         OnPropertyChanged(nameof(IsMobileSortedTabVisible));
     }
 
-    public string MobileSourceTabBg => DualSortMobileActiveTab == 0 ? "#0284C7" : "#1E293B";
-    public string MobileSortedTabBg => DualSortMobileActiveTab == 1 ? "#059669" : "#1E293B";
-    public bool IsMobileSourceTabVisible => DualSortMobileActiveTab == 0;
-    public bool IsMobileSortedTabVisible => DualSortMobileActiveTab == 1;
+    public string SourceTabBg => DualSortActiveTab == 0 ? "#0284C7" : "#1E293B";
+    public string SortedTabBg => DualSortActiveTab == 1 ? "#059669" : "#1E293B";
+    public string SourceTabBorder => DualSortActiveTab == 0 ? "#38BDF8" : "#334155";
+    public string SortedTabBorder => DualSortActiveTab == 1 ? "#34D399" : "#334155";
+    public bool IsSourceTabVisible => DualSortActiveTab == 0;
+    public bool IsSortedTabVisible => DualSortActiveTab == 1;
+
+    [ObservableProperty]
+    private int _dualSortMobileActiveTab = 0; // 0: Gốc, 1: Đã lọc
+
+    partial void OnDualSortMobileActiveTabChanged(int value)
+    {
+        if (_dualSortActiveTab != value)
+        {
+            DualSortActiveTab = value;
+        }
+        OnPropertyChanged(nameof(MobileSourceTabBg));
+        OnPropertyChanged(nameof(MobileSortedTabBg));
+        OnPropertyChanged(nameof(IsMobileSourceTabVisible));
+        OnPropertyChanged(nameof(IsMobileSortedTabVisible));
+    }
+
+    public string MobileSourceTabBg => SourceTabBg;
+    public string MobileSortedTabBg => SortedTabBg;
+    public bool IsMobileSourceTabVisible => IsSourceTabVisible;
+    public bool IsMobileSortedTabVisible => IsSortedTabVisible;
 
     [ObservableProperty]
     private bool _isDualSortMobilePreviewExpanded = false;
@@ -1488,15 +1508,27 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
+    public void SelectDualSortSourceTab()
+    {
+        DualSortActiveTab = 0;
+    }
+
+    [RelayCommand]
+    public void SelectDualSortSortedTab()
+    {
+        DualSortActiveTab = 1;
+    }
+
+    [RelayCommand]
     public void SelectDualSortMobileSourceTab()
     {
-        DualSortMobileActiveTab = 0;
+        SelectDualSortSourceTab();
     }
 
     [RelayCommand]
     public void SelectDualSortMobileSortedTab()
     {
-        DualSortMobileActiveTab = 1;
+        SelectDualSortSortedTab();
     }
 
     // ==========================================

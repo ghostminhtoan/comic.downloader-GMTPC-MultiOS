@@ -82,12 +82,12 @@
         </Style>
 
         <!-- Khi phóng to (khi cuộn hoặc hover hoặc được kích hoạt scroll-active) -->
-        <Style Selector="ScrollBar:vertical.scroll-active, ScrollViewer.scroll-active ScrollBar:vertical, ScrollBar:vertical:pointerover">
+        <Style Selector="ScrollBar:vertical.scroll-active, ScrollViewer.scroll-active /template/ ScrollBar:vertical, ScrollBar:vertical:pointerover">
             <Setter Property="MinWidth" Value="22" />
             <Setter Property="Width" Value="22" />
             <Setter Property="Opacity" Value="1.0" />
         </Style>
-        <Style Selector="ScrollBar:vertical.scroll-active /template/ Thumb, ScrollViewer.scroll-active ScrollBar:vertical /template/ Thumb, ScrollBar:vertical:pointerover /template/ Thumb">
+        <Style Selector="ScrollBar:vertical.scroll-active /template/ Thumb, ScrollBar:vertical:pointerover /template/ Thumb">
             <Setter Property="MinWidth" Value="18" />
             <Setter Property="Width" Value="18" />
             <Setter Property="CornerRadius" Value="9" />
