@@ -12,9 +12,11 @@ using Avalonia.Platform.Storage;
 namespace ComicDownloaderGMTPC.Services;
 
 /// <summary>
-/// Dịch vụ chọn thư mục hỗ trợ hiển thị danh sách tập tin ảnh trực quan trên cả Windows và Linux.
-/// Người dùng vừa có thể nhìn thấy toàn bộ file ảnh bên trong, vừa có thể chọn thư mục hiện tại
-/// hoặc click chọn một file ảnh bất kỳ thì ứng dụng đều tự động lấy thư mục đang chọn.
+/// Dịch vụ chọn thư mục hỗ trợ hiển thị danh sách tập tin ảnh trực quan trên cả Windows, Linux và Android.
+/// - Windows & Linux: Vừa nhìn thấy toàn bộ file ảnh bên trong, vừa có thể chọn thư mục hiện tại
+///   hoặc click chọn một file ảnh bất kỳ thì ứng dụng đều tự động lấy thư mục đang chọn.
+/// - Android: Gọi StorageProvider.OpenFolderPickerAsync (ACTION_OPEN_DOCUMENT_TREE) để hiển thị
+///   rõ nút "Sử dụng thư mục này" / "Use this folder" ở đáy màn hình theo chuẩn Android SAF.
 /// </summary>
 public static class FolderOrFilePickerService
 {
@@ -59,7 +61,47 @@ public static class FolderOrFilePickerService
             }
         }
 
-        // 3. Fallback tiêu chuẩn / Android: Sử dụng Avalonia OpenFilePickerAsync hiển thị danh sách file ảnh
+        // 3. Trên Android: Sử dụng OpenFolderPickerAsync để Android SAF (ACTION_OPEN_DOCUMENT_TREE)
+        // hiển thị rõ nút "Sử dụng thư mục này" / "Use this folder" ở dưới đáy màn hình
+        if (OperatingSystem.IsAndroid() && topLevel?.StorageProvider != null)
+        {
+            try
+            {
+                IStorageFolder? startFolder = null;
+                if (!string.IsNullOrWhiteSpace(initialPath) && Directory.Exists(initialPath))
+                {
+                    try
+                    {
+                        startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(initialPath);
+                    }
+                    catch { }
+                }
+
+                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+                {
+                    Title = language == "VI"
+                        ? "Chọn thư mục ảnh nguồn cần lọc (Bấm 'Sử dụng thư mục này')"
+                        : "Select Source Picture Folder (Tap 'Use this folder')",
+                    AllowMultiple = false,
+                    SuggestedStartLocation = startFolder
+                });
+
+                if (folders != null && folders.Count > 0)
+                {
+                    var selected = folders[0];
+                    string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                    string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                    {
+                        return normalized;
+                    }
+                }
+                return null;
+            }
+            catch { }
+        }
+
+        // 4. Fallback tiêu chuẩn: Sử dụng Avalonia OpenFilePickerAsync hiển thị danh sách file ảnh
         if (topLevel?.StorageProvider != null)
         {
             try

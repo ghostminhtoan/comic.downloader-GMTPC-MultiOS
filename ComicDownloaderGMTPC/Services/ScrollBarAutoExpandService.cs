@@ -163,34 +163,17 @@ public static class ScrollBarAutoExpandService
             }
         };
 
-        bool IsPointInSliderThumbScope(Point pos)
-        {
-            double trackHeight = bar.Bounds.Height;
-            if (trackHeight <= 0) return false;
-
-            double range = bar.Maximum - bar.Minimum;
-            if (range <= 0) return true;
-
-            double thumbHeight = 56.0;
-            double availableHeight = Math.Max(1.0, trackHeight - thumbHeight);
-            double ratio = Math.Clamp((bar.Value - bar.Minimum) / range, 0.0, 1.0);
-            double thumbTop = ratio * availableHeight;
-            double thumbBottom = thumbTop + thumbHeight;
-
-            // Chỉ bắt chạm trong đúng phạm vi của slider (núm trượt Thumb), ngoài phạm vi slider mép phải để tự do cho các nút khác
-            return pos.Y >= (thumbTop - 10) && pos.Y <= (thumbBottom + 10);
-        }
-
+        // Khi người dùng click hoặc tap ở bất kỳ vị trí nào trên thanh cuộn (dù trúng slider hay lệch ra ngoài):
+        // 1. Chặn triệt để lỗi tự cuộn về bottom của RepeatButton (bằng RoutingStrategies.Tunnel & e.Handled = true)
+        // 2. Di chuyển slider ngay đến vị trí click/tap/hold đó
+        // 3. Tự neo (capture) con trỏ/ngón tay để khi di chuyển lên xuống thì slider di chuyển theo
+        // 4. Khi thả tay/click ra thì ngưng di chuyển
         bar.AddHandler(InputElement.PointerPressedEvent, (s, e) =>
         {
             var prop = e.GetCurrentPoint(bar).Properties;
             if (prop.IsLeftButtonPressed || e.Pointer.Type == PointerType.Touch || e.Pointer.Type == PointerType.Pen)
             {
                 var pos = e.GetPosition(bar);
-                if (!IsPointInSliderThumbScope(pos))
-                {
-                    return;
-                }
 
                 isDraggingBar = true;
                 e.Pointer.Capture(bar);
@@ -207,10 +190,11 @@ public static class ScrollBarAutoExpandService
                     _activeExpandedBars.Add(bar);
                 }
 
+                // Di chuyển slider đến vị trí hold ngay lập tức (không bị nhảy về bottom)
                 UpdateScrollFromPointer(pos);
-                e.Handled = true;
+                e.Handled = true; // Chặn hành vi PageDown/cuộn về bottom mặc định của Avalonia
             }
-        }, RoutingStrategies.Bubble);
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
 
         bar.AddHandler(InputElement.PointerMovedEvent, (s, e) =>
         {
