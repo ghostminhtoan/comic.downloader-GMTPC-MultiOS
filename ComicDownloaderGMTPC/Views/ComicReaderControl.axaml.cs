@@ -1133,6 +1133,7 @@ public partial class ComicReaderControl : UserControl
         _isUserDraggingScrubber = true;
         if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
         {
+            vm.NavigationState = ReaderNavigationState.UserScrubbing;
             vm.UpdateScrubberHover((int)Math.Round(slider.Value), true);
         }
     }
@@ -1225,6 +1226,7 @@ public partial class ComicReaderControl : UserControl
             var scrubber = this.FindControl<Slider>("PageScrubberSlider");
             if (scrubber != null && DataContext is ComicReaderViewModel vm)
             {
+                if (vm.NavigationState == ReaderNavigationState.UserScrubbing) return;
                 double max = Math.Max(0, vm.TotalPages - 1);
                 double targetVal = Math.Clamp(vm.CurrentPageIndex, 0, max);
                 scrubber.Minimum = 0;
@@ -1668,15 +1670,22 @@ public partial class ComicReaderControl : UserControl
 
     private void OnReaderScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
+        // 1. Chỉ lắng nghe sự kiện từ chính ScrollViewer của Reader (loại bỏ hoàn toàn Drawer/Popups)
+        var scrollViewer = GetReaderScrollViewer();
+        if (scrollViewer == null || e.Source != scrollViewer) return;
+
+        if (DataContext is not ComicReaderViewModel vm || !vm.IsScrollMode || vm.Pages.Count == 0 || vm.IsLoadingChapter) return;
+        if (vm.NavigationState != ReaderNavigationState.IdleReading) return;
+
         long now = Environment.TickCount64;
         long pinchElapsed = now - _lastPinchEndTick;
 
         if (_isPinching || now < _pinchCooldownUntilTick ||
             (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 800))
         {
-            if (DataContext is ComicReaderViewModel vmP && _pinchTargetPageIndex >= 0 && vmP.Pages.Count > _pinchTargetPageIndex)
+            if (_pinchTargetPageIndex >= 0 && vm.Pages.Count > _pinchTargetPageIndex)
             {
-                vmP.CurrentPageIndex = _pinchTargetPageIndex;
+                vm.CurrentPageIndex = _pinchTargetPageIndex;
             }
             return;
         }
@@ -1690,231 +1699,170 @@ public partial class ComicReaderControl : UserControl
         {
             return;
         }
-        if (DataContext is not ComicReaderViewModel vm || !vm.IsScrollMode || vm.Pages.Count == 0 || vm.IsLoadingChapter) return;
 
         var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
         if (listBox == null) return;
 
-        var scrollViewer = GetReaderScrollViewer();
-        if (scrollViewer != null)
-        {
-            if (vm.IsHorizontalScrollMode)
-            {
-                double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
-                bool isAtEnd = vm.IsRightToLeft ? scrollViewer.Offset.X <= 6 : scrollViewer.Offset.X >= maxX - 6;
-                bool isAtStart = vm.IsRightToLeft ? scrollViewer.Offset.X >= maxX - 6 : scrollViewer.Offset.X <= 6;
-
-                if (isAtStart && vm.CurrentPageIndex <= 1)
-                {
-                    vm.IsScrollAtStart = true;
-                    vm.IsScrollAtEnd = false;
-                    vm.UpdatePageIndexFromScroll(0);
-                    return;
-                }
-                else if (isAtEnd && maxX > 0 && vm.CurrentPageIndex >= vm.Pages.Count - 2)
-                {
-                    vm.IsScrollAtStart = false;
-                    vm.IsScrollAtEnd = true;
-                    vm.UpdatePageIndexFromScroll(vm.Pages.Count - 1);
-                    return;
-                }
-                else
-                {
-                    vm.IsScrollAtStart = false;
-                    vm.IsScrollAtEnd = false;
-                }
-            }
-            else
-            {
-                double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
-                if (scrollViewer.Offset.Y <= 6 && vm.CurrentPageIndex <= 1)
-                {
-                    vm.IsScrollAtStart = true;
-                    vm.IsScrollAtEnd = false;
-                    vm.UpdatePageIndexFromScroll(0);
-                    return;
-                }
-                else if (scrollViewer.Offset.Y >= maxY - 6 && maxY > 0 && vm.CurrentPageIndex >= vm.Pages.Count - 2)
-                {
-                    vm.IsScrollAtStart = false;
-                    vm.IsScrollAtEnd = true;
-                    vm.UpdatePageIndexFromScroll(vm.Pages.Count - 1);
-                    return;
-                }
-                else
-                {
-                    vm.IsScrollAtStart = false;
-                    vm.IsScrollAtEnd = false;
-                }
-            }
-        }
-
-        if (vm.Pages.Count == 0) return;
-
+        // A. CHẾ ĐỘ CUỘN NGANG (Horizontal Scroll Mode LTR / RTL)
         if (vm.IsHorizontalScrollMode)
         {
-            double vw = (scrollViewer != null && scrollViewer.Viewport.Width > 10) ? scrollViewer.Viewport.Width : listBox.Bounds.Width;
+            double vw = scrollViewer.Viewport.Width > 10 ? scrollViewer.Viewport.Width : listBox.Bounds.Width;
             if (vw <= 10) return;
 
-            double maxX = scrollViewer != null ? Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width) : 0;
-            double offsetX = scrollViewer != null ? scrollViewer.Offset.X : 0;
+            double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+            bool isAtStart = vm.IsRightToLeft ? scrollViewer.Offset.X >= maxX - 6 : scrollViewer.Offset.X <= 6;
+            bool isAtEnd = vm.IsRightToLeft ? scrollViewer.Offset.X <= 6 : (maxX > 0 && scrollViewer.Offset.X >= maxX - 6);
 
-            // Xử lý tọa độ cuộn hiệu dụng (effectiveScrollX) tính từ Trang 0:
-            // Với LTR: Trang 0 ở X = 0, cuộn tới thì Offset.X tăng dần từ 0 đến maxX.
-            // Với RTL: Trang 0 ở X = maxX, cuộn tới thì Offset.X giảm dần từ maxX về 0.
+            if (isAtStart)
+            {
+                vm.IsScrollAtStart = true;
+                vm.IsScrollAtEnd = false;
+                vm.UpdatePageIndexFromScroll(0);
+                return;
+            }
+            if (isAtEnd)
+            {
+                vm.IsScrollAtStart = false;
+                vm.IsScrollAtEnd = true;
+                vm.UpdatePageIndexFromScroll(vm.Pages.Count - 1);
+                return;
+            }
+            vm.IsScrollAtStart = false;
+            vm.IsScrollAtEnd = false;
+
+            double offsetX = scrollViewer.Offset.X;
             double effectiveScrollX = (vm.IsRightToLeft && maxX > 0)
                 ? Math.Clamp(maxX - offsetX, 0, maxX)
                 : Math.Clamp(offsetX, 0, maxX);
 
-            double viewportLeft = effectiveScrollX;
-            double viewportRight = effectiveScrollX + vw;
-            double viewportMidX = effectiveScrollX + vw * 0.5;
-
-            // 1. Kiểm tra Hysteresis Sticky Anchor cho trang hiện tại (vm.CurrentPageIndex)
-            double currentAccX = 0;
-            double curPageLeft = -1;
-            double curPageRight = -1;
-
-            for (int i = 0; i < vm.Pages.Count; i++)
-            {
-                var p = vm.Pages[i];
-                double pW = Math.Max(40, p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right);
-                if (i == vm.CurrentPageIndex)
-                {
-                    curPageLeft = currentAccX;
-                    curPageRight = currentAccX + pW;
-                    break;
-                }
-                currentAccX += pW;
-            }
-
-            if (curPageLeft >= 0)
-            {
-                double visibleLeft = Math.Max(curPageLeft, viewportLeft);
-                double visibleRight = Math.Min(curPageRight, viewportRight);
-                double visibleWidth = Math.Max(0, visibleRight - visibleLeft);
-
-                // Miễn là trang hiện tại còn hiển thị ít nhất 25% chiều rộng trên màn hình
-                // HOẶC bao phủ vùng giữa màn hình (từ tâm viewportMidX):
-                // -> GIỮ NGUYÊN CurrentPageIndex, TUYỆT ĐỐI KHÔNG TUA TRANG!
-                if (visibleWidth >= vw * 0.25 || (curPageLeft <= viewportMidX && curPageRight >= viewportMidX))
-                {
-                    return;
-                }
-            }
-
-            // 2. Nếu trang hiện tại đã cuộn thực sự ra khỏi vùng đọc, tìm trang mới chiếm diện tích hiển thị lớn nhất (Maximum Overlap)
+            // Điểm đọc trọng tâm Read Anchor 35% từ mép trái màn hình
+            double anchorX = effectiveScrollX + vw * 0.35;
             int bestPageIndexX = -1;
-            double maxVisibleWidth = -1;
-            double runningX = 0;
 
-            for (int i = 0; i < vm.Pages.Count; i++)
+            // Ưu tiên 1: Lấy từ ListBoxItem container thực tế trên Visual Tree
+            try
             {
-                var page = vm.Pages[i];
-                double pW = Math.Max(40, page.DisplayWidth + page.PageMargin.Left + page.PageMargin.Right);
-                double left = runningX;
-                double right = runningX + pW;
-                runningX += pW;
-
-                if (right < viewportLeft) continue;
-                if (left > viewportRight) break;
-
-                double visibleLeft = Math.Max(left, viewportLeft);
-                double visibleRight = Math.Min(right, viewportRight);
-                double visibleWidth = Math.Max(0, visibleRight - visibleLeft);
-
-                if (visibleWidth > maxVisibleWidth)
+                int searchStart = Math.Max(0, vm.CurrentPageIndex - 6);
+                int searchEnd = Math.Min(vm.Pages.Count - 1, vm.CurrentPageIndex + 6);
+                for (int i = searchStart; i <= searchEnd; i++)
                 {
-                    maxVisibleWidth = visibleWidth;
-                    bestPageIndexX = i;
+                    if (listBox.ContainerFromIndex(i) is Control container && container.IsVisible)
+                    {
+                        var pt = container.TranslatePoint(new Point(0, 0), scrollViewer);
+                        if (pt.HasValue)
+                        {
+                            double itemLeft = pt.Value.X;
+                            double itemRight = itemLeft + container.Bounds.Width;
+                            double localAnchor = vw * 0.35;
+                            if (localAnchor >= itemLeft && localAnchor < itemRight)
+                            {
+                                bestPageIndexX = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // Ưu tiên 2: Fallback toán học O(N) cộng dồn
+            if (bestPageIndexX < 0)
+            {
+                double runningX = 0;
+                for (int i = 0; i < vm.Pages.Count; i++)
+                {
+                    var page = vm.Pages[i];
+                    double pW = Math.Max(40, page.DisplayWidth + page.PageMargin.Left + page.PageMargin.Right);
+                    if (anchorX >= runningX && anchorX < runningX + pW)
+                    {
+                        bestPageIndexX = i;
+                        break;
+                    }
+                    runningX += pW;
                 }
             }
 
-            if (bestPageIndexX >= 0 && bestPageIndexX != vm.CurrentPageIndex && maxVisibleWidth >= vw * 0.20)
+            if (bestPageIndexX >= 0 && bestPageIndexX != vm.CurrentPageIndex)
             {
                 vm.UpdatePageIndexFromScroll(bestPageIndexX);
             }
             return;
         }
 
-        // Chế độ cuộn dọc (Webtoon / Vertical Scroll)
-        // Thuật toán toán học O(N) thuần túy trên RAM (0.001ms), loại bỏ hoàn toàn việc duyệt Visual Tree
-        // Giúp tốc độ cuộn đạt 60-120 FPS siêu mượt, đồng thời bảo tồn cơ chế Hysteresis Sticky Anchor chống tua giật
-        double vh = (scrollViewer != null && scrollViewer.Viewport.Height > 10) ? scrollViewer.Viewport.Height : listBox.Bounds.Height;
+        // B. CHẾ ĐỘ CUỘN DỌC (Webtoon Vertical Scroll Mode)
+        double vh = scrollViewer.Viewport.Height > 10 ? scrollViewer.Viewport.Height : listBox.Bounds.Height;
         if (vh <= 10) return;
 
-        double offsetY = scrollViewer != null ? scrollViewer.Offset.Y : 0;
-        double viewportTop = offsetY;
-        double viewportBottom = offsetY + vh;
-        double viewportMidY = offsetY + vh * 0.5;
-
-        // 1. Kiểm tra Hysteresis cho CurrentPageIndex
-        double currentAccY = 0;
-        double curPageTop = -1;
-        double curPageBottom = -1;
-
-        for (int i = 0; i < vm.Pages.Count; i++)
+        double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+        if (scrollViewer.Offset.Y <= 6)
         {
-            var p = vm.Pages[i];
-            double pH = Math.Max(40, p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom);
-            if (i == vm.CurrentPageIndex)
-            {
-                curPageTop = currentAccY;
-                curPageBottom = currentAccY + pH;
-                break;
-            }
-            currentAccY += pH;
+            vm.IsScrollAtStart = true;
+            vm.IsScrollAtEnd = false;
+            vm.UpdatePageIndexFromScroll(0);
+            return;
         }
-
-        if (curPageTop >= 0)
+        if (maxY > 0 && scrollViewer.Offset.Y >= maxY - 6)
         {
-            double visibleTop = Math.Max(curPageTop, viewportTop);
-            double visibleBottom = Math.Min(curPageBottom, viewportBottom);
-            double visibleHeight = Math.Max(0, visibleBottom - visibleTop);
-
-            // Miễn là trang hiện tại còn hiển thị ít nhất 25% chiều cao trên màn hình
-            // HOẶC bao phủ vùng giữa màn hình (từ 40% đến 60% vh):
-            // -> GIỮ NGUYÊN CurrentPageIndex, TUYỆT ĐỐI KHÔNG TUA TRANG!
-            if (visibleHeight >= vh * 0.25 || (curPageTop <= viewportMidY && curPageBottom >= viewportMidY))
-            {
-                return;
-            }
+            vm.IsScrollAtStart = false;
+            vm.IsScrollAtEnd = true;
+            vm.UpdatePageIndexFromScroll(vm.Pages.Count - 1);
+            return;
         }
+        vm.IsScrollAtStart = false;
+        vm.IsScrollAtEnd = false;
 
-        // 2. Nếu trang hiện tại đã cuộn khỏi màn hình, tìm trang mới chiếm diện tích hiển thị lớn nhất (Maximum Overlap)
+        // Điểm đọc trọng tâm Read Anchor 35% từ đỉnh màn hình
+        double anchorY = scrollViewer.Offset.Y + vh * 0.35;
         int bestPageIndex = -1;
-        double maxVisibleHeight = -1;
-        double runningY = 0;
 
-        for (int i = 0; i < vm.Pages.Count; i++)
+        // Ưu tiên 1: Lấy từ ListBoxItem container thực tế trên Visual Tree
+        try
         {
-            var page = vm.Pages[i];
-            double pH = Math.Max(40, page.DisplayHeight + page.PageMargin.Top + page.PageMargin.Bottom);
-            double top = runningY;
-            double bottom = runningY + pH;
-            runningY += pH;
-
-            if (bottom < viewportTop) continue;
-            if (top > viewportBottom) break;
-
-            double visibleTop = Math.Max(top, viewportTop);
-            double visibleBottom = Math.Min(bottom, viewportBottom);
-            double visibleHeight = Math.Max(0, visibleBottom - visibleTop);
-
-            if (visibleHeight > maxVisibleHeight)
+            int searchStart = Math.Max(0, vm.CurrentPageIndex - 6);
+            int searchEnd = Math.Min(vm.Pages.Count - 1, vm.CurrentPageIndex + 6);
+            for (int i = searchStart; i <= searchEnd; i++)
             {
-                maxVisibleHeight = visibleHeight;
-                bestPageIndex = i;
+                if (listBox.ContainerFromIndex(i) is Control container && container.IsVisible)
+                {
+                    var pt = container.TranslatePoint(new Point(0, 0), scrollViewer);
+                    if (pt.HasValue)
+                    {
+                        double itemTop = pt.Value.Y;
+                        double itemBottom = itemTop + container.Bounds.Height;
+                        double localAnchor = vh * 0.35;
+                        if (localAnchor >= itemTop && localAnchor < itemBottom)
+                        {
+                            bestPageIndex = i;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        // Ưu tiên 2: Fallback toán học O(N) cộng dồn
+        if (bestPageIndex < 0)
+        {
+            double runningY = 0;
+            for (int i = 0; i < vm.Pages.Count; i++)
+            {
+                var page = vm.Pages[i];
+                double pH = Math.Max(40, page.DisplayHeight + page.PageMargin.Top + page.PageMargin.Bottom);
+                if (anchorY >= runningY && anchorY < runningY + pH)
+                {
+                    bestPageIndex = i;
+                    break;
+                }
+                runningY += pH;
             }
         }
 
-        if (bestPageIndex >= 0 && bestPageIndex != vm.CurrentPageIndex && maxVisibleHeight >= vh * 0.20)
+        if (bestPageIndex >= 0 && bestPageIndex != vm.CurrentPageIndex)
         {
             vm.UpdatePageIndexFromScroll(bestPageIndex);
         }
-
     }
-
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         StopKineticScroll();

@@ -524,3 +524,18 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Mở rộng `TranslateElement` hỗ trợ tự động dịch `PlaceholderText` của TextBox và `Content` của RadioButton.
   + Tự động cập nhật các nút trạng thái động (`DualSortBatchToggleBtnText`, `DualSortBatchButtonText`, `DualSortPreviewButtonText`) khi thay đổi ngôn ngữ.
 
+
+### 43. Rebuild Toàn Diện Hệ Thống Điều Hướng Reader & Đồng Bộ Seekbar (BUG-028)
+- **Tái Cấu Trúc Máy Trạng Thái FSM (`ReaderNavigationState.cs`, `ComicReaderViewModel.cs`, `ComicReaderControl.axaml.cs`)**:
+  + Thiết lập FSM 4 trạng thái độc lập: `IdleReading`, `UserScrubbing`, `ChapterTransitioning`, `ProgrammaticScrolling`.
+  + Triệt tiêu hoàn toàn race condition và xung đột giữa sự kiện cuộn ScrollViewer, thao tác kéo thanh trượt Seekbar và nạp chương mới.
+- **Nguyên Tử Hóa Quy Trình Đổi Chương (Atomic Chapter Transition)**:
+  + Lưu chính xác tiến độ của chương cũ (`SaveChapterReadingSession`) thông qua `OnCurrentChapterChanging` TRƯỚC KHI con trỏ `CurrentChapter` trỏ sang chương mới.
+  + Triệt tiêu hoàn toàn lỗi ô nhiễm tiến độ khiến chương mới chưa xem bị gán nhầm trang cuối hoặc trang giữa của chương trước đó.
+- **Thuật Toán Điểm Đọc Trọng Tâm Read Anchor 35% Viewport & Kiểm Tra Container Thực Tế**:
+  + Loại bỏ vòng lặp Hysteresis cũ (`visibleHeight >= vh * 0.25`) gây kẹt trang và hiện tượng Seekbar không cập nhật khi cuộn đọc sang ảnh khác.
+  + Kiểm tra trực tiếp tọa độ tương đối của các phần tử `ListBoxItem` đang hiện thực hóa trong Viewport (`TranslatePoint` so với `ScrollViewer`), kết hợp fallback tích lũy hình học chính xác O(N).
+  + Lọc chặt chẽ nguồn sự kiện cuộn (`e.Source == GetReaderScrollViewer()`), loại bỏ hoàn toàn các sự kiện cuộn từ Drawer hay Popup cài đặt.
+- **Tách Bạch Luồng Dữ Liệu Seekbar (Decoupled Flow)**:
+  + Khi người dùng chạm kéo Seekbar: FSM kích hoạt `UserScrubbing`, chỉ cập nhật bóng báo số trang (HUD Preview).
+  + Chỉ khi nhả tay (`PointerReleased`), hệ thống mới phát lệnh `ScrubToPage` duy nhất một lần và khôi phục `IdleReading` mượt mà, không giật lag.

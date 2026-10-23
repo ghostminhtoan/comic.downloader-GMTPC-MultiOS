@@ -95,6 +95,13 @@ public partial class ComicReaderViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(ShowBoundaryPrevChapterButton))]
     private LibraryChapterItem? _currentChapter;
 
+    /// <summary>
+    /// Trạng thái điều hướng FSM hiện tại của Reader.
+    /// Bảo vệ toàn diện tránh xung đột giữa cuộn thị giác, kéo thanh trượt Seekbar và nạp chương mới.
+    /// </summary>
+    [ObservableProperty]
+    private ReaderNavigationState _navigationState = ReaderNavigationState.IdleReading;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrentPageDisplayNumber))]
     [NotifyPropertyChangedFor(nameof(PageCounterText))]
@@ -2393,10 +2400,19 @@ public partial class ComicReaderViewModel : ViewModelBase
         await LoadChapterInternalAsync(targetChapter);
     }
 
+    partial void OnCurrentChapterChanging(LibraryChapterItem? value)
+    {
+        if (_suppressChapterSelectionChanged) return;
+        // Bảo vệ nguyên tử (Atomic Chapter Transition): Lưu tiến độ của chương cũ TRƯỚC KHI trỏ sang chương mới
+        if (_currentChapter != null && !ReferenceEquals(_currentChapter, value))
+        {
+            SaveChapterReadingSession(_currentChapter);
+        }
+    }
+
     partial void OnCurrentChapterChanged(LibraryChapterItem? value)
     {
         if (_suppressChapterSelectionChanged || value == null) return;
-        SaveCurrentReadingSession();
         _isNavigatingToPreviousChapter = false;
         ActivePopup = string.Empty;
         RefreshBookmarksList();
@@ -2456,6 +2472,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         _prefetchCts?.Cancel();
         _prefetchCts = new CancellationTokenSource();
 
+        NavigationState = ReaderNavigationState.ProgrammaticScrolling;
         CurrentPageIndex = clamped;
         RequestScrollToPage(clamped);
 
@@ -2465,6 +2482,11 @@ public partial class ComicReaderViewModel : ViewModelBase
         {
             _ = _readerService.EnsurePageLoadedAsync(targetPage);
         }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            NavigationState = ReaderNavigationState.IdleReading;
+        }, DispatcherPriority.Loaded);
     }
 
     private void SyncActivePdfBookmark(int pageIndex)
@@ -2490,6 +2512,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void UpdatePageIndexFromScroll(int visiblePageIndex)
     {
         if (Pages.Count == 0) return;
+        if (NavigationState != ReaderNavigationState.IdleReading) return;
         int clamped = Math.Clamp(visiblePageIndex, 0, Pages.Count - 1);
         if (clamped == CurrentPageIndex) return;
 
@@ -2520,6 +2543,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
 
+        NavigationState = ReaderNavigationState.ChapterTransitioning;
         IsLoadingChapter = true;
         ChapterLoadingProgress = 0;
         ChapterLoadingStatusText = "Đang mở và phân tích tệp...";
@@ -2721,6 +2745,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                     RequestScrollToPage(startIndex);
                     _suppressScrollSync = false;
                     RequestRefreshScrubber();
+                    NavigationState = ReaderNavigationState.IdleReading;
                 }, DispatcherPriority.Loaded);
             }
             else
@@ -2730,6 +2755,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                     RequestScrollToPage(0);
                     _suppressScrollSync = false;
                     RequestRefreshScrubber();
+                    NavigationState = ReaderNavigationState.IdleReading;
                 }, DispatcherPriority.Loaded);
             }
         }
@@ -2742,6 +2768,13 @@ public partial class ComicReaderViewModel : ViewModelBase
             OnPropertyChanged(nameof(CanGoPrevPage));
             OnPropertyChanged(nameof(CanGoNextPage));
             RequestRefreshScrubber();
+            if (NavigationState == ReaderNavigationState.ChapterTransitioning)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    NavigationState = ReaderNavigationState.IdleReading;
+                }, DispatcherPriority.Background);
+            }
         }
     }
 
@@ -2814,30 +2847,39 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void SaveCurrentReadingSession()
     {
         if (CurrentChapter == null) return;
+        SaveChapterReadingSession(CurrentChapter);
+    }
+
+    /// <summary>
+    /// Lưu chính xác tiến độ đọc cho một chương cụ thể (tránh ghi đè nhầm tiến độ khi đang đổi sang chương mới).
+    /// </summary>
+    public void SaveChapterReadingSession(LibraryChapterItem chapter)
+    {
+        if (chapter == null) return;
 
         int totalPages = Math.Max(TotalPages, Pages.Count);
         int page1Based = totalPages > 0 ? Math.Clamp(CurrentPageIndex + 1, 1, totalPages) : Math.Max(1, CurrentPageIndex + 1);
 
-        CurrentChapter.TotalPages = totalPages;
-        CurrentChapter.LastReadPage = page1Based;
+        chapter.TotalPages = totalPages;
+        chapter.LastReadPage = page1Based;
 
-        if (!string.IsNullOrWhiteSpace(CurrentChapter.EffectiveProgressKey))
+        if (!string.IsNullOrWhiteSpace(chapter.EffectiveProgressKey))
         {
-            _progressStore.SaveProgress(CurrentChapter.EffectiveProgressKey, CurrentPageIndex);
+            _progressStore.SaveProgress(chapter.EffectiveProgressKey, CurrentPageIndex);
             if (totalPages > 0)
             {
-                _progressStore.SaveChapterTotalPages(CurrentChapter.EffectiveProgressKey, totalPages);
+                _progressStore.SaveChapterTotalPages(chapter.EffectiveProgressKey, totalPages);
             }
         }
 
         string? comicRoot = ParentComic?.RootFolderPath;
         string? title = ParentComic?.Title ?? ComicTitle;
 
-        if (string.IsNullOrWhiteSpace(comicRoot) && !string.IsNullOrWhiteSpace(CurrentChapter.LocalPath))
+        if (string.IsNullOrWhiteSpace(comicRoot) && !string.IsNullOrWhiteSpace(chapter.LocalPath))
         {
             try
             {
-                string cleanChPath = CurrentChapter.LocalPath.TrimEnd('\\', '/');
+                string cleanChPath = chapter.LocalPath.TrimEnd('\\', '/');
                 string? parentDir = Path.GetDirectoryName(cleanChPath);
                 if (!string.IsNullOrWhiteSpace(parentDir) && Directory.Exists(parentDir))
                 {
@@ -2860,30 +2902,30 @@ public partial class ComicReaderViewModel : ViewModelBase
             catch { }
         }
 
-        if (string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(CurrentChapter.Title))
+        if (string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(chapter.Title))
         {
-            title = CurrentChapter.Title;
+            title = chapter.Title;
         }
 
         if (!string.IsNullOrWhiteSpace(comicRoot))
         {
-            _progressStore.SaveLastActiveChapterIndex(comicRoot, CurrentChapter.Index);
+            _progressStore.SaveLastActiveChapterIndex(comicRoot, chapter.Index);
         }
-        if (!string.IsNullOrWhiteSpace(CurrentChapter.LocalPath))
+        if (!string.IsNullOrWhiteSpace(chapter.LocalPath))
         {
-            _progressStore.SaveLastActiveChapterIndex(CurrentChapter.LocalPath, CurrentChapter.Index);
+            _progressStore.SaveLastActiveChapterIndex(chapter.LocalPath, chapter.Index);
         }
         if (!string.IsNullOrWhiteSpace(title))
         {
-            _progressStore.SaveLastActiveChapterForTitle(title, CurrentChapter.Index);
+            _progressStore.SaveLastActiveChapterForTitle(title, chapter.Index);
         }
 
         _progressStore.RecordSessionResume(
             comicTitle: title,
-            comicRootOrFilePath: comicRoot ?? CurrentChapter.LocalPath,
-            chapterTitle: CurrentChapter.Title,
-            chapterIndex: CurrentChapter.Index,
-            chapterNumber: ReadProgressStore.ExtractChapterNumber(CurrentChapter.Title),
+            comicRootOrFilePath: comicRoot ?? chapter.LocalPath,
+            chapterTitle: chapter.Title,
+            chapterIndex: chapter.Index,
+            chapterNumber: ReadProgressStore.ExtractChapterNumber(chapter.Title),
             pageIndex: CurrentPageIndex,
             totalPages: totalPages
         );
