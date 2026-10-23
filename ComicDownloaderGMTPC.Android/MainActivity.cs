@@ -76,6 +76,29 @@ public class MainActivity : AvaloniaMainActivity
             catch { }
         };
 
+        // Đăng ký bridge chạy ngầm, làm mát và bảo vệ thiết bị khi idle
+        Services.ThermalAndPowerOptimizationService.NativeSetKeepAliveIdleService = (enable) =>
+        {
+            var ctx = ApplicationContext ?? this;
+            if (enable)
+            {
+                ComicBackgroundService.StartOrUpdateIdleKeepAlive(ctx);
+            }
+        };
+
+        if (OperatingSystem.IsAndroidVersionAtLeast(29))
+        {
+            try
+            {
+                var pm = (PowerManager?)GetSystemService(PowerService);
+                pm?.AddThermalStatusListener(new ThermalStatusListener(status =>
+                {
+                    Services.ThermalAndPowerOptimizationService.Instance.UpdateThermalStatus((int)status);
+                }));
+            }
+            catch { }
+        }
+
         // Đăng ký bridge chạy ngầm và bong bóng
         Services.BackgroundExecutionService.NativeStartOrUpdateForegroundNotification = (taskId, title, text, progress, isDownloading, isPaused, act1Text, act2Text) =>
         {
@@ -296,6 +319,7 @@ public class MainActivity : AvaloniaMainActivity
         base.OnResume();
         CurrentInstance = this;
         AndroidStorageHelper.WakeUpStorage(this);
+        Services.ThermalAndPowerOptimizationService.Instance.SetAppInBackground(false);
 
         // Tự động kích hoạt / nâng cấp Bong bóng nổi nếu người dùng vừa cấp quyền từ màn hình Cài đặt hệ thống
         try
@@ -327,6 +351,7 @@ public class MainActivity : AvaloniaMainActivity
         try
         {
             base.OnPause();
+            Services.ThermalAndPowerOptimizationService.Instance.SetAppInBackground(true);
         }
         catch (Exception ex)
         {
@@ -875,3 +900,13 @@ public class MainActivity : AvaloniaMainActivity
         });
     }
 }
+#if ANDROID
+[global::Android.Runtime.Register("com/companyname/comicdownloadergmtpc/ThermalStatusListener")]
+public class ThermalStatusListener : Java.Lang.Object, PowerManager.IOnThermalStatusChangedListener
+{
+    private readonly Action<ThermalStatus> _callback;
+    public ThermalStatusListener(Action<ThermalStatus> callback) => _callback = callback;
+    public void OnThermalStatusChanged(ThermalStatus status) => _callback?.Invoke(status);
+}
+#endif
+

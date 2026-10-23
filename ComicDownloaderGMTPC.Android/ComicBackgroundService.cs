@@ -16,6 +16,7 @@ public class ComicBackgroundService : Service
     public const int NotificationId = 1002;
     public const string ActionStartOrUpdate = "ACTION_START_OR_UPDATE";
     public const string ActionStop = "ACTION_STOP";
+    public const string ActionIdleKeepAlive = "ACTION_IDLE_KEEP_ALIVE";
     public const string ActionToggleDownload = "ACTION_TOGGLE_DOWNLOAD";
     public const string ActionTogglePause = "ACTION_TOGGLE_PAUSE";
     public const string ActionContextual1 = "ACTION_CONTEXTUAL_1";
@@ -168,6 +169,11 @@ public class ComicBackgroundService : Service
                 // Chỉ giữ WakeLock khi ĐANG TẢI THỰC TẾ và KHÔNG BỊ TẠM DỪNG
                 shouldHold = isDownloading && !isPaused;
             }
+            else if (taskId == "idle_keep_alive" || taskId == "bubble_task")
+            {
+                // Khi Idle Keep-Alive hoặc Bong bóng ở trạng thái chờ: TUYỆT ĐỐI KHÔNG GIỮ WAKELOCK ĐỂ CPU NGHỈ SÂU
+                shouldHold = false;
+            }
             else
             {
                 // Các tác vụ nền khác (xử lý ảnh, đóng gói...): chỉ giữ khi đang chạy thực tế
@@ -289,6 +295,7 @@ public class ComicBackgroundService : Service
         }
 
         bool isBubbleMode = BackgroundExecutionService.Instance.IsBubbleMode;
+        bool isIdleMode = (taskId == "idle_keep_alive");
         var builder = new NotificationCompat.Builder(context, isBubbleMode ? ChannelIdBubble : ChannelId);
         builder.SetContentTitle(title);
         builder.SetContentText(text);
@@ -296,8 +303,8 @@ public class ComicBackgroundService : Service
         builder.SetOngoing(true);
         builder.SetOnlyAlertOnce(true);
         builder.SetSilent(true);
-        builder.SetPriority(NotificationCompat.PriorityLow);
-        builder.SetCategory(NotificationCompat.CategoryProgress);
+        builder.SetPriority(isIdleMode ? NotificationCompat.PriorityMin : NotificationCompat.PriorityLow);
+        builder.SetCategory(isIdleMode ? NotificationCompat.CategoryService : NotificationCompat.CategoryProgress);
         if (_cachedOpenPendingIntent != null)
         {
             builder.SetContentIntent(_cachedOpenPendingIntent);
@@ -462,6 +469,19 @@ public class ComicBackgroundService : Service
         catch (Exception ex)
         {
             global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi C# khởi chạy BackgroundService: {ex.Message}");
+        }
+    }
+
+    public static void StartOrUpdateIdleKeepAlive(Context context)
+    {
+        try
+        {
+            var appContext = context.ApplicationContext ?? context;
+            StartOrUpdate(appContext, "idle_keep_alive", "Comic Downloader GMTPC", "Chế độ chờ mát máy • Đang tiết kiệm năng lượng", 0, false, false, "📱 Mở ứng dụng", "");
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi StartOrUpdateIdleKeepAlive: {ex.Message}");
         }
     }
 

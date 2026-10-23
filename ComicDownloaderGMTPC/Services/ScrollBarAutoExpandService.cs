@@ -57,6 +57,7 @@ public static class ScrollBarAutoExpandService
     public static void TriggerGlobalScrollExpand(Visual? rootVisual)
     {
         if (rootVisual == null) return;
+        ThermalAndPowerOptimizationService.Instance.NotifyUserActivity();
 
         Dispatcher.UIThread.Post(() =>
         {

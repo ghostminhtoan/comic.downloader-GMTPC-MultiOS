@@ -541,7 +541,12 @@ public class DownloadEngineService
 
                         try
                         {
+                            ThermalAndPowerOptimizationService.Instance.NotifyUserActivity();
                             int currentImageThreads = Math.Max(1, ImageDownloadThreads);
+                            if (ThermalAndPowerOptimizationService.Instance.IsThermalThrottled)
+                            {
+                                currentImageThreads = Math.Min(2, currentImageThreads);
+                            }
                             await DownloadComicBookAsync(item, _activeMode, currentImageThreads, ct).ConfigureAwait(false);
                         }
                         catch (OperationCanceledException)

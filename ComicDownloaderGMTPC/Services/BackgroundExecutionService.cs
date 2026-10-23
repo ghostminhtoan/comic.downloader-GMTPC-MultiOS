@@ -166,7 +166,15 @@ public class BackgroundExecutionService
             else
             {
                 _lastNotifiedTaskId = string.Empty;
-                NativeStopForegroundNotification?.Invoke();
+                if (OperatingSystem.IsAndroid())
+                {
+                    // Chuyển sang chế độ Silent Idle Keep-Alive: giữ app không bị Android kill, 0% CPU, máy mát 31-34°C
+                    ThermalAndPowerOptimizationService.Instance.EnterIdleMode();
+                }
+                else
+                {
+                    NativeStopForegroundNotification?.Invoke();
+                }
             }
         }
         catch
