@@ -39,9 +39,8 @@ TARGET_FILES = [
 ]
 
 # Cau hinh giam sat toc do va retry
-MIN_UPLOAD_SPEED_MBPS = 10.0  # Nguong toc do toi thieu 10 Mbps (duoi 10 Mbps se tu dong huy va thu lai)
-MAX_RETRIES = 50              # Thu lai lien tuc den khi hoan tat moi thoi
-GRACE_PERIOD_SEC = 6          # Kiem tra toc do sau 6 giay theo yeu cau flow moi
+MIN_UPLOAD_SPEED_MBPS = 10.0  # Nguong toc do toi thieu 10 Mbps (duoi 10 Mbps se tu dong huy va retry vo han)
+GRACE_PERIOD_SEC = 12         # Sau 12 giay neu upload beta speed duoi 10 Mbps thi tu dong retry vo han
 
 
 def disable_quick_edit_mode():
@@ -667,9 +666,12 @@ def perform_browser_upload(force_login=False, min_speed_mbps=0.0, max_wait_sec=9
             print("\n[BACKUP] Kiem tra va rotate asset cu thanh ban backup dinh kem time date...")
             rotate_and_backup_existing_assets(target_names)
 
-            for attempt in range(1, MAX_RETRIES + 1):
+            attempt = 0
+            while True:
+                attempt += 1
+                effective_min = min_speed_mbps if min_speed_mbps is not None and min_speed_mbps > 0 else MIN_UPLOAD_SPEED_MBPS
                 print("\n====================================================================")
-                print(f"  [LAN THU {attempt}/{MAX_RETRIES}] Khoi dong quy trinh upload Release Beta...")
+                print(f"  [LAN THU {attempt}] Khoi dong quy trinh upload Release Beta (Speed Guard: > {effective_min:.1f} Mbps sau {GRACE_PERIOD_SEC}s, Retry vo han)...")
                 print("====================================================================")
 
                 print(f"[NAVIGATE] Dang truy cap trang Release Edit: {EDIT_URL}...")
@@ -764,7 +766,7 @@ def perform_browser_upload(force_login=False, min_speed_mbps=0.0, max_wait_sec=9
                     status_desc = f"{loaded_mb:.1f}/{total_target_mb:.1f} MB ({pct:.1f}%) | TB: {avg_mbps:.1f} Mbps | Tuc thoi: {instant_mbps:.1f} Mbps | {elapsed:.1f}s"
                     print(f" [TIEN DO] {status_desc}")
 
-                    # 1. SPEED GUARD: Trong 6 giay neu upload speed duoi 10 Megabit -> Huy va thu lai
+                    # 1. SPEED GUARD: Sau 12 giay neu upload speed duoi 10 Megabit -> Huy va retry vo han
                     effective_min_speed = min_speed_mbps if min_speed_mbps is not None and min_speed_mbps > 0 else MIN_UPLOAD_SPEED_MBPS
                     if elapsed >= GRACE_PERIOD_SEC:
                         is_stalled = (total_loaded == 0)
@@ -772,7 +774,7 @@ def perform_browser_upload(force_login=False, min_speed_mbps=0.0, max_wait_sec=9
 
                         if is_stalled or is_below_threshold:
                             print(f"\n[CANH BAO TOC DO] Sau {elapsed:.1f}s, toc do upload trung binh dat {avg_mbps:.2f} Mbps (< nguong yeu cau {effective_min_speed:.1f} Mbps)!")
-                            print(f"[KILL & RETRY] Tu dong huy upload (window.stop) va upload lai den khi xong moi thoi (Lan {attempt + 1}/{MAX_RETRIES})...")
+                            print(f"[KILL & RETRY] Tu dong huy upload (window.stop) va retry vo han den khi toc do > {effective_min_speed:.1f} Mbps moi thoi (Chuyen sang Lan {attempt + 1})...")
                             try:
                                 page.evaluate("() => window.stop()")
                             except Exception:
@@ -796,10 +798,10 @@ def perform_browser_upload(force_login=False, min_speed_mbps=0.0, max_wait_sec=9
                 if upload_success:
                     break
                 elif retry_needed:
-                    print(f"[RETRY] Cho 2 giay de he thong on dinh truoc khi thu lai...")
+                    print(f"[RETRY] Cho 2 giay de he thong on dinh truoc khi thu lai lan {attempt + 1}...")
                     time.sleep(2)
                 else:
-                    print(f"[TIMEOUT] Luot upload thu {attempt} qua thoi gian cho. Thu lai...")
+                    print(f"[TIMEOUT] Luot upload thu {attempt} qua thoi gian cho. Tu dong thu lai lan {attempt + 1}...")
 
             if upload_success:
                 # Bam nut "Update release"

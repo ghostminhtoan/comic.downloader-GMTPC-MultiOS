@@ -294,7 +294,7 @@ function Upload-AssetWithSpeedGuard {
                     if ($elapsedTotalSec -ge $WarmupSeconds -and $percent -lt 97.0) {
                         if ($instantSpeedMbps -lt $MinSpeedMbps) {
                             $slowCounter++
-                            if ($slowCounter -ge 2 -or ($elapsedTotalSec -ge 6 -and $avgSpeedMbps -lt $MinSpeedMbps)) {
+                            if ($slowCounter -ge 2 -or ($elapsedTotalSec -ge 12 -and $avgSpeedMbps -lt $MinSpeedMbps)) {
                                 Write-Host ""
                                 Write-Host "     [CANH BAO TOC DO] Toc do $instantSpeedMbps Mbps (TB: $avgSpeedMbps Mbps) < $MinSpeedMbps Mbps! Dang huy ket noi de thu lai..." -ForegroundColor Red
                                 $isAbortedDueToLowSpeed = $true
