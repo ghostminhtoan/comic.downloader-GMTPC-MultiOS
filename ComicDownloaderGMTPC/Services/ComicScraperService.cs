@@ -1454,7 +1454,7 @@ public class ComicScraperService
         var titleMatch = Regex.Match(html, @"<div[^>]*class=[""'][^""']*\binfo-title\b[^""']*[""'][^>]*>\s*<h2[^>]*>(?<title>[\s\S]*?)</h2>", RegexOptions.IgnoreCase);
         if (titleMatch.Success)
         {
-            item.Title = WebUtility.HtmlDecode(titleMatch.Groups["title"].Value).Trim();
+            item.Title = CleanTitle(titleMatch.Groups["title"].Value);
         }
         else
         {
@@ -3144,11 +3144,76 @@ public class ComicScraperService
         return fallback;
     }
 
-    private string CleanTitle(string title)
+    public static string CleanTitle(string title)
     {
-        title = WebUtility.HtmlDecode(title);
-        title = Regex.Replace(title, @"\s*(?:chương|chap|chapter)\s*(?:mới\s*nhất)?\s*\d+.*$", "", RegexOptions.IgnoreCase).Trim();
-        title = Regex.Replace(title, @"\s*[-|–—]\s*(?:truy[eệ]nqq|nettruyen|mangadex|tuoitre|hako|e-hentai(?:\s+galleries)?|exhentai|dâm cô nương|damconuong|loppytoon|hentaiforce|sayhentai|hitomi).*$", "", RegexOptions.IgnoreCase).Trim();
+        if (string.IsNullOrWhiteSpace(title)) return string.Empty;
+
+        // 1. Giải mã ký tự HTML (HTML Decode)
+        title = WebUtility.HtmlDecode(title).Trim();
+
+        // 2. Dọn dẹp hậu tố rác ở cuối tên (Loop đa tầng: [tới chap], tới chap, số chương, domain web...)
+        // Quy tắc: Ở cuối tên luôn luôn xoá triệt để
+        bool modified = true;
+        int loopGuard = 0;
+        while (modified && loopGuard++ < 5)
+        {
+            modified = false;
+            string before = title;
+
+            // 2.1. Hậu tố dạng ngoặc vuông / ngoặc tròn chứa 'tới chap', 'tới chương', 'chap', 'chapter'...
+            // Ví dụ: [tới chap], [tới chap 120], [tới chap latest], [tới chương 50], (tới chap), [chap 100]
+            string s1 = Regex.Replace(title, @"\s*\[[^\]]*(?:tới|toi|đến|den|chap|chapter|chương|chuong|tập|tap)[^\]]*\]\s*$", "", RegexOptions.IgnoreCase).Trim();
+            if (!string.IsNullOrWhiteSpace(s1)) title = s1;
+
+            string s2 = Regex.Replace(title, @"\s*\([^\)]*(?:tới|toi|đến|den|chap|chapter|chương|chuong|tập|tap)[^\)]*\)\s*$", "", RegexOptions.IgnoreCase).Trim();
+            if (!string.IsNullOrWhiteSpace(s2)) title = s2;
+
+            // 2.2. Hậu tố không ngoặc: 'tới chap', '- tới chap 120', 'tới chap latest', 'tới chương 50', 'đến chap 100'...
+            string s3 = Regex.Replace(title, @"\s*(?:[-|–—:~]\s*)?(?:tới|toi|đến|den)\s+(?:chap|chapter|chương|chuong|tập|tap)(?:\s+.*|\s*)$", "", RegexOptions.IgnoreCase).Trim();
+            if (!string.IsNullOrWhiteSpace(s3)) title = s3;
+
+            // 2.3. Hậu tố chap/chương thông thường: 'chương 123', 'chap 123 mới nhất', '- chap 123'
+            string s4 = Regex.Replace(title, @"\s*(?:[-|–—:~]\s*)?(?:chương|chap|chapter)\s*(?:mới\s*nhất)?(?:\s*\d+.*|\s*)$", "", RegexOptions.IgnoreCase).Trim();
+            if (!string.IsNullOrWhiteSpace(s4)) title = s4;
+
+            // 2.4. Hậu tố tên web / domain
+            string s5 = Regex.Replace(title, @"\s*[-|–—]\s*(?:truy[eệ]nqq|nettruyen|mangadex|tuoitre|hako|e-hentai(?:\s+galleries)?|exhentai|dâm cô nương|damconuong|loppytoon|hentaiforce|sayhentai|hitomi|[a-z0-9\-]+\.(?:com|net|vn|org|cc|to|io|tv|top|site|vip|club|me|online|info|xyz)).*$", "", RegexOptions.IgnoreCase).Trim();
+            if (!string.IsNullOrWhiteSpace(s5)) title = s5;
+
+            // Dọn dẹp dấu phân tách treo ở đuôi nếu có sau khi xoá hậu tố (-, :, |, ~, /, –, —, [, (, {)
+            string trimmedTrailing = title.TrimEnd(' ', '\t', '-', ':', '–', '—', '|', '~', '/', '[', '(', '{').Trim();
+            if (!string.IsNullOrWhiteSpace(trimmedTrailing)) title = trimmedTrailing;
+
+            if (!string.Equals(before, title, StringComparison.Ordinal))
+            {
+                modified = true;
+            }
+        }
+
+        // 3. Dọn dẹp tiền tố rác ở đầu tên:
+        // Quy tắc: Nếu không đúp thì xoá sạch tiền tố web ('Xem truyện abc' -> 'abc').
+        // Còn nếu đúp ('Truyện Truyện abc', 'Đọc truyện Đọc truyện abc', 'Xem truyện Xem truyện abc') thì giữ lại một phần cho tên thật.
+        // Chỉ bóc tách tiền tố web ĐÚNG MỘT LẦN ở đầu chuỗi (không lặp) để bảo toàn tên truyện thật nếu truyện vốn có chữ đó ở đầu.
+        var prefixMatch = Regex.Match(
+            title,
+            @"^(?:" +
+            @"\[\s*(?:xem\s+truy[eệ]n|đ[oọ]c\s+truy[eệ]n|doc\s+truyen|truy[eệ]n)\s*\]\s*|" +
+            @"\(\s*(?:xem\s+truy[eệ]n|đ[oọ]c\s+truy[eệ]n|doc\s+truyen|truy[eệ]n)\s*\)\s*|" +
+            @"(?:xem\s+truy[eệ]n|đ[oọ]c\s+truy[eệ]n|doc\s+truyen)\b(?:\s*[:\-\–—|~]\s*|\s+)|" +
+            @"truy[eệ]n\b(?:\s*[:\-\–—|~]\s*|\s+)" +
+            @")",
+            RegexOptions.IgnoreCase);
+
+        if (prefixMatch.Success)
+        {
+            string remainder = title.Substring(prefixMatch.Length).Trim();
+            // Chỉ bỏ tiền tố nếu phần còn lại không rỗng
+            if (!string.IsNullOrWhiteSpace(remainder))
+            {
+                title = remainder;
+            }
+        }
+
         return title;
     }
 
@@ -4113,7 +4178,7 @@ public class ComicScraperService
             title = ExtractFallbackTitleFromUrl(url);
         }
 
-        item.Title = title;
+        item.Title = CleanTitle(title);
         item.CoverUrl = coverUrl;
         item.Chapters.Clear();
         item.Chapters.Add(new ChapterItem
