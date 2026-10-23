@@ -25,7 +25,7 @@ public class ImageEnhancerOptions
     public int NoiseReduce { get; set; } = 0;       // 0 to 5
     public int Quality { get; set; } = 90;          // 10 to 100
     public bool OverwriteOriginal { get; set; } = false;
-    public int MaxThreads { get; set; } = 4;
+    public int MaxThreads { get; set; } = 2;
     public string OutputFormat { get; set; } = "original"; // "original", "jpg", "gif", "webp"
 }
 
@@ -542,9 +542,7 @@ public class ImageEnhancerService
         int errors = 0;
 
         // Giới hạn số luồng xử lý đồ họa trên thiết bị di động để tránh tràn native memory OOM killer của Android, trên Windows/Linux tôn trọng tối đa số luồng cấu hình
-        int effectiveThreads = OperatingSystem.IsAndroid()
-            ? Math.Clamp(options.MaxThreads, 1, 4)
-            : Math.Max(1, options.MaxThreads);
+        int effectiveThreads = Math.Clamp(options.MaxThreads, 1, 4);
 
         var parallelOptions = new ParallelOptions
         {

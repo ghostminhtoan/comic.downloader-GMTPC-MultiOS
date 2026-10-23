@@ -698,6 +698,22 @@ public sealed class ReadProgressStore
         if (touchTimestamp || !_progressMap.ContainsKey(histKey))
         {
             _progressMap[histKey] = GetCurrentOrderStamp();
+
+            // Tự động loại bỏ các file/thư mục chương con lẻ thuộc về cleanPath để không bị rác history
+            string prefixSep1 = cleanPath + Path.DirectorySeparatorChar;
+            string prefixSep2 = cleanPath + "/";
+            foreach (var key in _progressMap.Keys)
+            {
+                if (key.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase) && !string.Equals(key, histKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    string sub = key.Substring(HistoryPrefix.Length);
+                    if (sub.StartsWith(prefixSep1, StringComparison.OrdinalIgnoreCase) || sub.StartsWith(prefixSep2, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _progressMap.TryRemove(key, out _);
+                    }
+                }
+            }
+
             MarkDirtyAndScheduleFlush();
         }
     }
@@ -805,11 +821,15 @@ public sealed class ReadProgressStore
             {
                 if (LibraryScannerService.TryGetParentComicRoot(path, out string parentRoot, out _))
                 {
-                    isSubfolder = true;
-                    string parentKey = HistoryPrefix + NormalizeKey(parentRoot);
-                    if (!_progressMap.ContainsKey(parentKey))
+                    // Chỉ xem là subfolder khi parentRoot khác path (tránh xóa nhầm thư mục ảnh độc lập)
+                    if (!string.Equals(NormalizeKey(parentRoot), NormalizeKey(path), StringComparison.OrdinalIgnoreCase))
                     {
-                        _progressMap[parentKey] = GetComicLastReadOrder(path);
+                        isSubfolder = true;
+                        string parentKey = HistoryPrefix + NormalizeKey(parentRoot);
+                        if (!_progressMap.ContainsKey(parentKey))
+                        {
+                            _progressMap[parentKey] = GetComicLastReadOrder(path);
+                        }
                     }
                 }
             }

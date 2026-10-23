@@ -122,6 +122,12 @@ public partial class App : Application
                         {
                             var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
                             ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
+                            if (!string.Equals(cleanPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase) && File.Exists(cleanPath))
+                            {
+                                ReadProgressStore.Instance.RegisterReadComic(cleanPath, touchTimestamp: true);
+                            }
+                            ReadProgressStore.Instance.FlushImmediately();
+                            ReadProgressStore.Instance.SaveHistoryToDisk();
 
                             var readerVm = new ComicReaderViewModel();
                             var readerWin = new ComicReaderWindow
@@ -135,6 +141,7 @@ public partial class App : Application
                                     readerVm.SaveCurrentReadingSession();
                                     readerVm.Cleanup();
                                     ReadProgressStore.Instance.FlushImmediately();
+                                    ReadProgressStore.Instance.SaveHistoryToDisk();
                                 }
                                 catch { }
                             };

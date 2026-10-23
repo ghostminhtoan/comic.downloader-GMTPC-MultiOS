@@ -474,7 +474,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                 IsScrollMode = true;
                 IsHorizontalScrollMode = false;
                 IsRightToLeft = true;
-                FitMode = ImageFitMode.FitScreen;
+                FitMode = ImageFitMode.FitWidth; // Mặc định Fit Width cho Webtoon theo yêu cầu
                 ShowTransientToast("📜 Cuộn dọc RTL: phải ☜(ﾟヮﾟ☜) trái");
                 break;
             case 3: // Right S (Horizontal Scroll LTR - Cuộn ngang liên tục Trái → Phải)
@@ -495,7 +495,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                 IsScrollMode = true;
                 IsHorizontalScrollMode = false;
                 IsRightToLeft = false;
-                FitMode = ImageFitMode.FitScreen; // Mặc định Fit Screen cho Webtoon theo yêu cầu
+                FitMode = ImageFitMode.FitWidth; // Mặc định Fit Width cho Webtoon theo yêu cầu
                 ShowTransientToast("📜 Cuộn dọc: trái (☞ﾟヮﾟ)☞ phải (Webtoon)");
                 break;
         }
@@ -666,7 +666,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FitModeBadgeText))]
     [NotifyPropertyChangedFor(nameof(FitModeTooltipText))]
-    private ImageFitMode _fitMode = ImageFitMode.FitScreen;
+    private ImageFitMode _fitMode = ImageFitMode.FitWidth;
 
     public string FitModeBadgeText => FitMode switch
     {
@@ -2635,55 +2635,9 @@ public partial class ComicReaderViewModel : ViewModelBase
             }
             else
             {
-                // Quy tắc cốt lõi: Kiểm tra xem chương này có phải là chương CHƯA XEM không
-                // Một chương là CHƯA XEM khi:
-                // 1. chapter.LastReadPage <= 1 (hoặc chưa từng có tiến độ đọc)
-                // 2. VÀ trong progress store không có tiến độ đọc cục bộ riêng cho chapter này (> 1)
-                bool isUnreadChapter = (chapter.LastReadPage <= 1 || !chapter.HasReadProgress) &&
-                                       (_progressStore.GetLastReadPage(chapter.EffectiveProgressKey) <= 1);
-
-                if (isUnreadChapter)
-                {
-                    // Các chương truyện chưa xem khi được chọn PHẢI LUÔN MỞ TRANG ĐẦU (trang 1, index 0)!
-                    savedPageIndex = 0;
-                }
-                else
-                {
-                    // Chương ĐÃ ĐỌC: Khôi phục lại đúng trang đang đọc dở
-                    savedPageIndex = _progressStore.GetLastPageIndex(chapter.EffectiveProgressKey, TotalPages);
-
-                    if (savedPageIndex <= 0 && chapter.LastReadPage > 1)
-                    {
-                        savedPageIndex = Math.Clamp(chapter.LastReadPage - 1, 0, Math.Max(0, TotalPages - 1));
-                    }
-                    else if (savedPageIndex <= 0)
-                    {
-                        var resumeEntry = _progressStore.FindResumeEntryForComic(ParentComic?.Title ?? ComicTitle, chapter.LocalPath);
-                        if (resumeEntry != null && resumeEntry.LastReadPage > 1)
-                        {
-                            double chNum = ReadProgressStore.ExtractChapterNumber(chapter.Title);
-                            bool isMatching = false;
-                            if (chNum >= 0 && resumeEntry.ChapterNumber >= 0 && Math.Abs(chNum - resumeEntry.ChapterNumber) < 0.001)
-                            {
-                                isMatching = true;
-                            }
-                            else if (!string.IsNullOrWhiteSpace(resumeEntry.ChapterTitle) &&
-                                     string.Equals(ReadProgressStore.NormalizeChapterName(chapter.Title), ReadProgressStore.NormalizeChapterName(resumeEntry.ChapterTitle), StringComparison.OrdinalIgnoreCase))
-                            {
-                                isMatching = true;
-                            }
-                            else if (resumeEntry.ChapterIndex > 0 && chapter.Index == resumeEntry.ChapterIndex)
-                            {
-                                isMatching = true;
-                            }
-
-                            if (isMatching)
-                            {
-                                savedPageIndex = Math.Clamp(resumeEntry.LastReadPage - 1, 0, Math.Max(0, TotalPages - 1));
-                            }
-                        }
-                    }
-                }
+                // Theo yêu cầu: Mỗi chương không cần nhớ riêng trang đã đọc đến mấy, luôn mở từ đầu chương (trang 1, index 0).
+                // Resume.md chỉ phụ trách xem chương gần nhất là được.
+                savedPageIndex = 0;
             }
 
             _isNavigatingToPreviousChapter = false;
@@ -2742,7 +2696,7 @@ public partial class ComicReaderViewModel : ViewModelBase
             }
 
             TriggerPrefetch(startIndex);
-            _readerService.StartBackgroundChapterPrecaching(Pages, startIndex);
+            _readerService.StartBackgroundChapterPrecaching(Pages, startIndex, IsEcoMode);
 
             if (startIndex > 0)
             {
@@ -2843,12 +2797,13 @@ public partial class ComicReaderViewModel : ViewModelBase
         CurrentChapter.TotalPages = TotalPages;
         CurrentChapter.LastReadPage = page1Based;
 
-        _progressStore.SaveProgress(CurrentChapter.EffectiveProgressKey, pageIndex);
+        // Theo yêu cầu: Mỗi chương không cần nhớ riêng trang đã đọc đến mấy,
+        // Resume.md chỉ phụ trách xem chương gần nhất của bộ truyện.
         SaveCurrentReadingSession();
     }
 
     /// <summary>
-    /// Lưu toàn diện phiên đọc hiện tại: Chương đang xem, trang đang xem, tổng số trang,
+    /// Lưu toàn diện phiên đọc hiện tại: Chương đang xem, tổng số trang,
     /// đồng bộ trực tiếp vào ReadProgressStore và resume.md (CrossDeviceResumeEntry) để ghi nhớ
     /// chính xác 100% chương vừa đọc khi thoát Reader trên mọi hệ điều hành.
     /// </summary>
@@ -2859,7 +2814,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Lưu chính xác tiến độ đọc cho một chương cụ thể (tránh ghi đè nhầm tiến độ khi đang đổi sang chương mới).
+    /// Lưu chính xác tiến độ đọc chương gần nhất cho bộ truyện (tránh rác history và không nhớ trang lẻ cho từng chương).
     /// </summary>
     public void SaveChapterReadingSession(LibraryChapterItem chapter)
     {
@@ -2871,15 +2826,6 @@ public partial class ComicReaderViewModel : ViewModelBase
         chapter.TotalPages = totalPages;
         chapter.LastReadPage = page1Based;
 
-        if (!string.IsNullOrWhiteSpace(chapter.EffectiveProgressKey))
-        {
-            _progressStore.SaveProgress(chapter.EffectiveProgressKey, CurrentPageIndex);
-            if (totalPages > 0)
-            {
-                _progressStore.SaveChapterTotalPages(chapter.EffectiveProgressKey, totalPages);
-            }
-        }
-
         string? comicRoot = ParentComic?.RootFolderPath;
         string? title = ParentComic?.Title ?? ComicTitle;
 
@@ -2888,10 +2834,16 @@ public partial class ComicReaderViewModel : ViewModelBase
             try
             {
                 string cleanChPath = chapter.LocalPath.TrimEnd('\\', '/');
-                string? parentDir = Path.GetDirectoryName(cleanChPath);
-                if (!string.IsNullOrWhiteSpace(parentDir) && Directory.Exists(parentDir))
+                if (Directory.Exists(cleanChPath) || File.Exists(cleanChPath))
                 {
-                    comicRoot = parentDir;
+                    if (LibraryScannerService.TryGetParentComicRoot(cleanChPath, out string parentRoot, out _))
+                    {
+                        comicRoot = parentRoot;
+                    }
+                    else
+                    {
+                        comicRoot = cleanChPath;
+                    }
                 }
                 else
                 {
@@ -2934,7 +2886,7 @@ public partial class ComicReaderViewModel : ViewModelBase
             chapterTitle: chapter.Title,
             chapterIndex: chapter.Index,
             chapterNumber: ReadProgressStore.ExtractChapterNumber(chapter.Title),
-            pageIndex: CurrentPageIndex,
+            pageIndex: 0,
             totalPages: totalPages
         );
 
@@ -2943,7 +2895,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     }
 
     [ObservableProperty]
-    private bool _isEcoMode = OperatingSystem.IsAndroid();
+    private bool _isEcoMode = true;
 
     public string EcoModeStatusText => IsEcoMode ? "🍃 BẬT (Mát máy)" : "Tắt (Tiêu chuẩn)";
 
@@ -3031,6 +2983,11 @@ public partial class ComicReaderViewModel : ViewModelBase
             PageScrollingMode = IsScrollMode
                 ? (IsRightToLeft ? 2 : 5)
                 : (IsRightToLeft ? 1 : 0);
+            if (IsScrollMode && !IsHorizontalScrollMode)
+            {
+                FitMode = ImageFitMode.FitWidth;
+                ApplyFitModeLayout();
+            }
         }
 
         UpdateCurrentFlipPages();

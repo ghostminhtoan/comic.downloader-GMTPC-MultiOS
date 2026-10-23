@@ -512,7 +512,7 @@ public class FilePackerService
         {
             var pOptions = new ParallelOptions
             {
-                MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount),
+                MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 2, 2, 4),
                 CancellationToken = ct
             };
 

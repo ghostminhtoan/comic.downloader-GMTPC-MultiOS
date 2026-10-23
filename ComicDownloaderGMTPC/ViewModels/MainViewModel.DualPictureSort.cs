@@ -2072,7 +2072,7 @@ public partial class MainViewModel
                             useA = !useA;
                         }
 
-                        int delay = durations[currentFrame];
+                        int delay = Math.Max(33, durations[currentFrame]);
                         await Task.Delay(delay, cts.Token);
                         currentFrame = (currentFrame + 1) % totalFrames;
                     }

@@ -428,7 +428,7 @@ public sealed class ThumbnailPreviewService
         bool isReaderActive = ComicReaderService.Instance.IsReaderActive;
         int workerCount = isReaderActive
             ? 1
-            : Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 4 : 16);
+            : Math.Clamp(MaxCpuThreads, 1, 2);
         var workers = new List<Task>(workerCount);
 
         for (int w = 0; w < workerCount; w++)
@@ -444,6 +444,7 @@ public sealed class ThumbnailPreviewService
                     }
                     if (nextItem.ThumbnailBitmap != null && nextItem.HasThumbnailFile) continue;
                     await EnsureThumbnailCacheAsync(nextItem, ct, isPriority: false).ConfigureAwait(false);
+                    await Task.Delay(40, ct).ConfigureAwait(false);
                 }
             }, ct));
         }

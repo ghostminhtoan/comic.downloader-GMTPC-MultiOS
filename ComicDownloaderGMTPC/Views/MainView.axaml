@@ -12013,7 +12013,7 @@
 
                             <!-- Progress Bar chuyển động -->
 
-                            <ProgressBar IsIndeterminate="True"
+                            <ProgressBar IsIndeterminate="{Binding IsGoogleDriveBusy}"
 
                                          Height="6"
 

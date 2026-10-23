@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -901,75 +901,140 @@ public sealed class LibraryScannerService
         try
         {
             if (string.IsNullOrWhiteSpace(targetPath)) return false;
-            string dir = Directory.Exists(targetPath) ? targetPath : (Path.GetDirectoryName(targetPath) ?? string.Empty);
-            if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return false;
 
-            string cleanDir = dir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            string? parent = Path.GetDirectoryName(cleanDir);
-            if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent)) return false;
-
-            // Không coi Root của ổ đĩa (C:\, D:\, /) là Comic Root
-            string? rootOfParent = Path.GetPathRoot(parent);
-            if (string.Equals(parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                              rootOfParent?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                              StringComparison.OrdinalIgnoreCase))
+            // Xử lý khi targetPath là FILE (.zip, .cbz, .rar, .cbr, .pdf, .mobi hoặc file ảnh)
+            if (File.Exists(targetPath))
             {
-                return false;
-            }
+                string? fileDir = Path.GetDirectoryName(targetPath);
+                if (string.IsNullOrWhiteSpace(fileDir) || !Directory.Exists(fileDir)) return false;
 
-            // Tránh nhận diện nhầm thư mục quét thư viện chính làm Comic Root
-            string? lastLibRoot = ReadProgressStore.Instance.GetLastLibraryRootPath();
-            if (!string.IsNullOrWhiteSpace(lastLibRoot) &&
-                string.Equals(parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                              lastLibRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                              StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
+                string cleanFileDir = fileDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string? rootOfFileDir = Path.GetPathRoot(cleanFileDir);
+                if (string.Equals(cleanFileDir, rootOfFileDir?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
 
-            string currentFolderName = Path.GetFileName(cleanDir);
-            bool isChapterName = IsChapterNamePattern(currentFolderName);
+                string fileName = Path.GetFileName(targetPath);
+                string fileNameNoExt = Path.GetFileNameWithoutExtension(targetPath);
+                bool fileIsChapter = IsChapterNamePattern(fileNameNoExt) || ReadProgressStore.ExtractChapterNumber(fileNameNoExt) >= 0;
 
-            var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
-            var siblingDirs = Directory.GetDirectories(parent, "*", enumOpts);
-            int siblingWithImages = 0;
-            int siblingChapterCount = 0;
-
-            foreach (var sib in siblingDirs)
-            {
-                string sibName = Path.GetFileName(sib);
-                if (sibName.StartsWith(".", StringComparison.Ordinal)) continue;
-                if (IsChapterNamePattern(sibName)) siblingChapterCount++;
-
+                var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
+                int siblingArchives = 0;
+                int siblingImages = 0;
                 try
                 {
-                    if (Directory.EnumerateFiles(sib, "*", enumOpts).Any(IsImageFile))
-                    {
-                        siblingWithImages++;
-                    }
+                    siblingArchives = Directory.EnumerateFiles(cleanFileDir, "*", enumOpts)
+                        .Count(f => IsArchiveFile(f) || IsPdfFile(f) || IsMobiFile(f));
+                    siblingImages = Directory.EnumerateFiles(cleanFileDir, "*", enumOpts).Count(IsImageFile);
                 }
                 catch { }
+
+                // Nếu là file nén/sách và trong thư mục có nhiều file nén anh em hoặc tên file là chapter:
+                // Thư mục chứa nó chính là Comic Root của bộ truyện!
+                if ((IsArchiveFile(targetPath) || IsPdfFile(targetPath) || IsMobiFile(targetPath)) && (siblingArchives >= 2 || fileIsChapter))
+                {
+                    parentComicRoot = cleanFileDir;
+                    chapterName = !string.IsNullOrWhiteSpace(fileNameNoExt) ? fileNameNoExt : fileName;
+                    return true;
+                }
+
+                // Nếu là file ảnh trong thư mục chương con:
+                if (IsImageFile(targetPath))
+                {
+                    string folderName = Path.GetFileName(cleanFileDir);
+                    if (IsChapterNamePattern(folderName))
+                    {
+                        // Thư mục chứa ảnh là một chapter, quy về thư mục cha của nó (Comic Root)
+                        string? parent = Path.GetDirectoryName(cleanFileDir);
+                        if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent))
+                        {
+                            parentComicRoot = parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                            chapterName = folderName;
+                            return true;
+                        }
+                    }
+                    else if (siblingImages >= 1)
+                    {
+                        // Thư mục chứa ảnh là thư mục truyện/ảnh trực tiếp
+                        parentComicRoot = cleanFileDir;
+                        chapterName = folderName;
+                        return true;
+                    }
+                }
+
+                return false;
             }
 
-            // Kiểm tra thêm các file archive anh em (.zip, .cbz, .pdf...) trong parent
-            int siblingArchives = 0;
-            try
+            // Xử lý khi targetPath là DIRECTORY (Thư mục)
+            if (Directory.Exists(targetPath))
             {
-                siblingArchives = Directory.EnumerateFiles(parent, "*", enumOpts).Count(f => IsArchiveFile(f) || IsPdfFile(f) || IsMobiFile(f));
-            }
-            catch { }
+                string cleanDir = targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string? parent = Path.GetDirectoryName(cleanDir);
+                if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent)) return false;
 
-            // Điều kiện xác định parent là Comic Root:
-            // 1. Tên folder là chapter pattern VÀ parent có chứa các sibling khác (hoặc chính nó là chapter)
-            // 2. Hoặc trong parent có từ 2 chapter con trở lên có ảnh
-            // 3. Hoặc có từ 2 sibling mang tên chapter
-            if ((isChapterName && (siblingDirs.Length > 1 || siblingArchives > 0 || Directory.Exists(cleanDir))) ||
-                siblingWithImages >= 2 ||
-                siblingChapterCount >= 2)
-            {
-                parentComicRoot = parent;
-                chapterName = currentFolderName;
-                return true;
+                // Không coi Root của ổ đĩa (C:\, D:\, /) là Comic Root
+                string? rootOfParent = Path.GetPathRoot(parent);
+                if (string.Equals(parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                                  rootOfParent?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                                  StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                // Tránh nhận diện nhầm thư mục quét thư viện chính làm Comic Root
+                string? lastLibRoot = ReadProgressStore.Instance.GetLastLibraryRootPath();
+                if (!string.IsNullOrWhiteSpace(lastLibRoot) &&
+                    string.Equals(parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                                  lastLibRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                                  StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                string currentFolderName = Path.GetFileName(cleanDir);
+                bool isChapterName = IsChapterNamePattern(currentFolderName);
+
+                var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
+                var siblingDirs = Directory.GetDirectories(parent, "*", enumOpts);
+                int siblingWithImages = 0;
+                int siblingChapterCount = 0;
+
+                foreach (var sib in siblingDirs)
+                {
+                    string sibName = Path.GetFileName(sib);
+                    if (sibName.StartsWith(".", StringComparison.Ordinal)) continue;
+                    if (IsChapterNamePattern(sibName)) siblingChapterCount++;
+
+                    try
+                    {
+                        if (Directory.EnumerateFiles(sib, "*", enumOpts).Any(IsImageFile))
+                        {
+                            siblingWithImages++;
+                        }
+                    }
+                    catch { }
+                }
+
+                int siblingArchives = 0;
+                try
+                {
+                    siblingArchives = Directory.EnumerateFiles(parent, "*", enumOpts).Count(f => IsArchiveFile(f) || IsPdfFile(f) || IsMobiFile(f));
+                }
+                catch { }
+
+                // Chỉ quy về parent khi:
+                // 1. Tên folder là chapter pattern VÀ parent có chứa các chapter sibling khác hoặc archive anh em
+                // 2. Hoặc trong parent có từ 2 chapter con trở lên có ảnh
+                // 3. Hoặc có từ 2 sibling mang tên chapter
+                if ((isChapterName && (siblingDirs.Length > 1 || siblingArchives > 0)) ||
+                    siblingWithImages >= 2 ||
+                    siblingChapterCount >= 2)
+                {
+                    parentComicRoot = parent;
+                    chapterName = currentFolderName;
+                    return true;
+                }
             }
         }
         catch { }

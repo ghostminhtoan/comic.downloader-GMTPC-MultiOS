@@ -143,7 +143,7 @@ public sealed class ComicReaderService
 
     private CancellationTokenSource? _chapterPrecacheCts;
 
-    public void StartBackgroundChapterPrecaching(IList<ReaderPageItem> pages, int startIndex = 0)
+    public void StartBackgroundChapterPrecaching(IList<ReaderPageItem> pages, int startIndex = 0, bool ecoMode = false)
     {
         if (pages == null || pages.Count == 0) return;
 
@@ -174,10 +174,9 @@ public sealed class ComicReaderService
                     if (current - offset >= 0) order.Add(current - offset);
                 }
 
-                // Nếu số trang <= 80 (hầu hết các chương truyện tranh 20-50 trang):
-                // Eager Preload TOÀN BỘ chương ra Bitmap! Khi người dùng cuộn, độ trễ là 0ms tuyệt đối!
-                // Nếu số trang > 80: Preload 40 trang gần nhất ra Bitmap, các trang xa hơn chỉ nạp L1/Disk Cache
-                int maxFullBitmapPreload = (count <= 80) ? count : 40;
+                // Tối ưu hạ nhiệt độ máy: Thay vì decode toàn bộ 80 trang ảnh full size cùng lúc,
+                // chỉ decode 3-5 trang gần nhất (1 trang trước, 3-4 trang sau). Các trang khác nạp theo sliding window khi cuộn tới gần.
+                int maxFullBitmapPreload = (ecoMode || OperatingSystem.IsAndroid()) ? 3 : 5;
                 int processedCount = 0;
 
                 var parallelBatch = new List<Task>();
@@ -195,11 +194,12 @@ public sealed class ComicReaderService
                             parallelBatch.Add(EnsurePageLoadedAsync(page, ct));
                             processedCount++;
 
-                            // Xử lý theo từng batch 4-6 trang song song qua semaphore
-                            if (parallelBatch.Count >= 4)
+                            // Xử lý tuần tự nhẹ nhàng 2 trang một lần, kèm yield nghỉ 10ms để CPU hạ nhiệt
+                            if (parallelBatch.Count >= 2)
                             {
                                 await Task.WhenAll(parallelBatch).ConfigureAwait(false);
                                 parallelBatch.Clear();
+                                await Task.Delay(10, ct).ConfigureAwait(false);
                             }
                         }
                         else
@@ -239,9 +239,7 @@ public sealed class ComicReaderService
         ReaderActiveStateChanged?.Invoke(isActive);
     }
 
-    private readonly SemaphoreSlim _decodeSemaphore = new(
-        OperatingSystem.IsAndroid() ? Math.Clamp(Environment.ProcessorCount - 1, 3, 6) : Math.Clamp(Environment.ProcessorCount, 4, 8),
-        OperatingSystem.IsAndroid() ? Math.Clamp(Environment.ProcessorCount - 1, 3, 6) : Math.Clamp(Environment.ProcessorCount, 4, 8));
+    private readonly SemaphoreSlim _decodeSemaphore = new(2, 2);
 
     public Task<List<ReaderPageItem>> LoadChapterPagesAsync(LibraryChapterItem chapter, IProgress<(double percent, string status)>? progress = null, CancellationToken ct = default)
     {

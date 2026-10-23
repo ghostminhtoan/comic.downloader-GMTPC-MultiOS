@@ -858,7 +858,7 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [ObservableProperty]
-    private int _enhanceThreads = Math.Min(CpuTopologyHelper.GetMaxLogicalProcessorCount(), 16);
+    private int _enhanceThreads = Math.Clamp(CpuTopologyHelper.GetMaxLogicalProcessorCount() / 2, 2, 4);
 
     [ObservableProperty]
     private bool _enhanceOverwriteOriginal = false;
