@@ -2874,33 +2874,33 @@ public class ComicScraperService
         var itempropMeta = Regex.Match(html, @"<meta[^>]*itemprop=[""']name[""'][^>]*content=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
         if (itempropMeta.Success && !string.IsNullOrWhiteSpace(itempropMeta.Groups[1].Value))
         {
-            return CleanTitle(itempropMeta.Groups[1].Value);
+            return CleanTitle(itempropMeta.Groups[1].Value, url);
         }
 
         var h1Itemprop = Regex.Match(html, @"<h1[^>]*itemprop=[""']name[""'][^>]*>(.*?)</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         if (h1Itemprop.Success && !string.IsNullOrWhiteSpace(h1Itemprop.Groups[1].Value))
         {
             string raw = Regex.Replace(h1Itemprop.Groups[1].Value, @"<[^>]+>", "").Trim();
-            if (!string.IsNullOrWhiteSpace(raw)) return CleanTitle(raw);
+            if (!string.IsNullOrWhiteSpace(raw)) return CleanTitle(raw, url);
         }
 
         var h1Match = Regex.Match(html, @"<h1[^>]*>(.*?)</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         if (h1Match.Success && !string.IsNullOrWhiteSpace(h1Match.Groups[1].Value))
         {
             string raw = Regex.Replace(h1Match.Groups[1].Value, @"<[^>]+>", "").Trim();
-            if (!string.IsNullOrWhiteSpace(raw)) return CleanTitle(raw);
+            if (!string.IsNullOrWhiteSpace(raw)) return CleanTitle(raw, url);
         }
 
         var ogMatch = Regex.Match(html, @"<meta[^>]*property=[""']og:title[""'][^>]*content=[""']([^""']+)[""']", RegexOptions.IgnoreCase);
         if (ogMatch.Success && !string.IsNullOrWhiteSpace(ogMatch.Groups[1].Value))
         {
-            return CleanTitle(ogMatch.Groups[1].Value);
+            return CleanTitle(ogMatch.Groups[1].Value, url);
         }
 
         var titleMatch = Regex.Match(html, @"<title[^>]*>(.*?)</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         if (titleMatch.Success && !string.IsNullOrWhiteSpace(titleMatch.Groups[1].Value))
         {
-            return CleanTitle(titleMatch.Groups[1].Value);
+            return CleanTitle(titleMatch.Groups[1].Value, url);
         }
 
         return ExtractFallbackTitleFromUrl(url);
@@ -3025,6 +3025,41 @@ public class ComicScraperService
         return tags.Count > 0 ? "Tags: " + string.Join(", ", tags) : string.Empty;
     }
 
+    private static readonly Regex NavBypassRegex = new(
+        @"^(?:" +
+        @"(?:đọc\s*(?:từ\s*)?)?(?:chương|chap|tập|chuong|tap)\s*(?:đầu|dau|mới\s*nhất|moi\s*nhat|cuối|cuoi)|" +
+        @"(?:đọc|doc)\s*(?:từ\s*đầu|tu\s*dau|mới\s*nhất|moi\s*nhat|tiếp|tiep|ngay)|" +
+        @"(?:read\s*(?:now\s*)?)?(?:first|latest|last|continue)(?:\s*(?:chapter|chap|reading))?|" +
+        @"first\s*(?:chapter|chap)|" +
+        @"latest\s*(?:chapter|chap)|" +
+        @"theo\s*dõi|thích|like|subscribe|xem\s*thêm|mục\s*lục|danh\s*sách\s*(?:chương|chap)?" +
+        @")$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    public static bool IsNavigationButton(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return true;
+        string clean = Regex.Replace(text, @"^[\[\(>\-–—\s#]+|[\]\)>–—\s]+$", "").Trim();
+        if (NavBypassRegex.IsMatch(clean) || NavBypassRegex.IsMatch(text)) return true;
+
+        string lower = clean.ToLowerInvariant();
+        return lower == "chương đầu" || lower == "chuong dau" ||
+               lower == "chap đầu" || lower == "chap dau" ||
+               lower == "tập đầu" || lower == "tap dau" ||
+               lower == "đọc từ đầu" || lower == "doc tu dau" ||
+               lower == "đọc chương đầu" || lower == "doc chuong dau" ||
+               lower == "đọc chap đầu" || lower == "doc chap dau" ||
+               lower == "đọc từ chap đầu" || lower == "đọc từ chương đầu" ||
+               lower == "read first" || lower == "first chapter" ||
+               lower == "read first chapter" || lower == "start reading" ||
+               lower == "read latest" || lower == "latest chapter" ||
+               lower == "read last" || lower == "last chapter" ||
+               lower == "chương mới nhất" || lower == "chuong moi nhat" ||
+               lower == "chap mới nhất" || lower == "chap moi nhat" ||
+               lower == "đọc mới nhất" || lower == "doc moi nhat" ||
+               lower == "đọc chương mới nhất" || lower == "đọc tiếp" || lower == "continue reading";
+    }
+
     private List<ChapterItem> ExtractChapters(string html, string baseUrl, string domain)
     {
         var list = new List<ChapterItem>();
@@ -3034,12 +3069,21 @@ public class ComicScraperService
         string[] containerMarkers = new[]
         {
             "works-chapter-list",
+            "listing-chapters",
+            "wp-manga-chapter",
             "list_chapter",
-            "chapter-list",
             "list-chapter",
+            "chapter-list",
+            "chapters-list",
             "table-chapters",
             "box-list-chapter",
-            "nt_listchapter"
+            "nt_listchapter",
+            "id=\"chapters\"",
+            "class=\"chapters\"",
+            "id=\"chapterlist\"",
+            "class=\"chapterlist\"",
+            "id=\"list-chapters\"",
+            "class=\"list-chapters\""
         };
 
         foreach (var marker in containerMarkers)
@@ -3059,8 +3103,7 @@ public class ComicScraperService
         }
 
         var matches = Regex.Matches(searchScope, @"<a[^>]*href=[""']([^""']*(?:chap|chuong|chapter)[^""']*)[""'][^>]*>(.*?)</a>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var navBypassRegex = new Regex(@"^(?:đọc\s*(?:từ\s*đầu|mới\s*nhất|tiếp)|doc\s*(?:tu\s*dau|moi\s*nhat|tiep)|read\s*(?:first|latest|continue)|theo\s*dõi|thích|like|subscribe|xem\s*thêm|mục\s*lục)$", RegexOptions.IgnoreCase);
+        var urlToChapterMap = new Dictionary<string, ChapterItem>(StringComparer.OrdinalIgnoreCase);
 
         foreach (Match m in matches)
         {
@@ -3072,22 +3115,48 @@ public class ComicScraperService
                 continue;
             }
 
-            if (navBypassRegex.IsMatch(text))
+            // Bỏ qua các nút điều hướng/hành động trang web (Chương đầu, Read First, Đọc từ đầu, Chương mới nhất...)
+            if (IsNavigationButton(text))
             {
                 continue;
             }
 
             string fullUrl = MakeAbsoluteUrl(href, baseUrl);
-            if (seenUrls.Add(fullUrl))
+            double chapNum = ExtractChapterNumber(text, ExtractChapterNumber(href, 0));
+
+            if (!urlToChapterMap.TryGetValue(fullUrl, out var existing))
             {
-                double chapNum = ExtractChapterNumber(text, ExtractChapterNumber(href, 0));
-                list.Add(new ChapterItem
+                var chapItem = new ChapterItem
                 {
                     ChapterNumber = chapNum,
                     Title = text,
                     Url = fullUrl,
                     Status = "Waiting"
-                });
+                };
+                urlToChapterMap[fullUrl] = chapItem;
+                list.Add(chapItem);
+            }
+            else
+            {
+                // Nếu URL đã tồn tại, kiểm tra xem tên cũ có phải là tên generic/placeholder hoặc tên mới có số chương rõ hơn không
+                bool existingIsNav = IsNavigationButton(existing.Title) ||
+                                     Regex.IsMatch(existing.Title, @"\b(?:chương\s*đầu|chuong\s*dau|read\s*first|first\s*chapter|đọc\s*từ\s*đầu)\b", RegexOptions.IgnoreCase);
+                bool newHasNumber = Regex.IsMatch(text, @"(?:chap|chuong|chapter|\b)\s*\d+", RegexOptions.IgnoreCase);
+
+                if (existingIsNav || (!existing.Title.Any(char.IsDigit) && newHasNumber))
+                {
+                    existing.Title = text;
+                    existing.ChapterNumber = chapNum > 0 ? chapNum : existing.ChapterNumber;
+                }
+            }
+        }
+
+        // Tự động kiểm tra và chuẩn hóa nếu có chapter nào vẫn mang tên điều hướng rác
+        foreach (var c in list)
+        {
+            if (IsNavigationButton(c.Title) || Regex.IsMatch(c.Title, @"\b(?:chương\s*đầu|chuong\s*dau|read\s*first|first\s*chapter)\b", RegexOptions.IgnoreCase))
+            {
+                c.Title = c.ChapterNumber > 0 ? $"Chapter {c.ChapterNumber}" : "Chapter 1";
             }
         }
 
@@ -3144,7 +3213,7 @@ public class ComicScraperService
         return fallback;
     }
 
-    public static string CleanTitle(string title)
+    public static string CleanTitle(string title, string? url = null)
     {
         if (string.IsNullOrWhiteSpace(title)) return string.Empty;
 
@@ -3177,7 +3246,7 @@ public class ComicScraperService
             if (!string.IsNullOrWhiteSpace(s4)) title = s4;
 
             // 2.4. Hậu tố tên web / domain
-            string s5 = Regex.Replace(title, @"\s*[-|–—]\s*(?:truy[eệ]nqq|nettruyen|mangadex|tuoitre|hako|e-hentai(?:\s+galleries)?|exhentai|dâm cô nương|damconuong|loppytoon|hentaiforce|sayhentai|hitomi|[a-z0-9\-]+\.(?:com|net|vn|org|cc|to|io|tv|top|site|vip|club|me|online|info|xyz)).*$", "", RegexOptions.IgnoreCase).Trim();
+            string s5 = Regex.Replace(title, @"\s*[-|–—]\s*(?:truy[eệ]nqq|nettruyen|mangadex|tuoitre|hako|e-hentai(?:\s+galleries)?|exhentai|dâm cô nương|damconuong|loppytoon|hentaiforce|sayhentai|hitomi|[a-z0-9\-]+\.(?:com|net|vn|org|cc|to|io|tv|top|site|vip|club|me|online|info|xyz|pro|app|live|fun|moe|lat|icu|link|life|art|biz|tech|us|uk|co|in|mobi|ru|jp|tw|cn|asia|space|cloud|website|press|store)).*$", "", RegexOptions.IgnoreCase).Trim();
             if (!string.IsNullOrWhiteSpace(s5)) title = s5;
 
             // Dọn dẹp dấu phân tách treo ở đuôi nếu có sau khi xoá hậu tố (-, :, |, ~, /, –, —, [, (, {)
@@ -3190,7 +3259,69 @@ public class ComicScraperService
             }
         }
 
-        // 3. Dọn dẹp tiền tố rác ở đầu tên:
+        // 3. Dọn dẹp tiền tố tên miền ở đầu tên (Ví dụ: abc.com book name, [abc.com] book name, abc.com - book name)
+        var genericDomainMatch = Regex.Match(
+            title,
+            @"^(?:\[|\()?([a-z0-9\-]+\.(?:com|net|vn|org|cc|to|io|tv|top|site|vip|club|me|online|info|xyz|pro|app|live|fun|moe|lat|icu|link|life|art|biz|tech|us|uk|co|in|mobi|ru|jp|tw|cn|asia|space|cloud|website|press|store))(?:\]|\))?(?:\s*[:\-\–—|~]\s*|\s+)",
+            RegexOptions.IgnoreCase);
+        if (genericDomainMatch.Success)
+        {
+            string rem = title.Substring(genericDomainMatch.Length).Trim();
+            if (!string.IsNullOrWhiteSpace(rem))
+            {
+                title = rem;
+            }
+        }
+
+        // 4. Dọn dẹp tên website hoặc thương hiệu từ URL (Ví dụ: abc book name trong đó URL là https://abc.com/...)
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            try
+            {
+                var uri = new Uri(DomainRoutingService.NormalizeUrl(url));
+                string host = uri.Host.ToLowerInvariant();
+                if (host.StartsWith("www.")) host = host.Substring(4);
+
+                var candidates = new List<string> { host };
+                string[] parts = host.Split('.');
+                if (parts.Length >= 2)
+                {
+                    string brand = parts[0];
+                    if (parts.Length > 2 && (parts[parts.Length - 1] == "vn" || parts[parts.Length - 1] == "com") && parts[parts.Length - 2].Length <= 3)
+                    {
+                        brand = parts[0];
+                    }
+                    else if (parts.Length > 2)
+                    {
+                        brand = parts[parts.Length - 2];
+                    }
+
+                    if (brand.Length >= 3 && !candidates.Contains(brand))
+                    {
+                        candidates.Add(brand);
+                    }
+                }
+
+                foreach (var cand in candidates)
+                {
+                    if (string.IsNullOrWhiteSpace(cand) || cand.Length < 3) continue;
+                    string pattern = @"^(?:\[|\()?" + Regex.Escape(cand) + @"(?:\]|\))?(?:\s*[:\-\–—|~]\s*|\s+)";
+                    var m = Regex.Match(title, pattern, RegexOptions.IgnoreCase);
+                    if (m.Success)
+                    {
+                        string rem = title.Substring(m.Length).Trim();
+                        if (!string.IsNullOrWhiteSpace(rem))
+                        {
+                            title = rem;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 5. Dọn dẹp tiền tố rác ở đầu tên:
         // Quy tắc: Nếu không đúp thì xoá sạch tiền tố web ('Xem truyện abc' -> 'abc').
         // Còn nếu đúp ('Truyện Truyện abc', 'Đọc truyện Đọc truyện abc', 'Xem truyện Xem truyện abc') thì giữ lại một phần cho tên thật.
         // Chỉ bóc tách tiền tố web ĐÚNG MỘT LẦN ở đầu chuỗi (không lặp) để bảo toàn tên truyện thật nếu truyện vốn có chữ đó ở đầu.
@@ -3213,6 +3344,9 @@ public class ComicScraperService
                 title = remainder;
             }
         }
+
+        // Dọn dẹp dấu phân tách treo ở đầu nếu còn sót
+        title = title.TrimStart(' ', '\t', '-', ':', '–', '—', '|', '~', '/', ']').Trim();
 
         return title;
     }
