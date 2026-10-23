@@ -2464,9 +2464,17 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public void ScrubToPage(int targetPageIndex)
     {
-        if (Pages.Count == 0) return;
+        if (Pages.Count == 0)
+        {
+            NavigationState = ReaderNavigationState.IdleReading;
+            return;
+        }
         int clamped = Math.Clamp(targetPageIndex, 0, Pages.Count - 1);
-        if (CurrentPageIndex == clamped) return;
+        if (CurrentPageIndex == clamped)
+        {
+            NavigationState = ReaderNavigationState.IdleReading;
+            return;
+        }
 
         // Hủy ngay toàn bộ task nạp ảnh cũ đang dở dang để ưu tiên 100% CPU/RAM giải mã trang đích tức thì
         _prefetchCts?.Cancel();
@@ -2512,7 +2520,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void UpdatePageIndexFromScroll(int visiblePageIndex)
     {
         if (Pages.Count == 0) return;
-        if (NavigationState != ReaderNavigationState.IdleReading) return;
+        if (NavigationState == ReaderNavigationState.UserScrubbing) return;
         int clamped = Math.Clamp(visiblePageIndex, 0, Pages.Count - 1);
         if (clamped == CurrentPageIndex) return;
 

@@ -1144,9 +1144,10 @@ public partial class ComicReaderControl : UserControl
         _isUserDraggingScrubber = false;
         if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
         {
-            _suppressScrollChangedUntilTick = Environment.TickCount64 + 600;
+            _suppressScrollChangedUntilTick = Environment.TickCount64 + 200;
             vm.UpdateScrubberHover(0, false);
             vm.ScrubToPage((int)Math.Round(slider.Value));
+            vm.NavigationState = ReaderNavigationState.IdleReading;
         }
     }
 
@@ -1156,9 +1157,10 @@ public partial class ComicReaderControl : UserControl
         _isUserDraggingScrubber = false;
         if (sender is Slider slider && DataContext is ComicReaderViewModel vm)
         {
-            _suppressScrollChangedUntilTick = Environment.TickCount64 + 600;
+            _suppressScrollChangedUntilTick = Environment.TickCount64 + 200;
             vm.UpdateScrubberHover(0, false);
             vm.ScrubToPage((int)Math.Round(slider.Value));
+            vm.NavigationState = ReaderNavigationState.IdleReading;
         }
     }
 
@@ -1241,7 +1243,7 @@ public partial class ComicReaderControl : UserControl
                 scrubber.InvalidateVisual();
                 scrubber.InvalidateArrange();
             }
-        }, DispatcherPriority.Render);
+        }, DispatcherPriority.Normal);
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1670,12 +1672,20 @@ public partial class ComicReaderControl : UserControl
 
     private void OnReaderScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        // 1. Chỉ lắng nghe sự kiện từ chính ScrollViewer của Reader (loại bỏ hoàn toàn Drawer/Popups)
+        var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
+        if (listBox == null || !listBox.IsVisible) return;
+
+        // 1. Chỉ chấp nhận sự kiện bắt nguồn từ bên trong ReaderPagesListBox (loại bỏ hoàn toàn Drawer, Popups, Settings)
+        if (e.Source is not Visual visual || (!listBox.IsVisualAncestorOf(visual) && e.Source != listBox))
+        {
+            return;
+        }
+
         var scrollViewer = GetReaderScrollViewer();
-        if (scrollViewer == null || e.Source != scrollViewer) return;
+        if (scrollViewer == null) return;
 
         if (DataContext is not ComicReaderViewModel vm || !vm.IsScrollMode || vm.Pages.Count == 0 || vm.IsLoadingChapter) return;
-        if (vm.NavigationState != ReaderNavigationState.IdleReading) return;
+        if (vm.NavigationState == ReaderNavigationState.UserScrubbing) return;
 
         long now = Environment.TickCount64;
         long pinchElapsed = now - _lastPinchEndTick;
@@ -1690,18 +1700,22 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
-        if (now < _suppressScrollChangedUntilTick)
+        if (_isProgrammaticScroll)
+        {
+            if (now - _lastUserScrollInputTick < 300)
+            {
+                _isProgrammaticScroll = false;
+            }
+            else
+            {
+                return;
+            }
+        }
+
+        if (_isUserDraggingScrubber || _isDoubleTapZooming)
         {
             return;
         }
-
-        if (_isProgrammaticScroll || _isUserDraggingScrubber || _isDoubleTapZooming)
-        {
-            return;
-        }
-
-        var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
-        if (listBox == null) return;
 
         // A. CHẾ ĐỘ CUỘN NGANG (Horizontal Scroll Mode LTR / RTL)
         if (vm.IsHorizontalScrollMode)
@@ -1730,33 +1744,26 @@ public partial class ComicReaderControl : UserControl
             vm.IsScrollAtStart = false;
             vm.IsScrollAtEnd = false;
 
-            double offsetX = scrollViewer.Offset.X;
-            double effectiveScrollX = (vm.IsRightToLeft && maxX > 0)
-                ? Math.Clamp(maxX - offsetX, 0, maxX)
-                : Math.Clamp(offsetX, 0, maxX);
-
-            // Điểm đọc trọng tâm Read Anchor 35% từ mép trái màn hình
-            double anchorX = effectiveScrollX + vw * 0.35;
             int bestPageIndexX = -1;
+            // Với LTR: điểm đọc 35% từ mép trái; Với RTL (Manga): điểm đọc 35% từ mép phải (tức 65% từ mép trái)
+            double anchorX = vm.IsRightToLeft ? vw * 0.65 : vw * 0.35;
 
-            // Ưu tiên 1: Lấy từ ListBoxItem container thực tế trên Visual Tree
             try
             {
-                int searchStart = Math.Max(0, vm.CurrentPageIndex - 6);
-                int searchEnd = Math.Min(vm.Pages.Count - 1, vm.CurrentPageIndex + 6);
-                for (int i = searchStart; i <= searchEnd; i++)
+                var realizedContainers = listBox.GetVisualDescendants().OfType<ListBoxItem>();
+                foreach (var container in realizedContainers)
                 {
-                    if (listBox.ContainerFromIndex(i) is Control container && container.IsVisible)
+                    if (!container.IsVisible) continue;
+                    var pt = container.TranslatePoint(new Point(0, 0), scrollViewer);
+                    if (pt.HasValue)
                     {
-                        var pt = container.TranslatePoint(new Point(0, 0), scrollViewer);
-                        if (pt.HasValue)
+                        double left = pt.Value.X;
+                        double right = left + container.Bounds.Width;
+                        if (anchorX >= left && anchorX < right)
                         {
-                            double itemLeft = pt.Value.X;
-                            double itemRight = itemLeft + container.Bounds.Width;
-                            double localAnchor = vw * 0.35;
-                            if (localAnchor >= itemLeft && localAnchor < itemRight)
+                            if (container.DataContext is ReaderPageItem pageItem)
                             {
-                                bestPageIndexX = i;
+                                bestPageIndexX = pageItem.Index;
                                 break;
                             }
                         }
@@ -1765,21 +1772,12 @@ public partial class ComicReaderControl : UserControl
             }
             catch { }
 
-            // Ưu tiên 2: Fallback toán học O(N) cộng dồn
-            if (bestPageIndexX < 0)
+            if (bestPageIndexX < 0 && maxX > 0)
             {
-                double runningX = 0;
-                for (int i = 0; i < vm.Pages.Count; i++)
-                {
-                    var page = vm.Pages[i];
-                    double pW = Math.Max(40, page.DisplayWidth + page.PageMargin.Left + page.PageMargin.Right);
-                    if (anchorX >= runningX && anchorX < runningX + pW)
-                    {
-                        bestPageIndexX = i;
-                        break;
-                    }
-                    runningX += pW;
-                }
+                double ratio = vm.IsRightToLeft
+                    ? Math.Clamp((maxX - scrollViewer.Offset.X) / maxX, 0.0, 1.0)
+                    : Math.Clamp(scrollViewer.Offset.X / maxX, 0.0, 1.0);
+                bestPageIndexX = (int)Math.Round(ratio * (vm.Pages.Count - 1));
             }
 
             if (bestPageIndexX >= 0 && bestPageIndexX != vm.CurrentPageIndex)
@@ -1812,27 +1810,26 @@ public partial class ComicReaderControl : UserControl
         vm.IsScrollAtEnd = false;
 
         // Điểm đọc trọng tâm Read Anchor 35% từ đỉnh màn hình
-        double anchorY = scrollViewer.Offset.Y + vh * 0.35;
         int bestPageIndex = -1;
+        double anchorY = vh * 0.35;
 
-        // Ưu tiên 1: Lấy từ ListBoxItem container thực tế trên Visual Tree
+        // Ưu tiên 1: Lấy trực tiếp từ các ListBoxItem đang hiện thực hóa trong Viewport
         try
         {
-            int searchStart = Math.Max(0, vm.CurrentPageIndex - 6);
-            int searchEnd = Math.Min(vm.Pages.Count - 1, vm.CurrentPageIndex + 6);
-            for (int i = searchStart; i <= searchEnd; i++)
+            var realizedContainers = listBox.GetVisualDescendants().OfType<ListBoxItem>();
+            foreach (var container in realizedContainers)
             {
-                if (listBox.ContainerFromIndex(i) is Control container && container.IsVisible)
+                if (!container.IsVisible) continue;
+                var pt = container.TranslatePoint(new Point(0, 0), scrollViewer);
+                if (pt.HasValue)
                 {
-                    var pt = container.TranslatePoint(new Point(0, 0), scrollViewer);
-                    if (pt.HasValue)
+                    double top = pt.Value.Y;
+                    double bottom = top + container.Bounds.Height;
+                    if (anchorY >= top && anchorY < bottom)
                     {
-                        double itemTop = pt.Value.Y;
-                        double itemBottom = itemTop + container.Bounds.Height;
-                        double localAnchor = vh * 0.35;
-                        if (localAnchor >= itemTop && localAnchor < itemBottom)
+                        if (container.DataContext is ReaderPageItem pageItem)
                         {
-                            bestPageIndex = i;
+                            bestPageIndex = pageItem.Index;
                             break;
                         }
                     }
@@ -1841,21 +1838,11 @@ public partial class ComicReaderControl : UserControl
         }
         catch { }
 
-        // Ưu tiên 2: Fallback toán học O(N) cộng dồn
-        if (bestPageIndex < 0)
+        // Ưu tiên 2: Fallback chính xác theo tỷ lệ Offset / MaxY thực tế của ScrollViewer
+        if (bestPageIndex < 0 && maxY > 0)
         {
-            double runningY = 0;
-            for (int i = 0; i < vm.Pages.Count; i++)
-            {
-                var page = vm.Pages[i];
-                double pH = Math.Max(40, page.DisplayHeight + page.PageMargin.Top + page.PageMargin.Bottom);
-                if (anchorY >= runningY && anchorY < runningY + pH)
-                {
-                    bestPageIndex = i;
-                    break;
-                }
-                runningY += pH;
-            }
+            double ratio = Math.Clamp(scrollViewer.Offset.Y / maxY, 0.0, 1.0);
+            bestPageIndex = (int)Math.Round(ratio * (vm.Pages.Count - 1));
         }
 
         if (bestPageIndex >= 0 && bestPageIndex != vm.CurrentPageIndex)
