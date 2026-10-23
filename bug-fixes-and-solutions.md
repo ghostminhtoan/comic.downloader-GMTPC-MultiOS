@@ -1096,6 +1096,33 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
 
 ---
 
+### 29. BUG-029: Tự Động Neo Floating Bubble Vào Mép Trái/Phải Khi Landscape & Tinh Chỉnh Snap To Edge Toàn Diện Trên Android
+
+- **Triệu chứng**:
+  1. Trên Android khi xoay ngang màn hình (Landscape), bong bóng nổi (Floating Bubble) luôn bị lơ lửng ở vị trí chính giữa màn hình thay vì neo vào mép trái hoặc mép phải.
+  2. Người dùng kéo thả Bubble trong chế độ Landscape thì Bubble không hít mép mà dừng ngay ở giữa màn hình làm che khuất nội dung đọc truyện và giao diện thao tác.
+- **Nguyên nhân gốc rễ**:
+  1. MainActivity khai báo ConfigChanges.Orientation | ConfigChanges.ScreenSize nhưng chưa override OnConfigurationChanged(Configuration newConfig). Do đó khi xoay sang Landscape, tọa độ X của Bubble vẫn giữ nguyên giá trị cũ từ Portrait (~900-1000px); trong màn hình ngang rộng 1920-2400px thì tọa độ 900-1000px nằm ngay chính giữa màn hình!
+  2. Root View của Bubble chưa override OnConfigurationChanged và OnSizeChanged để phản ứng khi ứng dụng chạy ngầm (System Overlay).
+  3. Cả SystemBubbleTouchListener và InAppBubbleTouchListener đều giữ nguyên tọa độ tự do ở giữa màn hình thay vì tự động hít vào mép viền gần nhất khi người dùng buông tay trong chế độ Landscape.
+- **Giải pháp triệt để**:
+  1. *Cơ chế 2 tầng bắt sự kiện xoay màn hình (Activity & View Level)*:
+     - Tạo lớp BubbleContainerView : FrameLayout override OnConfigurationChanged và OnSizeChanged, tự động kích hoạt callback cập nhật lại vị trí neo kể cả khi Bubble đang là System Overlay trên các app khác.
+     - Trong MainActivity, override OnConfigurationChanged và gọi FloatingBubbleManager.HandleOrientationOrSizeChanged(this, newConfig).
+  2. *Hàm tái tính toán vị trí neo HandleOrientationOrSizeChanged*:
+     - Tự động phát hiện trạng thái Landscape (screenWidth > screenHeight).
+     - Tự động neo dính chặt vào mép phải (X = screenWidth - bubbleSize, hoặc nếu đang docked thì thụt 60% vào mép phải) nếu _isRightSide == true, hoặc mép trái (X = 0, hoặc -dockOffset) nếu _isRightSide == false.
+     - Căn chỉnh an toàn tọa độ Y trong phạm vi chiều cao mới của màn hình ngang, tránh bị lọt ra ngoài mép đáy.
+  3. *Tự động Snap To Edge khi kéo thả trong Landscape*:
+     - Trong SystemBubbleTouchListener và InAppBubbleTouchListener: Khi isLandscape == true, thao tác thả tay (MotionEventActions.Up) lập tức kích hoạt hoạt ảnh bay hít vào mép trái (X = 0) hoặc mép phải (X = screenWidth - bubbleSize) gần nhất và set isAtEdge = true.
+- **File can thiệp**: FloatingBubbleManager.cs, MainActivity.cs, ug-fixes-and-solutions.md.
+- **Quy tắc kiểm thử**:
+  - Mở Bong bóng nổi trên Android (cả In-App lẫn System Overlay).
+  - Xoay điện thoại từ Dọc sang Ngang (Landscape): Bong bóng lập tức neo ngay ngắn vào mép trái hoặc mép phải, không còn bị lơ lửng ở chính giữa màn hình.
+  - Trong chế độ Landscape, kéo Bubble ra giữa màn hình rồi thả tay: Bubble tự động bay hít vào mép viền gần nhất và tự động thụt mép sau 3.5 giây.
+
+---
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 

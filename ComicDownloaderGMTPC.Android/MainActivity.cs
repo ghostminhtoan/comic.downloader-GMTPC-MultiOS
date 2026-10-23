@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -898,6 +898,19 @@ public class MainActivity : AvaloniaMainActivity
                 catch { }
             }
         });
+    }
+
+    public override void OnConfigurationChanged(global::Android.Content.Res.Configuration newConfig)
+    {
+        base.OnConfigurationChanged(newConfig);
+        try
+        {
+            FloatingBubbleManager.HandleOrientationOrSizeChanged(this, newConfig);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC_Bubble", $"Lỗi MainActivity OnConfigurationChanged: {ex.Message}");
+        }
     }
 }
 #if ANDROID
