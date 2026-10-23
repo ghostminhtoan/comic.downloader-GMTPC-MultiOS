@@ -494,3 +494,17 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 ### 41. Bố Cục Tab Dual Picture Sort & Chuẩn Tự Động Phóng To ScrollBar 3 Giây Toàn Cục
 - **Dual Picture Sort 2 Tab**: Bố cục phân loại ảnh kép thống nhất dùng 2 Tab độc lập (`📁 THƯ MỤC GỐC` và `✨ ĐÃ LỌC`) trên toàn bộ các nền tảng (Desktop Windows, Linux và Android Mobile/Tablet). Tuyệt đối không dùng 2 panel song song (side-by-side) chia đôi màn hình để bảo toàn 100% không gian hiển thị cho lưới ảnh từ 1 đến 6 cột.
 - **Tự động phóng to ScrollBar dọc 3 giây**: Lắng nghe toàn cục thao tác cuộn (lăn chuột Tunnel/Bubble trên Desktop, cử chỉ vuốt chạm cảm ứng ngón tay Touch Drag trên Android, ScrollChanged từ mọi ScrollViewer). Khi có thao tác cuộn (kể cả khi nội dung ở đỉnh/đáy không cuộn thêm được), toàn bộ ScrollBar dọc đang hiển thị lập tức mở rộng từ 8px lên 22px (Thumb 18px màu Cyber Cyan `#38BDF8`) trong 3.0 giây rồi tự động thu nhỏ lại mượt mà qua Avalonia Transitions. Ngoại lệ duy nhất: Toàn bộ ScrollBar bên trong trình đọc truyện Reader (`ComicReaderControl`/`ComicReaderWindow`) không được phóng to để không che khuất trang truyện.
+
+
+### 42. Nâng Cấp Dual Picture Sort (Hiển Thị File Khi Chọn Source, Finish Folder & Chuẩn Hóa Song Ngữ EN-VI Toàn Bộ Tab)
+- **Hiển Thị File Xem Trước Danh Sách Ảnh Khi Duyệt Thư Mục Gốc (`OpenFilePickerAsync`)**:
+  + Thay thế `OpenFolderPickerAsync` bằng `OpenFilePickerAsync` kèm bộ lọc định dạng ảnh (*.jpg, *.png, *.webp, *.bmp, *.gif, *.avif, *.jxl) và Tất cả tệp (*.*). Người dùng khi mở duyệt thư mục sẽ thấy toàn bộ danh sách file ảnh và thumbnail xem trước, chọn 1 file bất kỳ hoặc bấm Open là hệ thống tự động nhận diện thư mục cha làm `DualSortSourcePath`.
+- **Tích Hợp Thư Mục Hoàn Thành (Finish Folder) & Tự Động Chuyển Bộ Kế Tiếp**:
+  + Bổ sung nút `🏁 Finish` trên Floating BATCH TOOL ngay phía trên hàng nút `Prev / Next`.
+  + Bổ sung cấu hình `🏁 Thư mục đích (Finish):` (nút Chọn, Mở, Finish Folder, TextBox `DualSortFinishPath`) ngay bên dưới dòng Thư mục đã lọc.
+  + Thao tác Finish sẽ di chuyển toàn bộ thư mục bộ ảnh đang thao tác sang `DualSortFinishPath` (tự động xử lý trùng lặp tên folder an toàn), xóa cache Undo/Redo và tự động nạp thư mục anh em tiếp theo.
+- **Chuẩn Hóa Đa Ngôn Ngữ EN - VI Toàn Diện**:
+  + Tự động bóc tách hậu tố emoji/icon ở cuối chuỗi (`Tiếp ⏭️`) và dấu câu đuôi (`:`, `...`, `!`, `?`) trong `LanguageService.Translate`.
+  + Cập nhật từ điển song ngữ trong `languages.md` và `LanguageService.cs` đầy đủ cho các thành phần Dual Picture Sort và Batch Tool.
+  + Mở rộng `TranslateElement` hỗ trợ tự động dịch `PlaceholderText` của TextBox và `Content` của RadioButton.
+  + Tự động cập nhật các nút trạng thái động (`DualSortBatchToggleBtnText`, `DualSortBatchButtonText`, `DualSortPreviewButtonText`) khi thay đổi ngôn ngữ.
