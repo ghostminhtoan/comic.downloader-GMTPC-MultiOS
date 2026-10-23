@@ -1,5 +1,21 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 >nul
+
+:: ========================================================
+:: BAT BUOC LUON LUON HIEN THI TRONG CUA SO COMMAND PROMPT
+:: Giup nguoi dung truc tiep quan sat tien do tung giay
+:: ========================================================
+if not "%IN_VISIBLE_CMD%"=="1" (
+    where python >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        if exist "%~dp0build_in_cmd.py" (
+            python "%~dp0build_in_cmd.py" --target "upload beta.cmd" %*
+            exit /b %ERRORLEVEL%
+        )
+    )
+)
+
 title Upload Release Beta (Direct-to-S3) - Comic Downloader GMTPC
 
 cd /d "%~dp0"
@@ -53,3 +69,4 @@ echo Nhan phim bat ky de dong cua so nay...
 pause >nul
 
 :END_OF_SCRIPT
+endlocal

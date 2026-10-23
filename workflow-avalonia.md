@@ -3,6 +3,7 @@ Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ,
 
 ## 1. Quy tắc nền
 - **QUY TẮC BẮT BUỘC SỐ 1 - TỰ ĐỘNG UPLOAD BETA DÙ USER KHÔNG NHẮC**: Bất kể người dùng có nhắc đến từ khóa "upload beta" hay không, sau khi viết code hoặc sửa bug xong, BẮT BUỘC PHẢI LUÔN LUÔN chạy `build.bat` đóng gói toàn diện cả 3 hệ điều hành (Windows, Linux, Android) và TỰ ĐỘNG UPLOAD RELEASE BETA lên GitHub Release tag `beta` (áp dụng flow mới: rotate backup asset cũ kèm date time + upload asset mới + speed guard sau 12s dưới 10Mbps thì retry vô hạn). Tuyệt đối không được bỏ qua hoặc đợi user nhắc!
+- **QUY TẮC BẮT BUỘC: LUÔN HIỂN THỊ CỬA SỔ COMMAND PROMPT KHI BUILD & UPDATE BETA**: Việc build và update beta từ nay về sau BẮT BUỘC LUÔN LUÔN hiển thị trong cửa sổ Command Prompt riêng biệt trên Desktop (`build_in_cmd.py` / `CREATE_NEW_CONSOLE`) để người dùng luôn luôn nhìn thấy rõ ràng tiến độ đang làm đến đâu (từng bước build [1/4] -> [4/4] và tiến trình upload từng giây).
 - Trả lời tiếng Việt.
 - Dùng emotion phong phú, không lặp lại.
 - Dùng skill [SKILL.md](codeContext;file:///c%3A/Users/Admin/source/repos/ghostminhtoan/subtitle%20edit%20nikse/.agents/skills/teamwork-preview-protocol/SKILL.md)[SKILL.md](codeContext;file:///c%3A/Users/Admin/source/repos/ghostminhtoan/subtitle%20edit%20nikse/.agents/skills/prompt-optimizer/SKILL.md)

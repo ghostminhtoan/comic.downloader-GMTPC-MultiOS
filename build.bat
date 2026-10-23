@@ -1,6 +1,22 @@
 @echo off
 setlocal enabledelayedexpansion
 
+:: ========================================================
+:: BAT BUOC LUON LUON HIEN THI TRONG CUA SO COMMAND PROMPT
+:: Giup nguoi dung truc tiep quan sat tien do tung giay
+:: ========================================================
+if not "%IN_VISIBLE_CMD%"=="1" (
+    where python >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        if exist "%~dp0build_in_cmd.py" (
+            python "%~dp0build_in_cmd.py" --target "build.bat" %*
+            exit /b %ERRORLEVEL%
+        )
+    )
+)
+
+title Comic Downloader GMTPC - Build & Upload Beta (Cross-Platform)
+
 echo ========================================================
 echo   Building and Publishing Comic Downloader GMTPC Avalonia
 echo   Cross-Platform Standalone Packages in Unified \publish\
@@ -22,6 +38,8 @@ echo [1/4] Publishing Windows (win-x64, standalone single-file exe)...
 dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Windows build failed!
+    echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
+    python -c "import time; time.sleep(20)"
     exit /b %ERRORLEVEL%
 )
 
@@ -40,6 +58,8 @@ echo [2/4] Publishing Linux (linux-x64, standalone binary, portable .tar.gz and 
 dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Linux build failed!
+    echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
+    python -c "import time; time.sleep(20)"
     exit /b %ERRORLEVEL%
 )
 
@@ -55,6 +75,8 @@ if exist "package_linux.py" (
     python package_linux.py
     if !ERRORLEVEL! NEQ 0 (
         echo [ERROR] Linux packaging failed!
+        echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
+        python -c "import time; time.sleep(20)"
         exit /b !ERRORLEVEL!
     )
 ) else (
@@ -73,6 +95,8 @@ echo [3/4] Building and Packaging Android (net10.0-android, Signed Standalone AP
 dotnet publish ComicDownloaderGMTPC.Android\ComicDownloaderGMTPC.Android.csproj -c Release -f net10.0-android -o publish
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Android build failed!
+    echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
+    python -c "import time; time.sleep(20)"
     exit /b %ERRORLEVEL%
 )
 
@@ -116,5 +140,8 @@ echo   - Linux Debian Package:  publish\comicdownloadergmtpc_1.0.0_amd64.deb
 echo   - Android APK:           publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk
 echo   - Release Beta:          https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta
 echo ========================================================
+echo.
+echo [HOAN TAT] Tien trinh build va upload Release Beta da xong 100%%.
+echo Cua so se tu dong dong sau 5 giay...
+python -c "import time; time.sleep(5)"
 endlocal
-
