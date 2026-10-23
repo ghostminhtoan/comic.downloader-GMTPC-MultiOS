@@ -518,49 +518,31 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
 
-            Avalonia.Platform.Storage.IStorageFolder? startFolder = null;
-            if (!string.IsNullOrWhiteSpace(DualSortSourcePath) && Directory.Exists(DualSortSourcePath))
+            // Sử dụng FolderOrFilePickerService: Trên Windows và Linux vừa hiển thị danh sách file ảnh trực quan,
+            // vừa chọn folder được (chọn folder hoặc chọn 1 file ảnh bất kỳ thì đều sẽ lấy folder đang chọn).
+            string? chosenFolder = await FolderOrFilePickerService.PickFolderWithFileViewAsync(
+                topLevel,
+                DualSortSourcePath,
+                _langService.CurrentLanguage);
+
+            if (!string.IsNullOrWhiteSpace(chosenFolder) && Directory.Exists(chosenFolder))
             {
-                try
+                DualSortSourcePath = chosenFolder;
+                if (IsAutoCreateSortedFolder)
                 {
-                    startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(DualSortSourcePath);
-                }
-                catch { }
-            }
-
-            // Chọn thư mục như cũ (Select Folder Dialog)
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
-            {
-                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục ảnh gốc cần lọc" : "Select Source Picture Folder",
-                AllowMultiple = false,
-                SuggestedStartLocation = startFolder
-            });
-
-            if (folders != null && folders.Count > 0)
-            {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    DualSortSourcePath = normalized;
-                    if (IsAutoCreateSortedFolder)
+                    string dirName = Path.GetFileName(chosenFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    DualSortSortedPath = Path.Combine(chosenFolder, $"{dirName}-sorted");
+                    try
                     {
-                        string dirName = Path.GetFileName(normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                        DualSortSortedPath = Path.Combine(normalized, $"{dirName}-sorted");
-                        try
+                        if (!Directory.Exists(DualSortSortedPath))
                         {
-                            if (!Directory.Exists(DualSortSortedPath))
-                            {
-                                Directory.CreateDirectory(DualSortSortedPath);
-                            }
+                            Directory.CreateDirectory(DualSortSortedPath);
                         }
-                        catch { }
                     }
-                    await LoadBothSortFoldersAsync();
+                    catch { }
                 }
+                await LoadBothSortFoldersAsync();
             }
         }
         catch (Exception ex)
