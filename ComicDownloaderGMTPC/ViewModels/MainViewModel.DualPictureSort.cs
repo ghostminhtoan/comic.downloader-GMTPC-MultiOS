@@ -255,6 +255,66 @@ public partial class MainViewModel
     }
 
     // ==========================================
+    // TIẾN ĐỘ THAO TÁC ẢNH (CIRCULAR PROGRESS & PHẦN TRĂM)
+    // ==========================================
+    [ObservableProperty]
+    private bool _isDualSortBusy = false;
+
+    [ObservableProperty]
+    private double _dualSortProgressPercent = 0.0;
+
+    [ObservableProperty]
+    private string _dualSortProgressStatusText = string.Empty;
+
+    [ObservableProperty]
+    private string _dualSortProgressDetailText = string.Empty;
+
+    public double DualSortProgressAngle => Math.Clamp(DualSortProgressPercent * 3.6, 0.0, 360.0);
+    public string DualSortProgressPercentText => $"{Math.Round(DualSortProgressPercent)}%";
+
+    partial void OnDualSortProgressPercentChanged(double value)
+    {
+        OnPropertyChanged(nameof(DualSortProgressAngle));
+        OnPropertyChanged(nameof(DualSortProgressPercentText));
+    }
+
+    public void StartDualSortProgress(string status, string detail = "")
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            IsDualSortBusy = true;
+            DualSortProgressPercent = 0;
+            DualSortProgressStatusText = status;
+            DualSortProgressDetailText = detail;
+            OnPropertyChanged(nameof(DualSortProgressAngle));
+            OnPropertyChanged(nameof(DualSortProgressPercentText));
+        });
+    }
+
+    public void UpdateDualSortProgress(double percent, string? status = null, string? detail = null)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            DualSortProgressPercent = Math.Clamp(percent, 0, 100);
+            if (status != null) DualSortProgressStatusText = status;
+            if (detail != null) DualSortProgressDetailText = detail;
+            OnPropertyChanged(nameof(DualSortProgressAngle));
+            OnPropertyChanged(nameof(DualSortProgressPercentText));
+        });
+    }
+
+    public void FinishDualSortProgress()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            IsDualSortBusy = false;
+            DualSortProgressPercent = 100;
+            OnPropertyChanged(nameof(DualSortProgressAngle));
+            OnPropertyChanged(nameof(DualSortProgressPercentText));
+        });
+    }
+
+    // ==========================================
     // CẤU HÌNH THƯ MỤC
     // ==========================================
     [ObservableProperty]
@@ -470,45 +530,26 @@ public partial class MainViewModel
                 catch { }
             }
 
-            // Hiển thị file để người dùng thấy trực tiếp danh sách ảnh bên trong thư mục
-            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+            // Chọn thư mục như cũ (Select Folder Dialog)
+            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
             {
-                Title = _langService.CurrentLanguage == "VI"
-                    ? "Chọn file ảnh bất kỳ để lấy thư mục nguồn (Hiển thị danh sách ảnh)"
-                    : "Select any image file to choose source folder (Shows picture list)",
+                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục ảnh gốc cần lọc" : "Select Source Picture Folder",
                 AllowMultiple = false,
-                SuggestedStartLocation = startFolder,
-                FileTypeFilter = new List<Avalonia.Platform.Storage.FilePickerFileType>
-                {
-                    new(_langService.CurrentLanguage == "VI" ? "Tất cả định dạng ảnh (*.jpg, *.png, *.webp, *.bmp, *.gif, *.avif, *.jxl)" : "All Image Formats (*.jpg, *.png, *.webp, *.bmp, *.gif, *.avif, *.jxl)")
-                    {
-                        Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif", "*.avif", "*.jxl" }
-                    },
-                    new(_langService.CurrentLanguage == "VI" ? "Tất cả tệp (*.*)" : "All Files (*.*)")
-                    {
-                        Patterns = new[] { "*" }
-                    }
-                }
+                SuggestedStartLocation = startFolder
             });
 
-            if (files != null && files.Count > 0)
+            if (folders != null && folders.Count > 0)
             {
-                var selected = files[0];
+                var selected = folders[0];
                 string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
                 string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
                 if (!string.IsNullOrWhiteSpace(normalized))
                 {
-                    string targetDir = normalized;
-                    if (File.Exists(normalized))
-                    {
-                        targetDir = Path.GetDirectoryName(normalized) ?? normalized;
-                    }
-
-                    DualSortSourcePath = targetDir;
+                    DualSortSourcePath = normalized;
                     if (IsAutoCreateSortedFolder)
                     {
-                        string dirName = Path.GetFileName(targetDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                        DualSortSortedPath = Path.Combine(targetDir, $"{dirName}-sorted");
+                        string dirName = Path.GetFileName(normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                        DualSortSortedPath = Path.Combine(normalized, $"{dirName}-sorted");
                         try
                         {
                             if (!Directory.Exists(DualSortSortedPath))
@@ -583,6 +624,115 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
+    public void ClearDualSortFinishFolder()
+    {
+        DualSortFinishPath = string.Empty;
+        DualSortStatusText = _langService.CurrentLanguage == "VI"
+            ? "Đã xóa sạch đường dẫn Thư mục hoàn thành (Finish folder)."
+            : "Cleared Finish folder path.";
+    }
+
+    [RelayCommand]
+    public async Task DualSortDeleteFolderAsync()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(DualSortSourcePath) || !Directory.Exists(DualSortSourcePath))
+            {
+                DualSortStatusText = _langService.CurrentLanguage == "VI"
+                    ? "Chưa chọn Thư mục gốc cần xóa hoặc thư mục không tồn tại!"
+                    : "No source folder selected to delete or folder does not exist!";
+                return;
+            }
+
+            string cleanSource = Path.GetFullPath(DualSortSourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string folderName = Path.GetFileName(cleanSource);
+
+            // Tìm trước thư mục anh em tiếp theo để nạp sau khi xóa
+            var dirs = GetDualSortSiblingFolders();
+            int currentIndex = dirs.FindIndex(d => string.Equals(Path.GetFullPath(d).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), cleanSource, StringComparison.OrdinalIgnoreCase));
+            string? nextDir = null;
+            if (dirs.Count > 1)
+            {
+                if (currentIndex >= 0 && currentIndex < dirs.Count - 1)
+                {
+                    nextDir = dirs[currentIndex + 1];
+                }
+                else if (currentIndex > 0)
+                {
+                    nextDir = dirs[currentIndex - 1];
+                }
+            }
+
+            CloseDualSortPreview();
+
+            StartDualSortProgress(
+                _langService.CurrentLanguage == "VI" ? $"Đang chuyển '{folderName}' vào Thùng rác..." : $"Moving '{folderName}' to Recycle Bin/Trash...",
+                _langService.CurrentLanguage == "VI" ? "Xóa an toàn vào Thùng rác hệ điều hành" : "Safe delete to OS Recycle Bin/Trash");
+
+            await Task.Run(() =>
+            {
+                // 1. Chuyển thư mục nguồn vào thùng rác (Recycle Bin / Trash)
+                RecycleBinService.DeleteToRecycleBin(cleanSource);
+
+                // 2. Nếu có thư mục child đã lọc (sorted) nằm riêng bên ngoài, xóa kèm theo
+                if (!string.IsNullOrWhiteSpace(DualSortSortedPath) && Directory.Exists(DualSortSortedPath))
+                {
+                    string cleanSorted = Path.GetFullPath(DualSortSortedPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    if (!cleanSorted.StartsWith(cleanSource, StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            RecycleBinService.DeleteToRecycleBin(cleanSorted);
+                        }
+                        catch { }
+                    }
+                }
+            });
+
+            AddLog("INFO", $"[DualSort] Đã chuyển thư mục '{folderName}' vào Thùng rác (Recycle Bin / Trash)");
+
+            // Xóa Undo / Redo
+            _dualSortUndoBatches.Clear();
+            _dualSortRedoBatches.Clear();
+            CanUndoSort = false;
+            CanRedoSort = false;
+
+            if (!string.IsNullOrWhiteSpace(nextDir) && Directory.Exists(nextDir))
+            {
+                var newDirs = GetDualSortSiblingFolders();
+                int newIdx = newDirs.FindIndex(d => string.Equals(Path.GetFullPath(d).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), Path.GetFullPath(nextDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase));
+                int humanIdx = newIdx >= 0 ? newIdx + 1 : 1;
+                await SwitchDualSortSourceFolderAsync(nextDir, humanIdx, Math.Max(newDirs.Count, 1));
+                DualSortStatusText = _langService.CurrentLanguage == "VI"
+                    ? $"Đã chuyển '{folderName}' vào Thùng rác! Đã chuyển sang: {Path.GetFileName(nextDir)}"
+                    : $"Moved '{folderName}' to Recycle Bin/Trash! Switched to: {Path.GetFileName(nextDir)}";
+            }
+            else
+            {
+                DualSortSourcePath = string.Empty;
+                DualSortSortedPath = string.Empty;
+                DualSortSourceItems.Clear();
+                DualSortSortedItems.Clear();
+                DualSortSourceCount = 0;
+                DualSortSortedCount = 0;
+                DualSortStatusText = _langService.CurrentLanguage == "VI"
+                    ? $"Đã chuyển '{folderName}' vào Thùng rác! Đã hết thư mục cần lọc."
+                    : $"Moved '{folderName}' to Recycle Bin/Trash! No more folders.";
+            }
+        }
+        catch (Exception ex)
+        {
+            DualSortStatusText = $"[DualSort] Lỗi khi chuyển thư mục vào Thùng rác: {ex.Message}";
+            AddLog("WARN", $"[DualSort] Lỗi khi chuyển thư mục vào Thùng rác: {ex.Message}");
+        }
+        finally
+        {
+            FinishDualSortProgress();
+        }
+    }
+
+    [RelayCommand]
     public async Task DualSortFinishFolderAsync()
     {
         try
@@ -606,9 +756,15 @@ public partial class MainViewModel
 
             CloseDualSortPreview();
 
+            string cleanCurrent = Path.GetFullPath(DualSortSourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string folderName = Path.GetFileName(cleanCurrent);
+
+            StartDualSortProgress(
+                _langService.CurrentLanguage == "VI" ? $"Đang chuyển '{folderName}' sang Finish folder..." : $"Moving '{folderName}' to Finish folder...",
+                _langService.CurrentLanguage == "VI" ? "Hoàn thành phân loại thư mục" : "Finishing folder sort");
+
             // Tìm trước thư mục anh em tiếp theo để nạp tự động sau khi di chuyển
             var dirs = GetDualSortSiblingFolders();
-            string cleanCurrent = Path.GetFullPath(DualSortSourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             int currentIndex = dirs.FindIndex(d => string.Equals(Path.GetFullPath(d).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), cleanCurrent, StringComparison.OrdinalIgnoreCase));
             string? nextDir = null;
             if (dirs.Count > 1)
@@ -628,7 +784,6 @@ public partial class MainViewModel
                 Directory.CreateDirectory(DualSortFinishPath);
             }
 
-            string folderName = Path.GetFileName(cleanCurrent);
             string targetDest = Path.Combine(DualSortFinishPath, folderName);
             int counter = 1;
             while (Directory.Exists(targetDest))
@@ -636,8 +791,11 @@ public partial class MainViewModel
                 targetDest = Path.Combine(DualSortFinishPath, $"{folderName} ({counter++})");
             }
 
+            UpdateDualSortProgress(50);
             // Di chuyển toàn bộ folder hiện tại (bao gồm cả thư mục con nếu có) sang Finish Folder
             Directory.Move(cleanCurrent, targetDest);
+            UpdateDualSortProgress(90);
+
             AddLog("INFO", $"[DualSort] Đã chuyển thư mục '{folderName}' vào Finish folder: {targetDest}");
 
             // Đặt lại Undo / Redo
@@ -674,6 +832,10 @@ public partial class MainViewModel
         {
             DualSortStatusText = $"[DualSort] Lỗi khi chuyển vào Finish folder: {ex.Message}";
             AddLog("WARN", $"[DualSort] Lỗi khi chuyển vào Finish folder: {ex.Message}");
+        }
+        finally
+        {
+            FinishDualSortProgress();
         }
     }
 
@@ -1220,15 +1382,29 @@ public partial class MainViewModel
 
         try
         {
+            if (selectedList.Count > 1)
+            {
+                StartDualSortProgress(
+                    _langService.CurrentLanguage == "VI" ? $"Đang chuyển {selectedList.Count} ảnh sang Thư mục đã lọc..." : $"Moving {selectedList.Count} images...",
+                    selectedList[0].FileName);
+            }
+
             if (!Directory.Exists(DualSortSortedPath))
             {
                 Directory.CreateDirectory(DualSortSortedPath);
             }
 
             var batchHistory = new List<PictureSortHistoryEntry>();
+            int total = selectedList.Count;
 
-            foreach (var item in selectedList)
+            for (int i = 0; i < total; i++)
             {
+                var item = selectedList[i];
+                if (total > 1)
+                {
+                    UpdateDualSortProgress((i + 1) * 100.0 / total, detail: item.FileName);
+                }
+
                 try
                 {
                     string sourceFile = item.FilePath;
@@ -1285,6 +1461,13 @@ public partial class MainViewModel
         {
             DualSortStatusText = $"Lỗi khi chuyển hàng loạt: {ex.Message}";
         }
+        finally
+        {
+            if (selectedList.Count > 1)
+            {
+                FinishDualSortProgress();
+            }
+        }
     }
 
     [RelayCommand]
@@ -1310,15 +1493,29 @@ public partial class MainViewModel
 
         try
         {
+            if (selectedList.Count > 1)
+            {
+                StartDualSortProgress(
+                    _langService.CurrentLanguage == "VI" ? $"Đang trả {selectedList.Count} ảnh về Thư mục gốc..." : $"Returning {selectedList.Count} images...",
+                    selectedList[0].FileName);
+            }
+
             if (!Directory.Exists(DualSortSourcePath))
             {
                 Directory.CreateDirectory(DualSortSourcePath);
             }
 
             var batchHistory = new List<PictureSortHistoryEntry>();
+            int total = selectedList.Count;
 
-            foreach (var item in selectedList)
+            for (int i = 0; i < total; i++)
             {
+                var item = selectedList[i];
+                if (total > 1)
+                {
+                    UpdateDualSortProgress((i + 1) * 100.0 / total, detail: item.FileName);
+                }
+
                 try
                 {
                     string sourceFile = item.FilePath;
@@ -1374,6 +1571,13 @@ public partial class MainViewModel
         catch (Exception ex)
         {
             DualSortStatusText = $"Lỗi khi trả hàng loạt: {ex.Message}";
+        }
+        finally
+        {
+            if (selectedList.Count > 1)
+            {
+                FinishDualSortProgress();
+            }
         }
     }
 
@@ -1955,6 +2159,11 @@ public partial class MainViewModel
             IsDualSortLoading = true;
             DualSortStatusText = "Đang thực hiện Keep Parent (Chuyển thư mục child vào Thùng rác)...";
 
+            StartDualSortProgress(
+                _langService.CurrentLanguage == "VI" ? "Đang thực hiện Keep Parent..." : "Executing Keep Parent...",
+                _langService.CurrentLanguage == "VI" ? "Chuyển thư mục child vào Thùng rác" : "Moving child folder to Trash");
+            UpdateDualSortProgress(40);
+
             await Task.Run(() =>
             {
                 try
@@ -1970,6 +2179,7 @@ public partial class MainViewModel
                     });
                 }
             });
+            UpdateDualSortProgress(90);
 
             DualSortSortedItems.Clear();
             DualSortSortedCount = 0;
@@ -1985,6 +2195,7 @@ public partial class MainViewModel
         finally
         {
             IsDualSortLoading = false;
+            FinishDualSortProgress();
         }
     }
 
@@ -2023,10 +2234,18 @@ public partial class MainViewModel
             IsDualSortLoading = true;
             DualSortStatusText = "Đang thực hiện Keep Child (Chuyển file gốc vào Thùng rác, chuyển ảnh lọc về gốc và dọn child)...";
 
+            StartDualSortProgress(
+                _langService.CurrentLanguage == "VI" ? "Đang thực hiện Keep Child..." : "Executing Keep Child...",
+                _langService.CurrentLanguage == "VI" ? "Dọn ảnh cũ và nạp ảnh lọc" : "Cleaning old pictures and moving sorted");
+
             await Task.Run(() =>
             {
-                // 1. Chuyển toàn bộ file ảnh cũ ở parent vào Thùng rác (Recycle Bin / Trash)
                 var sourceFiles = Directory.EnumerateFiles(fullSource, "*.*", SearchOption.TopDirectoryOnly).ToList();
+                var childFiles = Directory.Exists(fullSorted) ? Directory.EnumerateFiles(fullSorted, "*.*", SearchOption.TopDirectoryOnly).ToList() : new List<string>();
+                int totalSteps = sourceFiles.Count + childFiles.Count + 1;
+                int currentStep = 0;
+
+                // 1. Chuyển toàn bộ file ảnh cũ ở parent vào Thùng rác (Recycle Bin / Trash)
                 foreach (var file in sourceFiles)
                 {
                     try
@@ -2034,12 +2253,13 @@ public partial class MainViewModel
                         RecycleBinService.DeleteToRecycleBin(file);
                     }
                     catch { }
+                    currentStep++;
+                    UpdateDualSortProgress(currentStep * 100.0 / Math.Max(totalSteps, 1), detail: Path.GetFileName(file));
                 }
 
                 // 2. Move toàn bộ file ở child vào parent
                 if (Directory.Exists(fullSorted))
                 {
-                    var childFiles = Directory.EnumerateFiles(fullSorted, "*.*", SearchOption.TopDirectoryOnly).ToList();
                     foreach (var file in childFiles)
                     {
                         try
@@ -2053,6 +2273,8 @@ public partial class MainViewModel
                             File.Move(file, destPath);
                         }
                         catch { }
+                        currentStep++;
+                        UpdateDualSortProgress(currentStep * 100.0 / Math.Max(totalSteps, 1), detail: Path.GetFileName(file));
                     }
 
                     // 3. Chuyển thư mục child vào Thùng rác
@@ -2061,6 +2283,8 @@ public partial class MainViewModel
                         RecycleBinService.DeleteToRecycleBin(fullSorted);
                     }
                     catch { }
+                    currentStep++;
+                    UpdateDualSortProgress(100);
                 }
             });
 
@@ -2077,6 +2301,7 @@ public partial class MainViewModel
         finally
         {
             IsDualSortLoading = false;
+            FinishDualSortProgress();
         }
     }
 
@@ -2122,10 +2347,17 @@ public partial class MainViewModel
             IsDualSortLoading = true;
             DualSortStatusText = $"Đang thực hiện 'Chỉ giữ đã chọn' (Giữ {totalSelected} ảnh, chuyển các ảnh không chọn và thư mục child vào Thùng rác)...";
 
+            StartDualSortProgress(
+                _langService.CurrentLanguage == "VI" ? "Đang thực hiện Chỉ giữ đã chọn..." : "Executing Keep Selected Only...",
+                _langService.CurrentLanguage == "VI" ? $"Giữ {totalSelected} ảnh, dọn các ảnh còn lại" : $"Keeping {totalSelected} pictures");
+
             await Task.Run(() =>
             {
-                // 1. Chuyển các file ở Thư mục Gốc KHÔNG ĐƯỢC CHỌN vào Thùng rác
                 var allSourceDiskFiles = Directory.EnumerateFiles(fullSource, "*.*", SearchOption.TopDirectoryOnly).ToList();
+                int totalSteps = allSourceDiskFiles.Count + selectedSortedFiles.Count + 1;
+                int currentStep = 0;
+
+                // 1. Chuyển các file ở Thư mục Gốc KHÔNG ĐƯỢC CHỌN vào Thùng rác
                 foreach (var file in allSourceDiskFiles)
                 {
                     if (!selectedSourceFiles.Contains(file))
@@ -2136,6 +2368,8 @@ public partial class MainViewModel
                         }
                         catch { }
                     }
+                    currentStep++;
+                    UpdateDualSortProgress(currentStep * 100.0 / Math.Max(totalSteps, 1), detail: Path.GetFileName(file));
                 }
 
                 // 2. Chuyển các file ĐƯỢC CHỌN ở Child Folder về Gốc (Parent)
@@ -2152,6 +2386,8 @@ public partial class MainViewModel
                         File.Move(file, destPath);
                     }
                     catch { }
+                    currentStep++;
+                    UpdateDualSortProgress(currentStep * 100.0 / Math.Max(totalSteps, 1), detail: Path.GetFileName(file));
                 }
 
                 // 3. Xóa luôn cả child folder sort (chuyển vào Thùng rác an toàn)
@@ -2162,6 +2398,8 @@ public partial class MainViewModel
                         RecycleBinService.DeleteToRecycleBin(fullSorted);
                     }
                     catch { }
+                    currentStep++;
+                    UpdateDualSortProgress(100);
                 }
             });
 
@@ -2184,6 +2422,7 @@ public partial class MainViewModel
         finally
         {
             IsDualSortLoading = false;
+            FinishDualSortProgress();
         }
     }
 

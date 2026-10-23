@@ -508,3 +508,18 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Cập nhật từ điển song ngữ trong `languages.md` và `LanguageService.cs` đầy đủ cho các thành phần Dual Picture Sort và Batch Tool.
   + Mở rộng `TranslateElement` hỗ trợ tự động dịch `PlaceholderText` của TextBox và `Content` của RadioButton.
   + Tự động cập nhật các nút trạng thái động (`DualSortBatchToggleBtnText`, `DualSortBatchButtonText`, `DualSortPreviewButtonText`) khi thay đổi ngôn ngữ.
+
+
+### 42. Nâng Cấp Dual Picture Sort (Hiển Thị File Khi Chọn Source, Finish Folder & Chuẩn Hóa Song Ngữ EN-VI Toàn Bộ Tab)
+- **Hiển Thị File Xem Trước Danh Sách Ảnh Khi Duyệt Thư Mục Gốc (`OpenFilePickerAsync`)**:
+  + Thay thế `OpenFolderPickerAsync` bằng `OpenFilePickerAsync` kèm bộ lọc định dạng ảnh (*.jpg, *.png, *.webp, *.bmp, *.gif, *.avif, *.jxl) và Tất cả tệp (*.*). Người dùng khi mở duyệt thư mục sẽ thấy toàn bộ danh sách file ảnh và thumbnail xem trước, chọn 1 file bất kỳ hoặc bấm Open là hệ thống tự động nhận diện thư mục cha làm `DualSortSourcePath`.
+- **Tích Hợp Thư Mục Hoàn Thành (Finish Folder) & Tự Động Chuyển Bộ Kế Tiếp**:
+  + Bổ sung nút `🏁 Finish` trên Floating BATCH TOOL ngay phía trên hàng nút `Prev / Next`.
+  + Bổ sung cấu hình `🏁 Thư mục đích (Finish):` (nút Chọn, Mở, Finish Folder, TextBox `DualSortFinishPath`) ngay bên dưới dòng Thư mục đã lọc.
+  + Thao tác Finish sẽ di chuyển toàn bộ thư mục bộ ảnh đang thao tác sang `DualSortFinishPath` (tự động xử lý trùng lặp tên folder an toàn), xóa cache Undo/Redo và tự động nạp thư mục anh em tiếp theo.
+- **Chuẩn Hóa Đa Ngôn Ngữ EN - VI Toàn Diện**:
+  + Tự động bóc tách hậu tố emoji/icon ở cuối chuỗi (`Tiếp ⏭️`) và dấu câu đuôi (`:`, `...`, `!`, `?`) trong `LanguageService.Translate`.
+  + Cập nhật từ điển song ngữ trong `languages.md` và `LanguageService.cs` đầy đủ cho các thành phần Dual Picture Sort và Batch Tool.
+  + Mở rộng `TranslateElement` hỗ trợ tự động dịch `PlaceholderText` của TextBox và `Content` của RadioButton.
+  + Tự động cập nhật các nút trạng thái động (`DualSortBatchToggleBtnText`, `DualSortBatchButtonText`, `DualSortPreviewButtonText`) khi thay đổi ngôn ngữ.
+
