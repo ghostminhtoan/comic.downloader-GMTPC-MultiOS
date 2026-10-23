@@ -88,17 +88,42 @@ public class LanguageService
 
         string trimmed = text.Trim();
 
-        // 1. Bóc tách tiền tố emoji / icon
+        // 1. Bóc tách tiền tố emoji / icon ở đầu chuỗi
         string prefix = string.Empty;
-        var iconMatch = Regex.Match(trimmed, @"^([^\p{L}\p{N}]+)(?=[\p{L}\p{N}])");
-        if (iconMatch.Success)
+        var iconStartMatch = Regex.Match(trimmed, @"^([^\p{L}\p{N}]+)(?=[\p{L}\p{N}])");
+        if (iconStartMatch.Success)
         {
-            prefix = iconMatch.Groups[1].Value;
+            prefix = iconStartMatch.Groups[1].Value;
             trimmed = trimmed.Substring(prefix.Length).Trim();
         }
 
-        // 2. Xử lý mẫu chuỗi song ngữ lồng nhau dạng "Left (Right)"
-        // Ví dụ: "TAB SOURCE (NGUỒN TRUYỆN)", "Mở Web (Browse)", "CÀO MỚI (CRAWL)", "Bong bóng (Bubble)", "Queue (Hàng chờ)"
+        // 2. Bóc tách hậu tố emoji / icon ở cuối chuỗi (ví dụ: 'Tiếp ⏭️' -> bóc ' ⏭️')
+        string postfix = string.Empty;
+        var iconEndMatch = Regex.Match(trimmed, @"(?<=[\p{L}\p{N}])([^\p{L}\p{N}:.!?]+)$");
+        if (iconEndMatch.Success)
+        {
+            postfix = iconEndMatch.Groups[1].Value;
+            trimmed = trimmed.Substring(0, trimmed.Length - postfix.Length).Trim();
+        }
+
+        // 3. Bóc tách dấu câu ở đuôi (: hoặc ... hoặc ! hoặc ?)
+        string punctSuffix = string.Empty;
+        var punctMatch = Regex.Match(trimmed, @"([:.!?]+)$");
+        if (punctMatch.Success)
+        {
+            punctSuffix = punctMatch.Groups[1].Value;
+            trimmed = trimmed.Substring(0, trimmed.Length - punctSuffix.Length).Trim();
+        }
+
+        string translatedCore = TranslateCore(trimmed, toVietnamese);
+        return prefix + translatedCore + punctSuffix + postfix;
+    }
+
+    private string TranslateCore(string trimmed, bool toVietnamese)
+    {
+        if (string.IsNullOrWhiteSpace(trimmed)) return trimmed;
+
+        // Xử lý mẫu chuỗi song ngữ lồng nhau dạng "Left (Right)"
         var mixedMatch = Regex.Match(trimmed, @"^(?<left>[^()]+?)\s*\((?<right>[^()]+)\)$");
         if (mixedMatch.Success)
         {
@@ -108,58 +133,58 @@ public class LanguageService
             if (toVietnamese)
             {
                 if (LooksLikeVietnamese(left) && !LooksLikeVietnamese(right))
-                    return prefix + Translate(left, true);
+                    return TranslateCore(left, true);
                 if (LooksLikeVietnamese(right) && !LooksLikeVietnamese(left))
-                    return prefix + Translate(right, true);
+                    return TranslateCore(right, true);
 
-                if (_enToVi.TryGetValue(left, out var viFromLeft)) return prefix + viFromLeft;
-                if (_enToVi.TryGetValue(right, out var viFromRight)) return prefix + viFromRight;
-                if (_viToEn.ContainsKey(left)) return prefix + left;
-                if (_viToEn.ContainsKey(right)) return prefix + right;
+                if (_enToVi.TryGetValue(left, out var viFromLeft)) return viFromLeft;
+                if (_enToVi.TryGetValue(right, out var viFromRight)) return viFromRight;
+                if (_viToEn.ContainsKey(left)) return left;
+                if (_viToEn.ContainsKey(right)) return right;
 
-                return prefix + (LooksLikeVietnamese(right) ? right : left);
+                return LooksLikeVietnamese(right) ? right : left;
             }
             else
             {
                 if (!LooksLikeVietnamese(left) && LooksLikeVietnamese(right))
-                    return prefix + Translate(left, false);
+                    return TranslateCore(left, false);
                 if (!LooksLikeVietnamese(right) && LooksLikeVietnamese(left))
-                    return prefix + Translate(right, false);
+                    return TranslateCore(right, false);
 
-                if (_viToEn.TryGetValue(left, out var enFromLeft)) return prefix + enFromLeft;
-                if (_viToEn.TryGetValue(right, out var enFromRight)) return prefix + enFromRight;
-                if (_enToVi.ContainsKey(left)) return prefix + left;
-                if (_enToVi.ContainsKey(right)) return prefix + right;
+                if (_viToEn.TryGetValue(left, out var enFromLeft)) return enFromLeft;
+                if (_viToEn.TryGetValue(right, out var enFromRight)) return enFromRight;
+                if (_enToVi.ContainsKey(left)) return left;
+                if (_enToVi.ContainsKey(right)) return right;
 
-                return prefix + (!LooksLikeVietnamese(left) ? left : right);
+                return !LooksLikeVietnamese(left) ? left : right;
             }
         }
 
-        // 3. Tra từ điển chuẩn xác theo core text
+        // Tra từ điển chuẩn xác theo core text
         if (toVietnamese)
         {
             if (_enToVi.TryGetValue(trimmed, out var vi) && !string.IsNullOrWhiteSpace(vi))
             {
-                return prefix + vi;
+                return vi;
             }
             if (_viToEn.ContainsKey(trimmed))
             {
-                return prefix + trimmed;
+                return trimmed;
             }
         }
         else
         {
             if (_viToEn.TryGetValue(trimmed, out var en) && !string.IsNullOrWhiteSpace(en))
             {
-                return prefix + en;
+                return en;
             }
             if (_enToVi.ContainsKey(trimmed))
             {
-                return prefix + trimmed;
+                return trimmed;
             }
         }
 
-        return text;
+        return trimmed;
     }
 
     private static bool LooksLikeVietnamese(string s)
@@ -223,7 +248,57 @@ public class LanguageService
         AddPair("Preserve bookmarks", "Bảo tồn Bookmarks");
         AddPair("Offline Missing Scanner", "Quét Chap Thiếu Offline");
         AddPair("Batch Rename", "Đổi Tên Hàng Loạt");
-        AddPair("Dual Picture Sort", "Phân Loại Ảnh Kép");
+                // Dual Picture Sort & Batch Tool
+        AddPair("Dual Picture Sort", "Lọc ảnh song song");
+        AddPair("Source Folder", "Thư mục gốc");
+        AddPair("Sorted Folder", "Thư mục đã lọc");
+        AddPair("Finish Folder", "Thư mục hoàn thành");
+        AddPair("Destination Folder", "Thư mục đích");
+        AddPair("SOURCE FOLDER", "THƯ MỤC GỐC");
+        AddPair("SORTED", "ĐÃ LỌC");
+        AddPair("SORTED (CHILD)", "ĐÃ LỌC (SORTED)");
+        AddPair("Select...", "Chọn...");
+        AddPair("Select", "Chọn");
+        AddPair("Browse...", "Chọn...");
+        AddPair("Browse", "Chọn");
+        AddPair("Open", "Mở");
+        AddPair("Prev", "Trước");
+        AddPair("Previous", "Trước");
+        AddPair("Next", "Tiếp");
+        AddPair("Previous Folder", "Thư mục trước");
+        AddPair("Next Folder", "Thư mục tiếp theo");
+        AddPair("Finish", "Hoàn thành");
+        AddPair("Auto create '...-sorted' subfolder", "Tự động tạo thư mục con '...-sorted'");
+        AddPair("Move pictures (Move)", "Di chuyển ảnh (Move)");
+        AddPair("Move pictures", "Di chuyển ảnh");
+        AddPair("Move", "Di chuyển ảnh");
+        AddPair("Copy pictures (Copy)", "Sao chép ảnh (Copy)");
+        AddPair("Copy pictures", "Sao chép ảnh");
+        AddPair("Copy", "Sao chép ảnh");
+        AddPair("1-Click Fast Sort", "Chuyển ngay khi Click");
+        AddPair("Chuyển ngay khi Click (1-Click Fast Sort)", "1-Click Fast Sort");
+        AddPair("Keep Parent", "Giữ Gốc");
+        AddPair("Giữ Gốc (Keep Parent)", "Keep Parent");
+        AddPair("Keep Child", "Giữ Đã Lọc");
+        AddPair("Giữ Đã Lọc (Keep Child)", "Keep Child");
+        AddPair("Keep Selected Only", "Chỉ Giữ Đã Chọn");
+        AddPair("Keep Selected", "Giữ Đã Chọn");
+        AddPair("Refresh All", "Làm mới tất cả");
+        AddPair("Undo (Ctrl+Z)", "Hoàn tác (Ctrl+Z)");
+        AddPair("Undo", "Hoàn tác");
+        AddPair("Redo", "Làm lại");
+        AddPair("Move to Sorted", "Sang Sort");
+        AddPair("Return to Source", "Về Gốc");
+        AddPair("Grid", "Lưới");
+        AddPair("Grid:", "Lưới:");
+        AddPair("pictures", "ảnh");
+        AddPair("images", "ảnh");
+        AddPair("Search file name in Source folder...", "Tìm tên file trong Thư mục gốc...");
+        AddPair("Search file name in Sorted folder...", "Tìm tên file trong Thư mục đã lọc...");
+        AddPair("Select source folder containing pictures to sort (e.g. comic\\ranma fanart)...", "Chọn thư mục chứa ảnh gốc cần lọc (ví dụ: comic\\ranma fanart)...");
+        AddPair("Select or auto create sorted folder (e.g. comic\\ranma fanart\\ranma fanart-sorted)...", "Chọn hoặc tự động tạo thư mục đã lọc (ví dụ: comic\\ranma fanart\\ranma fanart-sorted)...");
+        AddPair("Select folder containing finished sorted pictures (Finish folder)...", "Chọn thư mục chứa các bộ ảnh đã lọc xong (Finish folder)...");
+
         AddPair("File Association", "Liên Kết Tệp");
 
         // Modes & Options

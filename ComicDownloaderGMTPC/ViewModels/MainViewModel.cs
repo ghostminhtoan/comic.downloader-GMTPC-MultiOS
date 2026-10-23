@@ -2116,6 +2116,16 @@ public partial class MainViewModel : ViewModelBase
             UpdateButtonLabel = isVi ? "🚀 CẬP NHẬT RELEASE" : "🚀 UPDATE RELEASE";
             UpdateBetaButtonLabel = isVi ? "🧪 CẬP NHẬT BETA" : "🧪 UPDATE BETA";
         }
+
+        UpdateDualSortLanguageStrings();
+    }
+
+    private void UpdateDualSortLanguageStrings()
+    {
+        OnPropertyChanged(nameof(DualSortBatchToggleBtnText));
+        OnPropertyChanged(nameof(DualSortBatchButtonText));
+        OnPropertyChanged(nameof(DualSortPreviewButtonText));
+        OnPropertyChanged(nameof(DualSortPreviewButtonShortText));
     }
 
     private int _isProgressUiUpdatePending;

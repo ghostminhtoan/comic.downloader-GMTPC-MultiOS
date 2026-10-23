@@ -7773,6 +7773,28 @@
 
 
 
+                                            <!-- Hàng 2.5: Thư mục hoàn thành (Finish folder) -->
+
+                                            <StackPanel Spacing="3">
+
+                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+                                                    <TextBlock Text="🏁 Thư mục đích (Finish):" Foreground="#34D399" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+
+                                                    <Button Command="{Binding BrowseDualSortFinishFolderCommand}" Content="📁 Chọn..." Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
+
+                                                    <Button Command="{Binding OpenDualSortFinishFolderCommand}" Content="🔍 Mở" Background="#1E293B" Foreground="#34D399" FontWeight="SemiBold" FontSize="10.5" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" ToolTip.Tip="Mở thư mục hoàn thành trong trình quản lý tệp" />
+
+                                                    <Button Command="{Binding DualSortFinishFolderCommand}" Content="🏁 Finish Folder" Background="#065F46" Foreground="#FFFFFF" BorderBrush="#10B981" BorderThickness="1" FontWeight="Bold" FontSize="10.5" Padding="10,3" CornerRadius="4" ToolTip.Tip="Chuyển thư mục hiện tại vào Thư mục hoàn thành (Finish folder) và tự động chuyển sang thư mục kế tiếp" />
+
+                                                </WrapPanel>
+
+                                                <TextBox Text="{Binding DualSortFinishPath}" PlaceholderText="Chọn thư mục chứa các bộ ảnh đã lọc xong (Finish folder)..." Height="30" CornerRadius="4" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#34D399" BorderThickness="1" FontSize="10.5" VerticalContentAlignment="Center" Padding="8,2" />
+
+                                            </StackPanel>
+
+
+
                                             <!-- Hàng 3: Tùy chọn (WrapPanel thích ứng) -->
 
                                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -9971,6 +9993,26 @@
                 <!-- Cụm tính năng thiết yếu (Luôn hiển thị kể cả khi thu nhỏ: Previous/Next Folder, Start/Stop Part, Preview) -->
 
                 <StackPanel x:Name="DualSortBatchEssentialPanel" Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
+
+                    <!-- Nút Finish Folder: Chuyển thư mục hiện tại vào Thư mục hoàn thành và sang thư mục tiếp theo -->
+
+                    <Button Command="{Binding DualSortFinishFolderCommand}"
+
+                            Background="#065F46" Foreground="#34D399" BorderBrush="#10B981" BorderThickness="1.2"
+
+                            FontWeight="Bold" CornerRadius="10" Padding="2,2" Width="92" Height="26" Margin="0,1,0,1"
+
+                            ToolTip.Tip="Finish Folder: Chuyển thư mục hiện tại vào Thư mục hoàn thành (Finish folder) và sang thư mục tiếp theo">
+
+                        <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
+
+                            <TextBlock Text="🏁" FontSize="9" VerticalAlignment="Center" />
+
+                            <TextBlock Text="Finish" FontSize="8.5" FontWeight="Bold" VerticalAlignment="Center" />
+
+                        </StackPanel>
+
+                    </Button>
 
                     <!-- Điều hướng Thư mục: Previous Folder (Trước) & Next Folder (Tiếp) -->
 

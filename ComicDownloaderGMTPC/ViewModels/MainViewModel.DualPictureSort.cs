@@ -122,7 +122,7 @@ public partial class MainViewModel
     public bool IsDualSortBatchToolbarRealVisible =>
         SelectedRootTabIndex == 3 && SelectedToolsTabIndex == 7 && IsDualSortBatchToolbarVisible;
 
-    public string DualSortBatchToggleBtnText => IsDualSortBatchToolbarVisible ? "⚡ BATCH TOOL: BẬT" : "⚡ BATCH TOOL: TẮT";
+    public string DualSortBatchToggleBtnText => IsDualSortBatchToolbarVisible ? (_langService.CurrentLanguage == "VI" ? "⚡ BATCH TOOL: BẬT" : "⚡ BATCH TOOL: ON") : (_langService.CurrentLanguage == "VI" ? "⚡ BATCH TOOL: TẮT" : "⚡ BATCH TOOL: OFF");
     public string DualSortBatchToggleBtnBg => IsDualSortBatchToolbarVisible ? "#0284C7" : "#1E293B";
     public string DualSortBatchToggleBtnBorder => IsDualSortBatchToolbarVisible ? "#38BDF8" : "#475569";
     public string DualSortBatchToggleBtnFg => IsDualSortBatchToolbarVisible ? "#FFFFFF" : "#94A3B8";
@@ -146,18 +146,19 @@ public partial class MainViewModel
     {
         get
         {
+            bool isVi = _langService.CurrentLanguage == "VI";
             if (!IsBatchModeActive)
                 return $"⚡ Start (Part {BatchPartNumber})";
             if (BatchStartItem == null)
-                return $"📍 Part {BatchPartNumber}: Đầu";
-            return $"🏁 Part {BatchPartNumber}: Cuối";
+                return isVi ? $"📍 Part {BatchPartNumber}: Đầu" : $"📍 Part {BatchPartNumber}: Start";
+            return isVi ? $"🏁 Part {BatchPartNumber}: Cuối" : $"🏁 Part {BatchPartNumber}: End";
         }
     }
 
     public string DualSortBatchButtonBg => IsBatchModeActive ? "#D97706" : "#1E293B";
     public string DualSortBatchButtonBorder => IsBatchModeActive ? "#F59E0B" : "#475569";
     public string DualSortBatchButtonFg => IsBatchModeActive ? "#FFFFFF" : "#38BDF8";
-    public string DualSortPreviewButtonShortText => IsDualSortPreviewEnabled ? "👁️ PREVIEW: BẬT" : "👁️ PREVIEW: TẮT";
+    public string DualSortPreviewButtonShortText => IsDualSortPreviewEnabled ? (_langService.CurrentLanguage == "VI" ? "👁️ PREVIEW: BẬT" : "👁️ PREVIEW: ON") : (_langService.CurrentLanguage == "VI" ? "👁️ PREVIEW: TẮT" : "👁️ PREVIEW: OFF");
 
     public void RefreshBatchProperties()
     {
@@ -263,6 +264,9 @@ public partial class MainViewModel
     private string _dualSortSortedPath = string.Empty;
 
     [ObservableProperty]
+    private string _dualSortFinishPath = string.Empty;
+
+    [ObservableProperty]
     private bool _isAutoCreateSortedFolder = true;
 
     [ObservableProperty]
@@ -330,7 +334,7 @@ public partial class MainViewModel
     [ObservableProperty]
     private string _dualSortPreviewAnimatedBadge = string.Empty;
 
-    public string DualSortPreviewButtonText => IsDualSortPreviewEnabled ? "👁️ PREVIEW: BẬT" : "👁️ PREVIEW: TẮT";
+    public string DualSortPreviewButtonText => IsDualSortPreviewEnabled ? (_langService.CurrentLanguage == "VI" ? "👁️ PREVIEW: BẬT" : "👁️ PREVIEW: ON") : (_langService.CurrentLanguage == "VI" ? "👁️ PREVIEW: TẮT" : "👁️ PREVIEW: OFF");
     public string DualSortPreviewButtonBg => IsDualSortPreviewEnabled ? "#064E3B" : "#1E293B";
     public string DualSortPreviewButtonBorder => IsDualSortPreviewEnabled ? "#10B981" : "#475569";
     public string DualSortPreviewButtonFg => IsDualSortPreviewEnabled ? "#FDE047" : "#94A3B8";
@@ -456,24 +460,55 @@ public partial class MainViewModel
             var topLevel = GetTopLevel();
             if (topLevel?.StorageProvider == null) return;
 
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            Avalonia.Platform.Storage.IStorageFolder? startFolder = null;
+            if (!string.IsNullOrWhiteSpace(DualSortSourcePath) && Directory.Exists(DualSortSourcePath))
             {
-                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục ảnh gốc cần lọc" : "Select Source Picture Folder",
-                AllowMultiple = false
+                try
+                {
+                    startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(DualSortSourcePath);
+                }
+                catch { }
+            }
+
+            // Hiển thị file để người dùng thấy trực tiếp danh sách ảnh bên trong thư mục
+            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+            {
+                Title = _langService.CurrentLanguage == "VI"
+                    ? "Chọn file ảnh bất kỳ để lấy thư mục nguồn (Hiển thị danh sách ảnh)"
+                    : "Select any image file to choose source folder (Shows picture list)",
+                AllowMultiple = false,
+                SuggestedStartLocation = startFolder,
+                FileTypeFilter = new List<Avalonia.Platform.Storage.FilePickerFileType>
+                {
+                    new(_langService.CurrentLanguage == "VI" ? "Tất cả định dạng ảnh (*.jpg, *.png, *.webp, *.bmp, *.gif, *.avif, *.jxl)" : "All Image Formats (*.jpg, *.png, *.webp, *.bmp, *.gif, *.avif, *.jxl)")
+                    {
+                        Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif", "*.avif", "*.jxl" }
+                    },
+                    new(_langService.CurrentLanguage == "VI" ? "Tất cả tệp (*.*)" : "All Files (*.*)")
+                    {
+                        Patterns = new[] { "*" }
+                    }
+                }
             });
 
-            if (folders != null && folders.Count > 0)
+            if (files != null && files.Count > 0)
             {
-                var selected = folders[0];
+                var selected = files[0];
                 string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
                 string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
                 if (!string.IsNullOrWhiteSpace(normalized))
                 {
-                    DualSortSourcePath = normalized;
+                    string targetDir = normalized;
+                    if (File.Exists(normalized))
+                    {
+                        targetDir = Path.GetDirectoryName(normalized) ?? normalized;
+                    }
+
+                    DualSortSourcePath = targetDir;
                     if (IsAutoCreateSortedFolder)
                     {
-                        string dirName = Path.GetFileName(normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                        DualSortSortedPath = Path.Combine(normalized, $"{dirName}-sorted");
+                        string dirName = Path.GetFileName(targetDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                        DualSortSortedPath = Path.Combine(targetDir, $"{dirName}-sorted");
                         try
                         {
                             if (!Directory.Exists(DualSortSortedPath))
@@ -490,6 +525,155 @@ public partial class MainViewModel
         catch (Exception ex)
         {
             AddLog("WARN", $"[DualSort] Lỗi khi chọn thư mục gốc: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task BrowseDualSortFinishFolderAsync()
+    {
+        try
+        {
+            var topLevel = GetTopLevel();
+            if (topLevel?.StorageProvider == null) return;
+
+            Avalonia.Platform.Storage.IStorageFolder? startFolder = null;
+            if (!string.IsNullOrWhiteSpace(DualSortFinishPath) && Directory.Exists(DualSortFinishPath))
+            {
+                try
+                {
+                    startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(DualSortFinishPath);
+                }
+                catch { }
+            }
+
+            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
+            {
+                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục hoàn thành (Finish folder)" : "Select Finish Picture Folder",
+                AllowMultiple = false,
+                SuggestedStartLocation = startFolder
+            });
+
+            if (folders != null && folders.Count > 0)
+            {
+                var selected = folders[0];
+                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    DualSortFinishPath = normalized;
+                    DualSortStatusText = _langService.CurrentLanguage == "VI"
+                        ? $"Đã chọn Finish folder: {Path.GetFileName(normalized)}"
+                        : $"Selected Finish folder: {Path.GetFileName(normalized)}";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"[DualSort] Lỗi khi chọn thư mục hoàn thành: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public void OpenDualSortFinishFolder()
+    {
+        if (!string.IsNullOrWhiteSpace(DualSortFinishPath))
+        {
+            _downloadEngine.OpenDirectoryInExplorer(DualSortFinishPath);
+        }
+    }
+
+    [RelayCommand]
+    public async Task DualSortFinishFolderAsync()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(DualSortSourcePath) || !Directory.Exists(DualSortSourcePath))
+            {
+                DualSortStatusText = _langService.CurrentLanguage == "VI"
+                    ? "Chưa chọn Thư mục gốc cần hoàn thành hoặc thư mục không tồn tại!"
+                    : "No source folder selected to finish or folder does not exist!";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(DualSortFinishPath))
+            {
+                DualSortStatusText = _langService.CurrentLanguage == "VI"
+                    ? "Vui lòng chọn Thư mục hoàn thành (Finish folder) trước!"
+                    : "Please select Finish folder first!";
+                await BrowseDualSortFinishFolderAsync();
+                if (string.IsNullOrWhiteSpace(DualSortFinishPath)) return;
+            }
+
+            CloseDualSortPreview();
+
+            // Tìm trước thư mục anh em tiếp theo để nạp tự động sau khi di chuyển
+            var dirs = GetDualSortSiblingFolders();
+            string cleanCurrent = Path.GetFullPath(DualSortSourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            int currentIndex = dirs.FindIndex(d => string.Equals(Path.GetFullPath(d).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), cleanCurrent, StringComparison.OrdinalIgnoreCase));
+            string? nextDir = null;
+            if (dirs.Count > 1)
+            {
+                if (currentIndex >= 0 && currentIndex < dirs.Count - 1)
+                {
+                    nextDir = dirs[currentIndex + 1];
+                }
+                else if (currentIndex > 0)
+                {
+                    nextDir = dirs[currentIndex - 1];
+                }
+            }
+
+            if (!Directory.Exists(DualSortFinishPath))
+            {
+                Directory.CreateDirectory(DualSortFinishPath);
+            }
+
+            string folderName = Path.GetFileName(cleanCurrent);
+            string targetDest = Path.Combine(DualSortFinishPath, folderName);
+            int counter = 1;
+            while (Directory.Exists(targetDest))
+            {
+                targetDest = Path.Combine(DualSortFinishPath, $"{folderName} ({counter++})");
+            }
+
+            // Di chuyển toàn bộ folder hiện tại (bao gồm cả thư mục con nếu có) sang Finish Folder
+            Directory.Move(cleanCurrent, targetDest);
+            AddLog("INFO", $"[DualSort] Đã chuyển thư mục '{folderName}' vào Finish folder: {targetDest}");
+
+            // Đặt lại Undo / Redo
+            _dualSortUndoBatches.Clear();
+            _dualSortRedoBatches.Clear();
+            CanUndoSort = false;
+            CanRedoSort = false;
+
+            if (!string.IsNullOrWhiteSpace(nextDir) && Directory.Exists(nextDir))
+            {
+                // Tìm lại danh sách dirs mới
+                var newDirs = GetDualSortSiblingFolders();
+                int newIdx = newDirs.FindIndex(d => string.Equals(Path.GetFullPath(d).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), Path.GetFullPath(nextDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase));
+                int humanIdx = newIdx >= 0 ? newIdx + 1 : 1;
+                await SwitchDualSortSourceFolderAsync(nextDir, humanIdx, Math.Max(newDirs.Count, 1));
+                DualSortStatusText = _langService.CurrentLanguage == "VI"
+                    ? $"Đã hoàn thành '{folderName}' -> Finish! Tự chuyển sang: {Path.GetFileName(nextDir)}"
+                    : $"Finished '{folderName}' -> Moved to Finish! Switched to: {Path.GetFileName(nextDir)}";
+            }
+            else
+            {
+                DualSortSourcePath = string.Empty;
+                DualSortSortedPath = string.Empty;
+                DualSortSourceItems.Clear();
+                DualSortSortedItems.Clear();
+                DualSortSourceCount = 0;
+                DualSortSortedCount = 0;
+                DualSortStatusText = _langService.CurrentLanguage == "VI"
+                    ? $"Đã hoàn thành '{folderName}' -> Finish! Đã hết thư mục cần lọc."
+                    : $"Finished '{folderName}' -> Moved to Finish! No more folders to sort.";
+            }
+        }
+        catch (Exception ex)
+        {
+            DualSortStatusText = $"[DualSort] Lỗi khi chuyển vào Finish folder: {ex.Message}";
+            AddLog("WARN", $"[DualSort] Lỗi khi chuyển vào Finish folder: {ex.Message}");
         }
     }
 

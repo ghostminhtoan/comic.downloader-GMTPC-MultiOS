@@ -34,6 +34,29 @@
 | SUBFOLDER NAME | TÊN THƯ MỤC CON |
 | Previous Folder | Thư mục trước |
 | Next Folder | Thư mục tiếp theo |
+| Finish Folder | Thư mục hoàn thành |
+| Destination Folder | Thư mục đích |
+| Select... | Chọn... |
+| Select | Chọn |
+| Browse... | Chọn... |
+| Browse | Chọn |
+| Open | Mở |
+| Prev | Trước |
+| Previous | Trước |
+| Next | Tiếp |
+| Finish | Hoàn thành |
+| Move pictures | Di chuyển ảnh |
+| Copy pictures | Sao chép ảnh |
+| Sang Sort | Move to Sorted |
+| Về Gốc | Return to Source |
+| Giữ Gốc | Keep Parent |
+| Giữ Đã Lọc | Keep Child |
+| Giữ Đã Chọn | Keep Selected |
+| Search file name in Source folder... | Tìm tên file trong Thư mục gốc... |
+| Search file name in Sorted folder... | Tìm tên file trong Thư mục đã lọc... |
+| Select source folder containing pictures to sort (e.g. comic\\ranma fanart)... | Chọn thư mục chứa ảnh gốc cần lọc (ví dụ: comic\\ranma fanart)... |
+| Select or auto create sorted folder (e.g. comic\\ranma fanart\\ranma fanart-sorted)... | Chọn hoặc tự động tạo thư mục đã lọc (ví dụ: comic\\ranma fanart\\ranma fanart-sorted)... |
+| Select folder containing finished sorted pictures (Finish folder)... | Chọn thư mục chứa các bộ ảnh đã lọc xong (Finish folder)... |
 | Prev | Trước |
 | Next | Tiếp |
 | The system is currently downloading comics! Getting new links (Get Link) will clear the current download list.\n\nIf you want to add more comics, please use the 'Get More' button instead. Are you sure you want to proceed and clear the list? | Hệ thống đang tải truyện! Việc lấy link mới (Get Link) sẽ xóa hết danh sách đang tải hiện tại. |
@@ -817,6 +840,29 @@
 | Keep Selected Only | Chỉ Giữ Đã Chọn |
 | Previous Folder | Thư mục trước |
 | Next Folder | Thư mục tiếp theo |
+| Finish Folder | Thư mục hoàn thành |
+| Destination Folder | Thư mục đích |
+| Select... | Chọn... |
+| Select | Chọn |
+| Browse... | Chọn... |
+| Browse | Chọn |
+| Open | Mở |
+| Prev | Trước |
+| Previous | Trước |
+| Next | Tiếp |
+| Finish | Hoàn thành |
+| Move pictures | Di chuyển ảnh |
+| Copy pictures | Sao chép ảnh |
+| Sang Sort | Move to Sorted |
+| Về Gốc | Return to Source |
+| Giữ Gốc | Keep Parent |
+| Giữ Đã Lọc | Keep Child |
+| Giữ Đã Chọn | Keep Selected |
+| Search file name in Source folder... | Tìm tên file trong Thư mục gốc... |
+| Search file name in Sorted folder... | Tìm tên file trong Thư mục đã lọc... |
+| Select source folder containing pictures to sort (e.g. comic\\ranma fanart)... | Chọn thư mục chứa ảnh gốc cần lọc (ví dụ: comic\\ranma fanart)... |
+| Select or auto create sorted folder (e.g. comic\\ranma fanart\\ranma fanart-sorted)... | Chọn hoặc tự động tạo thư mục đã lọc (ví dụ: comic\\ranma fanart\\ranma fanart-sorted)... |
+| Select folder containing finished sorted pictures (Finish folder)... | Chọn thư mục chứa các bộ ảnh đã lọc xong (Finish folder)... |
 
 ## 19. File Association & Context Menu (Liên Kết Tệp & Menu Ngữ Cảnh)
 

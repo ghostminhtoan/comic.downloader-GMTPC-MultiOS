@@ -4369,6 +4369,34 @@ public partial class MainView : UserControl
 
         }
 
+        else if (element is RadioButton rb)
+        {
+            if (rb.Content is string rStr && !string.IsNullOrWhiteSpace(rStr))
+            {
+                if (!IsPropertyBound(rb, ContentControl.ContentProperty))
+                {
+                    if (!_originalTextMap.TryGetValue(rb, out var orig))
+                    {
+                        orig = rStr;
+                        _originalTextMap[rb] = orig;
+                    }
+                    rb.Content = LanguageService.Instance.Translate(orig, toVi);
+                }
+            }
+        }
+        else if (element is TextBox txt)
+        {
+            if (!string.IsNullOrWhiteSpace(txt.PlaceholderText))
+            {
+                string wmKey = "wm_" + txt.GetHashCode();
+                if (!_originalTextMap.TryGetValue(wmKey, out var origWm))
+                {
+                    origWm = txt.PlaceholderText;
+                    _originalTextMap[wmKey] = origWm;
+                }
+                txt.PlaceholderText = LanguageService.Instance.Translate(origWm, toVi);
+            }
+        }
         else if (element is CheckBox cb)
 
         {
