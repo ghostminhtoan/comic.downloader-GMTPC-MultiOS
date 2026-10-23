@@ -15,22 +15,24 @@ using Avalonia.VisualTree;
 namespace ComicDownloaderGMTPC.Services;
 
 /// <summary>
-/// Dịch vụ tự động phóng to thanh cuộn dọc (Vertical ScrollBar) trong 3 giây khi có bất kỳ
-/// thao tác cuộn nào (lăn chuột Windows/Linux, vuốt chạm ngón tay Android, kéo Thumb, click track, phím bấm).
-/// Áp dụng cho mọi tab (trừ trình đọc truyện Reader).
+/// Dịch vụ tối ưu Vertical ScrollBar đa nền tảng (Windows, Linux, Android):
+/// 1. Bỏ triệt để lỗi bấm lệch tự cuộn xuống bottom của RepeatButton (nhảy ngay đến vị trí click).
+/// 2. Bấm giữ ở vị trí bất kỳ trên thanh cuộn (Hold & Drag) tự neo con trượt và di chuyển mượt mà theo tay/chuột.
+/// 3. Giữ nguyên 100% cơ chế kéo thả native tự nhiên của Thumb (không can thiệp Tunnel).
+/// 4. Tự động nở rộng núm trượt bán nguyệt khi cuộn và tự mờ dần sau 2.8 giây.
+/// 5. Miễn nhiễm và bảo vệ an toàn tuyệt đối cho Reader / ComicReader.
 /// </summary>
 public static class ScrollBarAutoExpandService
 {
+    private static readonly HashSet<ScrollBar> _registeredBars = new();
     private static readonly HashSet<ScrollBar> _activeExpandedBars = new();
     private static readonly HashSet<ScrollBar> _hoveredBars = new();
-    private static readonly HashSet<ScrollBar> _hookedBars = new();
     private static CancellationTokenSource? _globalCollapseCts;
     private static readonly object _syncLock = new();
-    private static DateTime _lastTreeScanUtc = DateTime.MinValue;
 
     /// <summary>
     /// Kiểm tra xem một control có nằm trong trình đọc truyện ComicReader hay không.
-    /// Nếu nằm trong Reader, tuyệt đối không can thiệp phóng to để tránh che khuất trang truyện.
+    /// Nếu nằm trong Reader, tuyệt đối không can thiệp.
     /// </summary>
     public static bool IsInsideReader(Visual visual)
     {
@@ -50,8 +52,7 @@ public static class ScrollBarAutoExpandService
     }
 
     /// <summary>
-    /// Kích hoạt phóng to toàn bộ ScrollBar dọc đang hiển thị trong giao diện (trừ Reader) trong 3 giây.
-    /// Kể cả nội dung có cuộn hay không (ở đầu trang/cuối trang), khi có thao tác cuộn vẫn lập tức phóng to!
+    /// Kích hoạt hiển thị rõ nét toàn bộ ScrollBar dọc đang active (trừ Reader) trong 2.8 giây.
     /// </summary>
     public static void TriggerGlobalScrollExpand(Visual? rootVisual)
     {
@@ -61,81 +62,69 @@ public static class ScrollBarAutoExpandService
         {
             try
             {
-                var now = DateTime.UtcNow;
-                List<ScrollBar> verticalBars;
-
                 lock (_syncLock)
                 {
-                    if ((now - _lastTreeScanUtc).TotalMilliseconds > 350 || _activeExpandedBars.Count == 0)
+                    // Nếu chưa có bar nào đăng ký, quét nhẹ để tìm
+                    if (_registeredBars.Count == 0)
                     {
-                        verticalBars = rootVisual.GetVisualDescendants()
+                        var foundBars = rootVisual.GetVisualDescendants()
                             .OfType<ScrollBar>()
-                            .Where(sb => sb.Orientation == Orientation.Vertical && !IsInsideReader(sb))
-                            .ToList();
-                        _lastTreeScanUtc = now;
-                    }
-                    else
-                    {
-                        verticalBars = _activeExpandedBars.Where(sb => !IsInsideReader(sb)).ToList();
+                            .Where(sb => sb.Orientation == Orientation.Vertical && !IsInsideReader(sb));
+                        foreach (var b in foundBars)
+                        {
+                            HookScrollBar(b);
+                        }
                     }
 
-                    if (verticalBars.Count == 0) return;
-
-                    foreach (var bar in verticalBars)
+                    foreach (var bar in _registeredBars)
                     {
+                        if (IsInsideReader(bar)) continue;
+
                         bar.Classes.Set("scroll-active", true);
                         if (bar.TemplatedParent is ScrollViewer sv)
                         {
                             sv.Classes.Set("scroll-active", true);
                         }
-
                         _activeExpandedBars.Add(bar);
-                        HookScrollBarPointerEvents(bar);
                     }
 
-                    // Reset bộ đếm 3.0 giây
-                    _globalCollapseCts?.Cancel();
-                    _globalCollapseCts?.Dispose();
-                    _globalCollapseCts = new CancellationTokenSource();
-                    var token = _globalCollapseCts.Token;
-
-                    Task.Delay(3000, token).ContinueWith(t =>
-                    {
-                        if (t.IsCanceled) return;
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            CollapseInactiveBars();
-                        });
-                    }, TaskScheduler.Default);
+                    ScheduleDelayedCollapse();
                 }
             }
             catch { }
-        }, DispatcherPriority.Normal);
+        }, DispatcherPriority.Background);
     }
 
-    public static void HookScrollBar(ScrollBar bar) => HookScrollBarPointerEvents(bar);
-    private static void HookScrollBarPointerEvents(ScrollBar bar)
+    /// <summary>
+    /// Đăng ký và thiết lập xử lý tương tác chuẩn cho từng ScrollBar
+    /// </summary>
+    public static void HookScrollBar(ScrollBar bar)
     {
-        if (!_hookedBars.Add(bar)) return;
+        if (bar == null || IsInsideReader(bar)) return;
 
-        bool isDraggingBar = false;
-
-        void UpdateScrollFromPointer(Point pos)
+        lock (_syncLock)
         {
-            double trackHeight = bar.Bounds.Height;
-            if (trackHeight <= 0) return;
+            if (!_registeredBars.Add(bar)) return;
+        }
 
-            double thumbHeight = 56.0;
-            double thumbHalfHeight = thumbHeight / 2.0;
-            double availableHeight = Math.Max(1.0, trackHeight - thumbHeight);
-            double relativeY = Math.Clamp(pos.Y - thumbHalfHeight, 0, availableHeight);
-            double ratio = relativeY / availableHeight;
+        bool isDraggingTrack = false;
+
+        void UpdateScrollToPoint(Point pos)
+        {
+            double barHeight = bar.Bounds.Height;
+            if (barHeight <= 0) return;
+
+            // Tìm chiều cao thật của Thumb trong template, không hardcode
+            var thumb = bar.FindDescendantOfType<Thumb>();
+            double thumbHeight = thumb != null && thumb.Bounds.Height > 0 ? thumb.Bounds.Height : 36.0;
+
+            double availableHeight = Math.Max(1.0, barHeight - thumbHeight);
+            double targetThumbTop = Math.Clamp(pos.Y - (thumbHeight / 2.0), 0.0, availableHeight);
+            double ratio = targetThumbTop / availableHeight;
             double targetValue = bar.Minimum + ratio * (bar.Maximum - bar.Minimum);
 
-            System.Diagnostics.Debug.WriteLine($"[UpdateScrollFromPointer] pos.Y={pos.Y}, relativeY={relativeY}, ratio={ratio}, targetValue={targetValue}");
-            Console.WriteLine($"[UpdateScrollFromPointer] pos.Y={pos.Y:F1}, relativeY={relativeY:F1}, ratio={ratio:F3}, targetValue={targetValue:F1}");
-
             bar.SetCurrentValue(ScrollBar.ValueProperty, targetValue);
+
             var sv = bar.TemplatedParent as ScrollViewer ?? bar.FindAncestorOfType<ScrollViewer>();
             if (sv != null)
             {
@@ -143,11 +132,13 @@ public static class ScrollBarAutoExpandService
             }
         }
 
+        // Hover events
         bar.PointerEntered += (s, e) =>
         {
             lock (_syncLock)
             {
                 _hoveredBars.Add(bar);
+                bar.Classes.Set("scroll-active", true);
             }
         };
 
@@ -155,7 +146,7 @@ public static class ScrollBarAutoExpandService
         {
             lock (_syncLock)
             {
-                if (!isDraggingBar)
+                if (!isDraggingTrack)
                 {
                     _hoveredBars.Remove(bar);
                     ScheduleDelayedCollapse();
@@ -163,53 +154,74 @@ public static class ScrollBarAutoExpandService
             }
         };
 
-        // Khi người dùng click hoặc tap ở bất kỳ vị trí nào trên thanh cuộn (dù trúng slider hay lệch ra ngoài):
-        // 1. Chặn triệt để lỗi tự cuộn về bottom của RepeatButton (bằng RoutingStrategies.Tunnel & e.Handled = true)
-        // 2. Di chuyển slider ngay đến vị trí click/tap/hold đó
-        // 3. Tự neo (capture) con trỏ/ngón tay để khi di chuyển lên xuống thì slider di chuyển theo
-        // 4. Khi thả tay/click ra thì ngưng di chuyển
+        // BẮT SỰ KIỆN POINTER PRESSED THEO LUỒNG BUBBLE TỰ NHIÊN (KHÔNG DÙNG TUNNEL)
         bar.AddHandler(InputElement.PointerPressedEvent, (s, e) =>
         {
             var prop = e.GetCurrentPoint(bar).Properties;
-            if (prop.IsLeftButtonPressed || e.Pointer.Type == PointerType.Touch || e.Pointer.Type == PointerType.Pen)
+            if (!prop.IsLeftButtonPressed && e.Pointer.Type != PointerType.Touch && e.Pointer.Type != PointerType.Pen)
+                return;
+
+            // Kiểm tra xem vị trí click có trúng vào chính Thumb hay không
+            var sourceVisual = e.Source as Visual;
+            bool isDirectThumbHit = false;
+            var cur = sourceVisual;
+            while (cur != null && cur != bar)
             {
-                var pos = e.GetPosition(bar);
+                if (cur is Thumb)
+                {
+                    isDirectThumbHit = true;
+                    break;
+                }
+                cur = cur.GetVisualParent();
+            }
 
-                isDraggingBar = true;
-                e.Pointer.Capture(bar);
-                e.PreventGestureRecognition();
-
+            // NẾU CLICK VÀO CHÍNH THUMB:
+            // Để Thumb tự xử lý kéo thả (DragDelta) native 100% của Avalonia! Không can thiệp!
+            if (isDirectThumbHit)
+            {
                 lock (_syncLock)
                 {
                     _hoveredBars.Add(bar);
                     bar.Classes.Set("scroll-active", true);
-                    if (bar.TemplatedParent is ScrollViewer sv)
-                    {
-                        sv.Classes.Set("scroll-active", true);
-                    }
                     _activeExpandedBars.Add(bar);
                 }
-
-                // Di chuyển slider đến vị trí hold ngay lập tức (không bị nhảy về bottom)
-                UpdateScrollFromPointer(pos);
-                e.Handled = true; // Chặn hành vi PageDown/cuộn về bottom mặc định của Avalonia
+                return;
             }
-        }, RoutingStrategies.Tunnel, handledEventsToo: true);
 
+            // NẾU CLICK VÀO KHOẢNG TRỐNG (TRACK / NGOÀI THUMB):
+            // 1. Nhảy con trượt ngay đến vị trí click (chặn triệt để lỗi RepeatButton cuộn về bottom)
+            // 2. Tự neo (capture) con trỏ để khi người dùng hold và di chuyển lên xuống thì con trượt di chuyển theo
+            isDraggingTrack = true;
+            e.Pointer.Capture(bar);
+            e.PreventGestureRecognition();
+
+            lock (_syncLock)
+            {
+                _hoveredBars.Add(bar);
+                bar.Classes.Set("scroll-active", true);
+                _activeExpandedBars.Add(bar);
+            }
+
+            UpdateScrollToPoint(e.GetPosition(bar));
+            e.Handled = true; // Chặn RepeatButton phát lệnh PageDown về bottom
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // KHI DI CHUYỂN CON TRỎ (POINTER MOVED)
         bar.AddHandler(InputElement.PointerMovedEvent, (s, e) =>
         {
-            if (isDraggingBar)
+            if (isDraggingTrack)
             {
-                UpdateScrollFromPointer(e.GetPosition(bar));
+                UpdateScrollToPoint(e.GetPosition(bar));
                 e.Handled = true;
             }
-        }, RoutingStrategies.Bubble | RoutingStrategies.Tunnel, handledEventsToo: true);
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
 
-        void EndBarDrag(Avalonia.Interactivity.RoutedEventArgs? e = null)
+        // KHI THẢ TAY / THẢ CHUỘT (RELEASED HOẶC CAPTURE LOST)
+        void EndTrackDrag(RoutedEventArgs? e = null)
         {
-            if (isDraggingBar)
+            if (isDraggingTrack)
             {
-                isDraggingBar = false;
+                isDraggingTrack = false;
                 if (e is PointerEventArgs pe)
                 {
                     pe.Pointer.Capture(null);
@@ -225,13 +237,24 @@ public static class ScrollBarAutoExpandService
 
         bar.AddHandler(InputElement.PointerReleasedEvent, (s, e) =>
         {
-            EndBarDrag(e);
-        }, RoutingStrategies.Bubble | RoutingStrategies.Tunnel, handledEventsToo: true);
+            EndTrackDrag(e);
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
 
         bar.AddHandler(InputElement.PointerCaptureLostEvent, (s, e) =>
         {
-            EndBarDrag(e);
-        }, RoutingStrategies.Bubble | RoutingStrategies.Tunnel, handledEventsToo: true);
+            EndTrackDrag(e);
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // Dọn dẹp khi ScrollBar bị gỡ khỏi Visual Tree
+        bar.DetachedFromVisualTree += (s, e) =>
+        {
+            lock (_syncLock)
+            {
+                _registeredBars.Remove(bar);
+                _activeExpandedBars.Remove(bar);
+                _hoveredBars.Remove(bar);
+            }
+        };
     }
 
     private static void ScheduleDelayedCollapse()
@@ -243,13 +266,13 @@ public static class ScrollBarAutoExpandService
             _globalCollapseCts = new CancellationTokenSource();
             var token = _globalCollapseCts.Token;
 
-            Task.Delay(3000, token).ContinueWith(t =>
+            Task.Delay(2800, token).ContinueWith(t =>
             {
                 if (t.IsCanceled) return;
                 Dispatcher.UIThread.Post(() =>
                 {
                     CollapseInactiveBars();
-                });
+                }, DispatcherPriority.Background);
             }, TaskScheduler.Default);
         }
     }
@@ -261,7 +284,7 @@ public static class ScrollBarAutoExpandService
             var barsToDeactivate = new List<ScrollBar>();
             foreach (var bar in _activeExpandedBars)
             {
-                // Nếu chuột vẫn đang hover hoặc nắm kéo thumb, không thu nhỏ
+                // Nếu chuột vẫn đang hover hoặc thumb đang được kéo, giữ nguyên
                 if (_hoveredBars.Contains(bar) || bar.IsPointerOver)
                 {
                     continue;
@@ -283,108 +306,40 @@ public static class ScrollBarAutoExpandService
     }
 
     /// <summary>
-    /// Tự động đăng ký toàn bộ sự kiện cuộn (PointerWheel, Touch swipe, ScrollChanged) lên root control.
+    /// Đăng ký toàn bộ ScrollBar trong visual tree của rootControl
     /// </summary>
     public static void AttachGlobalScrollListeners(Control rootControl)
     {
         if (rootControl == null) return;
 
-        rootControl.Loaded += (s, e) =>
+        void RegisterBars()
         {
             var bars = rootControl.GetVisualDescendants()
                 .OfType<ScrollBar>()
                 .Where(sb => sb.Orientation == Orientation.Vertical && !IsInsideReader(sb));
             foreach (var b in bars)
             {
-                HookScrollBarPointerEvents(b);
+                HookScrollBar(b);
             }
-        };
+        }
 
-        // 1. Bắt thao tác lăn chuột trên Windows & Linux (kể cả khi nội dung không thể cuộn thêm)
+        rootControl.Loaded += (s, e) => RegisterBars();
+
+        // Lăn chuột trên Windows/Linux
         rootControl.AddHandler(InputElement.PointerWheelChangedEvent, (s, e) =>
         {
             TriggerGlobalScrollExpand(rootControl);
         }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
 
-        // 2. Bắt sự kiện cuộn từ mọi ScrollViewer trong ứng dụng
+        // Cuộn nội dung từ ScrollViewer
         rootControl.AddHandler(ScrollViewer.ScrollChangedEvent, (s, e) =>
         {
             TriggerGlobalScrollExpand(rootControl);
         }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
-
-
-
-        // 4. Bắt cử chỉ vuốt chạm ngón tay ở giữa màn hình hoặc bất kỳ đâu trên Android
-        Point? touchStart = null;
-        bool isTouchMoving = false;
-
-        void OnTouchDown(Point pos)
-        {
-            touchStart = pos;
-            isTouchMoving = true;
-        }
-
-        void OnTouchMove(Point curPos)
-        {
-            if (isTouchMoving && touchStart.HasValue)
-            {
-                if (Math.Abs(curPos.Y - touchStart.Value.Y) > 3 || Math.Abs(curPos.X - touchStart.Value.X) > 3)
-                {
-                    TriggerGlobalScrollExpand(rootControl);
-                }
-            }
-        }
-
-        void OnTouchUp()
-        {
-            isTouchMoving = false;
-            touchStart = null;
-        }
-
-        rootControl.AddHandler(InputElement.PointerPressedEvent, (s, e) =>
-        {
-            OnTouchDown(e.GetPosition(rootControl));
-        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
-
-        rootControl.AddHandler(InputElement.PointerMovedEvent, (s, e) =>
-        {
-            OnTouchMove(e.GetPosition(rootControl));
-        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
-
-        rootControl.AddHandler(InputElement.PointerReleasedEvent, (s, e) =>
-        {
-            OnTouchUp();
-        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
-
-        rootControl.AddHandler(InputElement.PointerCaptureLostEvent, (s, e) =>
-        {
-            OnTouchUp();
-        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
-
-        Avalonia.Interactivity.Interactive? topLevel = (Interactive?)TopLevel.GetTopLevel(rootControl);
-        if (topLevel != null && topLevel != rootControl)
-        {
-            topLevel.AddHandler(InputElement.PointerPressedEvent, (s, e) =>
-            {
-                OnTouchDown(e.GetPosition(rootControl));
-            }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
-
-            topLevel.AddHandler(InputElement.PointerMovedEvent, (s, e) =>
-            {
-                OnTouchMove(e.GetPosition(rootControl));
-            }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
-
-            topLevel.AddHandler(InputElement.PointerReleasedEvent, (s, e) =>
-            {
-                OnTouchUp();
-            }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
-
-
-        }
     }
 
     /// <summary>
-    /// Duyệt Visual Tree và tự động đăng ký (giữ tương thích với code gọi cũ)
+    /// Giữ tương thích với các điểm gọi cũ
     /// </summary>
     public static void RegisterAllScrollViewers(Visual? container)
     {

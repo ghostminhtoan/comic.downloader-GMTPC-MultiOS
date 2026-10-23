@@ -54,11 +54,11 @@
             <Setter Property="HorizontalContentAlignment" Value="Center" />
         </Style>
 
-        <!-- Style ScrollBar chuẩn toàn hệ thống: Toàn bộ mép phải đều hẹp (6px), chỉ ở phạm vi slider (thumb) mới rộng để không che nút -->
+        <!-- Style ScrollBar chuẩn toàn hệ thống: Hitbox rộng 18px để bấm nhạy, Visual mỏng 6px, hover nở núm bán nguyệt 28px -->
         <Style Selector="ScrollBar:vertical">
-            <Setter Property="MinWidth" Value="6" />
-            <Setter Property="Width" Value="6" />
-            <Setter Property="Opacity" Value="0.4" />
+            <Setter Property="MinWidth" Value="18" />
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Opacity" Value="0.35" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="ClipToBounds" Value="False" />
@@ -71,41 +71,41 @@
         <Style Selector="ScrollBar:vertical /template/ Thumb">
             <Setter Property="MinWidth" Value="6" />
             <Setter Property="Width" Value="6" />
-            <Setter Property="Height" Value="40" />
+            <Setter Property="MinHeight" Value="36" />
             <Setter Property="CornerRadius" Value="3" />
             <Setter Property="Background" Value="#64748B" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Width" Duration="0:0:0.2" />
-                    <DoubleTransition Property="MinWidth" Duration="0:0:0.2" />
-                    <BrushTransition Property="Background" Duration="0:0:0.2" />
+                    <DoubleTransition Property="Width" Duration="0:0:0.18" />
+                    <DoubleTransition Property="MinWidth" Duration="0:0:0.18" />
+                    <BrushTransition Property="Background" Duration="0:0:0.18" />
                 </Transitions>
             </Setter>
         </Style>
 
-        <!-- Khi con trượt (slider/thumb) được kích hoạt cuộn hoặc hover/drag: chỉ riêng phạm vi slider mở rộng sang trái thành núm bán nguyệt 32px -->
+        <!-- Khi con trượt (slider/thumb) được kích hoạt cuộn hoặc hover/drag: chỉ riêng phạm vi slider mở rộng sang trái thành núm bán nguyệt 28px -->
         <Style Selector="ScrollBar:vertical.scroll-active, ScrollViewer.scroll-active /template/ ScrollBar:vertical, ScrollBar:vertical:pointerover, ScrollBar:vertical:pressed">
-            <Setter Property="MinWidth" Value="6" />
-            <Setter Property="Width" Value="6" />
+            <Setter Property="MinWidth" Value="18" />
+            <Setter Property="Width" Value="18" />
             <Setter Property="Opacity" Value="1.0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="ClipToBounds" Value="False" />
         </Style>
         <Style Selector="ScrollBar:vertical.scroll-active /template/ Thumb, ScrollViewer.scroll-active /template/ ScrollBar:vertical /template/ Thumb, ScrollBar:vertical:pointerover /template/ Thumb, ScrollBar:vertical /template/ Thumb:pointerover">
-            <Setter Property="MinWidth" Value="32" />
-            <Setter Property="Width" Value="32" />
-            <Setter Property="Height" Value="56" />
-            <Setter Property="CornerRadius" Value="16, 0, 0, 16" />
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="Width" Value="28" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="CornerRadius" Value="14, 0, 0, 14" />
             <Setter Property="Background" Value="#38BDF8" />
             <Setter Property="HorizontalAlignment" Value="Right" />
         </Style>
         <Style Selector="ScrollBar:vertical /template/ Thumb:pressed, ScrollBar:vertical.scroll-active /template/ Thumb:pressed">
-            <Setter Property="MinWidth" Value="32" />
-            <Setter Property="Width" Value="32" />
-            <Setter Property="Height" Value="56" />
-            <Setter Property="CornerRadius" Value="16, 0, 0, 16" />
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="Width" Value="28" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="CornerRadius" Value="14, 0, 0, 14" />
             <Setter Property="Background" Value="#0284C7" />
             <Setter Property="HorizontalAlignment" Value="Right" />
         </Style>
