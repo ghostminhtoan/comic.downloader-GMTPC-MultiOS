@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -1988,8 +1988,8 @@ public partial class ComicReaderControl : UserControl
         long now = Environment.TickCount64;
 
         long pinchElapsed = now - _lastPinchEndTick;
-        // Bỏ qua nảy chạm ngón tay thứ hai trong vòng 400ms sau khi pinch kết thúc
-        if (now < _pinchCooldownUntilTick || (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 400))
+        // Bỏ qua nảy chạm ngón tay thứ hai trong vòng 120ms sau khi pinch kết thúc (nếu không đang kéo rê)
+        if (!_isPanHolding && !_isPanDragging && (now < _pinchCooldownUntilTick || (_lastPinchEndTick > 0 && pinchElapsed >= 0 && pinchElapsed < 120)))
         {
             _activePointers.Clear();
             _pointerLastSeenTicks.Clear();
@@ -2509,23 +2509,96 @@ public partial class ComicReaderControl : UserControl
         double newZoom = vm.ZoomLevel;
         double ratio = (oldZoom > 0.05) ? (newZoom / oldZoom) : 1.0;
 
+        double viewW = Math.Max(1.0, Bounds.Width);
+        double viewH = Math.Max(1.0, Bounds.Height);
+        double normX = Math.Clamp(releasePoint.X / viewW, 0.0, 1.0);
+        double normY = Math.Clamp(releasePoint.Y / viewH, 0.0, 1.0);
+
         if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
         {
-            // Nguyên lý Bất biến Điểm chạm Nội dung (Content Anchor Invariance):
-            // Tọa độ Y tuyệt đối trên toàn bộ dải trang trước khi zoom
-            double contentYBefore = oldOffset.Y + touchInLb.Y;
-            // Tọa độ Y tuyệt đối trên dải trang sau khi zoom
-            double contentYAfter = contentYBefore * ratio;
-            // Vị trí cuộn Offset mới để điểm chạm tiếp tục nằm chính xác dưới ngón tay người dùng
-            double targetOffsetY = Math.Max(0, contentYAfter - touchInLb.Y);
+            // Chế độ Cuộn dọc (Vertical Scroll):
+            double targetOffsetY = Math.Max(0, (oldOffset.Y + touchInLb.Y) * ratio - touchInLb.Y);
+            double targetOffsetX;
 
-            // Tương tự cho trục X khi phóng to ngang
-            double contentXBefore = oldOffset.X + touchInLb.X;
-            double contentXAfter = contentXBefore * ratio;
-            double targetOffsetX = Math.Max(0, contentXAfter - touchInLb.X);
+            if (newZoom > 1.05)
+            {
+                // Neo lề thông minh (Smart Edge Anchor):
+                // Chạm gần mép trái (<= 35%): neo sát mép trái (offset = 0) để 100% thấy trọn vẹn chữ ở lề trái
+                if (normX < 0.35)
+                {
+                    targetOffsetX = 0;
+                }
+                // Chạm gần mép phải (>= 65%): neo sát mép phải để 100% thấy trọn vẹn chữ ở lề phải
+                else if (normX > 0.65)
+                {
+                    targetOffsetX = double.MaxValue;
+                }
+                // Chạm ở khu vực giữa: neo chuẩn theo tâm điểm chạm
+                else
+                {
+                    targetOffsetX = Math.Max(0, (oldOffset.X + touchInLb.X) * ratio - touchInLb.X);
+                }
+            }
+            else
+            {
+                // Khi Zoom Out về 100%: căn giữa khít màn hình
+                targetOffsetX = 0;
+            }
 
-            // Trang mục tiêu luôn luôn là trang hiện tại đang đọc (savedPageIndex),
-            // tuyệt đối KHÔNG cho phép Double-Tap tua hoặc đổi sang trang khác!
+            int targetPageIndex = savedPageIndex;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                var sv = GetReaderScrollViewer();
+                if (sv != null)
+                {
+                    double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
+                    double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
+                    sv.Offset = new Vector(Math.Clamp(targetOffsetX, 0, maxX), Math.Clamp(targetOffsetY, 0, maxY));
+                }
+
+                vm.CurrentPageIndex = targetPageIndex;
+                _isDoubleTapZooming = false;
+                _isProgrammaticScroll = false;
+                _suppressScrollChangedUntilTick = Environment.TickCount64 + 250;
+            }, DispatcherPriority.Render);
+        }
+        else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
+        {
+            // Chế độ Cuộn ngang (Horizontal Scroll):
+            double targetOffsetX;
+            if (newZoom > 1.05)
+            {
+                if (vm.IsRightToLeft)
+                {
+                    if (normX > 0.65) targetOffsetX = 0;
+                    else if (normX < 0.35) targetOffsetX = double.MaxValue;
+                    else targetOffsetX = Math.Max(0, (oldOffset.X + touchInLb.X) * ratio - touchInLb.X);
+                }
+                else
+                {
+                    if (normX < 0.35) targetOffsetX = 0;
+                    else if (normX > 0.65) targetOffsetX = double.MaxValue;
+                    else targetOffsetX = Math.Max(0, (oldOffset.X + touchInLb.X) * ratio - touchInLb.X);
+                }
+            }
+            else
+            {
+                targetOffsetX = Math.Max(0, (oldOffset.X + touchInLb.X) * ratio - touchInLb.X);
+            }
+
+            double targetOffsetY;
+            if (newZoom > 1.05)
+            {
+                if (normY < 0.35) targetOffsetY = 0;
+                else if (normY > 0.65) targetOffsetY = double.MaxValue;
+                else targetOffsetY = Math.Max(0, (oldOffset.Y + touchInLb.Y) * ratio - touchInLb.Y);
+            }
+            else
+            {
+                targetOffsetY = 0;
+            }
+
             int targetPageIndex = savedPageIndex;
 
             Dispatcher.UIThread.Post(() =>
@@ -2546,15 +2619,32 @@ public partial class ComicReaderControl : UserControl
         }
         else
         {
+            // Chế độ Lật trang (Flip Mode):
+            double targetX;
+            double targetY;
+            if (newZoom > 1.05)
+            {
+                if (normX < 0.35) targetX = 0;
+                else if (normX > 0.65) targetX = double.MaxValue;
+                else targetX = (oldOffset.X + releasePoint.X) * ratio - releasePoint.X;
+
+                if (normY < 0.35) targetY = 0;
+                else if (normY > 0.65) targetY = double.MaxValue;
+                else targetY = (oldOffset.Y + releasePoint.Y) * ratio - releasePoint.Y;
+            }
+            else
+            {
+                targetX = 0;
+                targetY = 0;
+            }
+
             Dispatcher.UIThread.Post(() =>
             {
-                var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
+                var sv = GetFlipScrollViewer();
                 if (sv != null)
                 {
                     double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
                     double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
-                    double targetX = (oldOffset.X + releasePoint.X) * ratio - releasePoint.X;
-                    double targetY = (oldOffset.Y + releasePoint.Y) * ratio - releasePoint.Y;
                     sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), Math.Clamp(targetY, 0, maxY));
                 }
 
@@ -2704,6 +2794,9 @@ public partial class ComicReaderControl : UserControl
     private void CheckContinuousOverscroll(ComicReaderViewModel vm, ScrollViewer scrollViewer, double deltaX, double deltaY, double maxX, double maxY)
     {
         if (vm.IsLoadingChapter) return;
+        // Bỏ qua hoàn toàn việc chuyển chương tự động khi đang zoom phóng to ảnh (> 1.05)
+        // để người dùng tự do cuộn/drag kiểm tra chi tiết tranh và đọc chữ sát mép
+        if (vm.ZoomLevel > 1.05) return;
         long now = Environment.TickCount64;
         if (now < _lastAutoChapterTransitionTick || now - _lastAutoChapterTransitionTick < 1400) return;
 

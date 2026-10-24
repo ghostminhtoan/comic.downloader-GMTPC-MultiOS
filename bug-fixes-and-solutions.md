@@ -1,4 +1,4 @@
-﻿# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
+# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
 
 > **Dự án**: Comic Downloader GMTPC Avalonia Multi-OS (Windows, Linux, Android)  
 
@@ -1413,8 +1413,7 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
   3. *Nhảy Chương Tự Động Do Trạng Thái Start / End*: Khi `Offset.X` bị kéo về `0`, điều kiện kiểm tra mép biên (`atStart` hoặc `atEnd`) ngộ nhận là người dùng đã chạm mép biên và ngay lập tức gọi `vm.PrevChapter()` hoặc `vm.NextChapter()`.
   4. *Thiếu Nạp Khẩn Cấp Cửa Sổ Trang Xung Quanh*: Khi đổi mode, chỉ nạp đơn lẻ `CurrentPage` mà không prefetch ngay cửa sổ các trang liền kề `[CurrentPageIndex - 3 .. CurrentPageIndex + 4]`.
 
-- **Giải pháp triệt để (Permanent Fix)**:
-  1. *Khóa Không Ép Offset Về Zero Khi `pageIndex > 0`*: Trong `OnVmScrollToPageRequested`, chỉ gán `sv.Offset` theo `maxX` / `maxY` khi `pageIndex == 0` hoặc khi `maxX > 10` / `maxY > 10`. Khi `pageIndex > 0` mà Extent chưa dãn nở, giao toàn quyền điều hướng cho `listBox.ScrollIntoView(targetItem)` để ảo hóa tự đo và căn vị trí mà không bị giật về đầu trang.
+- **Giải pháp trt:\[HDD T]\Program files\video sub finder\RGBImages\0_00_47_047__0_00_47_413_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_47_414__0_00_49_215_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_40_507__0_00_41_974_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_41_975__0_00_42_608_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_42_609__0_00_45_311_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_45_312__0_00_46_045_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_46_046__0_00_47_046_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_34_835__0_00_36_402_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_39_273__0_00_40_506_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_24_958__0_00_27_727_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_27_728__0_00_30_096_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_21_722__0_00_22_989_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_22_990__0_00_24_957_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_19_520__0_00_21_721_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_09_276__0_00_11_310_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_12_246__0_00_14_347_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_00_801__0_00_01_200_0003608120660010207201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_47_047__0_00_47_413_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_47_414__0_00_49_214_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_50_383__0_00_51_684_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_41_975__0_00_42_608_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_42_609__0_00_45_310_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_45_311__0_00_46_045_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_46_046__0_00_47_046_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_39_272__0_00_40_506_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_40_507__0_00_41_974_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_34_834__0_00_36_402_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_22_989__0_00_24_957_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_24_958__0_00_27_726_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_27_727__0_00_30_095_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_19_519__0_00_21_720_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_21_721__0_00_22_988_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_12_245__0_00_14_346_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_09_275__0_00_11_310_0003608090660010907201280.jpeg t:\[HDD T]\Program files\video sub finder\RGBImages\0_00_00_800__0_00_01_200_0003608090660010907201280.jpeg`OnVmScrollToPageRequested`, chỉ gán `sv.Offset` theo `maxX` / `maxY` khi `pageIndex == 0` hoặc khi `maxX > 10` / `maxY > 10`. Khi `pageIndex > 0` mà Extent chưa dãn nở, giao toàn quyền điều hướng cho `listBox.ScrollIntoView(targetItem)` để ảo hóa tự đo và căn vị trí mà không bị giật về đầu trang.
   2. *Fallback Thông Minh Cho Phím `-` và `+` Khi `maxX <= 10`*: Thay vì `return;` làm liệt phím, tự động chuyển trang theo chỉ số logic `CurrentPageIndex ± 1` và gọi `RequestScrollToPage`, giúp nút bấm phản hồi tức thì và không bị nhảy chương.
   3. *Chốt Chặn Khóa Chuyển Chương `isAutoChapterBlocked`*: Tích hợp cờ `_lastAutoChapterTransitionTick` (3500ms trên Android) và `SuppressAutoChapterUntilTick`. Khi người dùng vừa đổi mode, TUYỆT ĐỐI KHÔNG kích hoạt chuyển chương dù chạm mép biên, chỉ neo về đầu/cuối trang hiện tại.
   4. *Nạp Khẩn Cấp Dải Trang Lân Cận*: Trong `SelectPageScrollingMode`, kích hoạt giải mã khẩn cấp toàn bộ cửa sổ trang quanh `CurrentPageIndex` (`CurrentPageIndex - 3` đến `CurrentPageIndex + 4`) qua `EnsureSinglePageLoadedAsync`, triệt tiêu hoàn toàn Black Screen.
@@ -1427,6 +1426,49 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
 
 - **Quy tắc kiểm thử**:
   - Chạy Stress Test Harness mô phỏng môi trường Android Phone (1080x2400) với file zip 4508 ảnh (`yuusha ga shinda nettruyenqqviet.zip`), folder 140 chapter (`God Hand Teru`) và chapter 100 trang: Đạt 10/10 chu kỳ suôn sẻ liên tục không gián đoạn, 0 lỗi, 0 Black Screen, 0 Jump Chapter.
+
+---
+
+### 40. BUG-040: Tối Ưu Hóa Toàn Diện Cử Chỉ Double-Tap Zoom 170% Smart Edge Anchor & Seamless Pinch-to-Pan Trên Android
+
+- **Triệu chứng**:
+  1. *Che khuất chữ sát mép khi chạm đúp phóng to 170%*: Trên màn hình Android, khi người dùng chạm đúp (Double-Tap) ở gần mép trái hoặc mép phải để phóng to đọc lời thoại/bong bóng chữ, phần chữ nằm sát mép bị cắt cụt một phần hoặc nằm ngoài khung nhìn. Thao tác giữ và kéo (Hold Tap & Drag) để di chuyển ảnh sang ngang hoặc dọc bị đơ/liệt, không thể cuộn xem chữ.
+  2. *Giật khựng / kẹt khi chuyển tiếp từ Pinch 2 ngón sang Drag 1 ngón*: Khi người dùng phóng to/thu nhỏ bằng 2 ngón tay (Pinch-to-zoom) theo các hướng (dọc thẳng đứng, ngang thẳng đứng, góc nghiêng chéo), nếu thả một ngón tay nhưng giữ ngón còn lại để kéo rê ảnh, hệ thống bị rơi vào cooldown hoặc khóa cử chỉ, không cho drag mượt mà ngay lập tức.
+  3. *Tự động nhảy chapter ngoài ý muốn khi kéo rê ảnh lúc đang zoom*: Khi đang phóng to ảnh để đọc chi tiết chữ, người dùng kéo ảnh sát mép biên màn hình thì vô tình kích hoạt chuyển chương tự động (`CheckContinuousOverscroll`), làm văng sang chapter tiếp theo/trước đó.
+
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  1. *Khóa cứng trục cuộn trong XAML*: Trong `ComicReaderControl.axaml`, `VerticalReaderListBox` bị đặt thuộc tính `ScrollViewer.HorizontalScrollBarVisibility="Disabled"`, còn `HorizontalReaderListBox` bị đặt `ScrollViewer.VerticalScrollBarVisibility="Disabled"`. Khi bị `Disabled`, ScrollViewer khóa cứng trục cuộn trực giao, khiến `Extent` không dãn nở khi ảnh được phóng to 170% (`maxX = 0`). Do `ListBoxItem` căn giữa (`Center`), hai bên lề của ảnh bị xén cụt và thao tác kéo rê ngang/dọc hoàn toàn bị vô hiệu hóa!
+  2. *Thiếu thuật toán neo mép thông minh (Smart Edge Anchor)*: Công thức Double-Tap cũ chỉ nội suy tuyến tính theo tâm điểm chạm, khiến khi chạm ở mép trái (tọa độ $X \approx 50$px trên màn hình 1080px), offset $X$ bị đẩy vào trong khoảng $35$px - $50$px làm khuất chữ ở lề trái; tương tự khi chạm mép phải, offset $X$ không đạt kịch trần `maxX` làm khuất chữ sát lề phải.
+  3. *Chưa ngắt cờ tự động chuyển chương khi đang Zoom*: Hàm `CheckContinuousOverscroll` trước đây không kiểm tra `ZoomLevel`, dẫn đến khi người dùng đang zoom $> 1.05$ mà kéo rê ngón tay qua mép ảnh thì hệ thống tưởng nhầm là cử chỉ kéo đổi chương.
+  4. *Độ trễ cooldown cảm ứng 400ms quá lớn*: Trong `OnViewportPointerPressed`, thời gian chờ `400ms` sau khi pinch kết thúc làm vô hiệu hóa các cử chỉ chạm nhanh liên tiếp của người dùng.
+
+- **Giải pháp triệt để**:
+  1. *Mở thanh cuộn 2 chiều linh hoạt trong XAML*:
+     - `VerticalReaderListBox`: Chuyển `ScrollViewer.HorizontalScrollBarVisibility="Auto"`, bổ sung style cho `ScrollBar:horizontal` thanh mảnh ($6$px, bo tròn $3$px, màu `#38BDF8`). Khi `ZoomLevel = 1.0`, thanh cuộn ngang tự động ẩn; khi `ZoomLevel = 1.7`, `Extent.Width` dãn nở thành $1836$px, cho phép cuộn và Drag ngang tự do.
+     - `HorizontalReaderListBox`: Chuyển `ScrollViewer.VerticalScrollBarVisibility="Auto"`, bổ sung style cho `ScrollBar:vertical` thanh mảnh ($6$px). Cho phép cuộn và Drag dọc tự do khi zoom.
+  2. *Thuật toán Double-Tap Zoom Smart Edge Anchor*:
+     - Trong `PerformDoubleTapZoom`:
+       - Khi Zoom In mép trái (`normX < 0.35`): Neo cứng `targetOffsetX = 0` $\rightarrow$ Đảm bảo $100\%$ cạnh trái của ảnh nằm sát mép trái màn hình, hiển thị trọn vẹn từng nét chữ và bong bóng thoại ở lề trái!
+       - Khi Zoom In mép phải (`normX > 0.65`): Neo kịch trần `targetOffsetX = double.MaxValue` (clamp về `maxX`) $\rightarrow$ Đảm bảo $100\%$ cạnh phải của ảnh căn khít mép phải màn hình, hiển thị trọn vẹn chữ ở lề phải!
+       - Khi Zoom In vùng giữa ($0.35 \le normX \le 0.65$): Neo mượt mà theo tâm điểm chạm.
+       - Khi Zoom Out về $1.0$: Tự động đưa `targetOffsetX = 0`, căn giữa khít toàn màn hình.
+     - Áp dụng tương tự cho chế độ Cuộn Ngang (trục $Y$) và chế độ Lật trang (Flip Mode).
+  3. *Khóa an toàn chống nhảy chapter khi đang Zoom*:
+     - Trong `CheckContinuousOverscroll`: Thêm rào chắn `if (vm.ZoomLevel > 1.05) return;` $\rightarrow$ Triệt tiêu hoàn toàn hiện tượng vô tình nhảy sang chương khác khi đang phóng to soi tranh và đọc chữ.
+  4. *Chuyển tiếp mượt mà từ Pinch 2 ngón sang Drag 1 ngón (Seamless Pinch-to-Pan)*:
+     - Trong `OnViewportPointerReleased`, khi nhấc 1 ngón tay (`_isPinching && _activePointers.Count == 1`): Chuyển ngón còn lại thành Pan/Drag ngay tức thì (`_isPinching = false; _isPanHolding = true; _isPanDragging = true; _panLastPoint = remainingPt;`).
+     - Giảm cooldown cảm ứng từ $400$ms xuống $120$ms và không áp dụng cooldown khi đang giữ kéo rê ngón tay (`!_isPanHolding && !_isPanDragging`).
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Views/ComicReaderControl.axaml`
+  - `ComicDownloaderGMTPC/Views/ComicReaderControl.axaml.cs`
+  - `bug-fixes-and-solutions.md`
+
+- **Quy tắc kiểm thử**:
+  - Chạy Stress Test Harness tự động trên môi trường Android 1080x2400 với cả 2 bộ truyện (`yuusha ga shinda nettruyenqqviet.zip` và `God Hand Teru`):
+    1. Test 10 lần liên tiếp Double Tap Zoom 170% ở gần mép trái và mép phải: Full chữ mép trái (OffsetX = 0) ĐẠT, Full chữ mép phải (OffsetX = 756) ĐẠT, Hold Tap & Drag di chuyển mượt mà ĐẠT.
+    2. Test 10 lần liên tiếp Pinch Zoom In/Out theo 4 đường thẳng (Dọc, Ngang, Nghiêng trái dưới - phải trên, Nghiêng trái trên - phải dưới) + thả 1 ngón giữ ngón còn lại để Drag: 10/10 PASS cho toàn bộ 4 đường.
+    3. Tổng kết kiểm thử: 10/10 PASS, 0 FAIL.
 
 ---
 
