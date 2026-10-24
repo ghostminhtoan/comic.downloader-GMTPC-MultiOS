@@ -524,7 +524,7 @@ public class DownloadEngineService
 
         try
         {
-            BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", "Bắt đầu tải danh sách truyện...", 0, true);
+            ReportOverallProgress(null, "Bắt đầu tải danh sách truyện...", force: true);
 
             while (!ct.IsCancellationRequested && HasPendingEligibleItems())
             {
@@ -627,6 +627,7 @@ public class DownloadEngineService
             }
             LogEmitted?.Invoke("INFO", $"Đã nạp thêm {enqueuedCount} truyện mới vào tiến trình tải đang chạy (tự động ưu tiên theo vị trí từ trên xuống dưới).");
             ProgressUpdated?.Invoke();
+            ReportOverallProgress(null, $"Đã nạp thêm {enqueuedCount} truyện vào hàng chờ...", force: true);
         }
         else
         {
@@ -640,7 +641,7 @@ public class DownloadEngineService
         _isPaused = true;
         _pauseTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         LogEmitted?.Invoke("WARN", "⏸️ Đã tạm dừng tải truyện. Bấm TIẾP TỤC để tiếp tục tiến trình.");
-        BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện (Tạm dừng)", "Đã tạm dừng tải truyện...", 0, true);
+        ReportOverallProgress(null, "Đã tạm dừng tải truyện...", force: true);
         PauseStateChanged?.Invoke(true);
         ProgressUpdated?.Invoke();
     }
@@ -652,7 +653,7 @@ public class DownloadEngineService
         _pauseTcs?.TrySetResult(true);
         _pauseTcs = null;
         LogEmitted?.Invoke("INFO", "▶️ Tiếp tục tiến trình tải truyện...");
-        BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", "Đang tiếp tục tải...", 0, true);
+        ReportOverallProgress(null, "Đang tiếp tục tải...", force: true);
         PauseStateChanged?.Invoke(false);
         ProgressUpdated?.Invoke();
     }
@@ -750,6 +751,7 @@ public class DownloadEngineService
         book.StatusMessage = "Đang khởi tạo thư mục và nạp danh sách chương...";
         book.DetailProgressText = "Đang khởi tạo...";
         ProgressUpdated?.Invoke();
+        ReportOverallProgress(book, $"{book.Title} • Đang khởi tạo...", force: true);
 
         string effectiveRoot = EnsureWritableDownloadRoot(DownloadRoot);
         string serverFolder = DomainRoutingService.GetServerFolderName(book.Domain, book.Url);
@@ -980,7 +982,7 @@ public class DownloadEngineService
                                 force: doneNow == imageUrls.Count);
 
                             CalculateSpeed();
-                            BackgroundExecutionService.Instance.ReportProgress("download_queue", "Tải Truyện", $"{book.Title} • {chapter.Title} ({doneNow}/{imageUrls.Count})", book.ProgressPercentage, true);
+                            ReportOverallProgress(book, $"{book.Title} • {chapter.Title} ({doneNow}/{imageUrls.Count})", force: false);
 
                             long nowTick = Environment.TickCount64;
                             long minEngineInterval = OperatingSystem.IsAndroid() ? 450 : 200;
@@ -1023,6 +1025,7 @@ public class DownloadEngineService
                         completedChapters++;
                         chapter.Status = "Completed";
                         book.UpdateProgress(completedChapters, totalChapters, imageUrls.Count, imageUrls.Count);
+                        ReportOverallProgress(book, $"{book.Title} • Đã xong {chapter.Title}", force: false);
                     }
                 }
                 else
@@ -1069,6 +1072,7 @@ public class DownloadEngineService
             book.UpdateProgress(completedChapters, totalChapters, 0, 0);
             book.DetailProgressText = $"Hoàn tất {completedChapters}/{totalChapters} chaps • 100%";
             LogEmitted?.Invoke("SUCCESS", $"Đã hoàn tất truyện: '{book.Title}' ({completedChapters} chaps) -> {book.LocalDirectory}");
+            ReportOverallProgress(book, $"{book.Title} • Đã hoàn tất", force: true);
         }
         catch (OperationCanceledException)
         {
@@ -1486,6 +1490,109 @@ public class DownloadEngineService
         catch {}
 
         return false;
+    }
+
+    private long _lastReportOverallProgressTick = 0;
+
+    /// <summary>
+    /// Báo cáo tiến trình tổng thể của toàn bộ hàng đợi tải (hỗ trợ cả 1 truyện và nhiều truyện).
+    /// Đảm bảo con số phần trăm (%) trên Bong bóng nổi (Bubble) và Notification luôn được tính toán
+    /// nhất quán, tăng dần mượt mà theo tổng tiến độ của toàn bộ các truyện đang tham gia đợt tải.
+    /// </summary>
+    public void ReportOverallProgress(ComicBookItem? currentBook = null, string? currentDetail = null, bool force = false)
+    {
+        long now = Environment.TickCount64;
+        long minInterval = OperatingSystem.IsAndroid() ? 450 : 200;
+        if (!force && now - Interlocked.Read(ref _lastReportOverallProgressTick) < minInterval)
+        {
+            return;
+        }
+        Interlocked.Exchange(ref _lastReportOverallProgressTick, now);
+
+        List<ComicBookItem> batch;
+        lock (_queueLock)
+        {
+            if (_liveQueueSource == null || _liveQueueSource.Count == 0)
+            {
+                if (currentBook != null)
+                {
+                    batch = new List<ComicBookItem> { currentBook };
+                }
+                else
+                {
+                    return;
+                }
+            }
+            else
+            {
+                batch = _liveQueueSource.Where(c => c != null && c.IsChecked && !c.IsParallelSplitParent).ToList();
+                if (batch.Count == 0 && currentBook != null)
+                {
+                    batch = new List<ComicBookItem> { currentBook };
+                }
+            }
+        }
+
+        if (batch.Count == 0) return;
+
+        double overallPercent;
+        string title;
+        string detail;
+
+        if (batch.Count == 1)
+        {
+            var single = batch[0];
+            overallPercent = Math.Clamp(single.ProgressPercentage, 0, 100);
+            title = _isPaused ? "Tải Truyện (Tạm dừng)" : "Tải Truyện";
+            detail = currentDetail ?? $"{single.Title} ({overallPercent:0}%)";
+        }
+        else
+        {
+            // Nhiều truyện: Tính tổng tiến độ dựa trên toàn bộ các truyện tham gia đợt tải
+            double totalProgressSum = 0;
+            int completedCount = 0;
+
+            foreach (var b in batch)
+            {
+                if (IsCompletedStatus(b.Status))
+                {
+                    totalProgressSum += 100.0;
+                    completedCount++;
+                }
+                else if (string.Equals(b.Status, "Downloading", StringComparison.OrdinalIgnoreCase))
+                {
+                    totalProgressSum += Math.Clamp(b.ProgressPercentage, 0, 100);
+                }
+                else
+                {
+                    if (b.TotalChapters > 0 && b.DownloadedChapters > 0)
+                    {
+                        double ratio = (double)b.DownloadedChapters / b.TotalChapters * 100.0;
+                        totalProgressSum += Math.Clamp(ratio, 0, 100);
+                    }
+                }
+            }
+
+            overallPercent = Math.Clamp(totalProgressSum / batch.Count, 0, 100);
+            title = _isPaused
+                ? $"Tải Truyện (Tạm dừng - {completedCount}/{batch.Count})"
+                : $"Tải Truyện ({completedCount}/{batch.Count})";
+
+            if (!string.IsNullOrWhiteSpace(currentDetail))
+            {
+                detail = $"[{completedCount}/{batch.Count}] {currentDetail}";
+            }
+            else if (currentBook != null)
+            {
+                detail = $"[{completedCount}/{batch.Count}] {currentBook.Title} ({overallPercent:0}%)";
+            }
+            else
+            {
+                detail = $"Đang tải danh sách {batch.Count} truyện ({completedCount} xong) • {overallPercent:0}%";
+            }
+        }
+
+        BackgroundExecutionService.Instance.ReportProgress("download_queue", title, detail, overallPercent, true);
     }
 
     private void CalculateSpeed()

@@ -793,7 +793,8 @@ public static class FloatingBubbleManager
                     if (_badgeTextView != null)
                     {
                         _badgeTextView.Visibility = ViewStates.Visible;
-                        _badgeTextView.Text = task.ProgressPercentage > 0 ? $"{task.ProgressPercentage:0}" : "●";
+                        int pct = (int)Math.Round(Math.Clamp(task.ProgressPercentage, 0, 100));
+                        _badgeTextView.Text = task.ProgressPercentage >= 0 ? $"{pct}" : "●";
                         int badgeColor = (int)GetTaskColor(task.Id);
                         _badgeBg?.SetColor(badgeColor);
                     }
@@ -820,7 +821,8 @@ public static class FloatingBubbleManager
                         if (_badgeTextView != null)
                         {
                             _badgeTextView.Visibility = ViewStates.Visible;
-                            _badgeTextView.Text = $"{primary.ProgressPercentage:0}";
+                            int pct = (int)Math.Round(Math.Clamp(primary.ProgressPercentage, 0, 100));
+                            _badgeTextView.Text = primary.ProgressPercentage >= 0 ? $"{pct}" : "●";
                             _badgeBg?.SetColor((int)GetTaskColor(primary.Id));
                         }
                         _progressRingView?.UpdateProgress(primary.ProgressPercentage, primary.Id, true);

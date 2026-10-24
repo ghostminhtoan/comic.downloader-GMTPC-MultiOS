@@ -1123,6 +1123,31 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
 
 ---
 
+### 30. BUG-030: Đồng Bộ Tiến Trình Phần Trăm (%) Trên Bong Bóng Nổi (Bubble) Khi Tải Nhiều Truyện (Batch Queue Progress)
+
+- **Triệu chứng**:
+  1. Khi người dùng tải một danh sách gồm nhiều truyện, Bong bóng nổi (Floating Bubble) trên Android và Desktop không hiển thị phần trăm hoặc chỉ hiển thị biểu tượng dấu chấm "●" thay vì hiển thị con số phần trăm tiến độ rõ ràng.
+  2. Phần trăm trên Bubble chỉ xuất hiện khi tải đúng 1 truyện đơn lẻ. Khi tải nhiều truyện, mỗi truyện tải xong thì truyện tiếp theo bị reset về 0% hoặc mất phần trăm trong suốt thời gian cào dữ liệu chapter.
+- **Nguyên nhân gốc rễ**:
+  1. Trong `DownloadEngineService.cs`, phương thức `ReportProgress` chỉ được gọi tại một dòng duy nhất khi tải xong từng trang ảnh (`doneNow`), và chỉ truyền `book.ProgressPercentage` của riêng cuốn truyện đó.
+  2. Khi tải danh sách nhiều truyện, không có cơ chế tính toán tiến trình tổng thể (`overallProgress`) dựa trên toàn bộ các truyện tham gia đợt tải. Khi một truyện xong, truyện kế tiếp đang trích xuất chapter (mất 10-20s) thì không có lệnh `ReportProgress` nào được phát ra. Nếu tải song song nhiều truyện, các truyện thi nhau gửi % của riêng mình gây gián đoạn và xung đột.
+  3. Trên Android trong `FloatingBubbleManager.cs`, điều kiện hiển thị `task.ProgressPercentage > 0 ? $"{task.ProgressPercentage:0}" : "●"` dẫn đến việc bất kỳ khi nào tiến độ bằng 0% (hoặc đang khởi tạo), Bubble đều hiển thị dấu chấm "●" thay vì hiển thị con số phần trăm.
+- **Giải pháp triệt để**:
+  1. *Xây dựng phương thức tính toán tiến trình tổng thể `ReportOverallProgress`*:
+     - Tự động nhận diện danh sách các truyện tham gia đợt tải (`batch = eligibleComics`).
+     - Khi `batch.Count == 1`: Giữ nguyên 100% độ chính xác của tiến trình cuốn truyện đơn lẻ.
+     - Khi `batch.Count > 1`: Tính toán tổng tiến độ tích lũy `overallPercent = (sum of all book progresses) / batch.Count`, kết hợp số truyện đã hoàn tất `completedCount/batch.Count`.
+     - Tự động báo cáo tiến độ tổng thể ở mọi giai đoạn: bắt đầu tải đợt mới, khởi tạo truyện, trích xuất chapter, tải từng trang ảnh, hoàn tất chapter, hoàn tất truyện, tạm dừng và tiếp tục.
+  2. *Chuẩn hóa hiển thị Badge phần trăm trên Bubble Android & Desktop*:
+     - Thay đổi điều kiện hiển thị: Khi `task.ProgressPercentage >= 0`, luôn luôn hiển thị con số phần trăm được làm tròn chuẩn xác (`0`, `1`, `5`, `50`, `100`), không còn bị dấu chấm "●" che mất phần trăm khi tải nhiều truyện.
+     - Đồng bộ màu sắc viền tiến trình `CircularProgressRingView` và thanh tiến trình `BubbleProgress` ở Footer Status Bar theo tiến độ tổng thể.
+- **File can thiệp**: `DownloadEngineService.cs`, `FloatingBubbleManager.cs`, `FloatingBubbleWindow.axaml.cs`, `bug-fixes-and-solutions.md`.
+- **Quy tắc kiểm thử**:
+  - Chọn tải đồng thời 3-5 truyện trong hàng chờ (Queue): Bong bóng nổi (Bubble) trên cả Android và Desktop lập tức hiển thị con số phần trăm (`0%`, `5%`, `20%`, `50%`, `100%`), tiến độ tăng dần đều đặn liên tục từ truyện đầu tiên đến truyện cuối cùng.
+  - Khi một truyện hoàn tất và chuyển sang truyện tiếp theo, phần trăm trên Bubble không bị reset về 0 hay biến thành "●" mà giữ nguyên giá trị tích lũy và tiếp tục tăng dần.
+
+---
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 

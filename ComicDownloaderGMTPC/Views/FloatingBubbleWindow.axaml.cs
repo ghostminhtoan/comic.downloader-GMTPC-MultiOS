@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
@@ -452,7 +452,8 @@ public partial class FloatingBubbleWindow : Window
                 {
                     var taskBrush = GetTaskBrush(task.Id);
 
-                    BadgeText.Text = $"{task.ProgressPercentage}%";
+                    int pct = (int)Math.Round(Math.Clamp(task.ProgressPercentage, 0, 100));
+                    BadgeText.Text = task.ProgressPercentage >= 0 ? $"{pct}%" : "●";
                     BadgeBorder.Background = taskBrush;
                     BadgeBorder.IsVisible = true;
 
@@ -505,7 +506,8 @@ public partial class FloatingBubbleWindow : Window
         if (primary != null && primary.IsRunning)
         {
             var brush = GetTaskBrush(primary.Id);
-            BadgeText.Text = $"{primary.ProgressPercentage}%";
+            int pct = (int)Math.Round(Math.Clamp(primary.ProgressPercentage, 0, 100));
+            BadgeText.Text = primary.ProgressPercentage >= 0 ? $"{pct}%" : "●";
             BadgeBorder.Background = brush;
             BadgeBorder.IsVisible = true;
             BadgeText.Foreground = IsDarkColor(brush) ? Brushes.White : new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A));
