@@ -1297,16 +1297,20 @@ public partial class ComicReaderControl : UserControl
                 StopKineticScroll();
                 _cumulativeOverscrollX = 0;
                 _cumulativeOverscrollY = 0;
-                _lastAutoChapterTransitionTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 2500 : 1500);
-                _suppressScrollChangedUntilTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 1500 : 1000);
+                _lastAutoChapterTransitionTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 3500 : 2000);
+                _suppressScrollChangedUntilTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 2000 : 1200);
                 _isProgrammaticScroll = true;
+
+                // Đồng bộ chính xác trạng thái mép biên theo trang hiện tại để chống nhảy chương sai lệch
+                vm.IsScrollAtStart = (vm.CurrentPageIndex <= 0);
+                vm.IsScrollAtEnd = (vm.CurrentPageIndex >= vm.Pages.Count - 1 && vm.Pages.Count > 0);
 
                 var activeLb = GetActiveReaderListBox();
                 activeLb?.InvalidateMeasure();
                 activeLb?.InvalidateArrange();
 
                 var scrollViewer = GetReaderScrollViewer();
-                if (scrollViewer != null)
+                if (scrollViewer != null && vm.CurrentPageIndex <= 0)
                 {
                     scrollViewer.Offset = Vector.Zero;
                 }
@@ -1375,6 +1379,9 @@ public partial class ComicReaderControl : UserControl
         var scrollViewer = GetReaderScrollViewer();
         if (scrollViewer == null) return;
 
+        long now = Environment.TickCount64;
+        bool isAutoChapterBlocked = now < _lastAutoChapterTransitionTick || now < vm.SuppressAutoChapterUntilTick;
+
         if (vm.IsHorizontalScrollMode)
         {
             double dir = vm.IsRightToLeft ? -1.0 : 1.0;
@@ -1383,25 +1390,40 @@ public partial class ComicReaderControl : UserControl
             double step = vpWidth * fraction * dir;
             double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
 
-            // Chốt chặn an toàn: nếu Extent chưa kịp dãn nở trong khi truyện có nhiều trang, không kích hoạt chuyển chương
-            if (maxX <= 10 && vm.Pages.Count > 1) return;
+            // Chốt chặn an toàn: nếu Extent chưa kịp dãn nở trong khi truyện có nhiều trang,
+            // fallback chuyển trang theo chỉ số logic (CurrentPageIndex ± 1) để phím không bị liệt, đồng thời không nhảy chương bậy!
+            if (maxX <= 10 && vm.Pages.Count > 1)
+            {
+                int targetPage = fraction > 0
+                    ? Math.Min(vm.Pages.Count - 1, vm.CurrentPageIndex + 1)
+                    : Math.Max(0, vm.CurrentPageIndex - 1);
+                if (targetPage != vm.CurrentPageIndex)
+                {
+                    vm.CurrentPageIndex = targetPage;
+                    vm.RequestScrollToPage(targetPage);
+                }
+                return;
+            }
 
             double targetX = scrollViewer.Offset.X + step;
 
             if (fraction > 0)
             {
-                // Nút Tiến (+): Chuyển chương nếu đã thực sự ở cuối, hoặc neo tới cuối trang
+                // Nút Tiến (+): Chuyển chương nếu đã thực sự ở cuối và không bị khóa bởi cờ chuyển mode
                 bool atEnd = vm.IsRightToLeft
                     ? (maxX > 10 && scrollViewer.Offset.X <= 4 && (vm.CurrentPageIndex >= vm.Pages.Count - 1 || vm.IsScrollAtEnd))
                     : (maxX > 10 && scrollViewer.Offset.X >= maxX - 4 && (vm.CurrentPageIndex >= vm.Pages.Count - 1 || vm.IsScrollAtEnd));
 
                 if (atEnd)
                 {
-                    if (vm.CanGoNextChapter)
+                    if (!isAutoChapterBlocked && vm.CanGoNextChapter)
                     {
                         vm.NextChapter();
                         return;
                     }
+                    double finalX = vm.IsRightToLeft ? 0 : maxX;
+                    scrollViewer.Offset = new Vector(finalX, scrollViewer.Offset.Y);
+                    return;
                 }
                 else
                 {
@@ -1419,18 +1441,21 @@ public partial class ComicReaderControl : UserControl
             }
             else if (fraction < 0)
             {
-                // Nút Lùi (-): Chuyển chương nếu đã thực sự ở đầu, hoặc neo về đầu trang
+                // Nút Lùi (-): Chuyển chương nếu đã thực sự ở đầu và không bị khóa bởi cờ chuyển mode
                 bool atStart = vm.IsRightToLeft
                     ? (maxX > 10 && scrollViewer.Offset.X >= maxX - 4 && (vm.CurrentPageIndex <= 0 || vm.IsScrollAtStart))
                     : (scrollViewer.Offset.X <= 4 && (vm.CurrentPageIndex <= 0 || vm.IsScrollAtStart));
 
                 if (atStart)
                 {
-                    if (vm.CanGoPrevChapter)
+                    if (!isAutoChapterBlocked && vm.CanGoPrevChapter)
                     {
                         vm.PrevChapter();
                         return;
                     }
+                    double finalX = vm.IsRightToLeft ? maxX : 0;
+                    scrollViewer.Offset = new Vector(finalX, scrollViewer.Offset.Y);
+                    return;
                 }
                 else
                 {
@@ -1448,7 +1473,7 @@ public partial class ComicReaderControl : UserControl
             }
 
             // Xử lý chuyển chương khi cuộn chạm mép ở chế độ Đọc liền mạch
-            if (vm.IsContinuousChaptersMode)
+            if (vm.IsContinuousChaptersMode && !isAutoChapterBlocked)
             {
                 bool atEnd = vm.IsRightToLeft ? targetX <= -10 : targetX >= maxX + 10;
                 bool atStart = vm.IsRightToLeft ? targetX >= maxX + 10 : targetX <= -10;
@@ -1472,6 +1497,21 @@ public partial class ComicReaderControl : UserControl
             if (vpHeight <= 0) vpHeight = 600.0;
             double step = vpHeight * fraction;
             double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+
+            // Chốt chặn an toàn tương tự cho Vertical khi Extent chưa kịp tính toán
+            if (maxY <= 10 && vm.Pages.Count > 1)
+            {
+                int targetPage = fraction > 0
+                    ? Math.Min(vm.Pages.Count - 1, vm.CurrentPageIndex + 1)
+                    : Math.Max(0, vm.CurrentPageIndex - 1);
+                if (targetPage != vm.CurrentPageIndex)
+                {
+                    vm.CurrentPageIndex = targetPage;
+                    vm.RequestScrollToPage(targetPage);
+                }
+                return;
+            }
+
             double targetY = scrollViewer.Offset.Y + step;
 
             if (fraction > 0)
@@ -1479,11 +1519,13 @@ public partial class ComicReaderControl : UserControl
                 // Nút Tiến (+): Chuyển chương nếu đã ở đáy hoặc đang hiện nút chuyển chap tiếp theo
                 if (scrollViewer.Offset.Y >= maxY - 4 || vm.CurrentPageIndex >= vm.Pages.Count - 1 || vm.IsScrollAtEnd)
                 {
-                    if (vm.CanGoNextChapter)
+                    if (!isAutoChapterBlocked && vm.CanGoNextChapter)
                     {
                         vm.NextChapter();
                         return;
                     }
+                    scrollViewer.Offset = new Vector(scrollViewer.Offset.X, maxY);
+                    return;
                 }
                 else if (targetY >= maxY - 4)
                 {
@@ -1499,11 +1541,13 @@ public partial class ComicReaderControl : UserControl
                 // Nút Lùi (-): Chuyển chương nếu đã ở đỉnh hoặc đang hiện nút chuyển chap trước
                 if (scrollViewer.Offset.Y <= 4 || vm.CurrentPageIndex <= 0 || vm.IsScrollAtStart)
                 {
-                    if (vm.CanGoPrevChapter)
+                    if (!isAutoChapterBlocked && vm.CanGoPrevChapter)
                     {
                         vm.PrevChapter();
                         return;
                     }
+                    scrollViewer.Offset = new Vector(scrollViewer.Offset.X, 0);
+                    return;
                 }
                 else if (targetY <= 4)
                 {
@@ -1516,7 +1560,7 @@ public partial class ComicReaderControl : UserControl
             }
 
             // Xử lý chuyển chương khi cuộn chạm mép ở chế độ Đọc liền mạch
-            if (vm.IsContinuousChaptersMode)
+            if (vm.IsContinuousChaptersMode && !isAutoChapterBlocked)
             {
                 if (targetY >= maxY + 10 && vm.CanGoNextChapter)
                 {
@@ -1564,8 +1608,8 @@ public partial class ComicReaderControl : UserControl
         int reqVersion = ++_scrollRequestVersion;
         var targetItem = vm.Pages[pageIndex];
         _isProgrammaticScroll = true;
-        // Khóa sự kiện ScrollChanged đủ lâu (1200ms trên Android) để ảo hóa VirtualizingStackPanel và bố cục ổn định tuyệt đối
-        _suppressScrollChangedUntilTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 1200 : 600);
+        // Khóa sự kiện ScrollChanged đủ lâu (1500ms trên Android) để ảo hóa VirtualizingStackPanel và bố cục ổn định tuyệt đối
+        _suppressScrollChangedUntilTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 1500 : 800);
 
         var sv = GetReaderScrollViewer();
         if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
@@ -1579,7 +1623,14 @@ public partial class ComicReaderControl : UserControl
             if (sv != null)
             {
                 double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
-                sv.Offset = new Vector(0, pageIndex == 0 ? 0 : Math.Clamp(targetY, 0, maxY));
+                if (pageIndex == 0)
+                {
+                    sv.Offset = new Vector(0, 0);
+                }
+                else if (maxY > 10)
+                {
+                    sv.Offset = new Vector(0, Math.Clamp(targetY, 0, maxY));
+                }
             }
             try { listBox.ScrollIntoView(targetItem); } catch { }
         }
@@ -1594,10 +1645,16 @@ public partial class ComicReaderControl : UserControl
                     accX += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
                 }
                 double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
-                double targetX = pageIndex == 0
-                    ? (vm.IsRightToLeft ? maxX : 0)
-                    : (vm.IsRightToLeft ? (maxX - accX) : accX);
-                sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), 0);
+                if (pageIndex == 0)
+                {
+                    double targetX = vm.IsRightToLeft ? maxX : 0;
+                    sv.Offset = new Vector(Math.Clamp(targetX, 0, Math.Max(0, maxX)), 0);
+                }
+                else if (maxX > 10)
+                {
+                    double targetX = vm.IsRightToLeft ? (maxX - accX) : accX;
+                    sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), 0);
+                }
             }
             try { listBox.ScrollIntoView(targetItem); } catch { }
         }
@@ -1630,6 +1687,7 @@ public partial class ComicReaderControl : UserControl
                 return;
             }
 
+            var activeSv = GetReaderScrollViewer();
             if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
             {
                 double targetY = 0;
@@ -1638,15 +1696,22 @@ public partial class ComicReaderControl : UserControl
                     var p = vm.Pages[i];
                     targetY += p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom;
                 }
-                if (sv != null)
+                if (activeSv != null)
                 {
-                    double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
-                    sv.Offset = new Vector(0, pageIndex == 0 ? 0 : Math.Clamp(targetY, 0, maxY));
+                    double maxY = Math.Max(0, activeSv.Extent.Height - activeSv.Viewport.Height);
+                    if (pageIndex == 0)
+                    {
+                        activeSv.Offset = new Vector(0, 0);
+                    }
+                    else if (maxY > 10)
+                    {
+                        activeSv.Offset = new Vector(0, Math.Clamp(targetY, 0, maxY));
+                    }
                 }
             }
             else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
             {
-                if (sv != null)
+                if (activeSv != null)
                 {
                     double accX = 0;
                     for (int i = 0; i < pageIndex && i < vm.Pages.Count; i++)
@@ -1654,11 +1719,17 @@ public partial class ComicReaderControl : UserControl
                         var p = vm.Pages[i];
                         accX += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
                     }
-                    double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
-                    double targetX = pageIndex == 0
-                        ? (vm.IsRightToLeft ? maxX : 0)
-                        : (vm.IsRightToLeft ? (maxX - accX) : accX);
-                    sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), 0);
+                    double maxX = Math.Max(0, activeSv.Extent.Width - activeSv.Viewport.Width);
+                    if (pageIndex == 0)
+                    {
+                        double targetX = vm.IsRightToLeft ? maxX : 0;
+                        activeSv.Offset = new Vector(Math.Clamp(targetX, 0, Math.Max(0, maxX)), 0);
+                    }
+                    else if (maxX > 10)
+                    {
+                        double targetX = vm.IsRightToLeft ? (maxX - accX) : accX;
+                        activeSv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), 0);
+                    }
                 }
             }
 

@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: ComicReaderViewModel.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -55,6 +55,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     private bool _suppressScrollSync;
     private bool _suppressBrightnessAutoUncheck;
     private long _suppressAutoChapterUntilTick;
+    public long SuppressAutoChapterUntilTick => _suppressAutoChapterUntilTick;
     private double _viewportWidth = 1080;
     private double _viewportHeight = 1920;
 
@@ -570,12 +571,18 @@ public partial class ComicReaderViewModel : ViewModelBase
             CurrentPageIndex = Math.Clamp(preservedPageIndex, 0, Pages.Count - 1);
         }
 
+        IsScrollAtStart = (CurrentPageIndex <= 0);
+        IsScrollAtEnd = (CurrentPageIndex >= Pages.Count - 1 && Pages.Count > 0);
+
         UpdateCurrentFlipPages();
         TriggerPrefetch(CurrentPageIndex);
 
-        if (CurrentPage != null && !CurrentPage.IsLoaded)
+        // Kích hoạt giải mã khẩn cấp toàn bộ cửa sổ trang quanh vị trí đọc để triệt tiêu hoàn toàn Black Screen khi đổi mode
+        int prefetchStart = Math.Max(0, CurrentPageIndex - 3);
+        int prefetchEnd = Math.Min(Pages.Count, CurrentPageIndex + 4);
+        for (int i = prefetchStart; i < prefetchEnd; i++)
         {
-            _ = EnsureSinglePageLoadedAsync(CurrentPage);
+            _ = EnsureSinglePageLoadedAsync(Pages[i]);
         }
         if (SecondaryPage != null && !SecondaryPage.IsLoaded)
         {
@@ -724,12 +731,18 @@ public partial class ComicReaderViewModel : ViewModelBase
             CurrentPageIndex = Math.Clamp(preservedPageIndex, 0, Pages.Count - 1);
         }
 
+        IsScrollAtStart = (CurrentPageIndex <= 0);
+        IsScrollAtEnd = (CurrentPageIndex >= Pages.Count - 1 && Pages.Count > 0);
+
         UpdateCurrentFlipPages();
         TriggerPrefetch(CurrentPageIndex);
 
-        if (CurrentPage != null && !CurrentPage.IsLoaded)
+        // Kích hoạt giải mã khẩn cấp toàn bộ cửa sổ trang quanh vị trí đọc để triệt tiêu hoàn toàn Black Screen khi đổi mode
+        int prefetchStart = Math.Max(0, CurrentPageIndex - 3);
+        int prefetchEnd = Math.Min(Pages.Count, CurrentPageIndex + 4);
+        for (int i = prefetchStart; i < prefetchEnd; i++)
         {
-            _ = EnsureSinglePageLoadedAsync(CurrentPage);
+            _ = EnsureSinglePageLoadedAsync(Pages[i]);
         }
         if (SecondaryPage != null && !SecondaryPage.IsLoaded)
         {
