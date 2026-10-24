@@ -1148,6 +1148,29 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
 
 ---
 
+### 31. BUG-031: Bổ Sung Tùy Chọn Đánh Số Thứ Tự (STT) Ở Đầu Tên Truyện Khi Tải Trong Tab Download
+
+- **Yêu cầu & Triệu chứng**:
+  1. Trong Tab Download, người dùng muốn có tùy chọn đánh số thứ tự (001., 002., 003...) ở đầu tên truyện.
+  2. Truyện nào được tải trước thì phải có số thứ tự trước, đảm bảo tên thư mục và danh sách tải được xếp theo đúng thứ tự tải thực tế.
+- **Giải pháp triệt để**:
+  1. *Checkbox giao diện trong Tab Download*:
+     - Bổ sung `<CheckBox IsChecked="{Binding IsAddOrderPrefix}" Content="🔢 Đánh STT tên truyện" ... />` tại Toolbar của Tab Download.
+     - Thiết lập ToolTip giải thích rõ ràng và màu chữ Cyber Cyan `#38BDF8` đồng bộ hệ thống.
+  2. *Cơ chế cấp phát STT thông minh trong `DownloadEngineService`*:
+     - Thuộc tính `AddOrderPrefixToTitle`: khi bật, mỗi khi một truyện được dequeue ra để tải (`DownloadComicBookAsync`), hệ thống sẽ kiểm tra xem tên truyện đã có STT chưa.
+     - Phương thức `GetNextOrderIndex(targetServerDir)`:
+       + Tự động quét số thứ tự lớn nhất đã có trong thư mục đích của server/subfolder (ví dụ nếu đã có `002. ...` thì truyện tiếp theo tự động lấy `003. `).
+       + Thread-safe bằng `lock (_orderLock)`, đảm bảo khi tải song song nhiều luồng, mỗi truyện đều nhận một STT tăng dần duy nhất theo thứ tự thực thi.
+     - Tự động gắn tiền tố `${order:D3}. ` vào `book.Title` trên giao diện và thư mục lưu trữ `book.LocalDirectory`, đồng bộ với cả chế độ Nhiều truyện (Multi-mode).
+- **File can thiệp**: `DownloadEngineService.cs`, `MainViewModel.cs`, `MainView.axaml`, `bug-fixes-and-solutions.md`.
+- **Quy tắc kiểm thử**:
+  - Tích chọn checkbox "🔢 Đánh STT tên truyện" trong Tab Download.
+  - Chọn tải nhiều truyện trong hàng đợi: Các truyện khi bắt đầu tải sẽ lần lượt được đánh số `001. [Tên truyện]`, `002. [Tên truyện]`, `003. [Tên truyện]`... cả trên danh sách hiển thị lẫn tên thư mục lưu trên ổ cứng.
+  - Tắt checkbox: Truyện tải về giữ nguyên tên gốc không có tiền tố số thứ tự.
+
+---
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 

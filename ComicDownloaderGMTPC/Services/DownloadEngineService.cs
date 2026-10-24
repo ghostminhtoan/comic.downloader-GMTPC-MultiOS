@@ -59,6 +59,46 @@ public class DownloadEngineService
 
     public bool AutoSplitLongImages { get; set; } = false;
     public int AutoSplitHeight { get; set; } = 5000;
+    public bool AddOrderPrefixToTitle { get; set; } = false;
+
+    private int _orderCounter = 0;
+    private string _lastOrderServerDir = string.Empty;
+    private readonly object _orderLock = new();
+
+    public int GetNextOrderIndex(string targetServerDir)
+    {
+        lock (_orderLock)
+        {
+            if (!string.Equals(_lastOrderServerDir, targetServerDir, StringComparison.OrdinalIgnoreCase))
+            {
+                _lastOrderServerDir = targetServerDir;
+                int maxFound = 0;
+                try
+                {
+                    if (Directory.Exists(targetServerDir))
+                    {
+                        var dirs = Directory.GetDirectories(targetServerDir);
+                        foreach (var d in dirs)
+                        {
+                            string dirName = Path.GetFileName(d);
+                            var match = System.Text.RegularExpressions.Regex.Match(dirName, @"^(\d{1,5})[\.\s\-_]");
+                            if (match.Success && int.TryParse(match.Groups[1].Value, out int num))
+                            {
+                                if (num > maxFound) maxFound = num;
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                _orderCounter = maxFound;
+            }
+
+            _orderCounter++;
+            return _orderCounter;
+        }
+    }
+
     public int AutoSplitQuality { get; set; } = 90;
 
     // SỐ TRUYỆN TẢI CÙNG LÚC & SỐ LUỒNG TẢI ẢNH
@@ -760,6 +800,18 @@ public class DownloadEngineService
         if (string.IsNullOrWhiteSpace(subFolder)) subFolder = "[default]";
 
         string targetServerDir = Path.Combine(effectiveRoot, serverFolder, subFolder);
+
+        if (AddOrderPrefixToTitle)
+        {
+            var matchPrefix = System.Text.RegularExpressions.Regex.Match(book.Title, @"^(\d{1,5})[\.\s\-_]");
+            if (!matchPrefix.Success)
+            {
+                int nextOrder = GetNextOrderIndex(targetServerDir);
+                string prefix = $"{nextOrder:D3}. ";
+                book.Title = $"{prefix}{book.Title}";
+            }
+        }
+
         string safeBookName = MakeSafeFilename(book.Title, 80);
         string bookDir = Path.Combine(targetServerDir, safeBookName);
         book.LocalDirectory = bookDir;

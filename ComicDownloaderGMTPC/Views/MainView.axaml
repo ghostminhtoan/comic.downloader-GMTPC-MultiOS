@@ -3238,6 +3238,8 @@
 
                                     <CheckBox IsChecked="{Binding IsAutoRetry}" Content="🔁 Tự thử lại" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
 
+                                    <CheckBox IsChecked="{Binding IsAddOrderPrefix}" Content="🔢 Đánh STT tên truyện" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" Margin="0,0,10,4" ToolTip.Tip="Đánh số thứ tự (001., 002., 003...) ở đầu tên truyện khi tải. Tải truyện nào trước thì sẽ có số thứ tự đó trước." />
+
                                     <CheckBox IsChecked="{Binding IsCompactRow}" Content="📏 Nén dòng" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
 
                                     <CheckBox IsChecked="{Binding IsBubbleMode, Mode=TwoWay}" Click="OnBubbleCheckBoxClicked" Content="🫧 Bong bóng" FontSize="11" Foreground="#C084FC" FontWeight="Bold" Margin="0,0,10,4" ToolTip.Tip="Bật bong bóng nổi chạy ngầm: tự động thụt vào mép và làm mờ khi nhàn rỗi (hỗ trợ Overlay &amp; Android Bubble API)" />

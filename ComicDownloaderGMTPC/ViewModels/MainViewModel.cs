@@ -1,4 +1,4 @@
-// ====================================================================================================
+﻿// ====================================================================================================
 // FILE SUMMARY: MainViewModel.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -374,6 +374,14 @@ public partial class MainViewModel : ViewModelBase
     }
 
     // AUTO SPLIT LONG IMAGES
+    [ObservableProperty]
+    private bool _isAddOrderPrefix = false;
+
+    partial void OnIsAddOrderPrefixChanged(bool value)
+    {
+        _downloadEngine.AddOrderPrefixToTitle = value;
+    }
+
     [ObservableProperty]
     private bool _isAutoSplitLongImages = false;
 
@@ -1582,6 +1590,7 @@ public partial class MainViewModel : ViewModelBase
     {
         _downloadPathText = _downloadEngine.DownloadRoot;
         _downloadEngine.BindLiveQueueSource(ComicBooks);
+        _downloadEngine.AddOrderPrefixToTitle = IsAddOrderPrefix;
         _langService.LanguageChanged += OnLanguageChanged;
         _downloadEngine.LogEmitted += OnLogEmitted;
         _downloadEngine.ProgressUpdated += OnProgressUpdated;
