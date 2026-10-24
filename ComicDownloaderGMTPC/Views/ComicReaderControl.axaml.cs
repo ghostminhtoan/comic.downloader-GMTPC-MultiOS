@@ -48,7 +48,6 @@ public partial class ComicReaderControl : UserControl
     private double _cumulativeOverscrollX = 0;
     private long _lastAutoChapterTransitionTick = 0;
 
-    private ScrollViewer? _cachedReaderScrollViewer;
     private ScrollViewer? _cachedFlipScrollViewer;
 
     // Trạng thái vuốt ngang (Swipe) trên thanh công cụ Button 1-5 ↔ Button 6-10
@@ -110,7 +109,7 @@ public partial class ComicReaderControl : UserControl
 
         if (vm.IsScrollMode)
         {
-            var lb = this.FindControl<ListBox>("ReaderPagesListBox");
+            var lb = GetActiveReaderListBox();
             var sv = GetReaderScrollViewer();
 
             if (!vm.IsHorizontalScrollMode)
@@ -351,7 +350,7 @@ public partial class ComicReaderControl : UserControl
         _pinchStartPivot = currentPivot;
 
         Point inLb = currentPivot;
-        var lb = this.FindControl<ListBox>("ReaderPagesListBox");
+        var lb = GetActiveReaderListBox();
         if (lb != null)
         {
             var pt = this.TranslatePoint(currentPivot, lb);
@@ -822,17 +821,19 @@ public partial class ComicReaderControl : UserControl
         // Lắng nghe sự kiện cuộn trên ListBox để cập nhật trang đang đọc và lưu tiến độ
         AddHandler(ScrollViewer.ScrollChangedEvent, OnReaderScrollChanged, RoutingStrategies.Bubble);
 
-        var readerListBox = this.FindControl<ListBox>("ReaderPagesListBox");
-        if (readerListBox != null)
+        void AttachUnselect(string name)
         {
-            readerListBox.SelectionChanged += (s, e) =>
+            var lb = this.FindControl<ListBox>(name);
+            if (lb != null)
             {
-                if (readerListBox.SelectedItem != null)
+                lb.SelectionChanged += (s, e) =>
                 {
-                    readerListBox.SelectedItem = null;
-                }
-            };
+                    if (lb.SelectedItem != null) lb.SelectedItem = null;
+                };
+            }
         }
+        AttachUnselect("VerticalReaderListBox");
+        AttachUnselect("HorizontalReaderListBox");
 
         // Lắng nghe chạm / click / kéo trên vùng đọc truyện để Hold & Drag Scroll hoặc bật/tắt Overlay kiểu ComicScreen
         var viewport = this.FindControl<Panel>("ReaderViewportPanel");
@@ -911,13 +912,17 @@ public partial class ComicReaderControl : UserControl
         StopKineticScroll();
     }
 
+    public ListBox? GetActiveReaderListBox()
+    {
+        if (DataContext is ComicReaderViewModel vm && vm.IsHorizontalScrollMode)
+            return this.FindControl<ListBox>("HorizontalReaderListBox");
+        return this.FindControl<ListBox>("VerticalReaderListBox");
+    }
+
     public ScrollViewer? GetReaderScrollViewer()
     {
-        if (_cachedReaderScrollViewer != null)
-            return _cachedReaderScrollViewer;
-        var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
-        _cachedReaderScrollViewer = listBox?.FindDescendantOfType<ScrollViewer>();
-        return _cachedReaderScrollViewer;
+        var listBox = GetActiveReaderListBox();
+        return listBox?.FindDescendantOfType<ScrollViewer>();
     }
 
     private ScrollViewer? GetFlipScrollViewer()
@@ -1282,6 +1287,7 @@ public partial class ComicReaderControl : UserControl
         }
         else if (e.PropertyName == nameof(ComicReaderViewModel.PageScrollingMode) ||
                  e.PropertyName == nameof(ComicReaderViewModel.IsHorizontalScrollMode) ||
+                 e.PropertyName == nameof(ComicReaderViewModel.IsVerticalScrollMode) ||
                  e.PropertyName == nameof(ComicReaderViewModel.PageScrollOrientation) ||
                  e.PropertyName == nameof(ComicReaderViewModel.IsScrollMode) ||
                  e.PropertyName == nameof(ComicReaderViewModel.IsDoublePage))
@@ -1291,29 +1297,17 @@ public partial class ComicReaderControl : UserControl
                 StopKineticScroll();
                 _cumulativeOverscrollX = 0;
                 _cumulativeOverscrollY = 0;
-                _lastAutoChapterTransitionTick = Environment.TickCount64 + 2000;
+                _lastAutoChapterTransitionTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 2500 : 1500);
                 _suppressScrollChangedUntilTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 1500 : 1000);
                 _isProgrammaticScroll = true;
 
-                var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
-                if (listBox != null)
-                {
-                    // Cưỡng bức đồng bộ Orientation trực tiếp vào VirtualizingStackPanel của ListBox
-                    var vsp = listBox.FindDescendantOfType<VirtualizingStackPanel>();
-                    if (vsp != null)
-                    {
-                        vsp.Orientation = vm.PageScrollOrientation;
-                        vsp.InvalidateMeasure();
-                        vsp.InvalidateArrange();
-                    }
-                    listBox.InvalidateMeasure();
-                    listBox.InvalidateArrange();
-                }
+                var activeLb = GetActiveReaderListBox();
+                activeLb?.InvalidateMeasure();
+                activeLb?.InvalidateArrange();
 
                 var scrollViewer = GetReaderScrollViewer();
                 if (scrollViewer != null)
                 {
-                    // Reset Offset ngay lập tức về 0 trước khi đồng bộ trang để triệt tiêu việc Offset.Y cũ kẹt ở đáy
                     scrollViewer.Offset = Vector.Zero;
                 }
 
@@ -1388,14 +1382,18 @@ public partial class ComicReaderControl : UserControl
             if (vpWidth <= 0) vpWidth = 800.0;
             double step = vpWidth * fraction * dir;
             double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+
+            // Chốt chặn an toàn: nếu Extent chưa kịp dãn nở trong khi truyện có nhiều trang, không kích hoạt chuyển chương
+            if (maxX <= 10 && vm.Pages.Count > 1) return;
+
             double targetX = scrollViewer.Offset.X + step;
 
             if (fraction > 0)
             {
-                // Nút Tiến (+): Chuyển chương nếu đã ở cuối, hoặc neo tới cuối trang
+                // Nút Tiến (+): Chuyển chương nếu đã thực sự ở cuối, hoặc neo tới cuối trang
                 bool atEnd = vm.IsRightToLeft
-                    ? (scrollViewer.Offset.X <= 4 || vm.CurrentPageIndex >= vm.Pages.Count - 1 || vm.IsScrollAtEnd)
-                    : (scrollViewer.Offset.X >= maxX - 4 || vm.CurrentPageIndex >= vm.Pages.Count - 1 || vm.IsScrollAtEnd);
+                    ? (maxX > 10 && scrollViewer.Offset.X <= 4 && (vm.CurrentPageIndex >= vm.Pages.Count - 1 || vm.IsScrollAtEnd))
+                    : (maxX > 10 && scrollViewer.Offset.X >= maxX - 4 && (vm.CurrentPageIndex >= vm.Pages.Count - 1 || vm.IsScrollAtEnd));
 
                 if (atEnd)
                 {
@@ -1421,10 +1419,10 @@ public partial class ComicReaderControl : UserControl
             }
             else if (fraction < 0)
             {
-                // Nút Lùi (-): Chuyển chương nếu đã ở đầu, hoặc neo về đầu trang
+                // Nút Lùi (-): Chuyển chương nếu đã thực sự ở đầu, hoặc neo về đầu trang
                 bool atStart = vm.IsRightToLeft
-                    ? (scrollViewer.Offset.X >= maxX - 4 || vm.CurrentPageIndex <= 0 || vm.IsScrollAtStart)
-                    : (scrollViewer.Offset.X <= 4 || vm.CurrentPageIndex <= 0 || vm.IsScrollAtStart);
+                    ? (maxX > 10 && scrollViewer.Offset.X >= maxX - 4 && (vm.CurrentPageIndex <= 0 || vm.IsScrollAtStart))
+                    : (scrollViewer.Offset.X <= 4 && (vm.CurrentPageIndex <= 0 || vm.IsScrollAtStart));
 
                 if (atStart)
                 {
@@ -1560,7 +1558,7 @@ public partial class ComicReaderControl : UserControl
         if (DataContext is not ComicReaderViewModel vm) return;
         if (pageIndex < 0 || pageIndex >= vm.Pages.Count) return;
 
-        var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
+        var listBox = GetActiveReaderListBox();
         if (listBox == null) return;
 
         int reqVersion = ++_scrollRequestVersion;
@@ -1689,7 +1687,7 @@ public partial class ComicReaderControl : UserControl
 
     private void OnReaderScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
+        var listBox = GetActiveReaderListBox();
         if (listBox == null || !listBox.IsVisible) return;
 
         // 1. Chỉ chấp nhận sự kiện bắt nguồn từ bên trong ReaderPagesListBox (loại bỏ hoàn toàn Drawer, Popups, Settings)
@@ -2422,7 +2420,7 @@ public partial class ComicReaderControl : UserControl
         var scrollViewer = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
         Vector oldOffset = scrollViewer?.Offset ?? Vector.Zero;
 
-        var lb = this.FindControl<ListBox>("ReaderPagesListBox");
+        var lb = GetActiveReaderListBox();
         Point touchInLb = releasePoint;
         if (lb != null)
         {

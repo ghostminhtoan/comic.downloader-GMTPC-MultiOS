@@ -502,7 +502,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         int targetMode = Math.Clamp(mode, 0, 5);
         int preservedPageIndex = CurrentPageIndex;
 
-        _suppressAutoChapterUntilTick = Environment.TickCount64 + 2000;
+        _suppressAutoChapterUntilTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 2500 : 1500);
         _suppressScrollSync = true;
 
         PageScrollingMode = targetMode;
@@ -553,8 +553,17 @@ public partial class ComicReaderViewModel : ViewModelBase
                 break;
         }
 
+        OnPropertyChanged(nameof(IsVerticalScrollMode));
         OnPropertyChanged(nameof(ReaderFlowDirection));
         ApplyFitModeLayout();
+
+        double curVw = Math.Max(240, _viewportWidth);
+        double curVh = Math.Max(240, _viewportHeight);
+        double singleVw = (IsFlipMode && IsDoublePage) ? Math.Max(120, curVw * 0.5) : curVw;
+        foreach (var p in Pages)
+        {
+            p.RecalculateDimensions(FitMode, singleVw, curVh, ZoomLevel);
+        }
 
         if (Pages.Count > 0)
         {
@@ -2350,15 +2359,19 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFlipMode))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalScrollMode))]
     [NotifyPropertyChangedFor(nameof(ModeButtonText))]
     [NotifyPropertyChangedFor(nameof(ModeBadgeBackground))]
     [NotifyPropertyChangedFor(nameof(ComicScreenPageBadgeText))]
     private bool _isScrollMode = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalScrollMode))]
     [NotifyPropertyChangedFor(nameof(ModeButtonText))]
     [NotifyPropertyChangedFor(nameof(PageScrollOrientation))]
     private bool _isHorizontalScrollMode = false;
+
+    public bool IsVerticalScrollMode => IsScrollMode && !IsHorizontalScrollMode;
 
     public Avalonia.Layout.Orientation PageScrollOrientation =>
         IsHorizontalScrollMode ? Avalonia.Layout.Orientation.Horizontal : Avalonia.Layout.Orientation.Vertical;

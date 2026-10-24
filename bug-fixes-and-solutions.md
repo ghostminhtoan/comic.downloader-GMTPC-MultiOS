@@ -1369,6 +1369,36 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
   - Chuyển sang Cuộn ngang (Ctrl+6 hoặc Ctrl+7) hoặc Lật trang (Phím 6, Phím 7): Trang đang đọc được giữ nguyên vẹn, layout chuyển tức thì sang ngang mượt mà, không bao giờ bị nhảy sang chương mới.
 
 
+### 38. BUG-038: Lỗi Màn Hình Đen (Black Screen) & Nút -/+ Nhảy Chương Khi Chuyển Từ Webtoon Sang Cuộn Ngang Trên Android
+
+- **Triệu chứng**:
+  - Trên thiết bị Android với chương truyện dài 100 trang: Người dùng đang đọc ở chế độ Cuộn Dọc Webtoon, khi chuyển sang Cuộn Ngang liên tục (Mode 3, 4) thì bị lỗi màn hình đen (Black Screen).
+  - Khi thao tác bấm nút `-` hoặc `+` (PageButtonArea) thì không cuộn trang được mà tự động văng sang chương khác.
+  - Phải sang chương khác thì mới cuộn ngang được, còn ở cùng chương cũ vừa chuyển đổi thì bị tê liệt hoàn toàn.
+
+- **Nguyên nhân gốc rễ**:
+  1. *VirtualizingStackPanel Desync*: Trong Avalonia UI, việc thay đổi thuộc tính `Orientation` trên một `VirtualizingStackPanel` duy nhất đang chứa sẵn items trong `ItemsSource` không làm giải phóng/recycle các container `ListBoxItem` đã bố trí theo trục dọc trước đó. Các container cũ vẫn giữ kích thước dọc khổng lồ và tọa độ Y lệch ngoài Viewport, khiến khung nhìn trống rỗng (Black Screen) và không thể đo đạc bề ngang `Extent.Width`.
+  2. *False Positive atEnd Khi maxX == 0*: Do panel chưa dãn nở theo chiều ngang, `scrollViewer.Extent.Width` bằng đúng `Viewport.Width`, dẫn đến `maxX = 0`. Trong `OnVmPageButtonAreaScrollRequested`, điều kiện `atEnd` kiểm tra `(scrollViewer.Offset.X >= maxX - 4)` (tức `0 >= -4`) hoặc với RTL `scrollViewer.Offset.X <= 4` (tức `0 <= 4`) luôn luôn trả về `true`. Do đó khi người dùng bấm nút `+`, hệ thống ngộ nhận là đã ở cuối chương và kích hoạt ngay `vm.NextChapter()`.
+  3. *Tại sao ở chương mới lại được*: Khi chuyển sang chương mới, `Pages.Clear()` được gọi, kích hoạt Reset event dọn sạch toàn bộ container cũ, giúp VirtualizingStackPanel khởi tạo lại hoàn toàn theo trục ngang.
+
+- **Giải pháp triệt để**:
+  1. *Kiến trúc Dual ListBox (View Isolation)*: Tách thành 2 ListBox chuyên biệt trong XAML: `VerticalReaderListBox` (cố định `Orientation="Vertical"`, `IsVisible="{Binding IsVerticalScrollMode}"`) và `HorizontalReaderListBox` (cố định `Orientation="Horizontal"`, `IsVisible="{Binding IsHorizontalScrollMode}"`). Cả 2 dùng chung `DataTemplate` định nghĩa tại `UserControl.Resources`.
+  2. *Chốt chặn an toàn `maxX <= 10` trong `OnVmPageButtonAreaScrollRequested`*: Bổ sung kiểm tra `if (maxX <= 10 && vm.Pages.Count > 1) return;` và sửa logic nhận diện `atEnd` / `atStart` chỉ kích hoạt khi `maxX > 10` và thực sự ở trang biên (`CurrentPageIndex >= Pages.Count - 1`).
+  3. *Tái tính toán kích thước toàn diện theo `FitScreen`*: Trong `SelectPageScrollingMode`, duyệt tính lại toàn bộ kích thước hiển thị của các trang theo `FitScreen` / chiều cao Viewport của màn hình Android, nạp trước ảnh trang đích qua `EnsureSinglePageLoadedAsync`.
+  4. *Khóa chuyển chương tự động 2500ms*: Tăng thời gian bảo vệ chống nhảy chương ngoài ý muốn trên Android lên 2500ms sau khi đổi mode.
+  5. *Bộ điều phối động `GetActiveReaderListBox()` và `GetReaderScrollViewer()`*: Tự động định tuyến đến đúng ListBox và ScrollViewer đang kích hoạt, triệt tiêu lỗi cache stale.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/ViewModels/ComicReaderViewModel.cs`
+  - `ComicDownloaderGMTPC/Views/ComicReaderControl.axaml`
+  - `ComicDownloaderGMTPC/Views/ComicReaderControl.axaml.cs`
+  - `bug-fixes-and-solutions.md`
+
+- **Quy tắc kiểm thử**:
+  - Mở chương 100 trang trên Android, cuộn ở Webtoon dọc, sau đó chuyển sang Cuộn Ngang (Mode 3 hoặc 4).
+  - Kết quả: Không bị màn hình đen, trang hiện tại hiển thị tức thì theo phương ngang, bấm `-` và `+` cuộn trang mượt mà 75% màn hình, không tự nhảy qua chương khác.
+
+
 ---
 
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
