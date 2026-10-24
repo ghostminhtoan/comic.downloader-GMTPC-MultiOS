@@ -176,25 +176,35 @@ public sealed class ComicReaderService
 
                 // Tối ưu hạ nhiệt độ máy: Thay vì decode toàn bộ 80 trang ảnh full size cùng lúc,
                 // chỉ decode 3-5 trang gần nhất (1 trang trước, 3-4 trang sau). Các trang khác nạp theo sliding window khi cuộn tới gần.
+                // Tối ưu hóa siêu tốc & hạ nhiệt độ tuyệt đối cho folder/file nén hàng chục ngàn ảnh:
+                // Khống chế nghiêm ngặt cửa sổ trượt: Chỉ giải mã 3-5 Bitmap đầy đủ và tối đa 15 trang raw bytes gối đầu!
+                // TUYỆT ĐỐI KHÔNG quét nạp hàng chục ngàn trang ở xa gây cày nát ổ cứng, phình RAM và nóng máy!
                 int maxFullBitmapPreload = (ecoMode || OperatingSystem.IsAndroid()) ? 3 : 5;
-                int processedCount = 0;
+                int maxRawPrecacheCount = (ecoMode || OperatingSystem.IsAndroid()) ? 10 : 15;
+                int processedFullCount = 0;
+                int processedRawCount = 0;
 
                 var parallelBatch = new List<Task>();
                 foreach (int idx in order)
                 {
                     if (ct.IsCancellationRequested) break;
+                    // Khi đã nạp đủ số trang trong cửa sổ đọc gần nhất: DỪNG LẠI NGAY LẬP TỨC!
+                    if (processedFullCount >= maxFullBitmapPreload && processedRawCount >= maxRawPrecacheCount)
+                    {
+                        break;
+                    }
+
                     if (idx < 0 || idx >= pages.Count) continue;
                     var page = pages[idx];
 
                     if (!page.IsLoaded && !page.IsLoading)
                     {
-                        if (processedCount < maxFullBitmapPreload)
+                        if (processedFullCount < maxFullBitmapPreload)
                         {
-                            // Giải mã trực tiếp ra Bitmap đưa vào page.Image!
+                            // Giải mã trực tiếp ra Bitmap đưa vào page.Image cho 3-5 trang kế cận
                             parallelBatch.Add(EnsurePageLoadedAsync(page, ct));
-                            processedCount++;
+                            processedFullCount++;
 
-                            // Xử lý tuần tự nhẹ nhàng 2 trang một lần, kèm yield nghỉ 10ms để CPU hạ nhiệt
                             if (parallelBatch.Count >= 2)
                             {
                                 await Task.WhenAll(parallelBatch).ConfigureAwait(false);
@@ -202,9 +212,9 @@ public sealed class ComicReaderService
                                 await Task.Delay(10, ct).ConfigureAwait(false);
                             }
                         }
-                        else
+                        else if (processedRawCount < maxRawPrecacheCount)
                         {
-                            // Các trang ở rất xa trong file hàng ngàn trang: chỉ trích xuất raw bytes vào L1/Disk Cache
+                            // Nạp trước raw bytes vào L1 RAM cache cho 10-15 trang tiếp theo
                             string subKey = page.IsMobiEntry ? $"mobi_p_{page.MobiPageIndex}"
                                           : page.IsPdfEntry ? $"pdf_p_{page.PdfPageIndex}"
                                           : !string.IsNullOrEmpty(page.ArchiveEntryFullName) ? page.ArchiveEntryFullName
@@ -219,6 +229,7 @@ public sealed class ComicReaderService
                                     PutL1Cache(cacheKey, raw);
                                 }
                             }
+                            processedRawCount++;
                         }
                     }
                 }
@@ -443,7 +454,7 @@ public sealed class ComicReaderService
                 }
                 else if (Directory.Exists(chapter.LocalPath))
                 {
-                    progress?.Report((15, "Đang quét các file ảnh trong thư mục..."));
+                    progress?.Report((15, "Đang quét danh sách file ảnh trong thư mục..."));
                     var enumOptions = new EnumerationOptions
                     {
                         IgnoreInaccessible = true,
@@ -455,12 +466,32 @@ public sealed class ComicReaderService
                         .NaturalSort();
 
                     int total = imageFiles.Count;
+
+                    // Tối ưu hóa cực đại: Chỉ đọc Header kích thước của đúng 1 file đầu tiên để lấy tỷ lệ khung hình chuẩn
+                    // Tuyệt đối không mở đĩa đọc 50.000 file tuần tự gây đơ máy hàng phút!
+                    int defaultW = 900;
+                    int defaultH = 1350;
+                    if (total > 0)
+                    {
+                        string sampleFile = imageFiles[0];
+                        if (UniversalImageDecoder.TryGetFastJpegInfo(sampleFile, out int jw, out int jh) && jw > 0 && jh > 0)
+                        {
+                            defaultW = jw; defaultH = jh;
+                        }
+                        else if (UniversalImageDecoder.TryGetFastWebpInfo(sampleFile, out int ww, out int wh) && ww > 0 && wh > 0)
+                        {
+                            defaultW = ww; defaultH = wh;
+                        }
+                        else if (UniversalImageDecoder.TryGetFastPngInfo(sampleFile, out var pInfo) && pInfo.Width > 0 && pInfo.Height > 0)
+                        {
+                            defaultW = pInfo.Width; defaultH = pInfo.Height;
+                        }
+                    }
+
                     for (int i = 0; i < total; i++)
                     {
                         if (ct.IsCancellationRequested) break;
                         string file = imageFiles[i];
-                        long size = 0;
-                        try { size = new FileInfo(file).Length; } catch { }
 
                         var item = new ReaderPageItem
                         {
@@ -468,28 +499,16 @@ public sealed class ComicReaderService
                             Title = Path.GetFileName(file),
                             SourcePath = file,
                             ArchiveEntryFullName = string.Empty,
-                            FileSizeBytes = size
+                            FileSizeBytes = 0
                         };
-
-                        if (UniversalImageDecoder.TryGetFastJpegInfo(file, out int jw, out int jh) && jw > 0 && jh > 0)
-                        {
-                            item.SetKnownDimensions(jw, jh);
-                        }
-                        else if (UniversalImageDecoder.TryGetFastWebpInfo(file, out int ww, out int wh) && ww > 0 && wh > 0)
-                        {
-                            item.SetKnownDimensions(ww, wh);
-                        }
-                        else if (UniversalImageDecoder.TryGetFastPngInfo(file, out var pInfo) && pInfo.Width > 0 && pInfo.Height > 0)
-                        {
-                            item.SetKnownDimensions(pInfo.Width, pInfo.Height);
-                        }
+                        item.SetKnownDimensionsFast(defaultW, defaultH);
 
                         pages.Add(item);
 
                         if ((i + 1) % Math.Max(1, total / 20) == 0 || i + 1 == total)
                         {
                             double pct = 20 + (75.0 * (i + 1) / total);
-                            progress?.Report((pct, $"Đang nạp trang {i + 1}/{total} ({pct:F0}%)..."));
+                            progress?.Report((pct, $"Đang chuẩn bị trang {i + 1}/{total} ({pct:F0}%)..."));
                         }
                     }
                 }
@@ -613,18 +632,32 @@ public sealed class ComicReaderService
             int maxKeep = Math.Min(total - 1, safeCurrent + keepAhead);
 
             int releasedCount = 0;
+            // Tối ưu hóa UI Thread khi có hàng chục ngàn trang:
+            // Chỉ kiểm tra và unload các trang nằm trong vùng lân cận ngoài biên giữ lại,
+            // không duyệt tuyến tính 50.000 trang trên UI thread gây đơ giật!
+            int scanBehindStart = Math.Max(0, safeCurrent - keepBehind - 80);
+            int scanAheadEnd = Math.Min(total, safeCurrent + keepAhead + 80);
+
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                for (int i = 0; i < total; i++)
+                // Unload phía trước ngoài biên
+                for (int i = scanBehindStart; i < minKeep; i++)
                 {
-                    if (i < minKeep || i > maxKeep)
+                    var p = pages[i];
+                    if (p.IsLoaded || p.HasImage)
                     {
-                        var p = pages[i];
-                        if (p.IsLoaded || p.HasImage)
-                        {
-                            p.Unload();
-                            releasedCount++;
-                        }
+                        p.Unload();
+                        releasedCount++;
+                    }
+                }
+                // Unload phía sau ngoài biên
+                for (int i = maxKeep + 1; i < scanAheadEnd; i++)
+                {
+                    var p = pages[i];
+                    if (p.IsLoaded || p.HasImage)
+                    {
+                        p.Unload();
+                        releasedCount++;
                     }
                 }
             });

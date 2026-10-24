@@ -761,12 +761,29 @@ public partial class ComicReaderViewModel : ViewModelBase
 
         double singlePageVw = (IsFlipMode && IsDoublePage) ? Math.Max(120, vw * 0.5) : vw;
 
-        foreach (var page in Pages)
+        int pageCount = Pages.Count;
+        if (pageCount > 150)
         {
-            page.RecalculateDimensions(FitMode, singlePageVw, vh, ZoomLevel);
+            // Tối ưu hóa Virtualized Recalculate cho danh sách hàng ngàn / hàng chục ngàn ảnh:
+            // Chỉ tính toán chi tiết cho cửa sổ các trang đang hiển thị và lân cận xung quanh CurrentPageIndex,
+            // tránh đóng băng giao diện UI khi truyện có 20.000 - 50.000 trang!
+            int startIdx = Math.Max(0, CurrentPageIndex - 60);
+            int endIdx = Math.Min(pageCount, CurrentPageIndex + 80);
+            for (int i = startIdx; i < endIdx; i++)
+            {
+                Pages[i].RecalculateDimensions(FitMode, singlePageVw, vh, ZoomLevel);
+            }
+            if (CurrentPage != null) CurrentPage.RecalculateDimensions(FitMode, singlePageVw, vh, ZoomLevel);
+            if (SecondaryPage != null) SecondaryPage.RecalculateDimensions(FitMode, singlePageVw, vh, ZoomLevel);
         }
-
-        ApplyPageSpacingToAllItems();
+        else
+        {
+            foreach (var page in Pages)
+            {
+                page.RecalculateDimensions(FitMode, singlePageVw, vh, ZoomLevel);
+            }
+            ApplyPageSpacingToAllItems();
+        }
 
         OnPropertyChanged(nameof(FlipDisplayWidth));
         OnPropertyChanged(nameof(FlipDisplayHeight));
@@ -2593,9 +2610,9 @@ public partial class ComicReaderViewModel : ViewModelBase
             ChapterLoadingStatusText = $"Đang tối ưu hiển thị {loadedPages.Count} trang...";
 
             Thickness currentMargin = CalculateCurrentPageItemMargin();
-            foreach (var p in loadedPages)
+            for (int i = 0; i < loadedPages.Count; i++)
             {
-                p.PageMargin = currentMargin;
+                loadedPages[i].PageMargin = currentMargin;
             }
             Pages.AddRange(loadedPages);
             ApplyFitModeLayout();
@@ -2680,7 +2697,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                 await Task.WhenAll(loadTask1, loadTask2);
 
                 var firstTarget = Pages[startIndex];
-                if (firstTarget.AspectWidth > 0 && firstTarget.AspectHeight > 0)
+                if (firstTarget.AspectWidth > 0 && firstTarget.AspectHeight > 0 && Pages.Count <= 200)
                 {
                     int w = firstTarget.AspectWidth;
                     int h = firstTarget.AspectHeight;

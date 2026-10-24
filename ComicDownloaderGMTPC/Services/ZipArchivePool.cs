@@ -23,16 +23,20 @@ public sealed class ZipArchivePool : IDisposable
         public FileStream Stream { get; }
         public ZipArchive Archive { get; }
         public Dictionary<string, ZipArchiveEntry> EntriesMap { get; }
+        public Dictionary<string, ZipArchiveEntry> LeafMap { get; }
+        public List<(string FullName, string Name, long Length)>? CachedImageEntries { get; set; }
         public object Lock { get; } = new();
         public long LastAccessTick { get; set; }
 
-        public PooledArchiveEntry(string filePath, DateTime lastWriteTimeUtc, FileStream stream, ZipArchive archive, Dictionary<string, ZipArchiveEntry> entriesMap)
+        public PooledArchiveEntry(string filePath, DateTime lastWriteTimeUtc, FileStream stream, ZipArchive archive,
+            Dictionary<string, ZipArchiveEntry> entriesMap, Dictionary<string, ZipArchiveEntry> leafMap)
         {
             FilePath = filePath;
             LastWriteTimeUtc = lastWriteTimeUtc;
             Stream = stream;
             Archive = archive;
             EntriesMap = entriesMap;
+            LeafMap = leafMap;
             LastAccessTick = Environment.TickCount64;
         }
 
@@ -40,6 +44,9 @@ public sealed class ZipArchivePool : IDisposable
         {
             try { Archive.Dispose(); } catch { }
             try { Stream.Dispose(); } catch { }
+            EntriesMap?.Clear();
+            LeafMap?.Clear();
+            CachedImageEntries?.Clear();
         }
     }
 
@@ -79,16 +86,9 @@ public sealed class ZipArchivePool : IDisposable
             string cleanKey = entryFullName.Replace('\\', '/').TrimStart('/');
             if (!entry.EntriesMap.TryGetValue(cleanKey, out var zipEntry))
             {
-                // Thử tìm theo tên file trơn nếu entryFullName có đường dẫn tương đối khác biệt
+                // Tra cứu O(1) tức thời qua LeafMap, loại bỏ hoàn toàn vòng lặp 50.000 phần tử trong lock!
                 string leaf = Path.GetFileName(cleanKey);
-                foreach (var kv in entry.EntriesMap)
-                {
-                    if (string.Equals(Path.GetFileName(kv.Key), leaf, StringComparison.OrdinalIgnoreCase))
-                    {
-                        zipEntry = kv.Value;
-                        break;
-                    }
-                }
+                entry.LeafMap.TryGetValue(leaf, out zipEntry);
             }
 
             if (zipEntry == null) return null;
@@ -131,6 +131,11 @@ public sealed class ZipArchivePool : IDisposable
         lock (entry.Lock)
         {
             entry.LastAccessTick = Environment.TickCount64;
+            if (entry.CachedImageEntries != null)
+            {
+                return new List<(string FullName, string Name, long Length)>(entry.CachedImageEntries);
+            }
+
             foreach (var kv in entry.EntriesMap)
             {
                 var ze = kv.Value;
@@ -139,9 +144,11 @@ public sealed class ZipArchivePool : IDisposable
                     result.Add((ze.FullName, ze.Name, ze.Length));
                 }
             }
+
+            result.Sort((a, b) => NaturalSortComparer.Instance.Compare(a.FullName, b.FullName));
+            entry.CachedImageEntries = new List<(string FullName, string Name, long Length)>(result);
         }
 
-        result.Sort((a, b) => NaturalSortComparer.Instance.Compare(a.FullName, b.FullName));
         return result;
     }
 
@@ -166,16 +173,23 @@ public sealed class ZipArchivePool : IDisposable
         {
             var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 131072);
             var zip = new ZipArchive(fs, ZipArchiveMode.Read);
-            var map = new Dictionary<string, ZipArchiveEntry>(zip.Entries.Count, StringComparer.OrdinalIgnoreCase);
+            int entryCount = zip.Entries.Count;
+            var map = new Dictionary<string, ZipArchiveEntry>(entryCount, StringComparer.OrdinalIgnoreCase);
+            var leafMap = new Dictionary<string, ZipArchiveEntry>(entryCount, StringComparer.OrdinalIgnoreCase);
 
             foreach (var ze in zip.Entries)
             {
                 if (string.IsNullOrEmpty(ze.Name) || ze.Length == 0) continue;
                 string key = ze.FullName.Replace('\\', '/').TrimStart('/');
                 map[key] = ze;
+                string leaf = ze.Name;
+                if (!leafMap.ContainsKey(leaf))
+                {
+                    leafMap[leaf] = ze;
+                }
             }
 
-            var pooled = new PooledArchiveEntry(fullPath, lastWriteUtc, fs, zip, map);
+            var pooled = new PooledArchiveEntry(fullPath, lastWriteUtc, fs, zip, map, leafMap);
             _pool[fullPath] = pooled;
             return pooled;
         }

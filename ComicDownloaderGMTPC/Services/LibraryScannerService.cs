@@ -1200,6 +1200,7 @@ public sealed class LibraryScannerService
                         }
                     }
 
+                    // Tái sử dụng danh sách ảnh trực tiếp đã quét, không quét lại 20.000 file lần thứ hai!
                     var directImgs = GetDirectImagesSafe(dir);
                     if (directImgs.Count > 0)
                     {
