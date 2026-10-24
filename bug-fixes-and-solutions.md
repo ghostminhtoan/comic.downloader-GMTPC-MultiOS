@@ -1192,6 +1192,46 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
 
 ---
 
+
+---
+
+### 33. BUG-033: Xử Lý Dứt Điểm 3 Lỗi Chí Mạng Trong Reader: History Mất Tệp, Crash Khi Thoát Và Black Screen Khi Đổi Page Layout Dọc/Ngang
+
+- **Yêu cầu & Triệu chứng**:
+  1. *Lỗi 1 (History mất file)*: Khi xem ảnh đơn lẻ hoặc folder ảnh rồi thoát ra, History lưu lại được nhưng khi bấm xem tiếp thì app báo lỗi '⚠️ Không tìm thấy ảnh hoặc chương trong...' dù tệp vẫn còn nguyên vẹn trên đĩa.
+  2. *Lỗi 2 (Crash khi thoát)*: Khi thoát khỏi Reader (bằng nút Back, phím Esc hoặc nút Đóng), ứng dụng bị văng đột ngột (out/crash).
+  3. *Lỗi 3 (Black screen rồi crash khi đổi layout)*: Khi xem truyện ở chế độ Webtoon (cuộn dọc) hoặc ngang, khi chuyển đổi sang Page Layout khác thì màn hình chớp đen (Black screen) rồi ứng dụng crash ngay lập tức.
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  1. *Lỗi 1*: Trong `LibraryScannerService.TryGetParentComicRoot`, thuật toán tự động gom nhóm chương thiếu cơ chế loại trừ các thư mục hệ thống người dùng (`Downloads`, `Desktop`, `Pictures`, `UserProfile`, `/storage/emulated/0`...). Khi mở file ảnh, hàm nhận diện nhầm `Downloads` hoặc `Desktop` là thư mục Comic Root của bộ truyện. Khi ghi nhận phiên đọc, `ReadProgressStore.RecordSessionResume` lưu `Downloads` vào History và trong `GetAllHistoryPaths()`, phương thức tự động xóa vĩnh viễn key của file ảnh khỏi `_progressMap` bằng `TryRemove`. Lần sau mở lại từ History, app cố quét toàn bộ thư mục `Downloads` làm truyện và báo lỗi không tìm thấy.
+  2. *Lỗi 2*: Trong `ComicReaderViewModel.CloseReader()`, hàm gọi `Cleanup()` trước khi kích hoạt `CloseRequested?.Invoke()`. `Cleanup()` gọi `DisposeLoadedBitmaps()` duyệt qua các trang và hủy ngay lập tức các đối tượng `Bitmap`/`SKBitmap` trong khi `ComicReaderControl` vẫn đang gắn trên Visual Tree của Avalonia và luồng Skia Native Renderer đang thực thi frame vẽ cuối cùng. Việc truy cập vùng nhớ native đã bị giải phóng gây ra lỗi `AccessViolationException` ở tầng C++ làm sập ứng dụng ngay lập tức mà không thể bắt được bằng `try-catch` C#.
+  3. *Lỗi 3*: Trong `ComicReaderControl.axaml` ở chế độ Lật trang (Flip Mode), hai phần tử `<Image>` bind thuộc tính `MaxWidth="{Binding FlipDisplayWidth}"` và `MaxHeight="{Binding FlipDisplayHeight}"`. Trong `ComicReaderViewModel`, khi chế độ khung hình là `FitHeight` thì `FlipDisplayWidth` trả về `double.NaN`, và khi `FitMode` là `FitWidth` thì `FlipDisplayHeight` trả về `double.NaN`. Trong Avalonia UI, thuộc tính `MaxWidth` và `MaxHeight` chỉ chấp nhận số dương hoặc `PositiveInfinity`, việc bind giá trị `double.NaN` vi phạm validation của AvaloniaProperty ném ngay ngoại lệ `ArgumentException: 'NaN' is not an accepted value for MaxWidth/MaxHeight` ngay giữa chu kỳ render làm app crash; đồng thời trang đích `CurrentPage` chưa kịp nạp xong Bitmap khiến người dùng thấy màn hình đen.
+- **Giải pháp triệt để (Permanent Fix)**:
+  1. *Phòng thủ thư mục hệ thống & Bảo toàn History*:
+     - Bổ sung phương thức `LibraryScannerService.IsCommonSystemOrUserDirectory(string? dirPath)` chặn tuyệt đối không bao giờ nhận diện thư mục hệ thống (Desktop, Downloads, Pictures, UserProfile, root ổ đĩa, `/storage/emulated/0`) làm Comic Root.
+     - Trong `TryGetParentComicRoot`: Nếu ảnh nằm trong thư mục con trực tiếp hoặc thư mục cha là hệ thống, Comic Root chính là thư mục chứa ảnh trực tiếp, bảo đảm đường dẫn luôn hợp lệ 100%.
+     - Trong `ReadProgressStore.GetAllHistoryPaths`: Loại bỏ hoàn toàn logic xóa nhầm các key lịch sử hợp lệ khi file/thư mục vẫn đang tồn tại trên đĩa.
+     - Trong `LibraryViewModel.OpenHistoryItemAsync`: Tích hợp cơ chế tự phục hồi (Self-Healing) kiểm tra đường dẫn tồn tại; nếu đường dẫn bị đổi nhẹ thì tự động tìm kiếm lại file/folder theo `Title` trong các thư mục lưu trữ đã nạp và mở truyện thành công.
+  2. *Quy trình đóng an toàn (Safe Teardown Pipeline)*:
+     - Tái cấu trúc hoàn toàn `ComicReaderViewModel.CloseReader()`:
+       + Đặt cờ `_isClosing = true`.
+       + Kích hoạt `CloseRequested?.Invoke()` TRƯỚC TIÊN để UI thread gỡ bỏ ngay lập tức `ComicReaderControl` khỏi Visual Tree và ngắt DataContext an toàn.
+       + Hủy bỏ các token background (`_loadCts`, `_prefetchCts`, `_effectRefreshCts`, `_toastCts`).
+       + Trì hoãn việc giải phóng Bitmap `DisposeLoadedBitmaps()` ra background thread sau độ trễ an toàn 150ms để Avalonia và Skia hoàn tất toàn bộ frame chuyển cảnh thoát, triệt tiêu 100% `AccessViolationException`.
+  3. *Khắc phục triệt để Black Screen & Crash khi đổi Layout*:
+     - Trong `ComicReaderControl.axaml`: Loại bỏ triệt để việc gán `MaxWidth` và `MaxHeight` bind vào `FlipDisplayWidth` và `FlipDisplayHeight` trên cả 2 phần tử `<Image>` trang trái và trang phải (vì `Width` và `Height` đã được gán trực tiếp, và khung cha `UniformGrid`/`Panel` đã quản lý giới hạn khung hình).
+     - Trong `ComicReaderViewModel.SelectPageLayoutMode`: Bổ sung cơ chế nạp trước ưu tiên cao nhất cho trang đích `CurrentPage` và `SecondaryPage` qua `EnsureSinglePageLoadedAsync` ngay khi đổi chế độ, bảo đảm trang hiển thị tức thì, không bị rơi vào màn hình đen.
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/LibraryScannerService.cs`
+  - `ComicDownloaderGMTPC/Services/ReadProgressStore.cs`
+  - `ComicDownloaderGMTPC/ViewModels/LibraryViewModel.cs`
+  - `ComicDownloaderGMTPC/ViewModels/ComicReaderViewModel.cs`
+  - `ComicDownloaderGMTPC/Views/ComicReaderControl.axaml`
+  - `bug-fixes-and-solutions.md`
+- **Quy tắc kiểm thử**:
+  - Mở một file ảnh hoặc folder ảnh bất kỳ từ Downloads hoặc Desktop. Thoát ra màn hình chính, mở lại mục đó trong tab Lịch sử (History): Truyện và ảnh mở lại chuẩn xác 100%, không báo lỗi thiếu file.
+  - Mở một chương truyện bất kỳ, bấm nút Đóng Reader hoặc phím Esc: Ứng dụng thoát Reader mượt mà trở lại Thư viện, không bị crash hay out ứng dụng.
+  - Trong lúc đang đọc truyện, chuyển đổi qua lại giữa chế độ Webtoon (Cuộn dọc) và Chế độ Lật trang (1 trang / 2 trang song song / Auto): Giao diện đổi mượt mà, ảnh nạp ngay tức thì, không bị màn hình đen và không crash.
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 

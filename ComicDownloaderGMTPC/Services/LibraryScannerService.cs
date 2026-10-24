@@ -894,6 +894,94 @@ public sealed class LibraryScannerService
     /// Giúp nhận diện chính xác Comic Root (folder tổng của truyện) và Chapter, tránh ghi nhận các chương con
     /// (như 'chap 0410', 'chap 0401') thành các truyện độc lập riêng lẻ làm rác danh sách History.
     /// </summary>
+    /// <summary>
+    /// Kiểm tra xem một đường dẫn thư mục có phải là thư mục hệ thống hoặc thư mục người dùng chung
+    /// (Downloads, Desktop, Documents, Pictures, root ổ đĩa, Android storage root...) hay không.
+    /// Tuyệt đối KHÔNG BAO GIỜ nhận các thư mục này làm Parent Comic Root!
+    /// </summary>
+    public static bool IsCommonSystemOrUserDirectory(string? dirPath)
+    {
+        if (string.IsNullOrWhiteSpace(dirPath)) return true;
+        try
+        {
+            string clean = dirPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string? root = Path.GetPathRoot(clean);
+            if (string.IsNullOrEmpty(root)) return true;
+            if (string.Equals(clean, root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var specialFolders = new[]
+            {
+                Environment.SpecialFolder.UserProfile,
+                Environment.SpecialFolder.Desktop,
+                Environment.SpecialFolder.DesktopDirectory,
+                Environment.SpecialFolder.MyDocuments,
+                Environment.SpecialFolder.MyPictures,
+                Environment.SpecialFolder.MyMusic,
+                Environment.SpecialFolder.MyVideos,
+                Environment.SpecialFolder.ProgramFiles,
+                Environment.SpecialFolder.ProgramFilesX86,
+                Environment.SpecialFolder.Windows,
+                Environment.SpecialFolder.System,
+                Environment.SpecialFolder.ApplicationData,
+                Environment.SpecialFolder.LocalApplicationData,
+                Environment.SpecialFolder.CommonApplicationData
+            };
+
+            foreach (var sf in specialFolders)
+            {
+                try
+                {
+                    string p = Environment.GetFolderPath(sf);
+                    if (!string.IsNullOrWhiteSpace(p) && string.Equals(clean, p.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+                catch { }
+            }
+
+            try
+            {
+                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                if (!string.IsNullOrWhiteSpace(userProfile))
+                {
+                    string downloads = Path.Combine(userProfile, "Downloads");
+                    if (string.Equals(clean, downloads.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                string temp = Path.GetTempPath();
+                if (!string.IsNullOrWhiteSpace(temp) && string.Equals(clean, temp.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            catch { }
+
+            if (OperatingSystem.IsAndroid() || clean.StartsWith("/storage/", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("/sdcard", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.Equals(clean, "/storage/emulated/0", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(clean, "/storage/emulated/0/Download", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(clean, "/storage/emulated/0/DCIM", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(clean, "/storage/emulated/0/Pictures", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(clean, "/sdcard", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(clean, "/sdcard/Download", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
     public static bool TryGetParentComicRoot(string targetPath, out string parentComicRoot, out string chapterName)
     {
         parentComicRoot = string.Empty;
@@ -931,12 +1019,15 @@ public sealed class LibraryScannerService
                 catch { }
 
                 // Nếu là file nén/sách và trong thư mục có nhiều file nén anh em hoặc tên file là chapter:
-                // Thư mục chứa nó chính là Comic Root của bộ truyện!
+                // Thư mục chứa nó chính là Comic Root của bộ truyện (miễn là không phải thư mục hệ thống)!
                 if ((IsArchiveFile(targetPath) || IsPdfFile(targetPath) || IsMobiFile(targetPath)) && (siblingArchives >= 2 || fileIsChapter))
                 {
-                    parentComicRoot = cleanFileDir;
-                    chapterName = !string.IsNullOrWhiteSpace(fileNameNoExt) ? fileNameNoExt : fileName;
-                    return true;
+                    if (!IsCommonSystemOrUserDirectory(cleanFileDir))
+                    {
+                        parentComicRoot = cleanFileDir;
+                        chapterName = !string.IsNullOrWhiteSpace(fileNameNoExt) ? fileNameNoExt : fileName;
+                        return true;
+                    }
                 }
 
                 // Nếu là file ảnh trong thư mục chương con:
@@ -945,18 +1036,22 @@ public sealed class LibraryScannerService
                     string folderName = Path.GetFileName(cleanFileDir);
                     if (IsChapterNamePattern(folderName))
                     {
-                        // Thư mục chứa ảnh là một chapter, quy về thư mục cha của nó (Comic Root)
                         string? parent = Path.GetDirectoryName(cleanFileDir);
-                        if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent))
+                        if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent) && !IsCommonSystemOrUserDirectory(parent))
                         {
                             parentComicRoot = parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                             chapterName = folderName;
                             return true;
                         }
+                        else if (!IsCommonSystemOrUserDirectory(cleanFileDir))
+                        {
+                            parentComicRoot = cleanFileDir;
+                            chapterName = folderName;
+                            return true;
+                        }
                     }
-                    else if (siblingImages >= 1)
+                    else if (siblingImages >= 1 && !IsCommonSystemOrUserDirectory(cleanFileDir))
                     {
-                        // Thư mục chứa ảnh là thư mục truyện/ảnh trực tiếp
                         parentComicRoot = cleanFileDir;
                         chapterName = folderName;
                         return true;
@@ -973,11 +1068,8 @@ public sealed class LibraryScannerService
                 string? parent = Path.GetDirectoryName(cleanDir);
                 if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent)) return false;
 
-                // Không coi Root của ổ đĩa (C:\, D:\, /) là Comic Root
-                string? rootOfParent = Path.GetPathRoot(parent);
-                if (string.Equals(parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                                  rootOfParent?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                                  StringComparison.OrdinalIgnoreCase))
+                // Không coi Root của ổ đĩa hoặc thư mục hệ thống (Downloads, Desktop...) là Comic Root
+                if (IsCommonSystemOrUserDirectory(parent))
                 {
                     return false;
                 }

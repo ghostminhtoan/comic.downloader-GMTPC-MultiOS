@@ -586,11 +586,14 @@ public sealed class ReadProgressStore
         {
             if (LibraryScannerService.TryGetParentComicRoot(path, out string parentRoot, out string chName))
             {
-                path = NormalizeKey(parentRoot);
-                title = Path.GetFileName(parentRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                if (string.IsNullOrWhiteSpace(chapterTitle) || string.Equals(chapterTitle, title, StringComparison.OrdinalIgnoreCase))
+                if (!LibraryScannerService.IsCommonSystemOrUserDirectory(parentRoot))
                 {
-                    chapterTitle = chName;
+                    path = NormalizeKey(parentRoot);
+                    title = Path.GetFileName(parentRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    if (string.IsNullOrWhiteSpace(chapterTitle) || string.Equals(chapterTitle, title, StringComparison.OrdinalIgnoreCase))
+                    {
+                        chapterTitle = chName;
+                    }
                 }
             }
         }
@@ -816,19 +819,19 @@ public sealed class ReadProgressStore
                 }
             }
 
-            // 2. Kiểm tra nếu path là một chương con có parent comic root tồn tại
+            // 2. Kiểm tra nếu path là một chương con có parent comic root hợp lệ
             if (!isSubfolder && (Directory.Exists(path) || File.Exists(path)))
             {
                 if (LibraryScannerService.TryGetParentComicRoot(path, out string parentRoot, out _))
                 {
-                    // Chỉ xem là subfolder khi parentRoot khác path (tránh xóa nhầm thư mục ảnh độc lập)
-                    if (!string.Equals(NormalizeKey(parentRoot), NormalizeKey(path), StringComparison.OrdinalIgnoreCase))
+                    if (!LibraryScannerService.IsCommonSystemOrUserDirectory(parentRoot) &&
+                        !string.Equals(NormalizeKey(parentRoot), NormalizeKey(path), StringComparison.OrdinalIgnoreCase))
                     {
-                        isSubfolder = true;
-                        string parentKey = HistoryPrefix + NormalizeKey(parentRoot);
-                        if (!_progressMap.ContainsKey(parentKey))
+                        // Nếu đã có truyện cha trong danh sách sorted thì ẩn chương con này đi
+                        string normParent = NormalizeKey(parentRoot);
+                        if (sorted.Any(s => string.Equals(NormalizeKey(s), normParent, StringComparison.OrdinalIgnoreCase)))
                         {
-                            _progressMap[parentKey] = GetComicLastReadOrder(path);
+                            isSubfolder = true;
                         }
                     }
                 }
@@ -837,10 +840,6 @@ public sealed class ReadProgressStore
             if (!isSubfolder)
             {
                 cleanPaths.Add(path);
-            }
-            else
-            {
-                keysToRemove.Add(HistoryPrefix + path);
             }
         }
 

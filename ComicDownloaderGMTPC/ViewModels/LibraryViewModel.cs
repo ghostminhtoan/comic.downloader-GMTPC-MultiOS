@@ -1561,13 +1561,33 @@ public partial class LibraryViewModel : ViewModelBase
     {
         if (item == null) return;
 
-        if (item.HasLocalPath)
+        // Self-Healing: Kiểm tra đường dẫn lưu trong History
+        if (!string.IsNullOrWhiteSpace(item.Path))
         {
-            await OpenPathToReadAsync(item.Path);
-            return;
+            if (File.Exists(item.Path) || Directory.Exists(item.Path))
+            {
+                await OpenPathToReadAsync(item.Path);
+                return;
+            }
+
+            // Nếu path cũ là file ảnh mà bị di chuyển nhẹ hoặc path là thư mục cha bị đổi
+            string? dir = Path.GetDirectoryName(item.Path);
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+            {
+                var siblingImgs = Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
+                    .Where(LibraryScannerService.IsImageFile)
+                    .ToList();
+                if (siblingImgs.Count > 0)
+                {
+                    item.Path = dir;
+                    await OpenPathToReadAsync(dir);
+                    _ = LoadHistoryItemsAsync();
+                    return;
+                }
+            }
         }
 
-        // Thử tìm nhanh đường dẫn cục bộ trên thiết bị
+        // Thử tìm nhanh đường dẫn cục bộ trên thiết bị qua Self-Healing Title Search
         string? resolved = ReadProgressStore.Instance.TryResolveLocalPathForComic(item.Title);
         if (!string.IsNullOrWhiteSpace(resolved) && (File.Exists(resolved) || Directory.Exists(resolved)))
         {
@@ -1575,6 +1595,26 @@ public partial class LibraryViewModel : ViewModelBase
             await OpenPathToReadAsync(resolved);
             _ = LoadHistoryItemsAsync();
             return;
+        }
+
+        // Thử tìm kiếm sâu theo Title trong các Storage Folders đã nạp
+        foreach (var storageItem in StorageItems)
+        {
+            if (!string.IsNullOrWhiteSpace(storageItem.Path) && Directory.Exists(storageItem.Path))
+            {
+                try
+                {
+                    string candidateDir = Path.Combine(storageItem.Path, item.Title);
+                    if (Directory.Exists(candidateDir))
+                    {
+                        item.Path = candidateDir;
+                        await OpenPathToReadAsync(candidateDir);
+                        _ = LoadHistoryItemsAsync();
+                        return;
+                    }
+                }
+                catch { }
+            }
         }
 
         string devMsg = !string.IsNullOrWhiteSpace(item.CloudDeviceName) ? $" từ [{item.CloudDeviceName}]" : string.Empty;

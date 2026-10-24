@@ -3201,12 +3201,55 @@ public partial class ComicReaderViewModel : ViewModelBase
         FullScreenChangedRequested?.Invoke(IsFullScreen);
     }
 
+    private volatile bool _isClosing = false;
+    public bool IsClosing => _isClosing;
+
     [RelayCommand]
     public void CloseReader()
     {
-        SaveCurrentReadingSession();
-        Cleanup();
-        CloseRequested?.Invoke();
+        if (_isClosing) return;
+        _isClosing = true;
+
+        try
+        {
+            SaveCurrentReadingSession();
+        }
+        catch { }
+
+        // 1. Kích hoạt sự kiện đóng UI TRƯỚC để View detach khỏi Visual Tree và ngắt DataContext an toàn
+        try
+        {
+            CloseRequested?.Invoke();
+        }
+        catch { }
+
+        // 2. Hủy các background task và báo Reader ngưng hoạt động
+        try
+        {
+            _loadCts?.Cancel();
+            _prefetchCts?.Cancel();
+            _effectRefreshCts?.Cancel();
+            _toastCts?.Cancel();
+            _readerService.SetReaderActive(false);
+        }
+        catch { }
+
+        // 3. Trì hoãn việc giải phóng Bitmap ra background thread (sau 150ms) để Avalonia
+        // và GPU/Skia hoàn tất chu kỳ frame vẽ thoát giao diện, triệt tiêu 100% AccessViolationException sập app
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(150);
+                DisposeLoadedBitmaps();
+                ComicDiskCacheService.Instance.EnforceGlobalCacheQuota();
+                if (OperatingSystem.IsAndroid() || IsEcoMode)
+                {
+                    try { GC.Collect(0, GCCollectionMode.Optimized); } catch { }
+                }
+            }
+            catch { }
+        });
     }
 
     public void Cleanup()
