@@ -3301,6 +3301,56 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void ReverseQueue()
+    {
+        if (ComicBooks.Count <= 1)
+        {
+            AddLog("INFO", "Hàng chờ có ít hơn 2 truyện, không cần đảo ngược.");
+            return;
+        }
+
+        // Nhóm các mục theo khối phân cấp (cha và các con của cha nếu có)
+        var groups = new List<List<ComicBookItem>>();
+        List<ComicBookItem>? currentGroup = null;
+
+        for (int i = 0; i < ComicBooks.Count; i++)
+        {
+            var item = ComicBooks[i];
+            if (item.IsParallelSplitChild && currentGroup != null)
+            {
+                currentGroup.Add(item);
+            }
+            else
+            {
+                currentGroup = new List<ComicBookItem> { item };
+                groups.Add(currentGroup);
+            }
+        }
+
+        // Đảo ngược thứ tự các nhóm
+        groups.Reverse();
+
+        var flatList = new List<ComicBookItem>();
+        foreach (var group in groups)
+        {
+            flatList.AddRange(group);
+        }
+
+        ComicBooks.Clear();
+        for (int i = 0; i < flatList.Count; i++)
+        {
+            flatList[i].Index = i + 1;
+            ComicBooks.Add(flatList[i]);
+        }
+
+        ReindexComicBooks();
+        _downloadEngine.NotifyQueueOrderChanged();
+        UpdateStats();
+        RequestQueueAutoSave(150);
+        AddLog("SUCCESS", $"Đã đảo ngược toàn bộ thứ tự {ComicBooks.Count} truyện trong hàng chờ.");
+    }
+
+    [RelayCommand]
     public void DeleteSelected()
     {
         var toRemove = ComicBooks.Where(b => b.IsChecked).ToList();

@@ -1,4 +1,4 @@
-﻿# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
+# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
 
 > **Dự án**: Comic Downloader GMTPC Avalonia Multi-OS (Windows, Linux, Android)  
 
@@ -1168,6 +1168,27 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
   - Tích chọn checkbox "🔢 Đánh STT tên truyện" trong Tab Download.
   - Chọn tải nhiều truyện trong hàng đợi: Các truyện khi bắt đầu tải sẽ lần lượt được đánh số `001. [Tên truyện]`, `002. [Tên truyện]`, `003. [Tên truyện]`... cả trên danh sách hiển thị lẫn tên thư mục lưu trên ổ cứng.
   - Tắt checkbox: Truyện tải về giữ nguyên tên gốc không có tiền tố số thứ tự.
+
+---
+
+### 32. BUG-032: Bổ Sung Nút Đảo Ngược Danh Sách (Reverse Queue) Trực Quan Trên Tab Download Cùng ContextMenu Toàn Diện
+
+- **Triệu chứng**: Người dùng cần sắp xếp lại thứ tự tải truyện trong Tab Download (đặc biệt khi kết hợp với tính năng đánh số thứ tự STT ở đầu tên truyện để tải các truyện phía dưới trước), nhưng trên giao diện các nút trước đây viết tắt "ĐẢO NGƯỢC DS" chưa rõ ràng, thiếu nút thao tác nhanh ở thanh tùy chọn tải và thiếu tùy chọn trong menu ngữ cảnh chuột phải (ContextMenu).
+- **Nguyên nhân gốc rễ**:
+  1. *Nhãn nút viết tắt*: Nhãn nút trên Top Toolbar ghi là `🔃 ĐẢO NGƯỢC DS`, dễ gây nhầm lẫn hoặc khó nhận diện cho người dùng mới.
+  2. *Thiếu nút thao tác nhanh tại khu vực Tùy chọn Tải*: Khi người dùng cấu hình tải truyện (ví dụ bật Checkbox "🔢 Đánh STT tên truyện"), người dùng muốn có ngay nút "Đảo ngược danh sách" ngay bên cạnh để đảo ngược thứ tự trước khi bấm nút Tải.
+  3. *Thiếu menu ngữ cảnh (ContextMenu)*: Khi click chuột phải vào một truyện trong danh sách Hàng Chờ (List view hoặc Thumbnail view), chỉ có lệnh "Đưa lên đầu", "Đưa xuống cuối" mà thiếu lệnh "Đảo ngược danh sách".
+- **Giải pháp triệt để**:
+  1. *Nâng cấp Top Toolbar*: Đổi tên nút thành `🔃 ĐẢO NGƯỢC DANH SÁCH` với nền `#0284C7`, viền `#38BDF8`, chữ đậm nổi bật.
+  2. *Bổ sung nút nhanh tại Options Bar*: Đặt nút `🔃 Đảo ngược danh sách` ngay cạnh checkbox `🔢 Đánh STT tên truyện` với styling gọn gàng (`Height="26"`, background `#0F172A`, border `#0284C7`), giúp người dùng dễ dàng đảo ngược danh sách khi đang thiết lập tùy chọn tải.
+  3. *Nâng cấp Toolbar Hàng Chờ*: Đổi nút `🔃 Đảo ngược DS` thành `🔃 Đảo ngược danh sách` với nền `#0284C7` chữ trắng đậm.
+  4. *Bổ sung ContextMenu toàn diện*: Thêm MenuItem `🔃 Đảo ngược toàn bộ danh sách (Reverse Queue)` vào cả List view và Thumbnail view của Hàng Chờ.
+- **File can thiệp**: `MainView.axaml`.
+- **Quy tắc kiểm thử**:
+  - Mở Tab Download, xác nhận nút `🔃 ĐẢO NGƯỢC DANH SÁCH` hiển thị rõ ràng trên Top Toolbar.
+  - Xác nhận nút `🔃 Đảo ngược danh sách` hiển thị ngay cạnh checkbox `🔢 Đánh STT tên truyện` và trong toolbar Hàng Chờ.
+  - Thêm nhiều truyện vào hàng đợi, bấm nút Đảo ngược danh sách và kiểm tra thứ tự danh sách đảo ngược chính xác từ dưới lên trên.
+  - Click chuột phải vào truyện (cả List view và Thumbnail view), chọn menu "Đảo ngược toàn bộ danh sách" hoạt động chuẩn xác.
 
 ---
 

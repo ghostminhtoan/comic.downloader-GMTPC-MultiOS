@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
 
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 
@@ -2980,6 +2980,18 @@
 
                                     </Button>
 
+                                    <Button Command="{Binding ReverseQueueCommand}" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Đảo ngược thứ tự toàn bộ hàng chờ tải xuống (truyện cuối lên đầu, truyện đầu xuống cuối)">
+
+                                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+
+                                            <TextBlock Text="🔃" FontSize="11" VerticalAlignment="Center" />
+
+                                            <TextBlock Text="ĐẢO NGƯỢC DANH SÁCH" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
+
+                                        </StackPanel>
+
+                                    </Button>
+
                                     <Button Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" CornerRadius="5" Padding="10,5" Height="30" Margin="0,0,6,3" ToolTip.Tip="Sao lưu danh sách hàng chờ và tiến độ (Cục bộ hoặc Google Drive)">
 
                                         <Button.Flyout>
@@ -3238,7 +3250,19 @@
 
                                     <CheckBox IsChecked="{Binding IsAutoRetry}" Content="🔁 Tự thử lại" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
 
-                                    <CheckBox IsChecked="{Binding IsAddOrderPrefix}" Content="🔢 Đánh STT tên truyện" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" Margin="0,0,10,4" ToolTip.Tip="Đánh số thứ tự (001., 002., 003...) ở đầu tên truyện khi tải. Tải truyện nào trước thì sẽ có số thứ tự đó trước." />
+                                    <CheckBox IsChecked="{Binding IsAddOrderPrefix}" Content="🔢 Đánh STT tên truyện" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" Margin="0,0,6,4" ToolTip.Tip="Đánh số thứ tự (001., 002., 003...) ở đầu tên truyện khi tải. Tải truyện nào trước thì sẽ có số thứ tự đó trước." />
+
+                                    <Button Command="{Binding ReverseQueueCommand}" Background="#0F172A" BorderBrush="#0284C7" BorderThickness="1" Foreground="#38BDF8" FontWeight="Bold" FontSize="10.5" Padding="8,3" Height="26" CornerRadius="4" Margin="0,0,10,4" ToolTip.Tip="Đảo ngược thứ tự toàn bộ danh sách hàng chờ tải (truyện cuối lên đầu, truyện đầu xuống cuối) để tải theo thứ tự ngược lại">
+
+                                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+
+                                            <TextBlock Text="🔃" FontSize="11" VerticalAlignment="Center" />
+
+                                            <TextBlock Text="Đảo ngược danh sách" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center" />
+
+                                        </StackPanel>
+
+                                    </Button>
 
                                     <CheckBox IsChecked="{Binding IsCompactRow}" Content="📏 Nén dòng" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
 
@@ -3291,6 +3315,18 @@
                                             <Button Command="{Binding UnselectAllCommand}" Content="✗ Bỏ chọn" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
 
                                             <Button Command="{Binding InvertSelectionCommand}" Content="⇄ Đảo chọn" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
+
+                                            <Button Command="{Binding ReverseQueueCommand}" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="8,2" CornerRadius="3" Margin="0,0,4,2" ToolTip.Tip="Đảo ngược thứ tự toàn bộ danh sách hàng chờ tải (truyện cuối lên đầu, truyện đầu xuống cuối)">
+
+                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+
+                                                    <TextBlock Text="🔃" FontSize="10" VerticalAlignment="Center" />
+
+                                                    <TextBlock Text="Đảo ngược danh sách" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+
+                                                </StackPanel>
+
+                                            </Button>
 
                                             <Button Command="{Binding CheckSelectedRowsCommand}" Content="☑ Tích" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
 
@@ -3549,6 +3585,18 @@
                                                                     <MenuItem.Icon>
 
                                                                         <TextBlock Text="▼" Foreground="#F87171" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="🔃 Đảo ngược toàn bộ danh sách (Reverse Queue)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ReverseQueueCommand}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="🔃" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
 
                                                                     </MenuItem.Icon>
 
@@ -4092,6 +4140,114 @@
 
                                                             PointerPressed="OnThumbnailItemPointerPressed">
 
+                                                        <Border.ContextMenu>
+
+                                                            <ContextMenu>
+
+                                                                <MenuItem Header="Tích chọn truyện này (Check)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CheckSingleBookCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="✔" Foreground="#38BDF8" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="Bỏ chọn truyện này (Uncheck)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).UncheckSingleBookCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="✕" Foreground="#64748B" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <Separator Background="#334155" />
+
+                                                                <MenuItem Header="Đưa lên đầu hàng đợi (Move to Top)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveToTopCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="▲" Foreground="#34D399" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="Đưa xuống cuối hàng đợi (Move to Bottom)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveToBottomCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="▼" Foreground="#F87171" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="🔃 Đảo ngược toàn bộ danh sách (Reverse Queue)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ReverseQueueCommand}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="🔃" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <Separator Background="#334155" />
+
+                                                                <MenuItem Header="📁 Mở thư mục truyện (Open Folder)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenBookFolderCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="📁" Foreground="#FDE047" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="❌ Xóa khỏi hàng đợi"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).DeleteItemCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="✕" Foreground="#EF4444" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                            </ContextMenu>
+
+                                                        </Border.ContextMenu>
+
                                                         <Grid RowDefinitions="142, *, Auto">
 
                                                             <!-- Hàng 0: Checkbox góc trái + Ảnh bìa dọc ở giữa + Icon ☰ góc phải (Giống hệt WPF) -->
@@ -4369,6 +4525,142 @@
                                                         <TextBlock Grid.Column="2" Text="{Binding Message}" Foreground="#E2E8F0" FontSize="9" FontFamily="Consolas, Monospace" TextWrapping="Wrap" VerticalAlignment="Center" Margin="3,0,0,0" />
 
                                                     </Grid>
+
+                                                </DataTemplate>
+
+                                            </ItemsControl.ItemTemplate>
+
+                                        </ItemsControl>
+
+                                    </Border>
+
+                                </Grid>
+
+                            </TabItem>
+
+
+
+                            <!-- SUBTAB 2.4: REVERSE QUEUE ORDER -->
+
+                            <TabItem Header="🔃 Đảo Ngược Danh Sách" FontSize="12" FontWeight="SemiBold">
+
+                                <Grid RowDefinitions="Auto, *">
+
+                                    <!-- Toolbar điều khiển đảo ngược -->
+
+                                    <Border Grid.Row="0" Background="#161F30" Padding="10,6" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+
+                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+                                            <Button Command="{Binding ReverseQueueCommand}" Background="#0284C7" BorderBrush="#38BDF8" BorderThickness="1" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="12,5" CornerRadius="4" Margin="0,0,10,2" ToolTip.Tip="Đảo ngược thứ tự toàn bộ danh sách hàng chờ tải (mục cuối lên đầu, mục đầu xuống cuối)">
+
+                                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+
+                                                    <TextBlock Text="🔃" FontSize="12" />
+
+                                                    <TextBlock Text="ĐẢO NGƯỢC THỨ TỰ HÀNG CHỜ" FontWeight="Bold" FontSize="11" />
+
+                                                </StackPanel>
+
+                                            </Button>
+
+
+
+                                            <Border Background="#1E293B" CornerRadius="3" Padding="8,3" Margin="0,0,6,2" VerticalAlignment="Center">
+
+                                                <TextBlock Text="{Binding ComicBooks.Count, StringFormat='{}Tổng số truyện: {0}'}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" />
+
+                                            </Border>
+
+
+
+                                            <Border Background="#1E293B" CornerRadius="3" Padding="8,3" Margin="0,0,10,2" VerticalAlignment="Center">
+
+                                                <TextBlock Text="{Binding DownloadingCount, StringFormat='{}Đang tải: {0}'}" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" />
+
+                                            </Border>
+
+
+
+                                            <TextBlock Text="💡 Bấm nút 'ĐẢO NGƯỢC THỨ TỰ HÀNG CHỜ' để chuyển các truyện ở cuối danh sách lên đầu hoặc ngược lại." Foreground="#94A3B8" FontSize="10" FontStyle="Italic" VerticalAlignment="Center" Margin="0,0,0,2" />
+
+                                        </WrapPanel>
+
+                                    </Border>
+
+
+
+                                    <!-- Danh sách các truyện trong hàng chờ theo thứ tự hiện tại -->
+
+                                    <Border Grid.Row="1" Background="#0F172A" Padding="6,4">
+
+                                        <ItemsControl ItemsSource="{Binding ComicBooks}" Padding="0,0,0,70">
+
+                                            <ItemsControl.ItemsPanel>
+
+                                                <ItemsPanelTemplate>
+
+                                                    <VirtualizingStackPanel />
+
+                                                </ItemsPanelTemplate>
+
+                                            </ItemsControl.ItemsPanel>
+
+                                            <ItemsControl.Template>
+
+                                                <ControlTemplate>
+
+                                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{TemplateBinding Padding}">
+
+                                                        <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+
+                                                    </ScrollViewer>
+
+                                                </ControlTemplate>
+
+                                            </ItemsControl.Template>
+
+                                            <ItemsControl.ItemTemplate>
+
+                                                <DataTemplate>
+
+                                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="8,5" Margin="0,1">
+
+                                                        <Grid ColumnDefinitions="45, 90, *, 120, Auto" VerticalAlignment="Center">
+
+                                                            <TextBlock Grid.Column="0" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
+
+                                                            <Border Grid.Column="1" Background="#1E293B" CornerRadius="3" Padding="4,1" HorizontalAlignment="Left" VerticalAlignment="Center">
+
+                                                                <TextBlock Text="{Binding Domain}" FontSize="9" Foreground="#94A3B8" FontWeight="SemiBold" />
+
+                                                            </Border>
+
+                                                            <StackPanel Grid.Column="2" Margin="6,0" VerticalAlignment="Center">
+
+                                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F1F5F9" FontSize="11" TextTrimming="CharacterEllipsis" />
+
+                                                                <TextBlock Text="{Binding StatusMessage}" Foreground="#64748B" FontSize="9" TextTrimming="CharacterEllipsis" />
+
+                                                            </StackPanel>
+
+                                                            <StackPanel Grid.Column="3" Margin="4,0" VerticalAlignment="Center">
+
+                                                                <ProgressBar Value="{Binding ProgressPercentage}" Minimum="0" Maximum="100" Height="5" CornerRadius="2" Foreground="{Binding ProgressBarBrush}" Background="#1E293B" />
+
+                                                                <TextBlock Text="{Binding ProgressPercentage, StringFormat='{}{0:F1}%'}" Foreground="#94A3B8" FontSize="8" HorizontalAlignment="Right" Margin="0,1,0,0" />
+
+                                                            </StackPanel>
+
+                                                            <Border Grid.Column="4" Background="#1E293B" CornerRadius="3" Padding="6,2" VerticalAlignment="Center" Margin="6,0,0,0">
+
+                                                                <TextBlock Text="{Binding DisplayStatusVi}" FontSize="9" FontWeight="SemiBold" Foreground="#38BDF8" />
+
+                                                            </Border>
+
+                                                        </Grid>
+
+                                                    </Border>
 
                                                 </DataTemplate>
 
