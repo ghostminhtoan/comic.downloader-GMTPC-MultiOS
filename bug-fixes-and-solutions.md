@@ -1,4 +1,4 @@
-# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
+﻿# 🛠️ Sổ Tay Khắc Phục Lỗi & Giải Pháp Kỹ Thuật (Bug Fixes & Solutions Log)
 
 > **Dự án**: Comic Downloader GMTPC Avalonia Multi-OS (Windows, Linux, Android)  
 
@@ -1337,6 +1337,37 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
   - Mở truyện trên Android: Chạm mép phải sang trang, chạm giữa mở menu, bấm phím âm lượng lật trang chuẩn xác.
   - Trên PC: Bấm phím hông chuột hoặc lăn chuột ngang để sang trang.
   - Bật màu nền OLED: Nền đen tuyền `#000000`.
+
+### 37. BUG-037: Lỗi Kẹt Bố Cục Dọc & Tự Động Nhảy Sang Chương Mới Khi Chuyển Từ Webtoon Sang Ngang
+
+- **Triệu chứng**:
+  - Khi người dùng đang đọc truyện ở chế độ Cuộn Dọc Webtoon (Mode 5) và chuyển sang chế độ Cuộn Ngang (Mode 3 LTR, Mode 4 RTL) hoặc Lật Ngang (Mode 0, 1) hay Bố cục Dual Page:
+  - Giao diện bị kẹt vẫn hiển thị theo chiều dọc hoặc co cụm lệch khung nhìn.
+  - Sau đó hệ thống ngay lập tức tự động nhảy vọt sang chương mới mà người dùng không hề mong muốn.
+
+- **Nguyên nhân gốc rễ**:
+  1. *Lỗ hổng Suppression Flag không được đọc*: Biến `_suppressScrollChangedUntilTick` được gán ở 18 vị trí để bảo vệ ngắt cuộn nhưng trong hàm `OnReaderScrollChanged` lại hoàn toàn thiếu câu lệnh kiểm tra `if (now < _suppressScrollChangedUntilTick) return;`. Do đó mọi sự kiện `ScrollChanged` sinh ra khi ScrollViewer tái co dãn Extent/Viewport đều bị lọt qua và xử lý ngay tức thì.
+  2. *False Positive End-of-Chapter do Offset cũ*: Khi chuyển từ Cuộn dọc sang Cuộn ngang, `scrollViewer.Offset.X` ban đầu là 0. Với chế độ Cuộn ngang RTL (Mode 4), điều kiện `scrollViewer.Offset.X <= 6` bị thỏa mãn ngay lập tức, khiến `OnReaderScrollChanged` lầm tưởng là đã cuộn kịch đáy chương và ghi đè `CurrentPageIndex = Pages.Count - 1` cùng `IsScrollAtEnd = true`.
+  3. *Thiếu khóa chặn chuyển chương trong ViewModel*: Khi `CurrentPageIndex` bị đưa về trang cuối, bất kỳ tương tác tiếp theo nào (chạm màn hình 9-zone tap mép phải, lăn bánh xe chuột, hoặc vuốt nhẹ) đều kích hoạt `NextPage()` -> `NextChapter()` do không có cơ chế timeout khóa chặn `NextChapter()` sau khi đổi mode.
+  4. *Layout VirtualizingStackPanel không nhận Orientation*: `VirtualizingStackPanel` bên trong `ItemsPanelTemplate` của ListBox không tự động cập nhật lại layout theo trục ngang và style selector `ListBox.horizontalMode VirtualizingStackPanel` không xuyên qua template part của ListBox.
+
+- **Giải pháp triệt để**:
+  1. *Khóa chặn `_suppressScrollChangedUntilTick` ngay tại đầu `OnReaderScrollChanged`*: Ngăn chặn 100% việc tính toán và cập nhật trang trong lúc ScrollViewer đang co dãn layout khi chuyển mode.
+  2. *Bộ lọc Extent chưa dãn*: Bổ sung kiểm tra `if (maxX <= 10 && vm.Pages.Count > 1) return;` trong chế độ cuộn ngang và `if (maxY <= 10 && vm.Pages.Count > 1) return;` trong chế độ cuộn dọc để triệt tiêu hoàn toàn false positive ở thời điểm chuyển tiếp.
+  3. *Khóa chuyển chương `_suppressAutoChapterUntilTick` 2000ms*: Trong `ComicReaderViewModel`, đặt khóa chặn 2000ms trong `SelectPageScrollingMode` và `SelectPageLayoutMode`, ngăn chặn tuyệt đối `NextChapter()` và `PrevChapter()` bị kích hoạt ngoài ý muốn.
+  4. *Cưỡng bức đồng bộ VirtualizingStackPanel Orientation & Reset Offset*: Trong `OnVmPropertyChanged`, tìm trực tiếp `VirtualizingStackPanel` qua visual tree, gán trực tiếp `panel.Orientation = vm.PageScrollOrientation`, gọi Invalidate, reset `scrollViewer.Offset = Vector.Zero`, dừng `StopKineticScroll()`, và xóa sạch bộ đệm quá biên `_cumulativeOverscrollX/Y = 0`.
+  5. *Cập nhật Binding XAML ItemsPanel*: Sử dụng cú pháp `$parent[ListBox].((vm:ComicReaderViewModel)DataContext).PageScrollOrientation` với fallback `Vertical`.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/ViewModels/ComicReaderViewModel.cs`
+  - `ComicDownloaderGMTPC/Views/ComicReaderControl.axaml`
+  - `ComicDownloaderGMTPC/Views/ComicReaderControl.axaml.cs`
+  - `bug-fixes-and-solutions.md`
+
+- **Quy tắc kiểm thử**:
+  - Mở truyện đọc ở chế độ Cuộn dọc Webtoon, cuộn đến giữa chương bất kỳ.
+  - Chuyển sang Cuộn ngang (Ctrl+6 hoặc Ctrl+7) hoặc Lật trang (Phím 6, Phím 7): Trang đang đọc được giữ nguyên vẹn, layout chuyển tức thì sang ngang mượt mà, không bao giờ bị nhảy sang chương mới.
+
 
 ---
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -1282,14 +1282,40 @@ public partial class ComicReaderControl : UserControl
         }
         else if (e.PropertyName == nameof(ComicReaderViewModel.PageScrollingMode) ||
                  e.PropertyName == nameof(ComicReaderViewModel.IsHorizontalScrollMode) ||
+                 e.PropertyName == nameof(ComicReaderViewModel.PageScrollOrientation) ||
                  e.PropertyName == nameof(ComicReaderViewModel.IsScrollMode) ||
                  e.PropertyName == nameof(ComicReaderViewModel.IsDoublePage))
         {
             if (DataContext is ComicReaderViewModel vm)
             {
+                StopKineticScroll();
+                _cumulativeOverscrollX = 0;
+                _cumulativeOverscrollY = 0;
+                _lastAutoChapterTransitionTick = Environment.TickCount64 + 2000;
+                _suppressScrollChangedUntilTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 1500 : 1000);
+                _isProgrammaticScroll = true;
+
                 var listBox = this.FindControl<ListBox>("ReaderPagesListBox");
-                listBox?.InvalidateMeasure();
-                listBox?.InvalidateArrange();
+                if (listBox != null)
+                {
+                    // Cưỡng bức đồng bộ Orientation trực tiếp vào VirtualizingStackPanel của ListBox
+                    var vsp = listBox.FindDescendantOfType<VirtualizingStackPanel>();
+                    if (vsp != null)
+                    {
+                        vsp.Orientation = vm.PageScrollOrientation;
+                        vsp.InvalidateMeasure();
+                        vsp.InvalidateArrange();
+                    }
+                    listBox.InvalidateMeasure();
+                    listBox.InvalidateArrange();
+                }
+
+                var scrollViewer = GetReaderScrollViewer();
+                if (scrollViewer != null)
+                {
+                    // Reset Offset ngay lập tức về 0 trước khi đồng bộ trang để triệt tiêu việc Offset.Y cũ kẹt ở đáy
+                    scrollViewer.Offset = Vector.Zero;
+                }
 
                 var flipSv = GetFlipScrollViewer();
                 if (vm.IsFlipMode && flipSv != null)
@@ -1298,8 +1324,6 @@ public partial class ComicReaderControl : UserControl
                     if (vm.LeftFlipPage != null) _ = vm.EnsureSinglePageLoadedAsync(vm.LeftFlipPage);
                     if (vm.RightFlipPage != null) _ = vm.EnsureSinglePageLoadedAsync(vm.RightFlipPage);
                 }
-
-                _suppressScrollChangedUntilTick = Environment.TickCount64 + (OperatingSystem.IsAndroid() ? 800 : 400);
 
                 if (vm.IsScrollMode && vm.Pages.Count > 0 && vm.CurrentPageIndex >= 0)
                 {
@@ -1681,6 +1705,7 @@ public partial class ComicReaderControl : UserControl
         if (vm.NavigationState == ReaderNavigationState.UserScrubbing) return;
 
         long now = Environment.TickCount64;
+        if (now < _suppressScrollChangedUntilTick) return;
         long pinchElapsed = now - _lastPinchEndTick;
 
         if (_isPinching || now < _pinchCooldownUntilTick ||
@@ -1717,6 +1742,7 @@ public partial class ComicReaderControl : UserControl
             if (vw <= 10) return;
 
             double maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+            if (maxX <= 10 && vm.Pages.Count > 1) return;
             bool isAtStart = vm.IsRightToLeft ? scrollViewer.Offset.X >= maxX - 6 : scrollViewer.Offset.X <= 6;
             bool isAtEnd = vm.IsRightToLeft ? scrollViewer.Offset.X <= 6 : (maxX > 0 && scrollViewer.Offset.X >= maxX - 6);
 
@@ -1785,6 +1811,7 @@ public partial class ComicReaderControl : UserControl
         if (vh <= 10) return;
 
         double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+        if (maxY <= 10 && vm.Pages.Count > 1) return;
         if (scrollViewer.Offset.Y <= 6)
         {
             vm.IsScrollAtStart = true;
@@ -2540,7 +2567,7 @@ public partial class ComicReaderControl : UserControl
                 if (vm.IsContinuousChaptersMode)
                 {
                     long now = Environment.TickCount64;
-                    if (now - _lastAutoChapterTransitionTick > 1200)
+                    if (now >= _lastAutoChapterTransitionTick && now - _lastAutoChapterTransitionTick > 1200)
                     {
                         bool atEnd = targetX >= maxX + 10;
                         bool atStart = targetX <= -10;
@@ -2575,14 +2602,14 @@ public partial class ComicReaderControl : UserControl
             {
                 double maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
                 long now = Environment.TickCount64;
-                if (scrollViewer.Offset.Y >= maxY - 2 && e.Delta.Y < -0.15 && vm.CanGoNextChapter && now - _lastAutoChapterTransitionTick > 1200)
+                if (scrollViewer.Offset.Y >= maxY - 2 && e.Delta.Y < -0.15 && vm.CanGoNextChapter && now >= _lastAutoChapterTransitionTick && now - _lastAutoChapterTransitionTick > 1200)
                 {
                     _lastAutoChapterTransitionTick = now;
                     vm.NextChapter();
                     e.Handled = true;
                     return;
                 }
-                if (scrollViewer.Offset.Y <= 2 && e.Delta.Y > 0.15 && vm.CanGoPrevChapter && now - _lastAutoChapterTransitionTick > 1200)
+                if (scrollViewer.Offset.Y <= 2 && e.Delta.Y > 0.15 && vm.CanGoPrevChapter && now >= _lastAutoChapterTransitionTick && now - _lastAutoChapterTransitionTick > 1200)
                 {
                     _lastAutoChapterTransitionTick = now;
                     vm.PrevPage();
@@ -2609,7 +2636,7 @@ public partial class ComicReaderControl : UserControl
     {
         if (vm.IsLoadingChapter) return;
         long now = Environment.TickCount64;
-        if (now - _lastAutoChapterTransitionTick < 1400) return;
+        if (now < _lastAutoChapterTransitionTick || now - _lastAutoChapterTransitionTick < 1400) return;
 
         double threshold = vm.IsContinuousChaptersMode ? 50.0 : 75.0;
 

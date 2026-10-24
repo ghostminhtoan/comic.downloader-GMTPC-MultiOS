@@ -54,6 +54,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     private bool _suppressPdfBookmarkSelectionChanged;
     private bool _suppressScrollSync;
     private bool _suppressBrightnessAutoUncheck;
+    private long _suppressAutoChapterUntilTick;
     private double _viewportWidth = 1080;
     private double _viewportHeight = 1920;
 
@@ -501,6 +502,9 @@ public partial class ComicReaderViewModel : ViewModelBase
         int targetMode = Math.Clamp(mode, 0, 5);
         int preservedPageIndex = CurrentPageIndex;
 
+        _suppressAutoChapterUntilTick = Environment.TickCount64 + 2000;
+        _suppressScrollSync = true;
+
         PageScrollingMode = targetMode;
 
         switch (PageScrollingMode)
@@ -571,7 +575,15 @@ public partial class ComicReaderViewModel : ViewModelBase
 
         if (IsScrollMode)
         {
-            Dispatcher.UIThread.Post(() => RequestScrollToPage(CurrentPageIndex), DispatcherPriority.Background);
+            Dispatcher.UIThread.Post(() =>
+            {
+                _suppressScrollSync = false;
+                RequestScrollToPage(CurrentPageIndex);
+            }, DispatcherPriority.Background);
+        }
+        else
+        {
+            _suppressScrollSync = false;
         }
         ActivePopup = string.Empty;
     }
@@ -662,6 +674,8 @@ public partial class ComicReaderViewModel : ViewModelBase
     {
         if (!int.TryParse(modeParam, out int mode)) return;
         int preservedPageIndex = CurrentPageIndex;
+        _suppressAutoChapterUntilTick = Environment.TickCount64 + 2000;
+        _suppressScrollSync = true;
         PageLayoutMode = Math.Clamp(mode, 0, 3);
 
         switch (PageLayoutMode)
@@ -715,7 +729,15 @@ public partial class ComicReaderViewModel : ViewModelBase
 
         if (IsScrollMode)
         {
-            Dispatcher.UIThread.Post(() => RequestScrollToPage(CurrentPageIndex), DispatcherPriority.Background);
+            Dispatcher.UIThread.Post(() =>
+            {
+                _suppressScrollSync = false;
+                RequestScrollToPage(CurrentPageIndex);
+            }, DispatcherPriority.Background);
+        }
+        else
+        {
+            _suppressScrollSync = false;
         }
 
         ActivePopup = string.Empty;
@@ -3257,6 +3279,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void NextChapter()
     {
         ActivePopup = string.Empty;
+        if (Environment.TickCount64 < _suppressAutoChapterUntilTick) return;
         if (CurrentChapter == null) return;
         int idx = ChapterList.IndexOf(CurrentChapter);
         if (idx >= 0 && idx < ChapterList.Count - 1)
@@ -3271,6 +3294,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void PrevChapter()
     {
         ActivePopup = string.Empty;
+        if (Environment.TickCount64 < _suppressAutoChapterUntilTick) return;
         if (CurrentChapter == null) return;
         int idx = ChapterList.IndexOf(CurrentChapter);
         if (idx > 0)
