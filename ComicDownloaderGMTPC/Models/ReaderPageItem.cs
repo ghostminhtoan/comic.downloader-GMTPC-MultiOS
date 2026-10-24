@@ -156,6 +156,12 @@ public partial class ReaderPageItem : ObservableObject
     private bool _isLoaded;
 
     [ObservableProperty]
+    private bool _isLoadFailed;
+
+    [ObservableProperty]
+    private string? _errorMessage;
+
+    [ObservableProperty]
     private bool _isAnimated;
 
     public AnimatedPagePlayer? AnimationPlayer { get; set; }
@@ -186,6 +192,8 @@ public partial class ReaderPageItem : ObservableObject
         Image = null;
         IsLoaded = false;
         IsLoading = false;
+        IsLoadFailed = false;
+        ErrorMessage = null;
         try
         {
             old?.Dispose();

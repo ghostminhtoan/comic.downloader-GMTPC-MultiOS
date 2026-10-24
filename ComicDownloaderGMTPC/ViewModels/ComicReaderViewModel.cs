@@ -599,9 +599,20 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void OpenPageLayoutPopup() => TogglePopup("PageLayout");
 
     [RelayCommand]
+    public async Task RetryLoadPageAsync(ReaderPageItem? page)
+    {
+        if (page == null) return;
+        page.IsLoadFailed = false;
+        page.ErrorMessage = null;
+        page.IsLoading = true;
+        await EnsureSinglePageLoadedAsync(page).ConfigureAwait(false);
+    }
+
+    [RelayCommand]
     public void SelectPageLayoutMode(string? modeParam)
     {
         if (!int.TryParse(modeParam, out int mode)) return;
+        int preservedPageIndex = CurrentPageIndex;
         PageLayoutMode = Math.Clamp(mode, 0, 3);
 
         switch (PageLayoutMode)
@@ -636,8 +647,28 @@ public partial class ComicReaderViewModel : ViewModelBase
                 break;
         }
 
+        if (Pages.Count > 0)
+        {
+            CurrentPageIndex = Math.Clamp(preservedPageIndex, 0, Pages.Count - 1);
+        }
+
         UpdateCurrentFlipPages();
         TriggerPrefetch(CurrentPageIndex);
+
+        if (CurrentPage != null && !CurrentPage.IsLoaded)
+        {
+            _ = EnsureSinglePageLoadedAsync(CurrentPage);
+        }
+        if (SecondaryPage != null && !SecondaryPage.IsLoaded)
+        {
+            _ = EnsureSinglePageLoadedAsync(SecondaryPage);
+        }
+
+        if (IsScrollMode)
+        {
+            Dispatcher.UIThread.Post(() => RequestScrollToPage(CurrentPageIndex), DispatcherPriority.Background);
+        }
+
         ActivePopup = string.Empty;
     }
 

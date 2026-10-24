@@ -1275,6 +1275,35 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
     + CPU giữ mức thấp (< 5-10%), không còn hiện tượng máy nóng ran hoặc quạt chạy tối đa.
     + Thao tác lật trang và cuộn lướt giữa các trang mượt mà tức thì 0ms.
 
+### 35. BUG-035: Hoàn Thiện Tối Ưu Bộ Nhớ (Subsampling On Decode) & Circuit Breaker Bẫy Lỗi Trang Ảnh, Chuẩn Hóa Chuyển Đổi Viewport (Bước 2 & Bước 3)
+
+- **Yêu cầu & Triệu chứng**:
+  1. Khi nạp các trang ảnh có độ phân giải siêu cao (4K, 8K manhwa/raw scan), giải mã nguyên khổ uncompressed ngốn hàng trăm MB RAM/trang và tốn CPU Skia render.
+  2. Khi gặp file ảnh bị lỗi byte, hỏng hoặc định dạng không hỗ trợ trong file nén, UI hiển thị "Đang tải trang..." vô tận hoặc khoảng trống đen mà không giải thích hay cho phép thử lại.
+  3. Khi chuyển đổi giữa các bố cục trang (Single, Dual, Auto, Off), trang đang đọc bị nhảy hoặc lệch chỉ số, chưa đồng bộ vị trí đọc trơn tru.
+- **Giải pháp triệt để**:
+  1. *Subsampling on Decode với SkiaSharp (`ComicReaderService.cs`)*:
+     - Khống chế kích thước tối đa `maxDim` (2560px trên Android, 3840px trên Desktop).
+     - Khi giải mã ảnh siêu lớn (`AspectWidth > maxDim || AspectHeight > maxDim`), sử dụng `codec.GetScaledDimensions(scale)` trực tiếp từ bộ giải mã Skia để thu nhỏ kích thước decode tại gốc, tiết kiệm tới 75% RAM đồ họa và giảm triệt để nhiệt độ CPU/GPU.
+  2. *Cơ chế Circuit Breaker bẫy lỗi & Thử lại trang ảnh (`ReaderPageItem.cs`, `ComicReaderService.cs`, `ComicReaderViewModel.cs`, `ComicReaderControl.axaml`)*:
+     - Bổ sung thuộc tính `IsLoadFailed` và `ErrorMessage` vào `ReaderPageItem`.
+     - Trong `LoadPageBitmapAsync`, nếu tệp ảnh rỗng, hỏng byte hoặc giải mã thất bại, hệ thống tự động bẫy ngoại lệ và kích hoạt cờ `IsLoadFailed = true` kèm mô tả lỗi chi tiết, không bao giờ kéo sập ứng dụng hay treo luồng giao diện.
+     - Trên giao diện (cả chế độ Webtoon và Lật trang Flip mode), hiển thị Card báo lỗi Cyber/Dark hiện đại (`#1E1B2E`, viền `#F43F5E`) với icon `⚠️`, thông tin lỗi và nút `🔄 Thử tải lại trang` kết nối với `RetryLoadPageCommand`.
+  3. *Chuẩn hóa chuyển đổi Viewport Engine (`ComicReaderViewModel.cs`)*:
+     - Trong `SelectPageLayoutMode`: Lưu trữ `preservedPageIndex = CurrentPageIndex`, khôi phục vị trí trang sau khi tính toán bố cục mới, nạp trước trang hiện tại và thứ hai qua `EnsureSinglePageLoadedAsync`, và đồng bộ cuộn mượt mà qua `RequestScrollToPage(CurrentPageIndex)`.
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Models/ReaderPageItem.cs`
+  - `ComicDownloaderGMTPC/Services/ComicReaderService.cs`
+  - `ComicDownloaderGMTPC/ViewModels/ComicReaderViewModel.cs`
+  - `ComicDownloaderGMTPC/Views/ComicReaderControl.axaml`
+  - `bug-fixes-and-solutions.md`
+- **Quy tắc kiểm thử**:
+  - Mở các bộ truyện scan raw 4K/8K, RAM duy trì ổn định không bị tràn bộ nhớ.
+  - Thử mở một file ảnh bị lỗi hoặc cắt cụt byte: giao diện hiển thị ngay card báo lỗi màu đỏ hồng tinh tế với nút Thử lại, không bị treo "Đang tải...".
+  - Chuyển đổi qua lại giữa Single Page, Dual Pages và Webtoon: trang đang đọc được giữ nguyên chính xác 100%, không bị nhảy trang hay đen màn hình.
+
+---
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 

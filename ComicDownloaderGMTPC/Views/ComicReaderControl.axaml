@@ -7,6 +7,7 @@
              xmlns:services="using:ComicDownloaderGMTPC.Services"
              mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="1920"
              x:Class="ComicDownloaderGMTPC.Views.ComicReaderControl"
+             x:Name="RootReaderControl"
              x:DataType="vm:ComicReaderViewModel"
              Focusable="True"
              Background="{Binding ReaderBackgroundColor}">
@@ -209,17 +210,38 @@
                                    Background="Transparent"
                                    ClipToBounds="True"
                                    AttachedToVisualTree="OnPageContainerAttached">
-                                <!-- Khung chờ khi trang đang giải mã (chỉ đặt MinHeight khi chưa có ảnh) -->
+                                <!-- Khung chờ / Báo lỗi khi trang chưa có ảnh (Circuit Breaker) -->
                                 <Border Background="#0B1120" BorderBrush="#1E293B" BorderThickness="0,0,0,1"
                                         HorizontalAlignment="Stretch"
                                         VerticalAlignment="Stretch"
                                         MinHeight="180"
                                         IsVisible="{Binding !HasImage}">
-                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
-                                        <TextBlock Text="{Binding DisplayPageNumber, StringFormat='⏳ Đang tải trang {0}...'}"
-                                                   Foreground="#4FC3F7" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" />
-                                        <TextBlock Text="{Binding Title}" Foreground="#64748B" FontSize="11" HorizontalAlignment="Center" />
-                                    </StackPanel>
+                                    <Panel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8"
+                                                    IsVisible="{Binding !IsLoadFailed}">
+                                            <TextBlock Text="{Binding DisplayPageNumber, StringFormat='⏳ Đang tải trang {0}...'}"
+                                                       Foreground="#4FC3F7" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" />
+                                            <TextBlock Text="{Binding Title}" Foreground="#64748B" FontSize="11" HorizontalAlignment="Center" />
+                                        </StackPanel>
+
+                                        <Border Background="#1E1B2E" BorderBrush="#F43F5E" BorderThickness="1" CornerRadius="8" Padding="16,12"
+                                                IsVisible="{Binding IsLoadFailed}" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420">
+                                            <StackPanel Spacing="8" HorizontalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                                    <TextBlock Text="⚠️" FontSize="18" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding DisplayPageNumber, StringFormat='Không thể nạp trang {0}'}"
+                                                               Foreground="#FDA4AF" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding ErrorMessage, FallbackValue='Tệp ảnh bị lỗi hoặc không thể đọc dữ liệu.'}"
+                                                           Foreground="#94A3B8" FontSize="11.5" TextWrapping="Wrap" TextAlignment="Center" />
+                                                <Button Content="🔄 Thử tải lại trang"
+                                                        Background="#0284C7" Foreground="White" FontWeight="SemiBold" FontSize="12"
+                                                        CornerRadius="6" Padding="12,5" HorizontalAlignment="Center"
+                                                        Command="{Binding #RootReaderControl.((vm:ComicReaderViewModel)DataContext).RetryLoadPageCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Panel>
                                 </Border>
 
                                 <!-- Ảnh trang truyện (ôm khít 100% chiều cao và chiều rộng thực tế, không có viền đen thừa) -->
@@ -252,8 +274,24 @@
                             <Panel HorizontalAlignment="{Binding LeftFlipPageAlignment}" VerticalAlignment="Center" Margin="{Binding FlipPageMargin}">
                                 <Border Background="#0B1120" MinWidth="260" MinHeight="360" CornerRadius="6"
                                         IsVisible="{Binding LeftFlipPage.HasImage, Converter={x:Static BoolConverters.Not}, FallbackValue=True}">
-                                    <TextBlock Text="⏳ Đang nạp trang..." Foreground="#4FC3F7" FontSize="14" FontWeight="Bold"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Panel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="⏳ Đang nạp trang..." Foreground="#4FC3F7" FontSize="14" FontWeight="Bold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   IsVisible="{Binding !LeftFlipPage.IsLoadFailed}" />
+                                        <Border Background="#1E1B2E" BorderBrush="#F43F5E" BorderThickness="1" CornerRadius="8" Padding="16,12"
+                                                IsVisible="{Binding LeftFlipPage.IsLoadFailed}" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="320">
+                                            <StackPanel Spacing="8" HorizontalAlignment="Center">
+                                                <TextBlock Text="⚠️ Không thể nạp trang" Foreground="#FDA4AF" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" />
+                                                <TextBlock Text="{Binding LeftFlipPage.ErrorMessage, FallbackValue='Tệp ảnh bị lỗi.'}"
+                                                           Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" />
+                                                <Button Content="🔄 Thử tải lại"
+                                                        Background="#0284C7" Foreground="White" FontWeight="SemiBold" FontSize="12"
+                                                        CornerRadius="6" Padding="12,5" HorizontalAlignment="Center"
+                                                        Command="{Binding RetryLoadPageCommand}"
+                                                        CommandParameter="{Binding LeftFlipPage}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Panel>
                                 </Border>
                                 <Image Source="{Binding LeftFlipPage.Image}"
                                        Width="{Binding FlipDisplayWidth}"
@@ -269,8 +307,24 @@
                                    IsVisible="{Binding HasSecondaryPage}">
                                 <Border Background="#0B1120" MinWidth="260" MinHeight="360" CornerRadius="6"
                                         IsVisible="{Binding RightFlipPage.HasImage, Converter={x:Static BoolConverters.Not}, FallbackValue=True}">
-                                    <TextBlock Text="⏳ Đang nạp trang..." Foreground="#4FC3F7" FontSize="14" FontWeight="Bold"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Panel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="⏳ Đang nạp trang..." Foreground="#4FC3F7" FontSize="14" FontWeight="Bold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   IsVisible="{Binding !RightFlipPage.IsLoadFailed}" />
+                                        <Border Background="#1E1B2E" BorderBrush="#F43F5E" BorderThickness="1" CornerRadius="8" Padding="16,12"
+                                                IsVisible="{Binding RightFlipPage.IsLoadFailed}" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="320">
+                                            <StackPanel Spacing="8" HorizontalAlignment="Center">
+                                                <TextBlock Text="⚠️ Không thể nạp trang" Foreground="#FDA4AF" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" />
+                                                <TextBlock Text="{Binding RightFlipPage.ErrorMessage, FallbackValue='Tệp ảnh bị lỗi.'}"
+                                                           Foreground="#94A3B8" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" />
+                                                <Button Content="🔄 Thử tải lại"
+                                                        Background="#0284C7" Foreground="White" FontWeight="SemiBold" FontSize="12"
+                                                        CornerRadius="6" Padding="12,5" HorizontalAlignment="Center"
+                                                        Command="{Binding RetryLoadPageCommand}"
+                                                        CommandParameter="{Binding RightFlipPage}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Panel>
                                 </Border>
                                 <Image Source="{Binding RightFlipPage.Image}"
                                        Width="{Binding FlipDisplayWidth}"

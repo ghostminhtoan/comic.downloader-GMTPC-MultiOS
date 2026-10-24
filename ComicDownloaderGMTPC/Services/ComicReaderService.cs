@@ -540,7 +540,18 @@ public sealed class ComicReaderService
             var effects = ActiveEffectSettings.Clone();
 
             byte[]? rawBytes = await Task.Run(() => ReadRawPageBytes(page), ct).ConfigureAwait(false);
-            if (rawBytes == null || rawBytes.Length == 0 || ct.IsCancellationRequested) return;
+            if (rawBytes == null || rawBytes.Length == 0 || ct.IsCancellationRequested)
+            {
+                if (!ct.IsCancellationRequested)
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        page.IsLoadFailed = true;
+                        page.ErrorMessage = "Không thể đọc dữ liệu trang ảnh (file rỗng hoặc bị thiếu).";
+                    });
+                }
+                return;
+            }
 
             // 1. Kiểm tra và kích hoạt hoạt ảnh động (GIF hoặc WebP Animated)
             if (AnimatedPagePlayer.IsAnimatedImage(rawBytes, out int frameCount, out int animW, out int animH))
@@ -562,6 +573,8 @@ public sealed class ComicReaderService
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     page.IsLoaded = true;
+                    page.IsLoadFailed = false;
+                    page.ErrorMessage = null;
                 });
                 return;
             }
@@ -590,13 +603,30 @@ public sealed class ComicReaderService
                     }
                     page.Image = bmp;
                     page.IsLoaded = true;
+                    page.IsLoadFailed = false;
+                    page.ErrorMessage = null;
+                });
+            }
+            else if (bmp == null && !ct.IsCancellationRequested)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    page.IsLoadFailed = true;
+                    page.ErrorMessage = "Tệp ảnh bị lỗi hoặc không thể giải mã định dạng này.";
                 });
             }
         }
         catch (OperationCanceledException)
         {
         }
-        catch { }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                page.IsLoadFailed = true;
+                page.ErrorMessage = "Lỗi khi xử lý trang: " + ex.Message;
+            });
+        }
         finally
         {
             if (acquired)
@@ -800,7 +830,11 @@ public sealed class ComicReaderService
     {
         try
         {
-            if (effects.HasAnyEffect)
+            int maxDim = OperatingSystem.IsAndroid() ? 2560 : 3840;
+            bool isUltraLarge = page.AspectWidth > maxDim || page.AspectHeight > maxDim;
+
+            // Nếu có hiệu ứng màu sắc HOẶC nếu kích thước trang là ảnh siêu nét 4K/8K: decode qua Skia có subsampling để giảm 75% RAM
+            if (effects.HasAnyEffect || isUltraLarge)
             {
                 var processedBmp = DecodeAndApplyEffectsWithSkia(rawBytes, effects);
                 if (processedBmp != null)
@@ -816,6 +850,10 @@ public sealed class ComicReaderService
             }
             catch
             {
+                // Thử giải mã qua Skia có subsample trước khi fallback JPEG chuẩn
+                var skBmp = DecodeAndApplyEffectsWithSkia(rawBytes, effects);
+                if (skBmp != null) return skBmp;
+
                 var (jpegBytes, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(rawBytes, 92);
                 if (jpegBytes.Length > 0)
                 {
@@ -837,7 +875,25 @@ public sealed class ComicReaderService
             using var codec = SKCodec.Create(skData);
             if (codec == null) return null;
 
-            var decodeInfo = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            int origW = codec.Info.Width;
+            int origH = codec.Info.Height;
+            if (origW <= 4 || origH <= 4) return null;
+
+            int maxDim = OperatingSystem.IsAndroid() ? 2560 : 3840;
+            SKImageInfo decodeInfo;
+            if (origW > maxDim || origH > maxDim)
+            {
+                float scale = Math.Min((float)maxDim / origW, (float)maxDim / origH);
+                var scaledDim = codec.GetScaledDimensions(scale);
+                int dw = scaledDim.Width > 0 ? scaledDim.Width : origW;
+                int dh = scaledDim.Height > 0 ? scaledDim.Height : origH;
+                decodeInfo = new SKImageInfo(dw, dh, SKColorType.Bgra8888, SKAlphaType.Premul);
+            }
+            else
+            {
+                decodeInfo = new SKImageInfo(origW, origH, SKColorType.Bgra8888, SKAlphaType.Premul);
+            }
+
             using var srcBitmap = SKBitmap.Decode(codec, decodeInfo);
             if (srcBitmap == null || srcBitmap.Width <= 4 || srcBitmap.Height <= 4) return null;
 
