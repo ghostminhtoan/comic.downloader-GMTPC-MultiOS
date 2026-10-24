@@ -727,11 +727,6 @@ public sealed class LibraryScannerService
             // TRƯỜNG HỢP 1: File .zip/.cbz/.rar/.cbr chứa nhiều thư mục chương con (ví dụ: Chuong 1/, Chuong 2/, ...)
             if (folderGroups.Count >= 2)
             {
-                var flatAllEntries = allImageEntries
-                    .OrderBy(e => e, NaturalSortComparer.Instance)
-                    .ToList();
-                firstCoverEntry ??= flatAllEntries[0];
-
                 var sortedFolderKeys = folderGroups.Keys
                     .OrderBy(k => k, NaturalSortComparer.Instance)
                     .ToList();
@@ -739,9 +734,8 @@ public sealed class LibraryScannerService
                 int runningPages = 0;
                 foreach (string folderKey in sortedFolderKeys)
                 {
-                    var sortedEntries = folderGroups[folderKey]
-                        .OrderBy(e => e, NaturalSortComparer.Instance)
-                        .ToList();
+                    var sortedEntries = folderGroups[folderKey];
+                    sortedEntries.Sort(NaturalSortComparer.Instance);
 
                     if (sortedEntries.Count == 0) continue;
                     firstCoverEntry ??= sortedEntries[0];
@@ -1321,15 +1315,26 @@ public sealed class LibraryScannerService
                 string subName = Path.GetFileName(sub);
                 if (subName.StartsWith(".", StringComparison.Ordinal)) continue;
 
-                var directImgs = GetDirectImagesSafe(sub);
-                if (directImgs.Count > 0)
+                // Tối ưu hóa siêu tốc (Fast Probe): Chỉ kiểm tra có ảnh không thay vì load và sort toàn bộ ảnh của mọi chapter
+                bool hasImages = Directory.EnumerateFiles(sub, "*", enumOptions).Any(IsImageFile);
+                if (hasImages)
                 {
+                    int cachedPages = ReadProgressStore.Instance.GetChapterTotalPages(sub);
+                    if (cachedPages <= 0)
+                    {
+                        cachedPages = Directory.EnumerateFiles(sub, "*", enumOptions).Count(IsImageFile);
+                        if (cachedPages > 0)
+                        {
+                            ReadProgressStore.Instance.SaveChapterTotalPages(sub, cachedPages);
+                        }
+                    }
+
                     chapters.Add(new LibraryChapterItem
                     {
                         Index = chapterIndex++,
                         Title = subName,
                         LocalPath = sub,
-                        TotalPages = directImgs.Count,
+                        TotalPages = cachedPages > 0 ? cachedPages : 1,
                         LastReadPage = ReadProgressStore.Instance.GetLastReadPage(sub)
                     });
                 }
