@@ -2983,7 +2983,18 @@ public partial class ComicReaderViewModel : ViewModelBase
         string? comicRoot = ParentComic?.RootFolderPath;
         string? title = ParentComic?.Title ?? ComicTitle;
 
-        if (string.IsNullOrWhiteSpace(comicRoot) && !string.IsNullOrWhiteSpace(chapter.LocalPath))
+        bool isArchiveComic = (ParentComic != null && (LibraryScannerService.IsArchiveFile(ParentComic.RootFolderPath) || !string.IsNullOrEmpty(ParentComic.CoverArchivePath)))
+                              || (!string.IsNullOrWhiteSpace(chapter.LocalPath) && LibraryScannerService.IsArchiveFile(chapter.LocalPath))
+                              || chapter.IsCbz || chapter.IsRar;
+
+        if (isArchiveComic)
+        {
+            // Quy tắc tối thượng: File nén khi mở và khi tắt reader tuyệt đối KHÔNG ĐƯỢC PHÉP gộp với parent folder!
+            comicRoot = !string.IsNullOrWhiteSpace(ParentComic?.RootFolderPath) && LibraryScannerService.IsArchiveFile(ParentComic.RootFolderPath)
+                ? ParentComic.RootFolderPath
+                : (!string.IsNullOrWhiteSpace(chapter.LocalPath) ? chapter.LocalPath : comicRoot);
+        }
+        else if (string.IsNullOrWhiteSpace(comicRoot) && !string.IsNullOrWhiteSpace(chapter.LocalPath))
         {
             try
             {

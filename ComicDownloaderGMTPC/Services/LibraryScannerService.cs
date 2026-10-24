@@ -252,15 +252,9 @@ public sealed class LibraryScannerService
             var expanded = ExpandArchiveIntoChapters(archPath, ref tempIdx, out string? firstEntry);
             if (expanded.Count == 0) continue;
 
-            if (expanded.Count >= 2 || (chapterDirs.Count == 0 && archiveFiles.Count + pdfFiles.Count + mobiFiles.Count >= 1))
-            {
-                var standaloneComic = BuildStandaloneComicFromExpandedFile(archPath, currentDir, rootDir, expanded, isPdf: false, firstArchiveEntry: firstEntry);
-                results.Add(standaloneComic);
-            }
-            else
-            {
-                singleChapterArchives.Add(archPath);
-            }
+            // Quy định bất biến: File nén luôn là bộ truyện độc lập, tuyệt đối không gộp vào parent folder!
+            var standaloneComic = BuildStandaloneComicFromExpandedFile(archPath, currentDir, rootDir, expanded, isPdf: false, firstArchiveEntry: firstEntry);
+            results.Add(standaloneComic);
         }
 
         foreach (string pdfPath in pdfFiles)
@@ -987,64 +981,59 @@ public sealed class LibraryScannerService
             // Xử lý khi targetPath là FILE (.zip, .cbz, .rar, .cbr, .pdf, .mobi hoặc file ảnh)
             if (File.Exists(targetPath))
             {
-                string? fileDir = Path.GetDirectoryName(targetPath);
-                if (string.IsNullOrWhiteSpace(fileDir) || !Directory.Exists(fileDir)) return false;
-
-                string cleanFileDir = fileDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                string? rootOfFileDir = Path.GetPathRoot(cleanFileDir);
-                if (string.Equals(cleanFileDir, rootOfFileDir?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                // Quy tắc tối thượng: Chỉ có file ảnh mới được phép gộp thành parent folder!
+                // File nén (archive), PDF, MOBI khi mở và khi tắt reader tuyệt đối KHÔNG được phép gộp với parent folder!
+                if (IsArchiveFile(targetPath) || IsPdfFile(targetPath) || IsMobiFile(targetPath))
                 {
                     return false;
-                }
-
-                string fileName = Path.GetFileName(targetPath);
-                string fileNameNoExt = Path.GetFileNameWithoutExtension(targetPath);
-                bool fileIsChapter = IsChapterNamePattern(fileNameNoExt) || ReadProgressStore.ExtractChapterNumber(fileNameNoExt) >= 0;
-
-                var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
-                int siblingArchives = 0;
-                int siblingImages = 0;
-                try
-                {
-                    siblingArchives = Directory.EnumerateFiles(cleanFileDir, "*", enumOpts)
-                        .Count(f => IsArchiveFile(f) || IsPdfFile(f) || IsMobiFile(f));
-                    siblingImages = Directory.EnumerateFiles(cleanFileDir, "*", enumOpts).Count(IsImageFile);
-                }
-                catch { }
-
-                // Nếu là file nén/sách và trong thư mục có nhiều file nén anh em hoặc tên file là chapter:
-                // Thư mục chứa nó chính là Comic Root của bộ truyện (miễn là không phải thư mục hệ thống)!
-                if ((IsArchiveFile(targetPath) || IsPdfFile(targetPath) || IsMobiFile(targetPath)) && (siblingArchives >= 2 || fileIsChapter))
-                {
-                    if (!IsCommonSystemOrUserDirectory(cleanFileDir))
-                    {
-                        parentComicRoot = cleanFileDir;
-                        chapterName = !string.IsNullOrWhiteSpace(fileNameNoExt) ? fileNameNoExt : fileName;
-                        return true;
-                    }
                 }
 
                 // Nếu là file ảnh trong thư mục chương con:
                 if (IsImageFile(targetPath))
                 {
-                    string folderName = Path.GetFileName(cleanFileDir);
-                    if (IsChapterNamePattern(folderName))
+                    string? fileDir = Path.GetDirectoryName(targetPath);
+                    if (string.IsNullOrWhiteSpace(fileDir) || !Directory.Exists(fileDir)) return false;
+
+                    string cleanFileDir = fileDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    string? rootOfFileDir = Path.GetPathRoot(cleanFileDir);
+                    if (string.Equals(cleanFileDir, rootOfFileDir?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
                     {
-                        string? parent = Path.GetDirectoryName(cleanFileDir);
-                        if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent) && !IsCommonSystemOrUserDirectory(parent))
+                        return false;
+                    }
+
+                    var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
+                    int siblingImages = 0;
+                    try
+                    {
+                        siblingImages = Directory.EnumerateFiles(cleanFileDir, "*", enumOpts).Count(IsImageFile);
+                    }
+                    catch { }
+                    string folderName = Path.GetFileName(cleanFileDir);
+                    string? parent = Path.GetDirectoryName(cleanFileDir);
+                    bool isChapterFolder = IsChapterNamePattern(folderName) || ReadProgressStore.ExtractChapterNumber(folderName) >= 0;
+
+                    if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent) && !IsCommonSystemOrUserDirectory(parent))
+                    {
+                        bool parentHasMultipleChapters = false;
+                        try
+                        {
+                            var sibDirs = Directory.GetDirectories(parent, "*", enumOpts);
+                            if (sibDirs.Length >= 2 && (isChapterFolder || sibDirs.Count(d => IsChapterNamePattern(Path.GetFileName(d)) || ReadProgressStore.ExtractChapterNumber(Path.GetFileName(d)) >= 0) >= 2))
+                            {
+                                parentHasMultipleChapters = true;
+                            }
+                        }
+                        catch { }
+
+                        if (parentHasMultipleChapters || isChapterFolder)
                         {
                             parentComicRoot = parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                             chapterName = folderName;
                             return true;
                         }
-                        else if (!IsCommonSystemOrUserDirectory(cleanFileDir))
-                        {
-                            parentComicRoot = cleanFileDir;
-                            chapterName = folderName;
-                            return true;
-                        }
                     }
-                    else if (siblingImages >= 1 && !IsCommonSystemOrUserDirectory(cleanFileDir))
+
+                    if (siblingImages >= 1 && !IsCommonSystemOrUserDirectory(cleanFileDir))
                     {
                         parentComicRoot = cleanFileDir;
                         chapterName = folderName;
@@ -1079,7 +1068,7 @@ public sealed class LibraryScannerService
                 }
 
                 string currentFolderName = Path.GetFileName(cleanDir);
-                bool isChapterName = IsChapterNamePattern(currentFolderName);
+                bool isChapterName = IsChapterNamePattern(currentFolderName) || ReadProgressStore.ExtractChapterNumber(currentFolderName) >= 0;
 
                 var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
                 var siblingDirs = Directory.GetDirectories(parent, "*", enumOpts);
@@ -1090,7 +1079,7 @@ public sealed class LibraryScannerService
                 {
                     string sibName = Path.GetFileName(sib);
                     if (sibName.StartsWith(".", StringComparison.Ordinal)) continue;
-                    if (IsChapterNamePattern(sibName)) siblingChapterCount++;
+                    if (IsChapterNamePattern(sibName) || ReadProgressStore.ExtractChapterNumber(sibName) >= 0) siblingChapterCount++;
 
                     try
                     {
@@ -1102,18 +1091,12 @@ public sealed class LibraryScannerService
                     catch { }
                 }
 
-                int siblingArchives = 0;
-                try
-                {
-                    siblingArchives = Directory.EnumerateFiles(parent, "*", enumOpts).Count(f => IsArchiveFile(f) || IsPdfFile(f) || IsMobiFile(f));
-                }
-                catch { }
-
+                // Quy tắc tối thượng: Chỉ có thư mục/file ảnh mới được phép gộp về parent folder!
                 // Chỉ quy về parent khi:
-                // 1. Tên folder là chapter pattern VÀ parent có chứa các chapter sibling khác hoặc archive anh em
-                // 2. Hoặc trong parent có từ 2 chapter con trở lên có ảnh
+                // 1. Tên folder là chapter pattern VÀ parent có chứa từ 2 chapter sibling trở lên
+                // 2. Hoặc trong parent có từ 2 chapter con trở lên chứa ảnh
                 // 3. Hoặc có từ 2 sibling mang tên chapter
-                if ((isChapterName && (siblingDirs.Length > 1 || siblingArchives > 0)) ||
+                if ((isChapterName && siblingDirs.Length > 1) ||
                     siblingWithImages >= 2 ||
                     siblingChapterCount >= 2)
                 {

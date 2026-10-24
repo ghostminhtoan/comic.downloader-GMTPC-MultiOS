@@ -1499,6 +1499,43 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
     + `yuusha ga shinda nettruyenqqviet.zip`: Trung bình ~0.19s (Lần 1: 0.493s, Lần 2: 0.138s, Lần 3: 0.090s) $\rightarrow$ **100% ĐẠT CHUẨN (< 2.0s, thực tế < 0.5s)**.
     + `God Hand Teru`: Trung bình ~0.23s (Lần 1: 0.393s, Lần 2: 0.175s, Lần 3: 0.189s) $\rightarrow$ **100% ĐẠT CHUẨN (< 2.0s, thực tế < 0.4s)**.
 
+### 43. BUG-042: File Nén Bị Gộp Sai Với Thư Mục Cha Khi Mở Và Đóng Reader (Chỉ File Ảnh Mới Được Phép Gộp Parent Folder)
+
+- **Triệu chứng**:
+  - Khi mở một file nén truyện (.zip, .cbz, .rar, .cbr) nằm trong thư mục chứa nhiều file (ví dụ `ZALL/yuusha ga shinda nettruyenqqviet.zip`), hệ thống tự động gán truyện thuộc về thư mục cha `ZALL`.
+  - Khi người dùng thoát Reader, phiên đọc và tiến độ bị ghi đè lên thư mục cha `ZALL` trong `resume.md` và `ReadProgressStore` thay vì ghi nhận đúng file nén độc lập.
+  - Khi quét thư viện, các file nén cũng bị gộp nhầm thành các chapter con của thư mục cha nếu trong thư mục đó có thư mục khác.
+
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  1. *Lỗi suy đoán Parent Comic Root cho Archive*: Trong `LibraryScannerService.TryGetParentComicRoot`, logic cũ kiểm tra nếu target là file nén và trong thư mục cha có từ 2 archive anh em (`siblingArchives >= 2`) thì tự động kết luận thư mục cha là `parentComicRoot`. Điều này dẫn đến các thư mục chứa nhiều bộ truyện zip độc lập như `ZALL` bị ngộ nhận thành 1 bộ truyện duy nhất.
+  2. *Lưu Session/History không phân định loại file*: Khi đóng reader (`SaveChapterReadingSession`), hệ thống fallback gọi `TryGetParentComicRoot` và trong `ReadProgressStore.RecordSessionResume` / `RegisterReadComic` / `GetComicReadingHistory` tiếp tục quy file nén về `parentRoot`, ghi đè thông tin lịch sử và làm ẩn file nén khỏi danh sách đã đọc.
+
+- **Giải pháp triệt để**:
+  1. *Khóa Chặt Quy Tắc Phân Định Tối Thượng*:
+     - **Chỉ có file ảnh (`IsImageFile`) mới được phép nhận diện và gộp với thư mục cha** (`TryGetParentComicRoot` trả về `true` cho ảnh trong folder chapter như `God Hand Teru`).
+     - **File nén (`IsArchiveFile`), PDF, MOBI tuyệt đối KHÔNG ĐƯỢC PHÉP gộp với thư mục cha**: Khi `File.Exists(targetPath)` và là archive/pdf/mobi, `TryGetParentComicRoot` lập tức trả về `false`.
+  2. *Cố Định Độc Lập Khi Mở Và Tắt Reader*:
+     - Trong `ComicReaderViewModel.SaveChapterReadingSession`: Nếu là comic archive (`isArchiveComic`), `comicRoot` được cố định bằng chính đường dẫn file nén (`RootFolderPath` hoặc `chapter.LocalPath`), chặn hoàn toàn việc gọi `TryGetParentComicRoot`.
+     - Trong `ReadProgressStore`: Bảo vệ `RecordSessionResume`, `RegisterReadComic`, và `GetComicReadingHistory` không bao giờ biến file nén thành thư mục cha hoặc coi file nén là subfolder bị ẩn; tiêu đề lưu trữ luôn là tên file nén không đuôi.
+  3. *Bảo Vệ Độc Lập Khi Quét Thư Viện*:
+     - Trong `ScanDirectoryRecursive`: Mọi file nén `archPath` đều được khởi tạo thành một `LibraryComicItem` độc lập (`BuildStandaloneComicFromExpandedFile`), không bao giờ bị gom vào `singleChapterArchives` của thư mục cha.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/LibraryScannerService.cs`
+  - `ComicDownloaderGMTPC/Services/ReadProgressStore.cs`
+  - `ComicDownloaderGMTPC/ViewModels/ComicReaderViewModel.cs`
+  - `bug-fixes-and-solutions.md`
+
+- **Quy tắc kiểm thử**:
+  - Viết harness test độc lập `ArchiveParentSeparationTest` kiểm thử trên cả 2 bộ truyện thực tế:
+    + TEST 1: `TryGetParentComicRoot` với file ZIP $ightarrow$ `false` (PASS).
+    + TEST 2: Mở file ZIP qua `CreateQuickComicFromPath` $ightarrow$ `comic.RootFolderPath` chính là file ZIP, Title giữ nguyên tên truyện, không biến thành `ZALL` (PASS).
+    + TEST 3: Giả lập đọc và đóng reader $ightarrow$ `resume.md` và `ReadProgressStore` lưu chính xác file ZIP độc lập, không gộp vào `ZALL` (PASS).
+    + TEST 4: File ảnh trong `God Hand Teru` $ightarrow$ `TryGetParentComicRoot` nhận diện chính xác `parentComicRoot` là `God Hand Teru` (PASS).
+  - Kết quả: 100% PASS trên toàn bộ các ca kiểm thử.
+
+---
+
 ---
 
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
