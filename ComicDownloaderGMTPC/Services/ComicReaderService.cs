@@ -832,11 +832,12 @@ public sealed class ComicReaderService
         {
             int maxDim = OperatingSystem.IsAndroid() ? 2560 : 3840;
             bool isUltraLarge = page.AspectWidth > maxDim || page.AspectHeight > maxDim;
+            bool needsSplit = page.SplitMode != PageSplitMode.None;
 
-            // Nếu có hiệu ứng màu sắc HOẶC nếu kích thước trang là ảnh siêu nét 4K/8K: decode qua Skia có subsampling để giảm 75% RAM
-            if (effects.HasAnyEffect || isUltraLarge)
+            // Nếu có hiệu ứng màu sắc, ảnh siêu nét 4K/8K HOẶC cần xẻ đôi ảnh đôi: decode qua Skia
+            if (effects.HasAnyEffect || isUltraLarge || needsSplit)
             {
-                var processedBmp = DecodeAndApplyEffectsWithSkia(rawBytes, effects);
+                var processedBmp = DecodeAndApplyEffectsWithSkia(rawBytes, page, effects);
                 if (processedBmp != null)
                 {
                     return processedBmp;
@@ -851,7 +852,7 @@ public sealed class ComicReaderService
             catch
             {
                 // Thử giải mã qua Skia có subsample trước khi fallback JPEG chuẩn
-                var skBmp = DecodeAndApplyEffectsWithSkia(rawBytes, effects);
+                var skBmp = DecodeAndApplyEffectsWithSkia(rawBytes, page, effects);
                 if (skBmp != null) return skBmp;
 
                 var (jpegBytes, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(rawBytes, 92);
@@ -867,7 +868,7 @@ public sealed class ComicReaderService
         return null;
     }
 
-    private static Bitmap? DecodeAndApplyEffectsWithSkia(byte[] rawBytes, ReaderVisualEffectSettings effects)
+    private static Bitmap? DecodeAndApplyEffectsWithSkia(byte[] rawBytes, ReaderPageItem page, ReaderVisualEffectSettings effects)
     {
         try
         {
@@ -904,6 +905,16 @@ public sealed class ComicReaderService
             int rightPx = (int)Math.Round(srcW * Math.Clamp(effects.CropRightPercent, 0, 35) / 100.0);
             int topPx = (int)Math.Round(srcH * Math.Clamp(effects.CropTopPercent, 0, 35) / 100.0);
             int bottomPx = (int)Math.Round(srcH * Math.Clamp(effects.CropBottomPercent, 0, 35) / 100.0);
+
+            // Xử lý tự động xẻ đôi ảnh đôi (Auto Split 2-Page Spread)
+            if (page.SplitMode == PageSplitMode.LeftHalf)
+            {
+                rightPx = Math.Max(rightPx, srcW / 2);
+            }
+            else if (page.SplitMode == PageSplitMode.RightHalf)
+            {
+                leftPx = Math.Max(leftPx, srcW / 2);
+            }
 
             int cropW = Math.Max(32, srcW - leftPx - rightPx);
             int cropH = Math.Max(32, srcH - topPx - bottomPx);

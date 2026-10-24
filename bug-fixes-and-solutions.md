@@ -1304,6 +1304,42 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
 
 ---
 
+### 36. BUG-036: Nâng Cấp Trải Nghiệm Chạm Lướt Chuẩn ComicScreen: Ma Trận 9 Vùng Chạm, Phím Âm Lượng Android, Nền OLED #000000, Phím Hông Chuột & Cuộn Ngang Desktop, Tự Động Xẻ Trang Đôi (Phase 1 & Phase 2)
+
+- **Yêu cầu & Triệu chứng**:
+  1. Trải nghiệm chạm lật trang trên di động còn đơn giản, chưa hỗ trợ chạm mép trái/phải để lật trang theo thói quen đọc sách ComicScreen.
+  2. Chưa hỗ trợ phím âm lượng vật lý (Volume Up/Down) trên điện thoại Android để lật trang khi đọc bằng 1 tay.
+  3. Thiếu tông màu nền đen tuyệt đối `#000000` để tắt hoàn toàn bóng bán dẫn màn hình OLED/AMOLED giúp tiết kiệm pin tối đa.
+  4. Trên máy tính Windows và Linux, chưa hỗ trợ con lăn chuột ngang (Tilt Wheel) và 2 phím hông chuột phụ (XButton1/XButton2) để lùi/tiến trang.
+  5. Đọc truyện tranh scan Manga có các trang đôi (Double-page spread) khi xem màn dọc bị thu nhỏ li ti, khó đọc.
+- **Giải pháp triệt để**:
+  1. *Ma trận 9 vùng chạm tùy biến (9-Zone Tap Matrix - `ComicReaderControl.axaml.cs`)*:
+     - Giảm độ trễ Single-Tap từ 500ms xuống **280ms** (chuẩn cảm ứng Android cực nhạy).
+     - Phân chia màn hình thành 9 vùng: Chạm mép trái/phải lật trang theo chiều đọc LTR/RTL; chạm mép trên/dưới trong chế độ Webtoon cuộn mượt 75% chiều cao; chạm vùng trung tâm bật/tắt thanh công cụ HUD.
+  2. *Phím Âm Lượng Android (`MainActivity.cs` & `ComicReaderViewModel.cs`)*:
+     - Bắt sự kiện `Keycode.VolumeDown` (trang kế) và `Keycode.VolumeUp` (trang trước) qua bridge `ActiveInstance`, chặn không hiện thanh slider âm lượng hệ thống khi đang đọc.
+  3. *Tông màu đen tuyệt đối OLED Pure Black (`#000000`)*:
+     - Bổ sung tùy chọn `#000000` vào vòng lặp màu nền `CycleBackgroundColor` và pop-up cấu hình.
+  4. *Hỗ trợ Chuột Đa Năng Desktop (`ComicReaderControl.axaml.cs`)*:
+     - Lắng nghe `props.IsXButton1Pressed` (Back) và `props.IsXButton2Pressed` (Forward) để lật trang tức thì bằng phím chuột hông.
+     - Lắng nghe con lăn ngang `e.Delta.X` để lật trang mượt mà trong chế độ Flip Mode.
+  5. *Tự động xẻ đôi ảnh trang đôi (`PageSplitMode` trong `ReaderPageItem.cs` & `ComicReaderService.cs`)*:
+     - Hỗ trợ `PageSplitMode.LeftHalf` và `PageSplitMode.RightHalf`, crop trực tiếp qua SkiaSharp không tốn thêm dung lượng hay RAM, đưa hình ảnh vừa khít màn hình dọc.
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC.Android/MainActivity.cs`
+  - `ComicDownloaderGMTPC/Models/ReaderPageItem.cs`
+  - `ComicDownloaderGMTPC/Services/ComicReaderService.cs`
+  - `ComicDownloaderGMTPC/ViewModels/ComicReaderViewModel.cs`
+  - `ComicDownloaderGMTPC/Views/ComicReaderControl.axaml`
+  - `ComicDownloaderGMTPC/Views/ComicReaderControl.axaml.cs`
+  - `bug-fixes-and-solutions.md`
+- **Quy tắc kiểm thử**:
+  - Mở truyện trên Android: Chạm mép phải sang trang, chạm giữa mở menu, bấm phím âm lượng lật trang chuẩn xác.
+  - Trên PC: Bấm phím hông chuột hoặc lăn chuột ngang để sang trang.
+  - Bật màu nền OLED: Nền đen tuyền `#000000`.
+
+---
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 

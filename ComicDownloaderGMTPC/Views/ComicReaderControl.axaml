@@ -1160,6 +1160,18 @@
                             </Grid>
                         </Border>
 
+                        <!-- 7. Tap Zones & Smart Spread Split -->
+                        <Grid ColumnDefinitions="*, *" Margin="0,4">
+                            <CheckBox Grid.Column="0" Classes="comicCheck"
+                                      IsChecked="{Binding IsTapZonesEnabled}"
+                                      Content="👆 9 Vùng Chạm"
+                                      ToolTip.Tip="Ma trận 9 vùng chạm chuẩn ComicScreen: Chạm mép trái/phải lật trang, chạm giữa mở menu" />
+                            <CheckBox Grid.Column="1" Classes="comicCheck"
+                                      IsChecked="{Binding IsAutoSplitSpreadsEnabled}"
+                                      Content="✂️ Xẻ Trang Đôi"
+                                      ToolTip.Tip="Tự động xẻ đôi ảnh đôi 2 trang khi đọc màn hình dọc trên điện thoại" />
+                        </Grid>
+
                         <!-- Nút DEFAULT -->
                         <Button Command="{Binding ResetBrightnessDefaultsCommand}"
                                 Background="#374151" Foreground="#F8FAFC" FontWeight="Bold"

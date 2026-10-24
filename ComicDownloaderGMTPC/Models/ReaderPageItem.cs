@@ -16,6 +16,13 @@ public enum ImageFitMode
     Original = 4     // Kích thước gốc 1:1 (Original)
 }
 
+public enum PageSplitMode
+{
+    None = 0,
+    LeftHalf = 1,
+    RightHalf = 2
+}
+
 public partial class ReaderPageItem : ObservableObject
 {
     public int Index { get; set; }
@@ -51,7 +58,7 @@ public partial class ReaderPageItem : ObservableObject
     private int _aspectWidth = 900;
     private int _aspectHeight = 1350;
 
-    public int AspectWidth => _aspectWidth;
+    public int AspectWidth => SplitMode != PageSplitMode.None ? Math.Max(32, _aspectWidth / 2) : _aspectWidth;
     public int AspectHeight => _aspectHeight;
 
     [ObservableProperty]
@@ -160,6 +167,9 @@ public partial class ReaderPageItem : ObservableObject
 
     [ObservableProperty]
     private string? _errorMessage;
+
+    [ObservableProperty]
+    private PageSplitMode _splitMode = PageSplitMode.None;
 
     [ObservableProperty]
     private bool _isAnimated;

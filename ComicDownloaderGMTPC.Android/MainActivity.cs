@@ -523,6 +523,18 @@ public class MainActivity : AvaloniaMainActivity
             OnBackPressed();
             return true;
         }
+
+        if ((keyCode == Keycode.VolumeUp || keyCode == Keycode.VolumeDown) && e?.Action == KeyEventActions.Down)
+        {
+            if (ComicDownloaderGMTPC.ViewModels.ComicReaderViewModel.ActiveInstance != null &&
+                ComicDownloaderGMTPC.ViewModels.ComicReaderViewModel.IsVolumeKeyTurnEnabled)
+            {
+                bool isNext = (keyCode == Keycode.VolumeDown);
+                ComicDownloaderGMTPC.ViewModels.ComicReaderViewModel.TriggerVolumeKeyTurn(isNext);
+                return true;
+            }
+        }
+
         return base.OnKeyDown(keyCode, e);
     }
 

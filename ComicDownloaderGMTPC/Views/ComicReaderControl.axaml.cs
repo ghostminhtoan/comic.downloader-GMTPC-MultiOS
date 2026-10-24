@@ -799,27 +799,20 @@ public partial class ComicReaderControl : UserControl
 
         _singleTapTimer = new DispatcherTimer(DispatcherPriority.Normal)
         {
-            Interval = TimeSpan.FromMilliseconds(500)
+            Interval = TimeSpan.FromMilliseconds(280) // 280ms siêu nhạy chuẩn Android Touch
         };
         _singleTapTimer.Tick += (s, e) =>
         {
             _singleTapTimer.Stop();
             if (DataContext is ComicReaderViewModel vm)
             {
-                var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
-                Vector? savedOffset = sv?.Offset;
-                int savedPage = vm.CurrentPageIndex;
-                _suppressScrollChangedUntilTick = Environment.TickCount64 + 800;
-
-                vm.ToggleOverlay();
-
-                if (sv != null && savedOffset.HasValue)
+                if (vm.IsTapZonesEnabled)
                 {
-                    sv.Offset = savedOffset.Value;
+                    Handle9ZoneTap(vm, _lastTapPoint);
                 }
-                if (savedPage >= 0 && savedPage < vm.Pages.Count)
+                else
                 {
-                    vm.CurrentPageIndex = savedPage;
+                    vm.ToggleOverlay();
                 }
             }
         };
@@ -1864,6 +1857,29 @@ public partial class ComicReaderControl : UserControl
         }
 
         var props = e.GetCurrentPoint(this).Properties;
+
+        // Hỗ trợ 2 phím hông chuột phụ trên Desktop (XButton1 = Back, XButton2 = Forward)
+        if (props.IsXButton1Pressed)
+        {
+            if (DataContext is ComicReaderViewModel vmX1)
+            {
+                if (vmX1.IsRightToLeft) vmX1.NextPage();
+                else vmX1.PrevPage();
+                e.Handled = true;
+                return;
+            }
+        }
+        else if (props.IsXButton2Pressed)
+        {
+            if (DataContext is ComicReaderViewModel vmX2)
+            {
+                if (vmX2.IsRightToLeft) vmX2.PrevPage();
+                else vmX2.NextPage();
+                e.Handled = true;
+                return;
+            }
+        }
+
         if (!props.IsLeftButtonPressed && e.Pointer.Type != PointerType.Touch && e.Pointer.Type != PointerType.Pen)
         {
             _isPointerTapCandidate = false;
@@ -2292,6 +2308,81 @@ public partial class ComicReaderControl : UserControl
     }
 
     /// <summary>
+    /// Điều phối xử lý Ma trận 9 Vùng Chạm (9-Zone Tap Area) chuẩn ComicScreen:
+    /// - Tâm giữa: Bật/Tắt thanh công cụ Menu HUD
+    /// - Mép trái / Mép phải: Lật trang trước / sau theo chiều đọc RTL / LTR
+    /// - Vùng trên / Vùng dưới (Webtoon): Cuộn trang 75% chiều cao khung hình
+    /// </summary>
+    private void Handle9ZoneTap(ComicReaderViewModel vm, Point pt)
+    {
+        double w = Bounds.Width;
+        double h = Bounds.Height;
+        if (w <= 10 || h <= 10)
+        {
+            vm.ToggleOverlay();
+            return;
+        }
+
+        // Tỷ lệ phân vùng: Trái 30%, Giữa 40%, Phải 30% | Trên 25%, Giữa 50%, Dưới 25%
+        int col = pt.X < w * 0.30 ? 0 : (pt.X > w * 0.70 ? 2 : 1);
+        int row = pt.Y < h * 0.25 ? 0 : (pt.Y > h * 0.75 ? 2 : 1);
+
+        // Vùng tâm giữa (Center: col == 1, row == 1): Bật/Tắt Menu HUD
+        if (col == 1 && row == 1)
+        {
+            vm.ToggleOverlay();
+            return;
+        }
+
+        if (vm.IsScrollMode)
+        {
+            var sv = GetReaderScrollViewer();
+            if (sv != null)
+            {
+                double scrollStep = Math.Max(120, sv.Bounds.Height * 0.75);
+                if (row == 0) // Vùng trên: Cuộn lên
+                {
+                    sv.Offset = new Vector(sv.Offset.X, Math.Max(0, sv.Offset.Y - scrollStep));
+                    return;
+                }
+                if (row == 2) // Vùng dưới: Cuộn xuống
+                {
+                    sv.Offset = new Vector(sv.Offset.X, sv.Offset.Y + scrollStep);
+                    return;
+                }
+            }
+
+            if (col == 0)
+            {
+                if (vm.IsRightToLeft) vm.NextPage();
+                else vm.PrevPage();
+            }
+            else if (col == 2)
+            {
+                if (vm.IsRightToLeft) vm.PrevPage();
+                else vm.NextPage();
+            }
+            return;
+        }
+
+        // Chế độ Lật trang (Flip Mode)
+        if (col == 0)
+        {
+            if (vm.IsRightToLeft) vm.NextPage();
+            else vm.PrevPage();
+        }
+        else if (col == 2)
+        {
+            if (vm.IsRightToLeft) vm.PrevPage();
+            else vm.NextPage();
+        }
+        else
+        {
+            vm.ToggleOverlay();
+        }
+    }
+
+    /// <summary>
     /// Thực hiện thao tác Chạm đúp (Double-Tap) Zoom In / Out mượt mà, neo điểm tựa chính xác tuyệt đối,
     /// loại bỏ hoàn toàn lỗi lệch trang / tua trang trong cả chế độ Cuộn dọc (Vertical Scroll) và Lật trang (Flip Mode).
     /// </summary>
@@ -2501,11 +2592,11 @@ public partial class ComicReaderControl : UserControl
             }
         }
 
-        // Ở chế độ Flip mode (khi không giữ Ctrl): lăn chuột chuyển trang mượt mà
+        // Ở chế độ Flip mode (khi không giữ Ctrl): lăn chuột dọc và lăn chuột ngang chuyển trang mượt mà
         if (vm.IsFlipMode && vm.ZoomLevel <= 1.05)
         {
-            if (e.Delta.Y < 0) vm.NextPage();
-            else if (e.Delta.Y > 0) vm.PrevPage();
+            if (e.Delta.Y < -0.1 || e.Delta.X < -0.1) vm.NextPage();
+            else if (e.Delta.Y > 0.1 || e.Delta.X > 0.1) vm.PrevPage();
             e.Handled = true;
         }
     }

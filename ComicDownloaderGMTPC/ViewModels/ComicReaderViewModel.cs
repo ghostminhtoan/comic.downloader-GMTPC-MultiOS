@@ -57,8 +57,57 @@ public partial class ComicReaderViewModel : ViewModelBase
     private double _viewportWidth = 1080;
     private double _viewportHeight = 1920;
 
+    public static ComicReaderViewModel? ActiveInstance { get; set; }
+    public static bool IsVolumeKeyTurnEnabled { get; set; } = true;
+
+    public static void TriggerVolumeKeyTurn(bool isNext)
+    {
+        if (ActiveInstance == null) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (isNext)
+            {
+                if (ActiveInstance.IsRightToLeft) ActiveInstance.PrevPage();
+                else ActiveInstance.NextPage();
+            }
+            else
+            {
+                if (ActiveInstance.IsRightToLeft) ActiveInstance.NextPage();
+                else ActiveInstance.PrevPage();
+            }
+        });
+    }
+
+    [ObservableProperty]
+    private bool _isTapZonesEnabled = true;
+
+    [ObservableProperty]
+    private bool _isAutoSplitSpreadsEnabled = true;
+
+    [RelayCommand]
+    public void IncreaseAutoScrollSpeed()
+    {
+        AutoScrollSpeed = Math.Clamp(AutoScrollSpeed + 0.5, 0.5, 15.0);
+        ShowTransientToast($"⚡ Tốc độ tự động cuộn: {AutoScrollSpeed:F1}");
+    }
+
+    [RelayCommand]
+    public void DecreaseAutoScrollSpeed()
+    {
+        AutoScrollSpeed = Math.Clamp(AutoScrollSpeed - 0.5, 0.5, 15.0);
+        ShowTransientToast($"⚡ Tốc độ tự động cuộn: {AutoScrollSpeed:F1}");
+    }
+
+    [RelayCommand]
+    public void ToggleAutoSplitSpreads()
+    {
+        IsAutoSplitSpreadsEnabled = !IsAutoSplitSpreadsEnabled;
+        ShowTransientToast(IsAutoSplitSpreadsEnabled ? "📖 Bật tự động xẻ trang đôi khi đọc dọc" : "📄 Tắt tự động xẻ trang đôi");
+    }
+
     public ComicReaderViewModel()
     {
+        ActiveInstance = this;
         LoadShortcuts();
     }
 
@@ -1184,12 +1233,21 @@ public partial class ComicReaderViewModel : ViewModelBase
     {
         ReaderBackgroundColor = ReaderBackgroundColor switch
         {
+            "#000000" => "#05080F",
             "#05080F" => "#1E293B",
             "#1E293B" => "#282015",
             "#282015" => "#E2E8F0",
-            _ => "#05080F"
+            _ => "#000000"
         };
-        ShowTransientToast($"🎨 Đã đổi màu nền trình đọc: {ReaderBackgroundColor}");
+        string name = ReaderBackgroundColor switch
+        {
+            "#000000" => "OLED Pure Black (#000000)",
+            "#05080F" => "Cyber Night",
+            "#1E293B" => "Slate Dark",
+            "#282015" => "Warm Sepia",
+            _ => "Paper Light"
+        };
+        ShowTransientToast($"🎨 Đã đổi màu nền: {name}");
     }
 
     [RelayCommand]
@@ -3257,6 +3315,7 @@ public partial class ComicReaderViewModel : ViewModelBase
     {
         if (_isClosing) return;
         _isClosing = true;
+        if (ActiveInstance == this) ActiveInstance = null;
 
         try
         {
