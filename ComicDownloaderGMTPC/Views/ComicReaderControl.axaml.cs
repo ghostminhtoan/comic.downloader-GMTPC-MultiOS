@@ -350,7 +350,13 @@ public partial class ComicReaderControl : UserControl
         _pinchTargetOffsetY = _pinchStartOffset.Y;
 
         Point currentPivot = new Point((p1.X + p2.X) * 0.5, (p1.Y + p2.Y) * 0.5);
-        _pinchStartPivot = currentPivot;
+        Point pivotInSv = currentPivot;
+        if (sv != null)
+        {
+            var ptSv = this.TranslatePoint(currentPivot, sv);
+            if (ptSv.HasValue) pivotInSv = ptSv.Value;
+        }
+        _pinchStartPivot = pivotInSv;
 
         Point inLb = currentPivot;
         var lb = GetActiveReaderListBox();
@@ -447,59 +453,51 @@ public partial class ComicReaderControl : UserControl
         // Cập nhật mức Zoom (kích hoạt ApplyFitModeLayout tính lại DisplayWidth / DisplayHeight cho mọi trang)
         vm.ZoomLevel = newZoom;
 
-        // KHÓA HOÀN TOÀN THAO TÁC DRAG KHI 2 NGÓN TAY ĐANG THAO TÁC PINCH:
-        // Cố định điểm neo theo _pinchPivotInLb / _pinchStartPivot ban đầu lúc bắt đầu chạm,
-        // tuyệt đối KHÔNG cho phép rê/trượt ảnh theo chuyển động tay khi cả 2 ngón đang pinch!
+        double zoomRatio = (_pinchStartZoom > 0.05) ? (newZoom / _pinchStartZoom) : 1.0;
+
+        var sv = vm.IsScrollMode ? GetReaderScrollViewer() : GetFlipScrollViewer();
+        if (sv == null) return;
+
+        Point currentPivot = new Point((p1.X + p2.X) * 0.5, (p1.Y + p2.Y) * 0.5);
+        Point currentPivotInSv = currentPivot;
+        var tr = this.TranslatePoint(currentPivot, sv);
+        if (tr.HasValue) currentPivotInSv = tr.Value;
+
         if (vm.IsScrollMode && !vm.IsHorizontalScrollMode)
         {
-            var sv = GetReaderScrollViewer();
-            if (sv != null && _pinchTargetPageIndex >= 0 && _pinchTargetPageIndex < vm.Pages.Count)
+            // =========================================================================
+            // CHẾ ĐỘ WEBTOON (CUỘN DỌC - VERTICAL SCROLL MODE)
+            // =========================================================================
+            // Công thức neo bất biến:
+            // Tọa độ Document Point dưới tâm 2 ngón tay ban đầu: D0y = _pinchStartOffset.Y + _pinchStartPivot.Y
+            // Sau khi co giãn zoomRatio: Dty = D0y * zoomRatio
+            // Để Document Point bám dính chính xác vào tâm điểm hiện tại của 2 ngón tay (currentPivotInSv.Y):
+            // TargetOffsetY = Dty - currentPivotInSv.Y = (_pinchStartOffset.Y + _pinchStartPivot.Y) * zoomRatio - currentPivotInSv.Y
+            double targetOffsetY = (_pinchStartOffset.Y + _pinchStartPivot.Y) * zoomRatio - currentPivotInSv.Y;
+            double targetOffsetX = (_pinchStartOffset.X + _pinchStartPivot.X) * zoomRatio - currentPivotInSv.X;
+
+            // Tính toán giới hạn Max Extent thực tế tại mức zoom mới
+            double totalDocHeight = 0;
+            double maxPageWidth = 0;
+            for (int i = 0; i < vm.Pages.Count; i++)
             {
-                // 1. Tọa độ Document Y tuyệt đối của đỉnh trang mục tiêu ở mức zoom mới
-                double targetPageDocY = 0;
-                for (int i = 0; i < _pinchTargetPageIndex; i++)
-                {
-                    var p = vm.Pages[i];
-                    targetPageDocY += p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom;
-                }
-
-                var targetPage = vm.Pages[_pinchTargetPageIndex];
-                double targetPageHeight = targetPage.DisplayHeight;
-
-                // 2. Tọa độ điểm neo bên trong trang mục tiêu
-                double anchorPointInDocY = targetPageDocY + (_pinchTargetNormY * targetPageHeight);
-
-                // 3. Offset Y mới để điểm neo trên trang luôn nằm chính xác tại vị trí pivot ban đầu (_pinchPivotInLb.Y)
-                double newOffsetY = anchorPointInDocY - _pinchPivotInLb.Y;
-
-                // 4. Tính toán Extent thực tế của toàn bộ truyện ở mức zoom mới (tránh bị kẹp vào Extent cũ chưa kịp cập nhật)
-                double totalDocHeight = 0;
-                for (int i = 0; i < vm.Pages.Count; i++)
-                {
-                    var p = vm.Pages[i];
-                    totalDocHeight += p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom;
-                }
-                double maxOffsetY = Math.Max(0, totalDocHeight - sv.Viewport.Height);
-                newOffsetY = Math.Clamp(newOffsetY, 0, maxOffsetY);
-
-                // 5. Tính toán Offset X cố định theo điểm chạm ban đầu _pinchPivotInLb.X
-                double targetPageWidth = targetPage.DisplayWidth;
-                double newOffsetX = 0;
-                if (targetPageWidth > sv.Viewport.Width)
-                {
-                    double anchorPointInDocX = _pinchTargetNormX * targetPageWidth;
-                    newOffsetX = anchorPointInDocX - _pinchPivotInLb.X;
-                    double maxOffsetX = Math.Max(0, targetPageWidth - sv.Viewport.Width);
-                    newOffsetX = Math.Clamp(newOffsetX, 0, maxOffsetX);
-                }
-
-                _pinchTargetOffsetX = newOffsetX;
-                _pinchTargetOffsetY = newOffsetY;
-
-                _isProgrammaticScroll = true;
-                sv.Offset = new Vector(newOffsetX, newOffsetY);
-                _isProgrammaticScroll = false;
+                var p = vm.Pages[i];
+                totalDocHeight += p.DisplayHeight + p.PageMargin.Top + p.PageMargin.Bottom;
+                if (p.DisplayWidth > maxPageWidth) maxPageWidth = p.DisplayWidth;
             }
+
+            double maxOffsetY = Math.Max(0, Math.Max(totalDocHeight, sv.Extent.Height * zoomRatio) - sv.Viewport.Height);
+            double maxOffsetX = Math.Max(0, Math.Max(maxPageWidth, sv.Extent.Width * zoomRatio) - sv.Viewport.Width);
+
+            double clampedX = Math.Clamp(targetOffsetX, 0, maxOffsetX);
+            double clampedY = Math.Clamp(targetOffsetY, 0, maxOffsetY);
+
+            _pinchTargetOffsetX = clampedX;
+            _pinchTargetOffsetY = clampedY;
+
+            _isProgrammaticScroll = true;
+            sv.Offset = new Vector(clampedX, clampedY);
+            _isProgrammaticScroll = false;
 
             // Khóa cứng trang đọc hiện tại, chống tua trang trong suốt cử chỉ Pinch
             if (_pinchTargetPageIndex >= 0 && _pinchTargetPageIndex < vm.Pages.Count)
@@ -510,44 +508,33 @@ public partial class ComicReaderControl : UserControl
         }
         else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
         {
-            var sv = GetReaderScrollViewer();
-            if (sv != null && _pinchTargetPageIndex >= 0 && _pinchTargetPageIndex < vm.Pages.Count)
+            // =========================================================================
+            // CHẾ ĐỘ CUỘN NGANG (HORIZONTAL SCROLL MODE)
+            // =========================================================================
+            double totalDocWidth = 0;
+            double maxPageHeight = 0;
+            for (int i = 0; i < vm.Pages.Count; i++)
             {
-                double accX = 0;
-                for (int i = 0; i < _pinchTargetPageIndex; i++)
-                {
-                    var p = vm.Pages[i];
-                    accX += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
-                }
-
-                var targetPage = vm.Pages[_pinchTargetPageIndex];
-                double targetPageWidth = targetPage.DisplayWidth;
-                double totalDocWidth = 0;
-                for (int i = 0; i < vm.Pages.Count; i++)
-                {
-                    var p = vm.Pages[i];
-                    totalDocWidth += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
-                }
-                double maxX = Math.Max(0, totalDocWidth - sv.Viewport.Width);
-
-                double newOffsetX = 0;
-                if (!vm.IsRightToLeft)
-                {
-                    double anchorPointInDocX = accX + (_pinchTargetNormX * targetPageWidth);
-                    newOffsetX = anchorPointInDocX - _pinchPivotInLb.X;
-                }
-                else
-                {
-                    double anchorPointInDocX = (maxX - accX) + ((1.0 - _pinchTargetNormX) * targetPageWidth);
-                    newOffsetX = anchorPointInDocX - _pinchPivotInLb.X;
-                }
-                newOffsetX = Math.Clamp(newOffsetX, 0, maxX);
-
-                _pinchTargetOffsetX = newOffsetX;
-                _isProgrammaticScroll = true;
-                sv.Offset = new Vector(newOffsetX, sv.Offset.Y);
-                _isProgrammaticScroll = false;
+                var p = vm.Pages[i];
+                totalDocWidth += p.DisplayWidth + p.PageMargin.Left + p.PageMargin.Right;
+                if (p.DisplayHeight > maxPageHeight) maxPageHeight = p.DisplayHeight;
             }
+
+            double targetOffsetX = (_pinchStartOffset.X + _pinchStartPivot.X) * zoomRatio - currentPivotInSv.X;
+            double targetOffsetY = (_pinchStartOffset.Y + _pinchStartPivot.Y) * zoomRatio - currentPivotInSv.Y;
+
+            double maxX = Math.Max(0, Math.Max(totalDocWidth, sv.Extent.Width * zoomRatio) - sv.Viewport.Width);
+            double maxY = Math.Max(0, Math.Max(maxPageHeight, sv.Extent.Height * zoomRatio) - sv.Viewport.Height);
+
+            double clampedX = Math.Clamp(targetOffsetX, 0, maxX);
+            double clampedY = Math.Clamp(targetOffsetY, 0, maxY);
+
+            _pinchTargetOffsetX = clampedX;
+            _pinchTargetOffsetY = clampedY;
+
+            _isProgrammaticScroll = true;
+            sv.Offset = new Vector(clampedX, clampedY);
+            _isProgrammaticScroll = false;
 
             if (_pinchTargetPageIndex >= 0 && _pinchTargetPageIndex < vm.Pages.Count)
             {
@@ -557,17 +544,15 @@ public partial class ComicReaderControl : UserControl
         }
         else
         {
-            var flipSv = GetFlipScrollViewer();
-            if (flipSv != null)
-            {
-                double ratio = (_pinchStartZoom > 0.05) ? (newZoom / _pinchStartZoom) : 1.0;
-                // Neo cố định theo _pinchStartPivot ban đầu, không cho rê theo ngón tay khi 2 ngón đang pinch:
-                double newTargetX = (_pinchStartOffset.X + _pinchStartPivot.X) * ratio - _pinchStartPivot.X;
-                double newTargetY = (_pinchStartOffset.Y + _pinchStartPivot.Y) * ratio - _pinchStartPivot.Y;
-                double maxX = Math.Max(0, flipSv.Extent.Width - flipSv.Viewport.Width);
-                double maxY = Math.Max(0, flipSv.Extent.Height - flipSv.Viewport.Height);
-                flipSv.Offset = new Vector(Math.Clamp(newTargetX, 0, maxX), Math.Clamp(newTargetY, 0, maxY));
-            }
+            // =========================================================================
+            // CHẾ ĐỘ LẬT TRANG (FLIP MODE)
+            // =========================================================================
+            double targetX = (_pinchStartOffset.X + _pinchStartPivot.X) * zoomRatio - currentPivotInSv.X;
+            double targetY = (_pinchStartOffset.Y + _pinchStartPivot.Y) * zoomRatio - currentPivotInSv.Y;
+            double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
+            double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
+
+            sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), Math.Clamp(targetY, 0, maxY));
 
             if (_pinchTargetPageIndex >= 0 && _pinchTargetPageIndex < vm.Pages.Count)
             {
@@ -602,6 +587,8 @@ public partial class ComicReaderControl : UserControl
         _isPanHolding = false;
         _isPanDragging = false;
         _isPointerTapCandidate = false;
+        _panVelocityX = 0;
+        _panVelocityY = 0;
         StopKineticScroll();
         if (DataContext is ComicReaderViewModel vm && _pinchTargetPageIndex >= 0 && vm.Pages.Count > _pinchTargetPageIndex)
         {
@@ -2282,12 +2269,12 @@ public partial class ComicReaderControl : UserControl
         {
             if (_activePointers.Count == 1)
             {
-                // CHUYỂN TIẾP LIỀN MẠCH TỪ PINCH SANG DRAG 1 NGÓN:
-                // Người dùng nhấc 1 ngón tay lên, ngón còn lại tiếp tục drag rê ảnh mượt mà ngay lập tức!
+                // Người dùng nhấc 1 ngón tay lên trong lúc đang pinch:
+                // TUYỆT ĐỐI KHÔNG kích hoạt drag 1 ngón ngay lập tức để tránh văng quán tính nếu ngón kia cũng nhấc lên sau đó!
                 _isPinching = false;
                 _lastPinchEndTick = Environment.TickCount64;
-                _pinchCooldownUntilTick = 0; // Không cooldown để ngón tay còn lại không bị đơ
-                _suppressScrollChangedUntilTick = Environment.TickCount64 + 300;
+                _pinchCooldownUntilTick = Environment.TickCount64 + 250; // Khoảng đệm an toàn 250ms
+                _suppressScrollChangedUntilTick = Environment.TickCount64 + 500;
 
                 var remainingPt = _activePointers.Values.First();
                 _panStartPoint = remainingPt;
@@ -2295,7 +2282,7 @@ public partial class ComicReaderControl : UserControl
                 _panStartTick = Environment.TickCount64;
                 _lastPanMoveTick = Environment.TickCount64;
                 _isPanHolding = true;
-                _isPanDragging = true; // Kích hoạt kéo rê ngay tức khắc
+                _isPanDragging = false; // Phải đợi người dùng thực sự cố ý kéo vượt ngưỡng slop thì mới drag!
                 _isPointerTapCandidate = false;
                 _singleTapTimer.Stop();
                 _panVelocityX = 0;
@@ -2315,6 +2302,8 @@ public partial class ComicReaderControl : UserControl
                 _isPanHolding = false;
                 _isPanDragging = false;
                 _isPointerTapCandidate = false;
+                _panVelocityX = 0;
+                _panVelocityY = 0;
                 _activePointers.Clear();
                 _pointerLastSeenTicks.Clear();
                 if (DataContext is ComicReaderViewModel vmRel && _pinchTargetPageIndex >= 0 && vmRel.Pages.Count > _pinchTargetPageIndex)

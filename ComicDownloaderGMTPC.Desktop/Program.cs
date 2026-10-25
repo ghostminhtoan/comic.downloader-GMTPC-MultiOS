@@ -1,3 +1,5 @@
+using ComicDownloaderGMTPC.ViewModels;
+using ComicDownloaderGMTPC.Views;
 using System.Threading;
 using System.Threading.Tasks;
 using ComicDownloaderGMTPC.Models;
@@ -172,6 +174,27 @@ sealed class Program
             Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
             File.WriteAllText(logPath, sb.ToString(), System.Text.Encoding.UTF8);
             Console.WriteLine(sb.ToString());
+            return;
+        }
+
+        if (args.Any(a => string.Equals(a, "--test-pinch-zoom-20passes", StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            var app = BuildAvaloniaApp().SetupWithoutStarting();
+
+            var testTask = Task.Run(async () => await RunWebtoonPinchZoom20ConsecutiveTestAsync());
+            while (!testTask.IsCompleted)
+            {
+                try
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                }
+                catch { }
+                Thread.Sleep(5);
+            }
+
+            int exitCode = testTask.GetAwaiter().GetResult();
+            Environment.Exit(exitCode);
             return;
         }
 
@@ -387,4 +410,258 @@ sealed class Program
             return false;
         }
     }
+
+    private static async Task<int> RunWebtoonPinchZoom20ConsecutiveTestAsync()
+    {
+        Console.WriteLine("================================================================================");
+        Console.WriteLine("  BẮT ĐẦU CHU KỲ KIỂM THỬ TỰ ĐỘNG PINCH & ZOOM WEBTOON 20 LẦN LIÊN TIẾP");
+        Console.WriteLine("  Yêu cầu: 10 kịch bản Pinch In / Out 2 ngón tay ở 10 hướng khác nhau");
+        Console.WriteLine("  Mục tiêu: Đạt đủ 20 LẦN LIÊN TIẾP THÀNH CÔNG trên cả tệp ZIP và Thư mục");
+        Console.WriteLine("  1. Tệp nén ZIP: " + TestZipPath);
+        Console.WriteLine("  2. Thư mục:     " + TestFolderPath);
+        Console.WriteLine("================================================================================");
+
+        int targetConsecutive = 20;
+        int currentStreak = 0;
+        int totalAttempts = 0;
+
+        while (currentStreak < targetConsecutive)
+        {
+            totalAttempts++;
+            Console.WriteLine($"\n>>> [LẦN CHẠY {totalAttempts}] - Chuỗi thành công hiện tại: {currentStreak}/{targetConsecutive}");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            bool pass = await RunSinglePinchZoomIterationAsync(totalAttempts);
+            sw.Stop();
+
+            if (pass)
+            {
+                currentStreak++;
+                Console.WriteLine($"✅ LẦN CHẠY {totalAttempts} THÀNH CÔNG XUẤT SẮC trong {sw.ElapsedMilliseconds}ms! Chuỗi: {currentStreak}/{targetConsecutive}");
+            }
+            else
+            {
+                currentStreak = 0;
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"❌ LẦN CHẠY {totalAttempts} THẤT BẠI! Reset chuỗi thành công về 0/{targetConsecutive}. Sẽ chạy lại!");
+                Console.ResetColor();
+            }
+
+            // Dọn dẹp tài nguyên sau mỗi lần chạy
+            ComicReaderService.Instance.SetReaderActive(false);
+            GC.Collect(2, GCCollectionMode.Forced, true);
+            GC.WaitForPendingFinalizers();
+            await Task.Delay(150);
+        }
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("\n================================================================================");
+        Console.WriteLine($"🎉 XÁC NHẬN HOÀN TẤT: ĐÃ ĐẠT ĐỦ {targetConsecutive} LẦN LIÊN TIẾP THÀNH CÔNG 100%!");
+        Console.WriteLine($"   Tổng số lần thực hiện: {totalAttempts}");
+        Console.WriteLine("================================================================================");
+        Console.ResetColor();
+        return 0;
+    }
+
+    private static async Task<bool> RunSinglePinchZoomIterationAsync(int attempt)
+    {
+        try
+        {
+            // -------------------------------------------------------------------------
+            // MỤC TIÊU 1: Tệp nén ZIP (Ta Luyện Khí Ba Ngàn Năm.zip - 1.74GB, 381 chương)
+            // -------------------------------------------------------------------------
+            Console.WriteLine($"  [Test 1/2] Kiểm tra 10 hướng Pinch-to-Zoom với Tệp ZIP...");
+            var comicZip = LibraryScannerService.Instance.CreateQuickComicFromPath(TestZipPath);
+            if (comicZip == null || comicZip.Chapters.Count == 0)
+            {
+                Console.WriteLine("    [LỖI] Không thể phân tích tệp ZIP!");
+                return false;
+            }
+
+            var zipPages = await ComicReaderService.Instance.LoadChapterPagesAsync(comicZip.Chapters[0], null, CancellationToken.None);
+            if (zipPages == null || zipPages.Count == 0)
+            {
+                Console.WriteLine("    [LỖI] Không nạp được trang nào từ Chapter 1 tệp ZIP!");
+                return false;
+            }
+
+            bool zipPass = await Test10PinchDirectionsOnPagesAsync(zipPages, "ZIP: " + Path.GetFileName(TestZipPath));
+            if (!zipPass) return false;
+
+            // -------------------------------------------------------------------------
+            // MỤC TIÊU 2: Thư mục 500 chương (võ luyện đỉnh phong chap 0001-0500)
+            // -------------------------------------------------------------------------
+            Console.WriteLine($"  [Test 2/2] Kiểm tra 10 hướng Pinch-to-Zoom với Thư mục 500 chương...");
+            var comicFolder = LibraryScannerService.Instance.CreateQuickComicFromPath(TestFolderPath);
+            if (comicFolder == null || comicFolder.Chapters.Count == 0)
+            {
+                Console.WriteLine("    [LỖI] Không thể phân tích thư mục 500 chương!");
+                return false;
+            }
+
+            var folderPages = await ComicReaderService.Instance.LoadChapterPagesAsync(comicFolder.Chapters[0], null, CancellationToken.None);
+            if (folderPages == null || folderPages.Count == 0)
+            {
+                Console.WriteLine("    [LỖI] Không nạp được trang nào từ Chapter 1 thư mục!");
+                return false;
+            }
+
+            bool folderPass = await Test10PinchDirectionsOnPagesAsync(folderPages, "Folder: " + Path.GetFileName(TestFolderPath));
+            if (!folderPass) return false;
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"    [EXCEPTION] Lỗi trong chu kỳ test: {ex.Message}\n{ex.StackTrace}");
+            return false;
+        }
+    }
+
+    private static async Task<bool> Test10PinchDirectionsOnPagesAsync(System.Collections.Generic.List<ReaderPageItem> pages, string contextName)
+    {
+        // Khởi tạo ViewModel và ComicReaderControl trong môi trường Avalonia UI Thread
+        return await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            var vm = new ComicReaderViewModel();
+            vm.Pages.AddRange(pages);
+            vm.CurrentPageIndex = 0;
+            vm.IsScrollMode = true;
+            vm.IsHorizontalScrollMode = false; // Webtoon Mode
+            vm.UpdateViewportDimensions(800, 1200);
+
+            var control = new ComicReaderControl
+            {
+                DataContext = vm,
+                Width = 800,
+                Height = 1200
+            };
+
+            var window = new Avalonia.Controls.Window
+            {
+                Width = 800,
+                Height = 1200,
+                Content = control
+            };
+            window.Show();
+            window.Measure(new Avalonia.Size(800, 1200));
+            window.Arrange(new Avalonia.Rect(0, 0, 800, 1200));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            var sv = control.GetReaderScrollViewer();
+            if (sv == null)
+            {
+                Console.WriteLine($"    [LỖI] Không tìm thấy ScrollViewer trong ReaderControl cho {contextName}!");
+                window.Close();
+                return false;
+            }
+
+            // Đặt scroll offset ban đầu vào giữa tài liệu
+            sv.Offset = new Avalonia.Vector(0, 600);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            // 10 KỊCH BẢN PINCH & ZOOM Ở 10 HƯỚNG KHÁC NHAU:
+            var scenarios = new (string Name, Point P1Start, Point P2Start, Point P1End, Point P2End, bool ExpectZoomIn)[]
+            {
+                // Hướng 1: Dọc mở rộng (Vertical Zoom-In)
+                ("1. Dọc Zoom-In (0° / 180°)", new Point(400, 500), new Point(400, 700), new Point(400, 420), new Point(400, 780), true),
+                // Hướng 2: Dọc thu nhỏ (Vertical Zoom-Out)
+                ("2. Dọc Zoom-Out (0° / 180°)", new Point(400, 420), new Point(400, 780), new Point(400, 520), new Point(400, 680), false),
+                // Hướng 3: Ngang mở rộng (Horizontal Zoom-In)
+                ("3. Ngang Zoom-In (90° / 270°)", new Point(300, 600), new Point(500, 600), new Point(200, 600), new Point(600, 600), true),
+                // Hướng 4: Ngang thu nhỏ (Horizontal Zoom-Out)
+                ("4. Ngang Zoom-Out (90° / 270°)", new Point(200, 600), new Point(600, 600), new Point(320, 600), new Point(480, 600), false),
+                // Hướng 5: Chéo góc 1-3 mở rộng (Diagonal Zoom-In 45°)
+                ("5. Chéo Zoom-In 45° (ĐB - TN)", new Point(330, 670), new Point(470, 530), new Point(250, 750), new Point(550, 450), true),
+                // Hướng 6: Chéo góc 1-3 thu nhỏ (Diagonal Zoom-Out 45°)
+                ("6. Chéo Zoom-Out 45° (ĐB - TN)", new Point(250, 750), new Point(550, 450), new Point(340, 660), new Point(460, 540), false),
+                // Hướng 7: Chéo góc 2-4 mở rộng (Diagonal Zoom-In 135°)
+                ("7. Chéo Zoom-In 135° (TB - ĐN)", new Point(330, 530), new Point(470, 670), new Point(240, 440), new Point(560, 760), true),
+                // Hướng 8: Chéo góc 2-4 thu nhỏ (Diagonal Zoom-Out 135°)
+                ("8. Chéo Zoom-Out 135° (TB - ĐN)", new Point(240, 440), new Point(560, 760), new Point(350, 550), new Point(450, 650), false),
+                // Hướng 9: Bất đối xứng (Asymmetric Pinch / 1 ngón cố định, 1 ngón kéo)
+                ("9. Bất đối xứng (1 ngón giữ, 1 ngón kéo)", new Point(300, 500), new Point(450, 650), new Point(300, 500), new Point(600, 900), true),
+                // Hướng 10: Vừa Pinch vừa Pan dịch chuyển (Combined Pinch & Pan)
+                ("10. Pinch + Pan (Vừa zoom vừa dịch chuyển)", new Point(350, 550), new Point(450, 650), new Point(300, 450), new Point(500, 650), true)
+            };
+
+            for (int i = 0; i < scenarios.Length; i++)
+            {
+                var s = scenarios[i];
+                double initialZoom = vm.ZoomLevel;
+                Avalonia.Vector initialOffset = sv.Offset;
+
+                // 1. Bắt đầu Pinch
+                control.PerformPinchZoomStep(s.P1Start, s.P2Start);
+                if (!control.IsPinching)
+                {
+                    Console.WriteLine($"      [FAIL {s.Name}] Cử chỉ pinch không được kích hoạt!");
+                    window.Close();
+                    return false;
+                }
+
+                // 2. Di chuyển ngón tay tới vị trí kết thúc
+                control.PerformPinchZoomStep(s.P1End, s.P2End);
+
+                double newZoom = vm.ZoomLevel;
+                Avalonia.Vector newOffset = sv.Offset;
+
+                // 3. Đánh giá tính toàn vẹn:
+                // - Zoom level phải đổi đúng chiều
+                if (s.ExpectZoomIn && newZoom <= initialZoom)
+                {
+                    Console.WriteLine($"      [FAIL {s.Name}] Zoom In thất bại: ban đầu {initialZoom}, sau pinch {newZoom}");
+                    window.Close();
+                    return false;
+                }
+                if (!s.ExpectZoomIn && newZoom >= initialZoom)
+                {
+                    Console.WriteLine($"      [FAIL {s.Name}] Zoom Out thất bại: ban đầu {initialZoom}, sau pinch {newZoom}");
+                    window.Close();
+                    return false;
+                }
+
+                // - Tính toán công thức neo:
+                // Tọa độ Document Point dưới tâm ban đầu = initialOffset.Y + pivotStart.Y
+                // Khi zoomRatio thay đổi: TargetOffsetY = (initialOffset.Y + pivotStart.Y) * zoomRatio - pivotEnd.Y
+                double zoomRatio = initialZoom > 0.05 ? newZoom / initialZoom : 1.0;
+                double pivotStartY = (s.P1Start.Y + s.P2Start.Y) * 0.5;
+                double pivotEndY = (s.P1End.Y + s.P2End.Y) * 0.5;
+                double expectedTargetY = (initialOffset.Y + pivotStartY) * zoomRatio - pivotEndY;
+
+                // Độ dịch chuyển bất thường không được vượt quá phạm vi dự kiến (chống drag văng quá mức)
+                // Khoảng offset thực tế phải bám sát expectedTargetY trong phạm vi Clamp
+                double actualY = newOffset.Y;
+                double deltaExpected = Math.Abs(actualY - expectedTargetY);
+                if (deltaExpected > 2.0 && actualY > 0)
+                {
+                    Console.WriteLine($"      [FAIL {s.Name}] Ảnh bị trôi lệch khỏi công thức neo! Actual={actualY:F1}, Expected={expectedTargetY:F1}, Delta={deltaExpected:F1}");
+                    window.Close();
+                    return false;
+                }
+
+                // 4. Kết thúc Pinch
+                control.EndPinchZoom();
+                if (control.IsPinching)
+                {
+                    Console.WriteLine($"      [FAIL {s.Name}] Cử chỉ pinch không kết thúc đúng cách!");
+                    window.Close();
+                    return false;
+                }
+
+                // Đảm bảo không bị tua sang trang ngẫu nhiên khác
+                if (vm.CurrentPageIndex < 0 || vm.CurrentPageIndex >= vm.Pages.Count)
+                {
+                    Console.WriteLine($"      [FAIL {s.Name}] CurrentPageIndex bị nhảy sai: {vm.CurrentPageIndex}");
+                    window.Close();
+                    return false;
+                }
+            }
+
+            Console.WriteLine($"    -> Đã kiểm tra hoàn tất 10/10 hướng Pinch-to-Zoom thành công cho {contextName}!");
+            window.Close();
+            return true;
+        });
+    }
+
 }
