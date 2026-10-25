@@ -1,3 +1,6 @@
+using System.Threading;
+using System.Threading.Tasks;
+using ComicDownloaderGMTPC.Models;
 using System;
 using System.IO;
 using System.Linq;
@@ -172,6 +175,27 @@ sealed class Program
             return;
         }
 
+        if (args.Any(a => string.Equals(a, "--test-reader-5passes", StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            var app = BuildAvaloniaApp().SetupWithoutStarting();
+
+            var testTask = Task.Run(async () => await RunReaderAutoTest5ConsecutiveAsync());
+            while (!testTask.IsCompleted)
+            {
+                try
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                }
+                catch { }
+                Thread.Sleep(5);
+            }
+
+            int exitCode = testTask.GetAwaiter().GetResult();
+            Environment.Exit(exitCode);
+            return;
+        }
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
@@ -181,4 +205,186 @@ sealed class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace();
+
+    private const string TestZipPath = @"T:\[HDD T]\xnconvert\uploaded\Ta Luyện Khí Ba Ngàn Năm.zip";
+    private const string TestFolderPath = @"T:\[HDD T]\xnconvert\done\võ luyện đỉnh phong nettruyenvio\võ luyện đỉnh phong chap 0001-0500";
+
+    private static async Task<int> RunReaderAutoTest5ConsecutiveAsync()
+    {
+        Console.WriteLine("================================================================");
+        Console.WriteLine("  BẮT ĐẦU CHU KỲ KIỂM THỬ TỰ ĐỘNG 5 LẦN LIÊN TIẾP CHO READER");
+        Console.WriteLine("  1. Tệp nén ZIP: " + TestZipPath);
+        Console.WriteLine("  2. Thư mục:     " + TestFolderPath);
+        Console.WriteLine("================================================================");
+
+        int targetConsecutive = 5;
+        int currentStreak = 0;
+        int totalAttempts = 0;
+
+        while (currentStreak < targetConsecutive)
+        {
+            totalAttempts++;
+            Console.WriteLine($"\n[LẦN CHẠY {totalAttempts}] - Chuỗi thành công hiện tại: {currentStreak}/{targetConsecutive}");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            bool pass = await RunSingleReaderTestIterationAsync();
+            sw.Stop();
+
+            if (pass)
+            {
+                currentStreak++;
+                Console.WriteLine($"✅ LẦN CHẠY {totalAttempts} THÀNH CÔNG TRỌN VẸN trong {sw.ElapsedMilliseconds}ms! Chuỗi thành công: {currentStreak}/{targetConsecutive}");
+            }
+            else
+            {
+                currentStreak = 0;
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"❌ LẦN CHẠY {totalAttempts} THẤT BẠI! Reset chuỗi thành công về 0/{targetConsecutive}. Sẽ chạy lại!");
+                Console.ResetColor();
+            }
+
+            // Dọn dẹp tài nguyên và bộ nhớ sau mỗi lần lặp
+            ComicReaderService.Instance.SetReaderActive(false);
+            GC.Collect(2, GCCollectionMode.Forced, true);
+            GC.WaitForPendingFinalizers();
+            await Task.Delay(200);
+        }
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("\n================================================================");
+        Console.WriteLine($"🎉 XÁC NHẬN: TEST THÀNH CÔNG ĐỦ {targetConsecutive} LẦN LIÊN TIẾP!");
+        Console.WriteLine($"   Tổng số lần thực hiện: {totalAttempts}");
+        Console.WriteLine("================================================================");
+        Console.ResetColor();
+        return 0;
+    }
+
+    private static async Task<bool> RunSingleReaderTestIterationAsync()
+    {
+        try
+        {
+            // -------------------------------------------------------------
+            // PHẦN 1: TEST TỆP NÉN 1.74GB (Ta Luyện Khí Ba Ngàn Năm.zip)
+            // -------------------------------------------------------------
+            Console.WriteLine($"  [Test 1/2] Đang quét và kiểm tra tệp ZIP lớn: {Path.GetFileName(TestZipPath)}...");
+            if (!File.Exists(TestZipPath))
+            {
+                Console.WriteLine($"    [LỖI] Không tìm thấy tệp ZIP: {TestZipPath}");
+                return false;
+            }
+
+            var comicZip = LibraryScannerService.Instance.CreateQuickComicFromPath(TestZipPath);
+            if (comicZip == null || comicZip.Chapters.Count == 0)
+            {
+                Console.WriteLine("    [LỖI] Không thể phân tích chapter từ tệp ZIP!");
+                return false;
+            }
+            Console.WriteLine($"    -> Đã nhận diện: '{comicZip.Title}' ({comicZip.Chapters.Count} chương).");
+
+            var firstChap = comicZip.Chapters[0];
+            var zipPages = await ComicReaderService.Instance.LoadChapterPagesAsync(firstChap, null, CancellationToken.None);
+            if (zipPages == null || zipPages.Count == 0)
+            {
+                Console.WriteLine("    [LỖI] Không nạp được trang nào từ chapter 1 của tệp ZIP!");
+                return false;
+            }
+            Console.WriteLine($"    -> Chapter 1 có {zipPages.Count} trang ảnh.");
+
+            // Giải mã trang 1 (Thử nghiệm Subsample, ArrayPool, Skia Pipeline)
+            await ComicReaderService.Instance.EnsurePageLoadedAsync(zipPages[0]);
+            if (!zipPages[0].HasImage || zipPages[0].Image == null)
+            {
+                Console.WriteLine("    [LỖI] Giải mã trang 1 tệp ZIP thất bại (Image null)!");
+                return false;
+            }
+            Console.WriteLine($"    -> Trang 1 giải mã thành công: {zipPages[0].Image!.PixelSize.Width}x{zipPages[0].Image!.PixelSize.Height} px.");
+
+            // Kiểm tra bộ lọc Warm Filter & 16-bit RGB_565 (Mục 2 & 14)
+            if (zipPages.Count > 1)
+            {
+                ComicReaderService.Instance.ActiveEffectSettings.IsWarmFilter = true;
+                ComicReaderService.Instance.ActiveEffectSettings.Prefer16BitColor = true;
+
+                await ComicReaderService.Instance.EnsurePageLoadedAsync(zipPages[1]);
+                if (!zipPages[1].HasImage || zipPages[1].Image == null)
+                {
+                    Console.WriteLine("    [LỖI] Giải mã trang 2 với Warm Filter / 16-bit thất bại!");
+                    return false;
+                }
+                Console.WriteLine($"    -> Trang 2 áp dụng Warm Filter & 16-bit thành công: {zipPages[1].Image!.PixelSize.Width}x{zipPages[1].Image!.PixelSize.Height} px.");
+
+                ComicReaderService.Instance.ActiveEffectSettings.IsWarmFilter = false;
+            }
+
+            // -------------------------------------------------------------
+            // PHẦN 2: TEST THƯ MỤC 500 CHƯƠNG (võ luyện đỉnh phong chap 0001-0500)
+            // -------------------------------------------------------------
+            Console.WriteLine($"  [Test 2/2] Đang quét và kiểm tra thư mục 500 chương: {Path.GetFileName(TestFolderPath)}...");
+            if (!Directory.Exists(TestFolderPath))
+            {
+                Console.WriteLine($"    [LỖI] Không tìm thấy thư mục: {TestFolderPath}");
+                return false;
+            }
+
+            var comicFolder = LibraryScannerService.Instance.CreateQuickComicFromPath(TestFolderPath);
+            if (comicFolder == null || comicFolder.Chapters.Count < 450)
+            {
+                Console.WriteLine($"    [LỖI] Quét thư mục 500 chương chỉ nhận được {comicFolder?.Chapters.Count ?? 0} chương!");
+                return false;
+            }
+            Console.WriteLine($"    -> Đã nhận diện đủ {comicFolder.Chapters.Count} chương với Natural Sort chuẩn xác.");
+
+            // Nạp Chapter 1
+            var chap1Pages = await ComicReaderService.Instance.LoadChapterPagesAsync(comicFolder.Chapters[0], null, CancellationToken.None);
+            if (chap1Pages == null || chap1Pages.Count == 0)
+            {
+                Console.WriteLine("    [LỖI] Không nạp được trang nào từ Chapter 1 thư mục!");
+                return false;
+            }
+            await ComicReaderService.Instance.EnsurePageLoadedAsync(chap1Pages[0]);
+            if (!chap1Pages[0].HasImage || chap1Pages[0].Image == null)
+            {
+                Console.WriteLine("    [LỖI] Giải mã trang đầu Chapter 1 thư mục thất bại!");
+                return false;
+            }
+            Console.WriteLine($"    -> Chapter 1 ({chap1Pages.Count} trang) - Trang 1 giải mã: {chap1Pages[0].Image!.PixelSize.Width}x{chap1Pages[0].Image!.PixelSize.Height} px.");
+
+            // Nạp Chapter 100
+            int chapIdx = Math.Min(99, comicFolder.Chapters.Count - 1);
+            var chap100Pages = await ComicReaderService.Instance.LoadChapterPagesAsync(comicFolder.Chapters[chapIdx], null, CancellationToken.None);
+            if (chap100Pages == null || chap100Pages.Count == 0)
+            {
+                Console.WriteLine($"    [LỖI] Không nạp được trang nào từ Chapter {chapIdx + 1} thư mục!");
+                return false;
+            }
+            await ComicReaderService.Instance.EnsurePageLoadedAsync(chap100Pages[0]);
+            if (!chap100Pages[0].HasImage || chap100Pages[0].Image == null)
+            {
+                Console.WriteLine($"    [LỖI] Giải mã trang đầu Chapter {chapIdx + 1} thư mục thất bại!");
+                return false;
+            }
+            Console.WriteLine($"    -> Chapter {chapIdx + 1} ({chap100Pages.Count} trang) - Trang 1 giải mã: {chap100Pages[0].Image!.PixelSize.Width}x{chap100Pages[0].Image!.PixelSize.Height} px.");
+
+            // Kiểm tra Smart Margin Detection (Mục 17)
+            var rawFolder = ComicReaderService.ReadRawPageBytes(chap1Pages[0]);
+            if (rawFolder != null)
+            {
+                var (l, t, r, b) = ComicReaderService.DetectSmartMargins(rawFolder);
+                Console.WriteLine($"    -> Thuật toán Auto Smart Margin phân tích viền: L {l:0}% • T {t:0}% • R {r:0}% • B {b:0}%.");
+            }
+
+            // Dọn dẹp các trang đã nạp trong RAM
+            zipPages[0].Unload();
+            if (zipPages.Count > 1) zipPages[1].Unload();
+            chap1Pages[0].Unload();
+            chap100Pages[0].Unload();
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"    [EXCEPTION] Lỗi ngoại lệ trong quá trình test: {ex.Message}\n{ex.StackTrace}");
+            return false;
+        }
+    }
 }

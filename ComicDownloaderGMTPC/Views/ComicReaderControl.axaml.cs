@@ -40,6 +40,9 @@ public partial class ComicReaderControl : UserControl
     private double _kineticVelocityX;
     private double _kineticVelocityY;
     private readonly DispatcherTimer _kineticTimer;
+    private bool _isEdgeBrightnessDragging;
+    private double _edgeBrightnessStartY;
+    private double _edgeBrightnessStartPercent;
     private readonly System.Diagnostics.Stopwatch _kineticStopwatch = new();
 
 
@@ -933,12 +936,25 @@ public partial class ComicReaderControl : UserControl
         return _cachedFlipScrollViewer;
     }
 
+    private void SetReaderInterpolationMode(Avalonia.Media.Imaging.BitmapInterpolationMode mode)
+    {
+        try
+        {
+            var lbV = this.FindControl<ListBox>("VerticalReaderListBox");
+            if (lbV != null) Avalonia.Media.RenderOptions.SetBitmapInterpolationMode(lbV, mode);
+            var lbH = this.FindControl<ListBox>("HorizontalReaderListBox");
+            if (lbH != null) Avalonia.Media.RenderOptions.SetBitmapInterpolationMode(lbH, mode);
+        }
+        catch { }
+    }
+
     private void StopKineticScroll()
     {
         _kineticTimer.Stop();
         _kineticStopwatch.Reset();
         _kineticVelocityX = 0;
         _kineticVelocityY = 0;
+        SetReaderInterpolationMode(Avalonia.Media.Imaging.BitmapInterpolationMode.HighQuality);
     }
 
     private void OnKineticTimerTick(object? sender, EventArgs e)
@@ -1952,6 +1968,14 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
+        Point pressPtInit = e.GetPosition(this);
+        if (DataContext is ComicReaderViewModel vmEb && pressPtInit.X <= Math.Min(50.0, Bounds.Width * 0.07))
+        {
+            _isEdgeBrightnessDragging = true;
+            _edgeBrightnessStartY = pressPtInit.Y;
+            _edgeBrightnessStartPercent = vmEb.SystemBrightnessPercent;
+        }
+
         var props = e.GetCurrentPoint(this).Properties;
 
         // Hỗ trợ 2 phím hông chuột phụ trên Desktop (XButton1 = Back, XButton2 = Forward)
@@ -2063,6 +2087,16 @@ public partial class ComicReaderControl : UserControl
     {
         Point currentPoint = e.GetPosition(this);
         long moveNow = Environment.TickCount64;
+
+        if (_isEdgeBrightnessDragging && DataContext is ComicReaderViewModel vmEbMove)
+        {
+            double dy = _edgeBrightnessStartY - currentPoint.Y;
+            double newPercent = Math.Clamp(_edgeBrightnessStartPercent + (dy / 3.0), 2.0, 100.0);
+            vmEbMove.SystemBrightnessPercent = newPercent;
+            vmEbMove.ShowTransientToast($"🔆 Độ sáng: {Math.Round(newPercent)}%");
+            e.Handled = true;
+            return;
+        }
 
         long pinchElapsed = moveNow - _lastPinchEndTick;
         // Bỏ qua cử chỉ di chuyển mồ côi nếu KHÔNG ĐANG DRAG LIỀN MẠCH và chưa hết cooldown
@@ -2318,6 +2352,7 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
+        _isEdgeBrightnessDragging = false;
         _cumulativeOverscrollX = 0;
         _cumulativeOverscrollY = 0;
 
@@ -2370,6 +2405,7 @@ public partial class ComicReaderControl : UserControl
                     _kineticVelocityX = _panVelocityX;
                     _kineticVelocityY = _panVelocityY;
                     _kineticStopwatch.Restart();
+                    SetReaderInterpolationMode(Avalonia.Media.Imaging.BitmapInterpolationMode.LowQuality);
                     _kineticTimer.Start();
 
                 }
@@ -2420,7 +2456,7 @@ public partial class ComicReaderControl : UserControl
         }
 
         // Tỷ lệ phân vùng: Trái 30%, Giữa 40%, Phải 30% | Trên 25%, Giữa 50%, Dưới 25%
-        int col = pt.X < w * 0.30 ? 0 : (pt.X > w * 0.70 ? 2 : 1);
+        int col = pt.X < w * 0.30 ? (vm.IsRightToLeft ? 2 : 0) : (pt.X > w * 0.70 ? (vm.IsRightToLeft ? 0 : 2) : 1);
         int row = pt.Y < h * 0.25 ? 0 : (pt.Y > h * 0.75 ? 2 : 1);
 
         // Vùng tâm giữa (Center: col == 1, row == 1): Bật/Tắt Menu HUD

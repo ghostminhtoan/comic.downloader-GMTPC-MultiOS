@@ -1,250 +1,263 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.IO;
-using System.IO.Compression;
-
-namespace ComicDownloaderGMTPC.Services;
-
-/// <summary>
-/// Hồ lưu trữ và tái sử dụng ZipArchive tập trung (Zero-Allocation Zip Handle Pool).
-/// Cho phép đọc các trang ảnh bên trong tệp .zip/.cbz lớn (hàng chục ngàn ảnh) với tốc độ O(1) &lt; 0.5ms,
-/// loại bỏ hoàn toàn việc phân tích lại Central Directory hàng ngàn trang cho mỗi ảnh.
-/// </summary>
-public sealed class ZipArchivePool : IDisposable
-{
-    private static readonly Lazy<ZipArchivePool> _lazy = new(() => new ZipArchivePool());
-    public static ZipArchivePool Instance => _lazy.Value;
-
-    private sealed class PooledArchiveEntry : IDisposable
-    {
-        public string FilePath { get; }
-        public DateTime LastWriteTimeUtc { get; }
-        public FileStream Stream { get; }
-        public ZipArchive Archive { get; }
-        public Dictionary<string, ZipArchiveEntry> EntriesMap { get; }
-        public Dictionary<string, ZipArchiveEntry> LeafMap { get; }
-        public List<(string FullName, string Name, long Length)>? CachedImageEntries { get; set; }
-        public object Lock { get; } = new();
-        public long LastAccessTick { get; set; }
-
-        public PooledArchiveEntry(string filePath, DateTime lastWriteTimeUtc, FileStream stream, ZipArchive archive,
-            Dictionary<string, ZipArchiveEntry> entriesMap, Dictionary<string, ZipArchiveEntry> leafMap)
-        {
-            FilePath = filePath;
-            LastWriteTimeUtc = lastWriteTimeUtc;
-            Stream = stream;
-            Archive = archive;
-            EntriesMap = entriesMap;
-            LeafMap = leafMap;
-            LastAccessTick = Environment.TickCount64;
-        }
-
-        public void Dispose()
-        {
-            try { Archive.Dispose(); } catch { }
-            try { Stream.Dispose(); } catch { }
-            EntriesMap?.Clear();
-            LeafMap?.Clear();
-            CachedImageEntries?.Clear();
-        }
-    }
-
-    private readonly ConcurrentDictionary<string, PooledArchiveEntry> _pool = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _cleanupLock = new();
-    private const int MaxOpenArchives = 8;
-
-    private ZipArchivePool() { }
-
-    public byte[]? ReadEntryBytes(string archivePath, string entryFullName)
-    {
-        if (string.IsNullOrWhiteSpace(archivePath) || string.IsNullOrWhiteSpace(entryFullName) || !File.Exists(archivePath))
-        {
-            return null;
-        }
-
-        string normalizedPath;
-        DateTime lastWriteUtc;
-        try
-        {
-            normalizedPath = Path.GetFullPath(archivePath);
-            lastWriteUtc = File.GetLastWriteTimeUtc(normalizedPath);
-        }
-        catch
-        {
-            normalizedPath = archivePath;
-            lastWriteUtc = DateTime.MinValue;
-        }
-
-        PooledArchiveEntry? entry = GetOrOpenArchive(normalizedPath, lastWriteUtc);
-        if (entry == null) return null;
-
-        lock (entry.Lock)
-        {
-            entry.LastAccessTick = Environment.TickCount64;
-
-            string cleanKey = entryFullName.Replace('\\', '/').TrimStart('/');
-            if (!entry.EntriesMap.TryGetValue(cleanKey, out var zipEntry))
-            {
-                // Tra cứu O(1) tức thời qua LeafMap, loại bỏ hoàn toàn vòng lặp 50.000 phần tử trong lock!
-                string leaf = Path.GetFileName(cleanKey);
-                entry.LeafMap.TryGetValue(leaf, out zipEntry);
-            }
-
-            if (zipEntry == null) return null;
-
-            try
-            {
-                using var es = zipEntry.Open();
-                using var ms = new MemoryStream((int)Math.Max(32768, zipEntry.Length));
-                es.CopyTo(ms);
-                return ms.ToArray();
-            }
-            catch
-            {
-                return null;
-            }
-        }
-    }
-
-    public List<(string FullName, string Name, long Length)> GetImageEntriesInfo(string archivePath)
-    {
-        var result = new List<(string FullName, string Name, long Length)>();
-        if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath)) return result;
-
-        string normalizedPath;
-        DateTime lastWriteUtc;
-        try
-        {
-            normalizedPath = Path.GetFullPath(archivePath);
-            lastWriteUtc = File.GetLastWriteTimeUtc(normalizedPath);
-        }
-        catch
-        {
-            normalizedPath = archivePath;
-            lastWriteUtc = DateTime.MinValue;
-        }
-
-        PooledArchiveEntry? entry = GetOrOpenArchive(normalizedPath, lastWriteUtc);
-        if (entry == null) return result;
-
-        lock (entry.Lock)
-        {
-            entry.LastAccessTick = Environment.TickCount64;
-            if (entry.CachedImageEntries != null)
-            {
-                return new List<(string FullName, string Name, long Length)>(entry.CachedImageEntries);
-            }
-
-            foreach (var kv in entry.EntriesMap)
-            {
-                var ze = kv.Value;
-                if (!string.IsNullOrEmpty(ze.Name) && LibraryScannerService.IsImageFile(ze.Name) && ze.Length > 0)
-                {
-                    result.Add((ze.FullName, ze.Name, ze.Length));
-                }
-            }
-
-            result.Sort((a, b) => NaturalSortComparer.Instance.Compare(a.FullName, b.FullName));
-            entry.CachedImageEntries = new List<(string FullName, string Name, long Length)>(result);
-        }
-
-        return result;
-    }
-
-    private PooledArchiveEntry? GetOrOpenArchive(string fullPath, DateTime lastWriteUtc)
-    {
-        if (_pool.TryGetValue(fullPath, out var cached))
-        {
-            if (cached.LastWriteTimeUtc == lastWriteUtc)
-            {
-                return cached;
-            }
-
-            if (_pool.TryRemove(fullPath, out var obsolete))
-            {
-                obsolete.Dispose();
-            }
-        }
-
-        TrimPoolIfFull();
-
-        try
-        {
-            var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 131072);
-            var zip = new ZipArchive(fs, ZipArchiveMode.Read);
-            int entryCount = zip.Entries.Count;
-            var map = new Dictionary<string, ZipArchiveEntry>(entryCount, StringComparer.OrdinalIgnoreCase);
-            var leafMap = new Dictionary<string, ZipArchiveEntry>(entryCount, StringComparer.OrdinalIgnoreCase);
-
-            foreach (var ze in zip.Entries)
-            {
-                if (string.IsNullOrEmpty(ze.Name) || ze.Length == 0) continue;
-                string key = ze.FullName.Replace('\\', '/').TrimStart('/');
-                map[key] = ze;
-                string leaf = ze.Name;
-                if (!leafMap.ContainsKey(leaf))
-                {
-                    leafMap[leaf] = ze;
-                }
-            }
-
-            var pooled = new PooledArchiveEntry(fullPath, lastWriteUtc, fs, zip, map, leafMap);
-            _pool[fullPath] = pooled;
-            return pooled;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private void TrimPoolIfFull()
-    {
-        if (_pool.Count < MaxOpenArchives) return;
-
-        lock (_cleanupLock)
-        {
-            if (_pool.Count < MaxOpenArchives) return;
-
-            string? oldestKey = null;
-            long oldestTick = long.MaxValue;
-
-            foreach (var kv in _pool)
-            {
-                if (kv.Value.LastAccessTick < oldestTick)
-                {
-                    oldestTick = kv.Value.LastAccessTick;
-                    oldestKey = kv.Key;
-                }
-            }
-
-            if (oldestKey != null && _pool.TryRemove(oldestKey, out var removed))
-            {
-                removed.Dispose();
-            }
-        }
-    }
-
-    public void Invalidate(string archivePath)
-    {
-        try
-        {
-            string full = Path.GetFullPath(archivePath);
-            if (_pool.TryRemove(full, out var removed))
-            {
-                removed.Dispose();
-            }
-        }
-        catch { }
-    }
-
-    public void Dispose()
-    {
-        foreach (var kv in _pool)
-        {
-            try { kv.Value.Dispose(); } catch { }
-        }
-        _pool.Clear();
-    }
-}
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+
+namespace ComicDownloaderGMTPC.Services;
+
+/// <summary>
+/// Hồ lưu trữ và tái sử dụng ZipArchive tập trung (Zero-Allocation Zip Handle Pool).
+/// Cho phép đọc các trang ảnh bên trong tệp .zip/.cbz lớn (hàng chục ngàn ảnh) với tốc độ O(1) &lt; 0.5ms,
+/// loại bỏ hoàn toàn việc phân tích lại Central Directory hàng ngàn trang cho mỗi ảnh.
+/// </summary>
+public sealed class ZipArchivePool : IDisposable
+{
+    private static readonly Lazy<ZipArchivePool> _lazy = new(() => new ZipArchivePool());
+    public static ZipArchivePool Instance => _lazy.Value;
+
+    private sealed class PooledArchiveEntry : IDisposable
+    {
+        public string FilePath { get; }
+        public DateTime LastWriteTimeUtc { get; }
+        public FileStream Stream { get; }
+        public ZipArchive Archive { get; }
+        public Dictionary<string, ZipArchiveEntry> EntriesMap { get; }
+        public Dictionary<string, ZipArchiveEntry> LeafMap { get; }
+        public List<(string FullName, string Name, long Length)>? CachedImageEntries { get; set; }
+        public object Lock { get; } = new();
+        public long LastAccessTick { get; set; }
+
+        public PooledArchiveEntry(string filePath, DateTime lastWriteTimeUtc, FileStream stream, ZipArchive archive,
+            Dictionary<string, ZipArchiveEntry> entriesMap, Dictionary<string, ZipArchiveEntry> leafMap)
+        {
+            FilePath = filePath;
+            LastWriteTimeUtc = lastWriteTimeUtc;
+            Stream = stream;
+            Archive = archive;
+            EntriesMap = entriesMap;
+            LeafMap = leafMap;
+            LastAccessTick = Environment.TickCount64;
+        }
+
+        public void Dispose()
+        {
+            try { Archive.Dispose(); } catch { }
+            try { Stream.Dispose(); } catch { }
+            EntriesMap?.Clear();
+            LeafMap?.Clear();
+            CachedImageEntries?.Clear();
+        }
+    }
+
+    private readonly ConcurrentDictionary<string, PooledArchiveEntry> _pool = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _cleanupLock = new();
+    private const int MaxOpenArchives = 8;
+
+    private ZipArchivePool() { }
+
+    public byte[]? ReadEntryBytes(string archivePath, string entryFullName)
+    {
+        if (string.IsNullOrWhiteSpace(archivePath) || string.IsNullOrWhiteSpace(entryFullName) || !File.Exists(archivePath))
+        {
+            return null;
+        }
+
+        string normalizedPath;
+        DateTime lastWriteUtc;
+        try
+        {
+            normalizedPath = Path.GetFullPath(archivePath);
+            lastWriteUtc = File.GetLastWriteTimeUtc(normalizedPath);
+        }
+        catch
+        {
+            normalizedPath = archivePath;
+            lastWriteUtc = DateTime.MinValue;
+        }
+
+        PooledArchiveEntry? entry = GetOrOpenArchive(normalizedPath, lastWriteUtc);
+        if (entry == null) return null;
+
+        lock (entry.Lock)
+        {
+            entry.LastAccessTick = Environment.TickCount64;
+
+            string cleanKey = entryFullName.Replace('\\', '/').TrimStart('/');
+            if (!entry.EntriesMap.TryGetValue(cleanKey, out var zipEntry))
+            {
+                // Tra cứu O(1) tức thời qua LeafMap, loại bỏ hoàn toàn vòng lặp 50.000 phần tử trong lock!
+                string leaf = Path.GetFileName(cleanKey);
+                entry.LeafMap.TryGetValue(leaf, out zipEntry);
+            }
+
+            if (zipEntry == null) return null;
+
+            try
+            {
+                using var es = zipEntry.Open();
+                int initialCapacity = zipEntry.Length > 0 ? (int)Math.Min(zipEntry.Length, 64 * 1024 * 1024) : 32768;
+                using var ms = new MemoryStream(initialCapacity);
+                byte[] poolBuffer = System.Buffers.ArrayPool<byte>.Shared.Rent(32768);
+                try
+                {
+                    int bytesRead;
+                    while ((bytesRead = es.Read(poolBuffer, 0, poolBuffer.Length)) > 0)
+                    {
+                        ms.Write(poolBuffer, 0, bytesRead);
+                    }
+                }
+                finally
+                {
+                    System.Buffers.ArrayPool<byte>.Shared.Return(poolBuffer);
+                }
+                return ms.ToArray();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    public List<(string FullName, string Name, long Length)> GetImageEntriesInfo(string archivePath)
+    {
+        var result = new List<(string FullName, string Name, long Length)>();
+        if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath)) return result;
+
+        string normalizedPath;
+        DateTime lastWriteUtc;
+        try
+        {
+            normalizedPath = Path.GetFullPath(archivePath);
+            lastWriteUtc = File.GetLastWriteTimeUtc(normalizedPath);
+        }
+        catch
+        {
+            normalizedPath = archivePath;
+            lastWriteUtc = DateTime.MinValue;
+        }
+
+        PooledArchiveEntry? entry = GetOrOpenArchive(normalizedPath, lastWriteUtc);
+        if (entry == null) return result;
+
+        lock (entry.Lock)
+        {
+            entry.LastAccessTick = Environment.TickCount64;
+            if (entry.CachedImageEntries != null)
+            {
+                return new List<(string FullName, string Name, long Length)>(entry.CachedImageEntries);
+            }
+
+            foreach (var kv in entry.EntriesMap)
+            {
+                var ze = kv.Value;
+                if (!string.IsNullOrEmpty(ze.Name) && LibraryScannerService.IsImageFile(ze.Name) && ze.Length > 0)
+                {
+                    result.Add((ze.FullName, ze.Name, ze.Length));
+                }
+            }
+
+            result.Sort((a, b) => NaturalSortComparer.Instance.Compare(a.FullName, b.FullName));
+            entry.CachedImageEntries = new List<(string FullName, string Name, long Length)>(result);
+        }
+
+        return result;
+    }
+
+    private PooledArchiveEntry? GetOrOpenArchive(string fullPath, DateTime lastWriteUtc)
+    {
+        if (_pool.TryGetValue(fullPath, out var cached))
+        {
+            if (cached.LastWriteTimeUtc == lastWriteUtc)
+            {
+                return cached;
+            }
+
+            if (_pool.TryRemove(fullPath, out var obsolete))
+            {
+                obsolete.Dispose();
+            }
+        }
+
+        TrimPoolIfFull();
+
+        try
+        {
+            var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 131072);
+            var zip = new ZipArchive(fs, ZipArchiveMode.Read);
+            int entryCount = zip.Entries.Count;
+            var map = new Dictionary<string, ZipArchiveEntry>(entryCount, StringComparer.OrdinalIgnoreCase);
+            var leafMap = new Dictionary<string, ZipArchiveEntry>(entryCount, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var ze in zip.Entries)
+            {
+                if (string.IsNullOrEmpty(ze.Name) || ze.Length == 0) continue;
+                string key = ze.FullName.Replace('\\', '/').TrimStart('/');
+                map[key] = ze;
+                string leaf = ze.Name;
+                if (!leafMap.ContainsKey(leaf))
+                {
+                    leafMap[leaf] = ze;
+                }
+            }
+
+            var pooled = new PooledArchiveEntry(fullPath, lastWriteUtc, fs, zip, map, leafMap);
+            _pool[fullPath] = pooled;
+            return pooled;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void TrimPoolIfFull()
+    {
+        if (_pool.Count < MaxOpenArchives) return;
+
+        lock (_cleanupLock)
+        {
+            if (_pool.Count < MaxOpenArchives) return;
+
+            string? oldestKey = null;
+            long oldestTick = long.MaxValue;
+
+            foreach (var kv in _pool)
+            {
+                if (kv.Value.LastAccessTick < oldestTick)
+                {
+                    oldestTick = kv.Value.LastAccessTick;
+                    oldestKey = kv.Key;
+                }
+            }
+
+            if (oldestKey != null && _pool.TryRemove(oldestKey, out var removed))
+            {
+                removed.Dispose();
+            }
+        }
+    }
+
+    public void Invalidate(string archivePath)
+    {
+        try
+        {
+            string full = Path.GetFullPath(archivePath);
+            if (_pool.TryRemove(full, out var removed))
+            {
+                removed.Dispose();
+            }
+        }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        foreach (var kv in _pool)
+        {
+            try { kv.Value.Dispose(); } catch { }
+        }
+        _pool.Clear();
+    }
+}
