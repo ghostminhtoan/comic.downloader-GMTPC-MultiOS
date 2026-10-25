@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -36,6 +36,12 @@ public class MainActivity : AvaloniaMainActivity
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        try
+        {
+            AndroidX.Core.SplashScreen.SplashScreen.InstallSplashScreen(this);
+        }
+        catch { }
+
         CurrentInstance = this;
         AndroidStorageHelper.WakeUpStorage(this);
 
@@ -208,16 +214,26 @@ public class MainActivity : AvaloniaMainActivity
             });
         };
 
-        RequestAppStoragePermissions();
-
-        // Tự động làm mới danh mục Storage sau khi khởi động xong để bảo đảm hiện Thẻ SD
+        // Trì hoãn việc xin cấp quyền sau khi khung nhìn chính đã được render xong frame đầu tiên
+        // để không làm gián đoạn vòng đời OnCreate và tránh gây xung đột màn hình chờ
         RunOnUiThread(() =>
         {
             try
             {
-                App.SharedMainViewModel?.LibraryVm?.LoadStorageItems();
+                Window?.DecorView?.Post(() =>
+                {
+                    try
+                    {
+                        RequestAppStoragePermissions();
+                        App.SharedMainViewModel?.LibraryVm?.LoadStorageItems();
+                    }
+                    catch { }
+                });
             }
-            catch { }
+            catch
+            {
+                RequestAppStoragePermissions();
+            }
         });
 
         // Bảo vệ cử chỉ hệ thống và vùng điều hướng đáy khi đang gõ trong TextBox
@@ -613,9 +629,7 @@ public class MainActivity : AvaloniaMainActivity
             {
                 RequestPermissions(permissionsToRequest.ToArray(), StoragePermissionRequestCode);
             }
-
-            // Với Android 11+ (API 30+), xin quyền quản lý toàn bộ tệp (All files access)
-            if (OperatingSystem.IsAndroidVersionAtLeast(30))
+            else if (OperatingSystem.IsAndroidVersionAtLeast(30))
             {
                 RequestManageAllFilesPermission(this);
             }
@@ -623,6 +637,24 @@ public class MainActivity : AvaloniaMainActivity
         catch (Exception ex)
         {
             global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi xin cấp quyền lưu trữ: {ex.Message}");
+        }
+    }
+
+    public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Permission[] grantResults)
+    {
+        base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == StoragePermissionRequestCode)
+        {
+            try
+            {
+                App.SharedMainViewModel?.LibraryVm?.LoadStorageItems();
+            }
+            catch { }
+
+            if (OperatingSystem.IsAndroidVersionAtLeast(30))
+            {
+                RequestManageAllFilesPermission(this);
+            }
         }
     }
 

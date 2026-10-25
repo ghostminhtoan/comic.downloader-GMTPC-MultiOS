@@ -295,8 +295,7 @@ public static class AndroidStorageHelper
             {
                 activity.RequestPermissions(permissionsToRequest.ToArray(), requestCode);
             }
-
-            if (OperatingSystem.IsAndroidVersionAtLeast(30))
+            else if (OperatingSystem.IsAndroidVersionAtLeast(30))
             {
                 RequestManageAllFilesPermission(activity);
             }

@@ -57,6 +57,7 @@
 | **BUG-021** | Archive Merger | Khong the noi tiep chap moi vao file tong hop da dong goi (.pdf, .cbz, .zip, .mobi) | Thieu che do Append Mode va trich xuat/giu cau truc chapter/bookmarks muc luc cu | Xay dung engine Append Chapters voi Safe Atomic Overwrite, bao toan Bookmarks PDF va folder structure CBZ/ZIP | `ArchiveMergeService.cs`, `MainViewModel.ArchiveMerger.cs`, `MainView.axaml`, `LanguageService.cs` |
 | **BUG-022** | Floating Bubble (Windows & Linux) | Bat bong bong noi tren Desktop lam co rum cua so chinh thanh 380x240 vo nat layout | `MainWindow.axaml.cs` cuong buc ep kich thuoc MainWindow co lai thay vi tao Floating Window chuyen dung | Xay dung `FloatingBubbleWindow` doc lap (76x76, Transparent, Topmost), Circular Progress Ring doi mau theo task, auto-dock/fade 3.5s, dynamic badge % | `FloatingBubbleWindow.axaml`, `FloatingBubbleWindow.axaml.cs`, `MainWindow.axaml.cs` |
 | **BUG-023** | Archive Merger (Append Mode) | Thiếu lựa chọn rõ ràng giữa Ghi đè giữ bookmark vs Tạo file mới; chữ dài bị cắt xén trên Android | Dùng Checkbox đơn điệu, không giải thích tác động tới bookmark app đọc truyện; thiếu TextWrapping | Thiết kế 2 RadioButton Cards: Ghi đè giữ bookmark (Mặc định) vs Tạo file mới; toàn diện TextWrapping Responsive | `MainView.axaml`, `MainViewModel.ArchiveMerger.cs`, `LanguageService.cs` |
+| **BUG-024** | Android Core & Startup Lifecycle | Lỗi treo logo Avalonia khi cài đặt app lần đầu cho máy mới | Template dùng logo `avalonia_anim`, `windowIsTranslucent=true` làm hỏng drawing handshake trên Android 12+, thiếu `InstallSplashScreen`, và xin quyền quản lý file nhảy Settings quá sớm trong `OnCreate` làm gián đoạn frame đầu | Tích hợp AndroidX `InstallSplashScreen`, đổi splash icon sang Concept 06 `@drawable/icon`, gỡ bỏ `windowIsTranslucent`, và hoãn xin quyền sau khi UI hoàn tất vẽ frame đầu | `values-v31/styles.xml`, `values/styles.xml`, `MainActivity.cs`, `ComicReaderActivity.cs`, `AndroidStorageHelper.cs`, `EnhanceComparisonWindow.axaml` |
 
 
 
@@ -1535,6 +1536,47 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
   - Kết quả: 100% PASS trên toàn bộ các ca kiểm thử.
 
 ---
+
+---
+
+### 24. BUG-024: Triệt Tiêu Hoàn Toàn Lỗi Treo Logo Avalonia Khi Lần Đầu Cài App Cho Máy Mới
+
+- **Triệu chứng**: Khi cài đặt ứng dụng lần đầu tiên trên thiết bị mới (đặc biệt là điện thoại Android 12 trở lên: Android 12, 13, 14, 15), ứng dụng hiển thị logo vector Avalonia và bị treo cứng (đơ/freeze) không vào được giao diện chính `MainView`.
+
+- **Nguyên nhân gốc rễ**: 
+  1. **Hiển thị nhầm logo**: Trong `Resources/values-v31/styles.xml`, thuộc tính `android:windowSplashScreenAnimatedIcon` bị cấu hình trỏ vào `@drawable/avalonia_anim` (logo mặc định của framework Avalonia UI) thay vì icon ứng dụng Concept 06 (Comic Cloud Rocket).
+  2. **Xung đột `windowIsTranslucent` trên Android 12+**: Theme khởi động sử dụng `android:windowIsTranslucent = true`. Trên Android 12+, thuộc tính này làm hỏng drawing handshake giữa WindowManager và App Window: hệ điều hành không nhận được tín hiệu frame đầu tiên đã vẽ xong, dẫn đến màn hình chờ (splash screen) không bao giờ tự động ẩn đi.
+  3. **Thiếu SplashScreen API Handler**: Đã khai báo thư viện `Xamarin.AndroidX.Core.SplashScreen` và thuộc tính `postSplashScreenTheme`, nhưng trong `MainActivity.cs` và `ComicReaderActivity.cs` không hề gọi `AndroidX.Core.SplashScreen.SplashScreen.InstallSplashScreen(this)` trước khi gọi `base.OnCreate()`.
+  4. **Gián đoạn vòng đời khởi tạo khi cài máy mới**: Trên máy mới, người dùng chưa cấp quyền lưu trữ. `RequestAppStoragePermissions()` trong `MainActivity.OnCreate()` chạy đồng bộ và ngay lập tức gọi `RequestManageAllFilesPermission()` nhảy sang màn hình Cài đặt hệ thống (`Settings.ActionManageAppAllFilesAccessPermission`). Việc nhảy Activity ngay trong `OnCreate` đẩy `MainActivity` vào `OnPause` trước khi kịp vẽ frame đầu tiên, khiến màn hình chờ logo Avalonia bị đông cứng vĩnh viễn phía sau.
+
+- **Giải pháp triệt để**:
+  1. **Đổi Icon Chuẩn & Kế Thừa Theme.SplashScreen**:
+     - Cập nhật `values-v31/styles.xml` và `values/styles.xml`: Chuyển `MyTheme.NoActionBar` kế thừa chuẩn từ `Theme.SplashScreen`.
+     - Thay đổi `windowSplashScreenAnimatedIcon` thành `@drawable/icon` (Icon Concept 06 chính thức của app).
+     - Loại bỏ hoàn toàn `android:windowIsTranslucent = true` trong theme ứng dụng để khôi phục drawing pipeline chuẩn của Android.
+     - Thay thế nội dung `avalonia_anim.xml` thành bitmap tham chiếu `@drawable/icon`.
+  2. **Kích Hoạt AndroidX InstallSplashScreen**:
+     - Trong `MainActivity.cs` và `ComicReaderActivity.cs`: Bổ sung `AndroidX.Core.SplashScreen.SplashScreen.InstallSplashScreen(this)` ngay dòng đầu tiên của `OnCreate()` trước khi gọi `base.OnCreate(savedInstanceState)`.
+  3. **Tách Rời & Trì Hoãn Xin Quyền Tránh Đóng Băng Frame Đầu**:
+     - Trì hoãn việc gọi `RequestAppStoragePermissions()` ra sau khi frame giao diện đầu tiên đã render xong thông qua `Window?.DecorView?.Post()`.
+     - Phân tách tuần tự: Chỉ gọi `RequestPermissions()` trước; sau khi người dùng tương tác xong hộp thoại quyền tại `OnRequestPermissionsResult()`, mới kiểm tra và mở tiếp `RequestManageAllFilesPermission()` nếu cần thiết.
+  4. **Thay Thế Icon Cửa Sổ Desktop**:
+     - Trong `EnhanceComparisonWindow.axaml`, thay đổi `Icon="/Assets/avalonia-logo.ico"` sang `Icon="/Assets/app-icon.ico"`.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC.Android/Resources/values-v31/styles.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values/styles.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/drawable-v31/avalonia_anim.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/drawable-night-v31/avalonia_anim.xml`
+  - `ComicDownloaderGMTPC.Android/MainActivity.cs`
+  - `ComicDownloaderGMTPC.Android/ComicReaderActivity.cs`
+  - `ComicDownloaderGMTPC.Android/AndroidStorageHelper.cs`
+  - `ComicDownloaderGMTPC/Views/EnhanceComparisonWindow.axaml`
+  - `bug-fixes-and-solutions.md`
+
+- **Quy tắc kiểm thử**:
+  - Biên dịch toàn bộ giải pháp đạt 0 Error, 0 Warning trên cả `net10.0-android` và `net10.0` (Desktop).
+  - Đảm bảo SplashScreen khởi chạy mượt mà, chuyển tiếp sang `MainView` mà không có bất kỳ độ trễ hay treo logo nào.
 
 ---
 

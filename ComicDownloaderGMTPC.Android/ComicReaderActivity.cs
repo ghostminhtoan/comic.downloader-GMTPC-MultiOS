@@ -156,6 +156,12 @@ public class ComicReaderActivity : AvaloniaActivity
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        try
+        {
+            AndroidX.Core.SplashScreen.SplashScreen.InstallSplashScreen(this);
+        }
+        catch { }
+
         base.OnCreate(savedInstanceState);
         CurrentInstance = this;
 
