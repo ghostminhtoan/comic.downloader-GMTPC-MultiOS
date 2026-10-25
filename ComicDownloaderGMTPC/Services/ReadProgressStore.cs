@@ -60,7 +60,10 @@ public sealed class HistoryBackupPayload
 public sealed class CrossDeviceResumeEntry
 {
     public string ComicTitle { get; set; } = string.Empty;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public string RelativePath { get; set; } = string.Empty;
+
     public string ChapterTitle { get; set; } = string.Empty;
     public double ChapterNumber { get; set; } = -1;
     public int ChapterIndex { get; set; } = 1;
@@ -743,17 +746,14 @@ public sealed class ReadProgressStore
                 if (totalPages > 0) existing.TotalPages = totalPages;
                 existing.UpdatedAtUnixSeconds = now;
                 existing.DeviceName = devName;
-                if (!string.IsNullOrEmpty(path))
-                {
-                    existing.RelativePath = GetSafeRelativePath(path);
-                }
+                existing.RelativePath = string.Empty; // resume.md thuần túy dùng chung đa thiết bị, không lưu đường dẫn cục bộ
             }
             else
             {
                 _crossDeviceEntries.Add(new CrossDeviceResumeEntry
                 {
                     ComicTitle = title,
-                    RelativePath = !string.IsNullOrEmpty(path) ? GetSafeRelativePath(path) : title,
+                    RelativePath = string.Empty, // Thuần túy portable, không lưu đường dẫn cục bộ
                     ChapterTitle = chapterTitle ?? (chapterIndex > 0 ? $"Chương {chapterIndex}" : string.Empty),
                     ChapterNumber = chapterNumber >= 0 ? chapterNumber : (chapterIndex > 0 ? chapterIndex : -1),
                     ChapterIndex = chapterIndex > 0 ? chapterIndex : 1,
@@ -3227,7 +3227,7 @@ public sealed class ReadProgressStore
             entries.Add(new CrossDeviceResumeEntry
             {
                 ComicTitle = comicTitle,
-                RelativePath = GetSafeRelativePath(cleanPath),
+                RelativePath = string.Empty, // resume.md độc lập nền tảng, không lưu đường dẫn cục bộ
                 ChapterTitle = bestChapterTitle,
                 ChapterNumber = bestChapterNumber,
                 ChapterIndex = lastChapIdx > 0 ? lastChapIdx : 1,
