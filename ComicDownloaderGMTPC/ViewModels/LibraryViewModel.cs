@@ -243,6 +243,9 @@ public partial class LibraryViewModel : ViewModelBase
 
     public LibraryViewModel()
     {
+        ReadProgressStore.AdditionalStorageRootsProvider = () =>
+            StorageItems.Where(s => !string.IsNullOrWhiteSpace(s.Path)).Select(s => s.Path);
+
         LibraryRootPath = ReadProgressStore.Instance.GetLastLibraryRootPath()
                           ?? DownloadEngineService.Instance.DownloadRoot;
         CurrentDirectoryPath = LibraryRootPath;
@@ -482,6 +485,9 @@ public partial class LibraryViewModel : ViewModelBase
                     if (quickComic != null && quickComic.Chapters.Count > 0)
                     {
                         ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
+                ReadProgressStore.Instance.RegisterLocalComicPath(quickComic.Title, quickComic.RootFolderPath);
+                ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileName(quickComic.RootFolderPath), quickComic.RootFolderPath);
+                ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileNameWithoutExtension(quickComic.RootFolderPath), quickComic.RootFolderPath);
                         var existing = AllComics.FirstOrDefault(c =>
                             string.Equals(c.RootFolderPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
                         if (existing == null)
@@ -1561,11 +1567,12 @@ public partial class LibraryViewModel : ViewModelBase
     {
         if (item == null) return;
 
-        // Self-Healing: Kiểm tra đường dẫn lưu trong History
+        // BƯỚC 1: Kiểm tra trực tiếp đường dẫn lưu trong item.Path
         if (!string.IsNullOrWhiteSpace(item.Path))
         {
             if (File.Exists(item.Path) || Directory.Exists(item.Path))
             {
+                ReadProgressStore.Instance.RegisterLocalComicPath(item.Title, item.Path);
                 await OpenPathToReadAsync(item.Path);
                 return;
             }
@@ -1580,6 +1587,9 @@ public partial class LibraryViewModel : ViewModelBase
                 if (siblingImgs.Count > 0)
                 {
                     item.Path = dir;
+                    
+                    item.IsCloudSynced = false;
+                    ReadProgressStore.Instance.RegisterLocalComicPath(item.Title, dir);
                     await OpenPathToReadAsync(dir);
                     _ = LoadHistoryItemsAsync();
                     return;
@@ -1587,36 +1597,122 @@ public partial class LibraryViewModel : ViewModelBase
             }
         }
 
-        // Thử tìm nhanh đường dẫn cục bộ trên thiết bị qua Self-Healing Title Search
+        // BƯỚC 2: Thử tìm nhanh đường dẫn cục bộ trên thiết bị qua Self-Healing Title & Filename Resolver
         string? resolved = ReadProgressStore.Instance.TryResolveLocalPathForComic(item.Title);
+        if (string.IsNullOrEmpty(resolved) && !string.IsNullOrWhiteSpace(item.Path))
+        {
+            string fName = Path.GetFileName(item.Path);
+            if (!string.IsNullOrEmpty(fName)) resolved = ReadProgressStore.Instance.TryResolveLocalPathForComic(fName);
+            if (string.IsNullOrEmpty(resolved))
+            {
+                string fBase = Path.GetFileNameWithoutExtension(item.Path);
+                if (!string.IsNullOrEmpty(fBase)) resolved = ReadProgressStore.Instance.TryResolveLocalPathForComic(fBase);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(resolved) && (File.Exists(resolved) || Directory.Exists(resolved)))
         {
             item.Path = resolved;
+            
+            item.IsCloudSynced = false;
+            ReadProgressStore.Instance.RegisterLocalComicPath(item.Title, resolved);
+            ReadProgressStore.Instance.RegisterReadComic(resolved, touchTimestamp: true);
             await OpenPathToReadAsync(resolved);
             _ = LoadHistoryItemsAsync();
             return;
         }
 
-        // Thử tìm kiếm sâu theo Title trong các Storage Folders đã nạp
+        // BƯỚC 3: Thử tìm kiếm sâu theo Title & File Base trong các Storage Folders đã nạp trong thư viện
+        string cleanTitle = item.Title.Trim();
+        string cleanTitleNoExt = Path.GetFileNameWithoutExtension(cleanTitle);
+
         foreach (var storageItem in StorageItems)
         {
-            if (!string.IsNullOrWhiteSpace(storageItem.Path) && Directory.Exists(storageItem.Path))
+            if (string.IsNullOrWhiteSpace(storageItem.Path) || !Directory.Exists(storageItem.Path)) continue;
+
+            try
             {
-                try
+                // 1. Thư mục hoặc file trùng tên
+                string candidateDir = Path.Combine(storageItem.Path, cleanTitle);
+                if (Directory.Exists(candidateDir) || File.Exists(candidateDir))
                 {
-                    string candidateDir = Path.Combine(storageItem.Path, item.Title);
-                    if (Directory.Exists(candidateDir))
+                    item.Path = candidateDir;
+                    
+                    item.IsCloudSynced = false;
+                    ReadProgressStore.Instance.RegisterLocalComicPath(item.Title, candidateDir);
+                    await OpenPathToReadAsync(candidateDir);
+                    _ = LoadHistoryItemsAsync();
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(cleanTitleNoExt))
+                {
+                    string candidateNoExt = Path.Combine(storageItem.Path, cleanTitleNoExt);
+                    if (Directory.Exists(candidateNoExt) || File.Exists(candidateNoExt))
                     {
-                        item.Path = candidateDir;
-                        await OpenPathToReadAsync(candidateDir);
+                        item.Path = candidateNoExt;
+                        
+                        item.IsCloudSynced = false;
+                        ReadProgressStore.Instance.RegisterLocalComicPath(item.Title, candidateNoExt);
+                        await OpenPathToReadAsync(candidateNoExt);
                         _ = LoadHistoryItemsAsync();
                         return;
                     }
                 }
-                catch { }
+
+                // 2. Quét file nén và thư mục con cấp 1 & 2 trong Storage Folder này
+                var sFiles = Directory.GetFiles(storageItem.Path);
+                foreach (var f in sFiles)
+                {
+                    string fn = Path.GetFileName(f);
+                    string fb = Path.GetFileNameWithoutExtension(f);
+                    if (string.Equals(fn, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(fb, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(cleanTitleNoExt) && (string.Equals(fn, cleanTitleNoExt, StringComparison.OrdinalIgnoreCase) || string.Equals(fb, cleanTitleNoExt, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        item.Path = f;
+                        
+                        item.IsCloudSynced = false;
+                        ReadProgressStore.Instance.RegisterLocalComicPath(item.Title, f);
+                        await OpenPathToReadAsync(f);
+                        _ = LoadHistoryItemsAsync();
+                        return;
+                    }
+                }
+
+                var sSubDirs = Directory.GetDirectories(storageItem.Path);
+                foreach (var sd in sSubDirs)
+                {
+                    string sdn = Path.GetFileName(sd);
+                    if (string.Equals(sdn, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(cleanTitleNoExt) && string.Equals(sdn, cleanTitleNoExt, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        item.Path = sd;
+                        
+                        item.IsCloudSynced = false;
+                        ReadProgressStore.Instance.RegisterLocalComicPath(item.Title, sd);
+                        await OpenPathToReadAsync(sd);
+                        _ = LoadHistoryItemsAsync();
+                        return;
+                    }
+
+                    string subNested = Path.Combine(sd, cleanTitle);
+                    if (Directory.Exists(subNested) || File.Exists(subNested))
+                    {
+                        item.Path = subNested;
+                        
+                        item.IsCloudSynced = false;
+                        ReadProgressStore.Instance.RegisterLocalComicPath(item.Title, subNested);
+                        await OpenPathToReadAsync(subNested);
+                        _ = LoadHistoryItemsAsync();
+                        return;
+                    }
+                }
             }
+            catch { }
         }
 
+        // BƯỚC 4: Nếu hoàn toàn không tìm thấy tệp cục bộ trên máy
         string devMsg = !string.IsNullOrWhiteSpace(item.CloudDeviceName) ? $" từ [{item.CloudDeviceName}]" : string.Empty;
         StatusMessage = $"⚠️ Bộ truyện '{item.Title}' được đồng bộ{devMsg} nhưng chưa tìm thấy trên thiết bị này.";
         App.TryGetSharedMainViewModel()?.ShowCenterToast(

@@ -6177,25 +6177,26 @@ public partial class ComicReaderViewModel : ViewModelBase
         {
 
             _progressStore.SaveLastActiveChapterForTitle(title, chapter.Index);
-
         }
 
-
+        string? activeLocalPath = !string.IsNullOrWhiteSpace(comicRoot) ? comicRoot : chapter.LocalPath;
+        if (!string.IsNullOrWhiteSpace(activeLocalPath))
+        {
+            _progressStore.RegisterLocalComicPath(title, activeLocalPath);
+            if (!string.IsNullOrWhiteSpace(chapter.LocalPath) && !string.Equals(chapter.LocalPath, activeLocalPath, StringComparison.OrdinalIgnoreCase))
+            {
+                _progressStore.RegisterLocalComicPath(Path.GetFileName(chapter.LocalPath), chapter.LocalPath);
+                _progressStore.RegisterLocalComicPath(Path.GetFileNameWithoutExtension(chapter.LocalPath), chapter.LocalPath);
+            }
+        }
 
         _progressStore.RecordSessionResume(
-
             comicTitle: title,
-
             comicRootOrFilePath: comicRoot ?? chapter.LocalPath,
-
             chapterTitle: chapter.Title,
-
             chapterIndex: chapter.Index,
-
             chapterNumber: ReadProgressStore.ExtractChapterNumber(chapter.Title),
-
-            pageIndex: 0,
-
+            pageIndex: Math.Max(0, CurrentPageIndex),
             totalPages: totalPages
 
         );
