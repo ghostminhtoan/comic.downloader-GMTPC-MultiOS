@@ -281,9 +281,16 @@ public sealed class MoeTruyenCryptoService
         CancellationToken ct)
     {
         var session = await FetchChapterSessionAsync(chapterUrl, ct).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(session.BootstrapUrl))
+        if (string.IsNullOrWhiteSpace(session.BootstrapUrl) || session.MediaItems.Count == 0)
         {
-            // Kiểm tra xem chương có bị khóa trả phí (Paywall / Xu Mòe) không
+            // Kiểm tra và tự động Fallback tải từ Mirror nếu chương bị khóa trả phí (Xu Mòe) hoặc thiếu dữ liệu
+            int fallbackDone = await TryDownloadFallbackPagesAsync(chapterUrl, destinationDir, manifest, onProgress, ct).ConfigureAwait(false);
+            if (fallbackDone > 0)
+            {
+                return fallbackDone;
+            }
+
+            // Nếu fallback không thành công thì mới báo lỗi
             if (session.Html.Contains("data-chapter-purchase-paywall", StringComparison.OrdinalIgnoreCase) ||
                 session.Html.Contains("chapter-purchase-title", StringComparison.OrdinalIgnoreCase) ||
                 session.Html.Contains("data-purchase-config", StringComparison.OrdinalIgnoreCase))
@@ -292,7 +299,7 @@ public sealed class MoeTruyenCryptoService
                 var priceMatch = Regex.Match(session.Html, @"""price""\s*:\s*""?(\d+)""?");
                 if (priceMatch.Success) price = priceMatch.Groups[1].Value;
 
-                throw new InvalidOperationException($"Chương này bị KHÓA TRẢ PHÍ trên Mòe Truyện (Yêu cầu: {price} Xu Mòe). Server từ chối cấp dữ liệu tải cho tài khoản chưa mua chương.");
+                throw new InvalidOperationException($"Chương này bị KHÓA TRẢ PHÍ trên Mòe Truyện (Yêu cầu: {price} Xu Mòe) và không tìm thấy nguồn thay thế.");
             }
 
             throw new InvalidOperationException("Không thể tìm thấy Bootstrap URL trên trang chapter của Mòe Truyện.");
@@ -620,5 +627,113 @@ public sealed class MoeTruyenCryptoService
         }
 
         return completedCount;
+    }
+
+    /// <summary>
+    /// Tự động Fallback tải ảnh từ các nguồn mirror khi chương Mòe Truyện bị khóa trả phí (Xu Mòe) hoặc thiếu dữ liệu.
+    /// </summary>
+    private async Task<int> TryDownloadFallbackPagesAsync(
+        string chapterUrl,
+        string destinationDir,
+        Dictionary<string, string> manifest,
+        Action<int, int>? onProgress,
+        CancellationToken ct)
+    {
+        var m = Regex.Match(chapterUrl, @"/manga/(?:(\d+)-)?([^/]+)/chapters/(\d+(?:\.\d+)?)");
+        if (!m.Success) return 0;
+
+        string cleanSlug = m.Groups[2].Value;
+        string chapNum = m.Groups[3].Value;
+
+        string[] candidateUrls = new[]
+        {
+            $"https://nhattruyenqq.com/truyen-tranh/{cleanSlug}/chap-{chapNum}",
+            $"https://nettruyennew.com/truyen-tranh/{cleanSlug}/chap-{chapNum}",
+            $"https://nettruyenz.co.uk/truyen-tranh/{cleanSlug}/chap-{chapNum}",
+            $"https://truyenqqto.com/truyen-tranh/{cleanSlug}-chap-{chapNum}.html"
+        };
+
+        foreach (var cUrl in candidateUrls)
+        {
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, cUrl);
+                req.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36");
+                if (cUrl.Contains("nhattruyen")) req.Headers.Add("Referer", "https://nhattruyenqq.com/");
+                else if (cUrl.Contains("nettruyen")) req.Headers.Add("Referer", "https://nettruyennew.com/");
+
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                if (!res.IsSuccessStatusCode) continue;
+
+                string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                var imgMatches = Regex.Matches(html, @"<div class=[""']page-chapter[""'][^>]*>[\s\S]*?<img[^>]+(?:data-original|src)=[""']([^""']+)[""']");
+                if (imgMatches.Count == 0)
+                {
+                    imgMatches = Regex.Matches(html, @"class=[""']chapter-img[""'][^>]+(?:data-original|src)=[""']([^""']+)[""']");
+                }
+
+                if (imgMatches.Count == 0) continue;
+
+                var imgUrls = new List<string>();
+                foreach (Match im in imgMatches)
+                {
+                    string src = im.Groups[1].Value.Trim();
+                    if (src.StartsWith("//")) src = "https:" + src;
+                    if (src.StartsWith("http")) imgUrls.Add(src);
+                }
+
+                if (imgUrls.Count == 0) continue;
+
+                int totalPages = imgUrls.Count;
+                int completed = 0;
+                Directory.CreateDirectory(destinationDir);
+
+                for (int i = 0; i < totalPages; i++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    string imgUrl = imgUrls[i];
+                    string ext = Path.GetExtension(imgUrl);
+                    if (string.IsNullOrWhiteSpace(ext) || ext.Length > 5) ext = ".webp";
+                    string fileName = $"page_{(i + 1):D3}{ext}";
+                    string filePath = Path.Combine(destinationDir, fileName);
+
+                    if (File.Exists(filePath) && new FileInfo(filePath).Length > 1024)
+                    {
+                        lock (manifest)
+                        {
+                            manifest[fileName] = imgUrl;
+                        }
+                        completed++;
+                        onProgress?.Invoke(completed, totalPages);
+                        continue;
+                    }
+
+                    using var iReq = new HttpRequestMessage(HttpMethod.Get, imgUrl);
+                    iReq.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36");
+                    iReq.Headers.Add("Referer", cUrl);
+
+                    using var iRes = await _httpClient.SendAsync(iReq, ct).ConfigureAwait(false);
+                    if (!iRes.IsSuccessStatusCode) continue;
+
+                    byte[] imgBytes = await iRes.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                    await File.WriteAllBytesAsync(filePath, imgBytes, ct).ConfigureAwait(false);
+
+                    lock (manifest)
+                    {
+                        manifest[fileName] = imgUrl;
+                    }
+                    completed++;
+                    onProgress?.Invoke(completed, totalPages);
+                }
+
+                if (completed > 0)
+                {
+                    return completed;
+                }
+            }
+            catch { }
+        }
+
+        return 0;
     }
 }
