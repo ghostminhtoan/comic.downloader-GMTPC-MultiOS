@@ -15,10 +15,10 @@ namespace ComicDownloaderGMTPC.Services;
 
 /// <summary>
 /// Service giải mã và tải truyện thuần C# cho Mòe Truyện (moetruyen.net).
-/// Tự động giải mã bảo mật DRM IMGX v3:
+/// Tự động giải mã bảo mật DRM IMGX (hỗ trợ cả Version 3 và Version 4):
 /// - ECDH P-256 (NIST P-256) Key Exchange
 /// - HKDF-SHA256 Key Derivation
-/// - HMAC-SHA256 Token Proofs
+/// - HMAC-SHA256 Token Proofs (chuẩn hóa chapterId số nguyên + pubHash)
 /// - FNV-1a (32-bit) & Xorshift32 PRNG Key Unmasking
 /// - AES-256-GCM Payload Decryption -> WebP nguyên bản chất lượng cao.
 /// Hoạt động 100% độc lập, hỗ trợ cả Windows, Linux và Android mà không cần trình duyệt ngoài.
@@ -156,6 +156,28 @@ public sealed class MoeTruyenCryptoService
         aesGcm.Decrypt(iv, ct, tag, plaintext, aad);
         return plaintext;
     }
+
+    private static byte[] Concat(byte[] a, byte[] b)
+    {
+        byte[] res = new byte[a.Length + b.Length];
+        Buffer.BlockCopy(a, 0, res, 0, a.Length);
+        Buffer.BlockCopy(b, 0, res, a.Length, b.Length);
+        return res;
+    }
+
+    private static string GetStringOrNumber(JsonElement elem, string prop, string fallback = "")
+    {
+        if (elem.TryGetProperty(prop, out var p))
+        {
+            return p.ValueKind switch
+            {
+                JsonValueKind.String => p.GetString() ?? fallback,
+                JsonValueKind.Number => p.GetRawText(),
+                _ => fallback
+            };
+        }
+        return fallback;
+    }
     #endregion
 
     #region Chapter Data Models
@@ -172,7 +194,7 @@ public sealed class MoeTruyenCryptoService
         public string Html { get; set; } = string.Empty;
         public string ChapterUrl { get; set; } = string.Empty;
         public string BootstrapUrl { get; set; } = string.Empty;
-        public string ChapterId { get; set; } = string.Empty;
+        public long ChapterId { get; set; }
         public string ReqPath { get; set; } = string.Empty;
         public List<MediaItem> MediaItems { get; set; } = new();
     }
@@ -183,13 +205,17 @@ public sealed class MoeTruyenCryptoService
     /// </summary>
     public async Task<ChapterSessionData> FetchChapterSessionAsync(string chapterUrl, CancellationToken ct)
     {
+        // Trích xuất book URL làm Referer chuẩn
+        string refererUrl = Regex.Replace(chapterUrl, @"/chapters/\d+.*$", "");
+
         using var req = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
         req.Headers.Add("Sec-Ch-Ua", "\"Not A(Brand\";v=\"8\", \"Chromium\";v=\"133\", \"Google Chrome\";v=\"133\"");
         req.Headers.Add("Sec-Ch-Ua-Mobile", "?0");
         req.Headers.Add("Sec-Ch-Ua-Platform", "\"Windows\"");
         req.Headers.Add("Sec-Fetch-Dest", "document");
         req.Headers.Add("Sec-Fetch-Mode", "navigate");
-        req.Headers.Add("Sec-Fetch-Site", "none");
+        req.Headers.Add("Sec-Fetch-Site", "same-origin");
+        req.Headers.Add("Referer", !string.IsNullOrWhiteSpace(refererUrl) ? refererUrl : "https://moetruyen.net/");
 
         using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
         res.EnsureSuccessStatusCode();
@@ -203,7 +229,7 @@ public sealed class MoeTruyenCryptoService
 
         // Bootstrap URL
         var bootMatch = Regex.Match(html, @"bootstrapUrl:\s*[""']([^""']+)[""']");
-        if (bootMatch.Success)
+        if (bootMatch.Success && !string.IsNullOrWhiteSpace(bootMatch.Groups[1].Value))
         {
             string bPath = bootMatch.Groups[1].Value.Trim();
             data.BootstrapUrl = bPath.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? bPath : $"https://moetruyen.net{bPath}";
@@ -211,30 +237,23 @@ public sealed class MoeTruyenCryptoService
         else
         {
             var bootAttrMatch = Regex.Match(html, @"data-imgx-bootstrap-url=[""']([^""']+)[""']");
-            if (bootAttrMatch.Success)
+            if (bootAttrMatch.Success && !string.IsNullOrWhiteSpace(bootAttrMatch.Groups[1].Value))
             {
                 string bPath = bootAttrMatch.Groups[1].Value.Trim();
                 data.BootstrapUrl = bPath.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? bPath : $"https://moetruyen.net{bPath}";
             }
         }
 
-        // ChapterId & ReqPath
+        // ChapterId (bắt buộc lấy ID số nguyên từ database Mòe Truyện)
+        var chapIdMatch = Regex.Match(html, @"chapterId:\s*(\d+)");
+        if (chapIdMatch.Success && long.TryParse(chapIdMatch.Groups[1].Value, out long parsedId))
+        {
+            data.ChapterId = parsedId;
+        }
+
+        // ReqPath
         var uri = new Uri(chapterUrl);
         data.ReqPath = uri.AbsolutePath.TrimEnd('/') + "/page-access";
-
-        var chapIdMatch = Regex.Match(html, @"chapterId:\s*[""']?(\d+)[""']?");
-        if (chapIdMatch.Success)
-        {
-            data.ChapterId = chapIdMatch.Groups[1].Value;
-        }
-        else
-        {
-            var chapNumMatch = Regex.Match(chapterUrl, @"/chapters/(\d+)");
-            if (chapNumMatch.Success)
-            {
-                data.ChapterId = chapNumMatch.Groups[1].Value;
-            }
-        }
 
         // Media items
         var mediaMatch = Regex.Match(html, @"media:\s*(\[\s*\{[\s\S]*?\}\s*\])");
@@ -265,6 +284,11 @@ public sealed class MoeTruyenCryptoService
         if (string.IsNullOrWhiteSpace(session.BootstrapUrl))
         {
             throw new InvalidOperationException("Không thể tìm thấy Bootstrap URL trên trang chapter của Mòe Truyện.");
+        }
+
+        if (session.ChapterId <= 0)
+        {
+            throw new InvalidOperationException("Không thể tìm thấy ChapterId hợp lệ từ trang Mòe Truyện.");
         }
 
         if (session.MediaItems.Count == 0)
@@ -329,7 +353,6 @@ public sealed class MoeTruyenCryptoService
         byte[] capIv = Base64UrlDecode(capIvB64);
         byte[] capCtAll = Base64UrlDecode(capCtB64);
 
-        // AAD = JSON.stringify(['imgx-reader-channel-v1', clientPubB64, sealedCap.publicKey, bootstrapProof])
         string capAadStr = JsonSerializer.Serialize(new object[]
         {
             "imgx-reader-channel-v1",
@@ -362,7 +385,7 @@ public sealed class MoeTruyenCryptoService
             sequence++;
             long issuedAt = (long)serverTime;
 
-            // Proof signature message
+            // Chú ý: session.ChapterId BẮT BUỘC là số nguyên long để JSON serialize thành số chuẩn
             string proofMsg = JsonSerializer.Serialize(new object[]
             {
                 "imgx-page-access-proof-v3",
@@ -437,7 +460,6 @@ public sealed class MoeTruyenCryptoService
 
             foreach (var pElem in pagesDoc.RootElement.EnumerateArray())
             {
-                // Clone json element để lưu giữ sau khi doc bị dispose
                 grantsList.Add((pElem.Clone(), sSharedSecret, proofB64, sPubB64));
             }
         }
@@ -468,14 +490,14 @@ public sealed class MoeTruyenCryptoService
             }
 
             var g = pElem.GetProperty("grant");
-            string imageId = g.GetProperty("imageId").GetString()!;
-            string gVersion = g.TryGetProperty("version", out var vProp) ? vProp.GetString() ?? "" : "";
-            string gAlgorithm = g.TryGetProperty("algorithm", out var algProp) ? algProp.GetString() ?? "" : "";
-            long issuedAt = g.TryGetProperty("issuedAt", out var issProp) ? issProp.GetInt64() : 0;
-            long expiresAt = g.TryGetProperty("expiresAt", out var expProp) ? expProp.GetInt64() : 0;
-            string nonce = g.TryGetProperty("nonce", out var nProp) ? nProp.GetString() ?? "" : "";
-            string keyNonce = g.TryGetProperty("keyNonce", out var knProp) ? knProp.GetString() ?? "" : "";
-            string signature = g.TryGetProperty("signature", out var sigProp) ? sigProp.GetString() ?? "" : "";
+            string imageId = GetStringOrNumber(g, "imageId");
+            string gVersion = GetStringOrNumber(g, "version");
+            string gAlgorithm = GetStringOrNumber(g, "algorithm");
+            long gIssuedAt = g.TryGetProperty("issuedAt", out var issProp) ? issProp.GetInt64() : 0;
+            long gExpiresAt = g.TryGetProperty("expiresAt", out var expProp) ? expProp.GetInt64() : 0;
+            string nonce = GetStringOrNumber(g, "nonce");
+            string keyNonce = GetStringOrNumber(g, "keyNonce");
+            string signature = GetStringOrNumber(g, "signature");
 
             var chKeys = g.GetProperty("channelKeys");
             string ckIvB64 = chKeys.GetProperty("iv").GetString()!;
@@ -497,8 +519,8 @@ public sealed class MoeTruyenCryptoService
                 pageIndex,
                 storageKey,
                 imageId,
-                issuedAt,
-                expiresAt,
+                gIssuedAt,
+                gExpiresAt,
                 nonce,
                 signature
             });
@@ -508,17 +530,10 @@ public sealed class MoeTruyenCryptoService
 
             byte[] ckPlain = DecryptAesGcm(ckHkdfKey, ckIv, ckCtAll, ckAad);
             using var grantKeysDoc = JsonDocument.Parse(Encoding.UTF8.GetString(ckPlain));
-            string wrappedKeyB64 = grantKeysDoc.RootElement.GetProperty("wrappedContentKey").GetString()!;
-            byte[] wrappedKeyBytes = Base64UrlDecode(wrappedKeyB64);
 
-            // Mở khóa contentKey bằng Mask
-            string seedStr = $"IMGX-GRANT-WRAP-v1.{gVersion}.{gAlgorithm}.{imageId}.{issuedAt}.{expiresAt}.{nonce}.{keyNonce}.{signature}.{cleanStorageKey}";
+            // Mở khóa bằng Mask
+            string seedStr = $"IMGX-GRANT-WRAP-v1.{gVersion}.{gAlgorithm}.{imageId}.{gIssuedAt}.{gExpiresAt}.{nonce}.{keyNonce}.{signature}.{cleanStorageKey}";
             byte[] mask = DeriveMask(seedStr, 32);
-            byte[] contentKey = new byte[32];
-            for (int b = 0; b < 32; b++)
-            {
-                contentKey[b] = (byte)(wrappedKeyBytes[b] ^ mask[b]);
-            }
 
             // Tải payload nhị phân IMGX
             string dlUrl = $"https://i.truyen.moe/{storageKey}";
@@ -528,27 +543,58 @@ public sealed class MoeTruyenCryptoService
             imgRes.EnsureSuccessStatusCode();
             byte[] encImg = await imgRes.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
 
-            if (encImg.Length < 25 + 16 || encImg[0] != 'I' || encImg[1] != 'M' || encImg[2] != 'G' || encImg[3] != 'X')
+            if (encImg.Length < 13 || encImg[0] != 'I' || encImg[1] != 'M' || encImg[2] != 'G' || encImg[3] != 'X')
             {
                 throw new InvalidOperationException($"Payload ảnh trang {idx + 1} không đúng định dạng IMGX chuẩn.");
             }
 
-            // Đọc width & height (Big-Endian)
-            uint width = (uint)((encImg[5] << 24) | (encImg[6] << 16) | (encImg[7] << 8) | encImg[8]);
-            uint height = (uint)((encImg[9] << 24) | (encImg[10] << 16) | (encImg[11] << 8) | encImg[12]);
+            int imgVersion = encImg[4];
+            byte[] webpBytes;
 
-            byte[] imgIv = new byte[12];
-            Array.Copy(encImg, 13, imgIv, 0, 12);
+            if (imgVersion == 4)
+            {
+                // Giải mã version 4 (XChaCha/AES Envelope)
+                string wrappedV4KeyB64 = grantKeysDoc.RootElement.GetProperty("wrappedV4Key").GetString()!;
+                byte[] wrappedV4KeyBytes = Base64UrlDecode(wrappedV4KeyB64);
+                byte[] v4Key = new byte[32];
+                for (int b = 0; b < 32; b++) v4Key[b] = (byte)(wrappedV4KeyBytes[b] ^ mask[b]);
 
-            int imgCtTotalLen = encImg.Length - 25;
-            byte[] imgCtAll = new byte[imgCtTotalLen];
-            Array.Copy(encImg, 25, imgCtAll, 0, imgCtTotalLen);
+                byte[] salt = encImg[13..45]; // 32 bytes
+                byte[] infoBytes = Encoding.UTF8.GetBytes("IMGX-v4.envelope");
+                byte[] derived64 = HKDF.DeriveKey(HashAlgorithmName.SHA256, v4Key, 64, salt, infoBytes);
 
-            string imgAadStr = $"IMGX-v3.{imageId}.{cleanStorageKey}.{width}.{height}";
-            byte[] imgAad = Encoding.UTF8.GetBytes(imgAadStr);
+                byte[] envKey = derived64[..32];
+                byte[] payloadKey = derived64[32..64];
 
-            // Giải mã ra file WebP nguyên bản
-            byte[] webpBytes = DecryptAesGcm(contentKey, imgIv, imgCtAll, imgAad);
+                byte[] envIv = encImg[45..57]; // 12 bytes
+                byte[] envCtAll = encImg[57..78]; // 21 bytes
+
+                byte[] ctxBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new[] { "IMGX-v4", imageId, cleanStorageKey }));
+                byte[] envAad = Concat(encImg[..57], ctxBytes);
+
+                byte[] metaPlain = DecryptAesGcm(envKey, envIv, envCtAll, envAad);
+                byte[] payloadAad = Concat(encImg[..78], ctxBytes);
+                byte[] payloadData = encImg[78..];
+                byte[] payloadIv = payloadData[..12];
+                byte[] payloadCtAll = payloadData[12..];
+
+                webpBytes = DecryptAesGcm(payloadKey, payloadIv, payloadCtAll, payloadAad);
+            }
+            else
+            {
+                // Giải mã version 3 (AES-256-GCM chuẩn)
+                string wrappedKeyB64 = grantKeysDoc.RootElement.GetProperty("wrappedContentKey").GetString()!;
+                byte[] wrappedKeyBytes = Base64UrlDecode(wrappedKeyB64);
+                byte[] contentKey = new byte[32];
+                for (int b = 0; b < 32; b++) contentKey[b] = (byte)(wrappedKeyBytes[b] ^ mask[b]);
+
+                uint width = (uint)((encImg[5] << 24) | (encImg[6] << 16) | (encImg[7] << 8) | encImg[8]);
+                uint height = (uint)((encImg[9] << 24) | (encImg[10] << 16) | (encImg[11] << 8) | encImg[12]);
+                byte[] imgIv = encImg[13..25];
+                byte[] imgCtAll = encImg[25..];
+                string imgAadStr = $"IMGX-v3.{imageId}.{cleanStorageKey}.{width}.{height}";
+                webpBytes = DecryptAesGcm(contentKey, imgIv, imgCtAll, Encoding.UTF8.GetBytes(imgAadStr));
+            }
 
             await File.WriteAllBytesAsync(pageFilePath, webpBytes, ct).ConfigureAwait(false);
 
