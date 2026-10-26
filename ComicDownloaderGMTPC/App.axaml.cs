@@ -197,6 +197,13 @@ public partial class App : Application
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"[FATAL] MainViewFactory failed: {ex}");
+                    try
+                    {
+                        var log = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC] [MainViewFactory Crash]\n{ex}\n\n";
+                        var extPath = Path.Combine(DownloadEngineService.GetAppSpecificExternalPath(), "crash_log.txt");
+                        File.AppendAllText(extPath, log);
+                    }
+                    catch { }
                     return new TextBlock
                     {
                         Text = $"Khởi động ứng dụng gặp lỗi:\n{ex.Message}\n\n{ex.StackTrace}",
