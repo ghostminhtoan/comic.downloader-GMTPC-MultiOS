@@ -949,6 +949,53 @@ public class DownloadEngineService
                 ProgressUpdated?.Invoke();
 
                 await WaitIfPausedAsync(ct).ConfigureAwait(false);
+
+                // XỬ LÝ CHUYÊN BIỆT CHO MÒE TRUYỆN (DRM IMGX DECRYPTION THUẦN C#)
+                if (book.Domain != null && book.Domain.Contains("moetruyen"))
+                {
+                    book.StatusMessage = $"Đang giải mã và tải {chapter.Title}...";
+                    ProgressUpdated?.Invoke();
+
+                    int moeDone = 0;
+                    try
+                    {
+                        moeDone = await MoeTruyenCryptoService.Instance.DownloadChapterPagesAsync(
+                            chapter.Url,
+                            chapterDir,
+                            manifest,
+                            (done, total) =>
+                            {
+                                chapter.DownloadedPages = done;
+                                chapter.TotalPages = total;
+                                book.UpdateProgressThrottled(
+                                    completedChapters,
+                                    totalChapters,
+                                    done,
+                                    total,
+                                    $"Đang tải {chapter.Title}: {done}/{total} trang",
+                                    force: done == total);
+                                ReportOverallProgress(book, $"{book.Title} • {chapter.Title} ({done}/{total})", force: false);
+                            },
+                            ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogEmitted?.Invoke("ERROR", $"Lỗi tải chapter '{chapter.Title}' Mòe Truyện: {ex.Message}");
+                    }
+
+                    SaveManifest(manifestFile, manifest);
+                    if (moeDone > 0)
+                    {
+                        completedChapters++;
+                        chapter.Status = "Completed";
+                        chapter.TotalPages = Math.Max(chapter.TotalPages, manifest.Count);
+                        chapter.DownloadedPages = chapter.TotalPages;
+                        book.UpdateProgress(completedChapters, totalChapters, chapter.DownloadedPages, chapter.TotalPages);
+                        ProgressUpdated?.Invoke();
+                    }
+                    continue;
+                }
+
                 var readerUrls = new List<string>();
                 var imageUrls = await _scraperService.ExtractChapterImageUrlsAsync(chapter.Url, book.Domain ?? string.Empty, ct, readerUrls).ConfigureAwait(false);
                 if (imageUrls.Count == 0)
@@ -1327,6 +1374,10 @@ public class DownloadEngineService
                     else if (targetUrl.Contains("imggo.net", StringComparison.OrdinalIgnoreCase))
                     {
                         effectiveReferer = "https://daomeoden.net/";
+                    }
+                    else if (targetUrl.Contains("moetruyen", StringComparison.OrdinalIgnoreCase) || (refererUrl != null && refererUrl.Contains("moetruyen", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        effectiveReferer = "https://moetruyen.net/";
                     }
                     else if (targetUrl.Contains("pubtranxzyzz", StringComparison.OrdinalIgnoreCase) ||
                              (refererUrl != null && refererUrl.Contains("sayhentai", StringComparison.OrdinalIgnoreCase)))

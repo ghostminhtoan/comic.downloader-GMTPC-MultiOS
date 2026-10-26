@@ -368,6 +368,12 @@ public class ComicScraperService
             return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/tac-gia/");
         if (lowerDomain.Contains("daomeoden") || lowerUrl.Contains("daomeoden"))
             return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/tag/");
+        if (lowerDomain.Contains("moetruyen") || lowerUrl.Contains("moetruyen"))
+        {
+            if (lowerUrl.Contains("/chapters/")) return false;
+            if (Regex.IsMatch(lowerUrl, @"/manga/\d+-")) return false;
+            return lowerUrl.Contains("/manga") || lowerUrl.Contains("include=") || lowerUrl.Contains("?q=") || lowerUrl.Contains("&q=");
+        }
         if (lowerDomain.Contains("loppy") || lowerUrl.Contains("loppy"))
             return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/genre/") ||
                    lowerUrl.Contains("/tac-gia/") || lowerUrl.Contains("/nhom-dich/");
@@ -424,6 +430,11 @@ public class ComicScraperService
             if (domain.Contains("daomeoden"))
             {
                 return await ScrapeDaomeodenBookAsync(url, index, domain, ct).ConfigureAwait(false);
+            }
+
+            if (domain.Contains("moetruyen"))
+            {
+                return await ScrapeMoetruyenBookAsync(url, index, domain, ct).ConfigureAwait(false);
             }
 
             if (domain.Contains("damconuong"))
@@ -674,6 +685,12 @@ public class ComicScraperService
             {
                 var dmdImages = await ExtractDaomeodenChapterImagesAsync(html, chapterUrl, ct).ConfigureAwait(false);
                 if (dmdImages.Count > 0) return dmdImages;
+            }
+
+            if (domain.Contains("moetruyen"))
+            {
+                var moeImages = await ExtractMoetruyenChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
+                if (moeImages.Count > 0) return moeImages;
             }
 
             if (domain.Contains("damconuong") || domain.Contains("mbpro") || chapterUrl.Contains("damconuong") || chapterUrl.Contains("mbpro"))
@@ -3629,6 +3646,66 @@ public class ComicScraperService
                 return result;
             }
 
+            bool isMoetruyenDomain = result.Domain.Contains("moetruyen") || url.Contains("moetruyen");
+            if (isMoetruyenDomain)
+            {
+                using var moeReq = new HttpRequestMessage(HttpMethod.Get, url);
+                moeReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36");
+                moeReq.Headers.TryAddWithoutValidation("Referer", "https://moetruyen.net/");
+                using var moeRes = await _httpClient.SendAsync(moeReq, ct).ConfigureAwait(false);
+                if (!moeRes.IsSuccessStatusCode)
+                {
+                    result.StatusMessage = $"Lỗi máy chủ HTTP {(int)moeRes.StatusCode}";
+                    return result;
+                }
+                html = await moeRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+                // Bóc tách tổng số trang qua data-manga-catalog-page="(\d+)"
+                int moeMaxP = 1;
+                var catMatches = Regex.Matches(html, @"data-manga-catalog-page=[""'](?<p>\d+)[""']", RegexOptions.IgnoreCase);
+                foreach (Match cm in catMatches)
+                {
+                    if (int.TryParse(cm.Groups["p"].Value, out int p) && p > moeMaxP) moeMaxP = p;
+                }
+                var pageParamMatches = Regex.Matches(html, @"[?&]page=(?<p>\d+)", RegexOptions.IgnoreCase);
+                foreach (Match pm in pageParamMatches)
+                {
+                    if (int.TryParse(pm.Groups["p"].Value, out int p) && p > moeMaxP) moeMaxP = p;
+                }
+
+                // Tiêu đề tag/tìm kiếm
+                string rawMoeTitle = string.Empty;
+                var qMatch = Regex.Match(url, @"[?&]q=([^&]+)");
+                if (qMatch.Success)
+                {
+                    rawMoeTitle = "Tìm kiếm: " + Uri.UnescapeDataString(qMatch.Groups[1].Value.Replace("+", " "));
+                }
+                else
+                {
+                    var incMatch = Regex.Match(url, @"[?&]include=([^&]+)");
+                    if (incMatch.Success)
+                    {
+                        rawMoeTitle = "Thể loại: " + Uri.UnescapeDataString(incMatch.Groups[1].Value.Replace("+", " "));
+                    }
+                    else
+                    {
+                        var tMatch = Regex.Match(html, @"<title[^>]*>(?<t>[^<]+)</title>", RegexOptions.IgnoreCase);
+                        if (tMatch.Success)
+                        {
+                            rawMoeTitle = CleanTitle(Regex.Replace(tMatch.Groups["t"].Value, @"\s*[-|·]\s*Mòe Truyện.*$", "", RegexOptions.IgnoreCase));
+                        }
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(rawMoeTitle)) rawMoeTitle = ExtractFallbackTitleFromUrl(url);
+
+                result.TagTitle = rawMoeTitle;
+                result.TotalPages = Math.Max(1, moeMaxP);
+                result.IsSuccess = true;
+                result.StatusMessage = $"Phân tích thành công: {result.TotalPages:N0} trang ({result.TagTitle})";
+                return result;
+            }
+
             bool isEHentaiDomain = result.Domain.Contains("e-hentai") || result.Domain.Contains("ehentai") || result.Domain.Contains("exhentai") || url.Contains("e-hentai") || url.Contains("exhentai");
 
             if (isEHentaiDomain)
@@ -4159,6 +4236,17 @@ public class ComicScraperService
             return $"{baseUrl.TrimEnd('/')}/page-{page}.html";
         }
 
+        if (domain.Contains("moetruyen"))
+        {
+            if (page <= 1 && !baseUrl.Contains("page=")) return baseUrl;
+            if (Regex.IsMatch(baseUrl, @"([?&]page=)\d+"))
+            {
+                return Regex.Replace(baseUrl, @"([?&]page=)\d+", $"${{1}}{page}");
+            }
+            char sep = baseUrl.Contains('?') ? '&' : '?';
+            return $"{baseUrl}{sep}page={page}";
+        }
+
         if (domain.Contains("sayhentai") || domain.Contains("hentai2read"))
         {
             return $"{baseUrl.TrimEnd('/')}/page/{page}/";
@@ -4321,6 +4409,7 @@ public class ComicScraperService
             else if (domain.Contains("thuviensach") && (link.EndsWith(".html") || link.Contains("/truyen-tranh/"))) isComicLink = true;
             else if (domain.Contains("loppytoonn") && link.Contains("/truyen/") && link.TrimEnd('/').Split('/').Length <= 5) isComicLink = true;
             else if (domain.Contains("daomeoden") && link.Contains("/truyen-tranh/")) isComicLink = true;
+            else if (domain.Contains("moetruyen") && Regex.IsMatch(link, @"/manga/\d+-") && !link.Contains("/chapters/")) isComicLink = true;
             else if (domain.Contains("vi-hentai") && link.Contains("/truyen/")) isComicLink = true;
             else if (domain.Contains("damconuong") && link.Contains("/truyen/") && !link.Contains("/chapter-") && !link.Contains("/chap-")) isComicLink = true;
             else if (domain.Contains("sayhentai") && (link.Contains("/story/") || link.Contains("/truyen/"))) isComicLink = true;
@@ -5555,6 +5644,204 @@ public class ComicScraperService
         catch { }
 
         return images;
+    }
+
+
+    private async Task<ComicBookItem> ScrapeMoetruyenBookAsync(string url, int index, string domain, CancellationToken ct)
+    {
+        url = DomainRoutingService.NormalizeUrl(url);
+        var item = new ComicBookItem
+        {
+            Index = index,
+            Url = url,
+            Domain = domain,
+            Status = "Extracting..."
+        };
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36");
+            req.Headers.TryAddWithoutValidation("Referer", "https://moetruyen.net/");
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                item.Title = ExtractFallbackTitleFromUrl(url);
+                item.Status = "Error";
+                item.StatusMessage = $"Lỗi tải trang HTTP {(int)res.StatusCode}";
+                return item;
+            }
+
+            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            // 1. Tiêu đề truyện
+            string bookTitle = string.Empty;
+            var ogTitleMatch = Regex.Match(html, @"<meta\s+property=[""']og:title[""']\s+content=[""'](?<t>[^""']+)[""']", RegexOptions.IgnoreCase);
+            if (ogTitleMatch.Success)
+            {
+                bookTitle = WebUtility.HtmlDecode(ogTitleMatch.Groups["t"].Value.Trim());
+                bookTitle = Regex.Replace(bookTitle, @"\s*\[Tới Chap \d+\]\s*$", "", RegexOptions.IgnoreCase);
+            }
+            if (string.IsNullOrWhiteSpace(bookTitle))
+            {
+                var docTitleMatch = Regex.Match(html, @"<title>(?<t>[^<]+)</title>", RegexOptions.IgnoreCase);
+                if (docTitleMatch.Success)
+                {
+                    bookTitle = WebUtility.HtmlDecode(docTitleMatch.Groups["t"].Value.Trim());
+                    bookTitle = Regex.Replace(bookTitle, @"\s*\[Tới Chap \d+\]\s*$", "", RegexOptions.IgnoreCase);
+                    bookTitle = Regex.Replace(bookTitle, @"\s*[-|·]\s*Mòe Truyện.*$", "", RegexOptions.IgnoreCase);
+                }
+            }
+            if (string.IsNullOrWhiteSpace(bookTitle))
+            {
+                bookTitle = ExtractFallbackTitleFromUrl(url);
+            }
+            item.Title = CleanTitle(bookTitle);
+
+            // 2. Ảnh bìa (Cover)
+            var ogImgMatch = Regex.Match(html, @"<meta\s+property=[""']og:image[""']\s+content=[""'](?<src>[^""']+)[""']", RegexOptions.IgnoreCase);
+            if (ogImgMatch.Success)
+            {
+                item.CoverUrl = ogImgMatch.Groups["src"].Value.Trim();
+            }
+
+            // 3. Phân trang chapter (chapterPage=1..N)
+            int maxChapterPage = 1;
+            var pageMatches = Regex.Matches(html, @"chapterPage=(?<p>\d+)", RegexOptions.IgnoreCase);
+            foreach (Match pm in pageMatches)
+            {
+                if (int.TryParse(pm.Groups["p"].Value, out int p) && p > maxChapterPage)
+                {
+                    maxChapterPage = p;
+                }
+            }
+
+            // 4. Lấy toàn bộ chapter từ tất cả các trang chapterPage
+            var allChapterRaw = new List<(string Url, string Text)>();
+            var seenChapterUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            string cleanBaseUrl = Regex.Replace(url, @"[?#].*$", "");
+
+            for (int p = 1; p <= maxChapterPage; p++)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                string pageHtml = html;
+                if (p > 1)
+                {
+                    string pUrl = $"{cleanBaseUrl}?chapterPage={p}#chapters";
+                    using var pReq = new HttpRequestMessage(HttpMethod.Get, pUrl);
+                    pReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                    pReq.Headers.TryAddWithoutValidation("Referer", url);
+                    using var pRes = await _httpClient.SendAsync(pReq, ct).ConfigureAwait(false);
+                    if (pRes.IsSuccessStatusCode)
+                    {
+                        pageHtml = await pRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+
+                var chapMatches = Regex.Matches(pageHtml, @"<a[^>]+href=[""'](?<url>/manga/\d+-[^/]+/chapters/\d+)[""'][^>]*>(?<text>[\s\S]*?)</a>", RegexOptions.IgnoreCase);
+                foreach (Match cm in chapMatches)
+                {
+                    string cHref = cm.Groups["url"].Value;
+                    string cText = Regex.Replace(cm.Groups["text"].Value, @"<[^>]+>", " ").Trim();
+                    cText = Regex.Replace(cText, @"\s+", " ");
+
+                    if (cText.Contains("Đọc từ đầu", StringComparison.OrdinalIgnoreCase) ||
+                        cText.Contains("Đọc mới nhất", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    string fullChapUrl = MakeAbsoluteUrl(cHref, url);
+                    if (seenChapterUrls.Add(fullChapUrl))
+                    {
+                        allChapterRaw.Add((fullChapUrl, cText));
+                    }
+                }
+            }
+
+            var parsedChapters = new List<(double ChapNum, ChapterItem Item)>();
+            int fallbackOrder = 1;
+
+            foreach (var (cUrl, cText) in allChapterRaw)
+            {
+                double chapNum = fallbackOrder;
+                var numMatch = Regex.Match(cUrl, @"/chapters/(\d+)");
+                if (numMatch.Success && double.TryParse(numMatch.Groups[1].Value, out double parsed))
+                {
+                    chapNum = parsed;
+                }
+                else
+                {
+                    var titleNumMatch = Regex.Match(cText, @"(?:Ch\.|Chap|Chapter)\s*(\d+(?:\.\d+)?)", RegexOptions.IgnoreCase);
+                    if (titleNumMatch.Success && double.TryParse(titleNumMatch.Groups[1].Value, out double tParsed))
+                    {
+                        chapNum = tParsed;
+                    }
+                }
+
+                string displayTitle = !string.IsNullOrWhiteSpace(cText) ? cText : $"Chapter {chapNum}";
+                var cleanTitleMatch = Regex.Match(displayTitle, @"^(?<main>Ch\.\s*\d+[^•
+
+]*)(?:•.*)?$", RegexOptions.IgnoreCase);
+                if (cleanTitleMatch.Success && !string.IsNullOrWhiteSpace(cleanTitleMatch.Groups["main"].Value))
+                {
+                    displayTitle = cleanTitleMatch.Groups["main"].Value.Trim();
+                }
+
+                var chItem = new ChapterItem
+                {
+                    ChapterNumber = chapNum,
+                    Title = displayTitle,
+                    Url = cUrl,
+                    TotalPages = 0,
+                    DownloadedPages = 0,
+                    Status = "Waiting"
+                };
+
+                parsedChapters.Add((chapNum, chItem));
+                fallbackOrder++;
+            }
+
+            // Sắp xếp chapter từ số nhỏ đến số lớn (1 -> 222)
+            parsedChapters.Sort((a, b) => a.ChapNum.CompareTo(b.ChapNum));
+
+            for (int i = 0; i < parsedChapters.Count; i++)
+            {
+                var ch = parsedChapters[i].Item;
+                item.Chapters.Add(ch);
+            }
+
+            item.TotalChapters = item.Chapters.Count;
+            item.Status = item.TotalChapters > 0 ? "Ready" : "Empty";
+            item.StatusMessage = $"Đã trích xuất {item.TotalChapters} chương";
+        }
+        catch (Exception ex)
+        {
+            item.Status = "Error";
+            item.StatusMessage = $"Lỗi cào truyện: {ex.Message}";
+        }
+
+        return item;
+    }
+
+    private async Task<List<string>> ExtractMoetruyenChapterImagesAsync(string chapterUrl, CancellationToken ct)
+    {
+        try
+        {
+            var session = await MoeTruyenCryptoService.Instance.FetchChapterSessionAsync(chapterUrl, ct).ConfigureAwait(false);
+            if (session.MediaItems != null && session.MediaItems.Count > 0)
+            {
+                return session.MediaItems.Select(m => $"https://i.truyen.moe/{m.storageKey}").ToList();
+            }
+        }
+        catch { }
+        return new List<string>();
     }
 
 }
