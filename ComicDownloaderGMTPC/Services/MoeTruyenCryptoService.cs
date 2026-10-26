@@ -283,6 +283,18 @@ public sealed class MoeTruyenCryptoService
         var session = await FetchChapterSessionAsync(chapterUrl, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(session.BootstrapUrl))
         {
+            // Kiểm tra xem chương có bị khóa trả phí (Paywall / Xu Mòe) không
+            if (session.Html.Contains("data-chapter-purchase-paywall", StringComparison.OrdinalIgnoreCase) ||
+                session.Html.Contains("chapter-purchase-title", StringComparison.OrdinalIgnoreCase) ||
+                session.Html.Contains("data-purchase-config", StringComparison.OrdinalIgnoreCase))
+            {
+                string price = "5";
+                var priceMatch = Regex.Match(session.Html, @"""price""\s*:\s*""?(\d+)""?");
+                if (priceMatch.Success) price = priceMatch.Groups[1].Value;
+
+                throw new InvalidOperationException($"Chương này bị KHÓA TRẢ PHÍ trên Mòe Truyện (Yêu cầu: {price} Xu Mòe). Server từ chối cấp dữ liệu tải cho tài khoản chưa mua chương.");
+            }
+
             throw new InvalidOperationException("Không thể tìm thấy Bootstrap URL trên trang chapter của Mòe Truyện.");
         }
 
