@@ -1265,7 +1265,7 @@ public sealed class ReadProgressStore
     /// Thử tìm đường dẫn cục bộ trên thiết bị hiện tại khớp với tên truyện (ComicTitle) hoặc tên file.
     /// Tra cứu siêu tốc đa tầng (Registry máy hiện tại -> File/Thư mục trực tiếp -> Quét sâu Storage roots).
     /// </summary>
-    public string? TryResolveLocalPathForComic(string comicTitle)
+    public string? TryResolveLocalPathForComic(string comicTitle, bool fastOnly = false)
     {
         if (string.IsNullOrWhiteSpace(comicTitle)) return null;
         string cleanTitle = comicTitle.Trim();
@@ -1294,7 +1294,7 @@ public sealed class ReadProgressStore
             if (File.Exists(regPathCh) || Directory.Exists(regPathCh)) return regPathCh;
         }
 
-        // 3. Quét sâu đa tầng trong các Candidate Storage Roots
+        // 3. Quét đa tầng trong các Candidate Storage Roots
         var roots = GetCandidateStorageRoots();
         foreach (var root in roots)
         {
@@ -1317,6 +1317,9 @@ public sealed class ReadProgressStore
                         return directNoExt;
                     }
                 }
+
+                // Nếu fastOnly = true, dừng lại ở mức tra cứu O(1), không quét chậm cây thư mục
+                if (fastOnly) continue;
 
                 // B. Tìm các file nén / PDF / Archive trong root
                 var files = Directory.GetFiles(root);
@@ -1598,14 +1601,14 @@ public sealed class ReadProgressStore
                 string entryTitleNoExt = Path.GetFileNameWithoutExtension(entryTitle);
                 string entryNorm = NormalizeChapterName(entryTitle);
 
-                // Thử tìm đường dẫn cục bộ trên thiết bị hiện tại
-                string? resolved = TryResolveLocalPathForComic(entryTitle);
+                // Thử tìm đường dẫn cục bộ trên thiết bị hiện tại (chế độ fastOnly để khởi động tức thì)
+                string? resolved = TryResolveLocalPathForComic(entryTitle, fastOnly: true);
                 if (string.IsNullOrEmpty(resolved) && !string.IsNullOrEmpty(entry.RelativePath))
                 {
-                    resolved = TryResolveLocalPathForComic(Path.GetFileName(entry.RelativePath));
+                    resolved = TryResolveLocalPathForComic(Path.GetFileName(entry.RelativePath), fastOnly: true);
                     if (string.IsNullOrEmpty(resolved))
                     {
-                        resolved = TryResolveLocalPathForComic(Path.GetFileNameWithoutExtension(entry.RelativePath));
+                        resolved = TryResolveLocalPathForComic(Path.GetFileNameWithoutExtension(entry.RelativePath), fastOnly: true);
                     }
                 }
 

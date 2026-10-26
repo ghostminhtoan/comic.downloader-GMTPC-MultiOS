@@ -1529,10 +1529,14 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
 
 - **Quy tắc kiểm thử**:
   - Viết harness test độc lập `ArchiveParentSeparationTest` kiểm thử trên cả 2 bộ truyện thực tế:
-    + TEST 1: `TryGetParentComicRoot` với file ZIP $ightarrow$ `false` (PASS).
-    + TEST 2: Mở file ZIP qua `CreateQuickComicFromPath` $ightarrow$ `comic.RootFolderPath` chính là file ZIP, Title giữ nguyên tên truyện, không biến thành `ZALL` (PASS).
-    + TEST 3: Giả lập đọc và đóng reader $ightarrow$ `resume.md` và `ReadProgressStore` lưu chính xác file ZIP độc lập, không gộp vào `ZALL` (PASS).
-    + TEST 4: File ảnh trong `God Hand Teru` $ightarrow$ `TryGetParentComicRoot` nhận diện chính xác `parentComicRoot` là `God Hand Teru` (PASS).
+    + TEST 1: `TryGetParentComicRoot` với file ZIP $
+ightarrow$ `false` (PASS).
+    + TEST 2: Mở file ZIP qua `CreateQuickComicFromPath` $
+ightarrow$ `comic.RootFolderPath` chính là file ZIP, Title giữ nguyên tên truyện, không biến thành `ZALL` (PASS).
+    + TEST 3: Giả lập đọc và đóng reader $
+ightarrow$ `resume.md` và `ReadProgressStore` lưu chính xác file ZIP độc lập, không gộp vào `ZALL` (PASS).
+    + TEST 4: File ảnh trong `God Hand Teru` $
+ightarrow$ `TryGetParentComicRoot` nhận diện chính xác `parentComicRoot` là `God Hand Teru` (PASS).
   - Kết quả: 100% PASS trên toàn bộ các ca kiểm thử.
 
 ---
@@ -1577,6 +1581,35 @@ esume.md...) sang thư mục mới (nếu trùng tên, ưu tiên giữ file có 
 - **Quy tắc kiểm thử**:
   - Biên dịch toàn bộ giải pháp đạt 0 Error, 0 Warning trên cả `net10.0-android` và `net10.0` (Desktop).
   - Đảm bảo SplashScreen khởi chạy mượt mà, chuyển tiếp sang `MainView` mà không có bất kỳ độ trễ hay treo logo nào.
+
+---
+
+
+### 44. BUG-043: Khắc Phục Triệt Để Lỗi Crash Khởi Động (Cold Start Crash / ANR) Trên Android Do Quét Thư Mục Đệ Quy Đồng Bộ Khi Nạp Lịch Sử
+
+- **Triệu chứng**: Ứng dụng trên Windows mở bình thường, nhưng trên Android khi vừa mở lên (Cold Start) là bị crash / văng app ngay lập tức từ màn hình chính trước khi kịp hiển thị giao diện.
+- **Nguyên nhân gốc rễ**:
+  1. Trong LibraryViewModel.cs, constructor gọi _ = LoadHistoryItemsAsync(). Phương thức này thực thi hoàn toàn đồng bộ trên UI Thread khi chưa có bất kỳ wait nào trước ReadProgressStore.Instance.GetUnifiedHistoryItems().
+  2. ReadProgressStore.cs trong GetUnifiedHistoryItems() gọi TryResolveLocalPathForComic() cho toàn bộ các mục lịch sử đồng bộ. Với các bộ truyện chưa có trên máy, nó liên tục quét đệ quy Directory.GetFiles() và Directory.GetDirectories() 2 cấp trên toàn bộ danh mục bộ nhớ Android (/storage/emulated/0, /storage/emulated/0/Download...). Do Android có lớp Scoped Storage / FUSE filesystem rất chậm, việc duyệt sâu hàng ngàn file/folder đồng bộ trên Main Thread làm ứng dụng đơ quá 5 giây và bị Android OS Watchdog kích hoạt ANR / SIGKILL.
+  3. Lớp Application.cs trên Android kế thừa trực tiếp Application thay vì AvaloniaAndroidApplication<App>, đồng thời thiếu UnhandledException handler từ millisecond đầu tiên, khiến mọi ngoại lệ chưa bắt được làm sập process ngay mà không để lại log.
+  4. Cấu hình .csproj của Android Release có nguy cơ bị ILLink cắt bớt metadata cần thiết cho Avalonia XAML bindings.
+- **Giải pháp triệt để**:
+  1. Thêm cờ astOnly: true cho TryResolveLocalPathForComic(): Chỉ tra cứu O(1) từ _deviceLocalPathRegistry và kiểm tra trực tiếp File.Exists(directFolder), bỏ qua hoàn toàn quét đệ quy thư mục trong luồng nạp lịch sử khởi động.
+  2. Chuyển lời gọi nạp lịch sử trong LibraryViewModel sang chạy background bằng wait Task.Run(...), giải phóng hoàn toàn Main Thread để Android render frame đầu tiên ngay tức thì (<0.2s).
+  3. Viết lại Application.cs kế thừa AvaloniaAndroidApplication<App>, đăng ký UnhandledExceptionRaiser, CurrentDomain.UnhandledException, TaskScheduler.UnobservedTaskException ghi crash log ra bộ nhớ dùng chung.
+  4. Bọc an toàn Avalonia SingleViewLifetime trong App.axaml.cs bằng 	ry-catch và fallback view hiển thị thông báo lỗi thay vì crash process.
+  5. Đặt <PublishTrimmed>false</PublishTrimmed> và <RunAOTCompilation>false</RunAOTCompilation> trong ComicDownloaderGMTPC.Android.csproj.
+- **File can thiệp**:
+  - ComicDownloaderGMTPC/Services/ReadProgressStore.cs
+  - ComicDownloaderGMTPC/ViewModels/LibraryViewModel.cs
+  - ComicDownloaderGMTPC.Android/Application.cs
+  - ComicDownloaderGMTPC/App.axaml.cs
+  - ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj
+  - ComicDownloaderGMTPC AVALONIA/bug-fixes-and-solutions.md
+- **Quy tắc kiểm thử**:
+  - Chạy build và cài đặt bản APK Release mới lên môi trường Android.
+  - Khởi động ứng dụng liên tiếp 3 lần (
+unapp -> kiểm tra -> killapp -> lặp lại), xác nhận 3/3 lần mở thành công mượt mà, không sinh bất kỳ crash log nào.
 
 ---
 

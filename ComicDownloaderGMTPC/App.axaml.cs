@@ -188,14 +188,44 @@ public partial class App : Application
         }
         else if (ApplicationLifetime is IActivityApplicationLifetime singleViewFactoryApplicationLifetime)
         {
-            singleViewFactoryApplicationLifetime.MainViewFactory = () => new MainView { DataContext = SharedMainViewModel };
+            singleViewFactoryApplicationLifetime.MainViewFactory = () =>
+            {
+                try
+                {
+                    return new MainView { DataContext = SharedMainViewModel };
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[FATAL] MainViewFactory failed: {ex}");
+                    return new TextBlock
+                    {
+                        Text = $"Khởi động ứng dụng gặp lỗi:\n{ex.Message}\n\n{ex.StackTrace}",
+                        Margin = new Thickness(20),
+                        Foreground = Avalonia.Media.Brushes.Red,
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                    };
+                }
+            };
         }
         else if (ApplicationLifetime is ISingleViewApplicationLifetime singleViewPlatform)
         {
-            singleViewPlatform.MainView = new MainView
+            try
             {
-                DataContext = SharedMainViewModel
-            };
+                singleViewPlatform.MainView = new MainView
+                {
+                    DataContext = SharedMainViewModel
+                };
+            }
+            catch (Exception ex)
+            {
+                singleViewPlatform.MainView = new TextBlock
+                {
+                    Text = $"Khởi động ứng dụng gặp lỗi:\n{ex.Message}\n\n{ex.StackTrace}",
+                    Margin = new Thickness(20),
+                    Foreground = Avalonia.Media.Brushes.Red,
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                };
+            }
         }
 
         base.OnFrameworkInitializationCompleted();

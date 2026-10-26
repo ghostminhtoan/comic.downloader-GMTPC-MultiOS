@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: LibraryViewModel.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -1471,10 +1471,10 @@ public partial class LibraryViewModel : ViewModelBase
         {
             if (OperatingSystem.IsAndroid())
             {
-                LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
+                try { LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke(); } catch { }
             }
 
-            var unifiedList = ReadProgressStore.Instance.GetUnifiedHistoryItems();
+            var unifiedList = await Task.Run(() => ReadProgressStore.Instance.GetUnifiedHistoryItems());
             var items = new List<HistoryItemModel>();
 
             foreach (var u in unifiedList)
@@ -2446,7 +2446,7 @@ public partial class LibraryViewModel : ViewModelBase
             var quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(actualComicPath));
             if ((quickComic == null || quickComic.Chapters.Count == 0) && OperatingSystem.IsAndroid() && actualComicPath.Contains("/storage/"))
             {
-                LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
+                try { LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke(); } catch { }
                 await Task.Delay(150);
                 quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(actualComicPath));
             }
