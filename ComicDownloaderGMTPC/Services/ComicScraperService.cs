@@ -5786,9 +5786,7 @@ public class ComicScraperService
                 }
 
                 string displayTitle = !string.IsNullOrWhiteSpace(cText) ? cText : $"Chapter {chapNum}";
-                var cleanTitleMatch = Regex.Match(displayTitle, @"^(?<main>Ch\.\s*\d+[^•
-
-]*)(?:•.*)?$", RegexOptions.IgnoreCase);
+                var cleanTitleMatch = Regex.Match(displayTitle, @"^(?<main>Ch\.\s*\d+[^•\r\n]*)(?:•.*)?$", RegexOptions.IgnoreCase);
                 if (cleanTitleMatch.Success && !string.IsNullOrWhiteSpace(cleanTitleMatch.Groups["main"].Value))
                 {
                     displayTitle = cleanTitleMatch.Groups["main"].Value.Trim();

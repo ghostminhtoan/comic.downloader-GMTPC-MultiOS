@@ -1613,6 +1613,32 @@ unapp -> kiểm tra -> killapp -> lặp lại), xác nhận 3/3 lần mở thàn
 
 ---
 
+### 45. BUG-044: Khắc Phục Triệt Để Lỗi Cold Start Crash Trên Android Do Application Constructor Protected, Thiếu Lifecycle Crash Guard Trước base.OnCreate, Thiếu ABI 32-bit & Sai Vị Trí Tab Moetruyen
+
+- **Triệu chứng**: Ứng dụng trên Windows mở và tải truyện bình thường, nhưng trên Android khi vừa mở lên (Cold Start) là bị crash văng ngay lập tức từ đầu mà không phụ thuộc vào Comic Reader.
+- **Nguyên nhân gốc rễ**:
+  1. Trong `Application.cs`, constructor của lớp `Application` (kế thừa `AvaloniaAndroidApplication<App>`) được khai báo với phạm vi truy cập `protected`. Trên Android Java Runtime, khi process được tạo, `ActivityThread` khởi tạo đối tượng `Application` thông qua Java reflection. Constructor `protected` dẫn đến ngoại lệ `java.lang.IllegalAccessException`, làm sập process ngay từ lúc bắt đầu nạp runtime.
+  2. Trong `MainActivity.cs`, các bộ bắt lỗi ngoại lệ toàn cục (`AndroidEnvironment.UnhandledExceptionRaiser`, `AppDomain.CurrentDomain.UnhandledException`, `TaskScheduler.UnobservedTaskException`) được đăng ký sau lệnh gọi `base.OnCreate(savedInstanceState)`. Khi `base.OnCreate()` chạy, nó kích hoạt toàn bộ quá trình khởi tạo Avalonia (`App.axaml`, khởi tạo view `MainView`, khởi tạo `MainViewModel`). Nếu có bất kỳ lỗi nào xảy ra trong giai đoạn này, các handler chưa được đăng ký và `base.OnCreate()` không có khối `try-catch`, dẫn đến crash không để lại dấu vết.
+  3. Cấu hình bản phát hành APK trước đó chỉ đóng gói ABI 64-bit (`arm64-v8a`, `x86_64`), khiến các thiết bị hoặc trình giả lập chạy 32-bit (như LDPlayer 4 hoặc máy ARM 32-bit) bị `UnsatisfiedLinkError: couldn't find "libmonodroid.so"` ngay khi mở app.
+  4. Tab `moetruyen` bị đặt sai vị trí (sau `truyenqq` thay vì sau `daomeoden`), và trong `ComicScraperService.cs` có ký tự xuống dòng bất thường trong chuỗi regex phân tích tiêu đề chapter.
+- **Giải pháp triệt để**:
+  1. Đổi constructor `Application(nint javaReference, JniHandleOwnership transfer)` trong `Application.cs` thành `public`. Tách class `ApplicationCrashLogger` tĩnh để ghi crash log an toàn không xung đột namespace.
+  2. Đưa việc đăng ký `AndroidEnvironment.UnhandledExceptionRaiser`, `AppDomain.CurrentDomain.UnhandledException`, `TaskScheduler.UnobservedTaskException` lên dòng đầu tiên của `MainActivity.OnCreate()`. Bọc `base.OnCreate()` và `WakeUpStorage()` trong khối `try-catch` kèm ghi log ra `/storage/emulated/0/Download/autosaveComicDownloaderGMTPC/crash_log.txt`.
+  3. Bổ sung `<RuntimeIdentifiers>android-arm;android-arm64;android-x86;android-x64</RuntimeIdentifiers>` và `<AndroidLinkMode>None</AndroidLinkMode>` trong `ComicDownloaderGMTPC.Android.csproj`.
+  4. Di chuyển tab `moetruyen` về đúng vị trí bên phải tab `daomeoden` trong `MainView.axaml`, đồng thời làm sạch chuỗi regex trong `ComicScraperService.cs`.
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC.Android/Application.cs`
+  - `ComicDownloaderGMTPC.Android/MainActivity.cs`
+  - `ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj`
+  - `ComicDownloaderGMTPC/Views/MainView.axaml`
+  - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
+  - `ComicDownloaderGMTPC AVALONIA/bug-fixes-and-solutions.md`
+- **Quy tắc kiểm thử**:
+  - Đóng gói toàn bộ nền tảng (Windows, Linux, Android Fat APK đa kiến trúc 32-bit & 64-bit).
+  - Khởi động app trên thiết bị Android, xác nhận vượt qua cold start và nạp UI hoàn hảo.
+
+---
+
 ## 📋 Quy Chuẩn Ghi Nhận Lỗi Mới (Template Đóng Góp)
 
 

@@ -36,29 +36,13 @@ public class MainActivity : AvaloniaMainActivity
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
-        try
-        {
-            AndroidX.Core.SplashScreen.SplashScreen.InstallSplashScreen(this);
-        }
-        catch { }
-
-        CurrentInstance = this;
-        AndroidStorageHelper.WakeUpStorage(this);
-
-
-        // Cung cấp danh sách đường dẫn Root của toàn bộ thẻ nhớ ngoài (SD Card)
-        Services.LibraryScannerService.AndroidGetExternalStoragePaths = () =>
-            AndroidStorageHelper.GetExternalStoragePaths(CurrentInstance?.ApplicationContext ?? CurrentInstance);
-
-        base.OnCreate(savedInstanceState);
-        Window?.SetSoftInputMode(SoftInput.AdjustResize);
-
-        // Bảo vệ toàn diện chống crash unhandled khi chạy ngầm hoặc thay đổi focus/cử chỉ screenshot
+        // 1. Bảo vệ toàn diện chống crash unhandled ngay từ dòng đầu tiên của lifecycle
         AndroidEnvironment.UnhandledExceptionRaiser += (sender, args) =>
         {
             try
             {
                 global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[AndroidEnvironment Unhandled] {args.Exception}");
+                ApplicationCrashLogger.WriteCrashLog("MainActivity.AndroidEnvironment", args.Exception?.ToString());
                 args.Handled = true;
             }
             catch { }
@@ -69,6 +53,7 @@ public class MainActivity : AvaloniaMainActivity
             {
                 var ex = args.ExceptionObject as Exception;
                 global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[AppDomain Unhandled] {ex?.Message}\n{ex?.StackTrace}");
+                ApplicationCrashLogger.WriteCrashLog("MainActivity.AppDomain", ex?.ToString());
             }
             catch { }
         };
@@ -81,6 +66,43 @@ public class MainActivity : AvaloniaMainActivity
             }
             catch { }
         };
+
+        try
+        {
+            AndroidX.Core.SplashScreen.SplashScreen.InstallSplashScreen(this);
+        }
+        catch { }
+
+        CurrentInstance = this;
+        try
+        {
+            AndroidStorageHelper.WakeUpStorage(this);
+        }
+        catch (Exception ex)
+        {
+            ApplicationCrashLogger.WriteCrashLog("MainActivity.WakeUpStorage", ex.ToString());
+        }
+
+        try
+        {
+            // Cung cấp danh sách đường dẫn Root của toàn bộ thẻ nhớ ngoài (SD Card)
+            Services.LibraryScannerService.AndroidGetExternalStoragePaths = () =>
+                AndroidStorageHelper.GetExternalStoragePaths(CurrentInstance?.ApplicationContext ?? CurrentInstance);
+        }
+        catch { }
+
+        try
+        {
+            base.OnCreate(savedInstanceState);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[MainActivity.base.OnCreate Crash] {ex}");
+            ApplicationCrashLogger.WriteCrashLog("MainActivity.base.OnCreate", ex.ToString());
+            throw;
+        }
+
+        Window?.SetSoftInputMode(SoftInput.AdjustResize);
 
         // Đăng ký bridge chạy ngầm, làm mát và bảo vệ thiết bị khi idle
         Services.ThermalAndPowerOptimizationService.NativeSetKeepAliveIdleService = (enable) =>
