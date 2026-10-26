@@ -91,6 +91,9 @@ public partial class MainViewModel
     [ObservableProperty]
     private string _domainEhentaiTagUrl = "https://e-hentai.org/?f_search=female%3A%22dark+skin%24%22+other%3A%22uncensored%24%22+-female%3Afutanari+female%3A%22big+breasts%22";
 
+    [ObservableProperty]
+    private string _domainComixtoTagUrl = "https://comix.to/browse?genres_in=98897";
+
     // ==========================================
     // DOMAIN ANALYZE & BATCH SCRAPING STATE
     // ==========================================
@@ -592,6 +595,7 @@ public partial class MainViewModel
         if (domain.Contains("hitomi")) return DomainHitomiTagUrl;
         if (domain.Contains("hentaiforce")) return DomainHentaiforceTagUrl;
         if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return DomainEhentaiTagUrl;
+        if (domain.Contains("comix")) return DomainComixtoTagUrl;
         return UrlInput;
     }
 
@@ -612,6 +616,7 @@ public partial class MainViewModel
         else if (domain.Contains("hitomi")) DomainHitomiTagUrl = value;
         else if (domain.Contains("hentaiforce")) DomainHentaiforceTagUrl = value;
         else if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) DomainEhentaiTagUrl = value;
+        else if (domain.Contains("comix")) DomainComixtoTagUrl = value;
         UrlInput = value;
     }
 
@@ -632,6 +637,7 @@ public partial class MainViewModel
         if (domain.Contains("hitomi")) return "https://hitomi.la/";
         if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/";
         if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return "https://e-hentai.org/";
+        if (domain.Contains("comix")) return "https://comix.to/";
         return "https://google.com";
     }
 
@@ -652,6 +658,7 @@ public partial class MainViewModel
         if (domain.Contains("hitomi")) return "https://hitomi.la/type/manga-all.html";
         if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/search?q=-tomboy+%22uncensored%22+%22dark+skin+female%22+-futanari+category%3A%22doujin%22";
         if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return "https://e-hentai.org/?f_search=female%3A%22dark+skin%24%22+other%3A%22uncensored%24%22+-female%3Afutanari+female%3A%22big+breasts%22";
+        if (domain.Contains("comix")) return "https://comix.to/browse?genres_in=98897";
         return "";
     }
 

@@ -1362,17 +1362,24 @@ public class DownloadEngineService
                         effectiveReferer = "https://hentaiforce.net/";
                     }
 
-                    if (string.IsNullOrEmpty(effectiveReferer))
-                    {
-                        if (Uri.TryCreate(targetUrl, UriKind.Absolute, out var targetUri))
-                        {
-                            effectiveReferer = $"{targetUri.Scheme}://{targetUri.Host}/";
-                        }
-                    }
+                    bool isComixOrWyr = targetUrl.Contains("wyr.", StringComparison.OrdinalIgnoreCase) ||
+                                        targetUrl.Contains("blogofscott.site", StringComparison.OrdinalIgnoreCase) ||
+                                        (refererUrl != null && refererUrl.Contains("comix.to", StringComparison.OrdinalIgnoreCase));
 
-                    if (!string.IsNullOrEmpty(effectiveReferer))
+                    if (!isComixOrWyr)
                     {
-                        req.Headers.Add("Referer", effectiveReferer);
+                        if (string.IsNullOrEmpty(effectiveReferer))
+                        {
+                            if (Uri.TryCreate(targetUrl, UriKind.Absolute, out var targetUri))
+                            {
+                                effectiveReferer = $"{targetUri.Scheme}://{targetUri.Host}/";
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(effectiveReferer))
+                        {
+                            req.Headers.Add("Referer", effectiveReferer);
+                        }
                     }
 
                     req.Headers.TryAddWithoutValidation("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");

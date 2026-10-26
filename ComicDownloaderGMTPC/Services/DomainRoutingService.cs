@@ -38,6 +38,7 @@ public static class DomainRoutingService
             if (host.Contains("e-hentai") || host.Contains("exhentai")) return "e-hentai.org";
             if (host.Contains("hitomi")) return "hitomi.la";
             if (host.Contains("luscious")) return "luscious.net";
+            if (host.Contains("comix")) return "comix.to";
 
             return host;
         }
@@ -73,6 +74,7 @@ public static class DomainRoutingService
         if (key.Contains("e-hentai") || key.Contains("exhentai")) return "e-hentai";
         if (key.Contains("thuviensach") || key.Contains("dilib")) return "thuviensach";
         if (key.Contains("hako") || key.Contains("docln")) return "hako";
+        if (key.Contains("comix")) return "comix.to";
 
         // Fallback: Lấy subdomain/domain không có extension nếu có
         if (!string.IsNullOrWhiteSpace(url))

@@ -371,6 +371,8 @@ public class ComicScraperService
         if (lowerDomain.Contains("loppy") || lowerUrl.Contains("loppy"))
             return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/genre/") ||
                    lowerUrl.Contains("/tac-gia/") || lowerUrl.Contains("/nhom-dich/");
+        if (lowerDomain.Contains("comix") || lowerUrl.Contains("comix.to"))
+            return lowerUrl.Contains("/browse") || lowerUrl.Contains("genres_in=") || lowerUrl.Contains("demos=");
 
         return false;
     }
@@ -457,6 +459,11 @@ public class ComicScraperService
             if (domain.Contains("hitomi"))
             {
                 return await ScrapeHitomiBookAsync(url, index, domain, ct).ConfigureAwait(false);
+            }
+
+            if (domain.Contains("comix") || url.Contains("comix.to"))
+            {
+                return await ScrapeComixtoBookAsync(url, index, domain, ct).ConfigureAwait(false);
             }
 
             string? html = null;
@@ -599,6 +606,11 @@ public class ComicScraperService
             if (domain.Contains("hitomi"))
             {
                 return await ExtractHitomiChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
+            }
+
+            if (domain.Contains("comix") || chapterUrl.Contains("comix.to"))
+            {
+                return await ExtractComixtoChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
             }
 
             string? html = null;
@@ -3567,6 +3579,56 @@ public class ComicScraperService
         try
         {
             string html = string.Empty;
+            bool isComixDomain = result.Domain.Contains("comix") || url.Contains("comix.to");
+            if (isComixDomain)
+            {
+                if (NativeWebViewService.Instance.IsAvailable)
+                {
+                    html = await NativeWebViewService.Instance.FetchHtmlAsync(url, 45, ct).ConfigureAwait(false) ?? string.Empty;
+                }
+                if (string.IsNullOrWhiteSpace(html))
+                {
+                    result.StatusMessage = "Không thể tải trang comix.to (cần headless browser)";
+                    return result;
+                }
+
+                // Trích xuất số trang từ <div class="list-count mono"><strong>403</strong> items</div>
+                int comixMaxPage = 1;
+                var comixCountMatch = Regex.Match(html, @"class=[""']list-count mono[""']>\s*<strong>(?<count>[0-9,]+)</strong>\s*items", RegexOptions.IgnoreCase);
+                if (comixCountMatch.Success && int.TryParse(comixCountMatch.Groups["count"].Value.Replace(",", ""), out int comixTotalItems) && comixTotalItems > 0)
+                {
+                    comixMaxPage = (int)Math.Ceiling(comixTotalItems / 28.0);
+                }
+                else
+                {
+                    var pagerButtons = Regex.Matches(html, @"class=[""'][^""']*npager__num[^""']*[""'][^>]*>(?<num>\d+)</button>", RegexOptions.IgnoreCase);
+                    foreach (Match pb in pagerButtons)
+                    {
+                        if (int.TryParse(pb.Groups["num"].Value, out int pNum) && pNum > comixMaxPage)
+                        {
+                            comixMaxPage = pNum;
+                        }
+                    }
+                }
+
+                var comixTitleM = Regex.Match(html, @"<title[^>]*>(?<title>[^<]+)</title>", RegexOptions.IgnoreCase);
+                if (comixTitleM.Success)
+                {
+                    string rawTitle = comixTitleM.Groups["title"].Value;
+                    rawTitle = Regex.Replace(rawTitle, @"\s*[-·|]\s*Comix.*$", "", RegexOptions.IgnoreCase);
+                    result.TagTitle = CleanTitle(rawTitle);
+                }
+                if (string.IsNullOrWhiteSpace(result.TagTitle))
+                {
+                    result.TagTitle = ExtractFallbackTitleFromUrl(url);
+                }
+
+                result.TotalPages = Math.Max(1, comixMaxPage);
+                result.IsSuccess = true;
+                result.StatusMessage = $"Phân tích thành công: {result.TotalPages:N0} trang ({result.TagTitle})";
+                return result;
+            }
+
             bool isEHentaiDomain = result.Domain.Contains("e-hentai") || result.Domain.Contains("ehentai") || result.Domain.Contains("exhentai") || url.Contains("e-hentai") || url.Contains("exhentai");
 
             if (isEHentaiDomain)
@@ -3970,20 +4032,36 @@ public class ComicScraperService
             try
             {
                 string pageUrl = BuildPagedTagUrl(tagUrl, page, domain);
-                using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
-                if (domain.Contains("hentaiforce"))
+                string? html = null;
+                if (domain.Contains("comix"))
                 {
-                    req.Headers.TryAddWithoutValidation("Referer", "https://hentaiforce.net/");
+                    if (NativeWebViewService.Instance.IsAvailable)
+                    {
+                        html = await NativeWebViewService.Instance.FetchHtmlAsync(pageUrl, 45, ct).ConfigureAwait(false);
+                    }
                 }
-                else if (domain.Contains("hitomi"))
+                else
                 {
-                    req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
+                    using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
+                    if (domain.Contains("hentaiforce"))
+                    {
+                        req.Headers.TryAddWithoutValidation("Referer", "https://hentaiforce.net/");
+                    }
+                    else if (domain.Contains("hitomi"))
+                    {
+                        req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
+                    }
+                    using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                    if (res.IsSuccessStatusCode)
+                    {
+                        html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    }
                 }
-                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-                if (!res.IsSuccessStatusCode) return;
 
-                string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                pageResults[offset] = ExtractComicLinksFromTagPage(html, pageUrl, domain);
+                if (!string.IsNullOrWhiteSpace(html))
+                {
+                    pageResults[offset] = ExtractComicLinksFromTagPage(html, pageUrl, domain);
+                }
             }
             catch { }
             finally
@@ -4105,6 +4183,49 @@ public class ComicScraperService
     {
         var result = new List<(string Url, string Title, string Cover)>();
         domain = domain.ToLowerInvariant();
+
+        // Bóc tách chuyên biệt cho comix.to (thẻ <div class="lrow">)
+        if (domain.Contains("comix"))
+        {
+            var cardMatches = Regex.Matches(html, @"<div\s+class=[""']lrow[""'][\s\S]*?(?=<div\s+class=[""']lrow[""']|<footer|<\/body>|$)", RegexOptions.IgnoreCase);
+            foreach (Match cm in cardMatches)
+            {
+                string cardHtml = cm.Value;
+                var linkM = Regex.Match(cardHtml, @"href=[""'](?<url>/title/[^""']+)[""']", RegexOptions.IgnoreCase);
+                if (!linkM.Success) continue;
+
+                string cUrl = linkM.Groups["url"].Value;
+                if (!cUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                {
+                    cUrl = "https://comix.to" + cUrl;
+                }
+
+                string cTitle = string.Empty;
+                var titleM = Regex.Match(cardHtml, @"<h3\s+class=[""']lrow__title[""']>(?<title>[^<]+)</h3>", RegexOptions.IgnoreCase);
+                if (titleM.Success)
+                {
+                    cTitle = CleanTitle(titleM.Groups["title"].Value);
+                }
+                else
+                {
+                    var ariaM = Regex.Match(cardHtml, @"aria-label=[""'](?<title>[^""']+)[""']", RegexOptions.IgnoreCase);
+                    if (ariaM.Success) cTitle = CleanTitle(ariaM.Groups["title"].Value);
+                }
+
+                string cCover = string.Empty;
+                var coverM = Regex.Match(cardHtml, @"<img[^>]+src=[""'](?<src>[^""']+)[""']", RegexOptions.IgnoreCase);
+                if (coverM.Success)
+                {
+                    cCover = coverM.Groups["src"].Value;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cUrl) && !string.IsNullOrWhiteSpace(cTitle))
+                {
+                    result.Add((cUrl, cTitle, cCover));
+                }
+            }
+            return result;
+        }
 
         // 0. Bóc tách chuyên biệt cho E-Hentai (bảng Compact/Minimal/Extended hàng <tr> hoặc lưới Thumbnail <div class="gl1t">)
         if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai"))
@@ -5199,4 +5320,241 @@ public class ComicScraperService
         if (string.IsNullOrWhiteSpace(firstHtml)) return imageUrls;
         return ExtractDirectImagesFromHtml(firstHtml, galleryUrl);
     }
+
+    private async Task<ComicBookItem> ScrapeComixtoBookAsync(string url, int index, string domain, CancellationToken ct)
+    {
+        var book = new ComicBookItem
+        {
+            Index = index,
+            Url = url,
+            Domain = domain,
+            Status = "Waiting",
+            StatusMessage = "Sẵn sàng tải"
+        };
+
+        // Nếu là URL chapter đơn lẻ: https://comix.to/title/e09mx-lord/11520890-chapter-62
+        var singleChapMatch = Regex.Match(url, @"/title/[^/]+/(?<cid>\d+)(?:-[^/]+)?/?$", RegexOptions.IgnoreCase);
+        if (singleChapMatch.Success)
+        {
+            string cid = singleChapMatch.Groups["cid"].Value;
+            var images = await ExtractComixtoChapterImagesAsync(url, ct).ConfigureAwait(false);
+            book.Title = "Comix Chapter " + cid;
+            double num = double.TryParse(cid, out double parsedCid) ? parsedCid : 1.0;
+            book.Chapters = new List<ChapterItem>
+            {
+                new ChapterItem
+                {
+                    ChapterNumber = num,
+                    Title = "Chapter " + cid,
+                    Url = url,
+                    Status = "Waiting"
+                }
+            };
+            book.TotalChapters = 1;
+            book.Status = "Completed";
+            book.StatusMessage = $"Đã tải thông tin chapter ({images.Count} ảnh)";
+            return book;
+        }
+
+        // Trích xuất hid: URL có dạng https://comix.to/title/e09mx-lord/ hoặc https://comix.to/title/e09mx
+        var hidMatch = Regex.Match(url, @"/title/(?<hid>[a-zA-Z0-9]+)(?:-[^/]+)?/?$", RegexOptions.IgnoreCase);
+        string hid = hidMatch.Success ? hidMatch.Groups["hid"].Value : string.Empty;
+
+        // Fetch HTML để lấy title, cover từ initial-data
+        string? html = null;
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (res.IsSuccessStatusCode)
+            {
+                html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            }
+        }
+        catch { }
+
+        if (string.IsNullOrWhiteSpace(html) && NativeWebViewService.Instance.IsAvailable)
+        {
+            html = await NativeWebViewService.Instance.FetchHtmlAsync(url, 45, ct).ConfigureAwait(false);
+        }
+
+        if (!string.IsNullOrWhiteSpace(html))
+        {
+            var initMatch = Regex.Match(html, @"<script\s+type=[""']application/json[""']\s+id=[""']initial-data[""']>(?<json>[\s\S]*?)</script>", RegexOptions.IgnoreCase);
+            if (initMatch.Success)
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(initMatch.Groups["json"].Value);
+                    if (doc.RootElement.TryGetProperty("comic", out var comicElem))
+                    {
+                        if (comicElem.TryGetProperty("title", out var titleProp)) book.Title = titleProp.GetString() ?? string.Empty;
+                        if (comicElem.TryGetProperty("poster", out var posterProp) && posterProp.TryGetProperty("url", out var posterUrlProp))
+                        {
+                            book.CoverUrl = posterUrlProp.GetString() ?? string.Empty;
+                        }
+                        if (comicElem.TryGetProperty("hid", out var hidProp) && string.IsNullOrEmpty(hid))
+                        {
+                            hid = hidProp.GetString() ?? string.Empty;
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(book.Title))
+        {
+            var titleMatch = Regex.Match(url, @"/title/(?:[a-zA-Z0-9]+-)?(?<name>[^/]+)/?$", RegexOptions.IgnoreCase);
+            book.Title = titleMatch.Success ? CleanTitle(titleMatch.Groups["name"].Value.Replace('-', ' ')) : "Comix Manga";
+        }
+
+        if (string.IsNullOrWhiteSpace(hid))
+        {
+            book.Status = "Error";
+            book.StatusMessage = "Không xác định được mã truyện comix";
+            return book;
+        }
+
+        // Gọi API lấy toàn bộ danh sách chapter: /api/v1/manga/{hid}/chapters?limit=100&order[number]=desc&page={p}&v=0&w=0
+        var allChapters = new List<ChapterItem>();
+        int page = 1;
+        while (!ct.IsCancellationRequested)
+        {
+            string apiPath = $"/manga/{hid}/chapters?limit=100&order[number]=desc&page={page}&v=0&w=0";
+            string token = ComixCryptoService.GenerateToken(apiPath);
+            string apiUrl = $"https://comix.to/api/v1{apiPath}&_={token}";
+
+            try
+            {
+                using var apiReq = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                apiReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+                apiReq.Headers.TryAddWithoutValidation("X-Requested-With", "XMLHttpRequest");
+                apiReq.Headers.TryAddWithoutValidation("Referer", url);
+
+                using var apiRes = await _httpClient.SendAsync(apiReq, ct).ConfigureAwait(false);
+                if (!apiRes.IsSuccessStatusCode) break;
+
+                string rawJson = await apiRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(rawJson);
+                if (!doc.RootElement.TryGetProperty("e", out var encProp)) break;
+
+                string decJson = ComixCryptoService.DecryptPayload(encProp.GetString() ?? string.Empty);
+                using var decDoc = JsonDocument.Parse(decJson);
+                var result = decDoc.RootElement.GetProperty("result");
+                var items = result.GetProperty("items");
+
+                int itemCount = items.GetArrayLength();
+                if (itemCount == 0) break;
+
+                foreach (var item in items.EnumerateArray())
+                {
+                    string chapName = item.TryGetProperty("name", out var nProp) ? nProp.GetString() ?? string.Empty : string.Empty;
+                    string chapNumber = item.TryGetProperty("number", out var numProp) ? numProp.ToString() : string.Empty;
+                    string chapUrl = item.TryGetProperty("url", out var uProp) ? uProp.GetString() ?? string.Empty : string.Empty;
+
+                    if (!chapUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                    {
+                        chapUrl = "https://comix.to" + chapUrl;
+                    }
+
+                    string displayTitle = !string.IsNullOrWhiteSpace(chapName) 
+                        ? $"Chapter {chapNumber}: {chapName}".Trim() 
+                        : $"Chapter {chapNumber}".Trim();
+
+                    double cNum = double.TryParse(chapNumber, out double parsedN) ? parsedN : 0.0;
+
+                    allChapters.Add(new ChapterItem
+                    {
+                        ChapterNumber = cNum,
+                        Title = displayTitle,
+                        Url = chapUrl,
+                        Status = "Waiting"
+                    });
+                }
+
+                if (result.TryGetProperty("pagination", out var pagProp))
+                {
+                    int lastPage = pagProp.TryGetProperty("last_page", out var lp) ? lp.GetInt32() : 1;
+                    if (page >= lastPage) break;
+                }
+                else if (itemCount < 100)
+                {
+                    break;
+                }
+
+                page++;
+            }
+            catch
+            {
+                break;
+            }
+        }
+
+        // Đảo ngược thứ tự để chapter 1 ở đầu danh sách
+        allChapters.Reverse();
+
+        book.Chapters = allChapters;
+        book.TotalChapters = allChapters.Count;
+        book.Status = "Completed";
+        book.StatusMessage = $"Tìm thấy {allChapters.Count} chapter";
+        return book;
+    }
+
+    private async Task<List<string>> ExtractComixtoChapterImagesAsync(string chapterUrl, CancellationToken ct)
+    {
+        var images = new List<string>();
+        if (string.IsNullOrWhiteSpace(chapterUrl)) return images;
+
+        // Trích xuất chapter id từ URL: /title/.../11520890-chapter-62 hoặc /title/[^/]+/(\d+)
+        var chapMatch = Regex.Match(chapterUrl, @"/(?<cid>\d+)(?:-[^/]+)?/?$", RegexOptions.IgnoreCase);
+        if (!chapMatch.Success)
+        {
+            chapMatch = Regex.Match(chapterUrl, @"/(?<cid>\d+)-", RegexOptions.IgnoreCase);
+        }
+        if (!chapMatch.Success) return images;
+
+        string chapterId = chapMatch.Groups["cid"].Value;
+        string apiPath = $"/chapters/{chapterId}?v=0&w=0";
+        string token = ComixCryptoService.GenerateToken(apiPath);
+        string apiUrl = $"https://comix.to/api/v1{apiPath}&_={token}";
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+            req.Headers.TryAddWithoutValidation("X-Requested-With", "XMLHttpRequest");
+            req.Headers.TryAddWithoutValidation("Referer", chapterUrl);
+
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode) return images;
+
+            string rawJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(rawJson);
+            if (!doc.RootElement.TryGetProperty("e", out var encProp)) return images;
+
+            string decJson = ComixCryptoService.DecryptPayload(encProp.GetString() ?? string.Empty);
+            using var decDoc = JsonDocument.Parse(decJson);
+            var result = decDoc.RootElement.GetProperty("result");
+            if (result.TryGetProperty("pages", out var pagesObj) && pagesObj.TryGetProperty("items", out var items))
+            {
+                foreach (var item in items.EnumerateArray())
+                {
+                    if (item.TryGetProperty("url", out var urlProp))
+                    {
+                        string imgUrl = urlProp.GetString() ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(imgUrl))
+                        {
+                            images.Add(imgUrl);
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return images;
+    }
+
 }
