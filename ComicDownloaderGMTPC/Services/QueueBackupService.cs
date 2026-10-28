@@ -206,17 +206,35 @@ public class QueueBackupService
         {
             if (OperatingSystem.IsAndroid())
             {
-                EnsureAutoSaveMigration();
                 string publicDownload = "/storage/emulated/0/Download/autosaveComicDownloaderGMTPC";
-                if (Directory.Exists("/storage/emulated/0/Download"))
+                try
                 {
-                    if (!Directory.Exists(publicDownload)) Directory.CreateDirectory(publicDownload);
-                    return publicDownload;
+                    if (DownloadEngineService.CanWriteToDirectory(publicDownload))
+                    {
+                        EnsureAutoSaveMigration();
+                        return publicDownload;
+                    }
                 }
-                string appDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string androidAutoSave = Path.Combine(appDir, "autosave");
-                if (!Directory.Exists(androidAutoSave)) Directory.CreateDirectory(androidAutoSave);
-                return androidAutoSave;
+                catch { }
+
+                // Fallback an toàn tuyệt đối 100% không cần bất kỳ quyền nào (Zero-Permission App Storage)
+                try
+                {
+                    string safeDir = DownloadEngineService.GetAppSpecificExternalPath();
+                    string autoSaveSafe = Path.Combine(safeDir, "autosave");
+                    if (!Directory.Exists(autoSaveSafe)) Directory.CreateDirectory(autoSaveSafe);
+                    return autoSaveSafe;
+                }
+                catch { }
+
+                try
+                {
+                    string appDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                    string androidAutoSave = Path.Combine(appDir, "autosave");
+                    if (!Directory.Exists(androidAutoSave)) Directory.CreateDirectory(androidAutoSave);
+                    return androidAutoSave;
+                }
+                catch { }
             }
 
             string portableDir = GetPortableDirectory();

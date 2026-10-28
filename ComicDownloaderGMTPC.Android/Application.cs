@@ -75,6 +75,10 @@ namespace ComicDownloaderGMTPC.Android
         {
         }
 
+        public Application() : base(0, JniHandleOwnership.DoNotTransfer)
+        {
+        }
+
         public override void OnCreate()
         {
             SetupGlobalCrashProtection();

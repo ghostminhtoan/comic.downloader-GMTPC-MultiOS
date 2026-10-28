@@ -69,15 +69,11 @@ public class MainActivity : AvaloniaMainActivity
 
         if (ApplicationCrashLogger.StartupException != null)
         {
-            ShowCrashDiagnosticScreen(ApplicationCrashLogger.StartupException);
+            LaunchCrashReportActivity(ApplicationCrashLogger.StartupException, "Application.Startup");
+            try { base.OnCreate(savedInstanceState); } catch { }
+            Finish();
             return;
         }
-
-        try
-        {
-            AndroidX.Core.SplashScreen.SplashScreen.InstallSplashScreen(this);
-        }
-        catch { }
 
         CurrentInstance = this;
         try
@@ -105,7 +101,8 @@ public class MainActivity : AvaloniaMainActivity
         {
             global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[MainActivity.base.OnCreate Crash] {ex}");
             ApplicationCrashLogger.WriteCrashLog("MainActivity.base.OnCreate", ex.ToString());
-            ShowCrashDiagnosticScreen(ex);
+            LaunchCrashReportActivity(ex, "MainActivity.base.OnCreate");
+            Finish();
             return;
         }
 
@@ -973,109 +970,19 @@ public class MainActivity : AvaloniaMainActivity
         });
     }
 
-    private void ShowCrashDiagnosticScreen(Exception ex)
+    private void LaunchCrashReportActivity(Exception ex, string source = "MainActivity")
     {
         try
         {
-            var scrollView = new ScrollView(this)
-            {
-                LayoutParameters = new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MatchParent,
-                    ViewGroup.LayoutParams.MatchParent)
-            };
-            scrollView.SetBackgroundColor(global::Android.Graphics.Color.Rgb(18, 18, 24));
-            scrollView.SetPadding(40, 60, 40, 60);
-
-            var layout = new LinearLayout(this)
-            {
-                Orientation = Orientation.Vertical,
-                LayoutParameters = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MatchParent,
-                    LinearLayout.LayoutParams.WrapContent)
-            };
-
-            var titleView = new TextView(this)
-            {
-                Text = "⚠️ COMIC DOWNLOADER GMTPC - BÁO CÁO LỖI KHỞI ĐỘNG",
-                TextSize = 18,
-                Typeface = global::Android.Graphics.Typeface.DefaultBold
-            };
-            titleView.SetTextColor(global::Android.Graphics.Color.Rgb(255, 85, 85));
-            titleView.SetPadding(0, 0, 0, 20);
-            layout.AddView(titleView);
-
-            var descView = new TextView(this)
-            {
-                Text = "Ứng dụng không thể nạp giao diện chính. Ngoại lệ đã được lưu tự động vào tệp crash_log.txt trong bộ nhớ ứng dụng.",
-                TextSize = 14
-            };
-            descView.SetTextColor(global::Android.Graphics.Color.Rgb(220, 220, 220));
-            descView.SetPadding(0, 0, 0, 30);
-            layout.AddView(descView);
-
-            var copyBtn = new Button(this)
-            {
-                Text = "📋 SAO CHÉP TOÀN BỘ LỖI VÀO CLIPBOARD"
-            };
-            copyBtn.SetBackgroundColor(global::Android.Graphics.Color.Rgb(40, 80, 160));
-            copyBtn.SetTextColor(global::Android.Graphics.Color.White);
-            copyBtn.Click += (_, _) =>
-            {
-                try
-                {
-                    var cm = (ClipboardManager?)GetSystemService(ClipboardService);
-                    if (cm != null)
-                    {
-                        var clip = ClipData.NewPlainText("ComicGMTPC_Crash", ex.ToString());
-                        cm.PrimaryClip = clip;
-                        Toast.MakeText(this, "Đã sao chép chi tiết lỗi vào Clipboard!", ToastLength.Short)?.Show();
-                    }
-                }
-                catch { }
-            };
-            layout.AddView(copyBtn);
-
-            var restartBtn = new Button(this)
-            {
-                Text = "🔄 THỬ KHỞI ĐỘNG LẠI ỨNG DỤNG"
-            };
-            restartBtn.SetBackgroundColor(global::Android.Graphics.Color.Rgb(40, 140, 80));
-            restartBtn.SetTextColor(global::Android.Graphics.Color.White);
-            restartBtn.Click += (_, _) =>
-            {
-                try
-                {
-                    var intent = PackageManager?.GetLaunchIntentForPackage(PackageName ?? "");
-                    if (intent != null)
-                    {
-                        intent.AddFlags(ActivityFlags.ClearTop | ActivityFlags.NewTask);
-                        StartActivity(intent);
-                        Finish();
-                    }
-                }
-                catch { }
-            };
-            var btnParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MatchParent,
-                LinearLayout.LayoutParams.WrapContent);
-            btnParams.SetMargins(0, 20, 0, 30);
-            restartBtn.LayoutParameters = btnParams;
-            layout.AddView(restartBtn);
-
-            var errorDetailView = new TextView(this)
-            {
-                Text = $"[EXCEPTION TYPE]\n{ex.GetType().FullName}\n\n[MESSAGE]\n{ex.Message}\n\n[STACK TRACE]\n{ex.StackTrace}\n\n[INNER EXCEPTION]\n{ex.InnerException}",
-                TextSize = 12
-            };
-            errorDetailView.SetTextColor(global::Android.Graphics.Color.Rgb(255, 200, 200));
-            layout.AddView(errorDetailView);
-
-            scrollView.AddView(layout);
-            SetContentView(scrollView);
+            var intent = new Intent(this, typeof(CrashReportActivity));
+            intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.ClearTop);
+            intent.PutExtra(CrashReportActivity.ExtraCrashSource, source);
+            intent.PutExtra(CrashReportActivity.ExtraCrashDetails, ex.ToString());
+            StartActivity(intent);
         }
-        catch (Exception fallbackEx)
+        catch (Exception launchEx)
         {
-            global::Android.Util.Log.Error("ComicGMTPC_Crash", $"ShowCrashDiagnosticScreen error: {fallbackEx}");
+            global::Android.Util.Log.Error("ComicGMTPC_Crash", $"LaunchCrashReportActivity failed: {launchEx}");
         }
     }
 

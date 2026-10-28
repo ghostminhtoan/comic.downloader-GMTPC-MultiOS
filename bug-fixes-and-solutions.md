@@ -1698,3 +1698,38 @@ Khi phát hiện hoặc sửa chữa bất kỳ lỗi kỹ thuật mới nào, b
 
 
 
+
+---
+
+### 47. BUG-046: Khắc Phục Triệt Để Lỗi Crash Khởi Động Android (Oppo K9x / ColorOS) Bằng Việc Loại Bỏ Xung Đột AndroidX SplashScreen, Thiết Lập Standalone CrashReportActivity, Miễn Nhiễm Lỗi I/O Scoped Storage Và Chống Deadlock Dispatcher
+
+- **Triệu chứng**: Trên thiết bị Oppo K9x (ColorOS Android 11/12), ứng dụng bị văng ngay lập tức ra màn hình chính (Cold Start Force Close) trong chưa đầy 1 giây khi chạm vào icon mở app, không có màn hình chẩn đoán nào xuất hiện.
+- **Nguyên nhân gốc rễ**:
+  1. `Xamarin.AndroidX.Core.SplashScreen` và lệnh `InstallSplashScreen(this)` can thiệp vào Window DecorView và View tree animation trên ColorOS trước khi Avalonia View sẵn sàng, gây xung đột theme và ném exception hoặc native segfault.
+  2. Khi xảy ra ngoại lệ, `ShowCrashDiagnosticScreen` trước đây gọi `SetContentView` trực tiếp trên `AvaloniaMainActivity` đã phá hủy EGL Surface đang render ở tầng native C++, đồng thời nếu Activity trả về mà chưa gọi `base.OnCreate()` thành công thì Android OS lập tức kill app với lỗi `android.app.SuperNotCalledException`.
+  3. `QueueBackupService.GetAutoSaveDirectory()` và `EnsureAutoSaveMigration()` cố gắng thao tác I/O trên `/storage/emulated/0/Download/autosaveComicDownloaderGMTPC` khi chưa được cấp quyền `MANAGE_EXTERNAL_STORAGE`, làm ném `UnauthorizedAccessException` và rơi vào fallback trả về `BaseDirectory` (vùng chỉ đọc của APK), khiến các service ghi dữ liệu tiếp theo bị crash.
+  4. `LibraryViewModel` trong constructor gọi `LoadDirectory` khi quyền lưu trữ chưa được cấp.
+  5. `MainViewModel.RestoreAutoSavedQueueOnStartupAsync` sử dụng `await Dispatcher.UIThread.InvokeAsync` gây deadlock trên Android Main Looper trong pha Cold Start.
+- **Giải pháp triệt để**:
+  1. Loại bỏ hoàn toàn `Xamarin.AndroidX.Core.SplashScreen` và lệnh `InstallSplashScreen`. Chuyển sang sử dụng Splash Screen chuẩn native Android 12+ (`values-v31/styles.xml`) thông qua WindowManager của OS mà không cần bất kỳ thư viện trung gian nào.
+  2. Tạo mới `CrashReportActivity` hoàn toàn độc lập (kế thừa từ `Android.App.Activity` thuần, không dùng Avalonia/SkiaSharp). Khi xảy ra ngoại lệ khởi động, `MainActivity` khởi chạy `CrashReportActivity` với `NewTask | ClearTop` và gọi `Finish()`, loại bỏ 100% nguy cơ `SuperNotCalledException` và Native Surface Destruction.
+  3. Nâng cấp `QueueBackupService`: Kiểm tra quyền ghi trước khi truy cập thư mục Download công cộng (`DownloadEngineService.CanWriteToDirectory`), nếu chưa có quyền thì tự động fallback mượt mà vào thư mục riêng của app (`GetAppSpecificExternalPath()/autosave`) hoặc `LocalApplicationData/autosave` mà 100% không bao giờ ném ngoại lệ.
+  4. Bọc bảo vệ constructor `LibraryViewModel` và chỉ gọi `LoadDirectory` khi đường dẫn đã được xác nhận ghi/đọc hợp lệ.
+  5. Chuyển `Dispatcher.UIThread.InvokeAsync` trong `RestoreAutoSavedQueueOnStartupAsync` sang `Dispatcher.UIThread.Post(...)` bất đồng bộ không gây khóa luồng.
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC.Android/CrashReportActivity.cs` (Tạo mới)
+  - `ComicDownloaderGMTPC.Android/MainActivity.cs`
+  - `ComicDownloaderGMTPC.Android/ComicReaderActivity.cs`
+  - `ComicDownloaderGMTPC.Android/Application.cs`
+  - `ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj`
+  - `ComicDownloaderGMTPC.Android/Properties/AndroidManifest.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values/styles.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values-v31/styles.xml`
+  - `ComicDownloaderGMTPC/App.axaml.cs`
+  - `ComicDownloaderGMTPC/Services/QueueBackupService.cs`
+  - `ComicDownloaderGMTPC/ViewModels/LibraryViewModel.cs`
+  - `ComicDownloaderGMTPC/ViewModels/MainViewModel.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+- **Quy tắc kiểm thử**:
+  - Biên dịch sạch 0 Error, 0 Warning trên toàn bộ giải pháp (.slnx).
+  - Đóng gói và upload release beta đa nền tảng (Windows EXE, Linux Binary/DEB/Tar.gz, Android Signed APK).

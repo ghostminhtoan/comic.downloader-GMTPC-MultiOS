@@ -41,8 +41,15 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         // Tự động kiểm tra và di dời dữ liệu cũ từ ComicDownloaderGMTPC sang autosaveComicDownloaderGMTPC trên Android
-        // trước khi bất kỳ ViewModel hay Service nào khởi tạo và đọc dữ liệu
-        QueueBackupService.EnsureAutoSaveMigration();
+        // an toàn: chỉ thực hiện khi quyền lưu trữ công cộng đã sẵn sàng
+        try
+        {
+            if (!OperatingSystem.IsAndroid() || DownloadEngineService.CanWriteToDirectory("/storage/emulated/0/Download"))
+            {
+                QueueBackupService.EnsureAutoSaveMigration();
+            }
+        }
+        catch { }
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // 1. Kiểm tra cờ kiểm thử tự động CLI
@@ -204,12 +211,16 @@ public partial class App : Application
                         File.AppendAllText(extPath, log);
                     }
                     catch { }
-                    return new TextBlock
+                    return new Border
                     {
-                        Text = $"Khởi động ứng dụng gặp lỗi:\n{ex.Message}\n\n{ex.StackTrace}",
-                        Margin = new Thickness(20),
-                        Foreground = Avalonia.Media.Brushes.Red,
-                        TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                        Background = Avalonia.Media.Brushes.Black,
+                        Padding = new Thickness(20),
+                        Child = new TextBlock
+                        {
+                            Text = $"Khởi động ứng dụng gặp lỗi:\n{ex.Message}\n\n{ex.StackTrace}",
+                            Foreground = Avalonia.Media.Brushes.Red,
+                            TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                        }
                     };
                 }
             };
@@ -225,12 +236,16 @@ public partial class App : Application
             }
             catch (Exception ex)
             {
-                singleViewPlatform.MainView = new TextBlock
+                singleViewPlatform.MainView = new Border
                 {
-                    Text = $"Khởi động ứng dụng gặp lỗi:\n{ex.Message}\n\n{ex.StackTrace}",
-                    Margin = new Thickness(20),
-                    Foreground = Avalonia.Media.Brushes.Red,
-                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                    Background = Avalonia.Media.Brushes.Black,
+                    Padding = new Thickness(20),
+                    Child = new TextBlock
+                    {
+                        Text = $"Khởi động ứng dụng gặp lỗi:\n{ex.Message}\n\n{ex.StackTrace}",
+                        Foreground = Avalonia.Media.Brushes.Red,
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                    }
                 };
             }
         }

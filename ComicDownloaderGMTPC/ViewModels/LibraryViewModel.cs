@@ -243,16 +243,26 @@ public partial class LibraryViewModel : ViewModelBase
 
     public LibraryViewModel()
     {
-        ReadProgressStore.AdditionalStorageRootsProvider = () =>
-            StorageItems.Where(s => !string.IsNullOrWhiteSpace(s.Path)).Select(s => s.Path);
+        try
+        {
+            ReadProgressStore.AdditionalStorageRootsProvider = () =>
+                StorageItems.Where(s => !string.IsNullOrWhiteSpace(s.Path)).Select(s => s.Path);
 
-        LibraryRootPath = ReadProgressStore.Instance.GetLastLibraryRootPath()
-                          ?? DownloadEngineService.Instance.DownloadRoot;
-        CurrentDirectoryPath = LibraryRootPath;
-        LoadStorageItems();
-        LoadDirectory(CurrentDirectoryPath);
-        _ = LoadHistoryItemsAsync();
-        LoadBookmarkGroups();
+            LibraryRootPath = ReadProgressStore.Instance.GetLastLibraryRootPath()
+                              ?? DownloadEngineService.Instance.DownloadRoot;
+            CurrentDirectoryPath = LibraryRootPath;
+            try { LoadStorageItems(); } catch { }
+            if (!OperatingSystem.IsAndroid() || DownloadEngineService.CanWriteToDirectory(CurrentDirectoryPath))
+            {
+                try { LoadDirectory(CurrentDirectoryPath); } catch { }
+            }
+            try { _ = LoadHistoryItemsAsync(); } catch { }
+            try { LoadBookmarkGroups(); } catch { }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LibraryViewModel Constructor] {ex}");
+        }
     }
 
     partial void OnSearchQueryChanged(string value)

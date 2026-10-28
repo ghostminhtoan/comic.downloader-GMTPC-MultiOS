@@ -1866,7 +1866,7 @@ public partial class MainViewModel : ViewModelBase
             var restoreResult = await QueueBackupService.Instance.LoadAutoSaveQueueResultAsync().ConfigureAwait(false);
             if (restoreResult.HasValidStructure || restoreResult.Items.Count > 0)
             {
-                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
                     ApplyRestoredQueueSettings(restoreResult);
 
