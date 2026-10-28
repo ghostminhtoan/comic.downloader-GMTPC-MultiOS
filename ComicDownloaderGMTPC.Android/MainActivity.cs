@@ -19,14 +19,14 @@ namespace ComicDownloaderGMTPC.Android;
 
 [Activity(
     Label = "ComicDownloaderGMTPC",
-    Theme = "@style/MyTheme.NoActionBar",
+    Theme = "@style/MyTheme.App",
     Icon = "@drawable/icon",
-    MainLauncher = true,
+    MainLauncher = false,
     LaunchMode = LaunchMode.SingleTask,
     SupportsPictureInPicture = true,
     ResizeableActivity = true,
     AllowEmbedded = true,
-    Exported = true,
+    Exported = false,
     WindowSoftInputMode = SoftInput.AdjustResize,
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Density | ConfigChanges.FontScale)]
 public class MainActivity : AvaloniaMainActivity
@@ -76,6 +76,21 @@ public class MainActivity : AvaloniaMainActivity
         }
 
         CurrentInstance = this;
+
+        // 2. base.OnCreate PHẢI được gọi trước khi khởi tạo hoặc truy cập storage
+        try
+        {
+            base.OnCreate(savedInstanceState);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[MainActivity.base.OnCreate Crash] {ex}");
+            ApplicationCrashLogger.WriteCrashLog("MainActivity.base.OnCreate", ex.ToString());
+            LaunchCrashReportActivity(ex, "MainActivity.base.OnCreate");
+            Finish();
+            return;
+        }
+
         try
         {
             AndroidStorageHelper.WakeUpStorage(this);
@@ -92,19 +107,6 @@ public class MainActivity : AvaloniaMainActivity
                 AndroidStorageHelper.GetExternalStoragePaths(CurrentInstance?.ApplicationContext ?? CurrentInstance);
         }
         catch { }
-
-        try
-        {
-            base.OnCreate(savedInstanceState);
-        }
-        catch (Exception ex)
-        {
-            global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[MainActivity.base.OnCreate Crash] {ex}");
-            ApplicationCrashLogger.WriteCrashLog("MainActivity.base.OnCreate", ex.ToString());
-            LaunchCrashReportActivity(ex, "MainActivity.base.OnCreate");
-            Finish();
-            return;
-        }
 
         Window?.SetSoftInputMode(SoftInput.AdjustResize);
 

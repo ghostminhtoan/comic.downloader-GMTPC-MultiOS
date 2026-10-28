@@ -1733,3 +1733,36 @@ Khi phát hiện hoặc sửa chữa bất kỳ lỗi kỹ thuật mới nào, b
 - **Quy tắc kiểm thử**:
   - Biên dịch sạch 0 Error, 0 Warning trên toàn bộ giải pháp (.slnx).
   - Đóng gói và upload release beta đa nền tảng (Windows EXE, Linux Binary/DEB/Tar.gz, Android Signed APK).
+
+
+---
+
+### 48. BUG-047: Khắc Phục Triệt Để Lỗi Android Splash Screen Crash (Oppo K9x / ColorOS) Bằng Kiến Trúc Dedicated Native SplashActivity Độc Lập, Triệt Tiêu Xung Đột WindowSplashScreen Animated Icon, Và Đồng Bộ Hóa Theme Tối #0B0F19
+
+- **Triệu chứng**: Trên thiết bị Oppo K9x (ColorOS, Android 11/12), ứng dụng bị văng ngay khi vừa xuất hiện màn hình chờ Splash Screen (Splash Screen Crash).
+- **Nguyên nhân gốc rễ**:
+  1. Trong `values-v31/styles.xml`, thuộc tính `android:windowSplashScreenAnimatedIcon` được trỏ trực tiếp vào `@drawable/icon` (ảnh raster PNG 512x512). Bộ nạp Splash Screen API của ColorOS (Oppo) cố gắng giải mã và ép kiểu icon hoạt ảnh sang `Animatable` / `AnimatedVectorDrawable`. Khi gặp raster PNG kích thước lớn, WindowManager ném ngoại lệ `ClassCastException` hoặc giải mã thất bại gây crash ngay từ tầng hệ thống trước khi runtime C# kịp xử lý.
+  2. `MainActivity` vừa đảm nhận vai trò `MainLauncher = true` vừa là `AvaloniaMainActivity`. Quá trình chuyển tiếp mờ (Window Surface Transition) của Splash Screen diễn ra đồng thời với quá trình SkiaSharp / AvaloniaView khởi tạo EGL Rendering Surface, dẫn đến xung đột DecorView trên các ROM có cơ chế ColorOS App Startup Booster.
+  3. Thứ tự gọi trong `MainActivity.OnCreate`: `AndroidStorageHelper.WakeUpStorage(this)` được gọi trước `base.OnCreate(savedInstanceState)`. Việc truy cập Context/Storage API trước khi gọi `base.OnCreate` vi phạm Android Activity Lifecycle nghiêm ngặt, gây lỗi ngầm trên các phiên bản Android tùy biến.
+  4. Lỗi lặp thẻ đóng `</Project>` trong `ComicDownloaderGMTPC.Android.csproj`.
+  5. Màu nền `splash_background` ban đầu là `#FFFFFF` (trắng tinh) gây nhấp nháy chói mắt khi app khởi động vào ban đêm trước khi nạp giao diện nền tối.
+- **Giải pháp triệt để**:
+  1. **Kiến trúc Dedicated Native SplashActivity**: Tạo mới `SplashActivity.cs` kế thừa trực tiếp từ `Android.App.Activity` thuần túy (không nạp Avalonia, không nạp Skia, 0 dependencies nặng). Đặt `MainLauncher = true`, `NoHistory = true`, `Exported = true`, sử dụng theme `@style/MyTheme.Splash`.
+  2. Trong `SplashActivity.OnCreate`: Kiểm tra nếu `ApplicationCrashLogger.StartupException != null` thì mở trực tiếp `CrashReportActivity`. Nếu bình thường thì chuyển tiếp Intent và Extras sang `MainActivity` rồi gọi `Finish()` ngay lập tức. Toàn bộ chu kỳ SplashScreen của OS được khép lại trong mili-giây đầu tiên.
+  3. Cấu hình lại `MainActivity`: Chuyển thành `MainLauncher = false`, `Exported = false`, `Theme = "@style/MyTheme.App"`.
+  4. Chuẩn hóa Android Lifecycle trong `MainActivity.OnCreate`: Đưa `base.OnCreate(savedInstanceState)` lên đầu tiên trước mọi thao tác lưu trữ hoặc helper.
+  5. Loại bỏ hoàn toàn `android:windowSplashScreenAnimatedIcon` và `android:windowSplashScreenAnimationDuration` dạng raster bitmap trong `values-v31/styles.xml`. Dùng chuẩn native `windowSplashScreenBackground` và để hệ điều hành hiển thị icon tự nhiên.
+  6. Đồng bộ toàn bộ `splash_background` và `app_background` trong `values/colors.xml` và `values-night/colors.xml` thành màu tối `#0B0F19` sang trọng, triệt tiêu 100% hiện tượng chói mắt flashbang.
+  7. Xóa bỏ thẻ đóng `</Project>` thừa trong `ComicDownloaderGMTPC.Android.csproj`.
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC.Android/SplashActivity.cs` (Tạo mới)
+  - `ComicDownloaderGMTPC.Android/MainActivity.cs`
+  - `ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj`
+  - `ComicDownloaderGMTPC.Android/Resources/values/colors.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values-night/colors.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values/styles.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values-v31/styles.xml`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+- **Quy tắc kiểm thử**:
+  - Biên dịch Release sạch 0 Error, 0 Warning.
+  - Chạy `build.bat` thực hiện toàn bộ quy trình đóng gói đa hệ điều hành và upload Release Beta lên GitHub Release tag `beta`.
