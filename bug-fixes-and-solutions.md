@@ -1806,3 +1806,31 @@ Khi phát hiện hoặc sửa chữa bất kỳ lỗi kỹ thuật mới nào, b
 - **Quy tắc kiểm thử**:
   - Biên dịch Release sạch 0 Error, 0 Warning.
   - Chạy `build.bat` thực hiện toàn bộ quy trình đóng gói đa hệ điều hành và upload Release Beta lên GitHub Release tag `beta`.
+
+
+---
+
+### 50. BUG-049: Khắc Phục Lỗi "keeps stopping" Khởi Động Trên Giả Lập LDPlayer 4.0 / NoxPlayer 32-bit (x86 / ARMv7) Và Android 7.1 Bằng Cấu Hình Universal 4-ABI Vốn Có & Logo Avalonia PNG Tương Thích Tuyệt Đối
+
+- **Triệu chứng**: Khi cài đặt file APK và khởi chạy trên giả lập Android (như LDPlayer 4.0, NoxPlayer 32-bit, hệ điều hành Android 7.1), ứng dụng lập tức hiện hộp thoại `"ComicDownloaderGMTPC keeps stopping"` và buộc đóng lại ngay khi vừa chạm vào icon.
+- **Nguyên nhân gốc rễ**:
+  1. Thiếu kiến trúc CPU 32-bit trong APK: Thuộc tính `<RuntimeIdentifiers>` trong `ComicDownloaderGMTPC.Android.csproj` chỉ định nghĩa `android-arm64;android-x64` (chỉ 64-bit). Khi cài vào máy ảo Android 32-bit (như LDPlayer 4.0 chạy kiến trúc Intel `x86` 32-bit) hoặc điện thoại Android 32-bit (`armeabi-v7a`), hệ thống không tìm thấy thư viện native Mono runtime (`libmonosgen-2.0.so`) và `libSkiaSharp.so`, gây lỗi `java.lang.UnsatisfiedLinkError` làm app dừng hoạt động ngay lập tức.
+  2. Lỗi nạp Vector Drawable trong Window Background trên Android 7.1 (API 25): Trên các phiên bản Android cũ trước Android 8/12, hệ thống WindowManager không thể giải mã thẻ `<vector>` nằm bên trong file `<layer-list>` của `windowBackground` (`splash_screen.xml`), gây lỗi `Binary XML file: Error inflating class <layer-list>` / `Resources$NotFoundException`.
+  3. Lỗi liên kết tham chiếu `attr/postSplashScreenTheme`: Do `Xamarin.AndroidX.Core.SplashScreen` đã được loại bỏ để dùng native Splash API, thuộc tính này gây lỗi biên dịch AAPT2 nếu chưa dọn dẹp khỏi `values-v31/styles.xml`.
+- **Giải pháp triệt để**:
+  1. **Khai phóng Universal 4-ABI trong file APK**:
+     - Cập nhật `ComicDownloaderGMTPC.Android.csproj`: Mở rộng `<RuntimeIdentifiers>` thành `android-arm;android-arm64;android-x86;android-x64`. Đóng gói trọn vẹn cả 4 nền tảng (32-bit ARM, 64-bit ARM, 32-bit x86 giả lập, 64-bit x64 giả lập) trong duy nhất một gói cài đặt Universal Signed APK.
+  2. **Tương thích tuyệt đối Splash Screen với Logo Avalonia Raster PNG**:
+     - Trích xuất file ảnh PNG bitmap chính thức của Avalonia UI (`avalonia_logo.png`, 400x400) đặt vào `Resources/drawable/avalonia_logo.png`.
+     - Cấu hình `Resources/drawable/splash_screen.xml` tham chiếu trực tiếp `@drawable/avalonia_logo` bitmap, tương thích 100% từ Android 5.0 đến Android 15+, triệt tiêu hoàn toàn lỗi `Error inflating class`.
+  3. **Làm sạch `values-v31/styles.xml`**:
+     - Loại bỏ thuộc tính `postSplashScreenTheme`, giữ nguyên bộ 3 thuộc tính native Android 12+ (`windowSplashScreenBackground`, `windowSplashScreenAnimatedIcon`, `windowSplashScreenAnimationDuration`).
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj`
+  - `ComicDownloaderGMTPC.Android/Resources/drawable/avalonia_logo.png` (Trích xuất mới)
+  - `ComicDownloaderGMTPC.Android/Resources/drawable/splash_screen.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values-v31/styles.xml`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+- **Quy tắc kiểm thử**:
+  - Biên dịch Release sạch 0 Error, 0 Warning trên cả 4 ABI.
+  - Chạy `build.bat` xuất xưởng APK đa kiến trúc và tải lên GitHub Release tag `beta`.
