@@ -1860,3 +1860,35 @@ Khi phát hiện hoặc sửa chữa bất kỳ lỗi kỹ thuật mới nào, b
 - **Quy tắc kiểm thử**:
   - Biên dịch Release sạch 0 Error, 0 Warning trên cả 4 kiến trúc (ARM32, ARM64, x86, x64).
   - Thực thi quy trình xuất xưởng toàn diện `build.bat` và tự động upload Release Beta lên GitHub tag `beta`.
+
+
+---
+
+### 52. BUG-051: Cập Nhật Thuần C# Cho Comix.to Token 91r, Trích Xuất JSON Mới, Sửa Trạng Thái Scrape Hoàn Thành "Ready", Khắc Phục Triệt Để Crash Khởi Động Android & Loại Bỏ Phụ Thuộc Headless Browser
+
+- **Triệu chứng**:
+  1. Khi khởi động ứng dụng trên Android, nếu hàng chờ có chứa truyện từ `comix.to` hoặc `moetruyen.net`, ứng dụng bị crash văng ngay lập tức.
+  2. Không thể cào hoặc tải truyện từ `comix.to`: Báo lỗi HTTP 403 Forbidden `{"message":"Invalid token.","code":"key_retired"}`. Khi trích xuất chapter trả về 0 chapter. Khi tải ảnh bị lỗi HTTP 403 từ máy chủ CDN.
+  3. Truyện từ `comix.to` sau khi phân tích không tải được nội dung (Done=0) vì bị gán trạng thái nhầm thành "Completed" thay vì "Ready".
+- **Nguyên nhân gốc rễ**:
+  1. **Khóa bảo mật comix.to thay đổi**: Comix.to đã thay đổi token API từ `qey.` sang `91r.`, đồng thời thay thế toàn bộ bảng khóa 1088-byte `Base64KeyTable`. Cấu trúc JSON `initial-data` trên trang chủ cũng thay đổi, không còn phần tử `comic` ở root mà lưu trong `queries` và `manga`.
+  2. **Phụ thuộc Headless Browser ngoại vi gây Crash Android**: Mã nguồn trước đây gọi `NativeWebViewService` (cố gọi Chromium / Edge headless qua tiến trình `Process.Start`) khi fetch thất bại hoặc quét tag url. Trên Android không có nhị phân trình duyệt này, dẫn đến văng ngoại lệ không thể xử lý trong vòng đời khởi động của app.
+  3. **Lỗi Header Referer CDN**: Các máy chủ CDN lưu trữ ảnh của comix.to (`rxn.madisonscorner.site`, `*.blogof*.site`, `*.site`) cấm Header `Referer`. Khi ứng dụng gửi kèm Header Referer từ `comix.to`, Cloudflare lập tức chặn bằng mã lỗi 403 Forbidden.
+  4. **Lỗi logic trạng thái sau khi Scrape**: Trong `ComicScraperService.cs`, hàm `ScrapeComixtoBookAsync` gán `book.Status = "Completed"`. Khi người dùng đưa vào hàng chờ tải, `DownloadEngineService` thấy trạng thái "Completed" nên coi như đã hoàn tất và bỏ qua, dẫn đến không tải được chapter nào (Done=0).
+- **Giải pháp triệt để**:
+  1. **Cập nhật thuật toán ComixCryptoService thuần C# 100%**: Trích xuất bảng khóa 1088 bytes mới từ JS bundle `apicore-tnli0z-MbTyRM7l.js`, cập nhật token prefix mới `91r.`, đảm bảo giải mã payload AES/SHA-256 nội bộ thuần C# hoạt động trơn tru trên cả Windows, Linux và Android.
+  2. **Loại bỏ 100% phụ thuộc Headless Browser cho Comix & MoeTruyen**: Chuyển toàn bộ việc phân tích tag, lấy HTML và trích xuất dữ liệu sang thuần `HttpClient` với header chuẩn hóa. Không gọi bất kỳ native process nào trên Android.
+  3. **Lọc triệt để Referer khi tải ảnh Comix**: Trong `DownloadEngineService.cs`, cập nhật bộ lọc `isComixOrWyr` để tự động loại bỏ Header `Referer` cho tất cả CDN domain `.site/`, `madisonscorner.site`, `rxn.`, `wyr.`, cho phép tải trực tiếp 200 OK.
+  4. **Chuẩn hóa trạng thái sau khi Scrape thành "Ready"**: Đổi `book.Status = "Ready"` trong `ScrapeComixtoBookAsync`, đảm bảo `DownloadEngineService` tiếp nhận tải trọn vẹn toàn bộ các chapter được chỉ định.
+  5. **Kiểm thử thực tế tải thành công 100%**:
+     - `moetruyen.net`: Đã tải và giải mã thành công 11/11 chapter (chap 208 đến 218) với 291 ảnh WebP (~65 MB).
+     - `comix.to`: Đã tải thành công 20/20 chapter (chap 1 đến 20) với 1638 ảnh WebP (~250 MB).
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/ComixCryptoService.cs`
+  - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
+  - `ComicDownloaderGMTPC/Services/DownloadEngineService.cs`
+  - `ComicDownloaderGMTPC.Desktop/Program.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+- **Quy tắc kiểm thử**:
+  - Build sạch 0 Error, 0 Warning trên cả Desktop và Android Release.
+  - Chạy `build_in_cmd.py` để xuất xưởng cả 3 nền tảng (Windows EXE, Linux Binary/Deb/tar.gz, Android APK) và tự động upload Release Beta lên GitHub tag `beta`.

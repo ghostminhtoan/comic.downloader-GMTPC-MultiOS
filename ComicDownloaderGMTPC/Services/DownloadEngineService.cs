@@ -1415,6 +1415,9 @@ public class DownloadEngineService
 
                     bool isComixOrWyr = targetUrl.Contains("wyr.", StringComparison.OrdinalIgnoreCase) ||
                                         targetUrl.Contains("blogofscott.site", StringComparison.OrdinalIgnoreCase) ||
+                                        targetUrl.Contains("madisonscorner.site", StringComparison.OrdinalIgnoreCase) ||
+                                        targetUrl.Contains("rxn.", StringComparison.OrdinalIgnoreCase) ||
+                                        targetUrl.Contains(".site/", StringComparison.OrdinalIgnoreCase) ||
                                         (refererUrl != null && refererUrl.Contains("comix.to", StringComparison.OrdinalIgnoreCase));
 
                     if (!isComixOrWyr)

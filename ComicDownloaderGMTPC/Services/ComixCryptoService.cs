@@ -20,22 +20,7 @@ public static class ComixCryptoService
     private static readonly char[] Nj = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".ToCharArray();
 
     private const string Base64KeyTable =
-        "e2U1m5X3IX3lh22R/ZUZBKEW4gsD5qXBy7ns0ppgv51TXZzGtd98ciTr0NLJB1KwalZZve/skthhF9dmLFiqsAc6ut0e" +
-        "onGGB+hyee0K4/+H4Y0PW8MgtSVKIiVCrXJ5PolPISHXIqWT6gRsUrPlrKfFX7xwq69996E9H4SGSv1xHupcV3d8W6OF" +
-        "gITqmQf3Gx1qtrLRr3PyIF7QZ3DEsbI/8sB1SLkdA7avTvVoelDGES/W1j4qyq0jauW8wQAi5i/Kf1s0NsDVdOhY6EMQ" +
-        "4nYQYxEHNulruaL2hiKrXwfbXXaaOWVoYXu4TpYuDo9p/y6ACIy1CWpD7XKRq9HMviPcjUcvbAwvfY1u2hqKs+AgbTI1" +
-        "KMBTNy6hJxh/DU1HS3A9f+qdW02D/RvKaXIxfdXdwKvUjv4gkhMOCdZDuro7a+mT8OXsFp1hpV0TclZPqFQ1m8OsP8yF" +
-        "Q3CSMveRSZU5sp63sEcexafzKj8bOQinz7/j7faHMXHDm5z6h6uUG/c1zK0iDum41Vwk8hUZDL+Fpz+DQ3tIsch3KCg7" +
-        "KJwcMnW2jmbkJgtBwaIb5ELki7E3JbNBIQDOk24luE4TMr5RTDArlGgEexraMJbxpfdX4QjO8SjHEKORFdJ0gVd5C1Bh" +
-        "RGgx8/qAKkqkVn8FiYn2WGexOc1P1iwskFaBOZ94ODb7pnCsNydD+a0wnYaGwYcjm2P32hyaIG4gAHKAgiaginvQ4UVk" +
-        "k9xSaTkPzppqgQhVBQSt8lEtt7ezVj/ZYAHULBiSvF/GKxmR7AKy72NFnSEuJGQA/WfPG1ut4Ip81bJp7L8Y3sZnhjZJ" +
-        "D8Z5A44Kzf8zqXVAwspd+1In2M1Spx8+2EhWwKzr28mX2ycS93oUhV2dirqmIaKcXSL09t6HCgZvoNWypxFfLGfyERUE" +
-        "oBAarPzeL2o6+FsprT5TFgZJIubCm0a8y+yv+6+Jj8mqUjtiIE4MtBOUaqoBvkbSkSXYB+5Z+8bC025S3CXCBuqe+TUZ" +
-        "7LMFeUmoKOktzNQ/QD9sdTSTLHxFNxIaXJyE41J1TpbUYVx3koC9hmtd7oFtkUiUU1HwJnGox/5/iXGWnAVDMWrqs8KJ" +
-        "7WJqeqa1SdjgUSeSvEU7f1PF3QSgldwXSe36HG8mxdSg2EqHi0PwGucNREsG/SlnPsAJpNILoxU3keYMOdl11hypJ+R7" +
-        "dwy+LDO0MnvGYW9xiBQ2CB99QfZH0IjqXRknnAfWe3NZRFx+gIgBD0rjBg7ZlEodAaIZJyuu4AXZ4oEesN4yFg/eHcr4" +
-        "DMBDDvnvCeIZkHJ/SqrlvEnPmtZZktYLNtvtA0EohRh3Xz9TZCuWS4yh6izc/YisO8ais1EgGlEZPzwPdxZdevBThFZE" +
-        "624vCBE2c6D4+/LL8dwGEjckIruN1zK4bxgIYyh/a2HDGm9XnM7MvbpYB0Fx7jYYMwoOEJM=";
+        "ixq/u2BOfNGwwPJlCpKXVcYXtVES6ZV4vNQG1Eepk9/XyMEmvZC5IyMPnhanimsz7cjFehUtnY/OxmoqSvP1g1LSXVNRF3Nno6Ek24MxODJm1NGk6Rh0TjP7zGTfXPUiSW3rchPRzny/wtHvLVpVnjlcZmGCMGCLTfLmGVu/WKfJsfe1E91j1SCVHjPgzAe6oYbt7gE2fFvsvoXBZdvEslUh17ZCk9KCB3j1RIRcLLD7BtQ1pFjDq1cnpkPxJVTgrVqavDG9fQk8qLaRl3oOeDvUMtfe8lXT88YKarFaZbztiP2ZyBSPOUGPjRwdXxE9Jv6f2/jDKYWYvdB6GhJKs9YW5+0u4lQm0FXe0Z/yzCRkOv2dYpgLHDUiUVHnHf5M83pbsCH6RZHLOrjqdHaTEhfB6krR5cN/mMR/pPw23Tv/4eNFL8K3oq1gw/sTBjfw54N2jGk/MZP0WclXGIgXt0Wuce/U30sVL8aRdKOs36O8IJ1Gy4dTPANXm9eHcp6u8L87qRz2G79T3sahO7WUh5SFkDuiD4iSOKzCqHntD7D08MRrdXW2ep2fQ49yRMP3Mz1e1D5N3TaDq4q6B2UGPB5P6KSaSSiqNrlVQJNbBaqCWmiGTiTcIPu+stjftXszTB31ozQ8CHi6fGaXe/vdzMbDFEJDJfVEZeHS7ONK/k/Jsg3r/LOPfoPEmKle6aaWEUoE8P9SeBsKwT1ZEtVCgUVfazDW37dUImc5o/7DV45OiUn56B6pUuA3RDBdQVaGq6hdvtp8LuDx6L3Yqdrc1Hly986HSnFMEiyBQyY+HeRQ4U6X5IT9HS0dF66f775SHF6A0uhsTJvWW+TRXIrCqqOL5jffOMIJ3JWh4KFvAioousYKyrUJXO/wkCo4BKRlKuBOoKTSiE5gvkXKLXDU210lPZBSwwqdp5auOZPtpxd9dHaHFRkyXYA+A0B447ANmQ36h572AHq6k7FMfDtEZnrpn1LR31e2XOU0eK2K1ozvuMsurvrp0VdGA3hn80r/R5thLbmfobjPIbQngKFew4F3UDdl+yMa9uEJXT4Xq2HJ8k4AgBdige2F7phM18+wzXc/nTuSZymiMAuWwEP6ZYCACgDMvatkA2/n2w+S716EKXZ07m7TzWeAEcoJJfBdVk/0Jf9acowY+6urDPrhxn+AZFR0KfZKg717FFrfyaJtNGtGrk78rfoSy86YDkgXW5PzNcSl7Q3gU/8rdFu0W6d1MmgNWbYXSKUE0T/oE9SBHkME48tl3xcaRaX8rF3eW2FqtjDQehV/KrE3DJ6i1h24Ikp6kc0P98ErQePyanPs2nLYB/Y9NFF22m1ElaHds2GYNU6g5Sy9z++YI3CDll021mIjdbkqVWCqJco6HeEAHiaDoBOWd8BeJh9SZ9QoGp5U79VN51I1/uc0a04JaytgbRkMR1aqVtgi3muO/1k=";
 
     private static readonly byte[] KeyTable = Convert.FromBase64String(Base64KeyTable);
 
@@ -138,7 +123,7 @@ public static class ComixCryptoService
 
     public static string GenerateToken(string pathAndQuery)
     {
-        return "qey." + Wj(KeyTable, pathAndQuery);
+        return "91r." + Wj(KeyTable, pathAndQuery);
     }
 
     public static string DecryptPayload(string base64Payload)

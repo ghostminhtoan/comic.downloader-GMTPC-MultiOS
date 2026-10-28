@@ -3599,13 +3599,16 @@ public class ComicScraperService
             bool isComixDomain = result.Domain.Contains("comix") || url.Contains("comix.to");
             if (isComixDomain)
             {
-                if (NativeWebViewService.Instance.IsAvailable)
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                if (res.IsSuccessStatusCode)
                 {
-                    html = await NativeWebViewService.Instance.FetchHtmlAsync(url, 45, ct).ConfigureAwait(false) ?? string.Empty;
+                    html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                 }
                 if (string.IsNullOrWhiteSpace(html))
                 {
-                    result.StatusMessage = "Không thể tải trang comix.to (cần headless browser)";
+                    result.StatusMessage = "Không thể tải trang comix.to";
                     return result;
                 }
 
@@ -4110,29 +4113,23 @@ public class ComicScraperService
             {
                 string pageUrl = BuildPagedTagUrl(tagUrl, page, domain);
                 string? html = null;
+                using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
                 if (domain.Contains("comix"))
                 {
-                    if (NativeWebViewService.Instance.IsAvailable)
-                    {
-                        html = await NativeWebViewService.Instance.FetchHtmlAsync(pageUrl, 45, ct).ConfigureAwait(false);
-                    }
+                    req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
                 }
-                else
+                else if (domain.Contains("hentaiforce"))
                 {
-                    using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
-                    if (domain.Contains("hentaiforce"))
-                    {
-                        req.Headers.TryAddWithoutValidation("Referer", "https://hentaiforce.net/");
-                    }
-                    else if (domain.Contains("hitomi"))
-                    {
-                        req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
-                    }
-                    using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-                    if (res.IsSuccessStatusCode)
-                    {
-                        html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    }
+                    req.Headers.TryAddWithoutValidation("Referer", "https://hentaiforce.net/");
+                }
+                else if (domain.Contains("hitomi"))
+                {
+                    req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
+                }
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                if (res.IsSuccessStatusCode)
+                {
+                    html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                 }
 
                 if (!string.IsNullOrWhiteSpace(html))
@@ -5440,7 +5437,7 @@ public class ComicScraperService
                 }
             };
             book.TotalChapters = 1;
-            book.Status = "Completed";
+            book.Status = "Ready";
             book.StatusMessage = $"Đã tải thông tin chapter ({images.Count} ảnh)";
             return book;
         }
@@ -5463,10 +5460,6 @@ public class ComicScraperService
         }
         catch { }
 
-        if (string.IsNullOrWhiteSpace(html) && NativeWebViewService.Instance.IsAvailable)
-        {
-            html = await NativeWebViewService.Instance.FetchHtmlAsync(url, 45, ct).ConfigureAwait(false);
-        }
 
         if (!string.IsNullOrWhiteSpace(html))
         {
@@ -5476,7 +5469,8 @@ public class ComicScraperService
                 try
                 {
                     using var doc = JsonDocument.Parse(initMatch.Groups["json"].Value);
-                    if (doc.RootElement.TryGetProperty("comic", out var comicElem))
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("comic", out var comicElem))
                     {
                         if (comicElem.TryGetProperty("title", out var titleProp)) book.Title = titleProp.GetString() ?? string.Empty;
                         if (comicElem.TryGetProperty("poster", out var posterProp) && posterProp.TryGetProperty("url", out var posterUrlProp))
@@ -5486,6 +5480,26 @@ public class ComicScraperService
                         if (comicElem.TryGetProperty("hid", out var hidProp) && string.IsNullOrEmpty(hid))
                         {
                             hid = hidProp.GetString() ?? string.Empty;
+                        }
+                    }
+                    if (root.TryGetProperty("manga", out var mangaElem))
+                    {
+                        if (string.IsNullOrWhiteSpace(book.Title) && mangaElem.TryGetProperty("title", out var mtp)) book.Title = mtp.GetString() ?? string.Empty;
+                        if (string.IsNullOrWhiteSpace(book.CoverUrl) && mangaElem.TryGetProperty("poster", out var mpp) && mpp.TryGetProperty("url", out var mpu)) book.CoverUrl = mpu.GetString() ?? string.Empty;
+                        if (string.IsNullOrEmpty(hid) && mangaElem.TryGetProperty("hid", out var mhp)) hid = mhp.GetString() ?? string.Empty;
+                    }
+                    if (root.TryGetProperty("queries", out var queriesElem))
+                    {
+                        string qJson = queriesElem.GetRawText();
+                        if (string.IsNullOrWhiteSpace(book.Title))
+                        {
+                            var tMatch = Regex.Match(qJson, @"""title""\s*:\s*""(?<t>(?:[^""\\]|\\.)*)""", RegexOptions.IgnoreCase);
+                            if (tMatch.Success) book.Title = Regex.Unescape(tMatch.Groups["t"].Value);
+                        }
+                        if (string.IsNullOrWhiteSpace(book.CoverUrl))
+                        {
+                            var pMatch = Regex.Match(qJson, @"""poster""\s*:\s*\{[^}]*""url""\s*:\s*""(?<u>https?://[^""]+)""", RegexOptions.IgnoreCase);
+                            if (pMatch.Success) book.CoverUrl = pMatch.Groups["u"].Value;
                         }
                     }
                 }
@@ -5586,7 +5600,7 @@ public class ComicScraperService
 
         book.Chapters = allChapters;
         book.TotalChapters = allChapters.Count;
-        book.Status = "Completed";
+        book.Status = "Ready";
         book.StatusMessage = $"Tìm thấy {allChapters.Count} chapter";
         return book;
     }

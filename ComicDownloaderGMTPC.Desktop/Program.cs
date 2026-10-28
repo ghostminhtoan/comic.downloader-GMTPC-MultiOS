@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ComicDownloaderGMTPC.ViewModels;
 using ComicDownloaderGMTPC.Views;
 using System.Threading;
