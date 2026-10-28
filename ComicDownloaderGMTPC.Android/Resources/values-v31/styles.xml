@@ -4,23 +4,19 @@
   <style name="MyTheme">
   </style>
 
-  <!-- Theme Splash Android 12+ (API 31+): Dành riêng cho SplashActivity.
-       TUYỆT ĐỐI KHÔNG DÙNG windowSplashScreenAnimatedIcon với raster PNG lớn vì sẽ gây crash ClassCastException trên ColorOS (Oppo K9x) / MIUI!
-       Sử dụng windowSplashScreenBackground và để hệ thống hiển thị app icon tự nhiên -->
-  <style name="MyTheme.Splash" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
+  <style name="MyTheme.NoActionBar" parent="@style/Theme.AppCompat.NoActionBar">
     <item name="android:windowActionBar">false</item>
+    <item name="android:windowBackground">@null</item>
     <item name="android:windowNoTitle">true</item>
-    <item name="android:windowBackground">@drawable/splash_screen</item>
     <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+    <item name="android:windowSplashScreenAnimatedIcon">@drawable/avalonia_anim</item>
+    <item name="android:windowSplashScreenAnimationDuration">1000</item>
   </style>
 
-  <!-- Theme App Android 12+: Dành cho MainActivity sau khi vào app -->
-  <style name="MyTheme.App" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
-    <item name="android:windowActionBar">false</item>
-    <item name="android:windowNoTitle">true</item>
-    <item name="android:windowBackground">@color/app_background</item>
+  <style name="MyTheme.Main" parent="MyTheme.NoActionBar">
+    <item name="android:windowIsTranslucent">true</item>
   </style>
 
-  <style name="MyTheme.NoActionBar" parent="MyTheme.App" />
+  <style name="MyTheme.App" parent="MyTheme.NoActionBar" />
 
 </resources>

@@ -19,7 +19,6 @@ namespace ComicDownloaderGMTPC.Android
                 string log = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC] [{source}]\n{details}\n\n";
 
                 // 1. Ghi vào Context.GetExternalFilesDir(null) - /storage/emulated/0/Android/data/com.CompanyName.ComicDownloaderGMTPC/files/crash_log.txt
-                // Thư mục này KHÔNG CẦN BẤT KỲ QUYỀN NÀO! 100% luôn ghi thành công trên mọi Android (Android 4.4 đến Android 15+)
                 try
                 {
                     var ctx = global::Android.App.Application.Context;
@@ -70,12 +69,7 @@ namespace ComicDownloaderGMTPC.Android
     [Application]
     public class Application : AvaloniaAndroidApplication<App>
     {
-        // Phải là public để Java Android Runtime có thể instantiate khi process khởi động
-        public Application(nint javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
-        {
-        }
-
-        public Application() : base(0, JniHandleOwnership.DoNotTransfer)
+        protected Application(nint javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
         {
         }
 

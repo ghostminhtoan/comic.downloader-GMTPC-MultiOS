@@ -4,21 +4,12 @@
   <style name="MyTheme">
   </style>
 
-  <!-- Theme Splash: Dành riêng cho SplashActivity, hiển thị Splash Screen bằng drawable native siêu nhẹ, 0 lag, chống crash 100% -->
-  <style name="MyTheme.Splash" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
+  <style name="MyTheme.NoActionBar" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
     <item name="android:windowActionBar">false</item>
-    <item name="android:windowNoTitle">true</item>
     <item name="android:windowBackground">@drawable/splash_screen</item>
-  </style>
-
-  <!-- Theme App: Dành cho MainActivity và toàn bộ ứng dụng chính sau khi vào app -->
-  <style name="MyTheme.App" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
-    <item name="android:windowActionBar">false</item>
     <item name="android:windowNoTitle">true</item>
-    <item name="android:windowBackground">@color/app_background</item>
   </style>
 
-  <!-- Giữ alias MyTheme.NoActionBar để tương thích tuyệt đối với các Activity khác -->
-  <style name="MyTheme.NoActionBar" parent="MyTheme.App" />
+  <style name="MyTheme.App" parent="MyTheme.NoActionBar" />
 
 </resources>

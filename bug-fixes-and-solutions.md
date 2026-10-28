@@ -1766,3 +1766,43 @@ Khi phát hiện hoặc sửa chữa bất kỳ lỗi kỹ thuật mới nào, b
 - **Quy tắc kiểm thử**:
   - Biên dịch Release sạch 0 Error, 0 Warning.
   - Chạy `build.bat` thực hiện toàn bộ quy trình đóng gói đa hệ điều hành và upload Release Beta lên GitHub Release tag `beta`.
+
+
+
+---
+
+### 49. BUG-048: Khắc Phục Hiện Tượng Màn Hình Trắng Blank Crash Khởi Động Android, Khôi Phục Hoạt Ảnh Logo Avalonia Gốc Và Loại Bỏ Constructor JNI Null Peer Trong Application.cs
+
+- **Triệu chứng**: Ứng dụng khởi động trên Android bị hiện tượng màn hình trắng/trống không (blank screen) trong tích tắc rồi lập tức văng app (crash), logo tùy biến xuất hiện không mong muốn.
+- **Nguyên nhân gốc rễ**:
+  1. Trong `Application.cs`, tồn tại constructor không tham số `public Application() : base(0, JniHandleOwnership.DoNotTransfer)`. Khi Mono Android runtime hoặc OS Java runtime kích hoạt constructor này, nó truyền Handle = 0 (`IntPtr.Zero`). Đối tượng C# Application không được liên kết với Java Peer thực tế trên Android, dẫn đến việc JNI ném `NullPointerException` ngay khi Avalonia Runtime cố gắng gọi các method của Context để load theme, font hoặc assets.
+  2. Việc đưa Activity trung gian (`SplashActivity`) vào chu kỳ khởi động làm đứt gãy luồng chuyển tiếp giao diện (Window Transition) của Avalonia, tạo ra khoảng hở màn hình trống (blank) trước khi crash.
+  3. Logo tùy biến của ứng dụng bị chèn vào các file cấu hình boot thay vì logo vector hoạt ảnh gốc của framework Avalonia.
+- **Giải pháp triệt để**:
+  1. **Khôi phục hoàn toàn logo gốc Avalonia**:
+     - Phục hồi lại 2 file vector hoạt ảnh gốc `Resources/drawable-v31/avalonia_anim.xml` và `Resources/drawable-night-v31/avalonia_anim.xml` với `animated-vector` chính thức từ template Avalonia 12.1.3.
+     - Tạo vector tĩnh `Resources/drawable/avalonia_logo.xml` cho các phiên bản Android cũ (< 12) trong `splash_screen.xml`.
+     - Cấu hình lại `values-v31/styles.xml` chuẩn Avalonia: sử dụng `android:windowSplashScreenAnimatedIcon` = `@drawable/avalonia_anim`, thời lượng 1000ms, loại bỏ thuộc tính rác `postSplashScreenTheme`.
+     - Cấu hình lại `values/styles.xml`: `MyTheme.NoActionBar` kế thừa `@style/Theme.AppCompat.DayNight.NoActionBar` với `windowBackground` = `@drawable/splash_screen`.
+  2. **Loại bỏ Constructor Nguy Hiểm & Bảo Vệ JNI Lifecycle**:
+     - Xóa bỏ hoàn toàn constructor `public Application() : base(0, ...)`.
+     - Chỉ giữ duy nhất constructor chuẩn JNI `protected Application(nint javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)` chuẩn theo Avalonia template.
+  3. **Khôi phục `MainActivity` làm MainLauncher trực tiếp**:
+     - Xóa bỏ hoàn toàn `SplashActivity.cs`.
+     - Đặt lại `MainActivity`: `MainLauncher = true`, `Exported = true`, `Theme = "@style/MyTheme.NoActionBar"`.
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC.Android/Application.cs`
+  - `ComicDownloaderGMTPC.Android/MainActivity.cs`
+  - `ComicDownloaderGMTPC.Android/SplashActivity.cs` (Đã xóa)
+  - `ComicDownloaderGMTPC.Android/Resources/drawable/avalonia_logo.xml` (Tạo mới)
+  - `ComicDownloaderGMTPC.Android/Resources/drawable/splash_screen.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/drawable-v31/avalonia_anim.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/drawable-night-v31/avalonia_anim.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values/colors.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values-night/colors.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values/styles.xml`
+  - `ComicDownloaderGMTPC.Android/Resources/values-v31/styles.xml`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+- **Quy tắc kiểm thử**:
+  - Biên dịch Release sạch 0 Error, 0 Warning.
+  - Chạy `build.bat` thực hiện toàn bộ quy trình đóng gói đa hệ điều hành và upload Release Beta lên GitHub Release tag `beta`.

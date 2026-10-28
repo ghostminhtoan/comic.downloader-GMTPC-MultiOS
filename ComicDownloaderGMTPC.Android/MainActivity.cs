@@ -19,14 +19,14 @@ namespace ComicDownloaderGMTPC.Android;
 
 [Activity(
     Label = "ComicDownloaderGMTPC",
-    Theme = "@style/MyTheme.App",
+    Theme = "@style/MyTheme.NoActionBar",
     Icon = "@drawable/icon",
-    MainLauncher = false,
+    MainLauncher = true,
     LaunchMode = LaunchMode.SingleTask,
     SupportsPictureInPicture = true,
     ResizeableActivity = true,
     AllowEmbedded = true,
-    Exported = false,
+    Exported = true,
     WindowSoftInputMode = SoftInput.AdjustResize,
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Density | ConfigChanges.FontScale)]
 public class MainActivity : AvaloniaMainActivity
