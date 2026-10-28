@@ -69,7 +69,7 @@ namespace ComicDownloaderGMTPC.Android
     [Application]
     public class Application : AvaloniaAndroidApplication<App>
     {
-        protected Application(nint javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
+        public Application(nint javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
         {
         }
 

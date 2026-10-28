@@ -9,7 +9,7 @@ namespace ComicDownloaderGMTPC.Android;
 
 [Activity(
     Label = "Comic Downloader GMTPC - Báo Lỗi Khởi Động",
-    Theme = "@style/MyTheme.NoActionBar",
+    Theme = "@android:style/Theme.DeviceDefault.NoActionBar",
     Exported = false,
     ConfigurationChanges = global::Android.Content.PM.ConfigChanges.Orientation | global::Android.Content.PM.ConfigChanges.ScreenSize)]
 public class CrashReportActivity : Activity

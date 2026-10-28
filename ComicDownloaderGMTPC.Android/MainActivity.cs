@@ -228,15 +228,25 @@ public class MainActivity : AvaloniaMainActivity
                         return;
                     }
 
-                    // Fallback qua ToneGenerator nếu chưa tải xong file WAV
-                    var toneType = type switch
+                    // Fallback qua ToneGenerator nếu chưa tải xong file WAV (giải phóng an toàn sau khi âm thanh phát xong để triệt tiêu lỗi SIGSEGV native audio)
+                    _ = Task.Run(async () =>
                     {
-                        Services.SoundNotificationType.Startup => global::Android.Media.Tone.PropBeep,
-                        Services.SoundNotificationType.DownloadFinish => global::Android.Media.Tone.PropAck,
-                        _ => global::Android.Media.Tone.PropNack
-                    };
-                    using var toneGen = new global::Android.Media.ToneGenerator(global::Android.Media.Stream.Music, 100);
-                    toneGen.StartTone(toneType, 250);
+                        try
+                        {
+                            var toneType = type switch
+                            {
+                                Services.SoundNotificationType.Startup => global::Android.Media.Tone.PropBeep,
+                                Services.SoundNotificationType.DownloadFinish => global::Android.Media.Tone.PropAck,
+                                _ => global::Android.Media.Tone.PropNack
+                            };
+                            var toneGen = new global::Android.Media.ToneGenerator(global::Android.Media.Stream.Music, 80);
+                            toneGen.StartTone(toneType, 200);
+                            await Task.Delay(350).ConfigureAwait(false);
+                            toneGen.Release();
+                            toneGen.Dispose();
+                        }
+                        catch { }
+                    });
                 }
                 catch { }
             });

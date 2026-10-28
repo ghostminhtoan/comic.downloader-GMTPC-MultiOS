@@ -2,12 +2,13 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
 
   <item>
-    <color android:color="@color/splash_background"/>
+    <color android:color="@color/splash_background" />
   </item>
 
-  <item android:drawable="@drawable/avalonia_logo"
-        android:width="120dp"
-        android:height="120dp"
-        android:gravity="center" />
+  <item>
+    <bitmap
+        android:gravity="center"
+        android:src="@drawable/avalonia_logo" />
+  </item>
 
 </layer-list>
