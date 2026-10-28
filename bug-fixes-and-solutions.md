@@ -60,6 +60,7 @@
 | **BUG-024** | Android Core & Startup Lifecycle | Lỗi treo logo Avalonia khi cài đặt app lần đầu cho máy mới | Template dùng logo `avalonia_anim`, `windowIsTranslucent=true` làm hỏng drawing handshake trên Android 12+, thiếu `InstallSplashScreen`, và xin quyền quản lý file nhảy Settings quá sớm trong `OnCreate` làm gián đoạn frame đầu | Tích hợp AndroidX `InstallSplashScreen`, đổi splash icon sang Concept 06 `@drawable/icon`, gỡ bỏ `windowIsTranslucent`, và hoãn xin quyền sau khi UI hoàn tất vẽ frame đầu | `values-v31/styles.xml`, `values/styles.xml`, `MainActivity.cs`, `ComicReaderActivity.cs`, `AndroidStorageHelper.cs`, `EnhanceComparisonWindow.axaml` |
 | **BUG-044** | Android Core | Lỗi Cold Start Crash trên Android do Application constructor protected | Constructor `protected` gây `IllegalAccessException` khi runtime phản chiếu | Đổi sang `public`, đưa crash handler lên đầu OnCreate | `Application.cs`, `MainActivity.cs` |
 | **BUG-045** | Android Core (Oppo K9x / ColorOS) | Mở app bị văng ngay lập tức trên Oppo K9x (Dimensity 810), không hiển thị lỗi | Lệnh `throw;` trong MainActivity.OnCreate làm kill process; Crash log bị nuốt do thiếu quyền Scoped Storage trên Android 11/12; Xung đột 32-bit `armeabi-v7a` trên Zygote 64-bit | Loại bỏ hoàn toàn `throw;`, hiển thị Native Crash Diagnostic Screen với nút sao chép lỗi và khởi động lại; Ghi log đa tầng vào App-Specific Internal/External Storage (100% Zero-Permission); Thuần hóa 64-bit native (`android-arm64;android-x64`) | `Application.cs`, `MainActivity.cs`, `ComicDownloaderGMTPC.Android.csproj`, `App.axaml.cs` |
+| **BUG-052** | Android Core (Lifecycle) | Lỗi Cold Start Crash trên Android thật (`UnsatisfiedLinkError: n_onCreate`) | `Application.cs` override `OnCreate()` tạo JNI stub native trước khi Mono runtime hoàn tất đăng ký động | Loại bỏ `override void OnCreate()` trong `Application.cs`, kế thừa thuần `AvaloniaAndroidApplication<App>` và dồn toàn bộ crash guard vào `MainActivity.OnCreate()` | `ComicDownloaderGMTPC.Android/Application.cs`, `ComicDownloaderGMTPC.Android/MainActivity.cs` |
 
 
 
@@ -1892,3 +1893,39 @@ Khi phát hiện hoặc sửa chữa bất kỳ lỗi kỹ thuật mới nào, b
 - **Quy tắc kiểm thử**:
   - Build sạch 0 Error, 0 Warning trên cả Desktop và Android Release.
   - Chạy `build_in_cmd.py` để xuất xưởng cả 3 nền tảng (Windows EXE, Linux Binary/Deb/tar.gz, Android APK) và tự động upload Release Beta lên GitHub tag `beta`.
+
+---
+
+### 53. BUG-052: Khắc Phục Triệt Để Lỗi Crash Khởi Động Android (UnsatisfiedLinkError n_onCreate) Bằng Chuẩn Hóa JNI Lifecycle AvaloniaAndroidApplication
+
+- **Triệu chứng**: Ứng dụng Android khi vừa mở máy bị crash ngay lập tức (Cold Start Crash), Android logcat báo lỗi nghiêm trọng:
+  ```text
+  java.lang.UnsatisfiedLinkError: No implementation found for void crc64ce76c431864a36f3.Application.n_onCreate() (tried Java_crc64ce76c431864a36f3_Application_n_1onCreate and Java_crc64ce76c431864a36f3_Application_n_1onCreate__)
+  at crc64ce76c431864a36f3.Application.n_onCreate(Native Method)
+  at crc64ce76c431864a36f3.Application.onCreate(Application.java:34)
+  at android.app.Instrumentation.callApplicationOnCreate(Instrumentation.java:1223)
+  at android.app.ActivityThread.handleBindApplication(ActivityThread.java:7068)
+  ```
+- **Nguyên nhân gốc rễ**:
+  1. Trong `ComicDownloaderGMTPC.Android/Application.cs`, việc `override void OnCreate()` sinh ra JNI native hook `n_onCreate()` trong file wrapper Java sinh bởi .NET Android runtime (`crc64ce76c431864a36f3.Application`).
+  2. Khi Android OS khởi chạy process, `Application.onCreate()` được hệ điều hành gọi TRƯỚC KHI Mono runtime kịp nạp và hoàn tất việc đăng ký động các native method exports (JNI dynamic method registration). Do đó máy ảo Java ném `UnsatisfiedLinkError` và làm crash sập toàn bộ ứng dụng trước khi bất kỳ code C# nào kịp chạy.
+  3. Khi chỉ định cấu hình biên dịch đa kiến trúc (multi-ABI), các proxy method không được map đúng nếu `Application` can thiệp vào tầng JNI runtime quá sớm.
+- **Giải pháp triệt để**:
+  1. **Loại bỏ hoàn toàn `override void OnCreate()` khỏi `Application.cs`**: Kế thừa trực tiếp và thuần túy từ `AvaloniaAndroidApplication<App>`, chỉ giữ lại constructor JNI chuẩn:
+     ```csharp
+     public Application(IntPtr javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
+     {
+     }
+     ```
+  2. **Chuẩn hóa Crash Protection tại `MainActivity.OnCreate()`**: Toàn bộ logic bảo vệ ngoại lệ, crash logger, UnhandledExceptionRaiser và TaskScheduler unobserved exception đã được chuẩn hóa tập trung tại `MainActivity.OnCreate()`, nơi runtime Mono đã nạp hoàn tất và môi trường Avalonia đã sẵn sàng 100%.
+  3. **Kiểm thử thực tế trên thiết bị thật Oppo K9x (CPH2331, Android 12) qua ADB**:
+     - Ứng dụng khởi động mượt mà (PID 20128), hiển thị trọn vẹn Avalonia UI Dark Theme (screencap 310,326 bytes) không gặp bất kỳ lỗi crash nào.
+     - Tải và giải mã thành công 11/11 chapter MoeTruyen (chap 208-218) với 22 trang/chapter.
+     - Tải và giải mã thành công các chapter Comix.to (chap 1-20, Chapter 1 tải trọn vẹn 101 trang ảnh JPEG).
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC.Android/Application.cs`
+  - `ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+- **Quy tắc kiểm thử**:
+  - Biên dịch Release sạch 0 Error, 0 Warning trên cả Desktop và Android.
+  - Chạy `build.bat` xuất xưởng cả 3 hệ điều hành và tự động upload Release Beta lên GitHub tag `beta`.

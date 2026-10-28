@@ -69,58 +69,8 @@ namespace ComicDownloaderGMTPC.Android
     [Application]
     public class Application : AvaloniaAndroidApplication<App>
     {
-        public Application(nint javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
+        public Application(IntPtr javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
         {
-        }
-
-        public override void OnCreate()
-        {
-            SetupGlobalCrashProtection();
-            try
-            {
-                base.OnCreate();
-            }
-            catch (Exception ex)
-            {
-                ApplicationCrashLogger.StartupException = ex;
-                global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[Application.OnCreate Crash] {ex}");
-                ApplicationCrashLogger.WriteCrashLog("Application.OnCreate", ex.ToString());
-            }
-        }
-
-        private static void SetupGlobalCrashProtection()
-        {
-            AndroidEnvironment.UnhandledExceptionRaiser += (sender, args) =>
-            {
-                try
-                {
-                    global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[AndroidEnvironment Unhandled] {args.Exception}");
-                    ApplicationCrashLogger.WriteCrashLog("AndroidEnvironment", args.Exception?.ToString());
-                    args.Handled = true;
-                }
-                catch { }
-            };
-
-            AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
-            {
-                try
-                {
-                    var ex = args.ExceptionObject as Exception;
-                    global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[AppDomain Unhandled] {ex?.Message}\n{ex?.StackTrace}");
-                    ApplicationCrashLogger.WriteCrashLog("AppDomain", ex?.ToString());
-                }
-                catch { }
-            };
-
-            TaskScheduler.UnobservedTaskException += (sender, args) =>
-            {
-                try
-                {
-                    global::Android.Util.Log.Warn("ComicGMTPC_Task", $"[UnobservedTask] {args.Exception?.Message}");
-                    args.SetObserved();
-                }
-                catch { }
-            };
         }
 
         protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
