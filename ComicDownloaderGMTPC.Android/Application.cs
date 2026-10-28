@@ -67,9 +67,12 @@ namespace ComicDownloaderGMTPC.Android
     }
 
     [Application]
-    public class Application : AvaloniaAndroidApplication<App>
+#pragma warning disable CS0618
+    [global::Android.Runtime.Preserve(AllMembers = true)]
+#pragma warning restore CS0618
+    public class MainApplication : AvaloniaAndroidApplication<App>
     {
-        public Application(IntPtr javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
+        public MainApplication(IntPtr javaReference, JniHandleOwnership transfer) : base(javaReference, transfer)
         {
         }
 

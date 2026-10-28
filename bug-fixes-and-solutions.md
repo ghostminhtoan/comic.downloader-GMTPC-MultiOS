@@ -1929,3 +1929,47 @@ Khi phát hiện hoặc sửa chữa bất kỳ lỗi kỹ thuật mới nào, b
 - **Quy tắc kiểm thử**:
   - Biên dịch Release sạch 0 Error, 0 Warning trên cả Desktop và Android.
   - Chạy `build.bat` xuất xưởng cả 3 hệ điều hành và tự động upload Release Beta lên GitHub tag `beta`.
+
+
+---
+
+### 54. BUG-053: Khử Trùng Chapter Comix.to Thông Minh Theo Votes/Group, Khắc Phục Triệt Để UnsatisfiedLinkError AvaloniaAndroidApplication Và Kiểm Thử Boot UI Thành Công Trên Cả Windows Lẫn Android
+
+- **Triệu chứng**:
+  1. Khi tải truyện từ comix.to (điển hình như bộ [Teto X Egen](https://comix.to/title/301d3-teto-x-egen) với dải chapter 1-5), thư mục tải về sinh ra hàng loạt chapter trùng lặp lộn xộn: Chapter 1, Chapter 1_ #01_Egen Guy, Chapter 1_ Ch. 1 - Egen Guy, Chapter 2, Chapter 2_ #02_Teto Girl, Chapter 2_ Ch. 2 - Teto Girl... do nhiều nhóm dịch (scanlation groups) cùng đăng tải.
+  2. Ứng dụng Android khi chạy Release build bị crash lúc mở với lỗi:
+     java.lang.UnsatisfiedLinkError: No implementation found for void crc6431345fe65afe8d98.AvaloniaAndroidApplication_1.n_onCreate() do tầng JNI marshalling của .NET Android Release mode không ánh xạ được open generic type của Avalonia.
+- **Nguyên nhân gốc rễ**:
+  1. API comix.to trả về toàn bộ các bản ghi chapter từ tất cả các nhóm dịch khác nhau (95 bản ghi thô cho 25 chapter). Hàm ScrapeComixtoBookAsync trước đây nạp toàn bộ 95 item vào queue mà không gom nhóm lọc trùng, dẫn đến DownloadEngineService tải lặp lại cùng một chapter number nhiều lần với các tên folder khác nhau.
+  2. Trong .NET 10 Android, cơ chế AndroidEnableMarshalMethods mặc định kích hoạt trong cấu hình Release cố gắng sinh static marshal tables, tuy nhiên đối với open generic class AvaloniaAndroidApplication<TApp> trong thư viện Avalonia.Android, JNI native stub 
+_onCreate bị bỏ sót hoặc không được link vào dynamic registration table, dẫn đến ném ngoại lệ UnsatisfiedLinkError khi hệ thống gọi onCreate().
+- **Giải pháp triệt để**:
+  1. **Khử trùng chapter thông minh theo thứ hạng bình chọn (Smart Deduplication with Vote Ranking)**:
+     - Trong ComicScraperService.cs: Gom nhóm toàn bộ chapter theo số thứ tự (GroupBy(ParseChapterNum)).
+     - Với mỗi số chapter, chọn ra **1 bản dịch duy nhất tốt nhất** theo thứ tự ưu tiên khắt khe:
+       - Ưu tiên 1: Ngôn ngữ trùng PreferredLanguage (nếu có).
+       - Ưu tiên 2: Bản dịch chính thức (isOfficial == true).
+       - Ưu tiên 3: Số lượt bình chọn (otes) cao nhất từ cộng đồng đọc truyện (ví dụ nhóm dịch EZManga votes=45 vượt trội so với các nhóm 4-13 votes).
+       - Ưu tiên 4: Bản ghi có ID mới nhất.
+     - Sắp xếp tăng dần theo số chapter từ 1 đến N.
+  2. **Bảo vệ phòng thủ chiều sâu (Defense-in-Depth) trong DownloadEngineService**:
+     - Tự động khử trùng danh sách 	argetChapters theo ChapterNumber ngay trước vòng lặp tải để đảm bảo an toàn tuyệt đối ngay cả khi phục hồi danh sách từ queue / utosave.md cũ.
+  3. **Khắc phục triệt để UnsatisfiedLinkError trên Android**:
+     - Trong ComicDownloaderGMTPC.Android.csproj: Cấu hình <AndroidEnableMarshalMethods>false</AndroidEnableMarshalMethods> để đảm bảo dynamic JNI registration hoạt động chính xác 100%.
+     - Trong Application.cs: Thêm thuộc tính bảo toàn thành viên [global::Android.Runtime.Preserve(AllMembers = true)] trên lớp MainApplication : AvaloniaAndroidApplication<App>.
+- **Kiểm thử thực tế**:
+  - **Trên Windows**: Kiểm thử nạp 95 chapter raw của Teto X Egen, bộ lọc gom nhóm chính xác về 25 chapter duy nhất; chọn dải 1-5 tải đúng 5 chapter duy nhất (Chapter 1 đến Chapter 5), 0 thư mục dư thừa.
+  - **Trên thiết bị Android thật (Oppo K9x - Android 12 qua ADB)**:
+    - Ứng dụng khởi động mượt mà (PID 32015), giao diện Avalonia Dark Theme hiển thị đầy đủ, sắc nét, không gặp bất kỳ lỗi crash nào.
+    - Tải thực tế thành công trọn vẹn chap 1 đến 5 của Teto X Egen vào /storage/emulated/0/Download/ComicDownloads/comix.to/[default]/Teto X Egen/.
+    - Kiểm tra thư mục trên máy Android: Đúng duy nhất 5 folder Chapter 1, Chapter 2, Chapter 3, Chapter 4, Chapter 5 với đầy đủ file ảnh JPG và .manifest.json.
+- **File can thiệp**:
+  - ComicDownloaderGMTPC/Services/ComicScraperService.cs
+  - ComicDownloaderGMTPC/Services/DownloadEngineService.cs
+  - ComicDownloaderGMTPC.Android/ComicDownloaderGMTPC.Android.csproj
+  - ComicDownloaderGMTPC.Android/Application.cs
+  - ComicDownloaderGMTPC.Android/MainActivity.cs
+  - Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md
+- **Quy tắc kiểm thử**:
+  - Build sạch 0 Error, 0 Warning toàn bộ Solution.
+  - Tự động thực thi uild.bat xuất xưởng cả 3 nền tảng (Windows EXE, Linux Binary/Deb/tar.gz, Android APK) và upload Release Beta lên GitHub tag eta.

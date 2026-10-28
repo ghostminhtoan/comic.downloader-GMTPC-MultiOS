@@ -5521,7 +5521,7 @@ public class ComicScraperService
         }
 
         // Gọi API lấy toàn bộ danh sách chapter: /api/v1/manga/{hid}/chapters?limit=100&order[number]=desc&page={p}&v=0&w=0
-        var allChapters = new List<ChapterItem>();
+        var rawChapterItems = new List<JsonElement>();
         int page = 1;
         while (!ct.IsCancellationRequested)
         {
@@ -5553,28 +5553,7 @@ public class ComicScraperService
 
                 foreach (var item in items.EnumerateArray())
                 {
-                    string chapName = item.TryGetProperty("name", out var nProp) ? nProp.GetString() ?? string.Empty : string.Empty;
-                    string chapNumber = item.TryGetProperty("number", out var numProp) ? numProp.ToString() : string.Empty;
-                    string chapUrl = item.TryGetProperty("url", out var uProp) ? uProp.GetString() ?? string.Empty : string.Empty;
-
-                    if (!chapUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                    {
-                        chapUrl = "https://comix.to" + chapUrl;
-                    }
-
-                    string displayTitle = !string.IsNullOrWhiteSpace(chapName) 
-                        ? $"Chapter {chapNumber}: {chapName}".Trim() 
-                        : $"Chapter {chapNumber}".Trim();
-
-                    double cNum = double.TryParse(chapNumber, out double parsedN) ? parsedN : 0.0;
-
-                    allChapters.Add(new ChapterItem
-                    {
-                        ChapterNumber = cNum,
-                        Title = displayTitle,
-                        Url = chapUrl,
-                        Status = "Waiting"
-                    });
+                    rawChapterItems.Add(item.Clone());
                 }
 
                 if (result.TryGetProperty("pagination", out var pagProp))
@@ -5595,13 +5574,113 @@ public class ComicScraperService
             }
         }
 
-        // Đảo ngược thứ tự để chapter 1 ở đầu danh sách
-        allChapters.Reverse();
+        // Gom nhóm theo số chapter để loại bỏ hoàn toàn các bản dịch trùng lặp giữa các nhóm dịch
+        static double ParseChapterNum(JsonElement elem)
+        {
+            if (elem.TryGetProperty("number", out var numProp))
+            {
+                string s = numProp.ToString();
+                if (double.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed))
+                    return parsed;
+            }
+            return -1.0;
+        }
 
-        book.Chapters = allChapters;
-        book.TotalChapters = allChapters.Count;
+        static int GetVotes(JsonElement elem)
+        {
+            return elem.TryGetProperty("votes", out var v) && v.TryGetInt32(out int val) ? val : 0;
+        }
+
+        static long GetId(JsonElement elem)
+        {
+            return elem.TryGetProperty("id", out var id) && id.TryGetInt64(out long val) ? val : 0;
+        }
+
+        static bool IsOfficial(JsonElement elem)
+        {
+            return elem.TryGetProperty("isOfficial", out var off) && off.GetBoolean();
+        }
+
+        static string GetLang(JsonElement elem)
+        {
+            return elem.TryGetProperty("language", out var l) ? l.GetString() ?? string.Empty : string.Empty;
+        }
+
+        var groupedChapters = rawChapterItems
+            .GroupBy(ParseChapterNum)
+            .ToList();
+
+        var dedupedChapters = new List<ChapterItem>();
+        string prefLang = book.PreferredLanguage ?? string.Empty;
+
+        foreach (var group in groupedChapters)
+        {
+            if (group.Key < 0)
+            {
+                // Các chapter đặc biệt / oneshot không có số
+                foreach (var specialItem in group)
+                {
+                    string specName = specialItem.TryGetProperty("name", out var snProp) ? snProp.GetString() ?? string.Empty : string.Empty;
+                    string specUrl = specialItem.TryGetProperty("url", out var suProp) ? suProp.GetString() ?? string.Empty : string.Empty;
+                    if (!specUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                    {
+                        specUrl = "https://comix.to" + specUrl;
+                    }
+
+                    dedupedChapters.Add(new ChapterItem
+                    {
+                        ChapterNumber = -1,
+                        Title = !string.IsNullOrWhiteSpace(specName) ? specName : "Special Chapter",
+                        Url = specUrl,
+                        Status = "Waiting"
+                    });
+                }
+                continue;
+            }
+
+            // Chọn 1 bản dịch tốt nhất cho số chapter này:
+            // 1. Ưu tiên ngôn ngữ ưa thích (PreferredLanguage) nếu có
+            // 2. Ưu tiên isOfficial == true
+            // 3. Ưu tiên số lượt votes cao nhất (được cộng đồng đánh giá nhiều nhất)
+            // 4. Ưu tiên id mới nhất
+            var bestItem = group
+                .OrderByDescending(item => !string.IsNullOrWhiteSpace(prefLang) && GetLang(item).Equals(prefLang, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(IsOfficial)
+                .ThenByDescending(GetVotes)
+                .ThenByDescending(GetId)
+                .First();
+
+            string chapTitleName = bestItem.TryGetProperty("name", out var nProp) ? nProp.GetString() ?? string.Empty : string.Empty;
+            string chapNumberStr = bestItem.TryGetProperty("number", out var numProp) ? numProp.ToString() : group.Key.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string finalChapUrl = bestItem.TryGetProperty("url", out var uProp) ? uProp.GetString() ?? string.Empty : string.Empty;
+
+            if (!finalChapUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                finalChapUrl = "https://comix.to" + finalChapUrl;
+            }
+
+            string displayTitle = !string.IsNullOrWhiteSpace(chapTitleName) 
+                ? $"Chapter {chapNumberStr}: {chapTitleName}".Trim() 
+                : $"Chapter {chapNumberStr}".Trim();
+
+            dedupedChapters.Add(new ChapterItem
+            {
+                ChapterNumber = group.Key,
+                Title = displayTitle,
+                Url = finalChapUrl,
+                Status = "Waiting"
+            });
+        }
+
+        // Sắp xếp theo thứ tự số chapter tăng dần (1, 2, 3...)
+        dedupedChapters = dedupedChapters
+            .OrderBy(c => c.ChapterNumber >= 0 ? c.ChapterNumber : double.MaxValue)
+            .ToList();
+
+        book.Chapters = dedupedChapters;
+        book.TotalChapters = dedupedChapters.Count;
         book.Status = "Ready";
-        book.StatusMessage = $"Tìm thấy {allChapters.Count} chapter";
+        book.StatusMessage = $"Tìm thấy {dedupedChapters.Count} chapter";
         return book;
     }
 

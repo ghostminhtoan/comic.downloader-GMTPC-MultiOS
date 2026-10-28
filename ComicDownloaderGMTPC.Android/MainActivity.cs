@@ -32,6 +32,8 @@ namespace ComicDownloaderGMTPC.Android;
 public class MainActivity : AvaloniaMainActivity
 {
     private const int StoragePermissionRequestCode = 1001;
+
+
     public static MainActivity? CurrentInstance { get; private set; }
 
     protected override void OnCreate(Bundle? savedInstanceState)

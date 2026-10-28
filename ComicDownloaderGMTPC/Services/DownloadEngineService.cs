@@ -854,7 +854,7 @@ public class DownloadEngineService
                     for (int i = 0; i < book.Chapters.Count; i++)
                     {
                         var ch = book.Chapters[i];
-                        if (chapterFilter.IsMatch(ch.Title))
+                        if (chapterFilter.IsMatch(ch.Title, ch.ChapterNumber))
                         {
                             filtered.Add(ch);
                         }
@@ -870,6 +870,29 @@ public class DownloadEngineService
                         LogEmitted?.Invoke("WARN", $"[{book.Title}] Bộ lọc '{book.ChapterSelectionText}' không khớp chương nào. Tải toàn bộ {book.Chapters.Count} chương.");
                     }
                 }
+            }
+
+            // KHỬ TRÙNG CHAPTER (DEDUPLICATION DEFENSE-IN-DEPTH):
+            // Bảo vệ tuyệt đối không bao giờ tải trùng số chapter kể cả khi danh sách từ queue / autosave.md có bản ghi trùng lặp
+            if (targetChapters.Count > 1)
+            {
+                var dedupedList = new List<ChapterItem>();
+                var seenNumbers = new HashSet<double>();
+                foreach (var c in targetChapters)
+                {
+                    if (c.ChapterNumber > 0)
+                    {
+                        if (seenNumbers.Add(c.ChapterNumber))
+                        {
+                            dedupedList.Add(c);
+                        }
+                    }
+                    else
+                    {
+                        dedupedList.Add(c);
+                    }
+                }
+                targetChapters = dedupedList;
             }
 
             int totalChapters = Math.Max(1, targetChapters.Count);
