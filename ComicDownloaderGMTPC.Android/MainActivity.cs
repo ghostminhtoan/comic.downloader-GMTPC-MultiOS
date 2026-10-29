@@ -193,9 +193,28 @@ public class MainActivity : AvaloniaMainActivity
                     var uri = global::Android.Net.Uri.Parse(url);
                     var intent = new Intent(Intent.ActionView, uri);
                     intent.AddFlags(ActivityFlags.NewTask);
-                    StartActivity(intent);
+                    var chooserIntent = Intent.CreateChooser(intent, "Chọn trình duyệt để mở tìm kiếm");
+                    if (chooserIntent != null)
+                    {
+                        chooserIntent.AddFlags(ActivityFlags.NewTask);
+                        StartActivity(chooserIntent);
+                    }
+                    else
+                    {
+                        StartActivity(intent);
+                    }
                 }
-                catch { }
+                catch
+                {
+                    try
+                    {
+                        var uri = global::Android.Net.Uri.Parse(url);
+                        var intent = new Intent(Intent.ActionView, uri);
+                        intent.AddFlags(ActivityFlags.NewTask);
+                        StartActivity(intent);
+                    }
+                    catch { }
+                }
             });
         };
 

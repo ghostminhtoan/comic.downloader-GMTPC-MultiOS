@@ -66,7 +66,7 @@ public partial class MainView : UserControl
 
 
 
-        // Tự động nhận diện Landscape (width > height) vs Portrait (width < height)
+        // Tự động nhận diện Landscape (width > height) vs Portrait (width < height) và tự động căn chỉnh Search Layout
 
         SizeChanged += (s, e) =>
 
@@ -77,6 +77,14 @@ public partial class MainView : UserControl
             {
 
                 vm.IsPortraitMode = e.NewSize.Width < e.NewSize.Height;
+
+            }
+
+            if (e.NewSize.Width > 0 && e.NewSize.Height > 0)
+
+            {
+
+                UpdateSearchLayout(e.NewSize.Width, e.NewSize.Height);
 
             }
 
@@ -334,9 +342,55 @@ public partial class MainView : UserControl
         }
     }
 
+    private void UpdateSearchLayout(double width, double height)
+    {
+        try
+        {
+            var searchGrid = this.FindControl<Grid>("SearchLayoutGrid");
+            var inputBorder = this.FindControl<Border>("SearchInputBorder");
+            var domainBorder = this.FindControl<Border>("SearchDomainBorder");
+            if (searchGrid == null || inputBorder == null || domainBorder == null) return;
+
+            // Màn hình hẹp (< 750px) hoặc thiết bị Android dọc: Bố cục DỌC (Vertical) để không bị teo hẹp cột tên truyện
+            bool isNarrow = width < 750 || (OperatingSystem.IsAndroid() && (width < height || width < 850));
+            if (isNarrow)
+            {
+                if (searchGrid.ColumnDefinitions.Count > 0)
+                {
+                    searchGrid.ColumnDefinitions.Clear();
+                }
+                if (searchGrid.RowDefinitions.Count != 3)
+                {
+                    searchGrid.RowDefinitions = RowDefinitions.Parse("Auto, 14, Auto");
+                }
+                Grid.SetColumn(inputBorder, 0);
+                Grid.SetRow(inputBorder, 0);
+                Grid.SetColumn(domainBorder, 0);
+                Grid.SetRow(domainBorder, 2);
+            }
+            else
+            {
+                if (searchGrid.RowDefinitions.Count > 0)
+                {
+                    searchGrid.RowDefinitions.Clear();
+                }
+                if (searchGrid.ColumnDefinitions.Count != 3)
+                {
+                    searchGrid.ColumnDefinitions = ColumnDefinitions.Parse("*, 16, 360");
+                }
+                Grid.SetRow(inputBorder, 0);
+                Grid.SetColumn(inputBorder, 0);
+                Grid.SetRow(domainBorder, 0);
+                Grid.SetColumn(domainBorder, 2);
+            }
+        }
+        catch { }
+    }
+
     private void OnMainViewLoaded(object? sender, RoutedEventArgs e)
 
     {
+        UpdateSearchLayout(Bounds.Width, Bounds.Height);
 
         if (DataContext is MainViewModel vm)
 
@@ -515,7 +569,7 @@ public partial class MainView : UserControl
 
         {
 
-            if (e.Source is Button || (e.Source is Visual v && v.FindAncestorOfType<Button>() != null))
+            if (e.Source is Button || e.Source is CheckBox || (e.Source is Visual v && (v.FindAncestorOfType<Button>() != null || v.FindAncestorOfType<CheckBox>() != null)))
 
                 return;
 

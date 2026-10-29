@@ -2784,13 +2784,13 @@
 
 
 
-                                    <!-- Bố cục 2 Cột chính: Cột Trái = Danh sách tên truyện, Cột Phải = Domain & Engine -->
+                                    <!-- Bố cục 2 Cột chính: Cột Trái = Danh sách tên truyện, Cột Phải = Domain & Engine (Tự động thích ứng Responsive Dọc trên Android / Mobile) -->
 
-                                    <Grid Grid.Row="1" ColumnDefinitions="*, 16, 360" MinHeight="320">
+                                    <Grid x:Name="SearchLayoutGrid" Grid.Row="1" ColumnDefinitions="*, 16, 360" MinHeight="320">
 
                                         <!-- CỘT TRÁI: DANH SÁCH TÊN TRUYỆN -->
 
-                                        <Border Grid.Column="0" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12">
+                                        <Border x:Name="SearchInputBorder" Grid.Column="0" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12">
 
                                             <Grid RowDefinitions="Auto, *, Auto">
 
@@ -2850,7 +2850,7 @@
 
                                         <!-- CỘT PHẢI: CHỌN DOMAIN & SEARCH ENGINE (CÓ GRID GIỮA CÁC ROW) -->
 
-                                        <Border Grid.Column="2" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12">
+                                        <Border x:Name="SearchDomainBorder" Grid.Column="2" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="12">
 
                                             <StackPanel Spacing="10">
 
@@ -9815,6 +9815,26 @@
                 <!-- Cụm thao tác Tải / Dừng / Tạm dừng (Ẩn khi thu nhỏ, chỉ hiện khi mở rộng) -->
 
                 <StackPanel x:Name="FloatingActionPanel" Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
+
+                    <!-- Thao tác Dán Link & Tự dán trên thanh Quick Float Button (Đồng bộ 2 chiều với thanh chính) -->
+                    <Button Command="{Binding PasteLinkCommand}"
+                            Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                            Foreground="#38BDF8" FontWeight="Bold"
+                            CornerRadius="12" Padding="4,4" Width="74" Height="28"
+                            ToolTip.Tip="Dán link truyện từ Clipboard">
+                        <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="📋" FontSize="10" VerticalAlignment="Center" />
+                            <TextBlock Text="DÁN LINK" FontSize="9.5" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <CheckBox IsChecked="{Binding IsAutoPasteClipboard}"
+                              HorizontalAlignment="Center" Margin="0,1,0,3"
+                              ToolTip.Tip="Tự động theo dõi Clipboard: mỗi khi copy link truyện sẽ tự động nạp">
+                        <TextBlock Text="⚡ Tự dán" FontSize="9.5" Foreground="#38BDF8" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </CheckBox>
+
+                    <Border Height="1" Width="50" Background="#334155" HorizontalAlignment="Center" Margin="0,1,0,3" />
 
                     <!-- 1. Toggle Button Tải / Dừng tải -->
 

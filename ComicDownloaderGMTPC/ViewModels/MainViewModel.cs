@@ -4715,12 +4715,12 @@ public partial class MainViewModel : ViewModelBase
                         }
                         catch
                         {
-                            OpenUrlCrossPlatform(searchUrl);
+                            await LaunchWebUrlAsync(searchUrl);
                         }
                     }
                     else
                     {
-                        OpenUrlCrossPlatform(searchUrl);
+                        await LaunchWebUrlAsync(searchUrl);
                     }
 
                     openedCount++;
@@ -4746,26 +4746,7 @@ public partial class MainViewModel : ViewModelBase
 
     private static void OpenUrlCrossPlatform(string url)
     {
-        try
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
-            }
-            else if (OperatingSystem.IsLinux())
-            {
-                System.Diagnostics.Process.Start("xdg-open", url);
-            }
-            else if (OperatingSystem.IsMacOS())
-            {
-                System.Diagnostics.Process.Start("open", url);
-            }
-            else
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
-            }
-        }
-        catch { }
+        _ = LaunchWebUrlAsync(url);
     }
 
     private string? GetWindowsBrowserPath(out string newWindowArg)

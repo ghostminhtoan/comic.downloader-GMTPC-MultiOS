@@ -2044,3 +2044,38 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC/Services/DownloadEngineService.cs`
   - `ComicDownloaderGMTPC/ViewModels/MainViewModel.cs`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+
+---
+
+### BUG-056: LỖI GIAO DIỆN TAB TÌM TRUYỆN TRÊN ANDROID, MỞ CHỌN TRÌNH DUYỆT (INTENT CHOOSER) VÀ BỔ SUNG CHECKBOX TỰ DÁN / NÚT DÁN LINK TRÊN QUICK FLOAT BUTTON
+- **Hiện tượng**:
+  1. Trên Android (màn hình hẹp / dọc), giao diện tab "Tìm truyện hàng loạt" bị teo hẹp nghiêm trọng: Khung "SELECT DOMAIN" bên phải chiếm cố định 360px làm cột trái "DANH SÁCH TÊN TRUYỆN" bị ép chỉ còn vài chục pixel, chữ hướng dẫn bị bóp nghẹt thành 1 từ/dòng và các khung bị đè lên nhau.
+  2. Khi bấm nút "SEARCH (TÌM KIẾM)" trên Android, ứng dụng không mở được liên kết và không hiển thị hộp thoại cho người dùng chọn trình duyệt (Chrome, Firefox, Edge, Brave, Kiwi, v.v.) để tra cứu.
+  3. Thanh Quick Float Button (thanh công cụ nổi) chỉ có nút Tải / Dừng tải và Top / Bot, thiếu nút Dán Link và Checkbox Tự dán khiến người dùng phải cuộn lên đầu trang mỗi lần muốn nạp link nhanh từ clipboard.
+- **Nguyên nhân gốc rễ**:
+  1. `MainView.axaml` thiết lập `ColumnDefinitions="*, 16, 360"` cố định cho Grid tìm kiếm. Màn hình điện thoại có chiều rộng chỉ ~360 - 412 DIP khiến cột bên trái `*` bị co rúm hoàn toàn.
+  2. `MainViewModel.cs` trong `ExecuteBatchSearchAsync` gọi hàm nội bộ `OpenUrlCrossPlatform(url)`. Trên Android, `OperatingSystem.IsLinux()` trả về `true` nên chương trình cố chạy `Process.Start("xdg-open", url)` (vốn không tồn tại trên Android), gây exception nuốt trong catch rỗng. Đồng thời callback `NativeOpenBrowserRequested` trên Android chưa bọc qua `Intent.CreateChooser`.
+  3. Checkbox `⚡ Tự dán` và Nút `📋 Dán Link` mới chỉ có ở thanh Quick Direct Link Bar phía trên, chưa được đưa vào cụm thao tác mở rộng `FloatingActionPanel` của thanh nổi.
+- **Giải pháp triệt để**:
+  1. **Responsive Vertical Layout cho Tab Tìm truyện**:
+     - Trong `MainView.axaml.cs`: Bổ sung phương thức `UpdateSearchLayout(double width, double height)`. Khi màn hình hẹp (< 750px) hoặc thiết bị Android, tự động chuyển đổi `SearchLayoutGrid` sang dạng bố cục dọc (Row 0: Danh sách tên truyện full width 100%, Row 2: Select Domain & Engine full width 100%). Khi trên Desktop hoặc màn hình rộng, tự động trả về 2 cột `*, 16, 360` chuẩn mực.
+  2. **Native Intent Chooser cho Tìm Kiếm Trình Duyệt Trên Android**:
+     - Cập nhật `ComicDownloaderGMTPC.Android/MainActivity.cs`: Dùng `Intent.CreateChooser(intent, "Chọn trình duyệt để mở tìm kiếm")` kèm cờ `ActivityFlags.NewTask`, cho phép người dùng tùy ý chọn trình duyệt mong muốn.
+     - Cập nhật `MainViewModel.DomainAnalyze.cs` và `MainViewModel.cs`: `LaunchWebUrlAsync` ưu tiên kích hoạt trực tiếp `NativeOpenBrowserRequested` trên Android, và `OpenUrlCrossPlatform` đồng bộ qua `LaunchWebUrlAsync`.
+  3. **Tích hợp Dán Link & Checkbox Tự Dán trên Quick Float Button**:
+     - Trong `MainView.axaml`: Bổ sung Nút `📋 DÁN LINK` (`Command="{Binding PasteLinkCommand}"`) và CheckBox `⚡ Tự dán` (`IsChecked="{Binding IsAutoPasteClipboard}"`) vào ngay phía trên nút Tải / Dừng tải.
+     - Hai CheckBox tự dán (cũ và mới) cùng bind Two-Way vào `IsAutoPasteClipboard` nên đồng bộ trạng thái tức thì 100%.
+     - Trong `MainView.axaml.cs`: Cập nhật `OnPointerPressed` bỏ qua cả CheckBox để thao tác chạm/tick không bị cướp bởi gesture dragging hoặc toggling của thanh nổi.
+- **Kiểm thử thực tế**:
+  1. Kiểm thử trên thiết bị thật Oppo K9x (Android 12) qua ADB:
+     - Giao diện Tab Tìm truyện tự động xếp dọc ngay ngắn, chiều rộng 100% full width, TextBox nhập liệu rộng rãi, không bị đè che chữ.
+     - Thanh Quick Float Button hiển thị đầy đủ cụm Dán Link, Checkbox Tự Dán, Tải/Dừng tải, Top/Bot sắc nét và hoạt động mượt mà.
+  2. Build đa nền tảng đạt chuẩn 0 Warning, 0 Error và đã upload tự động lên GitHub Release tag `beta`.
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Views/MainView.axaml`
+  - `ComicDownloaderGMTPC/Views/MainView.axaml.cs`
+  - `ComicDownloaderGMTPC/ViewModels/MainViewModel.cs`
+  - `ComicDownloaderGMTPC/ViewModels/MainViewModel.DomainAnalyze.cs`
+  - `ComicDownloaderGMTPC.Android/MainActivity.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

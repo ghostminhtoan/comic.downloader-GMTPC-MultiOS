@@ -149,6 +149,13 @@ public partial class MainViewModel
         if (string.IsNullOrWhiteSpace(url)) return;
         url = DomainRoutingService.NormalizeUrl(url);
 
+        // Trên Android: Ưu tiên dùng Native Chooser Intent để người dùng được chọn trình duyệt mở link
+        if (OperatingSystem.IsAndroid())
+        {
+            BackgroundExecutionService.NativeOpenBrowserRequested?.Invoke(url);
+            return;
+        }
+
         try
         {
             var topLevel = Avalonia.Application.Current?.ApplicationLifetime switch
