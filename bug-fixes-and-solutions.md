@@ -2004,3 +2004,43 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
   - `ComicDownloaderGMTPC/Services/DownloadEngineService.cs`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+---
+
+### BUG-055: KHẮC PHỤC TRIỆT ĐỂ NGHẼN 2 CONNECTION 4 TRUYỆN, LỖI STOP/START LẦN 5 VÀ TỰ ĐỘNG CLEAR COOKIE BIẾN THÀNH MÁY MỚI (WINDOWS & ANDROID)
+- **Hiện tượng**:
+  1. Khi tải cùng lúc 2 connection 4 truyện trên `comix.to`, tiến trình gặp lỗi nghẽn hoặc đứng hình.
+  2. Khi đang tải rồi ngừng tải (Stop/Start) 4 lần liên tiếp, mỗi lần cách nhau 2 giây, thì đến lần tải thứ 5 bị lỗi hàng loạt.
+  3. Máy chủ `comix.to` trả về mã `HTTP 403 Forbidden` kèm payload `{"error":"captcha_required","challenge":"/@waf/challenge"}`, kích hoạt popup Cloudflare Turnstile Captcha chặn IP ("Verify you're human - For the best experience, please use our website or install the PWA app instead of a third-party app").
+- **Nguyên nhân gốc rễ**:
+  1. **Race Condition & Worker Swarm khi Stop/Start dồn dập**:
+     - Trong `DownloadEngineService.cs`, phương thức `Stop()` trước đây gán `_isDownloading = false` ngay lập tức mà không chờ vòng lặp worker cũ (`_runningDownloadTask`) dọn dẹp và thoát hẳn.
+     - Khi người dùng bấm Tải lại sau 2 giây, một phiên `StartDownloadAsync` mới được tạo ra trong khi các worker cũ vẫn đang chạy ngầm. Sau 4 lần Stop/Start, có tới 8-10 worker ngầm cùng tranh chấp file I/O và đồng loạt bắn bão request (Thundering Herd) lên máy chủ `comix.to`.
+  2. **Thiếu Global Rate Limiter & Cooldown giữa các connection**:
+     - Khi 2 truyện tải đồng thời, 2 luồng liên tục gọi API `api/v1/chapters/{cid}` và pagination mà không có khoảng cách an toàn (Zero Jitter/Throttling), dẫn đến vượt ngưỡng Burst Rate Limit của Cloudflare WAF.
+  3. **Lưu trữ Cookie Session cũ bị Flagged**:
+     - HttpClient dùng chung `CookieContainer` lưu lại các cookie tracking và cờ session bị phạt từ máy chủ comix, khiến mọi request tiếp theo dù đổi link hay retry vẫn bị nhận diện là session cũ và tiếp tục bị bắt captcha.
+  4. **Bão lỗi dây chuyền (Cascading Failure Storm)**:
+     - Khi một chapter bị rate-limit tạm thời, vòng lặp chapter nhảy ngay lập tức sang các chapter tiếp theo với delay 0ms, bắn hàng chục request lỗi trong 1 giây khiến WAF kích hoạt khóa IP cứng.
+- **Giải pháp triệt để**:
+  1. **Kiến trúc Tự Động Clear Cookie & Tái Tạo Danh Tính Máy Mới (Clean Machine Profile)**:
+     - Thêm phương thức `ResetComixSessionAsNewDevice()` trong `ComicScraperService.cs`:
+       - Tự động xóa sạch toàn bộ Cookie của `comix.to`, `.comix.to`, và các CDN liên quan trong `_comixCookieContainer`.
+       - Hủy bỏ và tái tạo connection pool mới toanh (`SocketsHttpHandler` + DoH bypass), ngắt toàn bộ TLS session ticket cũ.
+       - Tự động xoay User-Agent và Client Hints (`Sec-Ch-Ua`, `Sec-Ch-Ua-Mobile`, `Sec-Ch-Ua-Platform`) sang danh tính một thiết bị mới ngẫu nhiên (Windows Chrome 130, Windows Edge 129, Android Chrome Mobile 130, Android Samsung Browser, macOS Chrome).
+       - Tự động kích hoạt khi nhận được bất kỳ mã lỗi nào (403, 429, `captcha_required`, `@waf/challenge`), biến client thành một thiết bị hoàn toàn mới tinh vừa truy cập lần đầu.
+       - Áp dụng đồng bộ và hoàn hảo cho cả **Windows** lẫn **Android**.
+  2. **Bộ điều tiết tần suất tập trung ComixRateLimiter**:
+     - Đảm bảo khoảng cách tối thiểu giữa 2 request API comix bất kỳ >= 700ms.
+     - Tự động kích hoạt Cool-down Exponential Backoff (3s, 6s, 9s) khi phát hiện dấu hiệu rate limit để WAF giải tỏa cờ phạt mà không làm hỏng tiến trình tải.
+  3. **Drain Lock & Ngăn Chặn Chồng Lấn Worker (`_lifecycleLock`)**:
+     - Thêm SemaphoreSlim `_lifecycleLock` và biến theo dõi `_runningDownloadTask` trong `DownloadEngineService.cs`.
+     - Khi Stop, gán cờ `_isStopping = true` và cancel token; trong `StartDownloadAsync`, bắt buộc chờ phiên cũ dọn dẹp và thoát 100% trước khi phiên mới được phép chạy. Loại bỏ hoàn toàn lỗi tích tụ worker ở lần thứ 5.
+  4. **Chống Cascading Failure Storm**:
+     - Thêm biến đếm `consecutiveExtractErrors` trong `DownloadComicBookAsync`: Nếu gặp lỗi bóc tách ảnh 3 chương liên tiếp, tự động dừng bộ truyện đó và có khoảng nghỉ 1.5s để bảo vệ IP an toàn tuyệt đối.
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/ComixCryptoService.cs`
+  - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
+  - `ComicDownloaderGMTPC/Services/DownloadEngineService.cs`
+  - `ComicDownloaderGMTPC/ViewModels/MainViewModel.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

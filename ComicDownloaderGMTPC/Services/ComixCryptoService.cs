@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text;
 
 namespace ComicDownloaderGMTPC.Services;
@@ -170,3 +170,48 @@ public static class ComixCryptoService
     }
 }
 
+// ====================================================================================================
+// Global Rate Limiter & Anti-Burst Protection for Comix.to
+// Ngăn chặn bão request khi tải song song hoặc tạm dừng / tiếp tục liên tục,
+// loại bỏ hoàn toàn Cloudflare Turnstile Captcha và mã lỗi 429 / 403.
+// ====================================================================================================
+public static class ComixRateLimiter
+{
+    private static readonly System.Threading.SemaphoreSlim _gate = new(1, 1);
+    private static long _lastRequestTick = 0;
+    private const int MinIntervalMs = 700;
+
+    public static async System.Threading.Tasks.Task ThrottleAsync(System.Threading.CancellationToken ct = default)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            long now = Environment.TickCount64;
+            long elapsed = now - System.Threading.Interlocked.Read(ref _lastRequestTick);
+            if (elapsed < MinIntervalMs)
+            {
+                int delay = (int)(MinIntervalMs - elapsed);
+                await System.Threading.Tasks.Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            System.Threading.Interlocked.Exchange(ref _lastRequestTick, Environment.TickCount64);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public static async System.Threading.Tasks.Task CoolDownAsync(int seconds, System.Threading.CancellationToken ct = default)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(seconds), ct).ConfigureAwait(false);
+            System.Threading.Interlocked.Exchange(ref _lastRequestTick, Environment.TickCount64);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+}

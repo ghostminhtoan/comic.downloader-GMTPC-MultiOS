@@ -2494,7 +2494,7 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task ToggleDownloadAsync()
     {
-        if (IsDownloading)
+        if (IsDownloading || _downloadEngine.IsDownloading || _downloadEngine.IsStopping)
         {
             Stop();
         }

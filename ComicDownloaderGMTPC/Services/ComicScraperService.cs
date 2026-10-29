@@ -22,6 +22,95 @@ public class ComicScraperService
     private readonly HttpClient _httpClient;
     private readonly CookieContainer _cookieContainer = new();
 
+    // ====================================================================================================
+    // Fresh Machine Identity & Auto-Clear Cookie Architecture cho Comix.to (Windows & Android)
+    // ====================================================================================================
+    public record ComixDeviceIdentity(string UserAgent, string SecChUa, string Platform, string Mobile);
+
+    private static readonly ComixDeviceIdentity[] FreshComixDeviceProfiles =
+    [
+        new(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "\"Google Chrome\";v=\"130\", \"Chromium\";v=\"130\", \"Not?A_Brand\";v=\"99\"",
+            "\"Windows\"",
+            "?0"
+        ),
+        new(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0",
+            "\"Microsoft Edge\";v=\"129\", \"Chromium\";v=\"129\", \"Not=A?Brand\";v=\"24\"",
+            "\"Windows\"",
+            "?0"
+        ),
+        new(
+            "Mozilla/5.0 (Linux; Android 12; Oppo K9x Build/SP1A.210812.016) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+            "\"Google Chrome\";v=\"130\", \"Chromium\";v=\"130\", \"Not?A_Brand\";v=\"99\"",
+            "\"Android\"",
+            "?1"
+        ),
+        new(
+            "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36",
+            "\"Google Chrome\";v=\"129\", \"Chromium\";v=\"129\", \"Not=A?Brand\";v=\"24\"",
+            "\"Android\"",
+            "?1"
+        ),
+        new(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
+            "",
+            "\"Windows\"",
+            "?0"
+        )
+    ];
+
+    private int _currentComixDeviceIndex = 0;
+    public ComixDeviceIdentity CurrentComixDevice => FreshComixDeviceProfiles[Math.Abs(_currentComixDeviceIndex) % FreshComixDeviceProfiles.Length];
+
+    private CookieContainer _comixCookieContainer = new();
+    private HttpClient _comixHttpClient = null!;
+    private readonly object _comixClientLock = new();
+
+    private void InitComixClient()
+    {
+        _comixCookieContainer = new CookieContainer();
+        var handler = DoHResolver.CreateBypassHandler(_comixCookieContainer);
+        _comixHttpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+    }
+
+    /// <summary>
+    /// Xóa sạch toàn bộ Cookie và tái tạo danh tính máy mới tinh (Clean Machine State) cho Comix.to.
+    /// Giúp reset phiên duyệt web, vượt qua các trạng thái rate limit và cờ captcha cũ trên cả Windows lẫn Android.
+    /// </summary>
+    public void ResetComixSessionAsNewDevice()
+    {
+        lock (_comixClientLock)
+        {
+            try
+            {
+                var uris = new[]
+                {
+                    new Uri("https://comix.to"),
+                    new Uri("https://.comix.to"),
+                    new Uri("https://api.comix.to"),
+                    new Uri("https://johnsnotes.site")
+                };
+                foreach (var uri in uris)
+                {
+                    try
+                    {
+                        var cookies = _comixCookieContainer.GetCookies(uri);
+                        foreach (Cookie c in cookies) c.Expired = true;
+                    }
+                    catch { }
+                }
+
+                var oldClient = _comixHttpClient;
+                Interlocked.Increment(ref _currentComixDeviceIndex);
+                InitComixClient();
+                try { oldClient?.Dispose(); } catch { }
+            }
+            catch { }
+        }
+    }
+
     public int MaxCpuThreads { get; set; } = OperatingSystem.IsAndroid()
         ? 3
         : Math.Min(4, CpuTopologyHelper.GetMaxLogicalProcessorCount());
@@ -45,6 +134,8 @@ public class ComicScraperService
             LoadDamconuongCookies("https://damconuong.shop");
         }
         catch { }
+
+        InitComixClient();
     }
 
     public void EnsureEHentaiCookies()
@@ -5525,6 +5616,7 @@ public class ComicScraperService
         int page = 1;
         while (!ct.IsCancellationRequested)
         {
+            await ComixRateLimiter.ThrottleAsync(ct).ConfigureAwait(false);
             string apiPath = $"/manga/{hid}/chapters?limit=100&order[number]=desc&page={page}&v=0&w=0";
             string token = ComixCryptoService.GenerateToken(apiPath);
             string apiUrl = $"https://comix.to/api/v1{apiPath}&_={token}";
@@ -5532,14 +5624,40 @@ public class ComicScraperService
             try
             {
                 using var apiReq = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-                apiReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+                var dev = CurrentComixDevice;
+                apiReq.Headers.TryAddWithoutValidation("User-Agent", dev.UserAgent);
+                if (!string.IsNullOrEmpty(dev.SecChUa))
+                {
+                    apiReq.Headers.TryAddWithoutValidation("Sec-Ch-Ua", dev.SecChUa);
+                    apiReq.Headers.TryAddWithoutValidation("Sec-Ch-Ua-Mobile", dev.Mobile);
+                    apiReq.Headers.TryAddWithoutValidation("Sec-Ch-Ua-Platform", dev.Platform);
+                }
                 apiReq.Headers.TryAddWithoutValidation("X-Requested-With", "XMLHttpRequest");
                 apiReq.Headers.TryAddWithoutValidation("Referer", url);
 
-                using var apiRes = await _httpClient.SendAsync(apiReq, ct).ConfigureAwait(false);
-                if (!apiRes.IsSuccessStatusCode) break;
+                HttpClient currentClient;
+                lock (_comixClientLock) currentClient = _comixHttpClient;
 
-                string rawJson = await apiRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var apiRes = await currentClient.SendAsync(apiReq, ct).ConfigureAwait(false);
+                string rawJson = string.Empty;
+                if (apiRes.IsSuccessStatusCode)
+                {
+                    rawJson = await apiRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                }
+
+                bool isBlocked = !apiRes.IsSuccessStatusCode ||
+                                 apiRes.StatusCode == System.Net.HttpStatusCode.Forbidden ||
+                                 (int)apiRes.StatusCode == 429 ||
+                                 rawJson.Contains("captcha_required") ||
+                                 rawJson.Contains("@waf/challenge");
+
+                if (isBlocked)
+                {
+                    // TỰ ĐỘNG XÓA SẠCH COOKIE VÀ ĐỔI DANH TÍNH MÁY MỚI THEO TIÊU CHÍ YÊU CẦU
+                    ResetComixSessionAsNewDevice();
+                    await ComixRateLimiter.CoolDownAsync(3, ct).ConfigureAwait(false);
+                    continue;
+                }
                 using var doc = JsonDocument.Parse(rawJson);
                 if (!doc.RootElement.TryGetProperty("e", out var encProp)) break;
 
@@ -5707,15 +5825,47 @@ public class ComicScraperService
             if (ct.IsCancellationRequested) break;
             try
             {
+                await ComixRateLimiter.ThrottleAsync(ct).ConfigureAwait(false);
+
                 using var req = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+                var dev = CurrentComixDevice;
+                req.Headers.TryAddWithoutValidation("User-Agent", dev.UserAgent);
+                if (!string.IsNullOrEmpty(dev.SecChUa))
+                {
+                    req.Headers.TryAddWithoutValidation("Sec-Ch-Ua", dev.SecChUa);
+                    req.Headers.TryAddWithoutValidation("Sec-Ch-Ua-Mobile", dev.Mobile);
+                    req.Headers.TryAddWithoutValidation("Sec-Ch-Ua-Platform", dev.Platform);
+                }
                 req.Headers.TryAddWithoutValidation("X-Requested-With", "XMLHttpRequest");
                 req.Headers.TryAddWithoutValidation("Referer", chapterUrl);
 
-                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                HttpClient currentClient;
+                lock (_comixClientLock) currentClient = _comixHttpClient;
+
+                using var res = await currentClient.SendAsync(req, ct).ConfigureAwait(false);
+                string rawJson = string.Empty;
                 if (res.IsSuccessStatusCode)
                 {
-                    string rawJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    rawJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                }
+
+                bool isBlocked = !res.IsSuccessStatusCode ||
+                                 res.StatusCode == System.Net.HttpStatusCode.Forbidden ||
+                                 (int)res.StatusCode == 429 ||
+                                 rawJson.Contains("captcha_required") ||
+                                 rawJson.Contains("@waf/challenge");
+
+                if (isBlocked)
+                {
+                    // TỰ ĐỘNG XÓA SẠCH COOKIE VÀ ĐỔI DANH TÍNH MÁY MỚI THEO TIÊU CHÍ YÊU CẦU
+                    ResetComixSessionAsNewDevice();
+                    int coolDownSec = attempt * 3;
+                    await ComixRateLimiter.CoolDownAsync(coolDownSec, ct).ConfigureAwait(false);
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(rawJson))
+                {
                     using var doc = JsonDocument.Parse(rawJson);
                     if (doc.RootElement.TryGetProperty("e", out var encProp))
                     {

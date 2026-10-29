@@ -39,6 +39,11 @@ public class DownloadEngineService
     private CancellationTokenSource? _cts;
     private bool _isDownloading;
     private volatile bool _isPaused;
+    private volatile bool _isStopping;
+    private Task? _runningDownloadTask;
+    private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
+
+    public bool IsStopping => _isStopping;
     private TaskCompletionSource<bool>? _pauseTcs;
     private long _totalBytesDownloadedInWindow;
     private DateTime _lastSpeedCheckTime = DateTime.UtcNow;
@@ -505,13 +510,24 @@ public class DownloadEngineService
 
     public async Task StartDownloadAsync(IEnumerable<ComicBookItem> items, string mode, CancellationToken externalCt = default)
     {
-        if (_isDownloading) return;
+        await _lifecycleLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_runningDownloadTask != null && !_runningDownloadTask.IsCompleted)
+            {
+                if (_cts != null && !_cts.IsCancellationRequested)
+                {
+                    try { _cts.Cancel(); } catch { }
+                }
+                await Task.WhenAny(_runningDownloadTask, Task.Delay(3000)).ConfigureAwait(false);
+            }
 
-        _isDownloading = true;
-        DownloadingStateChanged?.Invoke(true);
-        _activeMode = mode;
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
-        var ct = _cts.Token;
+            _isStopping = false;
+            _isDownloading = true;
+            DownloadingStateChanged?.Invoke(true);
+            _activeMode = mode;
+            _cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
+            var ct = _cts.Token;
         _lastSpeedCheckTime = DateTime.UtcNow;
         _totalBytesDownloadedInWindow = 0;
 
@@ -558,6 +574,9 @@ public class DownloadEngineService
         }
 
         LogEmitted?.Invoke("INFO", $"Bắt đầu tải danh sách truyện theo thứ tự từ trên xuống dưới (Song song: {concurrentComics} truyện, {imageThreads} luồng ảnh | Thư mục: {mode}) tới: {DownloadRoot}");
+
+        var currentTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _runningDownloadTask = currentTcs.Task;
 
         try
         {
@@ -626,6 +645,7 @@ public class DownloadEngineService
                 _activeItems.Clear();
             }
             _isDownloading = false;
+            _isStopping = false;
             _isPaused = false;
             _pauseTcs?.TrySetResult(true);
             _pauseTcs = null;
@@ -634,8 +654,14 @@ public class DownloadEngineService
             DownloadingStateChanged?.Invoke(false);
             PauseStateChanged?.Invoke(false);
             ProgressUpdated?.Invoke();
+            currentTcs?.TrySetResult(true);
         }
     }
+    finally
+    {
+        _lifecycleLock.Release();
+    }
+}
 
     public async Task DownloadNewAsync(IEnumerable<ComicBookItem> items, string mode, CancellationToken externalCt = default)
     {
@@ -717,15 +743,10 @@ public class DownloadEngineService
 
     public void Stop()
     {
+        _isStopping = true;
         _isPaused = false;
         _pauseTcs?.TrySetCanceled();
         _pauseTcs = null;
-
-        lock (_queueLock)
-        {
-            _activeItems.Clear();
-            _attemptedInSession.Clear();
-        }
 
         if (_cts != null && !_cts.IsCancellationRequested)
         {
@@ -737,9 +758,6 @@ public class DownloadEngineService
             LogEmitted?.Invoke("WARN", "⏹️ Đã yêu cầu dừng toàn bộ tác vụ tải.");
         }
 
-        _isDownloading = false;
-        DownloadingStateChanged?.Invoke(false);
-        PauseStateChanged?.Invoke(false);
         CurrentSpeedText = "0.0 KB/s";
         BackgroundExecutionService.Instance.CompleteTask("download_queue", "Tải Truyện", "Đã dừng tải");
         ProgressUpdated?.Invoke();
@@ -894,6 +912,7 @@ public class DownloadEngineService
 
             int totalChapters = Math.Max(1, targetChapters.Count);
             int completedChapters = 0;
+            int consecutiveExtractErrors = 0;
 
             for (int chIdx = 0; chIdx < targetChapters.Count; chIdx++)
             {
@@ -1006,6 +1025,7 @@ public class DownloadEngineService
                     SaveManifest(manifestFile, manifest);
                     if (moeDone > 0)
                     {
+                        consecutiveExtractErrors = 0;
                         completedChapters++;
                         chapter.Status = "Completed";
                         chapter.TotalPages = Math.Max(chapter.TotalPages, manifest.Count);
@@ -1168,6 +1188,17 @@ public class DownloadEngineService
                     }
                     chapter.Status = "Error";
                     LogEmitted?.Invoke("WARN", $"[{book.Title}] Không thể bóc tách ảnh cho '{chapter.Title}'.");
+
+                    consecutiveExtractErrors++;
+                    if (consecutiveExtractErrors >= 3)
+                    {
+                        book.Status = "Error";
+                        book.StatusMessage = "Comix.to giới hạn kết nối hoặc yêu cầu xác thực. Tạm dừng để bảo vệ IP.";
+                        LogEmitted?.Invoke("ERROR", $"[{book.Title}] Không thể bóc tách ảnh 3 chương liên tiếp. Tạm dừng để bảo vệ IP.");
+                        ProgressUpdated?.Invoke();
+                        break;
+                    }
+                    await Task.Delay(1500, ct).ConfigureAwait(false);
                 }
 
                 SaveManifest(manifestFile, manifest);
