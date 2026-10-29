@@ -1480,7 +1480,16 @@ public class DownloadEngineService
                                         targetUrl.Contains(".site/", StringComparison.OrdinalIgnoreCase) ||
                                         (refererUrl != null && refererUrl.Contains("comix", StringComparison.OrdinalIgnoreCase));
 
-                    if (!isComixOrWyr)
+                    if (isComixOrWyr)
+                    {
+                        // Comix CDN (wyr.*, *.site/, rxn.*) bat buoc phai co Referer va Origin comix.to de chong 403 Forbidden!
+                        req.Headers.TryAddWithoutValidation("Referer", "https://comix.to/");
+                        req.Headers.TryAddWithoutValidation("Origin", "https://comix.to");
+                        req.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "image");
+                        req.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "no-cors");
+                        req.Headers.TryAddWithoutValidation("Sec-Fetch-Site", "cross-site");
+                    }
+                    else
                     {
                         if (string.IsNullOrEmpty(effectiveReferer))
                         {
@@ -1497,7 +1506,7 @@ public class DownloadEngineService
                     }
 
                     req.Headers.TryAddWithoutValidation("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
-                    req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+                    req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
 
                     using var res = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
                     if (res.IsSuccessStatusCode)

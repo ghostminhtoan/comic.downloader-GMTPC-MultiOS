@@ -3088,7 +3088,7 @@ public class ComicScraperService
         void AddTag(string rawText)
         {
             string clean = WebUtility.HtmlDecode(Regex.Replace(rawText ?? string.Empty, @"<[^>]+>", " ")).Trim();
-            clean = Regex.Replace(clean, @"\s+", " ").Trim(' ', ',', '-', '|', '•');
+            clean = Regex.Replace(clean, @"\s+", " ").Trim(' ', ',', '-', '|', '\u2022');
             if (!string.IsNullOrWhiteSpace(clean) && clean.Length <= 45 && seen.Add(clean))
             {
                 tags.Add(clean);
@@ -3416,7 +3416,7 @@ public class ComicScraperService
             }
 
             // Dọn dẹp dấu phân tách treo ở đuôi nếu có sau khi xoá hậu tố (-, :, |, ~, /, –, —, [, (, {)
-            string trimmedTrailing = title.TrimEnd(' ', '\t', '-', ':', '–', '—', '|', '~', '/', '[', '(', '{').Trim();
+            string trimmedTrailing = title.TrimEnd(' ', '\t', '-', ':', '\u2013', '\u2014', '|', '~', '/', '[', '(', '{').Trim();
             if (!string.IsNullOrWhiteSpace(trimmedTrailing)) title = trimmedTrailing;
 
             if (!string.Equals(before, title, StringComparison.Ordinal))
@@ -3590,7 +3590,7 @@ public class ComicScraperService
         StripWebBrandPrefix();
 
         // Dọn dẹp dấu phân tách treo ở đầu nếu còn sót
-        title = title.TrimStart(' ', '\t', '-', ':', '–', '—', '|', '~', '/', ']').Trim();
+        title = title.TrimStart(' ', '\t', '-', ':', '\u2013', '\u2014', '|', '~', '/', ']').Trim();
 
         return title;
     }
@@ -5563,7 +5563,7 @@ public class ComicScraperService
 
         if (!string.IsNullOrWhiteSpace(html))
         {
-            var initMatch = Regex.Match(html, @"<script\s+type=[""']application/json[""']\s+id=[""']initial-data[""']>(?<json>[\s\S]*?)</script>", RegexOptions.IgnoreCase);
+            var initMatch = Regex.Match(html, @"<script[^>]*id=[""']initial-data[""'][^>]*>(?<json>[\s\S]*?)</script>", RegexOptions.IgnoreCase);
             if (initMatch.Success)
             {
                 try
@@ -5623,10 +5623,11 @@ public class ComicScraperService
         // Gọi API lấy toàn bộ danh sách chapter: /api/v1/manga/{hid}/chapters?limit=100&order[number]=desc&page={p}&v=0&w=0
         var rawChapterItems = new List<JsonElement>();
         int page = 1;
+        int blockedRetries = 0;
         while (!ct.IsCancellationRequested)
         {
             await ComixRateLimiter.ThrottleAsync(ct).ConfigureAwait(false);
-            string apiPath = $"/manga/{hid}/chapters?limit=100&order[number]=asc&page={page}&v=0&w=0";
+            string apiPath = $"/manga/{hid}/chapters?limit=50&order[number]=asc&page={page}&v=0&w=0";
             string token = ComixCryptoService.GenerateToken(apiPath);
             string apiUrl = $"https://comix.to/api/v1{apiPath}&_={token}";
 
@@ -5662,11 +5663,21 @@ public class ComicScraperService
 
                 if (isBlocked)
                 {
-                    // TỰ ĐỘNG XÓA SẠCH COOKIE VÀ ĐỔI DANH TÍNH MÁY MỚI THEO TIÊU CHÍ YÊU CẦU
+                    if (++blockedRetries > 4)
+                    {
+                        if (rawChapterItems.Count == 0)
+                        {
+                            book.Status = "Error";
+                            book.StatusMessage = "Comix.to yêu cầu xác minh Cloudflare Turnstile hoặc tạm thời bị chặn (403 Forbidden). Vui lòng kiểm tra kết nối.";
+                        }
+                        break;
+                    }
+                    // T ĐNG XÓA SCH COOKIE VÀ ĐI DANH TÍNH MÁY MI THEO TIÊU CHÍ YÊU CU
                     ResetComixSessionAsNewDevice();
-                    await ComixRateLimiter.CoolDownAsync(3, ct).ConfigureAwait(false);
+                    await ComixRateLimiter.CoolDownAsync(2 * blockedRetries, ct).ConfigureAwait(false);
                     continue;
                 }
+                blockedRetries = 0;
                 using var doc = JsonDocument.Parse(rawJson);
                 if (!doc.RootElement.TryGetProperty("e", out var encProp)) break;
 

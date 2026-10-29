@@ -2117,3 +2117,38 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC/Services/DownloadEngineService.cs`
   - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+
+---
+
+### BUG-058: Khắc phục lỗi HTTP 403 Forbidden khi tải ảnh từ CDN Comix.to (wyr.*, johnsnotes.site, rxn.*) & Thêm Circuit Breaker chống treo app khi Comix Cloudflare Turnstile WAF Challenge
+
+- **Hiện tượng**:
+  1. Khi tải ảnh truyện từ các CDN của comix.to (đặc biệt trong các bộ truyện như Sangokushi, Cleopatra...), server CDN trả về lỗi `HTTP/1.1 403 Forbidden`. Khi người dùng thử bắt link qua IDM cũng gặp đúng thông báo lỗi này: "The server replies that you don't have permissions to download this file. Details: HTTP/1.1 403 Forbidden".
+  2. Khi cào danh sách chapter của comix.to, regex nạp initial-data cố định thứ tự thuộc tính `type` và `id` khiến không parse được metadata trang khi web đảo thứ tự thuộc tính HTML.
+  3. Khi IP bị Cloudflare WAF thách thức captcha Turnstile (`/@waf/challenge`), vòng lặp tải chapter bị retry vô tận gây nghẽn kết nối và treo app.
+
+- **Nguyên nhân gốc rễ**:
+  1. Trong `DownloadEngineService.cs`, khối code kiểm tra `isComixOrWyr` trước đây sử dụng `if (!isComixOrWyr) { req.Headers.Add("Referer", effectiveReferer); }`, điều này làm cho tất cả các request tải ảnh đến các host CDN của Comix (`wyr.*`, `blogofscott.site`, `madisonscorner.site`, `johnsnotes.site`, `rxn.*`, `*.site/`) BỊ BỎ RƠI, KHÔNG CÓ HEADER `Referer` và `Origin`! CDN của Comix kích hoạt chính sách bảo vệ Hotlink nghiêm ngặt: nếu thiếu `Referer: https://comix.to/` thì trả về ngay `HTTP 403 Forbidden`.
+  2. Regex `initial-data` dạng cứng `<script\s+type=["']application/json["']\s+id=["']initial-data["']>` không bắt được khi thứ tự thuộc tính HTML là `id="initial-data" type="application/json"`.
+  3. Vòng lặp `while (!ct.IsCancellationRequested)` trong `ScrapeComixtoBookAsync` khi gặp `isBlocked` chỉ gọi xóa session và cooldown mà không có giới hạn retry tối đa (Circuit Breaker).
+
+- **Giải pháp triệt để**:
+  1. **Bổ sung đầy đủ Referer, Origin và Sec-Fetch-* headers cho Comix CDN**:
+     - Trong `DownloadEngineService.cs`: Khi `isComixOrWyr == true`, inject trực tiếp các header:
+       - `Referer: https://comix.to/`
+       - `Origin: https://comix.to`
+       - `Sec-Fetch-Dest: image`
+       - `Sec-Fetch-Mode: no-cors`
+       - `Sec-Fetch-Site: cross-site`
+       - Cập nhật User-Agent hiện đại Chrome 130.
+  2. **Linh hoạt hóa Regex `initial-data`**:
+     - Đổi regex sang `<script[^>]*id=["']initial-data["'][^>]*>(?<json>[\s\S]*?)</script>` bắt chính xác bất kể thứ tự thuộc tính trong thẻ HTML.
+     - Đổi limit API pagination chapter về `limit=50` để tương thích hoàn toàn với web client Comix.
+  3. **Tích hợp Circuit Breaker bảo vệ kết nối Comix**:
+     - Bổ sung biến đếm `blockedRetries`. Nếu Cloudflare WAF chặn liên tục quá 4 lần, ngắt vòng lặp an toàn, gán thông báo lỗi rõ ràng `book.Status = "Error"` và hướng dẫn kiểm tra kết nối, chống hoàn toàn tình trạng treo vô hạn.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/DownloadEngineService.cs`
+  - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
