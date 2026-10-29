@@ -5702,39 +5702,51 @@ public class ComicScraperService
         string token = ComixCryptoService.GenerateToken(apiPath);
         string apiUrl = $"https://comix.to/api/v1{apiPath}&_={token}";
 
-        try
+        for (int attempt = 1; attempt <= 3; attempt++)
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
-            req.Headers.TryAddWithoutValidation("X-Requested-With", "XMLHttpRequest");
-            req.Headers.TryAddWithoutValidation("Referer", chapterUrl);
-
-            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-            if (!res.IsSuccessStatusCode) return images;
-
-            string rawJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(rawJson);
-            if (!doc.RootElement.TryGetProperty("e", out var encProp)) return images;
-
-            string decJson = ComixCryptoService.DecryptPayload(encProp.GetString() ?? string.Empty);
-            using var decDoc = JsonDocument.Parse(decJson);
-            var result = decDoc.RootElement.GetProperty("result");
-            if (result.TryGetProperty("pages", out var pagesObj) && pagesObj.TryGetProperty("items", out var items))
+            if (ct.IsCancellationRequested) break;
+            try
             {
-                foreach (var item in items.EnumerateArray())
+                using var req = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+                req.Headers.TryAddWithoutValidation("X-Requested-With", "XMLHttpRequest");
+                req.Headers.TryAddWithoutValidation("Referer", chapterUrl);
+
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                if (res.IsSuccessStatusCode)
                 {
-                    if (item.TryGetProperty("url", out var urlProp))
+                    string rawJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var doc = JsonDocument.Parse(rawJson);
+                    if (doc.RootElement.TryGetProperty("e", out var encProp))
                     {
-                        string imgUrl = urlProp.GetString() ?? string.Empty;
-                        if (!string.IsNullOrWhiteSpace(imgUrl))
+                        string decJson = ComixCryptoService.DecryptPayload(encProp.GetString() ?? string.Empty);
+                        using var decDoc = JsonDocument.Parse(decJson);
+                        var result = decDoc.RootElement.GetProperty("result");
+                        if (result.TryGetProperty("pages", out var pagesObj) && pagesObj.TryGetProperty("items", out var items))
                         {
-                            images.Add(imgUrl);
+                            foreach (var item in items.EnumerateArray())
+                            {
+                                if (item.TryGetProperty("url", out var urlProp))
+                                {
+                                    string imgUrl = urlProp.GetString() ?? string.Empty;
+                                    if (!string.IsNullOrWhiteSpace(imgUrl))
+                                    {
+                                        images.Add(imgUrl);
+                                    }
+                                }
+                            }
                         }
+                        if (images.Count > 0) break;
                     }
                 }
             }
+            catch { }
+
+            if (attempt < 3 && images.Count == 0)
+            {
+                await Task.Delay(400 * attempt, ct).ConfigureAwait(false);
+            }
         }
-        catch { }
 
         return images;
     }

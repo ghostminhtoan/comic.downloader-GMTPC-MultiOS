@@ -1973,3 +1973,34 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
 - **Quy tắc kiểm thử**:
   - Build sạch 0 Error, 0 Warning toàn bộ Solution.
   - Tự động thực thi uild.bat xuất xưởng cả 3 nền tảng (Windows EXE, Linux Binary/Deb/tar.gz, Android APK) và upload Release Beta lên GitHub tag eta.
+
+
+---
+
+### BUG-054: COMIX.TO XOAY KEY BẢO MẬT BUILD TNNCOV (TOKEN PREFIX YTI.) VÀ CDN ẢNH CHẶN REFERER HTTP 403
+- **Hiện tượng**:
+  1. Khi cào truyện hoặc tải chapter từ `comix.to`, API `api/v1/manga/{hid}/chapters` hoặc `api/v1/chapters/{cid}` trả về `HTTP 403 Forbidden` với body `{"message":"Invalid token.","code":"key_retired"}` và header `X-Build-Id: tnncov`. Token prefix cũ `91r.` và bảng khóa 1088 bytes cũ đã bị máy chủ comix.to thu hồi (retired).
+  2. Khi tải ảnh truyện, CDN của comix (`*.johnsnotes.site` hoặc `*.site`) chặn `HTTP 403 Forbidden` nếu ứng dụng gửi kèm Header `Referer: https://comix.to/`, dẫn đến việc tải bị đứng nghẽn hoặc tải quá lâu, người dùng dễ nhầm lẫn thành lỗi Cloudflare Captcha chặn IP dù vẫn truy cập web bình thường qua trình duyệt.
+- **Nguyên nhân gốc rễ**:
+  1. `comix.to` vừa cập nhật hệ thống bảo mật frontend sang build mới `tnncov`, thay đổi toàn bộ bundle JavaScript từ `tnli0z` sang `apicore-tnncov-D5jTWQtl.js`. Tiền tố token xác thực được đổi từ `91r.` sang `yti.`, và bảng khóa giải mã đối xứng 1088 bytes được tái tạo lại bằng hàm băm xor động mới.
+  2. CDN ảnh của comix.to áp dụng cơ chế Hotlink Protection nghiêm ngặt: Nếu request ảnh mang Header `Referer`, CDN sẽ lập tức từ chối phục vụ (HTTP 403); ngược lại khi request không mang Referer (Direct/No-Referrer), CDN cho phép tải trực tiếp tốc độ cao không giới hạn.
+- **Giải pháp triệt để**:
+  1. **Cập nhật ComixCryptoService thuần C# với KeyTable và Token Prefix mới**:
+     - Phân tích trực tiếp bundle `apicore-tnncov-D5jTWQtl.js` qua môi trường Node.js headless trích xuất:
+       - Token Prefix mới: `yti.`
+       - Bảng khóa giải mã Base64 1088 bytes mới: `1Gay3iETkw7Yj+9e2LrEDFNWkTAPj6S3g...`
+     - Cập nhật đồng bộ vào `ComixCryptoService.cs` cho cả hai hàm `GenerateToken` và `DecryptPayload`.
+  2. **Tăng cường độ bền vững và Retry cho bóc tách Chapter**:
+     - Trong `ComicScraperService.ExtractComixtoChapterImagesAsync`: Bổ sung cơ chế thử lại 3 lần có exponential backoff (`Task.Delay(400 * attempt)`) nếu kết nối mạng chập chờn hoặc máy chủ phản hồi chậm.
+  3. **Loại bỏ triệt để Header Referer cho CDN Comix**:
+     - Trong `DownloadEngineService.cs`: Mở rộng điều kiện kiểm tra `isComixOrWyr` bao gồm tất cả các domain CDN mới như `johnsnotes.site`, `*.site/`, và mọi yêu cầu tải từ nguồn `comix` để tuyệt đối không gửi Header `Referer`, bảo đảm 100% request ảnh thành công ngay lần đầu mà không bị CDN chặn 403.
+- **Kiểm thử thực tế**:
+  1. Kiểm thử tải thành công trọn vẹn chap 1 đến chap 70 cho 2 truyện yêu cầu:
+     - `God-level Assassin, I'm the Shadow` (chap 1-70): Tải đầy đủ, không thiếu trang, tốc độ vượt trội.
+     - `After the School Belle Dumped Me, I Became a Martial Arts God` (chap 1-70): Tải hoàn tất 100%.
+  2. Kiểm thử boot UI trên thiết bị thật Oppo K9x (Android 12) qua ADB: App khởi chạy hoàn hảo không crash.
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/ComixCryptoService.cs`
+  - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
+  - `ComicDownloaderGMTPC/Services/DownloadEngineService.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

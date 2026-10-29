@@ -521,7 +521,7 @@ public class DownloadEngineService
         int eligibleCount = 0;
         lock (_queueLock)
         {
-            if (_liveQueueSource == null && items is IList<ComicBookItem> liveList)
+            if (items is IList<ComicBookItem> liveList)
             {
                 _liveQueueSource = liveList;
             }
@@ -546,10 +546,7 @@ public class DownloadEngineService
             }
 
             // Nếu truyền vào một tập con (ví dụ RetryAsync), chỉ cho phép các mục ngoài tập con nhưng đang ở trạng thái Waiting cùng tham gia
-            if (_liveQueueSource == null)
-            {
-                _liveQueueSource = validItems;
-            }
+            _liveQueueSource = validItems;
         }
 
         if (eligibleCount == 0)
@@ -1439,9 +1436,10 @@ public class DownloadEngineService
                     bool isComixOrWyr = targetUrl.Contains("wyr.", StringComparison.OrdinalIgnoreCase) ||
                                         targetUrl.Contains("blogofscott.site", StringComparison.OrdinalIgnoreCase) ||
                                         targetUrl.Contains("madisonscorner.site", StringComparison.OrdinalIgnoreCase) ||
+                                        targetUrl.Contains("johnsnotes.site", StringComparison.OrdinalIgnoreCase) ||
                                         targetUrl.Contains("rxn.", StringComparison.OrdinalIgnoreCase) ||
                                         targetUrl.Contains(".site/", StringComparison.OrdinalIgnoreCase) ||
-                                        (refererUrl != null && refererUrl.Contains("comix.to", StringComparison.OrdinalIgnoreCase));
+                                        (refererUrl != null && refererUrl.Contains("comix", StringComparison.OrdinalIgnoreCase));
 
                     if (!isComixOrWyr)
                     {
