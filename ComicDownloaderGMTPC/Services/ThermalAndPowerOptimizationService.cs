@@ -95,6 +95,12 @@ public class ThermalAndPowerOptimizationService
         lock (_lock)
         {
             if (_isAppIdle) return;
+
+            // Nếu đang tải truyện hoặc có background task, TUYỆT ĐỐI không vào idle mode để tránh bị thả WakeLock
+            bool isBusy = DownloadEngineService.Instance.IsDownloading ||
+                          BackgroundExecutionService.Instance.HasActiveTasks;
+            if (isBusy) return;
+
             _isAppIdle = true;
             IdleStateChanged?.Invoke(true);
 
@@ -123,7 +129,13 @@ public class ThermalAndPowerOptimizationService
 
         if (inBackground)
         {
-            EnterIdleMode();
+            // Chỉ kích hoạt Idle Mode khi KHÔNG có tiến trình tải và KHÔNG có background task
+            bool isBusy = DownloadEngineService.Instance.IsDownloading ||
+                          BackgroundExecutionService.Instance.HasActiveTasks;
+            if (!isBusy)
+            {
+                EnterIdleMode();
+            }
         }
         else
         {

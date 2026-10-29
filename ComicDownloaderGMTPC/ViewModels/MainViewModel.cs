@@ -2001,7 +2001,8 @@ public partial class MainViewModel : ViewModelBase
             string.Equals(e.PropertyName, nameof(ComicBookItem.DownloadedPages), StringComparison.Ordinal))
         {
             long now = Environment.TickCount64;
-            if (now - _lastProgressAutoSaveTick >= 1800)
+            long progressAutoSaveInterval = OperatingSystem.IsAndroid() ? 15000 : 1800;
+            if (now - _lastProgressAutoSaveTick >= progressAutoSaveInterval)
             {
                 _lastProgressAutoSaveTick = now;
                 RequestQueueAutoSave(500);
@@ -2158,7 +2159,8 @@ public partial class MainViewModel : ViewModelBase
                 }
 
                 long now = Environment.TickCount64;
-                if (now - _lastProgressAutoSaveTick >= 2000)
+                long progressAutoSaveInterval = OperatingSystem.IsAndroid() ? 15000 : 2000;
+                if (now - _lastProgressAutoSaveTick >= progressAutoSaveInterval)
                 {
                     _lastProgressAutoSaveTick = now;
                     RequestQueueAutoSave(500);

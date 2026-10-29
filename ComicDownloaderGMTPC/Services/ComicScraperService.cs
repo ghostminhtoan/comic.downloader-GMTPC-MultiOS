@@ -105,7 +105,13 @@ public class ComicScraperService
                 var oldClient = _comixHttpClient;
                 Interlocked.Increment(ref _currentComixDeviceIndex);
                 InitComixClient();
-                try { oldClient?.Dispose(); } catch { }
+                if (oldClient != null)
+                {
+                    _ = Task.Delay(30000).ContinueWith(_ =>
+                    {
+                        try { oldClient.Dispose(); } catch { }
+                    }, TaskScheduler.Default);
+                }
             }
             catch { }
         }
@@ -5509,8 +5515,11 @@ public class ComicScraperService
             StatusMessage = "Sẵn sàng tải"
         };
 
+        // Chuẩn hóa và làm sạch URL: loại bỏ query string (?page=5, ?mode=...) và fragment (#...)
+        string cleanUrl = Regex.Replace(url.Trim(), @"[?#].*$", "").TrimEnd('/');
+
         // Nếu là URL chapter đơn lẻ: https://comix.to/title/e09mx-lord/11520890-chapter-62
-        var singleChapMatch = Regex.Match(url, @"/title/[^/]+/(?<cid>\d+)(?:-[^/]+)?/?$", RegexOptions.IgnoreCase);
+        var singleChapMatch = Regex.Match(cleanUrl, @"/title/[^/]+/(?<cid>\d+)(?:-[^/]+)?/?$", RegexOptions.IgnoreCase);
         if (singleChapMatch.Success)
         {
             string cid = singleChapMatch.Groups["cid"].Value;
@@ -5534,7 +5543,7 @@ public class ComicScraperService
         }
 
         // Trích xuất hid: URL có dạng https://comix.to/title/e09mx-lord/ hoặc https://comix.to/title/e09mx
-        var hidMatch = Regex.Match(url, @"/title/(?<hid>[a-zA-Z0-9]+)(?:-[^/]+)?/?$", RegexOptions.IgnoreCase);
+        var hidMatch = Regex.Match(cleanUrl, @"/title/(?<hid>[a-zA-Z0-9]+)(?:-[^/?#]+)?", RegexOptions.IgnoreCase);
         string hid = hidMatch.Success ? hidMatch.Groups["hid"].Value : string.Empty;
 
         // Fetch HTML để lấy title, cover từ initial-data
@@ -5617,7 +5626,7 @@ public class ComicScraperService
         while (!ct.IsCancellationRequested)
         {
             await ComixRateLimiter.ThrottleAsync(ct).ConfigureAwait(false);
-            string apiPath = $"/manga/{hid}/chapters?limit=100&order[number]=desc&page={page}&v=0&w=0";
+            string apiPath = $"/manga/{hid}/chapters?limit=100&order[number]=asc&page={page}&v=0&w=0";
             string token = ComixCryptoService.GenerateToken(apiPath);
             string apiUrl = $"https://comix.to/api/v1{apiPath}&_={token}";
 
@@ -5756,13 +5765,68 @@ public class ComicScraperService
                 continue;
             }
 
+            // Đánh giá chất lượng tiêu đề: Ưu tiên tải bản có tiêu đề chương thực sự thay vì chỉ là chap 1, 2, 3...
+            static int GetTitleScore(JsonElement elem)
+            {
+                string name = string.Empty;
+                if (elem.TryGetProperty("name", out var nProp))
+                {
+                    name = nProp.GetString()?.Trim() ?? string.Empty;
+                }
+                else if (elem.TryGetProperty("title", out var tProp))
+                {
+                    name = tProp.GetString()?.Trim() ?? string.Empty;
+                }
+
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    return 0; // Không có tiêu đề
+                }
+
+                // Loại bỏ tiền tố Chapter / Ch. / # / số để kiểm tra xem có phần chữ nội dung thực sự không
+                string clean = Regex.Replace(name, @"^(?:chapter|chap|ch\.?|tập|chương)\s*#?\d+(?:[.,]\d+)?\s*[:\-_.]*\s*", "", RegexOptions.IgnoreCase).Trim();
+                clean = Regex.Replace(clean, @"^#\d+\s*[:\-_.]*\s*", "").Trim();
+                clean = clean.Trim('-', ' ', ':', '_');
+
+                if (string.IsNullOrWhiteSpace(clean) || double.TryParse(clean, out _))
+                {
+                    return 1; // Chỉ chứa số hoặc tiền tố chapter, không có tiêu đề thực sự
+                }
+
+                // Tiêu đề thực sự giàu ý nghĩa (ví dụ: "Egen Guy", "Is Changing Jobs the Answer?")
+                return 1000 + Math.Min(clean.Length, 100);
+            }
+
+            // Chuẩn hóa tên chapter hiển thị: tránh lặp từ "Chapter 1: Ch. 1 - Egen Guy"
+            static string FormatComixChapterTitle(string chapNumberStr, string rawName)
+            {
+                if (string.IsNullOrWhiteSpace(rawName))
+                {
+                    return $"Chapter {chapNumberStr}";
+                }
+
+                string t = rawName.Trim();
+                string clean = Regex.Replace(t, @"^(?:chapter|chap|ch\.?|tập|chương)\s*#?\d+(?:[.,]\d+)?\s*[:\-_.]*\s*", "", RegexOptions.IgnoreCase).Trim();
+                clean = Regex.Replace(clean, @"^#\d+\s*[:\-_.]*\s*", "").Trim();
+                clean = clean.Trim('-', ' ', ':', '_');
+
+                if (!string.IsNullOrWhiteSpace(clean) && !double.TryParse(clean, out _))
+                {
+                    return $"Chapter {chapNumberStr}: {clean}";
+                }
+
+                return $"Chapter {chapNumberStr}";
+            }
+
             // Chọn 1 bản dịch tốt nhất cho số chapter này:
             // 1. Ưu tiên ngôn ngữ ưa thích (PreferredLanguage) nếu có
-            // 2. Ưu tiên isOfficial == true
-            // 3. Ưu tiên số lượt votes cao nhất (được cộng đồng đánh giá nhiều nhất)
-            // 4. Ưu tiên id mới nhất
+            // 2. BẮT BUỘC ƯU TIÊN BẢN CÓ TIÊU ĐỀ THỰC SỰ (thay vì chỉ đơn thuần là chap 1, 2, 3...)
+            // 3. Ưu tiên isOfficial == true
+            // 4. Ưu tiên số lượt votes cao nhất (được cộng đồng đánh giá nhiều nhất)
+            // 5. Ưu tiên id mới nhất
             var bestItem = group
                 .OrderByDescending(item => !string.IsNullOrWhiteSpace(prefLang) && GetLang(item).Equals(prefLang, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(GetTitleScore)
                 .ThenByDescending(IsOfficial)
                 .ThenByDescending(GetVotes)
                 .ThenByDescending(GetId)
@@ -5777,9 +5841,7 @@ public class ComicScraperService
                 finalChapUrl = "https://comix.to" + finalChapUrl;
             }
 
-            string displayTitle = !string.IsNullOrWhiteSpace(chapTitleName) 
-                ? $"Chapter {chapNumberStr}: {chapTitleName}".Trim() 
-                : $"Chapter {chapNumberStr}".Trim();
+            string displayTitle = FormatComixChapterTitle(chapNumberStr, chapTitleName);
 
             dedupedChapters.Add(new ChapterItem
             {

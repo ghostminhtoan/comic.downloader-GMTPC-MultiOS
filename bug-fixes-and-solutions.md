@@ -2079,3 +2079,41 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC/ViewModels/MainViewModel.DomainAnalyze.cs`
   - `ComicDownloaderGMTPC.Android/MainActivity.cs`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+
+### BUG-057: KHẮC PHỤC TRIỆT ĐỂ LỖI CRASH KHI TẢI COMIX.TO TRÊN ANDROID, ĐỒNG BỘ TẢI TỪ CHAP ĐẦU TIÊN TRÊN WINDOWS VÀ ƯU TIÊN BẢN DỊCH CÓ TIÊU ĐỀ CHƯƠNG THAY VÌ CHỈ LÀ CHAP 1, 2, 3
+
+- **Hiện tượng**:
+  1. Khi tải truyện trên comix.to (đặc biệt các bộ truyện dài hàng trăm chapter như Sangokushi 439 chaps), ứng dụng trên Android sau một khoảng thời gian tải ngầm thường xuyên bị hệ điều hành (ColorOS/Android 12) đóng hoặc kill đột ngột.
+  2. Trên Windows, khi dán link comix.to từ trình duyệt (nhất là khi URL có kèm ?page=5 hoặc query parameter khi người dùng duyệt tìm chap đầu), phần mềm không tải được từ chap đầu tiên hoặc không nhận diện được hid do regex cứng `/title/.../?$`. Ngoài ra, API comix.to gọi với `order[number]=desc` khiến trang 1 nạp từ chapter mới nhất trở xuống, nếu phân trang nhiều trang thì các chap đầu tiên (Chap 1, 2, 3...) nằm ở trang cuối cùng, dễ bị thiếu hoặc không bắt đầu từ chap 1.
+  3. Khi một chapter có nhiều nhóm dịch làm trùng nhau (như Teto X Egen Chap 1 có 4 nhóm), hệ thống trước đó chỉ dựa vào số lượt votes/isOfficial/id để chọn, thường chọn phải nhóm dịch đặt tên cụt lủn không có tiêu đề chương (chỉ đơn thuần là Chapter 1, Ch.1 hoặc để trống), trong khi các nhóm khác có tiêu đề chương đầy đủ, giàu thông tin (Ch. 1 - Egen Guy, #01_Egen Guy).
+
+- **Nguyên nhân gốc rễ**:
+  1. Trên Android: Khi người dùng tắt màn hình hoặc chuyển app, MainActivity.OnPause gọi SetAppInBackground(true) -> kích hoạt EnterIdleMode() -> gọi ComicBackgroundService.StartOrUpdateIdleKeepAlive(...) với isDownloading = false. UpdateWakeLock thấy isDownloading = false nên đã nhả toàn bộ WakeLock CPU (ReleaseWakeLock) và đặt timeout 15 phút. Khi CPU đi vào Deep Sleep mà socket HTTP vẫn đang mở và threadpool vẫn xả I/O, ColorOS/Android phát hiện app chạy ngầm không giữ WakeLock mà lạm dụng tài nguyên nên gửi SIGKILL (OplusEapManager). Đồng thời, cơ chế AutoSave tiến độ ghi đè 2 file JSON lớn (autosave.md và autosave mirror.md) mỗi 2 giây lên FUSE storage gây quá nhiệt và nghẽn I/O.
+  2. Bóc tách comix.to:
+     - URL trên Windows khi copy từ trình duyệt thường chứa query string ?page=5 hoặc fragment #... Regex cũ có `/?$` nên không match được hid.
+     - API comix.to gọi `order[number]=desc`, khiến các chap đầu tiên (Chap 1, 2, 3...) nằm ở trang phân trang cuối cùng thay vì trang đầu tiên.
+  3. Deduplication comix.to: Chưa có hàm tính điểm chất lượng tiêu đề (GetTitleScore). Nếu bản dịch có tiêu đề chi tiết nhưng số votes thấp hơn bản cụt lủn Ch.1 thì bản cụt lủn vẫn bị chọn nhầm.
+
+- **Giải pháp triệt để**:
+  1. **Khắc phục lỗi Crash Android & Bảo tồn WakeLock khi chạy ngầm**:
+     - `ThermalAndPowerOptimizationService.cs`: Trong SetAppInBackground và EnterIdleMode, bổ sung guard: nếu DownloadEngineService.Instance.IsDownloading hoặc BackgroundExecutionService.Instance.HasActiveTasks thì TUYỆT ĐỐI KHÔNG vào Idle Mode, không hạ cấp Keep-Alive.
+     - `ComicBackgroundService.cs`: Trong StartOrUpdateIdleKeepAlive, chặn đứng việc hạ cấp sang Idle nếu đang bận tải. Trong AcquireWakeLock, chuyển sang Partial WakeLock liên tục không timeout (SetReferenceCounted(false)), chỉ giải phóng khi hoàn tất hoặc dừng tải.
+     - `MainViewModel.cs`: Tăng chu kỳ lưu tiến độ tự động trên Android từ 2 giây lên 15 giây (OperatingSystem.IsAndroid() ? 15000 : 2000), giảm 85% số lần ghi đĩa flash FUSE, chống nghẽn I/O và lạm dụng năng lượng.
+     - `DownloadEngineService.cs`: Gọi `GC.Collect(1, GCCollectionMode.Optimized, false, false)` nhẹ nhàng sau mỗi chapter trên Android để giải phóng ngay buffer mảng byte ảnh (LOH), chống rò rỉ bộ nhớ khi tải > 400 chapter.
+     - `ComicScraperService.cs`: Trong ResetComixSessionAsNewDevice, trì hoãn dispose oldClient 30 giây để tránh ném ObjectDisposedException vào các worker thread đang gửi request dở dang.
+  2. **Đồng bộ tải từ Chap đầu tiên trên cả Windows lẫn Android**:
+     - `ComicScraperService.cs`: Làm sạch URL bằng `cleanUrl = Regex.Replace(url.Trim(), @"[?#].*$", "").TrimEnd('/');` và regex hid linh hoạt `Regex.Match(cleanUrl, @"/title/(?<hid>[a-zA-Z0-9]+)(?:-[^/?#]+)?", ...)`, tương thích 100% với URL có ?page=5 hoặc query parameter.
+     - Đổi thứ tự lấy chapter từ API comix.to sang `order[number]=asc`. Trang 1 luôn luôn trả về ngay lập tức các chap đầu tiên (Chap 1, 2, 3...) cho cả Windows và Android.
+  3. **Ưu tiên chọn bản dịch có Tiêu đề Chương Thực Sự**:
+     - Bổ sung hàm `GetTitleScore(JsonElement elem)`: loại bỏ các tiền tố chương (Ch. 1, Chapter 1, #01) và chấm điểm cao (1000 + độ dài) cho các bản dịch có tiêu đề chương thực sự (ví dụ: Egen Guy, Is Changing Jobs the Answer?).
+     - Bổ sung `FormatComixChapterTitle(chapNumberStr, chapTitleName)`: chuẩn hóa hiển thị đẹp mắt `Chapter 1: Egen Guy`, loại bỏ hoàn toàn hiện tượng lặp từ `Chapter 1: Ch. 1 - Egen Guy`.
+     - Sắp xếp ưu tiên `ThenByDescending(GetTitleScore)` trong bộ chọn bestItem khi khử trùng nhóm dịch.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/ThermalAndPowerOptimizationService.cs`
+  - `ComicDownloaderGMTPC.Android/ComicBackgroundService.cs`
+  - `ComicDownloaderGMTPC/ViewModels/MainViewModel.cs`
+  - `ComicDownloaderGMTPC/Services/DownloadEngineService.cs`
+  - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

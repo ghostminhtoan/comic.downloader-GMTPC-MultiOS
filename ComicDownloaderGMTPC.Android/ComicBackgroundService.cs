@@ -195,15 +195,20 @@ public class ComicBackgroundService : Service
     {
         try
         {
-            if (_wakeLock == null || !_wakeLock.IsHeld)
+            if (_wakeLock == null)
             {
                 var pm = (PowerManager?)GetSystemService(PowerService);
                 if (pm != null)
                 {
                     _wakeLock = pm.NewWakeLock(WakeLockFlags.Partial, "ComicGMTPC::BackgroundWakeLock");
-                    // Đặt timeout an toàn tối đa 15 phút: nếu hệ thống/tác vụ gặp sự cố, Android sẽ tự nhả WakeLock để hạ nhiệt CPU
-                    _wakeLock?.Acquire(15 * 60 * 1000L);
+                    _wakeLock?.SetReferenceCounted(false);
                 }
+            }
+
+            if (_wakeLock != null && !_wakeLock.IsHeld)
+            {
+                // Giữ CPU tỉnh táo chừng nào Foreground Service còn tải truyện (ReleaseWakeLock sẽ giải phóng khi dừng tải)
+                _wakeLock.Acquire();
             }
         }
         catch (Exception ex)
@@ -219,12 +224,15 @@ public class ComicBackgroundService : Service
             if (_wakeLock != null && _wakeLock.IsHeld)
             {
                 _wakeLock.Release();
-                _wakeLock = null;
             }
         }
         catch (Exception ex)
         {
             global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi giải phóng WakeLock: {ex.Message}");
+        }
+        finally
+        {
+            _wakeLock = null;
         }
     }
 
@@ -476,6 +484,13 @@ public class ComicBackgroundService : Service
     {
         try
         {
+            // Nếu đang có tiến trình tải truyện hoặc tác vụ nặng, TUYỆT ĐỐI không hạ cấp sang Idle Keep-Alive!
+            if (ComicDownloaderGMTPC.Services.DownloadEngineService.Instance.IsDownloading ||
+                ComicDownloaderGMTPC.Services.BackgroundExecutionService.Instance.HasActiveTasks)
+            {
+                return;
+            }
+
             var appContext = context.ApplicationContext ?? context;
             StartOrUpdate(appContext, "idle_keep_alive", "Comic Downloader GMTPC", "Chế độ chờ mát máy • Đang tiết kiệm năng lượng", 0, false, false, "📱 Mở ứng dụng", "");
         }

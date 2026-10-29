@@ -1205,6 +1205,14 @@ public class DownloadEngineService
                 // Giải phóng danh sách URL trang ảnh của chapter vừa tải xong để chống tích tụ RAM khi tải > 30 truyện
                 chapter.ImageUrls.Clear();
                 chapter.ReaderUrls.Clear();
+                if (OperatingSystem.IsAndroid())
+                {
+                    try
+                    {
+                        GC.Collect(1, GCCollectionMode.Optimized, false, false);
+                    }
+                    catch { }
+                }
                 ProgressUpdated?.Invoke();
             }
 
