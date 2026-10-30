@@ -592,6 +592,10 @@ public class ComicScraperService
             if (string.IsNullOrWhiteSpace(html) && NativeWebViewService.Instance.IsAvailable)
             {
                 html = await NativeWebViewService.Instance.FetchHtmlAsync(url, 45, ct).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(html))
+                {
+                    SyncCookiesFromNativeWebView(url);
+                }
             }
 
             if (string.IsNullOrWhiteSpace(html))
@@ -681,6 +685,10 @@ public class ComicScraperService
                 if (string.IsNullOrWhiteSpace(directHtml) && NativeWebViewService.Instance.IsAvailable)
                 {
                     directHtml = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 45, ct).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(directHtml))
+                    {
+                        SyncCookiesFromNativeWebView(chapterUrl);
+                    }
                 }
 
                 if (!string.IsNullOrWhiteSpace(directHtml))
@@ -738,6 +746,10 @@ public class ComicScraperService
             if (string.IsNullOrWhiteSpace(html) && NativeWebViewService.Instance.IsAvailable)
             {
                 html = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 45, ct).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(html))
+                {
+                    SyncCookiesFromNativeWebView(chapterUrl);
+                }
             }
 
             if (string.IsNullOrWhiteSpace(html)) return images;
@@ -6085,6 +6097,7 @@ public class ComicScraperService
                 string? webViewHtml = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 45, ct).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(webViewHtml))
                 {
+                    SyncCookiesFromNativeWebView(chapterUrl);
                     var directImgs = ExtractDirectImagesFromHtml(webViewHtml, chapterUrl);
                     if (directImgs.Count > 0)
                     {
@@ -6294,4 +6307,38 @@ public class ComicScraperService
         return new List<string>();
     }
 
+    private void SyncCookiesFromNativeWebView(string url)
+    {
+        try
+        {
+            string? cookieHeader = NativeWebViewService.Instance.GetCookies(url);
+            if (string.IsNullOrWhiteSpace(cookieHeader)) return;
+
+            var uri = new Uri(url);
+            string[] pairs = cookieHeader.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var pair in pairs)
+            {
+                int eqIdx = pair.IndexOf('=');
+                if (eqIdx > 0)
+                {
+                    string name = pair[..eqIdx].Trim();
+                    string val = pair[(eqIdx + 1)..].Trim();
+                    try
+                    {
+                        _cookieContainer.Add(uri, new Cookie(name, val) { Path = "/" });
+                    }
+                    catch { }
+                    if (url.Contains("comix.", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            _comixCookieContainer.Add(uri, new Cookie(name, val) { Path = "/" });
+                        }
+                        catch { }
+                    }
+                }
+            }
+        }
+        catch { }
+    }
 }

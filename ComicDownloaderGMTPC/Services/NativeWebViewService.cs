@@ -18,8 +18,14 @@ namespace ComicDownloaderGMTPC.Services;
 /// </summary>
 public class NativeWebViewService : INativeWebViewService
 {
-    private static readonly Lazy<NativeWebViewService> _instance = new(() => new NativeWebViewService());
-    public static NativeWebViewService Instance => _instance.Value;
+    private static INativeWebViewService? _customInstance;
+    private static readonly Lazy<NativeWebViewService> _defaultInstance = new(() => new NativeWebViewService());
+
+    public static INativeWebViewService Instance
+    {
+        get => _customInstance ?? _defaultInstance.Value;
+        set => _customInstance = value;
+    }
 
     private readonly string? _browserExecutablePath;
     private readonly string _engineName;

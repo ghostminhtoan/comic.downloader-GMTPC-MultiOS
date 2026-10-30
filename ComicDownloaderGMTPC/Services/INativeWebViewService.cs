@@ -28,4 +28,9 @@ public interface INativeWebViewService
     /// Tải dữ liệu JSON chạy ngầm (headless) qua native browser engine.
     /// </summary>
     Task<string?> FetchJsonAsync(string url, int timeoutSeconds = 15, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lấy chuỗi Cookie đã được lưu trữ trong trình duyệt (nếu có) cho URL chỉ định.
+    /// </summary>
+    string? GetCookies(string url) => null;
 }

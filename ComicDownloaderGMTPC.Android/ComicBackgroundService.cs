@@ -82,6 +82,15 @@ public class ComicBackgroundService : Service
 
         base.OnCreate();
 
+        try
+        {
+            if (ComicDownloaderGMTPC.Services.NativeWebViewService.Instance is not AndroidNativeWebViewService)
+            {
+                ComicDownloaderGMTPC.Services.NativeWebViewService.Instance = new AndroidNativeWebViewService();
+            }
+        }
+        catch { }
+
         _currentInstance = this;
 
         CreateNotificationChannel();
