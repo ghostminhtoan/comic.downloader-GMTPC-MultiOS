@@ -2152,3 +2152,38 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC/Services/DownloadEngineService.cs`
   - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+---
+
+### BUG-059: Khắc phục triệt để lỗi Crash sập App trên Android khi tải bộ truyện dài/nhiều trang (Sangokushi >200 trang/chap), Ngăn chặn LMK/OOM Task Burst, Throttling JNI Notification và Fix Header CDN Comix.to
+
+- **Hiện tượng**:
+  1. Khi người dùng tải các bộ truyện có dung lượng lớn hoặc số lượng trang cực nhiều trên Android (ví dụ bộ Sangokushi trên comix.to có 25 volumes, mỗi volume hơn 200 trang ảnh chất lượng cao), app đang tải được một vài phút thì bất ngờ bị văng/sập hoàn toàn (Crash) về màn hình chính điện thoại mà không hiển thị thông báo lỗi nào.
+  2. Logcat hệ thống không ghi nhận UnhandledException .NET nhưng tiến trình app nhận tín hiệu SIGKILL 9 do Android Low Memory Killer (LMK) bắn hạ.
+  3. Khi gửi request tải ảnh CDN Comix.to (*.site như softtouchgoods.site), server CDN trả về HTTP 403 Forbidden nếu có header Referer comix.to.
+  4. Notification cập nhật quá dồn dập (mỗi 400-500ms) qua JNI Android làm tràn Global Reference Table (GREF overflow) và ngốn CPU.
+  5. Phát âm thanh thông báo ToneGenerator/MediaPlayer trong background thread dồn dập dẫn đến native AudioFlinger crash.
+
+- **Nguyên nhân gốc rễ**:
+  1. **Task Burst OOM trên Android**: Trong DownloadEngineService.cs, khối tải ảnh từng chapter trước đây dùng imageUrls.Select(async ...).ToList() và Task.WhenAll. Khi chapter có 209 ảnh, toàn bộ 209 Task async được cấp phát đồng thời lên Managed Heap cùng các byte buffer, làm bùng nổ bộ nhớ RAM trong chốc lát trên thiết bị Android (vốn có giới hạn Heap hẹp ~256MB-512MB trên thiết bị 4GB RAM như Nokia 5.4), dẫn đến việc LMK can thiệp giết chết app.
+  2. **Comix CDN 403 Forbidden**: CDN Comix (*.site, softtouchgoods.site, wyr.*) kiểm tra chặt chẽ HTTP Header. Nếu client gửi kèm header Referer: https://comix.to/ thì CDN trả về 403 Forbidden. Nhưng nếu client KHÔNG gửi Referer, chỉ gửi Origin: https://comix.to cùng bộ header chuẩn trình duyệt (Sec-Fetch-Dest: image, Sec-Fetch-Mode: no-cors, Sec-Fetch-Site: cross-site), CDN sẽ trả về HTTP 200 OK ngay lập tức.
+  3. **Notification JNI Churn**: ComicBackgroundService.cs cập nhật Foreground Service Notification quá thường xuyên không có throttle chặt, khiến các đối tượng JNI Java (NotificationCompat.Builder, PendingIntent) sinh ra liên tục làm đơ UI thread của Android.
+  4. **ToneGenerator Thread Safety**: ToneGenerator trong Android không an toàn đa luồng nếu nhiều luồng nền cùng kích hoạt âm thanh hoàn tất/lỗi song song.
+
+- **Giải pháp triệt để**:
+  1. **Tái cấu trúc tải ảnh sang Parallel.ForEachAsync khống chế slot cố định & Thu gom rác**:
+     - Thay thế toàn bộ imageUrls.Select(...).ToList() bằng Parallel.ForEachAsync với MaxDegreeOfParallelism được khống chế chặt chẽ (1-3 luồng trên Android theo CPU/nhiệt độ).
+     - Bổ sung dọn dẹp bộ nhớ định kỳ: Gọi GC.Collect(0, GCCollectionMode.Optimized) mỗi 20 ảnh để giải phóng ngay lập tức các buffer ảnh Gen 0 tạm thời, giữ heap Android luôn ổn định dưới 150MB.
+  2. **Chuẩn hóa Header Comix.to CDN**:
+     - Loại bỏ header Referer khi tải từ các CDN comix (*.site, softtouchgoods.site).
+     - Giữ nguyên Origin: https://comix.to cùng các header hiện đại Sec-Fetch-* và User-Agent Chrome 130.
+  3. **Throttling JNI Notification tối thiểu 1000ms**:
+     - Bổ sung biến kiểm tra tick System.Environment.TickCount64 trong ComicBackgroundService.cs và DownloadEngineService.cs, bảo đảm tần suất gọi NotificationManager.Notify không dày hơn 1 giây/lần.
+  4. **Bọc SemaphoreSlim cho Audio Notification**:
+     - Đặt SemaphoreSlim(1,1) trong MainActivity.cs bảo đảm chỉ có một luồng duy nhất được phát âm thanh tại một thời điểm, loại bỏ triệt để lỗi native AudioFlinger crash.
+
+- **File can thiệp**:
+  - ComicDownloaderGMTPC/Services/DownloadEngineService.cs
+  - ComicDownloaderGMTPC.Android/ComicBackgroundService.cs
+  - ComicDownloaderGMTPC.Android/MainActivity.cs
+  - Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md
