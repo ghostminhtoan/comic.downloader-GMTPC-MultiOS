@@ -5546,13 +5546,22 @@ public class ComicScraperService
         var hidMatch = Regex.Match(cleanUrl, @"/title/(?<hid>[a-zA-Z0-9]+)(?:-[^/?#]+)?", RegexOptions.IgnoreCase);
         string hid = hidMatch.Success ? hidMatch.Groups["hid"].Value : string.Empty;
 
-        // Fetch HTML để lấy title, cover từ initial-data
+        // Fetch HTML để lấy title, cover từ initial-data và lưu session cookie tự động
         string? html = null;
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
-            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            var dev = CurrentComixDevice;
+            req.Headers.TryAddWithoutValidation("User-Agent", dev.UserAgent);
+            if (!string.IsNullOrEmpty(dev.SecChUa))
+            {
+                req.Headers.TryAddWithoutValidation("Sec-Ch-Ua", dev.SecChUa);
+                req.Headers.TryAddWithoutValidation("Sec-Ch-Ua-Mobile", dev.Mobile);
+                req.Headers.TryAddWithoutValidation("Sec-Ch-Ua-Platform", dev.Platform);
+            }
+            HttpClient currentClient;
+            lock (_comixClientLock) currentClient = _comixHttpClient;
+            using var res = await currentClient.SendAsync(req, ct).ConfigureAwait(false);
             if (res.IsSuccessStatusCode)
             {
                 html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -5627,7 +5636,7 @@ public class ComicScraperService
         while (!ct.IsCancellationRequested)
         {
             await ComixRateLimiter.ThrottleAsync(ct).ConfigureAwait(false);
-            string apiPath = $"/manga/{hid}/chapters?limit=50&order[number]=asc&page={page}&v=0&w=0";
+            string apiPath = $"/manga/{hid}/chapters?limit=100&order[number]=asc&page={page}&v=0&w=0";
             string token = ComixCryptoService.GenerateToken(apiPath);
             string apiUrl = $"https://comix.to/api/v1{apiPath}&_={token}";
 
@@ -5694,9 +5703,48 @@ public class ComicScraperService
                     rawChapterItems.Add(item.Clone());
                 }
 
-                if (result.TryGetProperty("pagination", out var pagProp))
+                int lastPage = 1;
+                bool hasLastPage = false;
+
+                if (result.TryGetProperty("meta", out var metaProp))
                 {
-                    int lastPage = pagProp.TryGetProperty("last_page", out var lp) ? lp.GetInt32() : 1;
+                    if (metaProp.TryGetProperty("last_page", out var lp))
+                    {
+                        lastPage = lp.GetInt32();
+                        hasLastPage = true;
+                    }
+                    else if (metaProp.TryGetProperty("total_pages", out var tp))
+                    {
+                        lastPage = tp.GetInt32();
+                        hasLastPage = true;
+                    }
+                    else if (metaProp.TryGetProperty("total", out var tot) && metaProp.TryGetProperty("limit", out var lim))
+                    {
+                        int totalItems = tot.GetInt32();
+                        int limitVal = lim.GetInt32();
+                        if (limitVal > 0)
+                        {
+                            lastPage = (int)Math.Ceiling((double)totalItems / limitVal);
+                            hasLastPage = true;
+                        }
+                    }
+                }
+                else if (result.TryGetProperty("pagination", out var pagProp))
+                {
+                    if (pagProp.TryGetProperty("last_page", out var lp))
+                    {
+                        lastPage = lp.GetInt32();
+                        hasLastPage = true;
+                    }
+                    else if (pagProp.TryGetProperty("total_pages", out var tp))
+                    {
+                        lastPage = tp.GetInt32();
+                        hasLastPage = true;
+                    }
+                }
+
+                if (hasLastPage)
+                {
                     if (page >= lastPage) break;
                 }
                 else if (itemCount < 100)
@@ -5870,8 +5918,16 @@ public class ComicScraperService
 
         book.Chapters = dedupedChapters;
         book.TotalChapters = dedupedChapters.Count;
-        book.Status = "Ready";
-        book.StatusMessage = $"Tìm thấy {dedupedChapters.Count} chapter";
+        if (dedupedChapters.Count > 0)
+        {
+            book.Status = "Ready";
+            book.StatusMessage = $"Tìm thấy {dedupedChapters.Count} chapter";
+        }
+        else if (book.Status != "Error")
+        {
+            book.Status = "Ready";
+            book.StatusMessage = "Không tìm thấy chapter nào";
+        }
         return book;
     }
 

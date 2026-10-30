@@ -2187,3 +2187,42 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - ComicDownloaderGMTPC.Android/ComicBackgroundService.cs
   - ComicDownloaderGMTPC.Android/MainActivity.cs
   - Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md
+
+---
+
+### BUG-060: Comix.to Thay Đổi Bảng Mã Hóa Crypto (Key Rotation - Prefix `ta0.`) & Sửa Lỗi Ngắt Phân Trang Sớm Khiến App Chỉ Get Được 25 Chapters (Bộ Truyện 438 Chương Sangokushi)
+
+- **Hiện tượng**:
+  - Khi cào bộ truyện dài như [Sangokushi](https://comix.to/title/gre09-sangokushi) (có thực tế 438 chapters), app chỉ lấy được đúng 25 chapters đầu tiên rồi dừng lại báo xong.
+  - Trên các phiên bản cũ, việc gọi API Comix bị trả về mã lỗi `HTTP 403 Forbidden` với payload `{"message":"Invalid token.","code":"key_retired"}` do máy chủ Comix.to đã đánh dấu bảng khóa mã hóa cũ hết hạn.
+
+- **Nguyên nhân kỹ thuật**:
+  1. **Comix Crypto Key Rotation**:
+     - Comix.to định kỳ thay đổi version key và token prefix trong JS bundle `apicore-tnp7ct-BIwwGHP6.js`.
+     - Tiền tố token cũ `"yti."` và bảng `Base64KeyTable` 1088 bytes cũ trong `ComixCryptoService.cs` đã bị máy chủ đổi thành prefix mới `"ta0."` và `Base64KeyTable` mới. Các token sinh ra với prefix cũ bị server trả về `key_retired`.
+  2. **Lỗi ngắt phân trang sớm do lệch điều kiện limit và thiếu parser `meta`**:
+     - Trong `ComicScraperService.cs`, API path được gọi với `limit=50`.
+     - Tuy nhiên, API Comix.to trả về cấu trúc phân trang bên trong đối tượng `meta` thay vì `pagination`.
+     - Khi `result.TryGetProperty("pagination", out _)` trả về `false`, code rơi vào nhánh fallback: `else if (itemCount < 100) break;`.
+     - Do `itemCount` của trang 1 tối đa là `50 < 100`, điều kiện dừng luôn luôn được thỏa mãn ngay tại `page = 1`!
+     - 50 bản ghi thô của trang 1 sau khi deduplicate loại trừ các bản dịch trùng lặp giữa các nhóm dịch cho cùng 1 số chapter (chương 0 đến ~24) cho ra kết quả chính xác đúng **25 chapters duy nhất**!
+  3. **Thiếu liên kết session cookie giữa HTML và API**:
+     - Đoạn code fetch HTML ban đầu dùng `_httpClient` chung thay vì `_comixHttpClient`, khiến cookie phiên của Comix không được chuyển tiếp sang các request gọi API tiếp theo.
+
+- **Giải pháp triệt để**:
+  1. **Deobfuscate và trích xuất Base64KeyTable mới**:
+     - Phân tích ngược bundle `apicore-tnp7ct-BIwwGHP6.js`, trích xuất `Base64KeyTable` mới (1088 bytes) và cập nhật tiền tố token thành `"ta0." + Wj(KeyTable, pathAndQuery);`.
+  2. **Tối ưu hóa tham số `limit=100` và nâng cấp bộ phân tích phân trang**:
+     - Đổi tham số gọi API từ `limit=50` sang `limit=100`, giảm một nửa số lượng request lên server Comix.
+     - Bổ sung bộ phân tích thông minh cho cả `meta` (`last_page`, `total_pages`, `total / limit`) và `pagination` (`last_page`, `total_pages`).
+     - Chỉ dừng khi `page >= lastPage`, hoặc khi số lượng item nhỏ hơn limit (`itemCount < 100`) trong trường hợp server không trả về metadata trang.
+  3. **Đồng bộ hóa Session Cookie và Tinh chỉnh Rate Limiter**:
+     - Chuyển việc fetch HTML đầu trang sang `_comixHttpClient` với đầy đủ Device Profile headers để tự động nạp session cookie.
+     - Nâng `MinIntervalMs` của `ComixRateLimiter` lên 900ms để giữ khoảng cách an toàn, triệt tiêu nguy cơ kích hoạt WAF Cloudflare.
+     - Bảo toàn cờ trạng thái `book.Status = "Error"` khi danh sách chương rỗng do sự cố mạng, tránh ghi đè thành `"Ready"` sai lệch.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/ComixCryptoService.cs`
+  - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+

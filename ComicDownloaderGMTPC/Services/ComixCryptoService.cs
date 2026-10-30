@@ -20,7 +20,7 @@ public static class ComixCryptoService
     private static readonly char[] Nj = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".ToCharArray();
 
     private const string Base64KeyTable =
-        "1Gay3iETkw7Yj+9e2LrEDFNWkTAPj6S3g2jZ3k+ZCh5P+LT+FCcycNE9E9Si8iis6WcRmyFBsu36KaECDLePW1MNYoHOCYt1cpOkcofWJV4MhRlMrbIn3cecLJ0dKqkAvK+dzANZQMVDk35zDHbTv6CD9E2ROUeh4NTf3yPHV6YNYDpzFWxs/TsGxJoGnpWCv+ayx6sO+nhXCXTnBIVKrX6zL8O02EglrsmIYpC/+XkQUn3m2Aw20KEqXXej/dCfSlOReHqyhlxBefkf2uz80QyXqGOwI7ZQJDxtdtXAtmjo+S1Kiaxhwvw8ow+Wu3iBy+9XwtSP78kmrHLNu8GFlu3P5sVmq6Cr6vkZ3y6EAEO+zl45xHce3mTeV1A21FNO1wpdAtmifEK1rnfQwz7FhBduVheITjd0sXsEb+E/VqYYoVLFMdCqll0VfqrMarwaC9IW2/FSAbc5KB6ceGM1GBvjkvg5JpgeSaDIKnNheNfaVZxdg3DgbnD3eEHkOuw0+eBcTrgXwXp3lgWRVaQ34uvK4VVQcxpqW9QJOBKszYPJeFmTqpgo7TDK1SFYO5YU/jiDOC9OEk4iAKDes1U9LoU1RcuzTyHHdiWhMF9spTXJ/jbb5NL3Hj6rp3qL+PN01LpzDPnIq2yKwDQiHWVhJEEdrfyesfSfMp6yNRanrc3uRUhDsVFZ1ETS9m9UkBhM2kfz//xN1Fa40i2izqZc3K5ORBOaNblXenn4rga0EE5oFxfd1fHcqQoWi8W4Rh11xXitB1VcNnh4+bf9HVefXsgs8LGnKJWkEUkLCH9/iDgGQjbmGXhEJkiqI9CvltXrdVB9e3HvVg6L80OPKEkDoxkyX+PD0wV0RY1CiQDV9VYUleafBnnThJQfrwyMRkfmBzMBotrdoQ9JhpBwECsYxs7F9dWQeuNp8vpm9uM3KUgLdpSzDGWW2IuooeGhO26w7NLMsJfG2afXzC6jh9Xpyg7hyyzUDONSAfQ7DLIkshnmUe+Kkr5szxGrLStXjaMIo9/cc7PsJfQ2yzL7OzycIipauc1foN4TplU6MdDFx5hC8mdPNfYOQwdiExNawGbIb6FPeGQ1wUeT+Bzi+13naPCoqiajDOfIrDssSBdkBzbB1OvsXgUawqJdJ4bWPMZ4fupLWg+hoKuZCBkz/rYTsYKrFnJs1ENIAv1gQVgkXWNOdB2bqrySz18aEh7RTG0H+Fqp43yVSEGNnFwH4EAsLyDjA0OUxLKhP8UMEO292R7+XQJySlX0dvTBOKBmUChZPAK3D+6mVIDwxSxtSYeEfMXwa/IeZmwDlru1ITY3XH3o0U7AGF3EueBPj4/jPu7rax+7GHG7+1+BMinZEDeWpZhhlmwKSaZEEWT6/ZKu3CFBrfy3vrLXphoeCDL/xGO+HvO+BSu3b/4uud8WZGrBhnVVn7SPq2+zvZZQnkUEdwc=";
+        "pgB+aNdnvJDhEnpooM/XNIesfXdaxt9RMXYk35mzaiTWANCNeW6TUwBK6EhfsZRB6M1R5noDpeW1OeGsXDQrRdTwMIGx/sBNDiH5rahIX0KVruRenhppIesww03qvkAi8DNXF8n7UYUfgCVosCEa9KixmyoIPDKTh/FA3ZQeAkrEczIGlITh4+X2naFmsbHubREZfHhTtNpgBe8NPr15KTAtjvb9KD7Oc7kAD0UP73h0u1WTatPRQMPFbxHfIztsjpN58HQzM0nkXsvLeqU3QBkm9mATGkof0ceNZrue5KprH7mrvW3CCrAFxmlSuCNIB3C2Ov63Pu/5caiLPriyKYdT7b/tgC6s+m7Ez/JtpB24wJFmhAZJKoFN/zPx6YVSjwdFJBePG9kFS73BxnmcFOOZH02VlyRXwcUi72gEnpyVo6OLRBDVm/w2KJ/RNtB/dBYgJkgBGGQ2C+tLUyP/paKPZI6eU9lt2MapHub49YVTf4UeJswuRNi4Qtg/TbIjrCsDvrXeHQ4Oo6Jfe/WHO3MQgFQFWU+GMz8ZDY6NsgouUsgfBy16tgdxeJK0meKnrCjZFYhrJMWvvAs8IA1cj7yUVQVMMIlHHNdjfSCrYTfjKvjGlp/gXfl4LsKaLX9Jt9zQwtIqLMTkS8RzE4Iwn12d2RLZIE3nIUYphGx7eKtqF8sMEg2ow3OJiNd4KlM7PTLBs7LpGvuJjTc+x+6slpvBGwb8f03WG7KgcgG++YpGye2CNyOjx3gi0EtszI5TuTrd7eV/pTltxGNtVrrdQ5I6ZagkWjALTGnFh9zE5+QMPghWqIPansEG+zoNf20pAgUdFeAOaxECHD/K/2QdzHXw7CgGq57nk18nogvU7vQbLulL1vAnegL6d89GOnfK/hk69r2U2aYXCMWtV59MDdX0pTsMQkmuwq3N29FVFX62GdUvgPbLaoB8sd+PQAmnljYd8eBcIP9WeA1HajlRAC/ooWDanHzPvs/0f3FylJyUmI1JhVnUZ16bw+jXgxrAbkkYgaLBL2KeqqkKoOpG9YyJHUpnSToQzaP+WPixkOUj0mtpTw6T9XEs41GFdhGXq78Wxb+rnZIHtWI5PRRRiRMEX9X3TiJUKqT1rOTj74XB9DA088LZVpJQrt5j0NCmUHBsspxaMmfgN9jIDRNsK0r6+x1br6qvmV6kcQR2RXT3T8aaDjbkc5432Ot0B71hpEofuSRU9ShQe9n2R09Vd32kE2NvSeSdir2nMYawJF0A2dArkQWxM81m8oYONpw6XsnVphl0N3/+16mq+9/Pt45Kb1xX5pe7xzw7oE9WQtRj7TPqitkEAMbEWWnFyOiGcay9TLoRKIwkM59soJG+9H/uqdi0je8Rcl1v/JgxJTkjuVsayLMPvBzUR6e0qxc19iNc1ppBA6NZpr0oON0G/lfpWF1u3EhTrCkZoUKFMAA=";
 
     private static readonly byte[] KeyTable = Convert.FromBase64String(Base64KeyTable);
 
@@ -123,7 +123,7 @@ public static class ComixCryptoService
 
     public static string GenerateToken(string pathAndQuery)
     {
-        return "yti." + Wj(KeyTable, pathAndQuery);
+        return "ta0." + Wj(KeyTable, pathAndQuery);
     }
 
     public static string DecryptPayload(string base64Payload)
@@ -179,7 +179,7 @@ public static class ComixRateLimiter
 {
     private static readonly System.Threading.SemaphoreSlim _gate = new(1, 1);
     private static long _lastRequestTick = 0;
-    private const int MinIntervalMs = 700;
+    private const int MinIntervalMs = 900;
 
     public static async System.Threading.Tasks.Task ThrottleAsync(System.Threading.CancellationToken ct = default)
     {
