@@ -5956,9 +5956,36 @@ public class ComicScraperService
             {
                 await ComixRateLimiter.ThrottleAsync(ct).ConfigureAwait(false);
 
+                HttpClient currentClient;
+                lock (_comixClientLock) currentClient = _comixHttpClient;
+
+                // Nạp session cookies comix.to (warm-up) nếu cookie container rỗng hoặc sau khi bị chặn
+                var testUri = new Uri("https://comix.to");
+                if (_comixCookieContainer.GetCookies(testUri).Count == 0 || attempt > 1)
+                {
+                    try
+                    {
+                        using var warmReq = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
+                        var devWarm = CurrentComixDevice;
+                        warmReq.Headers.TryAddWithoutValidation("User-Agent", devWarm.UserAgent);
+                        warmReq.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+                        warmReq.Headers.TryAddWithoutValidation("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7");
+                        if (!string.IsNullOrEmpty(devWarm.SecChUa))
+                        {
+                            warmReq.Headers.TryAddWithoutValidation("Sec-Ch-Ua", devWarm.SecChUa);
+                            warmReq.Headers.TryAddWithoutValidation("Sec-Ch-Ua-Mobile", devWarm.Mobile);
+                            warmReq.Headers.TryAddWithoutValidation("Sec-Ch-Ua-Platform", devWarm.Platform);
+                        }
+                        using var warmRes = await currentClient.SendAsync(warmReq, ct).ConfigureAwait(false);
+                    }
+                    catch { }
+                }
+
                 using var req = new HttpRequestMessage(HttpMethod.Get, apiUrl);
                 var dev = CurrentComixDevice;
                 req.Headers.TryAddWithoutValidation("User-Agent", dev.UserAgent);
+                req.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
+                req.Headers.TryAddWithoutValidation("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7");
                 if (!string.IsNullOrEmpty(dev.SecChUa))
                 {
                     req.Headers.TryAddWithoutValidation("Sec-Ch-Ua", dev.SecChUa);
@@ -5967,9 +5994,6 @@ public class ComicScraperService
                 }
                 req.Headers.TryAddWithoutValidation("X-Requested-With", "XMLHttpRequest");
                 req.Headers.TryAddWithoutValidation("Referer", chapterUrl);
-
-                HttpClient currentClient;
-                lock (_comixClientLock) currentClient = _comixHttpClient;
 
                 using var res = await currentClient.SendAsync(req, ct).ConfigureAwait(false);
                 string rawJson = string.Empty;
@@ -5986,9 +6010,11 @@ public class ComicScraperService
 
                 if (isBlocked)
                 {
-                    // TỰ ĐỘNG XÓA SẠCH COOKIE VÀ ĐỔI DANH TÍNH MÁY MỚI THEO TIÊU CHÍ YÊU CẦU
-                    ResetComixSessionAsNewDevice();
-                    int coolDownSec = attempt * 3;
+                    if (attempt == 3)
+                    {
+                        ResetComixSessionAsNewDevice();
+                    }
+                    int coolDownSec = attempt * 2;
                     await ComixRateLimiter.CoolDownAsync(coolDownSec, ct).ConfigureAwait(false);
                     continue;
                 }
@@ -6001,16 +6027,39 @@ public class ComicScraperService
                         string decJson = ComixCryptoService.DecryptPayload(encProp.GetString() ?? string.Empty);
                         using var decDoc = JsonDocument.Parse(decJson);
                         var result = decDoc.RootElement.GetProperty("result");
-                        if (result.TryGetProperty("pages", out var pagesObj) && pagesObj.TryGetProperty("items", out var items))
+                        if (result.TryGetProperty("pages", out var pagesObj))
                         {
-                            foreach (var item in items.EnumerateArray())
+                            string baseUrl = string.Empty;
+                            if (pagesObj.TryGetProperty("baseUrl", out var baseProp))
                             {
-                                if (item.TryGetProperty("url", out var urlProp))
+                                baseUrl = baseProp.GetString() ?? string.Empty;
+                            }
+
+                            JsonElement itemsElement = default;
+                            if (pagesObj.ValueKind == JsonValueKind.Array)
+                            {
+                                itemsElement = pagesObj;
+                            }
+                            else if (pagesObj.TryGetProperty("items", out var foundItems) && foundItems.ValueKind == JsonValueKind.Array)
+                            {
+                                itemsElement = foundItems;
+                            }
+
+                            if (itemsElement.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var item in itemsElement.EnumerateArray())
                                 {
-                                    string imgUrl = urlProp.GetString() ?? string.Empty;
-                                    if (!string.IsNullOrWhiteSpace(imgUrl))
+                                    if (item.TryGetProperty("url", out var urlProp))
                                     {
-                                        images.Add(imgUrl);
+                                        string imgUrl = urlProp.GetString() ?? string.Empty;
+                                        if (!string.IsNullOrWhiteSpace(imgUrl))
+                                        {
+                                            if (!imgUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(baseUrl))
+                                            {
+                                                imgUrl = baseUrl.TrimEnd('/') + "/" + imgUrl.TrimStart('/');
+                                            }
+                                            images.Add(imgUrl);
+                                        }
                                     }
                                 }
                             }
@@ -6025,6 +6074,25 @@ public class ComicScraperService
             {
                 await Task.Delay(400 * attempt, ct).ConfigureAwait(false);
             }
+        }
+
+        // Tầng phòng vệ thép thứ 2 (Defense in Depth): Nếu API trực tiếp bị chặn hoặc không có ảnh,
+        // sử dụng NativeWebViewService (trên Windows / desktop) để nạp trang và bóc tách ảnh từ DOM
+        if (images.Count == 0 && NativeWebViewService.Instance.IsAvailable)
+        {
+            try
+            {
+                string? webViewHtml = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 45, ct).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(webViewHtml))
+                {
+                    var directImgs = ExtractDirectImagesFromHtml(webViewHtml, chapterUrl);
+                    if (directImgs.Count > 0)
+                    {
+                        images.AddRange(directImgs);
+                    }
+                }
+            }
+            catch { }
         }
 
         return images;

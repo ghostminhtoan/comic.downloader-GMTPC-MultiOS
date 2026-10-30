@@ -2226,3 +2226,36 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
 
+
+
+---
+
+### BUG-061: Lỗi Không Thể Bóc Tách Ảnh Cho Các Chapter Comix.to (Chapter 0, 1, 2...) Dẫn Đến Dừng Tải Để Bảo Vệ IP
+
+- **Hiện tượng**:
+  - Sau khi cào truyện Comix.to thành công danh sách chapters (Sangokushi 438 chapters), khi bấm tải truyện, app báo lỗi liên tiếp trong tab Nhật Ký:
+    ```text
+    WARN [Sangokushi] Không thể bóc tách ảnh cho 'Chapter 0: Volume 14'.
+    WARN [Sangokushi] Không thể bóc tách ảnh cho 'Chapter 1: 5: The Oath of the Peach Garden'.
+    WARN [Sangokushi] Không thể bóc tách ảnh cho 'Chapter 2: Lady Fuyou'.
+    ERROR [Sangokushi] Không thể bóc tách ảnh 3 chương liên tiếp. Tạm dừng để bảo vệ IP.
+    ```
+  - App dừng toàn bộ tiến trình tải và không tải được bất kỳ ảnh nào trên cả Windows lẫn Android.
+
+- **Nguyên nhân kỹ thuật**:
+  1. **Thiếu Warm-up Session Cookie**: Trong `ExtractComixtoChapterImagesAsync`, code gọi thẳng vào API endpoint `https://comix.to/api/v1/chapters/{chapterId}?v=0&w=0&_={token}` bằng `_comixHttpClient` mà không hề truy cập trang HTML `chapterUrl` trước. Khi CookieContainer rỗng (hoặc sau khi session bị mất), Cloudflare WAF coi đây là bot cào API trực tiếp và trả về `HTTP 403 Forbidden` (`{"error":"captcha_required","challenge":"/@waf/challenge"}`).
+  2. **Vòng lặp xóa sạch cookie khi bị chặn (Self-Defeating Reset)**: Khi nhận mã 403, code lập tức thực thi `ResetComixSessionAsNewDevice()`, xóa sạch toàn bộ cookie và đổi sang User-Agent khác. Lần retry tiếp theo lại gọi thẳng API bằng cookie rỗng -> Lại bị 403 -> Lại xóa sạch cookie. Vòng lặp này khiến 100% các lần retry và các chapter tiếp theo đều thất bại.
+  3. **Thiếu Header Chuẩn Trình Duyệt**: Request API thiếu header `Accept: application/json, text/plain, */*` và `Accept-Language`, khiến WAF nhận diện bất thường.
+  4. **Thiếu hỗ trợ `baseUrl` trong payload JSON**: Trong response API của Comix, đối tượng `pages` có thể chứa thuộc tính `baseUrl` để ghép với các đường dẫn tương đối của từng trang ảnh. Code cũ chỉ đọc `url` trực tiếp mà bỏ qua `baseUrl`.
+  5. **Thiếu cơ chế Fallback phòng vệ (Defense in Depth)**: Khi `ExtractComixtoChapterImagesAsync` trả về 0 ảnh, hệ thống return rỗng ngay lập tức mà không có cơ chế fallback sang `NativeWebViewService` để giải quyết trường hợp Cloudflare Turnstile Captcha.
+
+- **Giải pháp triệt để**:
+  1. **Tự động Warm-up Session Cookie**: Trước khi gọi API `/chapters/{chapterId}`, tự động kiểm tra `_comixCookieContainer`. Nếu rỗng hoặc sau một lần bị lỗi, tự động gửi một request `GET chapterUrl` với đầy đủ browser headers để nạp và làm mới session cookies từ máy chủ Comix.to.
+  2. **Tối ưu hóa Chiến lược Reset Device**: Chỉ reset danh tính thiết bị và xóa cookie ở attempt thứ 3 (cuối cùng), giữ nguyên cookie hợp lệ để vượt qua các rào cản WAF của Comix.
+  3. **Bổ sung Headers Chuẩn Xác**: Thêm `Accept: application/json, text/plain, */*`, `Accept-Language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7`, `X-Requested-With: XMLHttpRequest`, `Referer: chapterUrl`.
+  4. **Chuẩn hóa Bộ Bóc Tách Ảnh JSON**: Hỗ trợ trích xuất cả `baseUrl` và ghép với `item.url` khi URL tương đối, hỗ trợ linh hoạt cả `pages` dạng Array hoặc Object có `items`.
+  5. **Bổ sung Fallback sang NativeWebViewService**: Nếu cả 3 lần gọi trực tiếp bằng HttpClient đều không có ảnh và máy có sẵn NativeWebView (Windows/Desktop), tự động gọi `NativeWebViewService.Instance.FetchHtmlAsync` để nạp DOM và trích xuất thẻ `<img>` trực tiếp, đảm bảo khả năng sống sót 100%.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
