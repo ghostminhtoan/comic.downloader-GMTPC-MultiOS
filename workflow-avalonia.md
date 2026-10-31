@@ -1,4 +1,4 @@
-# Workflow hiện tại - Comic Downloader GMTPC Avalonia Multi-OS
+﻿# Workflow hiện tại - Comic Downloader GMTPC Avalonia Multi-OS
 Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ, ít file, build sạch, không phá lane khác, sau khi build luôn luôn upload beta.
 
 ## 1. Quy tắc nền
@@ -574,3 +574,20 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - **Đồng Bộ Giao Diện Toolbar & Context Menu Đa Nền Tảng (MainView.axaml)**:
   + Bổ sung 2 nút bấm trực quan [🔤 Sắp xếp theo tên] và [⏮️ Thứ tự gốc từ web] trên Toolbar hàng chờ.
   + Bổ sung các lệnh tương ứng vào Context Menu chuột phải của cả chế độ bảng (List Mode) và chế độ lưới thẻ ảnh (Thumbnail Mode).
+
+### 46. Tích Hợp Hệ Thống Tìm Kiếm Nhanh Đa Trường & Bộ Lọc Nâng Cao 4 Tầng Logic (AdvancedSearchViewModel.cs, MainViewModel.QueueFilter.cs, MainView.axaml)
+- **Kiến Trúc Bộ Lọc Nâng Cao Đa Điều Kiện (AdvancedSearchViewModel.cs)**:
+  + **Bắt buộc có (+) [Must Have]**: Logic AND, truyện phải chứa đồng thời tất cả các từ khóa (ngăn cách bằng dấu chấm phẩy ;).
+  + **Có thể có (OR) [Can Have]**: Logic OR, truyện chỉ cần chứa ít nhất một trong các từ khóa chỉ định.
+  + **Bắt buộc không có (-) [Must Not Have]**: Logic EXCLUDE 1, loại bỏ ngay lập tức nếu truyện chứa bất kỳ từ khóa nào.
+  + **Loại trừ (-) [Exclude]**: Logic EXCLUDE 2, bổ sung lớp loại trừ độc lập tăng độ chính xác phân loại.
+  + **Lịch sử Undo / Redo**: Nút ↶ Undo và ↷ Redo lưu vết cấu hình bộ lọc vào Stack, cho phép hoàn tác/phục hồi mọi thao tác gõ.
+  + **Nút 🗑️ CLEAR**: Xóa trắng toàn bộ 4 ô điều kiện và đưa Match Mode về mặc định, tự động push state cũ vào Undo stack.
+- **Thuật Toán So Khớp Từ Ngữ Chuẩn Hóa (MainViewModel.QueueFilter.cs)**:
+  + **Bỏ dấu tiếng Việt (RemoveDiacritics)**: Tự động chuẩn hóa Unicode FormD và bóc tách dấu thanh, gõ không dấu (videl, da xong) vẫn tìm được từ có dấu.
+  + **Khớp từ chính xác (Exact Word)**: Ranh giới từ \b...\b với cache Regex O(1) 500 entry, ngăn chặn tìm man bị dính sang woman.
+  + **Tiền tố tìm kiếm chuyên sâu (Prefix)**: Hỗ trợ cú pháp name:<từ>, link:<từ>, tag:<từ>, hoặc quét đa trường toàn diện (Tiêu đề, Link, Tag, Chap thiếu, Trạng thái, Tiến trình, Chương đang tải).
+- **Giao Diện UI Flyout Cyberpunk & Thống Kê Header/Status Bar (MainView.axaml)**:
+  + Nút Phễu lọc [ ⏚ Lọc nâng cao ] với hiệu ứng màu sắc động (FilterIconBrush chuyển màu xanh lá #10B981 khi bộ lọc đang hoạt động).
+  + Bảng điều khiển Popup Flyout 760px rộng rãi, bố trí 4 ô màu nhận diện riêng biệt (Xanh lá, Vàng cam, Cyan, Đỏ).
+  + Huy hiệu kết quả tìm kiếm Kết quả tìm kiếm: {N} hiển thị đồng bộ trên Toolbar và thanh Status Bar dưới đáy.

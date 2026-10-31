@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ComicDownloaderGMTPC.Models;
@@ -10,6 +14,9 @@ namespace ComicDownloaderGMTPC.ViewModels;
 
 public partial class MainViewModel
 {
+    private AdvancedSearchViewModel? _advancedSearch;
+    public AdvancedSearchViewModel AdvancedSearch => _advancedSearch ??= new AdvancedSearchViewModel(ApplyQueueFilter);
+
     [ObservableProperty]
     private string _queueSearchFilter = string.Empty;
 
@@ -21,6 +28,15 @@ public partial class MainViewModel
 
     [ObservableProperty]
     private string _filteredQueueCountText = string.Empty;
+
+    [ObservableProperty]
+    private string _filteredHeaderCountText = string.Empty;
+
+    [ObservableProperty]
+    private int _filteredBooksCount = 0;
+
+    [ObservableProperty]
+    private bool _isFilterActive = false;
 
     [ObservableProperty]
     private int _duplicateBooksCount = 0;
@@ -52,6 +68,7 @@ public partial class MainViewModel
         QueueSearchFilter = string.Empty;
         IsFilterDuplicatesOnly = false;
         IsFilterUncenOnly = false;
+        AdvancedSearch.Clear();
         ApplyQueueFilter();
     }
 
@@ -217,36 +234,233 @@ public partial class MainViewModel
         ApplyQueueFilter();
     }
 
+    private static readonly ConcurrentDictionary<string, Regex> _exactWordRegexCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static Regex? GetExactWordRegex(string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword)) return null;
+        if (_exactWordRegexCache.Count > 500) _exactWordRegexCache.Clear();
+
+        return _exactWordRegexCache.GetOrAdd(keyword, kw =>
+        {
+            bool startWord = char.IsLetterOrDigit(kw[0]) || kw[0] == '_';
+            bool endWord = char.IsLetterOrDigit(kw[^1]) || kw[^1] == '_';
+
+            string pattern = (startWord ? @"\b" : "") + Regex.Escape(kw) + (endWord ? @"\b" : "");
+            return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        });
+    }
+
+    public static string RemoveDiacritics(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var normalizedString = text.Normalize(NormalizationForm.FormD);
+        var stringBuilder = new StringBuilder(text.Length);
+
+        foreach (var c in normalizedString)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+            {
+                stringBuilder.Append(c);
+            }
+        }
+
+        return stringBuilder.ToString().Normalize(NormalizationForm.FormC);
+    }
+
+    private static bool ContainsKeyword(string? source, string keyword, bool exactWord, Regex? regexExact)
+    {
+        if (string.IsNullOrEmpty(source)) return false;
+
+        if (!exactWord)
+        {
+            var compareInfo = CultureInfo.InvariantCulture.CompareInfo;
+            return compareInfo.IndexOf(source, keyword, CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) >= 0;
+        }
+        else
+        {
+            if (regexExact == null) return false;
+            string normalizedSource = RemoveDiacritics(source);
+            return regexExact.IsMatch(normalizedSource);
+        }
+    }
+
+    private bool IsComicBookMatchKeyword(ComicBookItem book, string keyword, bool exactWordMatch)
+    {
+        if (book == null || string.IsNullOrWhiteSpace(keyword)) return false;
+
+        string normalizedKeyword = keyword.Trim();
+        string? searchPrefix = null;
+
+        int colonIndex = normalizedKeyword.IndexOf(':');
+        if (colonIndex > 0 && colonIndex < normalizedKeyword.Length - 1)
+        {
+            string prefix = normalizedKeyword.Substring(0, colonIndex).ToLowerInvariant();
+            if (prefix is "name" or "link" or "tag")
+            {
+                searchPrefix = prefix;
+                normalizedKeyword = normalizedKeyword.Substring(colonIndex + 1).Trim();
+            }
+        }
+
+        Regex? regexExact = null;
+        if (exactWordMatch)
+        {
+            string noDiacriticsKeyword = RemoveDiacritics(normalizedKeyword);
+            regexExact = GetExactWordRegex(noDiacriticsKeyword);
+            if (regexExact == null) return false;
+        }
+
+        if (searchPrefix == "name") return ContainsKeyword(book.Title, normalizedKeyword, exactWordMatch, regexExact);
+        if (searchPrefix == "link") return ContainsKeyword(book.Url, normalizedKeyword, exactWordMatch, regexExact);
+        if (searchPrefix == "tag") return ContainsKeyword(book.PreviewTagsText, normalizedKeyword, exactWordMatch, regexExact);
+
+        return ContainsKeyword(book.Title, normalizedKeyword, exactWordMatch, regexExact) ||
+               ContainsKeyword(book.Url, normalizedKeyword, exactWordMatch, regexExact) ||
+               ContainsKeyword(book.PreviewTagsText, normalizedKeyword, exactWordMatch, regexExact) ||
+               ContainsKeyword(book.MissingChapters, normalizedKeyword, exactWordMatch, regexExact) ||
+               ContainsKeyword(book.Status, normalizedKeyword, exactWordMatch, regexExact) ||
+               ContainsKeyword(book.DetailProgressText, normalizedKeyword, exactWordMatch, regexExact) ||
+               ContainsKeyword(book.ChapterSelectionText, normalizedKeyword, exactWordMatch, regexExact);
+    }
+
     public void ApplyQueueFilter()
     {
         string filter = (QueueSearchFilter ?? string.Empty).Trim();
         bool filterDup = IsFilterDuplicatesOnly;
         bool filterUncen = IsFilterUncenOnly;
 
+        var posKeywords = AdvancedSearch.GetActivePositiveKeywords();
+        var nonNegKeywords = AdvancedSearch.GetActiveNonNegativeKeywords();
+        var nonPosKeywords = AdvancedSearch.GetActiveNonPositiveKeywords();
+        var negKeywords = AdvancedSearch.GetActiveNegativeKeywords();
+        bool exactWordMatch = AdvancedSearch.IsExactWord;
+
+        bool hasAdvanced = posKeywords.Count > 0 || nonNegKeywords.Count > 0 || nonPosKeywords.Count > 0 || negKeywords.Count > 0;
+        bool hasFilter = !string.IsNullOrWhiteSpace(filter) || hasAdvanced || filterDup || filterUncen;
+
         int visibleCount = 0;
         foreach (var book in ComicBooks)
         {
             if (book == null) continue;
 
-            bool matchesText = string.IsNullOrWhiteSpace(filter) ||
-                               (book.Title?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true) ||
-                               (book.Url?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true);
+            // 1. Kiểm tra bộ lọc tìm kiếm nhanh chính (QueueSearchFilter)
+            if (!string.IsNullOrEmpty(filter))
+            {
+                if (!IsComicBookMatchKeyword(book, filter, exactWordMatch))
+                {
+                    book.IsFilteredOut = true;
+                    continue;
+                }
+            }
 
-            bool matchesDup = !filterDup || (book.IsDuplicate || book.IsCensorshipColorDuplicate);
-            bool matchesUncen = !filterUncen || (book.IsCensorshipUncensoredVariant);
+            // 2. Kiểm tra Bắt buộc có (+) - AND logic (Phải chứa tất cả)
+            if (posKeywords.Count > 0)
+            {
+                bool matchAll = true;
+                foreach (var k in posKeywords)
+                {
+                    if (!IsComicBookMatchKeyword(book, k, exactWordMatch))
+                    {
+                        matchAll = false;
+                        break;
+                    }
+                }
+                if (!matchAll)
+                {
+                    book.IsFilteredOut = true;
+                    continue;
+                }
+            }
 
-            bool isVisible = matchesText && matchesDup && matchesUncen;
-            book.IsFilteredOut = !isVisible;
-            if (isVisible) visibleCount++;
+            // 3. Kiểm tra Có thể có (OR) - OR logic (Chứa ít nhất 1)
+            if (nonNegKeywords.Count > 0)
+            {
+                bool matchAny = false;
+                foreach (var k in nonNegKeywords)
+                {
+                    if (IsComicBookMatchKeyword(book, k, exactWordMatch))
+                    {
+                        matchAny = true;
+                        break;
+                    }
+                }
+                if (!matchAny)
+                {
+                    book.IsFilteredOut = true;
+                    continue;
+                }
+            }
+
+            // 4. Kiểm tra Bắt buộc không có (-) - Exclude logic 1
+            if (nonPosKeywords.Count > 0)
+            {
+                bool hasExcluded = false;
+                foreach (var k in nonPosKeywords)
+                {
+                    if (IsComicBookMatchKeyword(book, k, exactWordMatch))
+                    {
+                        hasExcluded = true;
+                        break;
+                    }
+                }
+                if (hasExcluded)
+                {
+                    book.IsFilteredOut = true;
+                    continue;
+                }
+            }
+
+            // 5. Kiểm tra Loại trừ (-) - Exclude logic 2
+            if (negKeywords.Count > 0)
+            {
+                bool hasExcluded = false;
+                foreach (var k in negKeywords)
+                {
+                    if (IsComicBookMatchKeyword(book, k, exactWordMatch))
+                    {
+                        hasExcluded = true;
+                        break;
+                    }
+                }
+                if (hasExcluded)
+                {
+                    book.IsFilteredOut = true;
+                    continue;
+                }
+            }
+
+            // 6. Kiểm tra Lọc trùng tên
+            if (filterDup && !(book.IsDuplicate || book.IsCensorshipColorDuplicate))
+            {
+                book.IsFilteredOut = true;
+                continue;
+            }
+
+            // 7. Kiểm tra Lọc Uncen
+            if (filterUncen && !book.IsCensorshipUncensoredVariant)
+            {
+                book.IsFilteredOut = true;
+                continue;
+            }
+
+            book.IsFilteredOut = false;
+            visibleCount++;
         }
 
-        if (!string.IsNullOrWhiteSpace(filter) || filterDup || filterUncen)
+        FilteredBooksCount = visibleCount;
+        IsFilterActive = hasFilter;
+
+        if (hasFilter)
         {
             FilteredQueueCountText = $"({visibleCount}/{ComicBooks.Count})";
+            FilteredHeaderCountText = $"Kết quả tìm kiếm: {visibleCount}";
         }
         else
         {
             FilteredQueueCountText = string.Empty;
+            FilteredHeaderCountText = string.Empty;
         }
     }
 }
