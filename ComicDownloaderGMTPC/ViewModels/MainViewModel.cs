@@ -4826,6 +4826,7 @@ public partial class MainViewModel : ViewModelBase
         DownloadingCount = ComicBooks.Count(b => b.Status == "Downloading");
         CompletedCount = ComicBooks.Count(b => b.Status == "Completed");
         ErrorCount = ComicBooks.Count(b => b.Status == "Error");
+        RecalculateDuplicates();
     }
 
     private void OnLogEmitted(string level, string message)

@@ -162,7 +162,50 @@ public partial class ComicBookItem : ObservableObject
     private string _preferredLanguage = "vi";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TitleBrush))]
     private bool _isDuplicate;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TitleBrush))]
+    private bool _isCensorshipColorDuplicate;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TitleBrush))]
+    private bool _isNumberedVariantDuplicate;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TitleBrush))]
+    private bool _isCensorshipUncensoredVariant;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TitleBrush))]
+    private bool _isCensorshipFullColorVariant;
+
+    /// <summary>
+    /// Màu sắc tiêu đề truyện chuẩn Color Rules Cyberpunk từ WPF
+    /// </summary>
+    public string TitleBrush
+    {
+        get
+        {
+            if (IsNumberedVariantDuplicate && IsCensorshipUncensoredVariant) return "#A3E635"; // Lime (#FF9DFF00)
+            if (IsNumberedVariantDuplicate && IsCensorshipFullColorVariant) return "#38BDF8"; // Bright Blue (#00CCFF)
+            if (IsCensorshipUncensoredVariant && IsCensorshipFullColorVariant) return "#F43F5E"; // Pink (#FF0055)
+            if (IsCensorshipUncensoredVariant) return "#FFE600"; // Yellow (#FFE600)
+            if (IsCensorshipFullColorVariant) return "#E879F9"; // Light Purple (#FFD78B)
+            if (IsNumberedVariantDuplicate) return "#2DD4BF"; // Mint (#33FFCC)
+            if (IsDuplicate || IsCensorshipColorDuplicate) return "#00E5FF"; // Cyan (#00F0FF)
+            return "#FDE047"; // Vàng mặc định nguyên bản
+        }
+    }
+
+    public void NotifyTitleBrushChanged()
+    {
+        OnPropertyChanged(nameof(TitleBrush));
+    }
+
+    [ObservableProperty]
+    private bool _isFilteredOut = false;
 
     [ObservableProperty]
     private string _localDirectory = string.Empty;

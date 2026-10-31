@@ -3432,6 +3432,84 @@
 
                                         <WrapPanel Orientation="Horizontal">
 
+                                            <!-- 🔍 Ô TÌM KIẾM LỌC TRUYỆN THEO TÊN TRONG HÀNG CHỜ -->
+                                            <Border Background="#091018" BorderBrush="#334155" BorderThickness="1" CornerRadius="3" Padding="4,1" Margin="0,0,6,2" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                    <TextBlock Text="🔍" FontSize="10" Foreground="#38BDF8" VerticalAlignment="Center" Margin="2,0,0,0"/>
+                                                    <TextBox Text="{Binding QueueSearchFilter}" PlaceholderText="Lọc theo tên..."
+                                                             Background="Transparent" BorderThickness="0" Foreground="#E2E8F0" FontSize="10"
+                                                             Width="130" Height="22" Padding="2,2" VerticalContentAlignment="Center"/>
+                                                    <Button Command="{Binding ClearQueueFilterCommand}" IsVisible="{Binding QueueSearchFilter, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                            Background="Transparent" BorderThickness="0" Foreground="#94A3B8" Padding="2" FontSize="9" VerticalAlignment="Center" ToolTip.Tip="Xóa bộ lọc">
+                                                        <TextBlock Text="✕" />
+                                                    </Button>
+                                                </StackPanel>
+                                            </Border>
+                                            <TextBlock Text="{Binding FilteredQueueCountText}" Foreground="#FDE047" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,2" IsVisible="{Binding FilteredQueueCountText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                                            <!-- NÚT TOGGLE LỌC TRUYỆN TRÙNG (TÊN TRÙNG) -->
+                                            <ToggleButton IsChecked="{Binding IsFilterDuplicatesOnly}" CornerRadius="3" Margin="0,0,4,2" Padding="6,2" FontSize="10"
+                                                          ToolTip.Tip="Chỉ hiển thị các truyện trùng lặp hoặc có biến thể trùng trong hàng đợi">
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="🔍" FontSize="10"/>
+                                                    <TextBlock Text="Tên trùng" FontWeight="Bold"/>
+                                                    <TextBlock Text="{Binding DuplicateBooksCount, StringFormat='({0})'}" Foreground="#00E5FF" FontWeight="Bold" IsVisible="{Binding DuplicateBooksCount}"/>
+                                                </StackPanel>
+                                            </ToggleButton>
+
+                                            <!-- NÚT TOGGLE LỌC TRUYỆN UNCEN -->
+                                            <ToggleButton IsChecked="{Binding IsFilterUncenOnly}" CornerRadius="3" Margin="0,0,4,2" Padding="6,2" FontSize="10"
+                                                          ToolTip.Tip="Chỉ hiển thị các truyện bản không che (Uncensored / Decensored)">
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="🔞" FontSize="10"/>
+                                                    <TextBlock Text="Uncen" FontWeight="Bold"/>
+                                                </StackPanel>
+                                            </ToggleButton>
+
+                                            <!-- NÚT BẢNG MÀU COLOR RULES VỚI POPUP FLYOUT -->
+                                            <Button Background="#1E293B" BorderBrush="#EC4899" BorderThickness="1" Foreground="#F43F5E" FontWeight="Bold" FontSize="10" Padding="6,2" CornerRadius="3" Margin="0,0,6,2"
+                                                    ToolTip.Tip="Xem giải thích quy tắc mã màu truyện trùng &amp; biến thể">
+                                                <Button.Flyout>
+                                                    <Flyout Placement="Bottom">
+                                                        <Border Background="#0B0F19" BorderBrush="#00E5FF" BorderThickness="1" CornerRadius="4" Padding="12" Width="360">
+                                                            <StackPanel Spacing="6">
+                                                                <TextBlock Text="🎨 BẢNG QUY TẮC MÀU SẮC (COLOR RULES)" Foreground="#00E5FF" FontWeight="Bold" FontSize="11" HorizontalAlignment="Center"/>
+                                                                <Separator Background="#1E293B"/>
+                                                                <Grid ColumnDefinitions="20, *" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                                                                    <Rectangle Grid.Row="0" Grid.Column="0" Width="12" Height="12" Fill="#FDE047" RadiusX="2" RadiusY="2" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="Vàng: Truyện độc lập bình thường (không trùng)" Foreground="#FDE047" FontSize="10.5" Margin="6,2"/>
+
+                                                                    <Rectangle Grid.Row="1" Grid.Column="0" Width="12" Height="12" Fill="#00E5FF" RadiusX="2" RadiusY="2" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="Cyan: Truyện trùng tên hoặc trùng nhóm" Foreground="#00E5FF" FontSize="10.5" Margin="6,2"/>
+
+                                                                    <Rectangle Grid.Row="2" Grid.Column="0" Width="12" Height="12" Fill="#2DD4BF" RadiusX="2" RadiusY="2" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="Mint (Xanh ngọc): Biến thể có đánh số (Part 1, 2...)" Foreground="#2DD4BF" FontSize="10.5" Margin="6,2"/>
+
+                                                                    <Rectangle Grid.Row="3" Grid.Column="0" Width="12" Height="12" Fill="#FFE600" RadiusX="2" RadiusY="2" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="Vàng sáng: Bản không che (Uncensored / Decensored)" Foreground="#FFE600" FontSize="10.5" Margin="6,2"/>
+
+                                                                    <Rectangle Grid.Row="4" Grid.Column="0" Width="12" Height="12" Fill="#E879F9" RadiusX="2" RadiusY="2" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="Tím nhạt: Bản có màu (Full Color / Colorized)" Foreground="#E879F9" FontSize="10.5" Margin="6,2"/>
+
+                                                                    <Rectangle Grid.Row="5" Grid.Column="0" Width="12" Height="12" Fill="#F43F5E" RadiusX="2" RadiusY="2" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Row="5" Grid.Column="1" Text="Hồng (Pink): Vừa không che vừa có màu (Uncen + Color)" Foreground="#F43F5E" FontSize="10.5" Margin="6,2"/>
+
+                                                                    <Rectangle Grid.Row="6" Grid.Column="0" Width="12" Height="12" Fill="#A3E635" RadiusX="2" RadiusY="2" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Row="6" Grid.Column="1" Text="Lime (Xanh chuối): Biến thể số + Không che" Foreground="#A3E635" FontSize="10.5" Margin="6,2"/>
+
+                                                                    <Rectangle Grid.Row="7" Grid.Column="0" Width="12" Height="12" Fill="#38BDF8" RadiusX="2" RadiusY="2" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Row="7" Grid.Column="1" Text="Xanh biển: Biến thể số + Có màu" Foreground="#38BDF8" FontSize="10.5" Margin="6,2"/>
+                                                                </Grid>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </Flyout>
+                                                </Button.Flyout>
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="🎨" FontSize="10"/>
+                                                    <TextBlock Text="COLOR RULES" FontWeight="Bold"/>
+                                                </StackPanel>
+                                            </Button>
+
                                             <Button Command="{Binding SelectAllCommand}" Content="✓ Tất cả" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
 
                                             <Button Command="{Binding UnselectAllCommand}" Content="✗ Bỏ chọn" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
@@ -3580,7 +3658,7 @@
 
                                             <DataTemplate>
 
-                                                    <Border Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Margin="0,0,0,2" CornerRadius="4" ClipToBounds="True"
+                                                    <Border IsVisible="{Binding !IsFilteredOut}" Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Margin="0,0,0,2" CornerRadius="4" ClipToBounds="True"
 
                                                             AttachedToVisualTree="OnThumbnailElementAttached"
 
@@ -3972,7 +4050,7 @@
 
                                                                                VerticalAlignment="Center" Margin="14,0,2,0" ToolTip.Tip="Nhánh con tách chương" />
 
-                                                                    <CheckBox Grid.Column="1" IsChecked="{Binding IsChecked}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                                                    <CheckBox Grid.Column="1" IsChecked="{Binding IsChecked}" PointerPressed="OnQueueItemCheckBoxPointerPressed" Margin="0,0,6,0" VerticalAlignment="Center" />
 
                                                                     <TextBlock Grid.Column="2" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" Width="26" VerticalAlignment="Center" />
 
@@ -3982,7 +4060,7 @@
 
                                                                     <TextBlock Grid.Column="3" Text="{Binding Title}"
 
-                                                                               FontWeight="Bold" Foreground="#FDE047" FontSize="11.5"
+                                                                               FontWeight="Bold" Foreground="{Binding TitleBrush}" FontSize="11.5"
 
                                                                                TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
 
@@ -4248,7 +4326,7 @@
 
                                                 <DataTemplate>
 
-                                                    <Border Width="195" Height="280" Margin="6" Background="#091018" BorderBrush="#00E5FF" BorderThickness="1" CornerRadius="3" Padding="8,6" ClipToBounds="True"
+                                                    <Border IsVisible="{Binding !IsFilteredOut}" Width="195" Height="280" Margin="6" Background="#091018" BorderBrush="#00E5FF" BorderThickness="1" CornerRadius="3" Padding="8,6" ClipToBounds="True"
 
                                                             AttachedToVisualTree="OnThumbnailElementAttached"
 
@@ -4376,7 +4454,7 @@
 
                                                             <Grid Grid.Row="0">
 
-                                                                <CheckBox IsChecked="{Binding IsChecked}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0" />
+                                                                <CheckBox IsChecked="{Binding IsChecked}" PointerPressed="OnQueueItemCheckBoxPointerPressed" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0" />
 
 
 
@@ -4414,7 +4492,7 @@
 
                                                             <StackPanel Grid.Row="1" Margin="0,6,0,4" Spacing="2">
 
-                                                                <TextBlock Text="{Binding Title}" FontSize="11.5" FontWeight="Bold" Foreground="#FDE047"
+                                                                <TextBlock Text="{Binding Title}" FontSize="11.5" FontWeight="Bold" Foreground="{Binding TitleBrush}"
 
                                                                            TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
 

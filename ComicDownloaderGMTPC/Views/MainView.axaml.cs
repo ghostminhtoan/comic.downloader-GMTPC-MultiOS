@@ -2367,6 +2367,53 @@ public partial class MainView : UserControl
 
 
 
+        private int _lastQueueClickedIndex = -1;
+
+    private void OnQueueItemCheckBoxPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control ctrl || ctrl.DataContext is not ComicDownloaderGMTPC.Models.ComicBookItem item) return;
+        if (DataContext is not MainViewModel vm) return;
+
+        var point = e.GetCurrentPoint(ctrl);
+
+        // 1. Thao tác CHUỘT GIỮA (Middle Click): Đảo trạng thái Check/Uncheck
+        if (point.Properties.IsMiddleButtonPressed)
+        {
+            item.IsChecked = !item.IsChecked;
+            e.Handled = true;
+            return;
+        }
+
+        // 2. Thao tác SHIFT-CLICK: Chọn dải liên tục từ vị trí click trước tới hiện tại
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _lastQueueClickedIndex >= 0)
+        {
+            int currentIndex = vm.ComicBooks.IndexOf(item);
+            if (currentIndex >= 0)
+            {
+                int start = Math.Min(_lastQueueClickedIndex, currentIndex);
+                int end = Math.Max(_lastQueueClickedIndex, currentIndex);
+                bool targetState = !item.IsChecked;
+                for (int i = start; i <= end; i++)
+                {
+                    if (i < vm.ComicBooks.Count && !vm.ComicBooks[i].IsFilteredOut)
+                    {
+                        vm.ComicBooks[i].IsChecked = targetState;
+                    }
+                }
+                item.IsChecked = targetState;
+                _lastQueueClickedIndex = currentIndex;
+                e.Handled = true;
+                return;
+            }
+        }
+
+        int idx = vm.ComicBooks.IndexOf(item);
+        if (idx >= 0)
+        {
+            _lastQueueClickedIndex = idx;
+        }
+    }
+
     private void OnQueueItemPointerPressed(object? sender, PointerPressedEventArgs e)
 
     {
@@ -2381,19 +2428,60 @@ public partial class MainView : UserControl
 
 
 
-        // Bỏ qua nếu người dùng tương tác trực tiếp vào các nút con (Button, CheckBox, TextBox, ...)
-
-        if (IsInteractiveChildControl(e.Source, ctrl))
-
+        // Xử lý sự kiện nếu người dùng click vào CheckBox trực tiếp
+        if (e.Source is CheckBox)
         {
-
+            OnQueueItemCheckBoxPointerPressed(e.Source, e);
             return;
-
         }
 
-
+        // Bỏ qua nếu người dùng tương tác trực tiếp vào các nút con (Button, TextBox, ...)
+        if (IsInteractiveChildControl(e.Source, ctrl))
+        {
+            return;
+        }
 
         var point = e.GetCurrentPoint(ctrl);
+
+        // Thao tác CHUỘT GIỮA trên thẻ truyện: Đảo trạng thái Check/Uncheck
+        if (point.Properties.IsMiddleButtonPressed)
+        {
+            item.IsChecked = !item.IsChecked;
+            e.Handled = true;
+            return;
+        }
+
+        // Thao tác SHIFT-CLICK trên thẻ truyện: Chọn dải liên tục
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _lastQueueClickedIndex >= 0 && DataContext is MainViewModel shiftVm)
+        {
+            int currentIndex = shiftVm.ComicBooks.IndexOf(item);
+            if (currentIndex >= 0)
+            {
+                int start = Math.Min(_lastQueueClickedIndex, currentIndex);
+                int end = Math.Max(_lastQueueClickedIndex, currentIndex);
+                bool targetState = !item.IsChecked;
+                for (int i = start; i <= end; i++)
+                {
+                    if (i < shiftVm.ComicBooks.Count && !shiftVm.ComicBooks[i].IsFilteredOut)
+                    {
+                        shiftVm.ComicBooks[i].IsChecked = targetState;
+                    }
+                }
+                item.IsChecked = targetState;
+                _lastQueueClickedIndex = currentIndex;
+                e.Handled = true;
+                return;
+            }
+        }
+
+        if (DataContext is MainViewModel clickVm)
+        {
+            int idx = clickVm.ComicBooks.IndexOf(item);
+            if (idx >= 0)
+            {
+                _lastQueueClickedIndex = idx;
+            }
+        }
 
 
 

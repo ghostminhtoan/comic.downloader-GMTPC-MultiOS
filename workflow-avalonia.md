@@ -539,3 +539,22 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - **Tách Bạch Luồng Dữ Liệu Seekbar (Decoupled Flow)**:
   + Khi người dùng chạm kéo Seekbar: FSM kích hoạt `UserScrubbing`, chỉ cập nhật bóng báo số trang (HUD Preview).
   + Chỉ khi nhả tay (`PointerReleased`), hệ thống mới phát lệnh `ScrubToPage` duy nhất một lần và khôi phục `IdleReading` mượt mà, không giật lag.
+
+
+### 44. Tích Hợp Hệ Thống Nhận Diện Trùng Lặp, Color Rules Cyberpunk, Ô Lọc Tên & Thao Tác Chuột Đa Nền Tảng (DuplicateDetectionService.cs, ComicBookItem.cs, MainViewModel.QueueFilter.cs, MainView.axaml, MainView.axaml.cs)
+- **Thuật Toán Gom Nhóm Trùng Lặp & Phân Loại Biến Thể Chuyên Sâu (`DuplicateDetectionService.cs`)**:
+  + Bóc tách chuỗi tiêu đề cốt lõi (`GetSimilarityCore`) thông minh, tự động chuẩn hóa brackets `[...]`, `{...}`, `(...)`, bóc tách các từ khóa số tập (`part`, `chap`, `vol`, `ch`), doujin, dj, phiên bản.
+  + Nhận diện các biến thể kiểm duyệt & màu sắc (`uncensored`, `decensored`, `full color`, `colorized`) và biến thể số tập tiếp theo (`IsNumberedVariantDuplicate`).
+  + Tự động trích xuất metadata từ tag nguồn (Hitomi, Nhentai, E-Hentai) để gắn chuẩn `(uncensored)` và `(full color)` vào tên truyện.
+- **Hệ Thống Tô Màu Tiêu Đề Chuẩn Color Rules Cyberpunk (`ComicBookItem.cs`, `MainView.axaml`)**:
+  + Tích hợp thuộc tính màu sắc `TitleBrush` đồng bộ 8 trạng thái màu trực quan cho cả List view và Thumbnail view: Vàng (Độc lập), Cyan (Trùng tên/nhóm), Mint (Biến thể số), Vàng sáng (Không che), Tím nhạt (Có màu), Hồng (Vừa không che vừa có màu), Lime (Biến thể số + Không che), Xanh biển (Biến thể số + Có màu).
+  + Nút `[🎨 COLOR RULES]` trên thanh công cụ hàng chờ với Flyout bảng màu chi tiết hướng dẫn trực quan.
+- **Thanh Công Cụ Tìm Kiếm & Bộ Lọc Nhanh Tại Hàng Chờ (`MainViewModel.QueueFilter.cs`, `MainView.axaml`)**:
+  + Bổ sung ô `TextBox` tìm kiếm lọc theo tên truyện (`QueueSearchFilter`) với icon `🔍`, PlaceholderText, nút xóa `✕` và badge đếm số lượng kết quả lọc `FilteredQueueCountText`.
+  + Nút toggle `[🔍 Tên trùng]` (chỉ hiển thị truyện trùng kèm số đếm) và nút toggle `[🔞 Uncen]` (chỉ hiển thị truyện không che).
+  + Cơ chế lọc `IsFilteredOut` điều khiển hiển thị siêu tốc không làm hủy hay nạp lại bitmap RAM.
+  + Lệnh tích/bỏ tích hàng loạt cho truyện trùng (`CheckAllDuplicatesCommand`, `UncheckAllDuplicatesCommand`).
+- **Thao Tác Chuột Đa Nền Tảng Cho Desktop & Hỗ Trợ Mượt Mà Cho Cảm Ứng Mobile (`MainView.axaml.cs`)**:
+  + **Chuột giữa (Middle Click)**: Click chuột giữa vào thẻ truyện hoặc ô Checkbox để lập tức đảo trạng thái Check/Uncheck.
+  + **Shift + Click (Range Select)**: Giữ phím Shift click chọn dải liên tục nhiều truyện từ vị trí click trước tới hiện tại trên cả Card và Checkbox.
+  + **Mobile Touch Android**: Tích hợp các nút chọn hàng loạt trên Toolbar và Context Menu chạm giữ tối ưu cho màn hình cảm ứng.
