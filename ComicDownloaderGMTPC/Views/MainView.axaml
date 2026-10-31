@@ -3448,83 +3448,92 @@
                                                 </StackPanel>
                                             </Border>
 
-                                            <!-- ⏚ NÚT ADVANCED SEARCH FILTER (POPUP / FLYOUT NÂNG CAO) -->
+                                            <!-- ⏚ NÚT ADVANCED SEARCH FILTER (POPUP / FLYOUT NÂNG CAO RESPONSIVE CHO CẢ ANDROID & DESKTOP) -->
                                             <Button Background="#091018" BorderBrush="{Binding AdvancedSearch.FilterIconBrush}" BorderThickness="1"
                                                     CornerRadius="3" Padding="6,2" Margin="0,0,6,2" VerticalAlignment="Center"
                                                     ToolTip.Tip="Bộ lọc nâng cao đa điều kiện: Bắt buộc có (+), Có thể có (OR), Loại trừ (-), Khớp chính xác từ">
                                                 <Button.Flyout>
                                                     <Flyout Placement="BottomEdgeAlignedLeft">
-                                                        <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="14" Width="760">
-                                                            <Grid RowDefinitions="Auto, Auto, Auto, Auto" DataContext="{Binding AdvancedSearch}">
-                                                                
-                                                                <!-- Tiêu đề Header -->
-                                                                <Border Grid.Row="0" Background="#111827" CornerRadius="4" Padding="8,4" Margin="0,0,0,10">
-                                                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
-                                                                        <TextBlock Text="⚡" FontSize="11" Foreground="#00E5FF"/>
-                                                                        <TextBlock Text="ADVANCED SEARCH FILTER (BỘ LỌC NÂNG CAO)" Foreground="#00E5FF" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"/>
-                                                                    </StackPanel>
-                                                                </Border>
+                                                        <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="10"
+                                                                MinWidth="280" MaxWidth="520" HorizontalAlignment="Stretch">
+                                                            <ScrollViewer MaxHeight="450" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                                                <Grid RowDefinitions="Auto, Auto, Auto, Auto, Auto, Auto" DataContext="{Binding AdvancedSearch}">
+                                                                    
+                                                                    <!-- Tiêu đề Header -->
+                                                                    <Border Grid.Row="0" Background="#111827" CornerRadius="4" Padding="8,4" Margin="0,0,0,8">
+                                                                        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                                                            <TextBlock Text="⚡" FontSize="11" Foreground="#00E5FF"/>
+                                                                            <TextBlock Text="ADVANCED SEARCH FILTER (BỘ LỌC NÂNG CAO)" Foreground="#00E5FF" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                                        </StackPanel>
+                                                                    </Border>
 
-                                                                <!-- Nhãn 4 cột điều kiện -->
-                                                                <Grid Grid.Row="1" ColumnDefinitions="*, *, *, *" Margin="0,0,0,6">
-                                                                    <TextBlock Grid.Column="0" Text="BẮT BUỘC CÓ (+)" Foreground="#10B981" FontSize="10.5" FontWeight="Bold" Margin="0,0,4,0"/>
-                                                                    <TextBlock Grid.Column="1" Text="CÓ THỂ CÓ (OR)" Foreground="#F59E0B" FontSize="10.5" FontWeight="Bold" Margin="4,0,4,0"/>
-                                                                    <TextBlock Grid.Column="2" Text="BẮT BUỘC KHÔNG CÓ (-)" Foreground="#00E5FF" FontSize="10.5" FontWeight="Bold" Margin="4,0,4,0"/>
-                                                                    <TextBlock Grid.Column="3" Text="LOẠI TRỪ (-)" Foreground="#F43F5E" FontSize="10.5" FontWeight="Bold" Margin="4,0,0,0"/>
+                                                                    <!-- HÀNG 1: BẮT BUỘC CÓ (+) & CÓ THỂ CÓ (OR) (Responsive 2 cột) -->
+                                                                    <Grid Grid.Row="1" ColumnDefinitions="*, *" Margin="0,0,0,4">
+                                                                        <TextBlock Grid.Column="0" Text="BẮT BUỘC CÓ (+)" Foreground="#10B981" FontSize="10" FontWeight="Bold" Margin="0,0,3,0"/>
+                                                                        <TextBlock Grid.Column="1" Text="CÓ THỂ CÓ (OR)" Foreground="#F59E0B" FontSize="10" FontWeight="Bold" Margin="3,0,0,0"/>
+                                                                    </Grid>
+                                                                    <Grid Grid.Row="2" ColumnDefinitions="*, *" Margin="0,0,0,8">
+                                                                        <!-- Cột 1: Positive Keywords (AND) -->
+                                                                        <TextBox Grid.Column="0" Text="{Binding PositiveText}" PlaceholderText="tag1; tag2; genre..."
+                                                                                 Background="#091018" BorderBrush="#10B981" BorderThickness="1" Foreground="#F3F4F6"
+                                                                                 Height="28" FontSize="10" Margin="0,0,3,0" VerticalContentAlignment="Center"
+                                                                                 ToolTip.Tip="Bắt buộc phải chứa TẤT CẢ các từ khóa này (phân tách bằng dấu chấm phẩy ;)"/>
+
+                                                                        <!-- Cột 2: Non-Negative Keywords (OR) -->
+                                                                        <TextBox Grid.Column="1" Text="{Binding NonNegativeText}" PlaceholderText="tag1; tag2..."
+                                                                                 Background="#091018" BorderBrush="#F59E0B" BorderThickness="1" Foreground="#F3F4F6"
+                                                                                 Height="28" FontSize="10" Margin="3,0,0,0" VerticalContentAlignment="Center"
+                                                                                 ToolTip.Tip="Phải chứa ÍT NHẤT MỘT trong các từ khóa này (phân tách bằng dấu chấm phẩy ;)"/>
+                                                                    </Grid>
+
+                                                                    <!-- HÀNG 2: BẮT BUỘC KHÔNG CÓ (-) & LOẠI TRỪ (-) (Responsive 2 cột) -->
+                                                                    <Grid Grid.Row="3" ColumnDefinitions="*, *" Margin="0,0,0,4">
+                                                                        <TextBlock Grid.Column="0" Text="BẮT BUỘC KHÔNG CÓ (-)" Foreground="#00E5FF" FontSize="10" FontWeight="Bold" Margin="0,0,3,0"/>
+                                                                        <TextBlock Grid.Column="1" Text="LOẠI TRỪ (-)" Foreground="#F43F5E" FontSize="10" FontWeight="Bold" Margin="3,0,0,0"/>
+                                                                    </Grid>
+                                                                    <Grid Grid.Row="4" ColumnDefinitions="*, *" Margin="0,0,0,10">
+                                                                        <!-- Cột 3: Non-Positive Keywords (Exclude 1) -->
+                                                                        <TextBox Grid.Column="0" Text="{Binding NonPositiveText}" PlaceholderText="cấm 1; cấm 2..."
+                                                                                 Background="#091018" BorderBrush="#00E5FF" BorderThickness="1" Foreground="#F3F4F6"
+                                                                                 Height="28" FontSize="10" Margin="0,0,3,0" VerticalContentAlignment="Center"
+                                                                                 ToolTip.Tip="Tuyệt đối KHÔNG ĐƯỢC CHỨA bất kỳ từ khóa nào trong danh sách này"/>
+
+                                                                        <!-- Cột 4: Negative Keywords (Exclude 2) -->
+                                                                        <TextBox Grid.Column="1" Text="{Binding NegativeText}" PlaceholderText="loại trừ..."
+                                                                                 Background="#091018" BorderBrush="#F43F5E" BorderThickness="1" Foreground="#F3F4F6"
+                                                                                 Height="28" FontSize="10" Margin="3,0,0,0" VerticalContentAlignment="Center"
+                                                                                 ToolTip.Tip="Loại trừ triệt để các từ khóa này khỏi kết quả tìm kiếm"/>
+                                                                    </Grid>
+
+                                                                    <!-- HÀNG 3: BỘ ĐIỀU KHIỂN CHÂN TRANG RESPONSIVE -->
+                                                                    <WrapPanel Grid.Row="5" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                        <!-- Nút Undo & Redo -->
+                                                                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,4">
+                                                                            <Button Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}"
+                                                                                    Content="↶ Undo" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="7,3" CornerRadius="4"/>
+                                                                            <Button Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}"
+                                                                                    Content="↷ Redo" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="7,3" CornerRadius="4"/>
+                                                                        </StackPanel>
+
+                                                                        <!-- Chế độ so khớp Match Mode -->
+                                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="6" Margin="0,0,8,4">
+                                                                            <TextBlock Text="CHẾ ĐỘ TÌM:" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                                            <RadioButton GroupName="MatchModeGroup" Content="Chứa từ" IsChecked="{Binding IsContainsMode, Mode=TwoWay}"
+                                                                                         Foreground="#E2E8F0" FontSize="10" VerticalContentAlignment="Center"
+                                                                                         ToolTip.Tip="Khớp chuỗi con ở bất kỳ vị trí nào trong từ"/>
+                                                                            <RadioButton GroupName="MatchModeGroup" Content="Từ chính xác" IsChecked="{Binding IsExactWord, Mode=TwoWay}"
+                                                                                         Foreground="#00E5FF" FontWeight="Bold" FontSize="10" VerticalContentAlignment="Center"
+                                                                                         ToolTip.Tip="Khớp nguyên từ hoàn chỉnh (ngăn cách bởi dấu cách hoặc dấu câu, ví dụ: 'man' không khớp 'woman')"/>
+                                                                        </StackPanel>
+
+                                                                        <!-- Nút CLEAR -->
+                                                                        <Button Command="{Binding ClearCommand}" Content="🗑️ CLEAR"
+                                                                                Background="#991B1B" BorderBrush="#DC2626" BorderThickness="1" Foreground="#FFFFFF"
+                                                                                FontWeight="Bold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,0,4"/>
+                                                                    </WrapPanel>
+
                                                                 </Grid>
-
-                                                                <!-- 4 ô nhập từ khóa (ngăn cách bằng dấu chấm phẩy ;) -->
-                                                                <Grid Grid.Row="2" ColumnDefinitions="*, *, *, *" Margin="0,0,0,12">
-                                                                    <!-- Cột 1: Positive Keywords (AND) -->
-                                                                    <TextBox Grid.Column="0" Text="{Binding PositiveText}" PlaceholderText="tag1; tag2; genre..."
-                                                                             Background="#091018" BorderBrush="#10B981" BorderThickness="1" Foreground="#F3F4F6"
-                                                                             Height="28" FontSize="10.5" Margin="0,0,4,0" VerticalContentAlignment="Center"
-                                                                             ToolTip.Tip="Bắt buộc phải chứa TẤT CẢ các từ khóa này (phân tách bằng dấu chấm phẩy ;)"/>
-
-                                                                    <!-- Cột 2: Non-Negative Keywords (OR) -->
-                                                                    <TextBox Grid.Column="1" Text="{Binding NonNegativeText}" PlaceholderText="tag1; tag2..."
-                                                                             Background="#091018" BorderBrush="#F59E0B" BorderThickness="1" Foreground="#F3F4F6"
-                                                                             Height="28" FontSize="10.5" Margin="4,0,4,0" VerticalContentAlignment="Center"
-                                                                             ToolTip.Tip="Phải chứa ÍT NHẤT MỘT trong các từ khóa này (phân tách bằng dấu chấm phẩy ;)"/>
-
-                                                                    <!-- Cột 3: Non-Positive Keywords (Exclude 1) -->
-                                                                    <TextBox Grid.Column="2" Text="{Binding NonPositiveText}" PlaceholderText="cấm 1; cấm 2..."
-                                                                             Background="#091018" BorderBrush="#00E5FF" BorderThickness="1" Foreground="#F3F4F6"
-                                                                             Height="28" FontSize="10.5" Margin="4,0,4,0" VerticalContentAlignment="Center"
-                                                                             ToolTip.Tip="Tuyệt đối KHÔNG ĐƯỢC CHỨA bất kỳ từ khóa nào trong danh sách này"/>
-
-                                                                    <!-- Cột 4: Negative Keywords (Exclude 2) -->
-                                                                    <TextBox Grid.Column="3" Text="{Binding NegativeText}" PlaceholderText="loại trừ..."
-                                                                             Background="#091018" BorderBrush="#F43F5E" BorderThickness="1" Foreground="#F3F4F6"
-                                                                             Height="28" FontSize="10.5" Margin="4,0,0,0" VerticalContentAlignment="Center"
-                                                                             ToolTip.Tip="Loại trừ triệt để các từ khóa này khỏi kết quả tìm kiếm"/>
-                                                                </Grid>
-
-                                                                <!-- Hàng điều khiển chân trang: Undo/Redo - Match Mode - Clear -->
-                                                                <Grid Grid.Row="3" ColumnDefinitions="Auto, *, Auto">
-                                                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                                        <Button Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}"
-                                                                                Content="↶ Undo" Background="#1E293B" Foreground="#38BDF8" FontSize="10.5" Padding="8,4" CornerRadius="4"/>
-                                                                        <Button Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}"
-                                                                                Content="↷ Redo" Background="#1E293B" Foreground="#38BDF8" FontSize="10.5" Padding="8,4" CornerRadius="4"/>
-                                                                    </StackPanel>
-
-                                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
-                                                                        <TextBlock Text="CHẾ ĐỘ TÌM:" Foreground="#94A3B8" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"/>
-                                                                        <RadioButton GroupName="MatchModeGroup" Content="Chứa từ" IsChecked="{Binding IsContainsMode, Mode=TwoWay}"
-                                                                                     Foreground="#E2E8F0" FontSize="10.5" VerticalContentAlignment="Center"
-                                                                                     ToolTip.Tip="Khớp chuỗi con ở bất kỳ vị trí nào trong từ"/>
-                                                                        <RadioButton GroupName="MatchModeGroup" Content="Từ chính xác" IsChecked="{Binding IsExactWord, Mode=TwoWay}"
-                                                                                     Foreground="#00E5FF" FontWeight="Bold" FontSize="10.5" VerticalContentAlignment="Center"
-                                                                                     ToolTip.Tip="Khớp nguyên từ hoàn chỉnh (ngăn cách bởi dấu cách hoặc dấu câu, ví dụ: 'man' không khớp 'woman')"/>
-                                                                    </StackPanel>
-
-                                                                    <Button Grid.Column="2" Command="{Binding ClearCommand}" Content="🗑️ CLEAR"
-                                                                            Background="#991B1B" BorderBrush="#DC2626" BorderThickness="1" Foreground="#FFFFFF"
-                                                                            FontWeight="Bold" FontSize="10.5" Padding="10,4" CornerRadius="4"/>
-                                                                </Grid>
-
-                                                            </Grid>
+                                                            </ScrollViewer>
                                                         </Border>
                                                     </Flyout>
                                                 </Button.Flyout>

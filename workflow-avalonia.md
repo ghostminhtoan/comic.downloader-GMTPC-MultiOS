@@ -3,6 +3,7 @@ Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ,
 
 ## 1. Quy tắc nền
 - **QUY TẮC BẮT BUỘC SỐ 1 - TỰ ĐỘNG UPLOAD BETA DÙ USER KHÔNG NHẮC**: Bất kể người dùng có nhắc đến từ khóa "upload beta" hay không, sau khi viết code hoặc sửa bug xong, BẮT BUỘC PHẢI LUÔN LUÔN chạy `build.bat` đóng gói toàn diện cả 3 hệ điều hành (Windows, Linux, Android) và TỰ ĐỘNG UPLOAD RELEASE BETA lên GitHub Release tag `beta` (áp dụng flow mới: rotate backup asset cũ kèm date time + upload asset mới + speed guard sau 12s dưới 10Mbps thì retry vô hạn). Tuyệt đối không được bỏ qua hoặc đợi user nhắc!
+- **QUY TẮC BẮT BUỘC: TOÀN BỘ GIAO DIỆN PHẢI LUÔN RESPONSIVE CHO CẢ ANDROID & DESKTOP BẤT KỂ NGƯỜI DÙNG CÓ NHẮC HAY KHÔNG**: Mọi Popup, Flyout, Modal, Dialog, Toolbar, Grid, Panel và List trong toàn bộ ứng dụng Avalonia TUYỆT ĐỐI KHÔNG ĐƯỢC đặt chiều rộng cứng (Width cố định quá lớn > 320px) gây tràn màn hình thiết bị di động Android. Bắt buộc luôn luôn sử dụng MaxWidth, WrapPanel, bố cục 2 cột (2x2) hoặc 1 cột dạng dọc thích ứng, kết hợp bọc trong ScrollViewer (HorizontalScrollBarVisibility="Disabled", VerticalScrollBarVisibility="Auto") để đảm bảo vừa khít 100% màn hình điện thoại Android cả chiều dọc (Portrait ~360-412px) lẫn chiều ngang (Landscape) và khi bàn phím ảo xuất hiện. Dù tạo phiên chat mới hay bất kỳ ai bảo trì, quy tắc này luôn có hiệu lực tuyệt đối.
 - **QUY TẮC BẮT BUỘC: LUÔN HIỂN THỊ CỬA SỔ COMMAND PROMPT KHI BUILD & UPDATE BETA**: Việc build và update beta từ nay về sau BẮT BUỘC LUÔN LUÔN hiển thị trong cửa sổ Command Prompt riêng biệt trên Desktop (`build_in_cmd.py` / `CREATE_NEW_CONSOLE`) để người dùng luôn luôn nhìn thấy rõ ràng tiến độ đang làm đến đâu (từng bước build [1/4] -> [4/4] và tiến trình upload từng giây).
 - Trả lời tiếng Việt.
 - Dùng emotion phong phú, không lặp lại.
@@ -591,3 +592,15 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Nút Phễu lọc [ ⏚ Lọc nâng cao ] với hiệu ứng màu sắc động (FilterIconBrush chuyển màu xanh lá #10B981 khi bộ lọc đang hoạt động).
   + Bảng điều khiển Popup Flyout 760px rộng rãi, bố trí 4 ô màu nhận diện riêng biệt (Xanh lá, Vàng cam, Cyan, Đỏ).
   + Huy hiệu kết quả tìm kiếm Kết quả tìm kiếm: {N} hiển thị đồng bộ trên Toolbar và thanh Status Bar dưới đáy.
+
+### 47. Tối Ưu Hóa Giao Diện Responsive Toàn Diện Cho Android & Desktop (Advanced Search Filter Popup)
+- **Tái Cấu Trúc Khung Hiển Thị Thích Ứng Mọi Thiết Bị (MainView.axaml)**:
+  + Loại bỏ Width="760" cố định gây tràn màn hình điện thoại Android Portrait (~360-412px) và Landscape.
+  + Áp dụng MinWidth="280" MaxWidth="520" HorizontalAlignment="Stretch" tự co giãn hoàn hảo theo kích thước màn hình.
+  + Bọc toàn bộ nội dung trong ScrollViewer MaxHeight="450" (VerticalScrollBarVisibility="Auto", HorizontalScrollBarVisibility="Disabled"), đảm bảo cuộn xem mượt mà khi bàn phím ảo Android mở lên.
+- **Bố Cục 2 Hàng x 2 Cột Thay Thế 4 Cột Ngang Cũ**:
+  + Hàng 1: BẮT BUỘC CÓ (+) [AND] (Xanh lá) & CÓ THỂ CÓ (OR) [OR] (Vàng cam).
+  + Hàng 2: BẮT BUỘC KHÔNG CÓ (-) [EXCLUDE 1] (Cyan) & LOẠI TRỪ (-) [EXCLUDE 2] (Đỏ).
+- **Chân Trang Co Giãn Tự Động (WrapPanel)**:
+  + Nhóm nút ↶ Undo, ↷ Redo, Chế độ tìm (Chứa từ / Từ chính xác) và nút 🗑️ CLEAR co giãn tự xuống dòng thông minh trên màn hình hẹp, không bao giờ bị cắt xén hay che khuất.
+
