@@ -558,3 +558,19 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + **Chuột giữa (Middle Click)**: Click chuột giữa vào thẻ truyện hoặc ô Checkbox để lập tức đảo trạng thái Check/Uncheck.
   + **Shift + Click (Range Select)**: Giữ phím Shift click chọn dải liên tục nhiều truyện từ vị trí click trước tới hiện tại trên cả Card và Checkbox.
   + **Mobile Touch Android**: Tích hợp các nút chọn hàng loạt trên Toolbar và Context Menu chạm giữ tối ưu cho màn hình cảm ứng.
+
+
+### 45. Bổ Sung Bộ Sắp Xếp Tên Alphabet (A-Z / Z-A) & Khôi Phục Thứ Tự Gốc Từ Web (OriginalIndex, MainViewModel.QueueFilter.cs, MainView.axaml)
+- **Cơ Chế Lưu Vết Thứ Tự Gốc Web (OriginalIndex & ComicBookItem.cs, QueueBackupService.cs)**:
+  + Bổ sung trường OriginalIndex vào ComicBookItem và snapshot sao lưu hàng chờ ComicBookItemSnapshot.
+  + Ghi nhận thứ tự ban đầu khi cào link từ website hoặc dán danh sách. Tự động bảo toàn giá trị gốc vĩnh viễn dù danh sách bị di chuyển, đảo ngược hay sắp xếp.
+- **Sắp Xếp Danh Sách Theo Tên Alphabet A-Z / Z-A (SortByNameAlphabetCommand)**:
+  + Tích hợp bộ so sánh số học tự nhiên NaturalSortComparer.Instance, xử lý chuẩn xác cả chữ cái lẫn các tập số (ví dụ Part 1, Part 2, Part 10).
+  + Hỗ trợ toggle 2 chiều linh hoạt: A-Z và Z-A với nhãn nút động (Tên: A-Z ⇅ / Tên: Z-A ⇅).
+  + Tôn trọng kiến trúc cây phân cấp (GroupComicBooksHierarchy): các chương con chia nhỏ (IsParallelSplitChild) luôn tự động bám dính liền sau truyện cha tương ứng.
+- **Khôi Phục Thứ Tự Gốc Ban Đầu Có Từ Web (RestoreOriginalOrderCommand)**:
+  + Tự động sắp xếp lại danh sách hàng chờ trở về đúng thứ tự ban đầu khi lấy link từ web theo OriginalIndex.
+  + Cập nhật lại số thứ tự hiển thị Index, đồng bộ tiến trình engine tải và kích hoạt lưu cache tự động.
+- **Đồng Bộ Giao Diện Toolbar & Context Menu Đa Nền Tảng (MainView.axaml)**:
+  + Bổ sung 2 nút bấm trực quan [🔤 Sắp xếp theo tên] và [⏮️ Thứ tự gốc từ web] trên Toolbar hàng chờ.
+  + Bổ sung các lệnh tương ứng vào Context Menu chuột phải của cả chế độ bảng (List Mode) và chế độ lưới thẻ ảnh (Thumbnail Mode).

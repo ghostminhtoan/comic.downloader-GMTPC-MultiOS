@@ -10,6 +10,9 @@ public partial class ComicBookItem : ObservableObject
     private int _index;
 
     [ObservableProperty]
+    private int _originalIndex;
+
+    [ObservableProperty]
     private bool _isChecked = true;
 
     [ObservableProperty]

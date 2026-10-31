@@ -35,6 +35,7 @@ public class QueueRestoreResult
 public class ComicBookItemSnapshot
 {
     public int Index { get; set; }
+    public int OriginalIndex { get; set; }
     public bool IsChecked { get; set; } = true;
     public string Title { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
@@ -508,6 +509,7 @@ public class QueueBackupService
         var snap = new ComicBookItemSnapshot
         {
             Index = index,
+            OriginalIndex = item.OriginalIndex > 0 ? item.OriginalIndex : index,
             IsChecked = item.IsChecked,
             Title = item.Title ?? string.Empty,
             Url = item.Url ?? string.Empty,
@@ -1003,6 +1005,7 @@ public class QueueBackupService
         var item = new ComicBookItem
         {
             Index = index,
+            OriginalIndex = snap.OriginalIndex > 0 ? snap.OriginalIndex : index,
             IsChecked = snap.IsChecked,
             Title = string.IsNullOrWhiteSpace(snap.Title) ? "Truyện phục hồi" : snap.Title,
             Url = snap.Url,

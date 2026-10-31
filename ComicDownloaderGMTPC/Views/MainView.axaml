@@ -3510,6 +3510,24 @@
                                                 </StackPanel>
                                             </Button>
 
+                                            <!-- NÚT SẮP XẾP THEO TÊN ALPHABET (A-Z / Z-A) -->
+                                            <Button Command="{Binding SortByNameAlphabetCommand}" Background="#1E293B" BorderBrush="#EAB308" BorderThickness="1" Foreground="#FDE047" FontWeight="Bold" FontSize="10" Padding="6,2" CornerRadius="3" Margin="0,0,4,2"
+                                                    ToolTip.Tip="Sắp xếp danh sách truyện theo bảng chữ cái alphabet (A-Z hoặc Z-A)">
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="🔤" FontSize="10"/>
+                                                    <TextBlock Text="{Binding SortByNameButtonText}" FontWeight="Bold"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- NÚT KHÔI PHỤC THỨ TỰ GỐC TỪ WEB -->
+                                            <Button Command="{Binding RestoreOriginalOrderCommand}" Background="#1E293B" BorderBrush="#0284C7" BorderThickness="1" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" Padding="6,2" CornerRadius="3" Margin="0,0,4,2"
+                                                    ToolTip.Tip="Khôi phục lại thứ tự ban đầu khi cào truyện từ web (Restore original order)">
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="⏮️" FontSize="10"/>
+                                                    <TextBlock Text="Thứ tự gốc từ web" FontWeight="Bold"/>
+                                                </StackPanel>
+                                            </Button>
+
                                             <Button Command="{Binding SelectAllCommand}" Content="✓ Tất cả" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
 
                                             <Button Command="{Binding UnselectAllCommand}" Content="✗ Bỏ chọn" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
@@ -3788,6 +3806,20 @@
 
                                                                     </MenuItem.Icon>
 
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="🔤 Sắp xếp theo tên alphabet (A-Z / Z-A)"
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SortByNameAlphabetCommand}">
+                                                                    <MenuItem.Icon>
+                                                                        <TextBlock Text="🔤" Foreground="#FDE047" FontSize="12" VerticalAlignment="Center" />
+                                                                    </MenuItem.Icon>
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="⏮️ Khôi phục thứ tự gốc từ web (Restore Order)"
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).RestoreOriginalOrderCommand}">
+                                                                    <MenuItem.Icon>
+                                                                        <TextBlock Text="⏮️" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
+                                                                    </MenuItem.Icon>
                                                                 </MenuItem>
 
                                                                 <MenuItem Header="🔃 Đảo ngược toàn bộ danh sách (Reverse Queue)"
@@ -4400,6 +4432,20 @@
 
                                                                     </MenuItem.Icon>
 
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="🔤 Sắp xếp theo tên alphabet (A-Z / Z-A)"
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SortByNameAlphabetCommand}">
+                                                                    <MenuItem.Icon>
+                                                                        <TextBlock Text="🔤" Foreground="#FDE047" FontSize="12" VerticalAlignment="Center" />
+                                                                    </MenuItem.Icon>
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="⏮️ Khôi phục thứ tự gốc từ web (Restore Order)"
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).RestoreOriginalOrderCommand}">
+                                                                    <MenuItem.Icon>
+                                                                        <TextBlock Text="⏮️" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
+                                                                    </MenuItem.Icon>
                                                                 </MenuItem>
 
                                                                 <MenuItem Header="🔃 Đảo ngược toàn bộ danh sách (Reverse Queue)"

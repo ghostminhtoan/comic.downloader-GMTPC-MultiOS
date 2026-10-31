@@ -3973,6 +3973,10 @@ public partial class MainViewModel : ViewModelBase
         for (int i = 0; i < ComicBooks.Count; i++)
         {
             ComicBooks[i].Index = i + 1;
+            if (ComicBooks[i].OriginalIndex <= 0)
+            {
+                ComicBooks[i].OriginalIndex = i + 1;
+            }
         }
     }
 
