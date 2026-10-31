@@ -424,7 +424,9 @@ public class ComicScraperService
             lowerUrl.Contains("/type/") ||
             lowerUrl.Contains("?tag=") ||
             lowerUrl.Contains("&tag=") ||
-            lowerUrl.Contains("search?"))
+            lowerUrl.Contains("search?") ||
+            lowerUrl.Contains("search.html") ||
+            lowerUrl.Contains("/search"))
         {
             return true;
         }
@@ -453,7 +455,11 @@ public class ComicScraperService
         if (lowerDomain.Contains("hentai2read") || lowerUrl.Contains("hentai2read"))
             return lowerUrl.Contains("/hentai-list/") || lowerUrl.Contains("/tag/");
         if (lowerDomain.Contains("hitomi") || lowerUrl.Contains("hitomi"))
-            return lowerUrl.Contains("/tag/") || lowerUrl.Contains("/artist/") || lowerUrl.Contains("/series/") || lowerUrl.Contains("/type/");
+        {
+            if (lowerUrl.Contains("/galleries/") || lowerUrl.Contains("/reader/")) return false;
+            if (Regex.IsMatch(lowerUrl, @"(?:-|/)\d+\.html(?:\?.*)?$")) return false;
+            return true;
+        }
         if (lowerDomain.Contains("hentaiforce") || lowerUrl.Contains("hentaiforce"))
             return lowerUrl.Contains("/tag/") || lowerUrl.Contains("/category/") ||
                    lowerUrl.Contains("/search") || lowerUrl.Contains("/artist/") ||
@@ -3868,6 +3874,27 @@ public class ComicScraperService
             bool isHitomiDomain = result.Domain.Contains("hitomi") || url.Contains("hitomi");
             if (isHitomiDomain)
             {
+                if (HitomiResolverService.IsHitomiSearchUrl(url))
+                {
+                    result.TagTitle = HitomiResolverService.ExtractSearchTitle(url);
+                    var searchGalleryIds = await HitomiResolverService.ResolveHitomiSearchGalleryIdsAsync(url, _httpClient, ct).ConfigureAwait(false);
+                    if (searchGalleryIds.Count > 0)
+                    {
+                        int calculatedPages = (int)Math.Ceiling(searchGalleryIds.Count / 25.0);
+                        result.TotalPages = Math.Max(1, calculatedPages);
+                        result.IsSuccess = true;
+                        result.StatusMessage = $"Phân tích thành công: {result.TotalPages:N0} trang ({searchGalleryIds.Count:N0} truyện) ({result.TagTitle})";
+                        return result;
+                    }
+                    else
+                    {
+                        result.TotalPages = 0;
+                        result.IsSuccess = false;
+                        result.StatusMessage = $"Không tìm thấy truyện nào khớp với từ khóa tìm kiếm: {result.TagTitle}";
+                        return result;
+                    }
+                }
+
                 string hTitle = ExtractFallbackTitleFromUrl(url);
                 if (titleMatch.Success)
                 {
@@ -4109,8 +4136,15 @@ public class ComicScraperService
         bool isHitomi = domain.Contains("hitomi") || tagUrl.Contains("hitomi");
         if (isHitomi)
         {
-            string nozomiUrl = GetHitomiNozomiUrl(tagUrl);
-            if (!string.IsNullOrWhiteSpace(nozomiUrl))
+            bool isHitomiSearch = HitomiResolverService.IsHitomiSearchUrl(tagUrl);
+            List<int>? searchGalleryIds = null;
+            if (isHitomiSearch)
+            {
+                searchGalleryIds = await HitomiResolverService.ResolveHitomiSearchGalleryIdsAsync(tagUrl, _httpClient, ct).ConfigureAwait(false);
+            }
+
+            string nozomiUrl = isHitomiSearch ? string.Empty : GetHitomiNozomiUrl(tagUrl);
+            if (!string.IsNullOrWhiteSpace(nozomiUrl) || (isHitomiSearch && searchGalleryIds != null && searchGalleryIds.Count > 0))
             {
                 int hitomiConcurrency = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
                 using var hitomiSem = new SemaphoreSlim(hitomiConcurrency, hitomiConcurrency);
@@ -4120,24 +4154,45 @@ public class ComicScraperService
                     if (ct.IsCancellationRequested) break;
                     try
                     {
-                        long startByte = (long)(page - 1) * 25 * 4;
-                        long endByte = startByte + (25 * 4) - 1;
-
-                        using var req = new HttpRequestMessage(HttpMethod.Get, nozomiUrl);
-                        req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
-                        req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startByte, endByte);
-                        using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-                        if (!res.IsSuccessStatusCode) continue;
-
-                        byte[] bytes = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
                         var pageGalleryIds = new List<int>();
-                        for (int i = 0; i + 3 < bytes.Length; i += 4)
+
+                        if (isHitomiSearch && searchGalleryIds != null)
                         {
-                            int gId = (bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3];
-                            string cUrl = $"https://hitomi.la/galleries/{gId}.html";
-                            if (seenUrls.Add(cUrl))
+                            int startIdx = (page - 1) * 25;
+                            int takeCount = Math.Min(25, searchGalleryIds.Count - startIdx);
+                            if (startIdx >= 0 && startIdx < searchGalleryIds.Count && takeCount > 0)
                             {
-                                pageGalleryIds.Add(gId);
+                                for (int i = 0; i < takeCount; i++)
+                                {
+                                    int gId = searchGalleryIds[startIdx + i];
+                                    string cUrl = $"https://hitomi.la/galleries/{gId}.html";
+                                    if (seenUrls.Add(cUrl))
+                                    {
+                                        pageGalleryIds.Add(gId);
+                                    }
+                                }
+                            }
+                        }
+                        else if (!string.IsNullOrWhiteSpace(nozomiUrl))
+                        {
+                            long startByte = (long)(page - 1) * 25 * 4;
+                            long endByte = startByte + (25 * 4) - 1;
+
+                            using var req = new HttpRequestMessage(HttpMethod.Get, nozomiUrl);
+                            req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
+                            req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startByte, endByte);
+                            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                            if (!res.IsSuccessStatusCode) continue;
+
+                            byte[] bytes = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                            for (int i = 0; i + 3 < bytes.Length; i += 4)
+                            {
+                                int gId = (bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3];
+                                string cUrl = $"https://hitomi.la/galleries/{gId}.html";
+                                if (seenUrls.Add(cUrl))
+                                {
+                                    pageGalleryIds.Add(gId);
+                                }
                             }
                         }
 

@@ -62,6 +62,7 @@
 | **BUG-045** | Android Core (Oppo K9x / ColorOS) | Mở app bị văng ngay lập tức trên Oppo K9x (Dimensity 810), không hiển thị lỗi | Lệnh `throw;` trong MainActivity.OnCreate làm kill process; Crash log bị nuốt do thiếu quyền Scoped Storage trên Android 11/12; Xung đột 32-bit `armeabi-v7a` trên Zygote 64-bit | Loại bỏ hoàn toàn `throw;`, hiển thị Native Crash Diagnostic Screen với nút sao chép lỗi và khởi động lại; Ghi log đa tầng vào App-Specific Internal/External Storage (100% Zero-Permission); Thuần hóa 64-bit native (`android-arm64;android-x64`) | `Application.cs`, `MainActivity.cs`, `ComicDownloaderGMTPC.Android.csproj`, `App.axaml.cs` |
 | **BUG-052** | Android Core (Lifecycle) | Lỗi Cold Start Crash trên Android thật (`UnsatisfiedLinkError: n_onCreate`) | `Application.cs` override `OnCreate()` tạo JNI stub native trước khi Mono runtime hoàn tất đăng ký động | Loại bỏ `override void OnCreate()` trong `Application.cs`, kế thừa thuần `AvaloniaAndroidApplication<App>` và dồn toàn bộ crash guard vào `MainActivity.OnCreate()` | `ComicDownloaderGMTPC.Android/Application.cs`, `ComicDownloaderGMTPC.Android/MainActivity.cs` |
 | **BUG-053** | Android Scraper & Cloudflare | Thiếu cơ chế Native WebView Headless trên Android dẫn đến lỗi 403 Forbidden khi web truyện bật Cloudflare Turnstile | `NativeWebViewService` trước đây chỉ gọi `Process.Start` executable desktop (Edge/Chrome); trên Android sandbox bị chặn và không có binary desktop | Xây dựng `AndroidNativeWebViewService` dùng trực tiếp `Android.Webkit.WebView` (0MB APK, Looper.MainLooper), tự động giải mã Cloudflare interstitial challenge, bóc tách DOM và đồng bộ Cookie clearance về `HttpClientHandler` | `AndroidNativeWebViewService.cs`, `INativeWebViewService.cs`, `NativeWebViewService.cs`, `ComicScraperService.cs`, `MainActivity.cs`, `ComicBackgroundService.cs` |
+| **BUG-062** | Hitomi Scraper & Batch Analyze | Lỗi phân tích Hitomi Search (search.html) nhảy tab Tải về sinh truyện rác '#1 Search' | `IsCategoryOrTagUrl` bỏ qua search.html; `ExtractGalleryId` không thấy số fallback sinh 'Search'; thiếu giải mã Multi-Tag Nozomi | Mọi URL Hitomi không phải truyện đơn là Tag/Search; Động cơ Hitomi Search Nozomi Resolution (Intersect/Difference/Cache); Analyze và Batch Scrape chuẩn xác | `HitomiResolverService.cs`, `ComicScraperService.cs` |
 
 
 
@@ -2258,5 +2259,35 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   5. **Bổ sung Fallback sang NativeWebViewService**: Nếu cả 3 lần gọi trực tiếp bằng HttpClient đều không có ảnh và máy có sẵn NativeWebView (Windows/Desktop), tự động gọi `NativeWebViewService.Instance.FetchHtmlAsync` để nạp DOM và trích xuất thẻ `<img>` trực tiếp, đảm bảo khả năng sống sót 100%.
 
 - **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+---
+
+### BUG-062: Lỗi Phân Tích (Analyze) Trên Hitomi.la Với URL Tìm Kiếm (search.html) Tự Động Nhảy Sang Tab Tải Về Và Tạo Truyện Giả "#1 Search" (0 chaps)
+
+- **Hiện tượng**:
+  - Khi người dùng dán liên kết tìm kiếm của Hitomi.la (ví dụ: `https://hitomi.la/search.html?female%3Acrying%20female%3Arape`) vào ô "Phân Tích Thể Loại Hitomi.la" và nhấn nút `[PHÂN TÍCH]`, ứng dụng lập tức tự động nhảy sang tab "Tải về" (Download Queue) và thêm một mục truyện rác tên là `#1 Search` với `0 chaps` (domain hitomi.la).
+  - Kết quả phân tích số trang không hiển thị, người dùng không thể thực hiện cào mới (Crawl) hoặc cào thêm (Crawl More) theo dải trang mong muốn.
+
+- **Nguyên nhân kỹ thuật**:
+  1. **Nhận diện sai loại URL trong `IsCategoryOrTagUrl`**: Hàm `ComicScraperService.IsCategoryOrTagUrl` chỉ kiểm tra các tiền tố cứng `/tag/`, `/artist/`, `/series/`, `/type/` cho Hitomi, hoàn toàn bỏ qua `/search.html`, các query parameters và các index khác. Do đó, URL tìm kiếm bị hiểu nhầm là URL của một bộ truyện đơn lẻ.
+  2. **Trích xuất sai ID và sinh fallback title rác**: Khi bị chuyển vào hàm cào truyện đơn `ScrapeHitomiBookAsync`, hàm `HitomiResolverService.ExtractGalleryId` không tìm thấy gallery ID dạng số từ `search.html`, dẫn đến việc fallback lấy tên từ URL (`search.html` -> "Search"), đánh dấu trạng thái lỗi và đẩy vào hàng đợi tải về kèm lệnh chuyển tab sang `SelectedRootTabIndex = 2`.
+  3. **Thiếu cơ chế phân giải tìm kiếm đa Tag của Hitomi**: Trước đây, `AnalyzeTagUrlAsync` chỉ đơn thuần thay đuôi `.html` thành `.nozomi` (ví dụ `search.nozomi`), dẫn đến mã lỗi HTTP 404 từ máy chủ CDN `ltn.gold-usergeneratedcontent.net`, vì Hitomi là Single Page Application tĩnh, dữ liệu tìm kiếm không nằm trong DOM HTML mà được tính toán thông qua các file binary Nozomi tương ứng với từng tag/namespace.
+
+- **Giải pháp triệt để**:
+  1. **Quy chuẩn nhận diện URL Hitomi toàn diện**: Trong `IsCategoryOrTagUrl`, quy ước mọi liên kết thuộc tên miền `hitomi.la` không chứa `/galleries/`, `/reader/` hoặc mẫu kết thúc bằng số gallery `-\d+\.html` đều là Category/Tag/Search URL. Bổ sung `search.html` và `/search` vào bộ lọc URL danh mục chung.
+  2. **Xây dựng động cơ phân giải Hitomi Search & Multi-Tag Nozomi Resolution trong `HitomiResolverService`**:
+     - Phân tích chuỗi truy vấn (URL query decode), bóc tách các search terms độc lập.
+     - Hỗ trợ toàn diện các namespaces của Hitomi: `female:`, `male:`, `tag:`, `artist:`, `series:`, `character:`, `group:`, `type:`, `language:` và thẻ loại trừ (negative tags `-tag`).
+     - Tải song song (Task.WhenAll) các file Nozomi nhị phân tương ứng qua HTTP GET với header `Referer: https://hitomi.la/` và giải mã mảng số nguyên 32-bit big-endian.
+     - Thực hiện thuật toán giao tập hợp (Intersection) đối với các positive tags và trừ tập hợp (Difference) đối với các negative tags, đảm bảo kết quả sắp xếp giảm dần theo ID mới nhất.
+     - Tích hợp bộ nhớ đệm `_searchCache` (TTL 15 phút) giúp tái sử dụng ngay tức thì khi chuyển trang hoặc cào truyện mà không cần tải lại file Nozomi.
+  3. **Tích hợp vào `AnalyzeTagUrlAsync` và `ScrapeBatchComicsFromTagPagesAsync`**:
+     - Khi phát hiện URL Hitomi Search, tự động gọi `ResolveHitomiSearchGalleryIdsAsync`, tính toán tổng số trang (`(totalGalleries + 24) / 25`), trả về kết quả thành công và giữ nguyên người dùng tại tab Nguồn.
+     - Khi người dùng nhấn Cào mới / Cào thêm, cắt đúng dải Gallery ID theo trang, bóc tách metadata và ảnh bìa thumbnail thật, nạp toàn bộ danh sách truyện chuẩn xác vào Queue tải về.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/HitomiResolverService.cs`
   - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

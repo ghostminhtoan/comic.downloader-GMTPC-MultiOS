@@ -198,4 +198,222 @@ public static class HitomiResolverService
             return null;
         }
     }
+
+    // ====================================================================================================
+    // HITOMI.LA SEARCH & NOZOMI MULTI-TAG QUERY RESOLUTION (Cross-Platform Windows/Linux/Android)
+    // ====================================================================================================
+    private static readonly ConcurrentDictionary<string, (List<int> Ids, DateTime Expiry)> _searchCache = new(StringComparer.OrdinalIgnoreCase);
+
+    public static bool IsHitomiSearchUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        string lower = url.ToLowerInvariant();
+        return lower.Contains("hitomi") && (lower.Contains("/search.html") || lower.Contains("/search?") || lower.Contains("search.html?"));
+    }
+
+    public static string ExtractSearchQuery(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+        int qIdx = url.IndexOf('?');
+        if (qIdx < 0 || qIdx + 1 >= url.Length) return string.Empty;
+        string rawQuery = url.Substring(qIdx + 1);
+        int hashIdx = rawQuery.IndexOf('#');
+        if (hashIdx >= 0) rawQuery = rawQuery.Substring(0, hashIdx);
+        return System.Net.WebUtility.UrlDecode(rawQuery).Trim();
+    }
+
+    public static string ExtractSearchTitle(string url)
+    {
+        string q = ExtractSearchQuery(url);
+        if (!string.IsNullOrWhiteSpace(q)) return q;
+        return "Hitomi Search";
+    }
+
+    public static List<string> ParseSearchTerms(string query)
+    {
+        var list = new List<string>();
+        if (string.IsNullOrWhiteSpace(query)) return list;
+
+        var parts = query.Split(new[] { ' ', '+' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var p in parts)
+        {
+            string t = System.Net.WebUtility.UrlDecode(p.Trim());
+            if (!string.IsNullOrWhiteSpace(t))
+            {
+                list.Add(t);
+            }
+        }
+        return list;
+    }
+
+    public static (string NozomiUrl, bool IsNegative) MapTermToNozomiUrl(string rawTerm, string language = "all")
+    {
+        if (string.IsNullOrWhiteSpace(rawTerm)) return (string.Empty, false);
+        string term = rawTerm.Trim();
+        bool isNegative = false;
+        if (term.StartsWith("-"))
+        {
+            isNegative = true;
+            term = term.Substring(1).Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(term)) return (string.Empty, isNegative);
+
+        int colonIdx = term.IndexOf(':');
+        if (colonIdx > 0)
+        {
+            string ns = term.Substring(0, colonIdx).Trim().ToLowerInvariant();
+            string val = term.Substring(colonIdx + 1).Trim();
+            string safeVal = val.Replace(' ', '_');
+
+            if (ns == "female" || ns == "male")
+            {
+                return ($"https://ltn.gold-usergeneratedcontent.net/tag/{ns}:{safeVal}-{language}.nozomi", isNegative);
+            }
+            if (ns == "tag")
+            {
+                return ($"https://ltn.gold-usergeneratedcontent.net/tag/{safeVal}-{language}.nozomi", isNegative);
+            }
+            if (ns == "artist")
+            {
+                return ($"https://ltn.gold-usergeneratedcontent.net/artist/{safeVal}-{language}.nozomi", isNegative);
+            }
+            if (ns == "series")
+            {
+                return ($"https://ltn.gold-usergeneratedcontent.net/series/{safeVal}-{language}.nozomi", isNegative);
+            }
+            if (ns == "character")
+            {
+                return ($"https://ltn.gold-usergeneratedcontent.net/character/{safeVal}-{language}.nozomi", isNegative);
+            }
+            if (ns == "group")
+            {
+                return ($"https://ltn.gold-usergeneratedcontent.net/group/{safeVal}-{language}.nozomi", isNegative);
+            }
+            if (ns == "type")
+            {
+                return ($"https://ltn.gold-usergeneratedcontent.net/type/{safeVal}-{language}.nozomi", isNegative);
+            }
+            if (ns == "language")
+            {
+                return ($"https://ltn.gold-usergeneratedcontent.net/index-{safeVal.ToLowerInvariant()}.nozomi", isNegative);
+            }
+            return ($"https://ltn.gold-usergeneratedcontent.net/tag/{term.Replace(' ', '_')}-{language}.nozomi", isNegative);
+        }
+
+        return ($"https://ltn.gold-usergeneratedcontent.net/tag/{term.Replace(' ', '_')}-{language}.nozomi", isNegative);
+    }
+
+    public static async Task<List<int>> FetchNozomiGalleryIdsAsync(string nozomiUrl, HttpClient httpClient, CancellationToken ct = default)
+    {
+        var list = new List<int>();
+        if (string.IsNullOrWhiteSpace(nozomiUrl)) return list;
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, nozomiUrl);
+            req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
+            using var res = await httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode) return list;
+
+            byte[] bytes = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            list.Capacity = bytes.Length / 4;
+            for (int i = 0; i + 3 < bytes.Length; i += 4)
+            {
+                int gId = (bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3];
+                list.Add(gId);
+            }
+        }
+        catch
+        {
+            // Trả về rỗng an toàn khi timeout hoặc không tìm thấy tag
+        }
+        return list;
+    }
+
+    public static async Task<List<int>> ResolveHitomiSearchGalleryIdsAsync(string searchUrl, HttpClient httpClient, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(searchUrl)) return new List<int>();
+
+        if (_searchCache.TryGetValue(searchUrl, out var cached) && cached.Expiry > DateTime.UtcNow)
+        {
+            return cached.Ids;
+        }
+
+        string query = ExtractSearchQuery(searchUrl);
+        var terms = ParseSearchTerms(query);
+
+        if (terms.Count == 0)
+        {
+            var allIds = await FetchNozomiGalleryIdsAsync("https://ltn.gold-usergeneratedcontent.net/index-all.nozomi", httpClient, ct).ConfigureAwait(false);
+            _searchCache[searchUrl] = (allIds, DateTime.UtcNow.AddMinutes(15));
+            return allIds;
+        }
+
+        var positiveTasks = new List<Task<List<int>>>();
+        var negativeTasks = new List<Task<List<int>>>();
+
+        foreach (var term in terms)
+        {
+            var (nozomiUrl, isNegative) = MapTermToNozomiUrl(term, "all");
+            if (string.IsNullOrWhiteSpace(nozomiUrl)) continue;
+
+            if (isNegative)
+            {
+                negativeTasks.Add(FetchNozomiGalleryIdsAsync(nozomiUrl, httpClient, ct));
+            }
+            else
+            {
+                positiveTasks.Add(FetchNozomiGalleryIdsAsync(nozomiUrl, httpClient, ct));
+            }
+        }
+
+        if (positiveTasks.Count == 0 && negativeTasks.Count == 0)
+        {
+            return new List<int>();
+        }
+
+        await Task.WhenAll(positiveTasks.Concat(negativeTasks)).ConfigureAwait(false);
+
+        List<int>? result = null;
+
+        // Phép giao (Intersection) của các tập positive
+        foreach (var pTask in positiveTasks)
+        {
+            var ids = await pTask.ConfigureAwait(false);
+            if (result == null)
+            {
+                result = new List<int>(ids);
+            }
+            else
+            {
+                var set = new HashSet<int>(ids);
+                result.RemoveAll(id => !set.Contains(id));
+            }
+        }
+
+        // Nếu chỉ có negative tags mà không có positive tags -> lấy index-all trừ đi negative
+        if (result == null)
+        {
+            var allIds = await FetchNozomiGalleryIdsAsync("https://ltn.gold-usergeneratedcontent.net/index-all.nozomi", httpClient, ct).ConfigureAwait(false);
+            result = new List<int>(allIds);
+        }
+
+        // Phép trừ (Difference) của các tập negative
+        foreach (var nTask in negativeTasks)
+        {
+            var negIds = await nTask.ConfigureAwait(false);
+            if (negIds.Count > 0)
+            {
+                var negSet = new HashSet<int>(negIds);
+                result.RemoveAll(id => negSet.Contains(id));
+            }
+        }
+
+        // Sắp xếp giảm dần theo ID (gallery mới nhất đứng trước)
+        result.Sort((a, b) => b.CompareTo(a));
+
+        _searchCache[searchUrl] = (result, DateTime.UtcNow.AddMinutes(15));
+        return result;
+    }
 }
