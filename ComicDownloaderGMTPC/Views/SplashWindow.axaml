@@ -1,0 +1,53 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ComicDownloaderGMTPC.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="380" d:DesignHeight="250"
+        Width="380" Height="250"
+        CanResize="False"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterScreen"
+        Background="Transparent"
+        Topmost="True"
+        x:Class="ComicDownloaderGMTPC.Views.SplashWindow"
+        x:DataType="vm:SplashViewModel"
+        Icon="/Assets/app-icon.ico"
+        Title="Khởi động Comic Downloader GMTPC">
+
+    <Border Background="#0B0F19" BorderBrush="#00E5FF" BorderThickness="1.5" CornerRadius="12" Padding="18">
+        <Grid RowDefinitions="Auto, Auto, *, Auto">
+            
+            <!-- Logo & Tiêu đề ứng dụng -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10" Margin="0,0,0,8">
+                <Image Source="/Assets/app-icon.ico" Width="36" Height="36" VerticalAlignment="Center"/>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="COMIC DOWNLOADER GMTPC" Foreground="#00E5FF" FontWeight="Bold" FontSize="13.5" LetterSpacing="0.8"/>
+                    <TextBlock Text="Đa nền tảng (Windows • Linux • Android)" Foreground="#94A3B8" FontSize="9.5"/>
+                </StackPanel>
+            </StackPanel>
+
+            <Separator Grid.Row="1" Background="#1E293B" Height="1" Margin="0,0,0,10"/>
+
+            <!-- Circular Progress Bar có phần trăm (%) ở trung tâm -->
+            <Grid Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Width="76" Height="76">
+                <!-- Vòng tròn nền xám mờ -->
+                <Ellipse Width="76" Height="76" Stroke="#1E293B" StrokeThickness="5"/>
+                <!-- Vòng cung tiến trình xoay động màu Cyan -->
+                <Arc Width="76" Height="76" Stroke="#00E5FF" StrokeThickness="5"
+                     StartAngle="-90" SweepAngle="{Binding SweepAngle}" StrokeLineCap="Round"/>
+                <!-- Nhãn phần trăm ở tâm vòng tròn -->
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="{Binding ProgressPercentText}" Foreground="#00E5FF" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Trạng thái tiến trình từng bước -->
+            <StackPanel Grid.Row="3" Spacing="3" Margin="0,10,0,0">
+                <TextBlock Text="{Binding StatusMessage}" Foreground="#E2E8F0" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="Đang khởi tạo hệ thống, vui lòng không mở thêm ứng dụng..." Foreground="#64748B" FontSize="8.5" HorizontalAlignment="Center"/>
+            </StackPanel>
+
+        </Grid>
+    </Border>
+</Window>

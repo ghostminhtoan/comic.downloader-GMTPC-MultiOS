@@ -604,3 +604,15 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - **Chân Trang Co Giãn Tự Động (WrapPanel)**:
   + Nhóm nút ↶ Undo, ↷ Redo, Chế độ tìm (Chứa từ / Từ chính xác) và nút 🗑️ CLEAR co giãn tự xuống dòng thông minh trên màn hình hẹp, không bao giờ bị cắt xén hay che khuất.
 
+### 48. Chuẩn Mobile Name Card Gọn Gàng Cho Bộ Lọc Tìm Kiếm & Khởi Động Nhanh Kèm Circular Progress Bar Có % (Splash Bootstrapper)
+- **Chuẩn Mobile Name Card Gọn Gàng Cho Bộ Lọc Nâng Cao (MainView.axaml)**:
+  + Chuyển đổi giao diện Flyout sang chuẩn thiết kế Mobile Name Card kích thước vàng `Width="315"`, sử dụng `Placement="Bottom"` căn giữa nút kích hoạt trên Toolbar.
+  + Loại bỏ hoàn toàn lỗi tràn lệch mép phải trên điện thoại Android màn hình dọc (~360-400px), mọi phần tử hiển thị cân đối và sắc nét.
+  + Đưa nút `🗑️ CLEAR` màu đỏ trực tiếp lên góc phải của Header Name Card, luôn hiển thị nổi bật và thao tác ngay mà không bị che khuất.
+  + Tối ưu 4 ô điều kiện 2x2 siêu gọn (chiều cao 25px, font 9.5px, padding 4,2), chân trang tích hợp Undo/Redo và chế độ so khớp từ.
+- **Kiến Trúc Khởi Động Nhanh Kèm Circular Progress Bar Có % Đa Nền Tảng (SplashViewModel, SplashWindow, SplashView, App.axaml.cs)**:
+  + Giải quyết dứt điểm vấn đề khởi động chậm và người dùng tưởng chưa mở nên bấm mở thêm.
+  + Hiển thị tức thì (< 0.1s) `SplashWindow` (trên Windows, Linux) và `SplashView` (trên Android) với Circular Progress Bar xoay tròn màu Cyan và con số phần trăm (%) ở trung tâm.
+  + Báo cáo tiến trình boot 5 giai đoạn minh bạch (0% -> 15% Cấu hình & ngôn ngữ -> 35% Công cụ cào truyện -> 60% Nạp ViewModel -> 85% Khôi phục hàng chờ -> 100% Mở ứng dụng).
+  + Tách các tác vụ I/O đĩa nặng sang background async non-blocking, giải phóng UI thread, tự động hoán đổi sang `MainWindow` / `MainView` khi đạt 100%.
+

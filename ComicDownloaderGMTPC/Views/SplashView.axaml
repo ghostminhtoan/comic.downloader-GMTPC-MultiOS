@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ComicDownloaderGMTPC.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="700"
+             x:Class="ComicDownloaderGMTPC.Views.SplashView"
+             x:DataType="vm:SplashViewModel"
+             Background="#0B0F19">
+
+    <Grid VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
+        <Border Background="#111827" BorderBrush="#00E5FF" BorderThickness="1.5" CornerRadius="14" Padding="20"
+                MaxWidth="340" HorizontalAlignment="Center">
+            <StackPanel Spacing="16" HorizontalAlignment="Center">
+                
+                <!-- Logo & Tiêu đề ứng dụng -->
+                <StackPanel HorizontalAlignment="Center" Spacing="6">
+                    <Image Source="/Assets/app-icon.ico" Width="48" Height="48" HorizontalAlignment="Center"/>
+                    <TextBlock Text="COMIC DOWNLOADER GMTPC" Foreground="#00E5FF" FontWeight="Bold" FontSize="13.5" HorizontalAlignment="Center" LetterSpacing="0.8"/>
+                    <TextBlock Text="Phiên bản di động Android" Foreground="#94A3B8" FontSize="10" HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <Separator Background="#1E293B" Height="1"/>
+
+                <!-- Circular Progress Bar có phần trăm (%) ở trung tâm -->
+                <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="80" Height="80">
+                    <!-- Vòng tròn nền xám mờ -->
+                    <Ellipse Width="80" Height="80" Stroke="#1E293B" StrokeThickness="5.5"/>
+                    <!-- Vòng cung tiến trình xoay động màu Cyan -->
+                    <Arc Width="80" Height="80" Stroke="#00E5FF" StrokeThickness="5.5"
+                         StartAngle="-90" SweepAngle="{Binding SweepAngle}" StrokeLineCap="Round"/>
+                    <!-- Nhãn phần trăm ở tâm vòng tròn -->
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="{Binding ProgressPercentText}" Foreground="#00E5FF" FontWeight="Bold" FontSize="15" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Trạng thái tiến trình từng bước -->
+                <StackPanel Spacing="4" HorizontalAlignment="Center">
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" TextAlignment="Center"/>
+                    <TextBlock Text="Đang khởi tạo hệ thống, vui lòng chờ trong giây lát..." Foreground="#64748B" FontSize="9" HorizontalAlignment="Center"/>
+                </StackPanel>
+
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
+

@@ -185,13 +185,57 @@ public partial class App : Application
                 try { _sharedMainViewModel?.FlushAutoSaveImmediately(); } catch { }
                 try { _singleInstanceMutex?.ReleaseMutex(); } catch { }
             };
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = SharedMainViewModel
-            };
+            // Khởi động Splash Screen siêu nhẹ với Circular Progress Bar có phần trăm (%)
+            desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnExplicitShutdown;
+            var splashVm = new SplashViewModel();
+            var splashWin = new SplashWindow { DataContext = splashVm };
+            desktop.MainWindow = splashWin;
+            splashWin.Show();
 
-            // Khởi tạo và quét trạng thái liên kết tệp hệ thống trên Desktop
-            SharedMainViewModel.InitFileAssociation();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    splashVm.ReportProgress(15, "Đang nạp cấu hình hệ thống & ngôn ngữ...");
+                    await Task.Delay(80).ConfigureAwait(false);
+
+                    splashVm.ReportProgress(35, "Khởi tạo công cụ cào truyện & bộ lọc...");
+                    var scraper = ComicScraperService.Instance;
+                    await Task.Delay(80).ConfigureAwait(false);
+
+                    splashVm.ReportProgress(60, "Chuẩn bị ViewModel & nạp cài đặt...");
+                    var vm = SharedMainViewModel;
+                    await Task.Delay(80).ConfigureAwait(false);
+
+                    splashVm.ReportProgress(85, "Khôi phục dữ liệu hàng chờ tự động...");
+                    await Task.Delay(80).ConfigureAwait(false);
+
+                    splashVm.ReportProgress(100, "Sẵn sàng! Đang mở ứng dụng...");
+                    await Task.Delay(100).ConfigureAwait(false);
+
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        var mainWindow = new MainWindow { DataContext = vm };
+                        desktop.MainWindow = mainWindow;
+                        desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnMainWindowClose;
+                        mainWindow.Show();
+                        splashWin.Close();
+                        vm.InitFileAssociation();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[BOOT ERROR] {ex}");
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        var mainWindow = new MainWindow { DataContext = SharedMainViewModel };
+                        desktop.MainWindow = mainWindow;
+                        desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnMainWindowClose;
+                        mainWindow.Show();
+                        splashWin.Close();
+                    });
+                }
+            });
         }
         else if (ApplicationLifetime is IActivityApplicationLifetime singleViewFactoryApplicationLifetime)
         {
@@ -199,7 +243,43 @@ public partial class App : Application
             {
                 try
                 {
-                    return new MainView { DataContext = SharedMainViewModel };
+                    var rootHost = new ContentControl();
+                    var splashVm = new SplashViewModel();
+                    rootHost.Content = new SplashView { DataContext = splashVm };
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            splashVm.ReportProgress(20, "Đang nạp cấu hình & kiểm tra bộ nhớ...");
+                            await Task.Delay(100).ConfigureAwait(false);
+
+                            splashVm.ReportProgress(50, "Khởi tạo công cụ cào truyện & bộ lọc...");
+                            var scraper = ComicScraperService.Instance;
+                            await Task.Delay(100).ConfigureAwait(false);
+
+                            splashVm.ReportProgress(75, "Nạp giao diện & khôi phục hàng chờ...");
+                            var vm = SharedMainViewModel;
+                            await Task.Delay(100).ConfigureAwait(false);
+
+                            splashVm.ReportProgress(100, "Sẵn sàng! Đang mở ứng dụng...");
+                            await Task.Delay(120).ConfigureAwait(false);
+
+                            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                            {
+                                rootHost.Content = new MainView { DataContext = vm };
+                            });
+                        }
+                        catch (Exception)
+                        {
+                            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                            {
+                                rootHost.Content = new MainView { DataContext = SharedMainViewModel };
+                            });
+                        }
+                    });
+
+                    return rootHost;
                 }
                 catch (Exception ex)
                 {
@@ -229,10 +309,42 @@ public partial class App : Application
         {
             try
             {
-                singleViewPlatform.MainView = new MainView
+                var rootHost = new ContentControl();
+                var splashVm = new SplashViewModel();
+                rootHost.Content = new SplashView { DataContext = splashVm };
+                singleViewPlatform.MainView = rootHost;
+
+                _ = Task.Run(async () =>
                 {
-                    DataContext = SharedMainViewModel
-                };
+                    try
+                    {
+                        splashVm.ReportProgress(20, "Đang nạp cấu hình & kiểm tra bộ nhớ...");
+                        await Task.Delay(100).ConfigureAwait(false);
+
+                        splashVm.ReportProgress(50, "Khởi tạo công cụ cào truyện & bộ lọc...");
+                        var scraper = ComicScraperService.Instance;
+                        await Task.Delay(100).ConfigureAwait(false);
+
+                        splashVm.ReportProgress(75, "Nạp giao diện & khôi phục hàng chờ...");
+                        var vm = SharedMainViewModel;
+                        await Task.Delay(100).ConfigureAwait(false);
+
+                        splashVm.ReportProgress(100, "Sẵn sàng! Đang mở ứng dụng...");
+                        await Task.Delay(120).ConfigureAwait(false);
+
+                        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            rootHost.Content = new MainView { DataContext = vm };
+                        });
+                    }
+                    catch (Exception)
+                    {
+                        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            rootHost.Content = new MainView { DataContext = SharedMainViewModel };
+                        });
+                    }
+                });
             }
             catch (Exception ex)
             {
