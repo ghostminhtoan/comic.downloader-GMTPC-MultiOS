@@ -63,7 +63,9 @@ public class DownloadEngineService
     public static event Action? ResetAndroidFolderOpenerRequested;
 
     public bool AutoSplitLongImages { get; set; } = false;
-    public int AutoSplitHeight { get; set; } = 5000;
+    public int AutoSplitHeight { get; set; } = 5000;
+    public bool AutoProcessImages { get; set; } = false;
+    public Func<ImageEnhancerOptions>? GetImageEnhancerOptions { get; set; }
     public bool AddOrderPrefixToTitle { get; set; } = false;
 
     private int _orderCounter = 0;
@@ -1628,6 +1630,20 @@ public class DownloadEngineService
                     await File.WriteAllBytesAsync(destinationPath, data!, ct).ConfigureAwait(false);
                     Interlocked.Add(ref _totalBytesDownloadedInWindow, data!.Length);
 
+                    if (AutoProcessImages && File.Exists(destinationPath))
+                    {
+                        try
+                        {
+                            var options = GetImageEnhancerOptions?.Invoke() ?? new ImageEnhancerOptions { OverwriteOriginal = true, OutputFormat = "original" };
+                            bool enhanced = ImageEnhancerService.TryEnhanceImageFile(destinationPath, options);
+                            if (enhanced)
+                            {
+                                LogEmitted?.Invoke("INFO", $"[Xú lý ảnh khi tải] Đã tối ưu ảnh '{Path.GetFileName(destinationPath)}'");
+                            }
+                        }
+                        catch { }
+                    }
+
                     if (AutoSplitLongImages && File.Exists(destinationPath))
                     {
                         try
@@ -1655,7 +1671,16 @@ public class DownloadEngineService
                             string safeFallbackPath = destinationPath.Replace("/storage/emulated/0/Download/ComicDownloads", safeAppStorage, StringComparison.OrdinalIgnoreCase);
                             string fallbackDir = Path.GetDirectoryName(safeFallbackPath)!;
                             if (!Directory.Exists(fallbackDir)) Directory.CreateDirectory(fallbackDir);
-                            File.WriteAllBytes(safeFallbackPath, data!);
+                            File.WriteAllBytes(safeFallbackPath, data!);
+                            if (AutoProcessImages && File.Exists(safeFallbackPath))
+                            {
+                                try
+                                {
+                                    var options = GetImageEnhancerOptions?.Invoke() ?? new ImageEnhancerOptions { OverwriteOriginal = true, OutputFormat = "original" };
+                                    ImageEnhancerService.TryEnhanceImageFile(safeFallbackPath, options);
+                                }
+                                catch { }
+                            }
                             Interlocked.Add(ref _totalBytesDownloadedInWindow, data!.Length);
                             LogEmitted?.Invoke("SUCCESS", $"[Lưu an toàn] Đã chuyển hướng lưu ảnh vào thư mục riêng của app: {Path.GetFileName(safeFallbackPath)}");
                             return true;

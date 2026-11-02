@@ -344,6 +344,12 @@ public class LanguageService
         AddPair("Auto Scroll (10s)", "Tự cuộn (10s)");
         AddPair("Auto Delete Completed", "Tự xóa đã xong");
         AddPair("Auto Split Long Images", "Tự cắt ảnh dài");
+        AddPair("Process Images While Downloading", "Xử lý ảnh khi tải");
+        AddPair("Process images while downloading", "Xử lý ảnh trong khi download");
+        AddPair("Process images during download", "Xử lý ảnh khi tải");
+        AddPair("Xử lý ảnh khi tải", "Process images while downloading");
+        AddPair("Xử lý ảnh trong khi download", "Process images while downloading");
+        AddPair("Process and enhance images in-flight while downloading using Image Enhancer settings", "Vừa tải vừa xử lý và nâng cấp ảnh (Image Enhancer) theo thiết lập bộ lọc (Tương phản, Độ nét, Màu sắc, Khử nhiễu) trong Tab Công cụ -> Nâng cấp ảnh");
         AddPair("Auto Paste", "Tự dán");
         AddPair("APPLY", "ÁP DỤNG");
         AddPair("Apply", "Áp dụng");

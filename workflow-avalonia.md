@@ -1,4 +1,4 @@
-﻿# Workflow hiện tại - Comic Downloader GMTPC Avalonia Multi-OS
+# Workflow hiện tại - Comic Downloader GMTPC Avalonia Multi-OS
 Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ, ít file, build sạch, không phá lane khác, sau khi build luôn luôn upload beta.
 
 ## 1. Quy tắc nền
@@ -34,6 +34,7 @@ Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ,
 - Luôn đánh giá, cập nhật `workflow-avalonia.md`.
 - Chuẩn Icon App: Dùng mẫu Concept 06 (Comic Cloud Rocket) đồng bộ trên toàn bộ nền tảng: Avalonia Desktop (`app-icon.ico` & Window Icon), Android (`Icon.png`), Linux (`comic-downloader.desktop` `Icon=Icon`).
 - Đánh giá prompt, gợi ý tính năng/file thiết kế mới; cập nhật `workflow-avalonia.md` khi cần.
+- Tab Download - Xử lý ảnh trong khi download (In-flight Image Enhancement): Checkbox 'Xử lý ảnh trong khi download' song ngữ ENG/VI, tự động áp dụng bộ lọc tối ưu hóa/nâng cấp ảnh từ Tab Công cụ -> Nâng cấp ảnh (Contrast, Brightness, Saturation, Sharpness, Noise reduction, Quality) cho từng ảnh tải về, ghi đè in-place an toàn và bảo toàn extension/manifest.
 
 ## 2. Snapshot kiến trúc hiện tại
 

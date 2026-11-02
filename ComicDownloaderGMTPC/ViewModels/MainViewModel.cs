@@ -383,6 +383,14 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [ObservableProperty]
+    private bool _isAutoProcessImages = false;
+
+    partial void OnIsAutoProcessImagesChanged(bool value)
+    {
+        _downloadEngine.AutoProcessImages = value;
+    }
+
+    [ObservableProperty]
     private bool _isAutoSplitLongImages = false;
 
     [ObservableProperty]
@@ -397,6 +405,22 @@ public partial class MainViewModel : ViewModelBase
     {
         _downloadEngine.AutoSplitHeight = Math.Max(100, value);
     }
+
+    public ImageEnhancerOptions GetDownloadImageEnhancerOptions()
+    {
+        return new ImageEnhancerOptions
+        {
+            Contrast = EnhanceContrast,
+            Brightness = EnhanceBrightness,
+            Saturation = EnhanceSaturation,
+            Sharpness = EnhanceSharpness,
+            NoiseReduce = EnhanceNoiseReduce,
+            Quality = EnhanceQuality,
+            OutputFormat = "original",
+            OverwriteOriginal = true
+        };
+    }
+
 
     // AUTO SCROLL TO LOWEST DOWNLOADING ITEM
     [ObservableProperty]
@@ -1606,6 +1630,8 @@ public partial class MainViewModel : ViewModelBase
             }
         };
         _downloadEngine.AddOrderPrefixToTitle = IsAddOrderPrefix;
+        _downloadEngine.GetImageEnhancerOptions = GetDownloadImageEnhancerOptions;
+        _downloadEngine.AutoProcessImages = IsAutoProcessImages;
         _langService.LanguageChanged += OnLanguageChanged;
         _downloadEngine.LogEmitted += OnLogEmitted;
         _downloadEngine.ProgressUpdated += OnProgressUpdated;

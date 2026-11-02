@@ -42,6 +42,47 @@ public class PreviewStatsResult
 
 public class ImageEnhancerService
 {
+    private static readonly Lazy<ImageEnhancerService> _instance = new(() => new ImageEnhancerService());
+    public static ImageEnhancerService Instance => _instance.Value;
+
+    /// <summary>
+    /// Xú lý tối ưu / nâng cấp một file ảnh đơn lẻ và ghi đè an toàn (hỗ trợ in-flight processing trong khi tải).
+    /// </summary>
+    public static bool TryEnhanceImageFile(string filePath, ImageEnhancerOptions? options = null)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            return false;
+
+        options ??= new ImageEnhancerOptions { OverwriteOriginal = true, OutputFormat = "original" };
+
+        string targetExt = GetTargetExtension(filePath, options.OutputFormat);
+        string tempPath = Path.ChangeExtension(filePath, targetExt) + ".tmp_enh";
+
+        try
+        {
+            Instance.EnhanceAndSaveImage(filePath, tempPath, options);
+
+            if (File.Exists(tempPath) && new FileInfo(tempPath).Length > 0)
+            {
+                string finalPath = Path.ChangeExtension(filePath, targetExt);
+                if (!string.Equals(finalPath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (File.Exists(filePath)) File.Delete(filePath);
+                }
+                File.Move(tempPath, finalPath, true);
+                return true;
+            }
+        }
+        catch (Exception)
+        {
+            if (File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); } catch { }
+            }
+        }
+
+        return false;
+    }
     public event Action<string, string>? LogEmitted;
     public event Action<double, string>? ProgressUpdated;
 

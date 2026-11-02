@@ -3394,7 +3394,9 @@
 
                                     <CheckBox IsChecked="{Binding IsAutoDeleteCompleted}" Content="🧹 Tự xóa đã xong" FontSize="11" Foreground="#10B981" FontWeight="SemiBold" Margin="0,0,10,4" ToolTip.Tip="Tự động dọn dẹp xóa truyện hoặc dải chương khỏi hàng đợi ngay khi tải xong 100%" />
 
-                                    <CheckBox IsChecked="{Binding IsAutoSplitLongImages}" Content="✂️ Tự cắt ảnh dài" FontSize="11" Foreground="#F43F5E" FontWeight="SemiBold" Margin="0,0,6,4" ToolTip.Tip="Tự động cắt ảnh có chiều cao lớn hơn ngưỡng chỉ định thành các mảnh nhỏ trong khi tải" />
+                                    <CheckBox IsChecked="{Binding IsAutoProcessImages}" Content="✨ Xử lý ảnh trong khi download" FontSize="11" Foreground="#EC4899" FontWeight="SemiBold" Margin="0,0,10,4" ToolTip.Tip="Vừa tải vừa xử lý và nâng cấp ảnh (Image Enhancer) theo thiết lập bộ lọc (Tương phản, Độ nét, Màu sắc, Khử nhiễu) trong Tab Công cụ -> Nâng cấp ảnh" />
+
+                                    <CheckBox IsChecked="{Binding IsAutoSplitLongImages}" Content="✂️ Tự cắt ảnh dài"  FontSize="11" Foreground="#F43F5E" FontWeight="SemiBold" Margin="0,0,6,4" ToolTip.Tip="Tự động cắt ảnh có chiều cao lớn hơn ngưỡng chỉ định thành các mảnh nhỏ trong khi tải" />
 
                                     <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding IsAutoSplitLongImages}" Margin="0,0,0,4">
 

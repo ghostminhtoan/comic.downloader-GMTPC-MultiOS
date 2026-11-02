@@ -67,6 +67,10 @@
 | :--- | :--- |
 | AUTO DOWNLOAD | TỰ ĐỘNG TẢI |
 | AUTO RETRY UNTIL SETTLED | TỰ THỬ LẠI ĐẾN KHI XONG |
+| Process images while downloading | Xử lý ảnh trong khi download |
+| Process images while downloading | Xử lý ảnh khi tải |
+| Process Images While Downloading | Xử lý ảnh khi tải |
+| Process and enhance images in-flight while downloading using Image Enhancer settings (Contrast, Sharpness, Saturation, Noise reduction) | Vừa tải vừa xử lý và nâng cấp ảnh (Image Enhancer) theo thiết lập bộ lọc (Tương phản, Độ nét, Màu sắc, Khử nhiễu) trong Tab Công cụ -> Nâng cấp ảnh |
 | AUTO SCROLL TO DOWNLOADING | TỰ CUỘN ĐẾN TRUYỆN ĐANG TẢI |
 | AUTO DELETE COMPLETED | TỰ ĐỘNG XÓA ĐÃ XONG |
 | CANCELLING... | ĐANG HỦY... |
