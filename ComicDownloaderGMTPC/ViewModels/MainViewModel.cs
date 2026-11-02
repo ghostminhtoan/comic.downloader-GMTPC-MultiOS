@@ -1210,7 +1210,10 @@ public partial class MainViewModel : ViewModelBase
 
     public bool IsThumbnailColumnVisible => SelectedQueueViewMode == "List + thumbnail column";
 
-    public IEnumerable<ComicBookItem>? ActiveThumbnailItemsSource => IsThumbnailMode ? ComicBooks : null;
+    public IEnumerable<ComicBookItem> ActiveQueueItemsSource =>
+        IsFilterActive && FilteredQueueItems != null ? FilteredQueueItems : ComicBooks;
+
+    public IEnumerable<ComicBookItem>? ActiveThumbnailItemsSource => IsThumbnailMode ? ActiveQueueItemsSource : null;
 
     public event Action? VisibleThumbnailScanRequested;
 
@@ -1467,6 +1470,11 @@ public partial class MainViewModel : ViewModelBase
     }
 
     public ObservableCollection<ComicBookItem> ComicBooks { get; } = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveQueueItemsSource))]
+    [NotifyPropertyChangedFor(nameof(ActiveThumbnailItemsSource))]
+    private ObservableCollection<ComicBookItem>? _filteredQueueItems;
     public ObservableCollection<MissingScanItem> ScanResults { get; } = new();
     public ObservableCollection<LogMessageItem> Logs { get; } = new();
     public ObservableCollection<SourceSearchResultItem> SearchResults { get; } = new();
@@ -1590,6 +1598,13 @@ public partial class MainViewModel : ViewModelBase
     {
         _downloadPathText = _downloadEngine.DownloadRoot;
         _downloadEngine.BindLiveQueueSource(ComicBooks);
+        ComicBooks.CollectionChanged += (s, e) =>
+        {
+            if (IsFilterActive)
+            {
+                RequestQueueFilter(50);
+            }
+        };
         _downloadEngine.AddOrderPrefixToTitle = IsAddOrderPrefix;
         _langService.LanguageChanged += OnLanguageChanged;
         _downloadEngine.LogEmitted += OnLogEmitted;

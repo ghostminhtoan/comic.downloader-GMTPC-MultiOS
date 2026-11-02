@@ -3742,7 +3742,7 @@
 
                                     <!-- Danh sách các hàng truyện (List view & List + thumbnail column) -->
 
-                                    <ItemsControl x:Name="QueueItemsControl" Grid.Row="1" ItemsSource="{Binding ComicBooks}" MinHeight="260" Padding="0,0,0,70" IsVisible="{Binding !IsThumbnailMode}">
+                                    <ItemsControl x:Name="QueueItemsControl" Grid.Row="1" ItemsSource="{Binding ActiveQueueItemsSource}" MinHeight="260" Padding="0,0,0,70" IsVisible="{Binding !IsThumbnailMode}">
 
                                         <ItemsControl.ItemsPanel>
 

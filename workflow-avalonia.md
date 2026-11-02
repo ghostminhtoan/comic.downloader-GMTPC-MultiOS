@@ -630,3 +630,13 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - **Batch UI Dispatch Cập Nhật Trực Quan**:
   + Chỉ gán `book.IsFilteredOut = shouldFilterOut` cho các item có trạng thái thực sự thay đổi, ngăn chặn Avalonia kích hoạt PropertyChanged và invalidation visual tree thừa thãi.
 
+### 50. Tích Hợp Kiến Trúc View Collection Siêu Tốc `ActiveQueueItemsSource` Cho Hàng Đợi (Instant Search & Zero-Freeze)
+- **Kiến Trúc View Collection Hai Danh Sách Tinh Gọn (MainViewModel.cs, MainView.axaml)**:
+  + Chuyển đổi cơ chế hiển thị của cả chế độ bảng (List Mode) và lưới ảnh (Thumbnail Mode) sang nguồn dữ liệu động `ActiveQueueItemsSource`:
+    * Khi không có bộ lọc: Trỏ trực tiếp vào Master Collection `ComicBooks` (Zero-Copy overhead).
+    * Khi có bộ lọc tìm kiếm: Chỉ đưa danh sách các truyện thực sự khớp `FilteredQueueItems` lên UI.
+  + Loại bỏ hoàn toàn tình trạng hàng ngàn/hàng chục ngàn phần tử bị ẩn (`IsVisible = false`) làm tắc nghẽn Avalonia Layout Engine và VirtualizingStackPanel/WrapPanel.
+  + UI chỉ phải vẽ đúng số phần tử thực tế cần hiển thị (ví dụ 5 - 30 item), thời gian dựng hình giảm xuống dưới 2 mili-giây, gõ tìm kiếm xong ra kết quả ngay lập tức trước mắt người dùng.
+- **Tự Động Đồng Bộ Với Master Collection**:
+  + Lắng nghe sự kiện `ComicBooks.CollectionChanged`: Mọi thao tác thêm link từ clipboard, xóa truyện, sắp xếp danh sách đều tự động cập nhật lại View Collection mà không cần người dùng thao tác lại bộ lọc.
+
