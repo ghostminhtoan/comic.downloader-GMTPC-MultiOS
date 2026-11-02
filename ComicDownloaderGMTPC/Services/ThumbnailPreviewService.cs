@@ -259,19 +259,46 @@ public sealed class ThumbnailPreviewService
             }
 
             string link = item.Url?.Trim() ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(link) && !link.Contains("hitomi.la") && !link.Contains("mangadex.org"))
+            if (!string.IsNullOrWhiteSpace(link))
             {
-                try
+                if (link.Contains("hitomi.la", StringComparison.OrdinalIgnoreCase))
                 {
-                    string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
-                    string extractedTags = ComicScraperService.ExtractPreviewTags(html, link);
-                    if (!string.IsNullOrWhiteSpace(extractedTags))
+                    try
                     {
-                        try { await File.WriteAllTextAsync(tagsFile, extractedTags, ct).ConfigureAwait(false); } catch { }
-                        await RunOnUiAsync(() => item.PreviewTagsText = extractedTags);
+                        string galleryId = HitomiResolverService.ExtractGalleryId(link);
+                        if (!string.IsNullOrEmpty(galleryId))
+                        {
+                            string jsUrl = $"https://ltn.gold-usergeneratedcontent.net/galleries/{galleryId}.js";
+                            string jsContent = await FetchStringAsync(jsUrl, ct).ConfigureAwait(false);
+                            if (!string.IsNullOrEmpty(jsContent))
+                            {
+                                string json = jsContent.Replace("var galleryinfo = ", "").Trim().TrimEnd(';');
+                                using var doc = JsonDocument.Parse(json);
+                                string extractedTags = ComicScraperService.ExtractHitomiTags(doc.RootElement);
+                                if (!string.IsNullOrWhiteSpace(extractedTags))
+                                {
+                                    try { await File.WriteAllTextAsync(tagsFile, extractedTags, ct).ConfigureAwait(false); } catch { }
+                                    await RunOnUiAsync(() => item.PreviewTagsText = extractedTags);
+                                }
+                            }
+                        }
                     }
+                    catch { }
                 }
-                catch { }
+                else if (!link.Contains("mangadex.org"))
+                {
+                    try
+                    {
+                        string html = await FetchStringAsync(link, ct).ConfigureAwait(false);
+                        string extractedTags = ComicScraperService.ExtractPreviewTags(html, link);
+                        if (!string.IsNullOrWhiteSpace(extractedTags))
+                        {
+                            try { await File.WriteAllTextAsync(tagsFile, extractedTags, ct).ConfigureAwait(false); } catch { }
+                            await RunOnUiAsync(() => item.PreviewTagsText = extractedTags);
+                        }
+                    }
+                    catch { }
+                }
             }
         }
     }
@@ -871,6 +898,26 @@ public sealed class ThumbnailPreviewService
                     {
                         string json = jsContent.Replace("var galleryinfo = ", "").Trim().TrimEnd(';');
                         using var doc = JsonDocument.Parse(json);
+                        string hitomiTags = ComicScraperService.ExtractHitomiTags(doc.RootElement);
+                        if (!string.IsNullOrWhiteSpace(hitomiTags))
+                        {
+                            try
+                            {
+                                string cacheDir = GetItemCacheDirectory(item);
+                                string tagsFile = Path.Combine(cacheDir, "cover.tags.txt");
+                                File.WriteAllText(tagsFile, hitomiTags);
+                            }
+                            catch { }
+
+                            _ = RunOnUiAsync(() =>
+                            {
+                                if (string.IsNullOrWhiteSpace(item.PreviewTagsText))
+                                {
+                                    item.PreviewTagsText = hitomiTags;
+                                }
+                            });
+                        }
+
                         if (doc.RootElement.TryGetProperty("files", out var files) && files.GetArrayLength() > 0)
                         {
                             var firstFile = files[0];

@@ -71,6 +71,9 @@
 | Process images while downloading | Xử lý ảnh khi tải |
 | Process Images While Downloading | Xử lý ảnh khi tải |
 | Process and enhance images in-flight while downloading using Image Enhancer settings (Contrast, Sharpness, Saturation, Noise reduction) | Vừa tải vừa xử lý và nâng cấp ảnh (Image Enhancer) theo thiết lập bộ lọc (Tương phản, Độ nét, Màu sắc, Khử nhiễu) trong Tab Công cụ -> Nâng cấp ảnh |
+| Prefix comics with sequence number preserving queue order | Đánh số thứ tự (001., 002., 003...) ở đầu tên truyện khi tải theo đúng thứ tự trong danh sách |
+| Order numbering from | Đánh STT từ |
+| Number comics from | Đánh STT tên truyện từ |
 | AUTO SCROLL TO DOWNLOADING | TỰ CUỘN ĐẾN TRUYỆN ĐANG TẢI |
 | AUTO DELETE COMPLETED | TỰ ĐỘNG XÓA ĐÃ XONG |
 | CANCELLING... | ĐANG HỦY... |

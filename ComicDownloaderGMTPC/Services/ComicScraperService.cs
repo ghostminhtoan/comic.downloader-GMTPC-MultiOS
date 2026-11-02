@@ -3176,6 +3176,57 @@ public class ComicScraperService
         return tags.Count > 0 ? "Tags: " + string.Join(", ", tags) : string.Empty;
     }
 
+    public static string ExtractHitomiTags(JsonElement root)
+    {
+        try
+        {
+            if (root.TryGetProperty("tags", out var tagsProp) && tagsProp.ValueKind == JsonValueKind.Array)
+            {
+                var tagsList = new List<string>();
+                var textInfo = System.Globalization.CultureInfo.InvariantCulture.TextInfo;
+                foreach (var t in tagsProp.EnumerateArray())
+                {
+                    if (t.TryGetProperty("tag", out var tagProp) && tagProp.ValueKind == JsonValueKind.String)
+                    {
+                        string tagName = tagProp.GetString() ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(tagName))
+                        {
+                            tagName = textInfo.ToTitleCase(tagName);
+                            bool isFemale = false;
+                            bool isMale = false;
+
+                            if (t.TryGetProperty("female", out var fProp))
+                            {
+                                if (fProp.ValueKind == JsonValueKind.Number && fProp.TryGetInt32(out int fVal) && fVal == 1) isFemale = true;
+                                else if (fProp.ValueKind == JsonValueKind.String && (fProp.GetString() == "1" || string.Equals(fProp.GetString(), "true", StringComparison.OrdinalIgnoreCase))) isFemale = true;
+                                else if (fProp.ValueKind == JsonValueKind.True) isFemale = true;
+                            }
+
+                            if (!isFemale && t.TryGetProperty("male", out var mProp))
+                            {
+                                if (mProp.ValueKind == JsonValueKind.Number && mProp.TryGetInt32(out int mVal) && mVal == 1) isMale = true;
+                                else if (mProp.ValueKind == JsonValueKind.String && (mProp.GetString() == "1" || string.Equals(mProp.GetString(), "true", StringComparison.OrdinalIgnoreCase))) isMale = true;
+                                else if (mProp.ValueKind == JsonValueKind.True) isMale = true;
+                            }
+
+                            if (isFemale) tagName += " ♀";
+                            else if (isMale) tagName += " ♂";
+
+                            tagsList.Add(tagName);
+                        }
+                    }
+                }
+
+                if (tagsList.Count > 0)
+                {
+                    return "Tags: " + string.Join(", ", tagsList);
+                }
+            }
+        }
+        catch { }
+        return string.Empty;
+    }
+
     private static readonly Regex NavBypassRegex = new(
         @"^(?:" +
         @"(?:đọc\s*(?:từ\s*)?)?(?:chương|chap|tập|chuong|tap)\s*(?:đầu|dau|mới\s*nhất|moi\s*nhat|cuối|cuoi)|" +
@@ -4205,6 +4256,7 @@ public class ComicScraperService
                                 string cUrl = $"https://hitomi.la/galleries/{gId}.html";
                                 string cTitle = $"Hitomi Gallery {gId}";
                                 string cCover = string.Empty;
+                                string cTags = string.Empty;
 
                                 try
                                 {
@@ -4212,6 +4264,7 @@ public class ComicScraperService
                                     if (doc != null)
                                     {
                                         var root = doc.RootElement;
+                                        cTags = ExtractHitomiTags(root);
                                         if (root.TryGetProperty("title", out var tProp) && tProp.ValueKind == JsonValueKind.String)
                                         {
                                             cTitle = tProp.GetString() ?? cTitle;
@@ -4235,6 +4288,7 @@ public class ComicScraperService
                                     Url = cUrl,
                                     Title = CleanTitle(cTitle),
                                     CoverUrl = cCover,
+                                    PreviewTagsText = cTags,
                                     Domain = "hitomi.la",
                                     Status = "Waiting",
                                     StatusMessage = "Sẵn sàng tải"
@@ -5184,6 +5238,7 @@ public class ComicScraperService
 
             item.Title = displayName;
             item.CoverUrl = coverUrl;
+            item.PreviewTagsText = ExtractHitomiTags(root);
             item.TotalChapters = 1;
             item.LatestChapter = totalPages > 0 ? $"{totalPages} Pages" : "Gallery";
             item.Status = "Ready";

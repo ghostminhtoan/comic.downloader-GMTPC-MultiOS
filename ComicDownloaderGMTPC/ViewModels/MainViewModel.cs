@@ -383,6 +383,15 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [ObservableProperty]
+    private int _orderPrefixStartIndex = 1;
+
+    partial void OnOrderPrefixStartIndexChanged(int value)
+    {
+        if (value < 1) value = 1;
+        _downloadEngine.OrderPrefixStartIndex = value;
+    }
+
+    [ObservableProperty]
     private bool _isAutoProcessImages = false;
 
     partial void OnIsAutoProcessImagesChanged(bool value)
@@ -1630,6 +1639,7 @@ public partial class MainViewModel : ViewModelBase
             }
         };
         _downloadEngine.AddOrderPrefixToTitle = IsAddOrderPrefix;
+        _downloadEngine.OrderPrefixStartIndex = OrderPrefixStartIndex;
         _downloadEngine.GetImageEnhancerOptions = GetDownloadImageEnhancerOptions;
         _downloadEngine.AutoProcessImages = IsAutoProcessImages;
         _langService.LanguageChanged += OnLanguageChanged;
