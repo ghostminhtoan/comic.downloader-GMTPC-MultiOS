@@ -319,6 +319,101 @@ public partial class ComicBookItem : ObservableObject
         }
     }
 
+    #region Fast Search Index Cache
+    private string? _normalizedSearchIndex;
+    private string? _normalizedTitle;
+    private string? _normalizedUrl;
+    private string? _normalizedTags;
+
+    public void InvalidateSearchIndex()
+    {
+        _normalizedSearchIndex = null;
+        _normalizedTitle = null;
+        _normalizedUrl = null;
+        _normalizedTags = null;
+    }
+
+    public string GetNormalizedSearchIndex()
+    {
+        if (_normalizedSearchIndex == null)
+        {
+            BuildSearchIndex();
+        }
+        return _normalizedSearchIndex!;
+    }
+
+    public string GetNormalizedTitle()
+    {
+        if (_normalizedTitle == null) BuildSearchIndex();
+        return _normalizedTitle!;
+    }
+
+    public string GetNormalizedUrl()
+    {
+        if (_normalizedUrl == null) BuildSearchIndex();
+        return _normalizedUrl!;
+    }
+
+    public string GetNormalizedTags()
+    {
+        if (_normalizedTags == null) BuildSearchIndex();
+        return _normalizedTags!;
+    }
+
+    private void BuildSearchIndex()
+    {
+        _normalizedTitle = RemoveDiacriticsFast(Title).ToLowerInvariant();
+        _normalizedUrl = (Url ?? string.Empty).ToLowerInvariant();
+        _normalizedTags = RemoveDiacriticsFast(PreviewTagsText).ToLowerInvariant();
+        string missing = RemoveDiacriticsFast(MissingChapters).ToLowerInvariant();
+        string status = RemoveDiacriticsFast(Status).ToLowerInvariant();
+        string progress = RemoveDiacriticsFast(DetailProgressText).ToLowerInvariant();
+        string chapSel = RemoveDiacriticsFast(ChapterSelectionText).ToLowerInvariant();
+
+        _normalizedSearchIndex = $"{_normalizedTitle} {_normalizedUrl} {_normalizedTags} {missing} {status} {progress} {chapSel}";
+    }
+
+    public static string RemoveDiacriticsFast(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+
+        bool hasNonAscii = false;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] >= 128)
+            {
+                hasNonAscii = true;
+                break;
+            }
+        }
+        if (!hasNonAscii) return text;
+
+        var normalizedString = text.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder(normalizedString.Length);
+
+        for (int i = 0; i < normalizedString.Length; i++)
+        {
+            char c = normalizedString[i];
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                if (c == 'đ') sb.Append('d');
+                else if (c == 'Đ') sb.Append('D');
+                else sb.Append(c);
+            }
+        }
+
+        return sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
+    }
+
+    partial void OnTitleChanged(string value) => InvalidateSearchIndex();
+    partial void OnUrlChanged(string value) => InvalidateSearchIndex();
+    partial void OnPreviewTagsTextChanged(string value) => InvalidateSearchIndex();
+    partial void OnMissingChaptersChanged(string value) => InvalidateSearchIndex();
+    partial void OnStatusChanged(string value) => InvalidateSearchIndex();
+    partial void OnDetailProgressTextChanged(string value) => InvalidateSearchIndex();
+    partial void OnChapterSelectionTextChanged(string value) => InvalidateSearchIndex();
+    #endregion
+
     public void RestoreDownloadProgress()
     {
         if (TotalChapters > 0)
