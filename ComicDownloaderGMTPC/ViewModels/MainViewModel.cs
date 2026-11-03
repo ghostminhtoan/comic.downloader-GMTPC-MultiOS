@@ -297,6 +297,11 @@ public partial class MainViewModel : ViewModelBase
         QueueBackupService.Instance.CurrentOrderPrefixStartIndex = OrderPrefixStartIndex;
         QueueBackupService.Instance.CurrentEnhanceOutputFormat = EnhanceOutputFormat;
         QueueBackupService.Instance.CurrentEnhanceQuality = EnhanceQuality;
+        QueueBackupService.Instance.CurrentEnhanceContrast = EnhanceContrast;
+        QueueBackupService.Instance.CurrentEnhanceBrightness = EnhanceBrightness;
+        QueueBackupService.Instance.CurrentEnhanceSaturation = EnhanceSaturation;
+        QueueBackupService.Instance.CurrentEnhanceSharpness = EnhanceSharpness;
+        QueueBackupService.Instance.CurrentEnhanceNoiseReduce = EnhanceNoiseReduce;
     }
 
     // AUTO PASTE CLIPBOARD MONITORING
@@ -1018,6 +1023,7 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsEnhanceFormatGif));
         OnPropertyChanged(nameof(IsEnhanceFormatWebp));
         OnPropertyChanged(nameof(DownloadEnhanceFormatIndex));
+        OnPropertyChanged(nameof(EnhanceFilterSummaryText));
         QueueBackupService.Instance.CurrentEnhanceOutputFormat = value;
         RequestQueueAutoSave(250);
         TriggerLivePreviewDebounced();
@@ -1341,15 +1347,62 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private ObservableCollection<string> _enhanceLogs = new();
 
-    partial void OnEnhanceContrastChanged(float value) => TriggerLivePreviewDebounced();
-    partial void OnEnhanceBrightnessChanged(float value) => TriggerLivePreviewDebounced();
-    partial void OnEnhanceSaturationChanged(float value) => TriggerLivePreviewDebounced();
-    partial void OnEnhanceSharpnessChanged(float value) => TriggerLivePreviewDebounced();
-    partial void OnEnhanceNoiseReduceChanged(int value) => TriggerLivePreviewDebounced();
+    public string EnhanceFilterSummaryText
+    {
+        get
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            if (Math.Abs(EnhanceContrast) > 0.01f) parts.Add($"Tương phản: {(EnhanceContrast > 0 ? "+" : "")}{EnhanceContrast:0}");
+            if (Math.Abs(EnhanceBrightness) > 0.01f) parts.Add($"Sáng: {(EnhanceBrightness > 0 ? "+" : "")}{EnhanceBrightness:0}");
+            if (Math.Abs(EnhanceSaturation - 100f) > 0.01f) parts.Add($"Bão hòa: {EnhanceSaturation:0}%");
+            if (EnhanceSharpness > 0.01f) parts.Add($"Nét: {EnhanceSharpness:0.0}");
+            if (EnhanceNoiseReduce > 0) parts.Add($"Khử nhiễu: {EnhanceNoiseReduce}");
+
+            if (parts.Count == 0) return "Bộ lọc: Mặc định";
+            return "Bộ lọc: " + string.Join(", ", parts);
+        }
+    }
+
+    partial void OnEnhanceContrastChanged(float value)
+    {
+        QueueBackupService.Instance.CurrentEnhanceContrast = value;
+        RequestQueueAutoSave(250);
+        OnPropertyChanged(nameof(EnhanceFilterSummaryText));
+        TriggerLivePreviewDebounced();
+    }
+    partial void OnEnhanceBrightnessChanged(float value)
+    {
+        QueueBackupService.Instance.CurrentEnhanceBrightness = value;
+        RequestQueueAutoSave(250);
+        OnPropertyChanged(nameof(EnhanceFilterSummaryText));
+        TriggerLivePreviewDebounced();
+    }
+    partial void OnEnhanceSaturationChanged(float value)
+    {
+        QueueBackupService.Instance.CurrentEnhanceSaturation = value;
+        RequestQueueAutoSave(250);
+        OnPropertyChanged(nameof(EnhanceFilterSummaryText));
+        TriggerLivePreviewDebounced();
+    }
+    partial void OnEnhanceSharpnessChanged(float value)
+    {
+        QueueBackupService.Instance.CurrentEnhanceSharpness = value;
+        RequestQueueAutoSave(250);
+        OnPropertyChanged(nameof(EnhanceFilterSummaryText));
+        TriggerLivePreviewDebounced();
+    }
+    partial void OnEnhanceNoiseReduceChanged(int value)
+    {
+        QueueBackupService.Instance.CurrentEnhanceNoiseReduce = value;
+        RequestQueueAutoSave(250);
+        OnPropertyChanged(nameof(EnhanceFilterSummaryText));
+        TriggerLivePreviewDebounced();
+    }
     partial void OnEnhanceQualityChanged(int value)
     {
         QueueBackupService.Instance.CurrentEnhanceQuality = value;
         RequestQueueAutoSave(250);
+        OnPropertyChanged(nameof(EnhanceFilterSummaryText));
         TriggerLivePreviewDebounced();
     }
 
@@ -2122,6 +2175,11 @@ public partial class MainViewModel : ViewModelBase
         {
             EnhanceQuality = restoreResult.EnhanceQuality.Value;
         }
+        if (restoreResult.EnhanceContrast.HasValue) EnhanceContrast = restoreResult.EnhanceContrast.Value;
+        if (restoreResult.EnhanceBrightness.HasValue) EnhanceBrightness = restoreResult.EnhanceBrightness.Value;
+        if (restoreResult.EnhanceSaturation.HasValue) EnhanceSaturation = restoreResult.EnhanceSaturation.Value;
+        if (restoreResult.EnhanceSharpness.HasValue) EnhanceSharpness = restoreResult.EnhanceSharpness.Value;
+        if (restoreResult.EnhanceNoiseReduce.HasValue) EnhanceNoiseReduce = restoreResult.EnhanceNoiseReduce.Value;
 
         SyncAutoSaveSettingsToService();
     }

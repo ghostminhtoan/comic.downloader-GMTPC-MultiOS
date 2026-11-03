@@ -2251,6 +2251,33 @@ public class DownloadEngineService
                                 bool downloaded = false;
                                 if (isExistingValid)
                                 {
+                                    // Nếu file đã tồn tại hợp lệ nhưng người dùng bật "Xử lý ảnh khi tải",
+                                    // kiểm tra xem file đã được nâng cấp sang định dạng đích mong muốn (hoặc tối ưu nén) chưa:
+                                    if (AutoProcessImages && foundValidFile != null && File.Exists(foundValidFile))
+                                    {
+                                        try
+                                        {
+                                            var options = GetImageEnhancerOptions?.Invoke() ?? new ImageEnhancerOptions { OverwriteOriginal = true, OutputFormat = "original" };
+                                            string expectedTargetExt = ImageEnhancerService.GetTargetExtension(foundValidFile, options.OutputFormat);
+                                            string currentExt = Path.GetExtension(foundValidFile).ToLowerInvariant();
+
+                                            bool needsEnhance = !string.Equals(currentExt, expectedTargetExt, StringComparison.OrdinalIgnoreCase);
+                                            if (needsEnhance)
+                                            {
+                                                bool enhanced = ImageEnhancerService.TryEnhanceImageFile(foundValidFile, options, out string finalEnhancedPath);
+                                                if (enhanced)
+                                                {
+                                                    string fmtLabel = string.IsNullOrWhiteSpace(options.OutputFormat) ? "ORIGINAL" : options.OutputFormat.ToUpperInvariant();
+                                                    LogEmitted?.Invoke("INFO", $"[Xử lý ảnh có sẵn] Đã nâng cấp '{Path.GetFileName(foundValidFile)}' -> '{Path.GetFileName(finalEnhancedPath)}' ({fmtLabel}, Q:{options.Quality})");
+                                                }
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            LogEmitted?.Invoke("WARN", $"[Xử lý ảnh có sẵn] Lỗi tối ưu '{Path.GetFileName(foundValidFile)}': {ex.Message}");
+                                        }
+                                    }
+
                                     downloaded = true;
                                 }
                                 else
@@ -3315,7 +3342,7 @@ public class DownloadEngineService
                             if (enhanced)
                             {
                                 string fmtLabel = string.IsNullOrWhiteSpace(options.OutputFormat) ? "ORIGINAL" : options.OutputFormat.ToUpperInvariant();
-                                LogEmitted?.Invoke("INFO", $"[Xử lý ảnh khi tải] Đã tối ưu ảnh '{Path.GetFileName(finalEnhancedPath)}' ({fmtLabel}, Q:{options.Quality})");
+                                LogEmitted?.Invoke("INFO", $"[Xử lý ảnh khi tải] Đã tối ưu '{Path.GetFileName(destinationPath)}' -> '{Path.GetFileName(finalEnhancedPath)}' ({fmtLabel}, Q:{options.Quality}, Contrast:{options.Contrast:+0;-0;0}, Bright:{options.Brightness:+0;-0;0})");
                             }
                         }
                         catch (Exception ex)
@@ -3384,7 +3411,12 @@ public class DownloadEngineService
                                 try
                                 {
                                     var options = GetImageEnhancerOptions?.Invoke() ?? new ImageEnhancerOptions { OverwriteOriginal = true, OutputFormat = "original" };
-                                    ImageEnhancerService.TryEnhanceImageFile(safeFallbackPath, options);
+                                    bool enhanced = ImageEnhancerService.TryEnhanceImageFile(safeFallbackPath, options, out string finalEnhancedPath);
+                                    if (enhanced)
+                                    {
+                                        string fmtLabel = string.IsNullOrWhiteSpace(options.OutputFormat) ? "ORIGINAL" : options.OutputFormat.ToUpperInvariant();
+                                        LogEmitted?.Invoke("INFO", $"[Xử lý ảnh khi tải] Đã tối ưu '{Path.GetFileName(safeFallbackPath)}' -> '{Path.GetFileName(finalEnhancedPath)}' ({fmtLabel}, Q:{options.Quality})");
+                                    }
                                 }
                                 catch { }
                             }

@@ -3429,6 +3429,8 @@
                                                 <Button Command="{Binding OpenEnhanceSettingsTabCommand}" Background="#831843" Foreground="#F472B6" FontSize="10" FontWeight="Bold" Padding="6,2" Height="22" CornerRadius="3" VerticalAlignment="Center" ToolTip.Tip="Mở tab Công cụ -> Nâng cấp ảnh để chỉnh chuyên sâu bộ lọc (Tương phản, Độ sáng, Bão hòa, Khử nhiễu, Presets)">
                                                     <TextBlock Text="⚙️ Bộ lọc" />
                                                 </Button>
+
+                                                <TextBlock Text="{Binding EnhanceFilterSummaryText}" FontSize="9.5" Foreground="#34D399" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0,2,0" ToolTip.Tip="Thông số bộ lọc hình ảnh đang được đồng bộ và áp dụng trực tiếp từ Tab Công cụ -> Xử lý ảnh" />
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -5832,8 +5834,8 @@
 
 
                                             <!-- Hàng 3: Bộ thông số tinh chỉnh (Chuẩn bố cục XnConvert: Slider ngang mỏng, NumericUpDown 3-digit nhỏ gọn, Nút Reset riêng ↺) -->
-                                            <!-- Căn lề phải Margin="0,0,24,0" cách ly thanh cuộn ScrollBar chống chạm nhầm khi bấm mũi tên tăng giảm -->
-                                            <UniformGrid Columns="{Binding EnhanceDualColumns}" HorizontalAlignment="Stretch" Margin="0,0,24,0">
+                                            <!-- Căn lề phải Margin="0,0,32,0" cách ly thanh cuộn ScrollBar chống chạm nhầm khi bấm mũi tên tăng giảm -->
+                                            <UniformGrid Columns="{Binding EnhanceDualColumns}" HorizontalAlignment="Stretch" Margin="0,0,32,0">
 
                                                 <UniformGrid.Resources>
 

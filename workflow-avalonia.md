@@ -786,3 +786,20 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
     + Tự động đồng bộ 2 chiều và lưu/phục hồi qua `autosave.md`.
 - **Căn Lề Phải Mũi Tên Tăng Giảm Slider Chống Chạm Nhầm Scroll Trên Android**:
   - Tại Tab Công cụ -> Xử lý ảnh (`MainView.axaml`): Thêm `Margin="0,0,24,0"` cho `UniformGrid` chứa 7 thanh trượt và các nút spinner mũi tên lên/xuống (`NumericUpDown`), tạo khoảng đệm an toàn > 24px cách ly hoàn toàn với ScrollBar và viền vuốt cuộn của Android, giúp thao tác bấm ngón tay chuẩn xác 100% không bị nhầm thành scroll.
+
+### 62. Đồng Bộ Hóa Toàn Diện 100% Giữa Tab Xử Lý Ảnh Và Tab Download (Bi-Directional Sync, Autosave Persistence & In-Place Enhancement)
+- **Root Cause Phức Hợp Khiến Tab Xử Lý Ảnh Không Tác Động Lên Tab Download**:
+  1. *Lỗi Bỏ Qua Tối Ưu Cho File Đã Tồn Tại Khi Tải Lại / Thử Lại*:
+     - Trước đó trong `DownloadEngineService.cs`, khi `isExistingValid == true` (file cũ `.webp` đã nằm sẵn trong thư mục do tải từ trước khi chưa bật tính năng hoặc tải lần 1), engine coi như trang đã hoàn thành (`downloaded = true`) và BỎ QUA HOÀN TOÀN, không hề gọi `DownloadImageWithRetryAsync` hay `TryEnhanceImageFile`.
+     - Kết quả: Khi người dùng vào Tab Xử lý ảnh chọn JPG, chỉnh tương phản/độ sáng, rồi quay lại Tab Download tick "Xử lý ảnh khi tải" và bấm tải lại, file cũ vẫn giữ nguyên định dạng `.webp` và dung lượng cũ hàng trăm KB!
+     - *Khắc phục*: Trong `DownloadImagesParallelAsync`, bổ sung cơ chế kiểm tra chủ động: Khi `isExistingValid == true` VÀ `AutoProcessImages == true`, nếu file trên đĩa chưa đúng định dạng đích mong muốn (ví dụ đang là `.webp` mà cấu hình chọn `jpg`), engine lập tức kích hoạt `ImageEnhancerService.TryEnhanceImageFile` để chuyển đổi và tối ưu nén file cũ thành `.jpg` tại chỗ, cập nhật manifest và xóa file cũ an toàn.
+  2. *Thiếu Khôi Phục & Đồng Bộ Autosave Cho Toàn Bộ Thông Số Bộ Lọc*:
+     - Khi người dùng điều chỉnh Tương phản, Độ sáng, Bão hòa, Độ nét, Khử nhiễu ở Tab Xử lý ảnh, các hàm `OnEnhance...Changed` chỉ kích hoạt xem trước debounced mà không lưu vào `QueueBackupService` và không gọi `RequestQueueAutoSave`.
+     - Trong `ApplyRestoredQueueSettings` và `SyncAutoSaveSettingsToService`, chỉ có `EnhanceOutputFormat` và `EnhanceQuality` được xử lý; các biến `EnhanceContrast`, `EnhanceBrightness`, `EnhanceSaturation`, `EnhanceSharpness`, `EnhanceNoiseReduce` hoàn toàn bị bỏ quên khiến mọi thiết lập bị reset về mặc định khi tắt mở lại app.
+     - *Khắc phục*: Đồng bộ 2 chiều toàn bộ 7 thông số vào `QueueBackupService.Instance`, lưu tự động ngay lập tức vào `save gallery.md` (autosave), và khôi phục vẹn nguyên 100% khi khởi động lại ứng dụng.
+  3. *Thiếu Phản Hồi Trực Quan Giữa Hai Tab*:
+     - Bổ sung thuộc tính `EnhanceFilterSummaryText` và TextBlock tóm tắt trực quan màu xanh ngọc ngay bên cạnh cụm tuỳ chọn của Tab Download:
+       Ví dụ: `Bộ lọc: Tương phản +10, Sáng -6, Bão hòa 125%`.
+       Mọi thay đổi từ Tab Xử lý ảnh (thanh trượt, presets Webtoon, Khử ố, reset) lập tức hiển thị sống động trên Tab Download.
+  4. *Căn Lề An Toàn Tuyệt Đối Trên Android*:
+     - Tăng lề phải của `UniformGrid` bộ điều khiển từ `24px` lên `32px` (`Margin="0,0,32,0"`) tạo khoảng đệm an toàn tuyệt đối chống chạm nhầm cử chỉ vuốt cuộn màn hình mép phải trên điện thoại Android.
