@@ -1639,15 +1639,28 @@ public class DownloadEngineService
 
         if (AddOrderPrefixToTitle)
         {
-            var matchPrefix = System.Text.RegularExpressions.Regex.Match(book.Title, @"^(\d{1,5})[\.\s\-_]");
-            if (!matchPrefix.Success)
+            int baseIndex = book.Index > 0 ? book.Index : 1;
+            int startIdx = OrderPrefixStartIndex > 0 ? OrderPrefixStartIndex : 1;
+            int orderNumber = (baseIndex - 1) + startIdx;
+
+            // Bao toan RawTitle tuyet doi cho truyen bat dau bang so (vd: 100 Kanojo, 300 Spartans, 86...)
+            if (string.IsNullOrWhiteSpace(book.RawTitle))
             {
-                int baseIndex = book.Index > 0 ? book.Index : 1;
-                int startIdx = OrderPrefixStartIndex > 0 ? OrderPrefixStartIndex : 1;
-                int orderNumber = (baseIndex - 1) + startIdx;
-                string prefix = $"{orderNumber:D3}. ";
-                book.Title = $"{prefix}{book.Title}";
+                book.RawTitle = book.Title;
             }
+
+            string baseTitle = !string.IsNullOrWhiteSpace(book.RawTitle) ? book.RawTitle : book.Title;
+            string prefix = $"{orderNumber:D3}. ";
+
+            book.HasOrderPrefixApplied = true;
+            book.AppliedOrderNumber = orderNumber;
+            book.Title = $"{prefix}{baseTitle}";
+        }
+        else if (book.HasOrderPrefixApplied && !string.IsNullOrWhiteSpace(book.RawTitle))
+        {
+            book.Title = book.RawTitle;
+            book.HasOrderPrefixApplied = false;
+            book.AppliedOrderNumber = 0;
         }
 
 

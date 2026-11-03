@@ -22,6 +22,15 @@ public partial class ComicBookItem : ObservableObject
     private string _title = string.Empty;
 
     [ObservableProperty]
+    private string _rawTitle = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasOrderPrefixApplied = false;
+
+    [ObservableProperty]
+    private int _appliedOrderNumber = 0;
+
+    [ObservableProperty]
     private string _url = string.Empty;
 
     [ObservableProperty]
@@ -445,7 +454,14 @@ public partial class ComicBookItem : ObservableObject
         return sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
     }
 
-    partial void OnTitleChanged(string value) => InvalidateSearchIndex();
+    partial void OnTitleChanged(string value)
+    {
+        if (!HasOrderPrefixApplied && !string.IsNullOrEmpty(value))
+        {
+            RawTitle = value;
+        }
+        InvalidateSearchIndex();
+    }
     partial void OnUrlChanged(string value) => InvalidateSearchIndex();
     partial void OnPreviewTagsTextChanged(string value) => InvalidateSearchIndex();
     partial void OnPreviewLanguageChanged(string value) => InvalidateSearchIndex();

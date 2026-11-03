@@ -19,6 +19,9 @@ public class QueueMarkdownPayload
     public int? ConcurrentComicDownloads { get; set; }
     public int? ImageDownloadThreads { get; set; }
     public int? LinkCpuThreads { get; set; }
+    public bool? AutoProcessImages { get; set; }
+    public bool? AddOrderPrefixToTitle { get; set; }
+    public int? OrderPrefixStartIndex { get; set; }
     public List<ComicBookItemSnapshot> Items { get; set; } = new();
 }
 
@@ -29,6 +32,9 @@ public class QueueRestoreResult
     public int? ConcurrentComicDownloads { get; set; }
     public int? ImageDownloadThreads { get; set; }
     public int? LinkCpuThreads { get; set; }
+    public bool? AutoProcessImages { get; set; }
+    public bool? AddOrderPrefixToTitle { get; set; }
+    public int? OrderPrefixStartIndex { get; set; }
     public bool HasValidStructure { get; set; }
 }
 
@@ -38,6 +44,9 @@ public class ComicBookItemSnapshot
     public int OriginalIndex { get; set; }
     public bool IsChecked { get; set; } = true;
     public string Title { get; set; } = string.Empty;
+    public string RawTitle { get; set; } = string.Empty;
+    public bool HasOrderPrefixApplied { get; set; }
+    public int AppliedOrderNumber { get; set; }
     public string Url { get; set; } = string.Empty;
     public string Domain { get; set; } = string.Empty;
     public int TotalChapters { get; set; }
@@ -113,6 +122,9 @@ public class QueueBackupService
     public int CurrentLinkCpuThreads { get; set; } = OperatingSystem.IsAndroid()
         ? 3
         : Math.Min(4, CpuTopologyHelper.GetMaxLogicalProcessorCount());
+    public bool CurrentIsAutoProcessImages { get; set; } = false;
+    public bool CurrentIsAddOrderPrefix { get; set; } = false;
+    public int CurrentOrderPrefixStartIndex { get; set; } = 1;
 
     private static readonly object _migrationLock = new object();
     private static bool _migrationExecuted = false;
@@ -516,6 +528,9 @@ public class QueueBackupService
             OriginalIndex = item.OriginalIndex > 0 ? item.OriginalIndex : index,
             IsChecked = item.IsChecked,
             Title = item.Title ?? string.Empty,
+            RawTitle = item.RawTitle ?? string.Empty,
+            HasOrderPrefixApplied = item.HasOrderPrefixApplied,
+            AppliedOrderNumber = item.AppliedOrderNumber,
             Url = item.Url ?? string.Empty,
             Domain = item.Domain ?? string.Empty,
             TotalChapters = item.TotalChapters,
@@ -587,7 +602,9 @@ public class QueueBackupService
         var sb = new StringBuilder();
         sb.AppendLine("# COMIC DOWNLOADER GMTPC - BACKUP QUEUE");
         sb.AppendLine($"> Thời gian sao lưu: {DateTime.Now:yyyy-MM-dd HH:mm:ss} | Hệ điều hành: {Environment.OSVersion.Platform}");
-        sb.AppendLine($"> Cấu hình tải: Số truyện cùng lúc: {concurrentComics} | Connection tải ảnh: {imageConnections} | Số luồng CPU: {linkCpuThreads}");
+        string autoProcText = CurrentIsAutoProcessImages ? "BẬT" : "TẮT";
+        string prefixText = CurrentIsAddOrderPrefix ? $"BẬT (từ {CurrentOrderPrefixStartIndex})" : "TẮT";
+        sb.AppendLine($"> Cấu hình tải: Số truyện cùng lúc: {concurrentComics} | Connection tải ảnh: {imageConnections} | Số luồng CPU: {linkCpuThreads} | Xử lý ảnh: {autoProcText} | Đánh STT: {prefixText}");
         sb.AppendLine();
         sb.AppendLine("| STT | Tên Truyện | Nguồn / URL | Trạng Thái | Tiến Độ | Chương Đang Tải | Trang Đang Tải | Chọn Chap | Subfolder | Thư Mục Lưu |");
         sb.AppendLine("| :---: | :--- | :--- | :---: | :---: | :--- | :--- | :--- | :--- | :--- |");
@@ -619,6 +636,9 @@ public class QueueBackupService
             ConcurrentComicDownloads = concurrentComics,
             ImageDownloadThreads = imageConnections,
             LinkCpuThreads = linkCpuThreads,
+            AutoProcessImages = CurrentIsAutoProcessImages,
+            AddOrderPrefixToTitle = CurrentIsAddOrderPrefix,
+            OrderPrefixStartIndex = CurrentOrderPrefixStartIndex,
             Items = snapshots
         };
 
@@ -828,6 +848,26 @@ public class QueueBackupService
             restoreResult.HasValidStructure = true;
         }
 
+        var mAutoProc = System.Text.RegularExpressions.Regex.Match(content, @"Xử lý ảnh:\s*(BẬT|TẮT|ON|OFF)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mAutoProc.Success)
+        {
+            string val = mAutoProc.Groups[1].Value.ToUpperInvariant();
+            restoreResult.AutoProcessImages = val == "BẬT" || val == "ON";
+            restoreResult.HasValidStructure = true;
+        }
+
+        var mPrefix = System.Text.RegularExpressions.Regex.Match(content, @"Đánh STT:\s*(?:BẬT\s*(?:\(từ\s*(\d+)\))?|TẮT|ON|OFF)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mPrefix.Success)
+        {
+            string raw = mPrefix.Value.ToUpperInvariant();
+            restoreResult.AddOrderPrefixToTitle = raw.Contains("BẬT") || raw.Contains("ON");
+            if (mPrefix.Groups[1].Success && int.TryParse(mPrefix.Groups[1].Value, out int sttFrom))
+            {
+                restoreResult.OrderPrefixStartIndex = sttFrom;
+            }
+            restoreResult.HasValidStructure = true;
+        }
+
         // 1. Ưu tiên đọc từ khối JSON Full Queue State Snapshot
         var payload = TryParseJsonPayload(content);
         if (payload != null)
@@ -844,6 +884,18 @@ public class QueueBackupService
             if (payload.LinkCpuThreads.HasValue && payload.LinkCpuThreads.Value > 0)
             {
                 restoreResult.LinkCpuThreads = payload.LinkCpuThreads.Value;
+            }
+            if (payload.AutoProcessImages.HasValue)
+            {
+                restoreResult.AutoProcessImages = payload.AutoProcessImages.Value;
+            }
+            if (payload.AddOrderPrefixToTitle.HasValue)
+            {
+                restoreResult.AddOrderPrefixToTitle = payload.AddOrderPrefixToTitle.Value;
+            }
+            if (payload.OrderPrefixStartIndex.HasValue && payload.OrderPrefixStartIndex.Value > 0)
+            {
+                restoreResult.OrderPrefixStartIndex = payload.OrderPrefixStartIndex.Value;
             }
 
             if (payload.Items != null)
@@ -1016,6 +1068,9 @@ public class QueueBackupService
             OriginalIndex = snap.OriginalIndex > 0 ? snap.OriginalIndex : index,
             IsChecked = snap.IsChecked,
             Title = string.IsNullOrWhiteSpace(snap.Title) ? "Truyện phục hồi" : snap.Title,
+            RawTitle = snap.RawTitle ?? string.Empty,
+            HasOrderPrefixApplied = snap.HasOrderPrefixApplied,
+            AppliedOrderNumber = snap.AppliedOrderNumber,
             Url = snap.Url,
             Domain = !string.IsNullOrWhiteSpace(snap.Domain) ? snap.Domain : DomainRoutingService.DetectDomain(snap.Url),
             TotalChapters = snap.TotalChapters,

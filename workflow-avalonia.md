@@ -672,3 +672,26 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Thiết lập `MinWidth="105"` toàn cục cho `NumericUpDown` tại `App.axaml` làm tấm khiên bảo vệ toàn hệ thống: Bất kỳ control nào được thêm mới cũng không bao giờ bị bẹp dưới 105px.
   + Chuẩn hóa ô nhập STT `OrderPrefixStartIndex`: Đặt `Width="115" Height="28"` với font chữ SemiBold Cyan `#38BDF8`, đảm bảo vùng text hiển thị số luôn rộng trên 65px (thoải mái chứa 3-4 chữ số như `001`, `999`, `1000` căn giữa hoàn hảo). Tổng kích thước cả cụm Border là ~315px, hoàn toàn vừa khít màn hình dọc Android 360px và Windows 1366x768 mà không bị tràn viền.
   + Rà soát và nâng cấp toàn bộ các ô `NumericUpDown` và `TextBox` đang bị hẹp trên toàn app (`FolderToolThreads`: 95 -> 110px, Rename Tool `StartNumber`: 90 -> 110px, `Step`/`ZeroPadding`: 80 -> 105px, Alphabet Range: 80 -> 105px, Preset Names: 56/65 -> 85px).
+
+### 55. Khắc Phục Lỗi Bỏ Qua Đánh STT Cho Truyện Bắt Đầu Bằng Số (Numeric Title Prefix Preservation)
+- **Root Cause**: Trước đó code dùng Regex `^(\d{1,5})[\.\s\-_]` để kiểm tra xem truyện đã có prefix chưa. Tuy nhiên, các truyện có tên gốc bắt đầu bằng số (ví dụ: `100 Kanojo`, `300 Spartans`, `1984`, `86`, `2.5 Cảnh Giới`, `1. One Piece`...) đều bị regex match nhầm là "đã có prefix", dẫn đến việc engine bỏ qua hoàn toàn không đánh STT cho những truyện này.
+- **Giải Pháp Triệt Để (First-Principles Engineering Rigor)**:
+  + Loại bỏ hoàn toàn việc dùng regex phỏng đoán tên truyện.
+  + Thêm thuộc tính `RawTitle`, `HasOrderPrefixApplied`, `AppliedOrderNumber` vào `ComicBookItem` và snapshot backup của `QueueBackupService`.
+  + Tự động đồng bộ `RawTitle = Title` bất cứ khi nào tên gốc thay đổi khi chưa áp dụng prefix (`OnTitleChanged`).
+  + Khi đánh STT (`DownloadBookAsync`): Luôn lấy `RawTitle` làm gốc, gán `Title = $"{prefix}{RawTitle}"` và bật `HasOrderPrefixApplied = true`. Bất kể tên truyện bắt đầu bằng số hay chữ, STT luôn được đánh chuẩn xác tuyệt đối `001. 100 Kanojo`, `002. 300 Spartans`.
+  + Khi retry/tải lại nhiều lần: `RawTitle` được bảo vệ nguyên vẹn, không bao giờ bị nhân đôi tiền tố (`001. 001. ...`).
+  + Khi thay đổi `OrderPrefixStartIndex`: Tự động cập nhật STT mới từ số đã chọn. Khi tắt tính năng, tự động hoàn trả lại `RawTitle` gốc ban đầu.
+
+### 56. Tự Động Đánh STT Trên Hàng Chờ & Lưu Trữ Cấu Hình Xử Lý Ảnh Qua Autosave
+- **Tự Động Đánh STT Trực Tiếp Trên Giao Diện (Live Queue Auto-Prefixing)**:
+  + Thêm cơ chế `ApplyOrderPrefixToQueue(bool enable, int startIdx)` trong `MainViewModel`: Khi người dùng bật checkbox "Đánh STT tên truyện" hoặc tăng/giảm số bắt đầu `OrderPrefixStartIndex`, toàn bộ danh sách truyện trong hàng chờ tự động cập nhật STT tức thì (`001. ...`, `002. ...`), không cần chờ đến lúc bấm tải.
+  + Khi tắt tính năng: Tự động hoàn trả 100% tên truyện về tên gốc ban đầu (`RawTitle`).
+  + Khi đảo ngược danh sách hoặc thêm truyện mới: `ReindexComicBooks()` tự động đồng bộ STT mới theo vị trí chuẩn xác trong hàng chờ.
+  + Khắc phục triệt để lỗi bỏ qua truyện bắt đầu bằng số (ví dụ: `100 Kanojo`, `300 Spartans`, `1984`...): Không dùng Regex nhận diện tiền tố, luôn sử dụng `RawTitle` làm gốc, gán `Title = $"{prefix}{baseTitle}"` tất định 100%.
+- **Lưu Trữ & Phục Hồi Cấu Hình Xử Lý Ảnh Qua Autosave (Auto-Save Persistence)**:
+  + Mở rộng `QueueBackupService` (cả Markdown Header và JSON Snapshot) để lưu trữ đầy đủ các cờ cấu hình tải:
+    * `IsAutoProcessImages` (Xử lý ảnh trong khi download).
+    * `IsAddOrderPrefix` (Đánh STT tên truyện).
+    * `OrderPrefixStartIndex` (Số thứ tự bắt đầu).
+  + Khi tắt app và mở lại: `ApplyRestoredQueueSettings` tự động khôi phục nguyên vẹn trạng thái của tính năng xử lý ảnh và đánh STT từ phiên làm việc trước thông qua `autosave.md`.

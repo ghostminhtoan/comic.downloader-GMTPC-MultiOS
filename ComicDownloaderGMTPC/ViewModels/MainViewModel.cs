@@ -285,10 +285,16 @@ public partial class MainViewModel : ViewModelBase
         ParallelCheckCount = clampedCpu;
         _downloadEngine.ConcurrentComicDownloads = clampedConcurrent;
         _downloadEngine.ImageDownloadThreads = clampedConnections;
+        _downloadEngine.AutoProcessImages = IsAutoProcessImages;
+        _downloadEngine.AddOrderPrefixToTitle = IsAddOrderPrefix;
+        _downloadEngine.OrderPrefixStartIndex = OrderPrefixStartIndex;
 
         QueueBackupService.Instance.CurrentLinkCpuThreads = clampedCpu;
         QueueBackupService.Instance.CurrentConcurrentComicDownloads = clampedConcurrent;
         QueueBackupService.Instance.CurrentImageDownloadThreads = clampedConnections;
+        QueueBackupService.Instance.CurrentIsAutoProcessImages = IsAutoProcessImages;
+        QueueBackupService.Instance.CurrentIsAddOrderPrefix = IsAddOrderPrefix;
+        QueueBackupService.Instance.CurrentOrderPrefixStartIndex = OrderPrefixStartIndex;
     }
 
     // AUTO PASTE CLIPBOARD MONITORING
@@ -380,6 +386,9 @@ public partial class MainViewModel : ViewModelBase
     partial void OnIsAddOrderPrefixChanged(bool value)
     {
         _downloadEngine.AddOrderPrefixToTitle = value;
+        QueueBackupService.Instance.CurrentIsAddOrderPrefix = value;
+        ApplyOrderPrefixToQueue(value, OrderPrefixStartIndex);
+        RequestQueueAutoSave(250);
     }
 
     [ObservableProperty]
@@ -389,6 +398,12 @@ public partial class MainViewModel : ViewModelBase
     {
         if (value < 1) value = 1;
         _downloadEngine.OrderPrefixStartIndex = value;
+        QueueBackupService.Instance.CurrentOrderPrefixStartIndex = value;
+        if (IsAddOrderPrefix)
+        {
+            ApplyOrderPrefixToQueue(true, value);
+        }
+        RequestQueueAutoSave(250);
     }
 
     [ObservableProperty]
@@ -397,6 +412,45 @@ public partial class MainViewModel : ViewModelBase
     partial void OnIsAutoProcessImagesChanged(bool value)
     {
         _downloadEngine.AutoProcessImages = value;
+        QueueBackupService.Instance.CurrentIsAutoProcessImages = value;
+        RequestQueueAutoSave(250);
+    }
+
+    public void ApplyOrderPrefixToQueue(bool enable, int startIdx)
+    {
+        if (ComicBooks == null || ComicBooks.Count == 0) return;
+
+        int baseIdx = startIdx > 0 ? startIdx : 1;
+        for (int i = 0; i < ComicBooks.Count; i++)
+        {
+            var book = ComicBooks[i];
+            if (book == null || book.IsParallelSplitChild) continue;
+
+            if (enable)
+            {
+                if (string.IsNullOrWhiteSpace(book.RawTitle))
+                {
+                    book.RawTitle = book.Title;
+                }
+
+                string baseTitle = !string.IsNullOrWhiteSpace(book.RawTitle) ? book.RawTitle : book.Title;
+                int orderNumber = i + baseIdx;
+                string prefix = $"{orderNumber:D3}. ";
+
+                book.HasOrderPrefixApplied = true;
+                book.AppliedOrderNumber = orderNumber;
+                book.Title = $"{prefix}{baseTitle}";
+            }
+            else
+            {
+                if (book.HasOrderPrefixApplied && !string.IsNullOrWhiteSpace(book.RawTitle))
+                {
+                    book.Title = book.RawTitle;
+                    book.HasOrderPrefixApplied = false;
+                    book.AppliedOrderNumber = 0;
+                }
+            }
+        }
     }
 
     [ObservableProperty]
@@ -1904,6 +1958,18 @@ public partial class MainViewModel : ViewModelBase
         if (restoreResult.LinkCpuThreads.HasValue && restoreResult.LinkCpuThreads.Value > 0)
         {
             LinkCpuThreads = Math.Clamp(restoreResult.LinkCpuThreads.Value, 1, MaxLinkCpuThreads);
+        }
+        if (restoreResult.AutoProcessImages.HasValue)
+        {
+            IsAutoProcessImages = restoreResult.AutoProcessImages.Value;
+        }
+        if (restoreResult.AddOrderPrefixToTitle.HasValue)
+        {
+            IsAddOrderPrefix = restoreResult.AddOrderPrefixToTitle.Value;
+        }
+        if (restoreResult.OrderPrefixStartIndex.HasValue && restoreResult.OrderPrefixStartIndex.Value > 0)
+        {
+            OrderPrefixStartIndex = restoreResult.OrderPrefixStartIndex.Value;
         }
 
         SyncAutoSaveSettingsToService();
@@ -4028,6 +4094,11 @@ public partial class MainViewModel : ViewModelBase
             {
                 ComicBooks[i].OriginalIndex = i + 1;
             }
+        }
+
+        if (IsAddOrderPrefix)
+        {
+            ApplyOrderPrefixToQueue(true, OrderPrefixStartIndex);
         }
     }
 
