@@ -648,7 +648,7 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - **Bảo Lưu Thứ Tự Danh Sách Hàng Chờ Tuyệt Đối Khi Tải Song Song (Order Prefix Determinism)**:
   + Khắc phục triệt để tình trạng race condition khi nhiều truyện tải đồng thời làm sai lệch số thứ tự prefix (001., 002...).
   + Tính toán số thứ tự tất định dựa trên vị trí chính xác của truyện trong hàng chờ: `(book.Index - 1) + OrderPrefixStartIndex`. Bất kể truyện nào tải xong trước hoặc bắt đầu trước trong 1-16 luồng song song, thứ tự đánh số prefix luôn luôn bảo lưu chính xác tuyệt đối theo thứ tự xuất hiện trong danh sách list.
-  + Thêm ô nhập số bắt đầu `OrderPrefixStartIndex` với `NumericUpDown` (Width 88px, Height 26px, tối ưu TextBox padding 4,0,2,0 rộng rãi thoải mái cho 3-4 chữ số) kèm mũi tên tăng giảm gọn gàng, chứa vừa vặn 3-4 chữ số, bọc trong Border viền Cyberpunk bo góc, không tràn viền trên Android 9:21 (360px) hay Windows 16:9 (1366x768).
+  + Thêm ô nhập số bắt đầu `OrderPrefixStartIndex` với `NumericUpDown` chuẩn mực (Width 115px, Height 28px, vùng text >65px chứa cực kỳ thoải mái 3-4 chữ số '001', '999', '1000' căn giữa sắc nét) kèm mũi tên tăng giảm gọn gàng, bọc trong Border Cyberpunk bo góc, vừa khít 100% màn hình Android 9:21 (360px) và Windows 16:9 (1366x768).
 ### 52. Hiển Thị Đầy Đủ Metadata Type, Language, Artist & Parody Trong Preview Popup
 - **Bóc Tách Toàn Diện Siêu Dữ Liệu Truyện (ExtractHitomiMetadata)**:
   + Tự động trích xuất `Type` (Doujinshi, Manga, Artist CG, Game CG...), `Language` (Japanese, English, Chinese, Vietnamese kèm tên bản địa như 日本語, 中文), `Artist`, `Parody` và `Tags` từ file JSON `galleryinfo` của Hitomi.la và các domain tương ứng.
@@ -665,3 +665,10 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Tối ưu getter `LatestChapterDisplay` trong `ComicBookItem`: Ưu tiên trả về `"{TotalPages} Pages"` khi truyện có số trang xác định (TotalPages > 0), liên kết thông báo `[NotifyPropertyChangedFor(nameof(LatestChapterDisplay))]` khi `TotalPages` thay đổi.
   + Lưu trữ và đồng bộ hóa `totalPages` và `latestChapter` vào file cache `.tmp\preview-cache\<item>\cover.meta.json` để nạp tức thì 0ms.
 
+
+### 54. Tiêu Chuẩn Kích Thước Nhập Liệu & Chống Co Hẹp Toàn Diện (Systemic Input & NumericUpDown Layout Standard)
+- **Giải Pháp Triệt Để Lỗi Co Hẹp Ô Số & TextBox (Root-Cause Elimination)**:
+  + Cụm nút ButtonSpinner tăng/giảm số của Avalonia FluentTheme chiếm tối thiểu 50-55px chiều rộng. Nếu đặt `Width < 100px`, vùng `TextBox` bên trong chỉ còn 15-25px, bị padding và caret nuốt chửng, dẫn đến tình trạng ô số bị bẹp dúm thành 1 khe chỉ thấy mỗi con trỏ dọc `|`.
+  + Thiết lập `MinWidth="105"` toàn cục cho `NumericUpDown` tại `App.axaml` làm tấm khiên bảo vệ toàn hệ thống: Bất kỳ control nào được thêm mới cũng không bao giờ bị bẹp dưới 105px.
+  + Chuẩn hóa ô nhập STT `OrderPrefixStartIndex`: Đặt `Width="115" Height="28"` với font chữ SemiBold Cyan `#38BDF8`, đảm bảo vùng text hiển thị số luôn rộng trên 65px (thoải mái chứa 3-4 chữ số như `001`, `999`, `1000` căn giữa hoàn hảo). Tổng kích thước cả cụm Border là ~315px, hoàn toàn vừa khít màn hình dọc Android 360px và Windows 1366x768 mà không bị tràn viền.
+  + Rà soát và nâng cấp toàn bộ các ô `NumericUpDown` và `TextBox` đang bị hẹp trên toàn app (`FolderToolThreads`: 95 -> 110px, Rename Tool `StartNumber`: 90 -> 110px, `Step`/`ZeroPadding`: 80 -> 105px, Alphabet Range: 80 -> 105px, Preset Names: 56/65 -> 85px).

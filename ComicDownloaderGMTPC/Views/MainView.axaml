@@ -3372,18 +3372,11 @@
 
                                     <CheckBox IsChecked="{Binding IsAutoRetry}" Content="🔁 Tự thử lại" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
 
-                                    <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="5,2" Margin="0,0,8,4" VerticalAlignment="Center">
-                                        <Border.Styles>
-                                            <Style Selector="NumericUpDown /template/ TextBox#PART_TextBox">
-                                                <Setter Property="Padding" Value="4,0,2,0" />
-                                                <Setter Property="FontSize" Value="11" />
-                                                <Setter Property="FontWeight" Value="SemiBold" />
-                                            </Style>
-                                        </Border.Styles>
-                                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                    <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="5" Padding="6,3" Margin="0,0,8,4" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                             <CheckBox IsChecked="{Binding IsAddOrderPrefix}" Content="🔢 Đánh STT tên truyện" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0" ToolTip.Tip="Đánh số thứ tự (001., 002., 003...) ở đầu tên truyện khi tải theo đúng thứ tự trong danh sách" />
-                                            <TextBlock Text="từ:" FontSize="10.5" Foreground="#94A3B8" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,0,0" />
-                                            <NumericUpDown Value="{Binding OrderPrefixStartIndex}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="88" Height="26" FontSize="11" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#334155" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số thứ tự bắt đầu đánh (Mặc định: 1 -> 001., 002...)" />
+                                            <TextBlock Text="từ:" FontSize="11" Foreground="#94A3B8" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,0,0" />
+                                            <NumericUpDown Value="{Binding OrderPrefixStartIndex}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="115" Height="28" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số thứ tự bắt đầu đánh (Mặc định: 1 -> 001., 002...)" />
                                         </StackPanel>
                                     </Border>
 
@@ -5119,7 +5112,7 @@
 
                                                                 <TextBlock Text="Số CPU:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
 
-                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder di chuyển cùng lúc (Mặc định: 20 folder, tối đa theo CPU máy)" />
+                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="110" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder di chuyển cùng lúc (Mặc định: 20 folder, tối đa theo CPU máy)" />
 
                                                                 <TextBlock Text="folder" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
 
@@ -5221,7 +5214,7 @@
 
                                                                 <TextBlock Text="Số CPU:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
 
-                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder di chuyển cùng lúc (Mặc định: 20 folder, tối đa theo CPU máy)" />
+                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="110" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder di chuyển cùng lúc (Mặc định: 20 folder, tối đa theo CPU máy)" />
 
                                                                 <TextBlock Text="folder" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
 
@@ -5239,7 +5232,7 @@
 
                                                                 <TextBlock Text="Dải:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
 
-                                                                <TextBox Text="{Binding NewAlphabetRangeInput}" PlaceholderText="VD: A-C" Width="80" Height="28" FontSize="11" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="6,2" />
+                                                                <TextBox Text="{Binding NewAlphabetRangeInput}" PlaceholderText="VD: A-C" Width="105" Height="28" FontSize="11" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="6,2" />
 
                                                                 <Button Command="{Binding AddAlphabetRangeCommand}" Content="➕ Thêm" Background="#1E293B" Foreground="#38BDF8" FontSize="10" Padding="8,4" CornerRadius="3" />
 
@@ -5365,7 +5358,7 @@
 
                                                                 <TextBlock Text="Số CPU:" Foreground="#E2E8F0" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
 
-                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="95" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder đổi tên cùng lúc (Mặc định: 20 folder)" />
+                                                                <NumericUpDown Value="{Binding FolderToolThreads}" Minimum="1" Maximum="{Binding MaxFolderToolThreads}" Increment="1" FormatString="0" Width="110" Height="28" FontSize="11" Foreground="#10B981" Background="#0B0F19" BorderBrush="#10B981" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số lượng folder đổi tên cùng lúc (Mặc định: 20 folder)" />
 
                                                                 <TextBlock Text="folder" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" />
 
@@ -6421,7 +6414,7 @@
 
                                                         <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,3,2">
 
-                                                            <TextBox Text="{Binding UserPreset1Name}" Width="56" Height="22" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 1" />
+                                                            <TextBox Text="{Binding UserPreset1Name}" Width="85" Height="24" FontSize="10" Padding="5,2" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 1" />
 
                                                             <Button Command="{Binding SaveUserPreset1Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="22" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 1" />
 
@@ -6431,7 +6424,7 @@
 
                                                         <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,3,2">
 
-                                                            <TextBox Text="{Binding UserPreset2Name}" Width="56" Height="22" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 2" />
+                                                            <TextBox Text="{Binding UserPreset2Name}" Width="85" Height="24" FontSize="10" Padding="5,2" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 2" />
 
                                                             <Button Command="{Binding SaveUserPreset2Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="22" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 2" />
 
@@ -6441,7 +6434,7 @@
 
                                                         <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,3,2">
 
-                                                            <TextBox Text="{Binding UserPreset3Name}" Width="56" Height="22" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 3" />
+                                                            <TextBox Text="{Binding UserPreset3Name}" Width="85" Height="24" FontSize="10" Padding="5,2" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 3" />
 
                                                             <Button Command="{Binding SaveUserPreset3Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="22" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 3" />
 
@@ -8109,7 +8102,7 @@
 
                                                                         <TextBlock Text="Bắt đầu từ:" Foreground="#CBD5E1" FontSize="10.5" />
 
-                                                                        <NumericUpDown Value="{Binding ((services:RenumberMethod)SelectedRenameMethod).StartNumber}" Minimum="0" Maximum="99999" Height="26" Width="90" FontSize="11" />
+                                                                        <NumericUpDown Value="{Binding ((services:RenumberMethod)SelectedRenameMethod).StartNumber}" Minimum="0" Maximum="99999" Height="28" Width="110" FontSize="11" />
 
                                                                     </StackPanel>
 
@@ -8117,7 +8110,7 @@
 
                                                                         <TextBlock Text="Bước nhảy:" Foreground="#CBD5E1" FontSize="10.5" />
 
-                                                                        <NumericUpDown Value="{Binding ((services:RenumberMethod)SelectedRenameMethod).Step}" Minimum="1" Maximum="1000" Height="26" Width="80" FontSize="11" />
+                                                                        <NumericUpDown Value="{Binding ((services:RenumberMethod)SelectedRenameMethod).Step}" Minimum="1" Maximum="1000" Height="28" Width="105" FontSize="11" />
 
                                                                     </StackPanel>
 
@@ -8125,7 +8118,7 @@
 
                                                                         <TextBlock Text="Số chữ số 0:" Foreground="#CBD5E1" FontSize="10.5" />
 
-                                                                        <NumericUpDown Value="{Binding ((services:RenumberMethod)SelectedRenameMethod).ZeroPadding}" Minimum="0" Maximum="10" Height="26" Width="80" FontSize="11" />
+                                                                        <NumericUpDown Value="{Binding ((services:RenumberMethod)SelectedRenameMethod).ZeroPadding}" Minimum="0" Maximum="10" Height="28" Width="105" FontSize="11" />
 
                                                                     </StackPanel>
 
@@ -9829,7 +9822,7 @@
 
                                     <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,4,2">
 
-                                        <TextBox Text="{Binding UserPreset1Name}" Width="65" Height="24" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 1" />
+                                        <TextBox Text="{Binding UserPreset1Name}" Width="85" Height="24" FontSize="10" Padding="5,2" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 1" />
 
                                         <Button Command="{Binding SaveUserPreset1Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="24" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 1" />
 
@@ -9839,7 +9832,7 @@
 
                                     <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,4,2">
 
-                                        <TextBox Text="{Binding UserPreset2Name}" Width="65" Height="24" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 2" />
+                                        <TextBox Text="{Binding UserPreset2Name}" Width="85" Height="24" FontSize="10" Padding="5,2" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 2" />
 
                                         <Button Command="{Binding SaveUserPreset2Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="24" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 2" />
 
@@ -9849,7 +9842,7 @@
 
                                     <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,0,2">
 
-                                        <TextBox Text="{Binding UserPreset3Name}" Width="65" Height="24" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 3" />
+                                        <TextBox Text="{Binding UserPreset3Name}" Width="85" Height="24" FontSize="10" Padding="5,2" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 3" />
 
                                         <Button Command="{Binding SaveUserPreset3Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="24" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 3" />
 

@@ -310,17 +310,17 @@
                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="💾 Presets:" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
                             <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,4,2">
-                                <TextBox Text="{Binding UserPreset1Name}" Width="65" Height="24" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 1" />
+                                <TextBox Text="{Binding UserPreset1Name}" Width="85" Height="24" FontSize="10" Padding="5,2" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 1" />
                                 <Button Command="{Binding SaveUserPreset1Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="24" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 1" />
                                 <Button Command="{Binding LoadUserPreset1Command}" Content="📂" Background="#0D9488" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="24" CornerRadius="3" ToolTip.Tip="Tải Preset 1" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,4,2">
-                                <TextBox Text="{Binding UserPreset2Name}" Width="65" Height="24" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 2" />
+                                <TextBox Text="{Binding UserPreset2Name}" Width="85" Height="24" FontSize="10" Padding="5,2" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 2" />
                                 <Button Command="{Binding SaveUserPreset2Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="24" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 2" />
                                 <Button Command="{Binding LoadUserPreset2Command}" Content="📂" Background="#0D9488" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="24" CornerRadius="3" ToolTip.Tip="Tải Preset 2" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,0,2">
-                                <TextBox Text="{Binding UserPreset3Name}" Width="65" Height="24" FontSize="9" Padding="3,1" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 3" />
+                                <TextBox Text="{Binding UserPreset3Name}" Width="85" Height="24" FontSize="10" Padding="5,2" VerticalAlignment="Center" Background="#1E293B" Foreground="#E2E8F0" CornerRadius="3" ToolTip.Tip="Tên Preset 3" />
                                 <Button Command="{Binding SaveUserPreset3Command}" Content="💾" Background="#0284C7" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="24" CornerRadius="3" ToolTip.Tip="Lưu vào Preset 3" />
                                 <Button Command="{Binding LoadUserPreset3Command}" Content="📂" Background="#0D9488" Foreground="#FFFFFF" FontSize="9" Padding="4,1" Height="24" CornerRadius="3" ToolTip.Tip="Tải Preset 3" />
                             </StackPanel>

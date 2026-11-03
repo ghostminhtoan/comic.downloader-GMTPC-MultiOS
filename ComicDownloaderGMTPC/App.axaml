@@ -13,6 +13,8 @@
         
         <!-- Style chuẩn toàn hệ thống cho NumericUpDown: Số hiển thị rõ nét, căn giữa, mũi tên tự nhiên -->
         <Style Selector="NumericUpDown">
+            <Setter Property="MinWidth" Value="105" />
+            <Setter Property="MinHeight" Value="26" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="FontSize" Value="11" />
