@@ -53,6 +53,10 @@ public class ComicBookItemSnapshot
     public string? ThumbnailLocalPath { get; set; }
     public string? OriginalCoverLocalPath { get; set; }
     public string PreviewTagsText { get; set; } = string.Empty;
+    public string PreviewLanguage { get; set; } = string.Empty;
+    public string PreviewType { get; set; } = string.Empty;
+    public string PreviewArtist { get; set; } = string.Empty;
+    public string PreviewParody { get; set; } = string.Empty;
     public string MissingChapters { get; set; } = string.Empty;
     public string LatestChapter { get; set; } = string.Empty;
     public string PreferredLanguage { get; set; } = "vi";
@@ -527,6 +531,10 @@ public class QueueBackupService
             ThumbnailLocalPath = item.ThumbnailLocalPath,
             OriginalCoverLocalPath = item.OriginalCoverLocalPath,
             PreviewTagsText = item.PreviewTagsText ?? string.Empty,
+            PreviewLanguage = item.PreviewLanguage ?? string.Empty,
+            PreviewType = item.PreviewType ?? string.Empty,
+            PreviewArtist = item.PreviewArtist ?? string.Empty,
+            PreviewParody = item.PreviewParody ?? string.Empty,
             MissingChapters = item.MissingChapters ?? string.Empty,
             LatestChapter = item.LatestChapter ?? string.Empty,
             PreferredLanguage = item.PreferredLanguage ?? "vi",
@@ -1023,6 +1031,10 @@ public class QueueBackupService
             ThumbnailLocalPath = snap.ThumbnailLocalPath,
             OriginalCoverLocalPath = snap.OriginalCoverLocalPath,
             PreviewTagsText = snap.PreviewTagsText ?? string.Empty,
+            PreviewLanguage = snap.PreviewLanguage ?? string.Empty,
+            PreviewType = snap.PreviewType ?? string.Empty,
+            PreviewArtist = snap.PreviewArtist ?? string.Empty,
+            PreviewParody = snap.PreviewParody ?? string.Empty,
             MissingChapters = snap.MissingChapters ?? string.Empty,
             LatestChapter = snap.LatestChapter ?? string.Empty,
             PreferredLanguage = !string.IsNullOrWhiteSpace(snap.PreferredLanguage) ? snap.PreferredLanguage : "vi",

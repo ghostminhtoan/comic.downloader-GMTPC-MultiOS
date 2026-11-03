@@ -3176,6 +3176,110 @@ public class ComicScraperService
         return tags.Count > 0 ? "Tags: " + string.Join(", ", tags) : string.Empty;
     }
 
+    public static (string Type, string Language, string Artist, string Parody, string Tags) ExtractHitomiMetadata(JsonElement root, string? fallbackUrl = null)
+    {
+        var textInfo = System.Globalization.CultureInfo.InvariantCulture.TextInfo;
+
+        // 1. Type
+        string type = string.Empty;
+        if (root.TryGetProperty("type", out var typeProp) && typeProp.ValueKind == JsonValueKind.String)
+        {
+            string rawType = typeProp.GetString() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(rawType))
+            {
+                type = rawType.ToLowerInvariant() switch
+                {
+                    "artistcg" => "Artist CG",
+                    "gamecg" => "Game CG",
+                    "imageset" => "Image Set",
+                    "non-h" => "Non-H",
+                    _ => textInfo.ToTitleCase(rawType.Trim())
+                };
+            }
+        }
+        if (string.IsNullOrWhiteSpace(type) && !string.IsNullOrWhiteSpace(fallbackUrl))
+        {
+            var matchType = System.Text.RegularExpressions.Regex.Match(fallbackUrl, @"hitomi\.la/(doujinshi|manga|artistcg|gamecg|imageset|anime)/", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (matchType.Success)
+            {
+                string raw = matchType.Groups[1].Value.ToLowerInvariant();
+                type = raw switch
+                {
+                    "artistcg" => "Artist CG",
+                    "gamecg" => "Game CG",
+                    "imageset" => "Image Set",
+                    "non-h" => "Non-H",
+                    _ => textInfo.ToTitleCase(raw)
+                };
+            }
+        }
+
+        // 2. Language
+        string language = string.Empty;
+        string rawLang = string.Empty;
+        if (root.TryGetProperty("language", out var langProp) && langProp.ValueKind == JsonValueKind.String)
+        {
+            rawLang = langProp.GetString() ?? string.Empty;
+        }
+        string localName = string.Empty;
+        if (root.TryGetProperty("language_localname", out var localProp) && localProp.ValueKind == JsonValueKind.String)
+        {
+            localName = localProp.GetString() ?? string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(rawLang))
+        {
+            string normLang = textInfo.ToTitleCase(rawLang.Trim());
+            if (!string.IsNullOrWhiteSpace(localName) && !string.Equals(normLang, localName, StringComparison.OrdinalIgnoreCase))
+            {
+                language = $"{normLang} ({localName})";
+            }
+            else
+            {
+                language = normLang;
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(localName))
+        {
+            language = localName;
+        }
+
+        // 3. Artist
+        var artists = new List<string>();
+        if (root.TryGetProperty("artists", out var artProp) && artProp.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var a in artProp.EnumerateArray())
+            {
+                if (a.TryGetProperty("artist", out var aProp) && aProp.ValueKind == JsonValueKind.String)
+                {
+                    string name = aProp.GetString() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(name)) artists.Add(textInfo.ToTitleCase(name.Trim()));
+                }
+            }
+        }
+        string artist = artists.Count > 0 ? string.Join(", ", artists) : string.Empty;
+
+        // 4. Parody
+        var parodies = new List<string>();
+        if (root.TryGetProperty("parodys", out var parProp) && parProp.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var p in parProp.EnumerateArray())
+            {
+                if (p.TryGetProperty("parody", out var pProp) && pProp.ValueKind == JsonValueKind.String)
+                {
+                    string name = pProp.GetString() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(name)) parodies.Add(textInfo.ToTitleCase(name.Trim()));
+                }
+            }
+        }
+        string parody = parodies.Count > 0 ? string.Join(", ", parodies) : string.Empty;
+
+        // 5. Tags
+        string tags = ExtractHitomiTags(root);
+
+        return (type, language, artist, parody, tags);
+    }
+
     public static string ExtractHitomiTags(JsonElement root)
     {
         try
@@ -4257,6 +4361,10 @@ public class ComicScraperService
                                 string cTitle = $"Hitomi Gallery {gId}";
                                 string cCover = string.Empty;
                                 string cTags = string.Empty;
+                                string cType = string.Empty;
+                                string cLang = string.Empty;
+                                string cArtist = string.Empty;
+                                string cParody = string.Empty;
 
                                 try
                                 {
@@ -4264,7 +4372,12 @@ public class ComicScraperService
                                     if (doc != null)
                                     {
                                         var root = doc.RootElement;
-                                        cTags = ExtractHitomiTags(root);
+                                        var meta = ExtractHitomiMetadata(root, cUrl);
+                                        cType = meta.Type;
+                                        cLang = meta.Language;
+                                        cArtist = meta.Artist;
+                                        cParody = meta.Parody;
+                                        cTags = meta.Tags;
                                         if (root.TryGetProperty("title", out var tProp) && tProp.ValueKind == JsonValueKind.String)
                                         {
                                             cTitle = tProp.GetString() ?? cTitle;
@@ -4288,6 +4401,10 @@ public class ComicScraperService
                                     Url = cUrl,
                                     Title = CleanTitle(cTitle),
                                     CoverUrl = cCover,
+                                    PreviewType = cType,
+                                    PreviewLanguage = cLang,
+                                    PreviewArtist = cArtist,
+                                    PreviewParody = cParody,
                                     PreviewTagsText = cTags,
                                     Domain = "hitomi.la",
                                     Status = "Waiting",
@@ -5236,9 +5353,14 @@ public class ComicScraperService
                 }
             }
 
+            var hitomiMeta = ExtractHitomiMetadata(root, url);
             item.Title = displayName;
             item.CoverUrl = coverUrl;
-            item.PreviewTagsText = ExtractHitomiTags(root);
+            item.PreviewType = hitomiMeta.Type;
+            item.PreviewLanguage = hitomiMeta.Language;
+            item.PreviewArtist = hitomiMeta.Artist;
+            item.PreviewParody = hitomiMeta.Parody;
+            item.PreviewTagsText = hitomiMeta.Tags;
             item.TotalChapters = 1;
             item.LatestChapter = totalPages > 0 ? $"{totalPages} Pages" : "Gallery";
             item.Status = "Ready";

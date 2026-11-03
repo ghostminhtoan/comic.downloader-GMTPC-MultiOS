@@ -649,4 +649,13 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Khắc phục triệt để tình trạng race condition khi nhiều truyện tải đồng thời làm sai lệch số thứ tự prefix (001., 002...).
   + Tính toán số thứ tự tất định dựa trên vị trí chính xác của truyện trong hàng chờ: `(book.Index - 1) + OrderPrefixStartIndex`. Bất kể truyện nào tải xong trước hoặc bắt đầu trước trong 1-16 luồng song song, thứ tự đánh số prefix luôn luôn bảo lưu chính xác tuyệt đối theo thứ tự xuất hiện trong danh sách list.
   + Thêm ô nhập số bắt đầu `OrderPrefixStartIndex` với `NumericUpDown` (Width 72px, Height 25px) kèm mũi tên tăng giảm gọn gàng, chứa vừa vặn 3-4 chữ số, bọc trong Border viền Cyberpunk bo góc, không tràn viền trên Android 9:21 (360px) hay Windows 16:9 (1366x768).
+### 52. Hiển Thị Đầy Đủ Metadata Type, Language, Artist & Parody Trong Preview Popup
+- **Bóc Tách Toàn Diện Siêu Dữ Liệu Truyện (ExtractHitomiMetadata)**:
+  + Tự động trích xuất `Type` (Doujinshi, Manga, Artist CG, Game CG...), `Language` (Japanese, English, Chinese, Vietnamese kèm tên bản địa như 日本語, 中文), `Artist`, `Parody` và `Tags` từ file JSON `galleryinfo` của Hitomi.la và các domain tương ứng.
+  + Mở rộng `ComicBookItem` với các ObservableProperty `PreviewType`, `PreviewLanguage`, `PreviewArtist`, `PreviewParody` và tích hợp vào chỉ mục tìm kiếm siêu tốc `GetNormalizedSearchIndex()`.
+  + Tối ưu bộ nhớ đệm đa tầng: Lưu trữ và đồng bộ hóa qua `cover.meta.json` và `cover.tags.txt` trong thư mục cache `.tmp\preview-cache`, giúp nạp on-demand tức thì 0ms khi người dùng di chuột qua bất kỳ truyện nào.
+- **Bố Cục Trực Quan Preview Popup Tinh Tế (MainView.axaml)**:
+  + Dòng Type & Language thanh lịch với màu sắc tương phản nổi bật: `Type: Doujinshi` (hồng tím `#F472B6`), dấu chấm phân cách `•` (`#475569`), `Language: Japanese (日本語)` (xanh ngọc `#34D399`).
+  + Hiển thị thông tin tác giả `Artist` (Cyan `#38BDF8`) và bộ truyện gốc `Parody` (Vàng hổ phách `#FACC15`) khi có dữ liệu.
+  + Tự động ẩn các trường rỗng mà không phá vỡ cấu trúc responsive của popup trên cả Android và Windows.
 

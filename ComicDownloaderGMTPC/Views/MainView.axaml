@@ -10554,6 +10554,32 @@
 
                                FontWeight="Bold" FontSize="13" Foreground="#FDE047" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" />
 
+                    <!-- Dòng Type & Language thanh lịch, gọn gàng -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1,0,1" IsVisible="{Binding ActiveHoverItem.HasPreviewTypeOrLanguage}">
+                        <TextBlock FontSize="11" IsVisible="{Binding ActiveHoverItem.HasPreviewType}">
+                            <Run Text="Type: " Foreground="#94A3B8" />
+                            <Run Text="{Binding ActiveHoverItem.PreviewType}" Foreground="#F472B6" FontWeight="SemiBold" />
+                        </TextBlock>
+
+                        <TextBlock Text="•" Foreground="#475569" IsVisible="{Binding ActiveHoverItem.HasBothPreviewTypeAndLanguage}" VerticalAlignment="Center" />
+
+                        <TextBlock FontSize="11" IsVisible="{Binding ActiveHoverItem.HasPreviewLanguage}">
+                            <Run Text="Language: " Foreground="#94A3B8" />
+                            <Run Text="{Binding ActiveHoverItem.PreviewLanguage}" Foreground="#34D399" FontWeight="SemiBold" />
+                        </TextBlock>
+                    </StackPanel>
+
+                    <!-- Artist & Parody (nếu có) -->
+                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,1,0,1" IsVisible="{Binding ActiveHoverItem.HasPreviewArtist}">
+                        <Run Text="Artist: " Foreground="#94A3B8" />
+                        <Run Text="{Binding ActiveHoverItem.PreviewArtist}" Foreground="#38BDF8" FontWeight="SemiBold" />
+                    </TextBlock>
+
+                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,1,0,1" IsVisible="{Binding ActiveHoverItem.HasPreviewParody}">
+                        <Run Text="Parody: " Foreground="#94A3B8" />
+                        <Run Text="{Binding ActiveHoverItem.PreviewParody}" Foreground="#FACC15" FontWeight="SemiBold" />
+                    </TextBlock>
+
                     <TextBlock Text="{Binding ActiveHoverItem.PreviewTagsText}"
 
                                IsVisible="{Binding ActiveHoverItem.HasPreviewTags}"

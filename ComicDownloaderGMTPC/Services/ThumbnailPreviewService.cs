@@ -20,6 +20,73 @@ namespace ComicDownloaderGMTPC.Services;
 
 public sealed class ThumbnailPreviewService
 {
+    public static void SaveItemMetadataCache(string cacheDir, ComicBookItem item)
+    {
+        try
+        {
+            if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
+
+            if (!string.IsNullOrWhiteSpace(item.PreviewTagsText))
+            {
+                File.WriteAllText(Path.Combine(cacheDir, "cover.tags.txt"), item.PreviewTagsText);
+            }
+
+            if (item.HasPreviewTags || item.HasPreviewType || item.HasPreviewLanguage || item.HasPreviewArtist || item.HasPreviewParody)
+            {
+                var dict = new Dictionary<string, string>
+                {
+                    ["type"] = item.PreviewType ?? string.Empty,
+                    ["language"] = item.PreviewLanguage ?? string.Empty,
+                    ["artist"] = item.PreviewArtist ?? string.Empty,
+                    ["parody"] = item.PreviewParody ?? string.Empty,
+                    ["tags"] = item.PreviewTagsText ?? string.Empty
+                };
+                string json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(Path.Combine(cacheDir, "cover.meta.json"), json);
+            }
+        }
+        catch { }
+    }
+
+    public static bool TryLoadItemMetadataCache(string cacheDir, ComicBookItem item)
+    {
+        bool loaded = false;
+        try
+        {
+            string metaFile = Path.Combine(cacheDir, "cover.meta.json");
+            if (File.Exists(metaFile))
+            {
+                string json = File.ReadAllText(metaFile);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("type", out var tProp) && string.IsNullOrWhiteSpace(item.PreviewType))
+                    item.PreviewType = tProp.GetString() ?? string.Empty;
+                if (root.TryGetProperty("language", out var lProp) && string.IsNullOrWhiteSpace(item.PreviewLanguage))
+                    item.PreviewLanguage = lProp.GetString() ?? string.Empty;
+                if (root.TryGetProperty("artist", out var aProp) && string.IsNullOrWhiteSpace(item.PreviewArtist))
+                    item.PreviewArtist = aProp.GetString() ?? string.Empty;
+                if (root.TryGetProperty("parody", out var pProp) && string.IsNullOrWhiteSpace(item.PreviewParody))
+                    item.PreviewParody = pProp.GetString() ?? string.Empty;
+                if (root.TryGetProperty("tags", out var tgProp) && string.IsNullOrWhiteSpace(item.PreviewTagsText))
+                    item.PreviewTagsText = tgProp.GetString() ?? string.Empty;
+                loaded = true;
+            }
+
+            string tagsFile = Path.Combine(cacheDir, "cover.tags.txt");
+            if (string.IsNullOrWhiteSpace(item.PreviewTagsText) && File.Exists(tagsFile))
+            {
+                string cachedTags = File.ReadAllText(tagsFile).Trim();
+                if (!string.IsNullOrWhiteSpace(cachedTags))
+                {
+                    item.PreviewTagsText = cachedTags;
+                    loaded = true;
+                }
+            }
+        }
+        catch { }
+        return loaded;
+    }
+
     private static readonly Lazy<ThumbnailPreviewService> _lazy = new(() => new ThumbnailPreviewService());
     public static ThumbnailPreviewService Instance => _lazy.Value;
 
@@ -242,20 +309,13 @@ public sealed class ThumbnailPreviewService
             catch { }
         }
 
-        if (string.IsNullOrWhiteSpace(item.PreviewTagsText))
+        if (string.IsNullOrWhiteSpace(item.PreviewTagsText) || string.IsNullOrWhiteSpace(item.PreviewType) || string.IsNullOrWhiteSpace(item.PreviewLanguage))
         {
-            if (File.Exists(tagsFile))
+            bool loaded = false;
+            await RunOnUiAsync(() => loaded = TryLoadItemMetadataCache(cacheDir, item));
+            if (loaded && !string.IsNullOrWhiteSpace(item.PreviewTagsText) && !string.IsNullOrWhiteSpace(item.PreviewType))
             {
-                try
-                {
-                    string cachedTags = (await File.ReadAllTextAsync(tagsFile, ct).ConfigureAwait(false)).Trim();
-                    if (!string.IsNullOrWhiteSpace(cachedTags))
-                    {
-                        await RunOnUiAsync(() => item.PreviewTagsText = cachedTags);
-                        return;
-                    }
-                }
-                catch { }
+                return;
             }
 
             string link = item.Url?.Trim() ?? string.Empty;
@@ -274,12 +334,16 @@ public sealed class ThumbnailPreviewService
                             {
                                 string json = jsContent.Replace("var galleryinfo = ", "").Trim().TrimEnd(';');
                                 using var doc = JsonDocument.Parse(json);
-                                string extractedTags = ComicScraperService.ExtractHitomiTags(doc.RootElement);
-                                if (!string.IsNullOrWhiteSpace(extractedTags))
+                                var meta = ComicScraperService.ExtractHitomiMetadata(doc.RootElement, link);
+                                await RunOnUiAsync(() =>
                                 {
-                                    try { await File.WriteAllTextAsync(tagsFile, extractedTags, ct).ConfigureAwait(false); } catch { }
-                                    await RunOnUiAsync(() => item.PreviewTagsText = extractedTags);
-                                }
+                                    if (string.IsNullOrWhiteSpace(item.PreviewType)) item.PreviewType = meta.Type;
+                                    if (string.IsNullOrWhiteSpace(item.PreviewLanguage)) item.PreviewLanguage = meta.Language;
+                                    if (string.IsNullOrWhiteSpace(item.PreviewArtist)) item.PreviewArtist = meta.Artist;
+                                    if (string.IsNullOrWhiteSpace(item.PreviewParody)) item.PreviewParody = meta.Parody;
+                                    if (string.IsNullOrWhiteSpace(item.PreviewTagsText)) item.PreviewTagsText = meta.Tags;
+                                });
+                                SaveItemMetadataCache(cacheDir, item);
                             }
                         }
                     }
@@ -312,22 +376,14 @@ public sealed class ThumbnailPreviewService
         string thumbFile = Path.Combine(cacheDir, "cover.thumb.jpg");
         string tagsFile = Path.Combine(cacheDir, "cover.tags.txt");
 
-        // Đồng bộ tags vào/từ file cache nếu có
-        if (!string.IsNullOrWhiteSpace(item.PreviewTagsText) && !File.Exists(tagsFile))
+        // Đồng bộ tags và metadata (Type, Language, Artist, Parody) vào/từ file cache nếu có
+        if (item.HasPreviewTags || item.HasPreviewType || item.HasPreviewLanguage)
         {
-            try { await File.WriteAllTextAsync(tagsFile, item.PreviewTagsText, ct).ConfigureAwait(false); } catch { }
+            SaveItemMetadataCache(cacheDir, item);
         }
-        else if (string.IsNullOrWhiteSpace(item.PreviewTagsText) && File.Exists(tagsFile))
+        else
         {
-            try
-            {
-                string cachedTags = (await File.ReadAllTextAsync(tagsFile, ct).ConfigureAwait(false)).Trim();
-                if (!string.IsNullOrWhiteSpace(cachedTags))
-                {
-                    await RunOnUiAsync(() => item.PreviewTagsText = cachedTags);
-                }
-            }
-            catch { }
+            await RunOnUiAsync(() => TryLoadItemMetadataCache(cacheDir, item));
         }
 
         // Nếu đã có Bitmap nạp vào UI thì bỏ qua
@@ -898,25 +954,21 @@ public sealed class ThumbnailPreviewService
                     {
                         string json = jsContent.Replace("var galleryinfo = ", "").Trim().TrimEnd(';');
                         using var doc = JsonDocument.Parse(json);
-                        string hitomiTags = ComicScraperService.ExtractHitomiTags(doc.RootElement);
-                        if (!string.IsNullOrWhiteSpace(hitomiTags))
+                        var meta = ComicScraperService.ExtractHitomiMetadata(doc.RootElement, link);
+                        _ = RunOnUiAsync(() =>
                         {
-                            try
-                            {
-                                string cacheDir = GetItemCacheDirectory(item);
-                                string tagsFile = Path.Combine(cacheDir, "cover.tags.txt");
-                                File.WriteAllText(tagsFile, hitomiTags);
-                            }
-                            catch { }
-
-                            _ = RunOnUiAsync(() =>
-                            {
-                                if (string.IsNullOrWhiteSpace(item.PreviewTagsText))
-                                {
-                                    item.PreviewTagsText = hitomiTags;
-                                }
-                            });
+                            if (string.IsNullOrWhiteSpace(item.PreviewType)) item.PreviewType = meta.Type;
+                            if (string.IsNullOrWhiteSpace(item.PreviewLanguage)) item.PreviewLanguage = meta.Language;
+                            if (string.IsNullOrWhiteSpace(item.PreviewArtist)) item.PreviewArtist = meta.Artist;
+                            if (string.IsNullOrWhiteSpace(item.PreviewParody)) item.PreviewParody = meta.Parody;
+                            if (string.IsNullOrWhiteSpace(item.PreviewTagsText)) item.PreviewTagsText = meta.Tags;
+                        });
+                        try
+                        {
+                            string cacheDir = GetItemCacheDirectory(item);
+                            SaveItemMetadataCache(cacheDir, item);
                         }
+                        catch { }
 
                         if (doc.RootElement.TryGetProperty("files", out var files) && files.GetArrayLength() > 0)
                         {

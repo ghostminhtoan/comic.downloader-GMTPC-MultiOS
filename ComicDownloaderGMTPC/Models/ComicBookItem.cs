@@ -126,6 +126,37 @@ public partial class ComicBookItem : ObservableObject
     public bool HasPreviewTags => !string.IsNullOrWhiteSpace(PreviewTagsText);
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPreviewLanguage))]
+    [NotifyPropertyChangedFor(nameof(HasPreviewTypeOrLanguage))]
+    [NotifyPropertyChangedFor(nameof(HasBothPreviewTypeAndLanguage))]
+    private string _previewLanguage = string.Empty;
+
+    public bool HasPreviewLanguage => !string.IsNullOrWhiteSpace(PreviewLanguage);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPreviewType))]
+    [NotifyPropertyChangedFor(nameof(HasPreviewTypeOrLanguage))]
+    [NotifyPropertyChangedFor(nameof(HasBothPreviewTypeAndLanguage))]
+    private string _previewType = string.Empty;
+
+    public bool HasPreviewType => !string.IsNullOrWhiteSpace(PreviewType);
+
+    public bool HasPreviewTypeOrLanguage => HasPreviewType || HasPreviewLanguage;
+    public bool HasBothPreviewTypeAndLanguage => HasPreviewType && HasPreviewLanguage;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPreviewArtist))]
+    private string _previewArtist = string.Empty;
+
+    public bool HasPreviewArtist => !string.IsNullOrWhiteSpace(PreviewArtist);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPreviewParody))]
+    private string _previewParody = string.Empty;
+
+    public bool HasPreviewParody => !string.IsNullOrWhiteSpace(PreviewParody);
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MissingChapterDisplay))]
     [NotifyPropertyChangedFor(nameof(HasMissingChapterIssue))]
     [NotifyPropertyChangedFor(nameof(MissingChapterBrush))]
@@ -365,12 +396,16 @@ public partial class ComicBookItem : ObservableObject
         _normalizedTitle = RemoveDiacriticsFast(Title).ToLowerInvariant();
         _normalizedUrl = (Url ?? string.Empty).ToLowerInvariant();
         _normalizedTags = RemoveDiacriticsFast(PreviewTagsText).ToLowerInvariant();
+        string pLang = RemoveDiacriticsFast(PreviewLanguage).ToLowerInvariant();
+        string pType = RemoveDiacriticsFast(PreviewType).ToLowerInvariant();
+        string pArt = RemoveDiacriticsFast(PreviewArtist).ToLowerInvariant();
+        string pPar = RemoveDiacriticsFast(PreviewParody).ToLowerInvariant();
         string missing = RemoveDiacriticsFast(MissingChapters).ToLowerInvariant();
         string status = RemoveDiacriticsFast(Status).ToLowerInvariant();
         string progress = RemoveDiacriticsFast(DetailProgressText).ToLowerInvariant();
         string chapSel = RemoveDiacriticsFast(ChapterSelectionText).ToLowerInvariant();
 
-        _normalizedSearchIndex = $"{_normalizedTitle} {_normalizedUrl} {_normalizedTags} {missing} {status} {progress} {chapSel}";
+        _normalizedSearchIndex = $"{_normalizedTitle} {_normalizedUrl} {_normalizedTags} {pLang} {pType} {pArt} {pPar} {missing} {status} {progress} {chapSel}";
     }
 
     public static string RemoveDiacriticsFast(string? text)
@@ -408,6 +443,10 @@ public partial class ComicBookItem : ObservableObject
     partial void OnTitleChanged(string value) => InvalidateSearchIndex();
     partial void OnUrlChanged(string value) => InvalidateSearchIndex();
     partial void OnPreviewTagsTextChanged(string value) => InvalidateSearchIndex();
+    partial void OnPreviewLanguageChanged(string value) => InvalidateSearchIndex();
+    partial void OnPreviewTypeChanged(string value) => InvalidateSearchIndex();
+    partial void OnPreviewArtistChanged(string value) => InvalidateSearchIndex();
+    partial void OnPreviewParodyChanged(string value) => InvalidateSearchIndex();
     partial void OnMissingChaptersChanged(string value) => InvalidateSearchIndex();
     partial void OnStatusChanged(string value) => InvalidateSearchIndex();
     partial void OnDetailProgressTextChanged(string value) => InvalidateSearchIndex();
