@@ -80,13 +80,21 @@ public static class HitomiResolverService
                 _b = reB.Groups[1].Value;
             }
 
+            // Trich xuat gia tri o trong switch case (Vi du: o = 0; break; hoac o = 1; break;)
+            int switchCaseVal = 0;
+            var reSwitchVal = Regex.Match(body, @"switch\s*\([^)]*\)\s*\{[\s\S]*?o\s*=\s*(\d+);");
+            if (reSwitchVal.Success && int.TryParse(reSwitchVal.Groups[1].Value, out int sVal))
+            {
+                switchCaseVal = sVal;
+            }
+
             var reCaseMatches = Regex.Matches(body, @"case\s+(\d+):");
             _mMap.Clear();
             foreach (Match m in reCaseMatches)
             {
                 if (int.TryParse(m.Groups[1].Value, out int caseVal))
                 {
-                    _mMap[caseVal] = 1;
+                    _mMap[caseVal] = switchCaseVal;
                 }
             }
 

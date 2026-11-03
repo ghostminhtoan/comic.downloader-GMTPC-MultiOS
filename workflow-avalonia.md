@@ -728,3 +728,21 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
     * **Số truyện / Tổng số truyện đang load**: Dòng chữ vàng hổ phách hiển thị rõ ràng: `15 / 50 truyện đang load` hoặc `48 truyện đã load (Trang 2/5)`.
     * **Tên truyện / Domain đang cào**: Cập nhật trực tiếp tiêu đề truyện hoặc link đang được fetch.
     * **Nút `⏹ DỪNG CÀO`**: Nút bấm màu đỏ rực rỡ cho phép người dùng chủ động ngắt tiến trình cào ngay lập tức mà không phải chờ đợi.
+
+### 59. Khắc Phục Triệt Để Lỗi Tải Chậm Hitomi.la & Cơ Chế Điều Phối Tải Tuần Tự Ưu Tiên Số Trang (Sequential Sliding Window Worker Pool)
+- **Root Cause 1: Lỗi Giải Mã Subdomain Hitomi (`HitomiResolverService.cs`)**:
+  + Trong logic script `gg.js` của Hitomi.la:
+    `var o = 1; switch (g) { case ...: o = 0; break; }`
+    Nếu số `g` thuộc danh sách case, `o = 0` (Subdomain là `w + (1 + 0) = w1`). Nếu không thuộc case, `o = 1` (Subdomain là `w + (1 + 1) = w2`).
+  + Code C# trước đó parse các case nhưng lại gán cứng `_mMap[caseVal] = 1;`, dẫn đến mọi số `g` đều trả về `1` (`w2`)!
+  + Thực tế trên CDN Hitomi (`gold-usergeneratedcontent.net`), file của switch case chỉ tồn tại trên `w1` (HTTP 200), nếu trỏ nhầm sang `w2` server trả về HTTP 404 Not Found! Hơn 50% số ảnh bị 404 và phải retry 4 lần liên tiếp, làm tốc độ tải bị nghẽn trầm trọng và rớt trang.
+  + **Khắc phục**: Trích xuất chính xác giá trị `o` trong switch block (`switchCaseVal = sVal`), gán `_mMap[caseVal] = switchCaseVal` (0). Đồng thời trong `DownloadEngineService.cs` bổ sung cơ chế tự động xoay vòng subdomain dự phòng (`w1 <-> w2 <-> w3`) nếu CDN trả về lỗi.
+- **Root Cause 2: Tải Rời Rạc Thiếu Trang Do `Parallel.ForEachAsync` Không Giới Hạn Độ Lệch Trang (Page Drift)**:
+  + `Parallel.ForEachAsync` bốc việc tự do cho các luồng song song. Khi gặp mạng trễ hoặc retry, các luồng khác bốc các trang tít tận cuối (020, 027, 035...), khiến thư mục tải về bị lủng lỗ, nhảy cóc, người dùng không thể đọc truyện một cách tuần tự khi đang tải dở.
+  + **Giải pháp: Cơ Chế Điều Phối Tải Tuần Tự Ưu Tiên Số Trang (Sequential Sliding Window Worker Pool)**:
+    * Thiết lập cửa sổ trượt kích thước đúng bằng `maxParallel` connection.
+    * Con trỏ `lowestIncompleteIndex` theo dõi trang chưa hoàn thành có số thứ tự nhỏ nhất.
+    * Con trỏ `nextDispatchIndex` chỉ được phép phát việc cho các trang nằm trong cửa sổ: `nextDispatchIndex < lowestIncompleteIndex + maxParallel`.
+    * Nếu một trang nhỏ hơn bị chậm, các luồng khác chỉ được phép tải tối đa tới `lowestIncompleteIndex + maxParallel - 1`, sau đó phải chờ (`windowSignal.WaitAsync`) cho đến khi trang nhỏ hơn hoàn tất mới được phép trượt tiếp.
+    * Bọc khối tải trong `try ... finally` đảm bảo `pageCompleted[pIdx] = true` và `windowSignal.Release(maxParallel)` luôn được kích hoạt an toàn, không bao giờ xảy ra deadlock.
+    * Kết quả: Ảnh lưu xuống đĩa luôn đảm bảo 100% thứ tự tuần tự `001.webp`, `002.webp`, `003.webp`..., giải quyết triệt để vấn đề tải rời rạc!

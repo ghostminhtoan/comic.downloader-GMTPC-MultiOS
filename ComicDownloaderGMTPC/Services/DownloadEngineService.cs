@@ -2141,177 +2141,154 @@ public class DownloadEngineService
 
 
 
-                    var parallelOpts = new ParallelOptions
+                    // CƠ CHẾ ĐIỀU PHỐI TẢI TUẦN TỰ ƯU TIÊN SỐ TRANG (Sequential Sliding Window Worker Pool)
+                    // Bất kể mở bao nhiêu connection tải ảnh, các luồng luôn tập trung tải tuần tự theo thứ tự trang (001, 002, 003...)
+                    // Không bao giờ cho phép một luồng nhảy cóc vượt quá xa so với trang chưa hoàn thành nhỏ nhất!
+                    int totalPagesInChapter = imageUrls.Count;
+                    var pageCompleted = new bool[totalPagesInChapter];
+                    int lowestIncompleteIndex = 0;
+                    int nextDispatchIndex = 0;
+                    var windowLock = new object();
+                    using var windowSignal = new SemaphoreSlim(0, int.MaxValue);
 
+                    var workerTasks = Enumerable.Range(0, maxParallel).Select(async workerId =>
                     {
-
-                        MaxDegreeOfParallelism = maxParallel,
-
-                        CancellationToken = ct
-
-                    };
-
-
-
-                    await Parallel.ForEachAsync(indexedUrls, parallelOpts, async (item, token) =>
-
-                    {
-
-                        if (token.IsCancellationRequested) return;
-
-                        await WaitIfPausedAsync(token).ConfigureAwait(false);
-
-
-
-                        string pageUrl = item.Url;
-
-                        int pIdx = item.Index;
-
-                        string pageExt = GetSafeImageExtensionFromUrl(pageUrl);
-
-                        string pageFileName = $"{(pIdx + 1):D3}{pageExt}";
-
-                        string pageFilePath = Path.Combine(chapterDir, pageFileName);
-
-
-
-                        // Kiểm tra file tồn tại: Chỉ chấp nhận nếu file > 512 bytes và có trong manifest.
-
-                        // Nếu file <= 512 bytes (file rác / placeholder 15 bytes cũ bị lỗi), tự động xóa để tải lại ảnh thật.
-
-                        if (File.Exists(pageFilePath))
-
+                        while (!ct.IsCancellationRequested)
                         {
+                            (string Url, int Index)? workItem = null;
 
-                            var fi = new FileInfo(pageFilePath);
-
-                            if (fi.Length > 512 && manifest.ContainsKey(pageFileName))
-
+                            lock (windowLock)
                             {
-
-                                int currentDone = Interlocked.Increment(ref downloadedCount);
-
-                                chapter.DownloadedPages = currentDone;
-
-                                book.UpdateProgressThrottled(
-
-                                    completedChapters,
-
-                                    totalChapters,
-
-                                    currentDone,
-
-                                    imageUrls.Count,
-
-                                    $"Đang tải {chapter.Title}: {currentDone}/{imageUrls.Count} trang",
-
-                                    force: currentDone == imageUrls.Count);
-
-                                return;
-
-                            }
-
-                            else
-
-                            {
-
-                                try { File.Delete(pageFilePath); } catch {}
-
-                                lock (manifest)
-
+                                if (nextDispatchIndex >= totalPagesInChapter)
                                 {
-
-                                    manifest.Remove(pageFileName);
-
+                                    break;
                                 }
 
+                                // Chỉ dispatch nếu trang nằm trong cửa sổ trượt: [lowestIncompleteIndex, lowestIncompleteIndex + maxParallel)
+                                if (nextDispatchIndex < lowestIncompleteIndex + maxParallel)
+                                {
+                                    int dispatchIdx = nextDispatchIndex++;
+                                    workItem = (imageUrls[dispatchIdx], dispatchIdx);
+                                }
                             }
 
-                        }
-
-
-
-                        string? pageReaderUrl = (chapter.ReaderUrls != null && pIdx < chapter.ReaderUrls.Count) ? chapter.ReaderUrls[pIdx] : null;
-
-                        bool downloaded = await DownloadImageWithRetryAsync(pageUrl, pageFilePath, chapter.Url, pageReaderUrl, token).ConfigureAwait(false);
-
-                        int doneNow = downloaded ? Interlocked.Increment(ref downloadedCount) : downloadedCount;
-
-                        if (downloaded)
-
-                        {
-
-                            lock (manifest)
-
+                            if (workItem == null)
                             {
-
-                                manifest[pageFileName] = pageUrl;
-
+                                // Chờ một trang nhỏ hơn hoàn tất để trượt cửa sổ sang trang tiếp theo
+                                try
+                                {
+                                    await windowSignal.WaitAsync(ct).ConfigureAwait(false);
+                                }
+                                catch (OperationCanceledException)
+                                {
+                                    break;
+                                }
+                                continue;
                             }
 
-                            chapter.DownloadedPages = doneNow;
+                            var item = workItem.Value;
+                            if (ct.IsCancellationRequested) break;
+                            await WaitIfPausedAsync(ct).ConfigureAwait(false);
 
-                        }
-
-
-
-                        book.UpdateProgressThrottled(
-
-                            completedChapters,
-
-                            totalChapters,
-
-                            doneNow,
-
-                            imageUrls.Count,
-
-                            $"Đang tải {chapter.Title}: {doneNow}/{imageUrls.Count} trang",
-
-                            force: doneNow == imageUrls.Count);
-
-
-
-                        CalculateSpeed();
-
-                        ReportOverallProgress(book, $"{book.Title} • {chapter.Title} ({doneNow}/{imageUrls.Count})", force: false);
-
-
-
-                        long nowTick = Environment.TickCount64;
-
-                        long minEngineInterval = OperatingSystem.IsAndroid() ? 1000 : 200;
-
-                        if (doneNow == imageUrls.Count || nowTick - Interlocked.Read(ref _lastEngineProgressTick) >= minEngineInterval)
-
-                        {
-
-                            Interlocked.Exchange(ref _lastEngineProgressTick, nowTick);
-
-                            ProgressUpdated?.Invoke();
-
-                        }
-
-
-
-                        // Thu gom rác nhẹ định kỳ mỗi 20 ảnh trên Android để giải phóng ngay bộ nhớ đệm socket/stream, triệt tiêu OOM
-
-                        if (OperatingSystem.IsAndroid() && doneNow % 20 == 0)
-
-                        {
-
+                            int pIdx = item.Index;
                             try
-
                             {
+                                string pageUrl = item.Url;
+                                string pageExt = GetSafeImageExtensionFromUrl(pageUrl);
+                                string pageFileName = $"{(pIdx + 1):D3}{pageExt}";
+                                string pageFilePath = Path.Combine(chapterDir, pageFileName);
 
-                                GC.Collect(0, GCCollectionMode.Optimized, false, false);
+                                // Kiểm tra file tồn tại: Chỉ chấp nhận nếu file > 512 bytes và có trong manifest.
+                                // Nếu file <= 512 bytes (file rác / placeholder 15 bytes cũ bị lỗi), tự động xóa để tải lại ảnh thật.
+                                bool isExistingValid = false;
+                                if (File.Exists(pageFilePath))
+                                {
+                                    var fi = new FileInfo(pageFilePath);
+                                    if (fi.Length > 512 && manifest.ContainsKey(pageFileName))
+                                    {
+                                        isExistingValid = true;
+                                    }
+                                    else
+                                    {
+                                        try { File.Delete(pageFilePath); } catch {}
+                                        lock (manifest)
+                                        {
+                                            manifest.Remove(pageFileName);
+                                        }
+                                    }
+                                }
 
+                                bool downloaded = false;
+                                if (isExistingValid)
+                                {
+                                    downloaded = true;
+                                }
+                                else
+                                {
+                                    string? pageReaderUrl = (chapter.ReaderUrls != null && pIdx < chapter.ReaderUrls.Count) ? chapter.ReaderUrls[pIdx] : null;
+                                    downloaded = await DownloadImageWithRetryAsync(pageUrl, pageFilePath, chapter.Url, pageReaderUrl, ct).ConfigureAwait(false);
+                                }
+
+                                int doneNow = downloaded ? Interlocked.Increment(ref downloadedCount) : downloadedCount;
+                                if (downloaded)
+                                {
+                                    lock (manifest)
+                                    {
+                                        manifest[pageFileName] = pageUrl;
+                                    }
+                                    chapter.DownloadedPages = doneNow;
+                                }
+
+                                book.UpdateProgressThrottled(
+                                    completedChapters,
+                                    totalChapters,
+                                    doneNow,
+                                    totalPagesInChapter,
+                                    $"Đang tải {chapter.Title}: {doneNow}/{totalPagesInChapter} trang",
+                                    force: doneNow == totalPagesInChapter);
+
+                                CalculateSpeed();
+                                ReportOverallProgress(book, $"{book.Title} • {chapter.Title} ({doneNow}/{totalPagesInChapter})", force: false);
+
+                                long nowTick = Environment.TickCount64;
+                                long minEngineInterval = OperatingSystem.IsAndroid() ? 1000 : 200;
+                                if (doneNow == totalPagesInChapter || nowTick - Interlocked.Read(ref _lastEngineProgressTick) >= minEngineInterval)
+                                {
+                                    Interlocked.Exchange(ref _lastEngineProgressTick, nowTick);
+                                    ProgressUpdated?.Invoke();
+                                }
+
+                                // Thu gom rác nhẹ định kỳ mỗi 20 ảnh trên Android để giải phóng ngay bộ nhớ đệm socket/stream, triệt tiêu OOM
+                                if (OperatingSystem.IsAndroid() && doneNow % 20 == 0)
+                                {
+                                    try
+                                    {
+                                        GC.Collect(0, GCCollectionMode.Optimized, false, false);
+                                    }
+                                    catch { }
+                                }
                             }
-
-                            catch { }
-
+                            finally
+                            {
+                                // Đánh dấu hoàn tất trang này và trượt cửa sổ
+                                lock (windowLock)
+                                {
+                                    pageCompleted[pIdx] = true;
+                                    while (lowestIncompleteIndex < totalPagesInChapter && pageCompleted[lowestIncompleteIndex])
+                                    {
+                                        lowestIncompleteIndex++;
+                                    }
+                                    // Đánh thức các worker đang đợi cửa sổ trượt
+                                    windowSignal.Release(maxParallel);
+                                }
+                            }
                         }
 
-                    }).ConfigureAwait(false);
+                        // Kích hoạt đánh thức worker còn lại nếu có
+                        try { windowSignal.Release(1); } catch { }
+                    });
+
+                    await Task.WhenAll(workerTasks).ConfigureAwait(false);
 
 
 
@@ -2778,6 +2755,29 @@ public class DownloadEngineService
         }
 
 
+
+        // Candidate fallback cho Hitomi.la: Tu dong bo sung subdomain du phong w1 <-> w2
+        if (imageUrl.Contains("gold-usergeneratedcontent.net", StringComparison.OrdinalIgnoreCase) ||
+            imageUrl.Contains("hitomi.la", StringComparison.OrdinalIgnoreCase))
+        {
+            if (imageUrl.Contains("//w1.gold-usergeneratedcontent.net/"))
+            {
+                string altW2 = imageUrl.Replace("//w1.gold-usergeneratedcontent.net/", "//w2.gold-usergeneratedcontent.net/");
+                if (!candidateUrls.Contains(altW2, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(altW2);
+            }
+            else if (imageUrl.Contains("//w2.gold-usergeneratedcontent.net/"))
+            {
+                string altW1 = imageUrl.Replace("//w2.gold-usergeneratedcontent.net/", "//w1.gold-usergeneratedcontent.net/");
+                if (!candidateUrls.Contains(altW1, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(altW1);
+            }
+            else if (imageUrl.Contains("//w3.gold-usergeneratedcontent.net/"))
+            {
+                string altW1 = imageUrl.Replace("//w3.gold-usergeneratedcontent.net/", "//w1.gold-usergeneratedcontent.net/");
+                string altW2 = imageUrl.Replace("//w3.gold-usergeneratedcontent.net/", "//w2.gold-usergeneratedcontent.net/");
+                if (!candidateUrls.Contains(altW1, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(altW1);
+                if (!candidateUrls.Contains(altW2, StringComparer.OrdinalIgnoreCase)) candidateUrls.Add(altW2);
+            }
+        }
 
         // Candidate fallback cho Luscious (full-res 1280x0 -> 640x0 -> 315x0)
 
