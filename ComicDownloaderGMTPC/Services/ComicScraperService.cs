@@ -3176,7 +3176,7 @@ public class ComicScraperService
         return tags.Count > 0 ? "Tags: " + string.Join(", ", tags) : string.Empty;
     }
 
-    public static (string Type, string Language, string Artist, string Parody, string Tags) ExtractHitomiMetadata(JsonElement root, string? fallbackUrl = null)
+    public static (string Type, string Language, string Artist, string Parody, string Tags, int TotalPages) ExtractHitomiMetadata(JsonElement root, string? fallbackUrl = null)
     {
         var textInfo = System.Globalization.CultureInfo.InvariantCulture.TextInfo;
 
@@ -3277,7 +3277,22 @@ public class ComicScraperService
         // 5. Tags
         string tags = ExtractHitomiTags(root);
 
-        return (type, language, artist, parody, tags);
+        // 6. Total Pages (Từ mảng files hoặc reader URL hash #1033)
+        int totalPages = 0;
+        if (root.TryGetProperty("files", out var filesProp) && filesProp.ValueKind == JsonValueKind.Array)
+        {
+            totalPages = filesProp.GetArrayLength();
+        }
+        if (totalPages <= 0 && !string.IsNullOrWhiteSpace(fallbackUrl))
+        {
+            var matchReader = System.Text.RegularExpressions.Regex.Match(fallbackUrl, @"#(\d+)$");
+            if (matchReader.Success && int.TryParse(matchReader.Groups[1].Value, out int pageFromHash))
+            {
+                totalPages = pageFromHash;
+            }
+        }
+
+        return (type, language, artist, parody, tags, totalPages);
     }
 
     public static string ExtractHitomiTags(JsonElement root)
@@ -4365,6 +4380,7 @@ public class ComicScraperService
                                 string cLang = string.Empty;
                                 string cArtist = string.Empty;
                                 string cParody = string.Empty;
+                                int cPages = 0;
 
                                 try
                                 {
@@ -4378,6 +4394,7 @@ public class ComicScraperService
                                         cArtist = meta.Artist;
                                         cParody = meta.Parody;
                                         cTags = meta.Tags;
+                                        cPages = meta.TotalPages;
                                         if (root.TryGetProperty("title", out var tProp) && tProp.ValueKind == JsonValueKind.String)
                                         {
                                             cTitle = tProp.GetString() ?? cTitle;
@@ -4406,9 +4423,12 @@ public class ComicScraperService
                                     PreviewArtist = cArtist,
                                     PreviewParody = cParody,
                                     PreviewTagsText = cTags,
+                                    TotalChapters = 1,
+                                    TotalPages = cPages,
+                                    LatestChapter = cPages > 0 ? $"{cPages} Pages" : "Gallery",
                                     Domain = "hitomi.la",
                                     Status = "Waiting",
-                                    StatusMessage = "Sẵn sàng tải"
+                                    StatusMessage = cPages > 0 ? $"{cPages} Pages" : "Sẵn sàng tải"
                                 };
                             }
                             finally
@@ -5354,6 +5374,10 @@ public class ComicScraperService
             }
 
             var hitomiMeta = ExtractHitomiMetadata(root, url);
+            if (totalPages <= 0 && hitomiMeta.TotalPages > 0)
+            {
+                totalPages = hitomiMeta.TotalPages;
+            }
             item.Title = displayName;
             item.CoverUrl = coverUrl;
             item.PreviewType = hitomiMeta.Type;
@@ -5362,6 +5386,7 @@ public class ComicScraperService
             item.PreviewParody = hitomiMeta.Parody;
             item.PreviewTagsText = hitomiMeta.Tags;
             item.TotalChapters = 1;
+            item.TotalPages = totalPages;
             item.LatestChapter = totalPages > 0 ? $"{totalPages} Pages" : "Gallery";
             item.Status = "Ready";
             item.StatusMessage = totalPages > 0 ? $"Extracted {totalPages} pages" : "Ready";
@@ -5370,7 +5395,7 @@ public class ComicScraperService
             item.Chapters.Add(new ChapterItem
             {
                 ChapterNumber = 1,
-                Title = "Full Gallery",
+                Title = totalPages > 0 ? $"{totalPages} Pages" : "Full Gallery",
                 Url = url,
                 TotalPages = totalPages,
                 Status = "Waiting"

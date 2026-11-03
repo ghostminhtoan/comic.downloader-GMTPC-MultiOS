@@ -39,7 +39,9 @@ public sealed class ThumbnailPreviewService
                     ["language"] = item.PreviewLanguage ?? string.Empty,
                     ["artist"] = item.PreviewArtist ?? string.Empty,
                     ["parody"] = item.PreviewParody ?? string.Empty,
-                    ["tags"] = item.PreviewTagsText ?? string.Empty
+                    ["tags"] = item.PreviewTagsText ?? string.Empty,
+                    ["totalPages"] = item.TotalPages > 0 ? item.TotalPages.ToString() : string.Empty,
+                    ["latestChapter"] = item.LatestChapter ?? string.Empty
                 };
                 string json = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(Path.Combine(cacheDir, "cover.meta.json"), json);
@@ -69,6 +71,19 @@ public sealed class ThumbnailPreviewService
                     item.PreviewParody = pProp.GetString() ?? string.Empty;
                 if (root.TryGetProperty("tags", out var tgProp) && string.IsNullOrWhiteSpace(item.PreviewTagsText))
                     item.PreviewTagsText = tgProp.GetString() ?? string.Empty;
+                if (root.TryGetProperty("totalPages", out var tpProp) && int.TryParse(tpProp.GetString(), out int tp) && tp > 0)
+                {
+                    if (item.TotalPages <= 0) item.TotalPages = tp;
+                }
+                if (root.TryGetProperty("latestChapter", out var lcProp) && string.IsNullOrWhiteSpace(item.LatestChapter))
+                {
+                    string lc = lcProp.GetString() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(lc)) item.LatestChapter = lc;
+                }
+                if (string.IsNullOrWhiteSpace(item.LatestChapter) && item.TotalPages > 0)
+                {
+                    item.LatestChapter = $"{item.TotalPages} Pages";
+                }
                 loaded = true;
             }
 
@@ -342,6 +357,14 @@ public sealed class ThumbnailPreviewService
                                     if (string.IsNullOrWhiteSpace(item.PreviewArtist)) item.PreviewArtist = meta.Artist;
                                     if (string.IsNullOrWhiteSpace(item.PreviewParody)) item.PreviewParody = meta.Parody;
                                     if (string.IsNullOrWhiteSpace(item.PreviewTagsText)) item.PreviewTagsText = meta.Tags;
+                                    if (meta.TotalPages > 0)
+                                    {
+                                        item.TotalPages = meta.TotalPages;
+                                        if (string.IsNullOrWhiteSpace(item.LatestChapter) || item.LatestChapter == "N/A" || item.LatestChapter == "Gallery")
+                                        {
+                                            item.LatestChapter = $"{meta.TotalPages} Pages";
+                                        }
+                                    }
                                 });
                                 SaveItemMetadataCache(cacheDir, item);
                             }
@@ -962,6 +985,14 @@ public sealed class ThumbnailPreviewService
                             if (string.IsNullOrWhiteSpace(item.PreviewArtist)) item.PreviewArtist = meta.Artist;
                             if (string.IsNullOrWhiteSpace(item.PreviewParody)) item.PreviewParody = meta.Parody;
                             if (string.IsNullOrWhiteSpace(item.PreviewTagsText)) item.PreviewTagsText = meta.Tags;
+                            if (meta.TotalPages > 0)
+                            {
+                                item.TotalPages = meta.TotalPages;
+                                if (string.IsNullOrWhiteSpace(item.LatestChapter) || item.LatestChapter == "N/A" || item.LatestChapter == "Gallery")
+                                {
+                                    item.LatestChapter = $"{meta.TotalPages} Pages";
+                                }
+                            }
                         });
                         try
                         {

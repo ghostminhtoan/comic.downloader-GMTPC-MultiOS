@@ -658,4 +658,10 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Dòng Type & Language thanh lịch với màu sắc tương phản nổi bật: `Type: Doujinshi` (hồng tím `#F472B6`), dấu chấm phân cách `•` (`#475569`), `Language: Japanese (日本語)` (xanh ngọc `#34D399`).
   + Hiển thị thông tin tác giả `Artist` (Cyan `#38BDF8`) và bộ truyện gốc `Parody` (Vàng hổ phách `#FACC15`) khi có dữ liệu.
   + Tự động ẩn các trường rỗng mà không phá vỡ cấu trúc responsive của popup trên cả Android và Windows.
+### 53. Tự Động Xác Định & Hiển Thị Số Trang Toàn Diện Cho Truyện Phân Trang Nhiều Trang (Full Total Pages & Latest Chapter Detection)
+- **Cơ Chế Nhận Diện Số Trang Mới Nhất (TotalPages & LatestChapter)**:
+  + Đối với các bộ truyện/imageset/doujinshi dài không ghi sẵn nhãn số trang trên HTML web (ví dụ Hitomi.la phân trang thành nhiều trang với ảnh cuối cùng mang số thứ tự `#1033`), hệ thống tự động bóc tách chính xác từ mảng `files` trong `galleryinfo` (1033 file ảnh) kết hợp trích xuất fallback qua reader hash URL (`#1033`).
+  + Gán chính xác `TotalPages = 1033` và `LatestChapter = "1033 Pages"` ngay từ bước cào truyện (`ScrapeHitomiBookAsync`), bước crawl kết quả tìm kiếm (`CrawlHitomiSearchAsync`), cũng như khi nạp xem trước hover on-demand (`ThumbnailPreviewService.cs`).
+  + Tối ưu getter `LatestChapterDisplay` trong `ComicBookItem`: Ưu tiên trả về `"{TotalPages} Pages"` khi truyện có số trang xác định (TotalPages > 0), liên kết thông báo `[NotifyPropertyChangedFor(nameof(LatestChapterDisplay))]` khi `TotalPages` thay đổi.
+  + Lưu trữ và đồng bộ hóa `totalPages` và `latestChapter` vào file cache `.tmp\preview-cache\<item>\cover.meta.json` để nạp tức thì 0ms.
 

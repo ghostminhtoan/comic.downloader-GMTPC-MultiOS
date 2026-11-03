@@ -34,6 +34,7 @@ public partial class ComicBookItem : ObservableObject
     private int _downloadedChapters;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LatestChapterDisplay))]
     private int _totalPages;
 
     [ObservableProperty]
@@ -184,10 +185,14 @@ public partial class ComicBookItem : ObservableObject
         {
             if (!string.IsNullOrWhiteSpace(LatestChapter) && !LatestChapter.Equals("N/A", StringComparison.OrdinalIgnoreCase))
                 return LatestChapter;
+            if (TotalPages > 0)
+                return $"{TotalPages} Pages";
             if (Chapters != null && Chapters.Count > 0 && !string.IsNullOrWhiteSpace(Chapters[^1].Title))
                 return Chapters[^1].Title;
-            if (TotalChapters > 0)
+            if (TotalChapters > 1)
                 return $"Chương {TotalChapters}";
+            if (TotalChapters == 1)
+                return TotalPages > 0 ? $"{TotalPages} Pages" : "Chương 1";
             return "N/A";
         }
     }
