@@ -648,7 +648,7 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - **Bảo Lưu Thứ Tự Danh Sách Hàng Chờ Tuyệt Đối Khi Tải Song Song (Order Prefix Determinism)**:
   + Khắc phục triệt để tình trạng race condition khi nhiều truyện tải đồng thời làm sai lệch số thứ tự prefix (001., 002...).
   + Tính toán số thứ tự tất định dựa trên vị trí chính xác của truyện trong hàng chờ: `(book.Index - 1) + OrderPrefixStartIndex`. Bất kể truyện nào tải xong trước hoặc bắt đầu trước trong 1-16 luồng song song, thứ tự đánh số prefix luôn luôn bảo lưu chính xác tuyệt đối theo thứ tự xuất hiện trong danh sách list.
-  + Thêm ô nhập số bắt đầu `OrderPrefixStartIndex` với `NumericUpDown` (Width 72px, Height 25px) kèm mũi tên tăng giảm gọn gàng, chứa vừa vặn 3-4 chữ số, bọc trong Border viền Cyberpunk bo góc, không tràn viền trên Android 9:21 (360px) hay Windows 16:9 (1366x768).
+  + Thêm ô nhập số bắt đầu `OrderPrefixStartIndex` với `NumericUpDown` (Width 88px, Height 26px, tối ưu TextBox padding 4,0,2,0 rộng rãi thoải mái cho 3-4 chữ số) kèm mũi tên tăng giảm gọn gàng, chứa vừa vặn 3-4 chữ số, bọc trong Border viền Cyberpunk bo góc, không tràn viền trên Android 9:21 (360px) hay Windows 16:9 (1366x768).
 ### 52. Hiển Thị Đầy Đủ Metadata Type, Language, Artist & Parody Trong Preview Popup
 - **Bóc Tách Toàn Diện Siêu Dữ Liệu Truyện (ExtractHitomiMetadata)**:
   + Tự động trích xuất `Type` (Doujinshi, Manga, Artist CG, Game CG...), `Language` (Japanese, English, Chinese, Vietnamese kèm tên bản địa như 日本語, 中文), `Artist`, `Parody` và `Tags` từ file JSON `galleryinfo` của Hitomi.la và các domain tương ứng.

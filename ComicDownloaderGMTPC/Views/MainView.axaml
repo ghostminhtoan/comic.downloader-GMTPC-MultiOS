@@ -3373,10 +3373,17 @@
                                     <CheckBox IsChecked="{Binding IsAutoRetry}" Content="🔁 Tự thử lại" FontSize="11" Foreground="#D1D5DB" Margin="0,0,10,4" />
 
                                     <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="5,2" Margin="0,0,8,4" VerticalAlignment="Center">
+                                        <Border.Styles>
+                                            <Style Selector="NumericUpDown /template/ TextBox#PART_TextBox">
+                                                <Setter Property="Padding" Value="4,0,2,0" />
+                                                <Setter Property="FontSize" Value="11" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                            </Style>
+                                        </Border.Styles>
                                         <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                                             <CheckBox IsChecked="{Binding IsAddOrderPrefix}" Content="🔢 Đánh STT tên truyện" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0" ToolTip.Tip="Đánh số thứ tự (001., 002., 003...) ở đầu tên truyện khi tải theo đúng thứ tự trong danh sách" />
                                             <TextBlock Text="từ:" FontSize="10.5" Foreground="#94A3B8" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,0,0" />
-                                            <NumericUpDown Value="{Binding OrderPrefixStartIndex}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="72" Height="25" FontSize="10.5" Padding="2,0" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#334155" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số thứ tự bắt đầu đánh (Mặc định: 1 -> 001., 002...)" />
+                                            <NumericUpDown Value="{Binding OrderPrefixStartIndex}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="88" Height="26" FontSize="11" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#334155" BorderThickness="1" CornerRadius="3" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số thứ tự bắt đầu đánh (Mặc định: 1 -> 001., 002...)" />
                                         </StackPanel>
                                     </Border>
 
