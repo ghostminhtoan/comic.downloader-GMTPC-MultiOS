@@ -406,6 +406,62 @@ public partial class MainViewModel : ViewModelBase
         RequestQueueAutoSave(250);
     }
 
+    [RelayCommand]
+    public void ClearSingleBookOrderPrefix(ComicBookItem? book)
+    {
+        if (book == null) return;
+        var prefixRegex = new System.Text.RegularExpressions.Regex(@"^(\[?\d{1,5}\]?[.\-_\s]+|\(\d{1,5}\)[.\-_\s]+)");
+        string currentTitle = book.Title ?? string.Empty;
+        string cleaned = prefixRegex.Replace(currentTitle, string.Empty).Trim();
+        string rawCleaned = string.IsNullOrWhiteSpace(book.RawTitle)
+            ? cleaned
+            : prefixRegex.Replace(book.RawTitle, string.Empty).Trim();
+
+        book.Title = cleaned;
+        book.RawTitle = rawCleaned;
+        book.HasOrderPrefixApplied = false;
+        book.AppliedOrderNumber = 0;
+        AddLog("SUCCESS", $"[Clear STT] Đã xóa số thứ tự của truyện '{cleaned}'.");
+        RequestQueueAutoSave(250);
+    }
+
+    [RelayCommand]
+    public void ClearOrderPrefix()
+    {
+        IsAddOrderPrefix = false;
+
+        int count = 0;
+        var prefixRegex = new System.Text.RegularExpressions.Regex(@"^(\[?\d{1,5}\]?[.\-_\s]+|\(\d{1,5}\)[.\-_\s]+)");
+
+        foreach (var book in ComicBooks)
+        {
+            string currentTitle = book.Title ?? string.Empty;
+            string cleaned = prefixRegex.Replace(currentTitle, string.Empty).Trim();
+            string rawCleaned = string.IsNullOrWhiteSpace(book.RawTitle)
+                ? cleaned
+                : prefixRegex.Replace(book.RawTitle, string.Empty).Trim();
+
+            if (!string.Equals(book.Title, cleaned, StringComparison.Ordinal) || book.HasOrderPrefixApplied)
+            {
+                book.Title = cleaned;
+                book.RawTitle = rawCleaned;
+                book.HasOrderPrefixApplied = false;
+                book.AppliedOrderNumber = 0;
+                count++;
+            }
+            else
+            {
+                book.RawTitle = rawCleaned;
+                book.HasOrderPrefixApplied = false;
+                book.AppliedOrderNumber = 0;
+            }
+        }
+
+        AddLog("SUCCESS", $"[Clear STT] Đã xóa sạch số thứ tự cho {count}/{ComicBooks.Count} truyện trong hàng chờ.");
+        ShowCenterToast("🧹 ĐÃ XÓA SỐ THỨ TỰ", $"Đã xóa sạch toàn bộ STT của {count} truyện trong hàng chờ, đưa tên truyện về trạng thái gốc sạch sẽ.", "✓");
+        RequestQueueAutoSave(250);
+    }
+
     [ObservableProperty]
     private bool _isAutoProcessImages = false;
 
@@ -4143,6 +4199,13 @@ public partial class MainViewModel : ViewModelBase
         _scraperService.MaxCpuThreads = cpuThreads;
         AddLog("INFO", $"Đang trích xuất thông tin cho {targetUrls.Count} link truyện mới (Số luồng CPU: {cpuThreads})...");
 
+        IsSourceCrawlBusy = true;
+        SourceCrawlDomainText = "Lấy link truyện";
+        SourceCrawlProgressAngle = 0;
+        SourceCrawlProgressPercentText = "0%";
+        SourceCrawlCountText = $"0 / {targetUrls.Count} truyện đang load";
+        SourceCrawlStatusText = "Đang kết nối và phân tích thông tin...";
+
         bool hasMangadex = targetUrls.Any(l => DomainRoutingService.DetectDomain(l).Contains("mangadex"));
         string mangadexLang = "vi";
         bool mangadexFallback = true;
@@ -4172,6 +4235,12 @@ public partial class MainViewModel : ViewModelBase
                 int currentIndex = startIndex + i;
                 var book = await Task.Run(() => _scraperService.ScrapeBookAsync(url, currentIndex, mangadexLang, mangadexFallback)).ConfigureAwait(true);
                 scrapedBooks[i] = book;
+                int done = i + 1;
+                double pct = (double)done / targetUrls.Count * 100.0;
+                SourceCrawlProgressAngle = Math.Clamp(pct * 3.6, 0, 360);
+                SourceCrawlProgressPercentText = $"{(int)pct}%";
+                SourceCrawlCountText = $"{done} / {targetUrls.Count} truyện đang load";
+                SourceCrawlStatusText = book?.Title ?? url;
             }
         }
         else
@@ -4217,6 +4286,8 @@ public partial class MainViewModel : ViewModelBase
         UpdateStats();
         StartScanMissing();
         TriggerThumbnailPrefetchIfNeeded();
+
+        IsSourceCrawlBusy = false;
 
         if (IsAutoDownload)
         {

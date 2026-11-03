@@ -3251,25 +3251,25 @@ public partial class MainView : UserControl
 
         double viewH = this.Bounds.Height > 0 ? this.Bounds.Height : 850;
 
-        double popupW = Math.Min(340, Math.Max(260, viewW - 24));
+        double popupW = Math.Min(350, Math.Max(260, viewW - 24));
 
         popup.Width = popupW;
 
-        double popupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 480;
+        popup.MaxHeight = Math.Max(260, viewH - 24);
 
 
+
+        // Trên Android hoặc thiết bị chạm cảm ứng (Touch): Căn giữa tuyệt đối màn hình cả X và Y chống tràn viền khi item ở trên cao hoặc dưới thấp
 
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
 
         {
 
-            double touchLeft = Math.Max(12, (viewW - popupW) / 2.0);
+            popup.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center;
 
-            var touchPos = e.GetPosition(this);
+            popup.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
 
-            double touchTop = Math.Clamp(touchPos.Y - 120, 16, Math.Max(16, viewH - popupH - 24));
-
-            popup.Margin = new Thickness(touchLeft, touchTop, 0, 0);
+            popup.Margin = new Thickness(0);
 
             return;
 
@@ -3297,27 +3297,39 @@ public partial class MainView : UserControl
 
         double viewH = this.Bounds.Height > 0 ? this.Bounds.Height : 850;
 
-        double popupW = Math.Min(340, Math.Max(260, viewW - 24));
+        double popupW = Math.Min(350, Math.Max(260, viewW - 24));
 
         popup.Width = popupW;
 
-        double popupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 480;
+        popup.MaxHeight = Math.Max(260, viewH - 24);
 
 
+
+        // Trên Android: Luôn căn giữa màn hình tuyệt đối
 
         if (OperatingSystem.IsAndroid())
 
         {
 
-            double touchLeft = Math.Max(12, (viewW - popupW) / 2.0);
+            popup.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center;
 
-            double touchTop = Math.Clamp(pos.Y - 120, 16, Math.Max(16, viewH - popupH - 24));
+            popup.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
 
-            popup.Margin = new Thickness(touchLeft, touchTop, 0, 0);
+            popup.Margin = new Thickness(0);
 
             return;
 
         }
+
+
+
+        popup.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left;
+
+        popup.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top;
+
+
+
+        double popupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 480;
 
 
 

@@ -4238,7 +4238,7 @@ public class ComicScraperService
         return result;
     }
 
-    public async Task<List<ComicBookItem>> ScrapeBatchComicsFromTagPagesAsync(string tagUrl, int pageFrom, int pageTo, string domain, CancellationToken ct = default)
+    public async Task<List<ComicBookItem>> ScrapeBatchComicsFromTagPagesAsync(string tagUrl, int pageFrom, int pageTo, string domain, CancellationToken ct = default, Action<int, int, int, string>? onProgress = null)
     {
         var list = new List<ComicBookItem>();
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -4264,10 +4264,12 @@ public class ComicScraperService
                     if (page >= pageFrom)
                     {
                         var comicLinks = ExtractComicLinksFromTagPage(html, currentUrl, domain);
+                        string latestTitle = string.Empty;
                         foreach (var (cUrl, cTitle, cCover) in comicLinks)
                         {
                             if (seenUrls.Add(cUrl))
                             {
+                                latestTitle = cTitle;
                                 list.Add(new ComicBookItem
                                 {
                                     Index = list.Count + 1,
@@ -4280,6 +4282,7 @@ public class ComicScraperService
                                 });
                             }
                         }
+                        onProgress?.Invoke(page - pageFrom + 1, pageTo - pageFrom + 1, list.Count, latestTitle);
                     }
 
                     // Tìm URL trang kế tiếp qua ExtractEHentaiNextUrl chuẩn
@@ -4457,6 +4460,7 @@ public class ComicScraperService
         int pageConcurrency = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
         var pageResults = new List<(string Url, string Title, string Cover)>?[totalPagesToFetch];
         using var pageSem = new SemaphoreSlim(pageConcurrency, pageConcurrency);
+        int completedPagesCount = 0;
 
         var pageTasks = Enumerable.Range(0, totalPagesToFetch).Select(async offset =>
         {
@@ -4489,10 +4493,23 @@ public class ComicScraperService
 
                 if (!string.IsNullOrWhiteSpace(html))
                 {
-                    pageResults[offset] = ExtractComicLinksFromTagPage(html, pageUrl, domain);
+                    var extracted = ExtractComicLinksFromTagPage(html, pageUrl, domain);
+                    pageResults[offset] = extracted;
+                    int done = Interlocked.Increment(ref completedPagesCount);
+                    string lastTitle = extracted.LastOrDefault().Title ?? "";
+                    onProgress?.Invoke(done, totalPagesToFetch, done * Math.Max(1, extracted.Count), lastTitle);
+                }
+                else
+                {
+                    int done = Interlocked.Increment(ref completedPagesCount);
+                    onProgress?.Invoke(done, totalPagesToFetch, 0, "");
                 }
             }
-            catch { }
+            catch
+            {
+                int done = Interlocked.Increment(ref completedPagesCount);
+                onProgress?.Invoke(done, totalPagesToFetch, 0, "");
+            }
             finally
             {
                 pageSem.Release();

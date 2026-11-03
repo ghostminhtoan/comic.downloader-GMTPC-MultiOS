@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: MainViewModel.DomainAnalyze.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -100,6 +100,32 @@ public partial class MainViewModel
     // ==========================================
     // DOMAIN ANALYZE & BATCH SCRAPING STATE
     // ==========================================
+    [ObservableProperty]
+    private bool _isSourceCrawlBusy;
+
+    [ObservableProperty]
+    private double _sourceCrawlProgressAngle;
+
+    [ObservableProperty]
+    private string _sourceCrawlProgressPercentText = "0%";
+
+    [ObservableProperty]
+    private string _sourceCrawlCountText = "0 truyện đang load...";
+
+    [ObservableProperty]
+    private string _sourceCrawlStatusText = "Đang kết nối tới nguồn...";
+
+    [ObservableProperty]
+    private string _sourceCrawlDomainText = "Nguồn truyện";
+
+    [RelayCommand]
+    public void StopSourceCrawl()
+    {
+        StopDomainBatchScrape();
+        IsSourceCrawlBusy = false;
+        AddLog("WARN", "[Cào nguồn] Đã dừng tiến trình cào truyện.");
+    }
+
     [ObservableProperty]
     private int _domainTotalPages = 1;
 
@@ -453,6 +479,12 @@ public partial class MainViewModel
             }
 
             IsDomainBatchScraping = true;
+            IsSourceCrawlBusy = true;
+            SourceCrawlDomainText = domain;
+            SourceCrawlProgressAngle = 0;
+            SourceCrawlProgressPercentText = "0%";
+            SourceCrawlCountText = $"0 truyện đang load (Trang {DomainPageFrom} - {DomainPageTo})...";
+            SourceCrawlStatusText = $"Đang kết nối và cào dữ liệu từ {domain}...";
             _scraperService.MaxCpuThreads = Math.Clamp(LinkCpuThreads, 1, MaxLinkCpuThreads);
             _domainScrapeCts = new CancellationTokenSource();
 
@@ -504,12 +536,27 @@ public partial class MainViewModel
 
                     AddLog("INFO", $"[Cào hàng loạt] [{tagIdx + 1}/{tagUrls.Count}] Đang cào ({targetDomain}): {currentTagUrl} (Trang {DomainPageFrom} - {DomainPageTo})...");
 
+                    int totalPagesInBatch = Math.Max(1, DomainPageTo - DomainPageFrom + 1);
                     var scrapedItems = await _scraperService.ScrapeBatchComicsFromTagPagesAsync(
                         currentTagUrl,
                         DomainPageFrom,
                         DomainPageTo,
                         targetDomain,
-                        _domainScrapeCts.Token);
+                        _domainScrapeCts.Token,
+                        onProgress: (curPage, totPages, scrapedSoFar, title) =>
+                        {
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                double pct = totPages > 0 ? Math.Min(100.0, (double)curPage / totPages * 100.0) : 0;
+                                SourceCrawlProgressAngle = Math.Clamp(pct * 3.6, 0, 360);
+                                SourceCrawlProgressPercentText = $"{(int)pct}%";
+                                SourceCrawlCountText = $"{totalScraped + scrapedSoFar} truyện đang load (Trang {curPage}/{totPages})";
+                                if (!string.IsNullOrWhiteSpace(title))
+                                {
+                                    SourceCrawlStatusText = title;
+                                }
+                            });
+                        });
 
                     totalScraped += scrapedItems.Count;
                     int addedThisTag = 0;
@@ -551,6 +598,7 @@ public partial class MainViewModel
         finally
         {
             IsDomainBatchScraping = false;
+            IsSourceCrawlBusy = false;
         }
     }
 

@@ -695,3 +695,36 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
     * `IsAddOrderPrefix` (Đánh STT tên truyện).
     * `OrderPrefixStartIndex` (Số thứ tự bắt đầu).
   + Khi tắt app và mở lại: `ApplyRestoredQueueSettings` tự động khôi phục nguyên vẹn trạng thái của tính năng xử lý ảnh và đánh STT từ phiên làm việc trước thông qua `autosave.md`.
+
+### 57. Chuẩn Hóa Căn Giữa Màn Hình Tuyệt Đối Cho Popup Preview Trên Android & Chống Tràn Viền (Anti-Edge-Clipping Center Layout)
+- **Root Cause Lỗi Tràn Viền Trên Android**:
+  + Trước đó, vị trí Popup Preview trên màn hình cảm ứng/Android được tính toán theo tọa độ ngón tay chạm: `touchTop = Math.Clamp(touchPos.Y - 120, 16, Math.Max(16, viewH - popupH - 24))`.
+  + Khi người dùng chạm vào truyện ở trên cao (đầu danh sách), popup bị ghim sát mép trên, phần đáy popup bị đẩy vượt quá đáy màn hình.
+  + Khi người dùng chạm vào truyện ở dưới thấp (cuối danh sách), popup bị ghim sát đáy; đặc biệt khi ảnh bìa tải xong phình to hơn chiều cao ước tính 480px, toàn bộ phần thông tin chi tiết (Type, Language, Artist, Tags, Status) và các nút điều khiển bị thụt xuống dưới màn hình khiến người dùng không nhìn thấy được.
+- **Giải Pháp Chuẩn Hóa Toàn Diện (First-Principles Layout Engineering)**:
+  + **Căn Giữa Tuyệt Đối Trên Android & Touch (`MainView.axaml.cs`)**:
+    * Trong cả hai hàm `UpdateHoverPreviewPosition` và `UpdateHoverPreviewPositionManual`: Khi `OperatingSystem.IsAndroid()` hoặc `e.Pointer.Type == PointerType.Touch`, thiết lập trực tiếp `popup.HorizontalAlignment = HorizontalAlignment.Center`, `popup.VerticalAlignment = VerticalAlignment.Center`, `popup.Margin = new Thickness(0)`.
+    * Avalonia Layout Engine sẽ tự động căn giữa popup tại trung tâm màn hình/viewport, độc lập hoàn toàn với vị trí cuộn của danh sách và vị trí ngón tay chạm.
+    * Đặt giới hạn `popup.MaxHeight = Math.Max(260, viewH - 24)` và `popup.MaxWidth = Math.Min(350, Math.Max(260, viewW - 24))` để đảm bảo luôn chừa lề an toàn 12px bốn phía viền màn hình.
+    * Khi ở Desktop (chuột di chuyển): Tự động chuyển lại `HorizontalAlignment = HorizontalAlignment.Left`, `VerticalAlignment = VerticalAlignment.Top` và bám sát theo con trỏ chuột.
+  + **Tái Cấu Trúc Khung Popup Với Grid Cố Định Header & ScrollViewer Cuộn An Toàn (`MainView.axaml`)**:
+    * Chia popup thành `Grid RowDefinitions="Auto, *"`:
+      - Row 0: Header chứa nhãn `"🔍 XEM TRƯỚC TRUYỆN"` và nút `"✕ ĐÓNG"` màu đỏ rực rỡ được cố định 100% trên đỉnh, không bị cuộn trôi đi, người dùng luôn luôn bấm đóng được ngay lập tức.
+      - Row 1: Bọc trong `ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"` chứa khung ảnh bìa và toàn bộ cụm thông tin chi tiết (Title, Type, Language, Artist, Parody, Tags, latest chapter, missing chapter, Status).
+    * Giúp popup tương thích hoàn hảo trên mọi kích thước màn hình Android (từ màn hình dọc 9:21 360px cho đến màn hình xoay ngang Landscape hẹp chiều cao): Nội dung có thể vuốt cuộn mượt mà mà không bao giờ bị cắt cụt hay tràn khỏi màn hình.
+
+### 58. Cơ Chế Xóa Sạch STT Truyện (Clear Order Prefix) & Circular Progress Bar Cho Mọi Tab Source Khi Crawl Link
+- **Cơ Chế Xóa Sạch STT Truyện (Clear Order Prefix - Toàn Danh Sách & Từng Truyện)**:
+  + Thêm nút bấm `"🧹 Xóa STT"` đặt ngay trong cụm điều khiển Đánh STT tên truyện (`MainView.axaml`):
+    * Border bo góc Cyberpunk, nút bấm viền đỏ `#EF4444` nổi bật, tooltip giải thích rõ ràng.
+    * Khi click: Tự động tắt checkbox `IsAddOrderPrefix`, dùng Regex chuẩn `^(\[?\d{1,5}\]?[.\-_\s]+|\(\d{1,5}\)[.\-_\s]+)` quét sạch mọi tiền tố STT dạng `001. `, `01. `, `1. `, `01 - `, `[01] `, `(1) `... ở cả `Title` lẫn `RawTitle` của toàn bộ truyện trong hàng chờ, đưa tên truyện về trạng thái gốc sạch bong không tì vết.
+    * Reset triệt để `HasOrderPrefixApplied = false` và `AppliedOrderNumber = 0`, tự động đồng bộ sang file sao lưu `autosave.md` và xuất Center Toast thông báo thành công.
+  + Thêm tùy chọn menu ngữ cảnh `"🧹 Xóa STT tên truyện này (Clear STT)"` trong ContextMenu chuột phải/nhấn giữ trên cả 2 chế độ hiển thị (List View và Thumbnail Grid View) cho phép người dùng xóa STT của một truyện riêng lẻ bất kỳ lúc nào.
+- **Circular Progress Bar Cho Mọi Tab Source Khi Crawl Link (Cào Mới, Cào Thêm, Lấy Link Trực Tiếp)**:
+  + Khắc phục triệt để tình trạng "crawl ngầm quá yên ắng" khiến người dùng không biết tiến trình cào truyện đang chạy đến đâu.
+  + Tích hợp Overlay trung tâm `SourceCrawlProgressOverlay` bao phủ mọi Tab Nguồn (Manga Source, Manga English, Source Hentai, Novel Source...):
+    * **Circular Progress Bar với `<Arc>`**: Đường cong Cyan neon xoay mượt mà từ 0 đến 360 độ (`SourceCrawlProgressAngle`) theo tiến trình tải.
+    * **Chỉ số % to bản**: Hiển thị con số phần trăm chính xác ở tâm vòng tròn (`0%` -> `100%`).
+    * **Số truyện / Tổng số truyện đang load**: Dòng chữ vàng hổ phách hiển thị rõ ràng: `15 / 50 truyện đang load` hoặc `48 truyện đã load (Trang 2/5)`.
+    * **Tên truyện / Domain đang cào**: Cập nhật trực tiếp tiêu đề truyện hoặc link đang được fetch.
+    * **Nút `⏹ DỪNG CÀO`**: Nút bấm màu đỏ rực rỡ cho phép người dùng chủ động ngắt tiến trình cào ngay lập tức mà không phải chờ đợi.

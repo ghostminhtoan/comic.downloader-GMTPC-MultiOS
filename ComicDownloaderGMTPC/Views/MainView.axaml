@@ -3377,6 +3377,16 @@
                                             <CheckBox IsChecked="{Binding IsAddOrderPrefix}" Content="🔢 Đánh STT tên truyện" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0" ToolTip.Tip="Đánh số thứ tự (001., 002., 003...) ở đầu tên truyện khi tải theo đúng thứ tự trong danh sách" />
                                             <TextBlock Text="từ:" FontSize="11" Foreground="#94A3B8" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,0,0" />
                                             <NumericUpDown Value="{Binding OrderPrefixStartIndex}" Minimum="1" Maximum="9999" Increment="1" FormatString="0" Width="115" Height="28" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" Background="#0B0F19" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Số thứ tự bắt đầu đánh (Mặc định: 1 -> 001., 002...)" />
+                                            <Button Command="{Binding ClearOrderPrefixCommand}"
+                                                    Background="#1E293B" BorderBrush="#EF4444" BorderThickness="1"
+                                                    Foreground="#F87171" FontWeight="Bold" FontSize="10.5"
+                                                    Padding="8,3" Height="26" CornerRadius="4" Margin="2,0,0,0"
+                                                    ToolTip.Tip="Xóa sạch số thứ tự ở đầu tên truyện (001., 01., 1., 01 -, [01]...) của toàn bộ danh sách để đưa tên truyện về dạng gốc sạch sẽ">
+                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                    <TextBlock Text="🧹" FontSize="10" VerticalAlignment="Center" />
+                                                    <TextBlock Text="Xóa STT" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
                                         </StackPanel>
                                     </Border>
 
@@ -4110,6 +4120,14 @@
 
                                                                 <Separator Background="#334155" />
 
+                                                                <MenuItem Header="🧹 Xóa STT tên truyện này (Clear STT)"
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ClearSingleBookOrderPrefixCommand}"
+                                                                          CommandParameter="{Binding .}">
+                                                                    <MenuItem.Icon>
+                                                                        <TextBlock Text="🧹" Foreground="#F87171" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+                                                                    </MenuItem.Icon>
+                                                                </MenuItem>
+                                                                <Separator Background="#334155" />
                                                                 <MenuItem Header="❌ Xóa khỏi hàng đợi"
 
                                                                           Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).DeleteItemCommand}"
@@ -4580,6 +4598,14 @@
 
                                                                 </MenuItem>
 
+                                                                <MenuItem Header="🧹 Xóa STT tên truyện này (Clear STT)"
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ClearSingleBookOrderPrefixCommand}"
+                                                                          CommandParameter="{Binding .}">
+                                                                    <MenuItem.Icon>
+                                                                        <TextBlock Text="🧹" Foreground="#F87171" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+                                                                    </MenuItem.Icon>
+                                                                </MenuItem>
+                                                                <Separator Background="#334155" />
                                                                 <MenuItem Header="❌ Xóa khỏi hàng đợi"
 
                                                                           Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).DeleteItemCommand}"
@@ -10470,9 +10496,9 @@
 
                 ZIndex="2500"
 
-                HorizontalAlignment="Left" VerticalAlignment="Top"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
 
-                Margin="420,180,0,0" Width="340"
+                Margin="0" Width="340" MaxWidth="360"
 
                 Background="#F8091018" BorderBrush="#00E5FF" BorderThickness="1.5"
 
@@ -10480,11 +10506,11 @@
 
                 PointerExited="OnPopupPreviewPointerExited">
 
-            <StackPanel Spacing="6">
+            <Grid RowDefinitions="Auto, *">
 
-                <!-- Thanh tiêu đề Popup Preview kèm Nút Tắt (✕ ĐÓNG) nổi bật cho Android & Desktop -->
+                <!-- Thanh tiêu đề Popup Preview kèm Nút Tắt (✕ ĐÓNG) nổi bật cho Android & Desktop (Cố định ở đỉnh, luôn nhìn thấy 100%) -->
 
-                <Grid ColumnDefinitions="*, Auto" Margin="2,0,0,2">
+                <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="2,0,0,6">
 
                     <TextBlock Grid.Column="0" Text="🔍 XEM TRƯỚC TRUYỆN"
 
@@ -10514,115 +10540,149 @@
 
 
 
-                <!-- Khung Ảnh Bìa Độ Phân Giải Cao (cover.jpg) -->
+                <!-- Vùng cuộn an toàn chống tràn viền màn hình cho Android & Desktop khi nội dung dài hoặc xoay ngang màn hình -->
 
-                <Border Background="#05080D" CornerRadius="2" MinHeight="220" MaxHeight="380" ClipToBounds="True">
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
 
-                    <Grid>
+                    <StackPanel Spacing="6" Margin="0,0,2,0">
 
-                        <TextBlock Text="NO IMG" FontSize="14" FontWeight="Bold" Foreground="#475569"
+                        <!-- Khung Ảnh Bìa Độ Phân Giải Cao (cover.jpg) -->
 
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                        <Border Background="#05080D" CornerRadius="2" MinHeight="180" MaxHeight="380" ClipToBounds="True">
 
-                                   IsVisible="{Binding ActiveHoverItem.EffectivePopupBitmap, Converter={x:Static ObjectConverters.IsNull}}" />
+                            <Grid>
 
-                        <Image Source="{Binding ActiveHoverItem.EffectivePopupBitmap}"
+                                <TextBlock Text="NO IMG" FontSize="14" FontWeight="Bold" Foreground="#475569"
 
-                               Stretch="Uniform" MaxHeight="370"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
 
-                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           IsVisible="{Binding ActiveHoverItem.EffectivePopupBitmap, Converter={x:Static ObjectConverters.IsNull}}" />
 
-                               RenderOptions.BitmapInterpolationMode="HighQuality" />
+                                <Image Source="{Binding ActiveHoverItem.EffectivePopupBitmap}"
 
-                        <Border Background="#80000000" IsVisible="{Binding ActiveHoverItem.IsThumbnailLoading}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                       Stretch="Uniform" MaxHeight="370"
 
-                            <TextBlock Text="⏳ Đang tải ảnh bìa..." FontSize="11" Foreground="#00E5FF" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+
+                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+
+                                <Border Background="#80000000" IsVisible="{Binding ActiveHoverItem.IsThumbnailLoading}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+
+                                    <TextBlock Text="⏳ Đang tải ảnh bìa..." FontSize="11" Foreground="#00E5FF" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                </Border>
+
+                            </Grid>
 
                         </Border>
 
-                    </Grid>
-
-                </Border>
 
 
+                        <!-- Thông tin chi tiết chuẩn WPF: Title, latest chapter, missing chapter, Status, Tags -->
 
-                <!-- Thông tin chi tiết chuẩn WPF: Title, latest chapter, missing chapter, Status, Tags -->
+                        <StackPanel Spacing="2" Margin="2,2,2,0">
 
-                <StackPanel Spacing="2" Margin="2,2,2,0">
+                            <TextBlock Text="{Binding ActiveHoverItem.Title}"
 
-                    <TextBlock Text="{Binding ActiveHoverItem.Title}"
+                                       FontWeight="Bold" FontSize="13" Foreground="#FDE047" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" />
 
-                               FontWeight="Bold" FontSize="13" Foreground="#FDE047" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" />
+                            <!-- Dòng Type & Language thanh lịch, gọn gàng -->
 
-                    <!-- Dòng Type & Language thanh lịch, gọn gàng -->
-                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1,0,1" IsVisible="{Binding ActiveHoverItem.HasPreviewTypeOrLanguage}">
-                        <TextBlock FontSize="11" IsVisible="{Binding ActiveHoverItem.HasPreviewType}">
-                            <Run Text="Type: " Foreground="#94A3B8" />
-                            <Run Text="{Binding ActiveHoverItem.PreviewType}" Foreground="#F472B6" FontWeight="SemiBold" />
-                        </TextBlock>
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1,0,1" IsVisible="{Binding ActiveHoverItem.HasPreviewTypeOrLanguage}">
 
-                        <TextBlock Text="•" Foreground="#475569" IsVisible="{Binding ActiveHoverItem.HasBothPreviewTypeAndLanguage}" VerticalAlignment="Center" />
+                                <TextBlock FontSize="11" IsVisible="{Binding ActiveHoverItem.HasPreviewType}">
 
-                        <TextBlock FontSize="11" IsVisible="{Binding ActiveHoverItem.HasPreviewLanguage}">
-                            <Run Text="Language: " Foreground="#94A3B8" />
-                            <Run Text="{Binding ActiveHoverItem.PreviewLanguage}" Foreground="#34D399" FontWeight="SemiBold" />
-                        </TextBlock>
+                                    <Run Text="Type: " Foreground="#94A3B8" />
+
+                                    <Run Text="{Binding ActiveHoverItem.PreviewType}" Foreground="#F472B6" FontWeight="SemiBold" />
+
+                                </TextBlock>
+
+
+
+                                <TextBlock Text="•" Foreground="#475569" IsVisible="{Binding ActiveHoverItem.HasBothPreviewTypeAndLanguage}" VerticalAlignment="Center" />
+
+
+
+                                <TextBlock FontSize="11" IsVisible="{Binding ActiveHoverItem.HasPreviewLanguage}">
+
+                                    <Run Text="Language: " Foreground="#94A3B8" />
+
+                                    <Run Text="{Binding ActiveHoverItem.PreviewLanguage}" Foreground="#34D399" FontWeight="SemiBold" />
+
+                                </TextBlock>
+
+                            </StackPanel>
+
+
+
+                            <!-- Artist & Parody (nếu có) -->
+
+                            <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,1,0,1" IsVisible="{Binding ActiveHoverItem.HasPreviewArtist}">
+
+                                <Run Text="Artist: " Foreground="#94A3B8" />
+
+                                <Run Text="{Binding ActiveHoverItem.PreviewArtist}" Foreground="#38BDF8" FontWeight="SemiBold" />
+
+                            </TextBlock>
+
+
+
+                            <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,1,0,1" IsVisible="{Binding ActiveHoverItem.HasPreviewParody}">
+
+                                <Run Text="Parody: " Foreground="#94A3B8" />
+
+                                <Run Text="{Binding ActiveHoverItem.PreviewParody}" Foreground="#FACC15" FontWeight="SemiBold" />
+
+                            </TextBlock>
+
+
+
+                            <TextBlock Text="{Binding ActiveHoverItem.PreviewTagsText}"
+
+                                       IsVisible="{Binding ActiveHoverItem.HasPreviewTags}"
+
+                                       FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" MaxLines="4" TextTrimming="CharacterEllipsis" Margin="0,1,0,2" />
+
+
+
+                            <TextBlock FontSize="11.5" FontWeight="SemiBold" Foreground="#00E5FF" TextWrapping="Wrap">
+
+                                <Run Text="latest chapter: " />
+
+                                <Run Text="{Binding ActiveHoverItem.LatestChapterDisplay}" />
+
+                            </TextBlock>
+
+
+
+                            <TextBlock FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding ActiveHoverItem.MissingChapterBrush}" TextWrapping="Wrap">
+
+                                <Run Text="missing chapter: " />
+
+                                <Run Text="{Binding ActiveHoverItem.MissingChapterDisplay}" />
+
+                            </TextBlock>
+
+
+
+                            <TextBlock FontSize="11.5" FontWeight="SemiBold" Foreground="#00E5FF">
+
+                                <Run Text="Status: " />
+
+                                <Run Text="{Binding ActiveHoverItem.DisplayStatusVi}" />
+
+                            </TextBlock>
+
+
+
+                        </StackPanel>
+
                     </StackPanel>
 
-                    <!-- Artist & Parody (nếu có) -->
-                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,1,0,1" IsVisible="{Binding ActiveHoverItem.HasPreviewArtist}">
-                        <Run Text="Artist: " Foreground="#94A3B8" />
-                        <Run Text="{Binding ActiveHoverItem.PreviewArtist}" Foreground="#38BDF8" FontWeight="SemiBold" />
-                    </TextBlock>
+                </ScrollViewer>
 
-                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,1,0,1" IsVisible="{Binding ActiveHoverItem.HasPreviewParody}">
-                        <Run Text="Parody: " Foreground="#94A3B8" />
-                        <Run Text="{Binding ActiveHoverItem.PreviewParody}" Foreground="#FACC15" FontWeight="SemiBold" />
-                    </TextBlock>
-
-                    <TextBlock Text="{Binding ActiveHoverItem.PreviewTagsText}"
-
-                               IsVisible="{Binding ActiveHoverItem.HasPreviewTags}"
-
-                               FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" MaxLines="4" TextTrimming="CharacterEllipsis" Margin="0,1,0,2" />
-
-
-
-                    <TextBlock FontSize="11.5" FontWeight="SemiBold" Foreground="#00E5FF" TextWrapping="Wrap">
-
-                        <Run Text="latest chapter: " />
-
-                        <Run Text="{Binding ActiveHoverItem.LatestChapterDisplay}" />
-
-                    </TextBlock>
-
-
-
-                    <TextBlock FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding ActiveHoverItem.MissingChapterBrush}" TextWrapping="Wrap">
-
-                        <Run Text="missing chapter: " />
-
-                        <Run Text="{Binding ActiveHoverItem.MissingChapterDisplay}" />
-
-                    </TextBlock>
-
-
-
-                    <TextBlock FontSize="11.5" FontWeight="SemiBold" Foreground="#00E5FF">
-
-                        <Run Text="Status: " />
-
-                        <Run Text="{Binding ActiveHoverItem.DisplayStatusVi}" />
-
-                    </TextBlock>
-
-
-
-                    
-
-                </StackPanel>
-
-            </StackPanel>
+            </Grid>
 
         </Border>
 
@@ -11012,6 +11072,74 @@
         </Border>
 
 
+
+        <!-- OVERLAY CIRCULAR PROGRESS BAR CHO CRAWL LINK MỌI TAB SOURCE -->
+        <Border x:Name="SourceCrawlProgressOverlay"
+                IsVisible="{Binding IsSourceCrawlBusy}"
+                IsHitTestVisible="True"
+                ZIndex="3000"
+                HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                Background="#B0050811">
+            <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="#181F2E" BorderBrush="#00F0FF" BorderThickness="1.5"
+                    CornerRadius="16" Padding="26,22" MinWidth="280" MaxWidth="380"
+                    BoxShadow="0 16 48 10 #E0000000">
+                <StackPanel Orientation="Vertical" Spacing="14" HorizontalAlignment="Center">
+                    <!-- Header Icon & Title -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <TextBlock Text="🌐" FontSize="16" VerticalAlignment="Center" />
+                        <TextBlock Text="ĐANG CÀO TRUYỆN TỪ NGUỒN..." FontSize="13" FontWeight="ExtraBold" Foreground="#00F0FF" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- CIRCULAR PROGRESS BAR -->
+                    <Grid Width="96" Height="96" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <!-- Vòng nền xám mờ -->
+                        <Ellipse Width="86" Height="86"
+                                 Stroke="#334155" StrokeThickness="7"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <!-- Cung tròn tiến độ (Arc quay theo góc SourceCrawlProgressAngle từ 0 đến 360 độ) -->
+                        <Arc Width="86" Height="86"
+                             Stroke="#00F0FF" StrokeThickness="7"
+                             StrokeLineCap="Round"
+                             StartAngle="-90"
+                             SweepAngle="{Binding SourceCrawlProgressAngle}"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <!-- Con số phần trăm to bản ở giữa -->
+                        <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding SourceCrawlProgressPercentText}"
+                                       FontSize="18" FontWeight="Black"
+                                       Foreground="#00F0FF"
+                                       HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Text số truyện / tổng số truyện đang load -->
+                    <StackPanel Spacing="4" HorizontalAlignment="Center">
+                        <TextBlock Text="{Binding SourceCrawlCountText}"
+                                   FontSize="13" FontWeight="Bold" Foreground="#FDE047"
+                                   TextWrapping="Wrap" TextAlignment="Center"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding SourceCrawlStatusText}"
+                                   FontSize="11" Foreground="#94A3B8"
+                                   TextWrapping="Wrap" TextAlignment="Center"
+                                   MaxWidth="320" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- Nút Dừng cào nổi bật -->
+                    <Button Command="{Binding StopSourceCrawlCommand}"
+                            Background="#DC2626" BorderBrush="#F87171" BorderThickness="1"
+                            Foreground="#FFFFFF" FontWeight="Bold" FontSize="11"
+                            Padding="14,6" CornerRadius="6" HorizontalAlignment="Center"
+                            ToolTip.Tip="Dừng tiến trình cào truyện hiện tại">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <TextBlock Text="⏹" FontSize="11" VerticalAlignment="Center" />
+                            <TextBlock Text="DỪNG CÀO" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Border>
 
         <!-- 8. MODAL / OVERLAY CIRCULAR PROGRESS BAR CHO DUAL PICTURE SORT -->
         <Border x:Name="DualSortProgressOverlay"
