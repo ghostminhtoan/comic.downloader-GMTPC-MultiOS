@@ -3410,7 +3410,28 @@
 
                                     <CheckBox IsChecked="{Binding IsAutoDeleteCompleted}" Content="🧹 Tự xóa đã xong" FontSize="11" Foreground="#10B981" FontWeight="SemiBold" Margin="0,0,10,4" ToolTip.Tip="Tự động dọn dẹp xóa truyện hoặc dải chương khỏi hàng đợi ngay khi tải xong 100%" />
 
-                                    <CheckBox IsChecked="{Binding IsAutoProcessImages}" Content="✨ Xử lý ảnh trong khi download" FontSize="11" Foreground="#EC4899" FontWeight="SemiBold" Margin="0,0,10,4" ToolTip.Tip="Vừa tải vừa xử lý và nâng cấp ảnh (Image Enhancer) theo thiết lập bộ lọc (Tương phản, Độ nét, Màu sắc, Khử nhiễu) trong Tab Công cụ -> Nâng cấp ảnh" />
+                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,10,4">
+                                        <CheckBox IsChecked="{Binding IsAutoProcessImages}" Content="✨ Xử lý ảnh khi tải" FontSize="11" Foreground="#EC4899" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip.Tip="Vừa tải vừa tự động nâng cấp và chuyển đổi định dạng ảnh (JPG/WebP/Original) theo chất lượng đã chọn" />
+
+                                        <!-- Cụm tuỳ chọn nhanh khi bật Xử lý ảnh (Định dạng xuất, Chất lượng, Nút mở bộ lọc) -->
+                                        <Border IsVisible="{Binding IsAutoProcessImages}" Background="#0B0F19" BorderBrush="#EC4899" BorderThickness="1" CornerRadius="4" Padding="5,1" VerticalAlignment="Center" Margin="2,0,0,0">
+                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                <TextBlock Text="Định dạng:" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center" />
+                                                <ComboBox SelectedIndex="{Binding DownloadEnhanceFormatIndex}" Width="82" Height="24" FontSize="10" Background="#1E293B" Foreground="#38BDF8" BorderThickness="0" CornerRadius="3" VerticalAlignment="Center" ToolTip.Tip="Định dạng xuất file ảnh khi tải về (JPG nén siêu nhẹ, WebP hiện đại, hoặc Giữ nguyên gốc)">
+                                                    <ComboBoxItem Content="JPG" />
+                                                    <ComboBoxItem Content="WebP" />
+                                                    <ComboBoxItem Content="Gốc" />
+                                                </ComboBox>
+
+                                                <TextBlock Text="CL:" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center" Margin="3,0,0,0" />
+                                                <NumericUpDown Value="{Binding EnhanceQuality}" Minimum="10" Maximum="100" Increment="5" FormatString="0" Width="68" Height="24" FontSize="10" Foreground="#F59E0B" Background="#1E293B" BorderThickness="0" CornerRadius="3" VerticalAlignment="Center" HorizontalContentAlignment="Center" ToolTip.Tip="Chất lượng nén ảnh (10 - 100, khuyên dùng 45-80 để nén siêu nhẹ)" />
+
+                                                <Button Command="{Binding OpenEnhanceSettingsTabCommand}" Background="#831843" Foreground="#F472B6" FontSize="10" FontWeight="Bold" Padding="6,2" Height="22" CornerRadius="3" VerticalAlignment="Center" ToolTip.Tip="Mở tab Công cụ -> Nâng cấp ảnh để chỉnh chuyên sâu bộ lọc (Tương phản, Độ sáng, Bão hòa, Khử nhiễu, Presets)">
+                                                    <TextBlock Text="⚙️ Bộ lọc" />
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
 
                                     <CheckBox IsChecked="{Binding IsAutoSplitLongImages}" Content="✂️ Tự cắt ảnh dài"  FontSize="11" Foreground="#F43F5E" FontWeight="SemiBold" Margin="0,0,6,4" ToolTip.Tip="Tự động cắt ảnh có chiều cao lớn hơn ngưỡng chỉ định thành các mảnh nhỏ trong khi tải" />
 
@@ -5811,8 +5832,8 @@
 
 
                                             <!-- Hàng 3: Bộ thông số tinh chỉnh (Chuẩn bố cục XnConvert: Slider ngang mỏng, NumericUpDown 3-digit nhỏ gọn, Nút Reset riêng ↺) -->
-
-                                            <UniformGrid Columns="{Binding EnhanceDualColumns}" HorizontalAlignment="Stretch">
+                                            <!-- Căn lề phải Margin="0,0,24,0" cách ly thanh cuộn ScrollBar chống chạm nhầm khi bấm mũi tên tăng giảm -->
+                                            <UniformGrid Columns="{Binding EnhanceDualColumns}" HorizontalAlignment="Stretch" Margin="0,0,24,0">
 
                                                 <UniformGrid.Resources>
 

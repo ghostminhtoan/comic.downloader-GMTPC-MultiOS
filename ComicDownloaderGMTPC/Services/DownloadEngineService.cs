@@ -2199,26 +2199,52 @@ public class DownloadEngineService
                             {
                                 string pageUrl = item.Url;
                                 string pageExt = GetSafeImageExtensionFromUrl(pageUrl);
-                                string pageFileName = $"{(pIdx + 1):D3}{pageExt}";
+                                string pageBaseName = $"{(pIdx + 1):D3}";
+                                string pageFileName = $"{pageBaseName}{pageExt}";
                                 string pageFilePath = Path.Combine(chapterDir, pageFileName);
 
                                 // Kiểm tra file tồn tại: Chỉ chấp nhận nếu file > 512 bytes và có trong manifest.
-                                // Nếu file <= 512 bytes (file rác / placeholder 15 bytes cũ bị lỗi), tự động xóa để tải lại ảnh thật.
+                                // Hỗ trợ linh hoạt cả khi file đã được chuyển đổi sang định dạng khác (.jpg, .webp, .png, .gif) do In-flight Image Enhancement
                                 bool isExistingValid = false;
+                                string? foundValidFile = null;
+
                                 if (File.Exists(pageFilePath))
                                 {
                                     var fi = new FileInfo(pageFilePath);
-                                    if (fi.Length > 512 && manifest.ContainsKey(pageFileName))
+                                    if (fi.Length > 512)
                                     {
-                                        isExistingValid = true;
+                                        foundValidFile = pageFilePath;
                                     }
                                     else
                                     {
                                         try { File.Delete(pageFilePath); } catch {}
-                                        lock (manifest)
+                                        lock (manifest) { manifest.Remove(pageFileName); }
+                                    }
+                                }
+
+                                if (foundValidFile == null)
+                                {
+                                    foreach (var altExt in new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif" })
+                                    {
+                                        string altPath = Path.Combine(chapterDir, $"{pageBaseName}{altExt}");
+                                        if (File.Exists(altPath))
                                         {
-                                            manifest.Remove(pageFileName);
+                                            var fi = new FileInfo(altPath);
+                                            if (fi.Length > 512)
+                                            {
+                                                foundValidFile = altPath;
+                                                break;
+                                            }
                                         }
+                                    }
+                                }
+
+                                if (foundValidFile != null)
+                                {
+                                    string foundName = Path.GetFileName(foundValidFile);
+                                    if (manifest.ContainsKey(pageFileName) || manifest.ContainsKey(foundName) || manifest.ContainsValue(pageUrl))
+                                    {
+                                        isExistingValid = true;
                                     }
                                 }
 
@@ -2239,6 +2265,15 @@ public class DownloadEngineService
                                     lock (manifest)
                                     {
                                         manifest[pageFileName] = pageUrl;
+                                        // Ghi nhận cả định dạng thực tế nếu In-flight Image Enhancer đã chuyển đổi sang (.jpg, .webp, v.v.)
+                                        foreach (var altExt in new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif" })
+                                        {
+                                            string altName = $"{pageBaseName}{altExt}";
+                                            if (File.Exists(Path.Combine(chapterDir, altName)))
+                                            {
+                                                manifest[altName] = pageUrl;
+                                            }
+                                        }
                                     }
                                     chapter.DownloadedPages = doneNow;
                                 }
@@ -3276,13 +3311,17 @@ public class DownloadEngineService
                         try
                         {
                             var options = GetImageEnhancerOptions?.Invoke() ?? new ImageEnhancerOptions { OverwriteOriginal = true, OutputFormat = "original" };
-                            bool enhanced = ImageEnhancerService.TryEnhanceImageFile(destinationPath, options);
+                            bool enhanced = ImageEnhancerService.TryEnhanceImageFile(destinationPath, options, out string finalEnhancedPath);
                             if (enhanced)
                             {
-                                LogEmitted?.Invoke("INFO", $"[Xú lý ảnh khi tải] Đã tối ưu ảnh '{Path.GetFileName(destinationPath)}'");
+                                string fmtLabel = string.IsNullOrWhiteSpace(options.OutputFormat) ? "ORIGINAL" : options.OutputFormat.ToUpperInvariant();
+                                LogEmitted?.Invoke("INFO", $"[Xử lý ảnh khi tải] Đã tối ưu ảnh '{Path.GetFileName(finalEnhancedPath)}' ({fmtLabel}, Q:{options.Quality})");
                             }
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            LogEmitted?.Invoke("WARN", $"[Xử lý ảnh khi tải] Lỗi tối ưu '{Path.GetFileName(destinationPath)}': {ex.Message}");
+                        }
                     }
 
                     if (AutoSplitLongImages && File.Exists(destinationPath))

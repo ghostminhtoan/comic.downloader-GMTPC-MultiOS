@@ -22,6 +22,13 @@ public class QueueMarkdownPayload
     public bool? AutoProcessImages { get; set; }
     public bool? AddOrderPrefixToTitle { get; set; }
     public int? OrderPrefixStartIndex { get; set; }
+    public string? EnhanceOutputFormat { get; set; }
+    public float? EnhanceContrast { get; set; }
+    public float? EnhanceBrightness { get; set; }
+    public float? EnhanceSaturation { get; set; }
+    public float? EnhanceSharpness { get; set; }
+    public int? EnhanceNoiseReduce { get; set; }
+    public int? EnhanceQuality { get; set; }
     public List<ComicBookItemSnapshot> Items { get; set; } = new();
 }
 
@@ -35,6 +42,13 @@ public class QueueRestoreResult
     public bool? AutoProcessImages { get; set; }
     public bool? AddOrderPrefixToTitle { get; set; }
     public int? OrderPrefixStartIndex { get; set; }
+    public string? EnhanceOutputFormat { get; set; }
+    public float? EnhanceContrast { get; set; }
+    public float? EnhanceBrightness { get; set; }
+    public float? EnhanceSaturation { get; set; }
+    public float? EnhanceSharpness { get; set; }
+    public int? EnhanceNoiseReduce { get; set; }
+    public int? EnhanceQuality { get; set; }
     public bool HasValidStructure { get; set; }
 }
 
@@ -125,6 +139,13 @@ public class QueueBackupService
     public bool CurrentIsAutoProcessImages { get; set; } = false;
     public bool CurrentIsAddOrderPrefix { get; set; } = false;
     public int CurrentOrderPrefixStartIndex { get; set; } = 1;
+    public string CurrentEnhanceOutputFormat { get; set; } = "original";
+    public float CurrentEnhanceContrast { get; set; } = 0f;
+    public float CurrentEnhanceBrightness { get; set; } = 0f;
+    public float CurrentEnhanceSaturation { get; set; } = 100f;
+    public float CurrentEnhanceSharpness { get; set; } = 0f;
+    public int CurrentEnhanceNoiseReduce { get; set; } = 0;
+    public int CurrentEnhanceQuality { get; set; } = 90;
 
     private static readonly object _migrationLock = new object();
     private static bool _migrationExecuted = false;
@@ -639,6 +660,13 @@ public class QueueBackupService
             AutoProcessImages = CurrentIsAutoProcessImages,
             AddOrderPrefixToTitle = CurrentIsAddOrderPrefix,
             OrderPrefixStartIndex = CurrentOrderPrefixStartIndex,
+            EnhanceOutputFormat = CurrentEnhanceOutputFormat,
+            EnhanceContrast = CurrentEnhanceContrast,
+            EnhanceBrightness = CurrentEnhanceBrightness,
+            EnhanceSaturation = CurrentEnhanceSaturation,
+            EnhanceSharpness = CurrentEnhanceSharpness,
+            EnhanceNoiseReduce = CurrentEnhanceNoiseReduce,
+            EnhanceQuality = CurrentEnhanceQuality,
             Items = snapshots
         };
 
@@ -897,6 +925,16 @@ public class QueueBackupService
             {
                 restoreResult.OrderPrefixStartIndex = payload.OrderPrefixStartIndex.Value;
             }
+            if (!string.IsNullOrWhiteSpace(payload.EnhanceOutputFormat))
+            {
+                restoreResult.EnhanceOutputFormat = payload.EnhanceOutputFormat;
+            }
+            if (payload.EnhanceContrast.HasValue) restoreResult.EnhanceContrast = payload.EnhanceContrast.Value;
+            if (payload.EnhanceBrightness.HasValue) restoreResult.EnhanceBrightness = payload.EnhanceBrightness.Value;
+            if (payload.EnhanceSaturation.HasValue) restoreResult.EnhanceSaturation = payload.EnhanceSaturation.Value;
+            if (payload.EnhanceSharpness.HasValue) restoreResult.EnhanceSharpness = payload.EnhanceSharpness.Value;
+            if (payload.EnhanceNoiseReduce.HasValue) restoreResult.EnhanceNoiseReduce = payload.EnhanceNoiseReduce.Value;
+            if (payload.EnhanceQuality.HasValue) restoreResult.EnhanceQuality = payload.EnhanceQuality.Value;
 
             if (payload.Items != null)
             {

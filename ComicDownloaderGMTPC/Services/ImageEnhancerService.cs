@@ -50,6 +50,16 @@ public class ImageEnhancerService
     /// </summary>
     public static bool TryEnhanceImageFile(string filePath, ImageEnhancerOptions? options = null)
     {
+        return TryEnhanceImageFile(filePath, options, out _);
+    }
+
+    /// <summary>
+    /// Xử lý tối ưu / nâng cấp một file ảnh đơn lẻ, ghi đè an toàn và trả về đường dẫn file thực tế cuối cùng.
+    /// Hỗ trợ chuyển đổi định dạng linh hoạt (.jpg, .webp, .png, original) và nén chất lượng in-flight.
+    /// </summary>
+    public static bool TryEnhanceImageFile(string filePath, ImageEnhancerOptions? options, out string finalFilePath)
+    {
+        finalFilePath = filePath;
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
             return false;
 
@@ -70,11 +80,13 @@ public class ImageEnhancerService
                     if (File.Exists(filePath)) File.Delete(filePath);
                 }
                 File.Move(tempPath, finalPath, true);
+                finalFilePath = finalPath;
                 return true;
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Instance.LogEmitted?.Invoke("ERROR", $"[Lỗi xử lý ảnh] {ex.Message}");
             if (File.Exists(tempPath))
             {
                 try { File.Delete(tempPath); } catch { }
@@ -367,7 +379,50 @@ public class ImageEnhancerService
                     ".bmp" => SKEncodedImageFormat.Bmp,
                     _ => SKEncodedImageFormat.Jpeg
                 };
-                enhanced.Encode(fs, format, Math.Clamp(options.Quality, 10, 100));
+
+                int quality = Math.Clamp(options.Quality, 10, 100);
+                bool encoded = false;
+
+                try
+                {
+                    using var skImg = SKImage.FromBitmap(enhanced);
+                    if (skImg != null)
+                    {
+                        using var data = skImg.Encode(format, quality);
+                        if (data != null && data.Size > 0)
+                        {
+                            data.SaveTo(fs);
+                            encoded = true;
+                        }
+                    }
+                }
+                catch { }
+
+                // Fallback nếu SkiaSharp encoder không ghi được byte nào (đặc biệt khi encode WebP trên một số bản Skia)
+                if (!encoded)
+                {
+                    if (format == SKEncodedImageFormat.Webp)
+                    {
+                        using var ms = new MemoryStream();
+                        using (var img = SKImage.FromBitmap(enhanced))
+                        using (var data = img.Encode(SKEncodedImageFormat.Png, 100))
+                        {
+                            data.SaveTo(ms);
+                        }
+                        ms.Position = 0;
+                        using var imageSharpImg = SixLabors.ImageSharp.Image.Load(ms);
+                        imageSharpImg.SaveAsWebp(fs, new SixLabors.ImageSharp.Formats.Webp.WebpEncoder
+                        {
+                            Quality = quality,
+                            FileFormat = SixLabors.ImageSharp.Formats.Webp.WebpFileFormatType.Lossy
+                        });
+                        encoded = true;
+                    }
+                    else
+                    {
+                        enhanced.Encode(fs, format, quality);
+                    }
+                }
             }
         }
     }

@@ -295,6 +295,8 @@ public partial class MainViewModel : ViewModelBase
         QueueBackupService.Instance.CurrentIsAutoProcessImages = IsAutoProcessImages;
         QueueBackupService.Instance.CurrentIsAddOrderPrefix = IsAddOrderPrefix;
         QueueBackupService.Instance.CurrentOrderPrefixStartIndex = OrderPrefixStartIndex;
+        QueueBackupService.Instance.CurrentEnhanceOutputFormat = EnhanceOutputFormat;
+        QueueBackupService.Instance.CurrentEnhanceQuality = EnhanceQuality;
     }
 
     // AUTO PASTE CLIPBOARD MONITORING
@@ -578,7 +580,7 @@ public partial class MainViewModel : ViewModelBase
             Sharpness = EnhanceSharpness,
             NoiseReduce = EnhanceNoiseReduce,
             Quality = EnhanceQuality,
-            OutputFormat = "original",
+            OutputFormat = string.IsNullOrWhiteSpace(EnhanceOutputFormat) ? "original" : EnhanceOutputFormat,
             OverwriteOriginal = true
         };
     }
@@ -1015,7 +1017,44 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsEnhanceFormatJpg));
         OnPropertyChanged(nameof(IsEnhanceFormatGif));
         OnPropertyChanged(nameof(IsEnhanceFormatWebp));
+        OnPropertyChanged(nameof(DownloadEnhanceFormatIndex));
+        QueueBackupService.Instance.CurrentEnhanceOutputFormat = value;
+        RequestQueueAutoSave(250);
         TriggerLivePreviewDebounced();
+    }
+
+    /// <summary>
+    /// Chỉ số lựa chọn định dạng nhanh bên Tab Download (0: JPG, 1: WebP, 2: Gốc / Original)
+    /// </summary>
+    public int DownloadEnhanceFormatIndex
+    {
+        get => (EnhanceOutputFormat ?? "original").ToLowerInvariant() switch
+        {
+            "jpg" or "jpeg" => 0,
+            "webp" => 1,
+            _ => 2
+        };
+        set
+        {
+            string chosen = value switch
+            {
+                0 => "jpg",
+                1 => "webp",
+                _ => "original"
+            };
+            if (!string.Equals(EnhanceOutputFormat, chosen, StringComparison.OrdinalIgnoreCase))
+            {
+                EnhanceOutputFormat = chosen;
+            }
+            OnPropertyChanged(nameof(DownloadEnhanceFormatIndex));
+        }
+    }
+
+    [RelayCommand]
+    public void OpenEnhanceSettingsTab()
+    {
+        SelectedRootTabIndex = 3; // Chuyển sang Tab Công cụ
+        SelectedToolsTabIndex = 2; // Chuyển sang Subtab Xử lý ảnh
     }
 
     public bool IsEnhanceFormatOriginal
@@ -1307,7 +1346,12 @@ public partial class MainViewModel : ViewModelBase
     partial void OnEnhanceSaturationChanged(float value) => TriggerLivePreviewDebounced();
     partial void OnEnhanceSharpnessChanged(float value) => TriggerLivePreviewDebounced();
     partial void OnEnhanceNoiseReduceChanged(int value) => TriggerLivePreviewDebounced();
-    partial void OnEnhanceQualityChanged(int value) => TriggerLivePreviewDebounced();
+    partial void OnEnhanceQualityChanged(int value)
+    {
+        QueueBackupService.Instance.CurrentEnhanceQuality = value;
+        RequestQueueAutoSave(250);
+        TriggerLivePreviewDebounced();
+    }
 
     partial void OnIsSwappedDualOrderChanged(bool value)
     {
@@ -2069,6 +2113,14 @@ public partial class MainViewModel : ViewModelBase
         if (restoreResult.OrderPrefixStartIndex.HasValue && restoreResult.OrderPrefixStartIndex.Value > 0)
         {
             OrderPrefixStartIndex = restoreResult.OrderPrefixStartIndex.Value;
+        }
+        if (!string.IsNullOrWhiteSpace(restoreResult.EnhanceOutputFormat))
+        {
+            EnhanceOutputFormat = restoreResult.EnhanceOutputFormat;
+        }
+        if (restoreResult.EnhanceQuality.HasValue && restoreResult.EnhanceQuality.Value >= 10 && restoreResult.EnhanceQuality.Value <= 100)
+        {
+            EnhanceQuality = restoreResult.EnhanceQuality.Value;
         }
 
         SyncAutoSaveSettingsToService();

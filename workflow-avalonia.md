@@ -766,3 +766,23 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
      - Chỉ gán STT cho những truyện MỚI thêm vào chưa có STT (`!book.HasOrderPrefixApplied`).
      - Tự động tiếp nối STT mới sau số lớn nhất hiện có trong hàng chờ (`maxExisting + 1`), bất kể các truyện trước đó đã bị xóa hay chưa.
      - Toàn bộ các truyện cũ đang chờ tải được bảo toàn vẹn nguyên số thứ tự định danh (truyện 31 luôn là `031. ...`), không bao giờ bị renumber lại khi xóa truyện đã xong.
+
+### 61. Tối Ưu Hóa Tính Năng Xử Lý Ảnh Trong Khi Download (In-Flight Image Enhancement) & Căn Lề Chống Chạm Nhầm Scroll
+- **Root Cause & Khắc Phục Lỗi Xử Lý Ảnh Khi Download**:
+  1. *Lỗi Hardcode Định Dạng "original"*:
+     - Trước đó trong `MainViewModel.cs`, hàm `GetDownloadImageEnhancerOptions()` bị gán cứng `OutputFormat = "original"`.
+     - Kể cả khi người dùng chọn JPG và chất lượng 45 ở Tab Công cụ, options truyền sang `DownloadEngineService` vẫn là `"original"`. Khi gặp nguồn truyện WebP (như Hitomi.la), ảnh vẫn được xuất ra dưới dạng WebP gốc dung lượng hàng trăm KB mà không được chuyển sang JPG.
+     - *Khắc phục*: Đồng bộ trực tiếp `OutputFormat = EnhanceOutputFormat` (hoặc định dạng nhanh được chọn bên Tab Download: JPG/WebP/Original).
+  2. *Lỗi Lệch Đuôi File Giữa Manifest & File Thực Tế*:
+     - Khi file tải về được convert sang `.jpg` và xóa `.webp` gốc, logic kiểm tra `isExistingValid` cũ chỉ kiểm tra đúng `pageFileName` (`001.webp`), dẫn tới việc không tìm thấy file và tải lại.
+     - *Khắc phục*: Trong `DownloadEngineService.cs`, mở rộng cơ chế kiểm tra file tồn tại (`foundValidFile`): nhận diện mọi định dạng ảnh hợp lệ (`.jpg`, `.jpeg`, `.webp`, `.png`) có độ dài > 512 bytes và khớp manifest; đồng thời ghi nhận cả extension thực tế sau xử lý vào manifest.
+  3. *Tăng Cường Bộ Mã Hóa SkiaSharp & ImageSharp Fallback*:
+     - Nâng cấp `EnhanceAndSaveImage`: Sử dụng `SKImage.Encode` chuẩn mực, kết hợp fallback qua `ImageSharp Lossy WebP Encoder` khi SkiaSharp WebP encoder không được hỗ trợ trên một số nền tảng, đảm bảo 100% file JPG/WebP được nén đúng chất lượng chỉ định (Quality 45 nén ảnh xuống chỉ còn 40-70 KB siêu nhẹ).
+- **Giao Diện Linh Hoạt Ngay Tại Tab Download**:
+  - Bổ sung cụm điều khiển nhanh ngay cạnh Checkbox `✨ Xử lý ảnh khi tải`:
+    + ComboBox chọn nhanh Định dạng: `JPG`, `WebP`, `Gốc` (`DownloadEnhanceFormatIndex`).
+    + NumericUpDown chỉnh nhanh Chất lượng: `10` -> `100` (`EnhanceQuality`).
+    + Nút bấm `⚙️ Bộ lọc`: Chuyển thẳng sang Tab Công cụ -> Xử lý ảnh để tinh chỉnh chuyên sâu (Tương phản, Độ sáng, Bão hòa, Khử nhiễu, Presets).
+    + Tự động đồng bộ 2 chiều và lưu/phục hồi qua `autosave.md`.
+- **Căn Lề Phải Mũi Tên Tăng Giảm Slider Chống Chạm Nhầm Scroll Trên Android**:
+  - Tại Tab Công cụ -> Xử lý ảnh (`MainView.axaml`): Thêm `Margin="0,0,24,0"` cho `UniformGrid` chứa 7 thanh trượt và các nút spinner mũi tên lên/xuống (`NumericUpDown`), tạo khoảng đệm an toàn > 24px cách ly hoàn toàn với ScrollBar và viền vuốt cuộn của Android, giúp thao tác bấm ngón tay chuẩn xác 100% không bị nhầm thành scroll.
