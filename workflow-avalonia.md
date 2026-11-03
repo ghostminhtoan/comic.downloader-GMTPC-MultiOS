@@ -746,3 +746,23 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
     * Nếu một trang nhỏ hơn bị chậm, các luồng khác chỉ được phép tải tối đa tới `lowestIncompleteIndex + maxParallel - 1`, sau đó phải chờ (`windowSignal.WaitAsync`) cho đến khi trang nhỏ hơn hoàn tất mới được phép trượt tiếp.
     * Bọc khối tải trong `try ... finally` đảm bảo `pageCompleted[pIdx] = true` và `windowSignal.Release(maxParallel)` luôn được kích hoạt an toàn, không bao giờ xảy ra deadlock.
     * Kết quả: Ảnh lưu xuống đĩa luôn đảm bảo 100% thứ tự tuần tự `001.webp`, `002.webp`, `003.webp`..., giải quyết triệt để vấn đề tải rời rạc!
+
+### 60. Khắc Phục Triệt Để Lỗi Renumber STT Về 1 Khi Tự Xóa / Xóa Truyện Đã Xong (Order Prefix Immutability & Sister-Bug Guard)
+- **Root Cause Phức Hợp (Dual Root Cause Elimination)**:
+  1. *Root Cause 1 (`MainViewModel.cs`)*:
+     - Trước đó, trong hàm `ReindexComicBooks()` có chứa lệnh: `if (IsAddOrderPrefix) ApplyOrderPrefixToQueue(true, OrderPrefixStartIndex);`.
+     - Mỗi khi có truyện hoàn tất và tính năng "Tự xóa đã xong" (`CheckAndAutoDeleteCompleted`) hoặc nút "Xóa đã xong" (`ClearCompleted`) được kích hoạt, các truyện đã xong bị xóa khỏi hàng chờ và hàm `ReindexComicBooks()` được gọi.
+     - Hàm `ApplyOrderPrefixToQueue` luôn duyệt `for (int i = 0; i < ComicBooks.Count; i++)` và gán lại `orderNumber = i + baseIdx`.
+     - Khi 30 truyện đầu tiên tải xong và bị xóa, truyện thứ 31 trước đó trở thành phần tử đầu tiên (`i = 0`), khiến nó bị renumber lùi từ 31 về 1 (`001. ...`), kéo theo toàn bộ truyện phía sau bị renumber lại từ đầu!
+  2. *Root Cause 2 - Sister Bug (`DownloadEngineService.cs`)*:
+     - Trong hàm `DownloadBookAsync` khi chuẩn bị tải truyện:
+       `int baseIndex = book.Index > 0 ? book.Index : 1; int orderNumber = (baseIndex - 1) + startIdx; book.Title = $"{prefix}{baseTitle}";`
+     - Khi 30 truyện trước đó bị xóa, `book.Index` của truyện 31 tụt xuống 1. Khi engine bắt đầu tải truyện 31, nó lại tự động tính lại `orderNumber` theo `book.Index` và đè `Title` về 1, lưu thư mục thành `001. ...` gây trùng lặp thư mục với truyện 001 đã tải trước đó!
+- **Giải Pháp Triệt Để (First-Principles Engineering Rigor)**:
+  1. **Tính Bất Biến Của STT Đã Gán (Order Prefix Immutability)**:
+     - Trong `DownloadEngineService.cs`: Kiểm tra nghiêm ngặt `if (!book.HasOrderPrefixApplied || book.AppliedOrderNumber <= 0)`. Nếu truyện ĐÃ CÓ STT (`HasOrderPrefixApplied = true` và `AppliedOrderNumber > 0`), engine bảo toàn 100% STT đã có, tuyệt đối không tính lại theo `book.Index`.
+  2. **Hàm Bổ Sung STT An Toàn `EnsureOrderPrefixForNewItems()` Trong `MainViewModel.cs`**:
+     - Thay thế lệnh renumber thô bạo trong `ReindexComicBooks()` bằng `EnsureOrderPrefixForNewItems()`.
+     - Chỉ gán STT cho những truyện MỚI thêm vào chưa có STT (`!book.HasOrderPrefixApplied`).
+     - Tự động tiếp nối STT mới sau số lớn nhất hiện có trong hàng chờ (`maxExisting + 1`), bất kể các truyện trước đó đã bị xóa hay chưa.
+     - Toàn bộ các truyện cũ đang chờ tải được bảo toàn vẹn nguyên số thứ tự định danh (truyện 31 luôn là `031. ...`), không bao giờ bị renumber lại khi xóa truyện đã xong.

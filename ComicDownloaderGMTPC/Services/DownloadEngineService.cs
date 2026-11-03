@@ -1639,22 +1639,26 @@ public class DownloadEngineService
 
         if (AddOrderPrefixToTitle)
         {
-            int baseIndex = book.Index > 0 ? book.Index : 1;
-            int startIdx = OrderPrefixStartIndex > 0 ? OrderPrefixStartIndex : 1;
-            int orderNumber = (baseIndex - 1) + startIdx;
-
-            // Bao toan RawTitle tuyet doi cho truyen bat dau bang so (vd: 100 Kanojo, 300 Spartans, 86...)
-            if (string.IsNullOrWhiteSpace(book.RawTitle))
+            // Bao toan tuyet doi STT da gan (khong renumber lai khi cac truyen truoc do tai xong va bi tu dong xoa)
+            if (!book.HasOrderPrefixApplied || book.AppliedOrderNumber <= 0)
             {
-                book.RawTitle = book.Title;
+                int baseIndex = book.Index > 0 ? book.Index : 1;
+                int startIdx = OrderPrefixStartIndex > 0 ? OrderPrefixStartIndex : 1;
+                int orderNumber = (baseIndex - 1) + startIdx;
+
+                // Bao toan RawTitle tuyet doi cho truyen bat dau bang so (vd: 100 Kanojo, 300 Spartans, 86...)
+                if (string.IsNullOrWhiteSpace(book.RawTitle))
+                {
+                    book.RawTitle = book.Title;
+                }
+
+                string baseTitle = !string.IsNullOrWhiteSpace(book.RawTitle) ? book.RawTitle : book.Title;
+                string prefix = $"{orderNumber:D3}. ";
+
+                book.HasOrderPrefixApplied = true;
+                book.AppliedOrderNumber = orderNumber;
+                book.Title = $"{prefix}{baseTitle}";
             }
-
-            string baseTitle = !string.IsNullOrWhiteSpace(book.RawTitle) ? book.RawTitle : book.Title;
-            string prefix = $"{orderNumber:D3}. ";
-
-            book.HasOrderPrefixApplied = true;
-            book.AppliedOrderNumber = orderNumber;
-            book.Title = $"{prefix}{baseTitle}";
         }
         else if (book.HasOrderPrefixApplied && !string.IsNullOrWhiteSpace(book.RawTitle))
         {

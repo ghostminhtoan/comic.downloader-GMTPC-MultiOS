@@ -509,6 +509,49 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Tu dong bo sung STT cho cac truyen MOI them vao hang cho ma chua co prefix,
+    /// bao toan tuyet doi 100% STT da gan cua cac truyen cu (chong renumber khi tu xoa da xong).
+    /// </summary>
+    public void EnsureOrderPrefixForNewItems()
+    {
+        if (!IsAddOrderPrefix || ComicBooks == null || ComicBooks.Count == 0) return;
+
+        int maxExisting = 0;
+        foreach (var b in ComicBooks)
+        {
+            if (b != null && b.HasOrderPrefixApplied && b.AppliedOrderNumber > maxExisting)
+            {
+                maxExisting = b.AppliedOrderNumber;
+            }
+        }
+
+        int nextOrder = maxExisting > 0 ? maxExisting + 1 : (OrderPrefixStartIndex > 0 ? OrderPrefixStartIndex : 1);
+
+        for (int i = 0; i < ComicBooks.Count; i++)
+        {
+            var book = ComicBooks[i];
+            if (book == null || book.IsParallelSplitChild) continue;
+
+            // Chi ap dung cho truyen CHUA co STT
+            if (!book.HasOrderPrefixApplied || book.AppliedOrderNumber <= 0)
+            {
+                if (string.IsNullOrWhiteSpace(book.RawTitle))
+                {
+                    book.RawTitle = book.Title;
+                }
+
+                string baseTitle = !string.IsNullOrWhiteSpace(book.RawTitle) ? book.RawTitle : book.Title;
+                string prefix = $"{nextOrder:D3}. ";
+
+                book.HasOrderPrefixApplied = true;
+                book.AppliedOrderNumber = nextOrder;
+                book.Title = $"{prefix}{baseTitle}";
+                nextOrder++;
+            }
+        }
+    }
+
     [ObservableProperty]
     private bool _isAutoSplitLongImages = false;
 
@@ -4154,7 +4197,7 @@ public partial class MainViewModel : ViewModelBase
 
         if (IsAddOrderPrefix)
         {
-            ApplyOrderPrefixToQueue(true, OrderPrefixStartIndex);
+            EnsureOrderPrefixForNewItems();
         }
     }
 
