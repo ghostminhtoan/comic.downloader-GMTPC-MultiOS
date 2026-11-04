@@ -5,6 +5,8 @@ namespace ComicDownloaderGMTPC.ViewModels;
 
 public partial class SplashViewModel : ViewModelBase
 {
+    public static SplashViewModel? ActiveInstance { get; private set; }
+
     [ObservableProperty]
     private int _progressPercentage = 0;
 
@@ -16,6 +18,11 @@ public partial class SplashViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _statusMessage = "Đang khởi tạo hệ thống...";
+
+    public SplashViewModel()
+    {
+        ActiveInstance = this;
+    }
 
     partial void OnProgressPercentageChanged(int value)
     {
@@ -30,14 +37,19 @@ public partial class SplashViewModel : ViewModelBase
 
     public void ReportProgress(int percent, string message)
     {
+        int clamped = Math.Clamp(percent, 0, 100);
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            ProgressPercentage = percent;
+            ProgressPercentage = clamped;
             if (!string.IsNullOrEmpty(message))
             {
                 StatusMessage = message;
             }
         });
     }
-}
 
+    public static void ReportGlobalProgress(int percent, string? message = null)
+    {
+        ActiveInstance?.ReportProgress(percent, message ?? string.Empty);
+    }
+}

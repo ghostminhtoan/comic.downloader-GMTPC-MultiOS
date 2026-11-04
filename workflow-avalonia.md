@@ -864,3 +864,18 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
        + Thông báo nhật ký rõ ràng: `🏁 Part X hoàn tất: Đã chọn/bỏ chọn dải Y truyện (từ vị trí #A đến #B)`.
        + Tự động tăng `QueueBatchPartNumber` lên X+1, quay lại trạng thái bình thường sẵn sàng cho lần chọn dải tiếp theo.
        + Bấm lại nút Part khi đang chọn dở dang sẽ hủy Part an toàn và khôi phục trạng thái truyện ban đầu.
+
+### 66. Khắc Phục Lỗi Tràn Viền Android, Chuẩn Hóa Single Tap Cho Quick Float Button, Cải Tiến Tiến Độ Crawl Hitomi.la & Khởi Động Splash Screen Toàn Nền Tảng
+- **Mục Tiêu & Trải Nghiệm Người Dùng (UX)**:
+  1. *Khắc Phục Lỗi Tràn Viền Trên Android*:
+     - Thay thế `StackPanel` cứng bằng `WrapPanel` thích ứng cho cụm Đánh STT tên truyện và cụm Tùy chọn xử lý ảnh khi tải.
+     - Thu gọn `NumericUpDown` cho `OrderPrefixStartIndex` từ `115px` xuống `68px` chuẩn công thái học, giúp toàn bộ nội dung nằm gọn trong màn hình dọc Android (~360–412px) mà không bị tràn viền hoặc cắt cụt.
+  2. *Chuẩn Hóa Thao Tác Chọn Start & End Part Trên Quick Float Button*:
+     - Trước đây: Bắt sự kiện trên `PointerPressed`, dẫn đến việc người dùng chạm giữ để kéo cuộn màn hình (Hold & Drag) bị nhận diện nhầm thành hành động chọn truyện.
+     - *Giải Pháp*: Chuyển toàn bộ logic chọn truyện Part sang `PointerReleased`, kiểm tra điều kiện `Single Tap` (`!_queueTouchMoved && !_queueTouchLongPressTriggered` trên Touch / khoảng cách di chuyển `<= 15px` trên Desktop). Đảm bảo thao tác cuộn vuốt không bao giờ bị kích hoạt nhầm.
+  3. *Tăng Tiến Phần Trăm & Đếm Số Truyện Crawl Hitomi.la Theo Thời Gian Thực*:
+     - Bổ sung `onProgress?.Invoke` bên trong vòng lặp cào metadata từng gallery của Hitomi.
+     - Cập nhật `SourceCrawlProgressAngle`, `SourceCrawlProgressPercentText` và `SourceCrawlCountText` dạng `X / Y truyện đang load (X/Y)`, giúp người dùng quan sát trực quan tiến trình xoay tròn và số lượng truyện tăng tiến liên tục từ 0% đến 100%.
+  4. *Khắc Phục Lỗi Splash Screen Bị Treo 75% Rồi Nhảy Lên 100%*:
+     - Thiết lập cơ chế `SplashViewModel.ReportGlobalProgress` bám sát các mốc nạp dữ liệu thật của hệ thống từ 5% -> 18% -> 32% -> 45% -> 52% -> 62% -> 70% -> 78% -> 84% -> 90% -> 94% -> 97% -> 100%.
+     - Đồng bộ quy trình `RunStartupFlowAsync` chuẩn hóa cho cả 3 nền tảng (Desktop, Android Activity, Linux SingleView).

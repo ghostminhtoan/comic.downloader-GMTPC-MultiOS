@@ -4319,6 +4319,13 @@ public class ComicScraperService
             string nozomiUrl = isHitomiSearch ? string.Empty : GetHitomiNozomiUrl(tagUrl);
             if (!string.IsNullOrWhiteSpace(nozomiUrl) || (isHitomiSearch && searchGalleryIds != null && searchGalleryIds.Count > 0))
             {
+                int totalHitomiPages = pageTo - pageFrom + 1;
+                int totalExpectedGalleries = (isHitomiSearch && searchGalleryIds != null)
+                    ? Math.Min(totalHitomiPages * 25, Math.Max(0, searchGalleryIds.Count - (pageFrom - 1) * 25))
+                    : (totalHitomiPages * 25);
+                if (totalExpectedGalleries <= 0) totalExpectedGalleries = 25;
+                int completedHitomiGalleries = 0;
+
                 int hitomiConcurrency = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
                 using var hitomiSem = new SemaphoreSlim(hitomiConcurrency, hitomiConcurrency);
                 await HitomiResolverService.RefreshGGAsync(_httpClient, ct).ConfigureAwait(false);
@@ -4436,6 +4443,9 @@ public class ComicScraperService
                             }
                             finally
                             {
+                                int doneCount = Interlocked.Increment(ref completedHitomiGalleries);
+                                string reportTitle = fetchedItems[idx]?.Title ?? $"Hitomi Gallery {gId}";
+                                onProgress?.Invoke(doneCount, totalExpectedGalleries, doneCount, reportTitle);
                                 hitomiSem.Release();
                             }
                         });

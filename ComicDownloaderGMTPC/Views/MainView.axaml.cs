@@ -2376,8 +2376,7 @@ public partial class MainView : UserControl
 
         if (vm.IsQueueBatchModeActive)
         {
-            vm.HandleQueueBatchItemClick(item);
-            e.Handled = true;
+            // Trong chế độ chọn Part từ Quick Float Button: hoãn lại để PointerReleased bắt Single Tap, không chọn ngay khi vừa chạm
             return;
         }
 
@@ -2440,9 +2439,7 @@ public partial class MainView : UserControl
         // Nếu đang trong chế độ Batch Select theo Part từ Quick Float Button
         if (DataContext is MainViewModel batchPressedVm && batchPressedVm.IsQueueBatchModeActive)
         {
-            batchPressedVm.HandleQueueBatchItemClick(item);
-            e.Handled = true;
-            return;
+            // Hoãn lại để PointerReleased bắt Single Tap (tránh nhầm lẫn khi người dùng chạm giữ và kéo cuộn danh sách)
         }
 
         // Xử lý sự kiện nếu người dùng click vào CheckBox trực tiếp
@@ -2885,6 +2882,24 @@ public partial class MainView : UserControl
 
         if (DataContext is MainViewModel batchRelVm && batchRelVm.IsQueueBatchModeActive)
         {
+            _queueTouchHoldCts?.Cancel();
+            bool isSingleTap = false;
+            if (e.Pointer.Type == PointerType.Touch)
+            {
+                isSingleTap = !_queueTouchMoved && !_queueTouchLongPressTriggered;
+            }
+            else
+            {
+                var pt = e.GetCurrentPoint(this).Position;
+                double dx = pt.X - _queueTouchStartPos.X;
+                double dy = pt.Y - _queueTouchStartPos.Y;
+                isSingleTap = Math.Sqrt(dx * dx + dy * dy) <= 15;
+            }
+
+            if (isSingleTap && sender is Control ctrl && ctrl.DataContext is ComicBookItem item)
+            {
+                batchRelVm.HandleQueueBatchItemClick(item);
+            }
             e.Handled = true;
             return;
         }
@@ -3014,6 +3029,32 @@ public partial class MainView : UserControl
 
 
 
+    private void OnThumbnailItemPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && vm.IsQueueBatchModeActive)
+        {
+            bool isSingleTap = false;
+            if (e.Pointer.Type == PointerType.Touch)
+            {
+                isSingleTap = !_thumbTouchMoved;
+            }
+            else
+            {
+                var curPt = e.GetCurrentPoint(this).Position;
+                double dx = curPt.X - _thumbTouchStartPos.X;
+                double dy = curPt.Y - _thumbTouchStartPos.Y;
+                isSingleTap = Math.Sqrt(dx * dx + dy * dy) <= 15;
+            }
+
+            if (isSingleTap && sender is Control ctrl && ctrl.DataContext is ComicBookItem item)
+            {
+                vm.HandleQueueBatchItemClick(item);
+            }
+            e.Handled = true;
+            return;
+        }
+    }
+
     private void OnThumbnailElementAttached(object? sender, VisualTreeAttachmentEventArgs e)
 
     {
@@ -3105,9 +3146,19 @@ public partial class MainView : UserControl
 
 
 
+    private Point _thumbTouchStartPos;
+    private bool _thumbTouchMoved;
+
     private void OnThumbnailItemPointerMoved(object? sender, PointerEventArgs e)
 
     {
+        var curPt = e.GetCurrentPoint(this).Position;
+        double tdx = curPt.X - _thumbTouchStartPos.X;
+        double tdy = curPt.Y - _thumbTouchStartPos.Y;
+        if (Math.Sqrt(tdx * tdx + tdy * tdy) > 15)
+        {
+            _thumbTouchMoved = true;
+        }
 
         if (e.Pointer.Type == PointerType.Touch) return;
 
@@ -3223,6 +3274,8 @@ public partial class MainView : UserControl
     private void OnThumbnailItemPointerPressed(object? sender, PointerPressedEventArgs e)
 
     {
+        _thumbTouchStartPos = e.GetCurrentPoint(this).Position;
+        _thumbTouchMoved = false;
 
         if (sender is Control control && control.DataContext is ComicBookItem item)
 
@@ -3263,8 +3316,7 @@ public partial class MainView : UserControl
             {
                 if (vm.IsQueueBatchModeActive)
                 {
-                    vm.HandleQueueBatchItemClick(item);
-                    e.Handled = true;
+                    // Hoãn lại để PointerReleased bắt Single Tap (tránh nhầm lẫn khi người dùng vuốt cuộn thumbnail)
                     return;
                 }
 

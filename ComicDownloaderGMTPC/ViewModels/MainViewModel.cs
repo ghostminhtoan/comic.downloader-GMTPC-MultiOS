@@ -1900,6 +1900,7 @@ public partial class MainViewModel : ViewModelBase
 
     public MainViewModel()
     {
+        SplashViewModel.ReportGlobalProgress(52, "Khởi tạo cấu hình & kết nối hàng chờ...");
         _downloadPathText = _downloadEngine.DownloadRoot;
         _downloadEngine.BindLiveQueueSource(ComicBooks);
         ComicBooks.CollectionChanged += (s, e) =>
@@ -1941,8 +1942,11 @@ public partial class MainViewModel : ViewModelBase
             });
         };
         DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
+        SplashViewModel.ReportGlobalProgress(62, "Đang nạp preset người dùng & bộ lọc ảnh...");
         LoadUserPresetsFromDisk();
+        SplashViewModel.ReportGlobalProgress(70, "Khởi tạo công cụ tìm kiếm & định tuyến...");
         InitializeSearchDomains();
+        SplashViewModel.ReportGlobalProgress(78, "Đang khôi phục hàng chờ tự động từ đĩa...");
         InitializeQueueAutoBackupAndRestore();
         InitGoogleDriveService();
 
@@ -2056,10 +2060,12 @@ public partial class MainViewModel : ViewModelBase
         };
 
         UpdateLanguageStrings();
+        SplashViewModel.ReportGlobalProgress(94, "Khởi tạo công cụ nối file & dọn dẹp...");
         InitFolderToolsService();
         try { InitArchiveMerger(); } catch { }
         LoadPasswordManagerSettings();
         _ = Task.Run(async () => await EnsureDamconuongRedirectDomainAsync().ConfigureAwait(false));
+        SplashViewModel.ReportGlobalProgress(97, "Chuẩn bị giao diện ứng dụng...");
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
         SoundNotificationService.Instance.PlaySound(SoundNotificationType.Startup);
     }
@@ -2215,7 +2221,9 @@ public partial class MainViewModel : ViewModelBase
         _isAutoSaveSuspended = true;
         try
         {
+            SplashViewModel.ReportGlobalProgress(84, "Đang giải mã dữ liệu hàng chờ tự động...");
             var restoreResult = await QueueBackupService.Instance.LoadAutoSaveQueueResultAsync().ConfigureAwait(false);
+            SplashViewModel.ReportGlobalProgress(90, (restoreResult.Items.Count > 0) ? $"Đã khôi phục {restoreResult.Items.Count} truyện từ hàng chờ..." : "Hàng chờ sẵn sàng...");
             if (restoreResult.HasValidStructure || restoreResult.Items.Count > 0)
             {
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>

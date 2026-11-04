@@ -550,7 +550,14 @@ public partial class MainViewModel
                                 double pct = totPages > 0 ? Math.Min(100.0, (double)curPage / totPages * 100.0) : 0;
                                 SourceCrawlProgressAngle = Math.Clamp(pct * 3.6, 0, 360);
                                 SourceCrawlProgressPercentText = $"{(int)pct}%";
-                                SourceCrawlCountText = $"{totalScraped + scrapedSoFar} truyện đang load (Trang {curPage}/{totPages})";
+                                if (totPages > totalPagesInBatch)
+                                {
+                                    SourceCrawlCountText = $"{totalScraped + curPage} / {totalScraped + totPages} truyện đang load ({curPage}/{totPages})";
+                                }
+                                else
+                                {
+                                    SourceCrawlCountText = $"{totalScraped + scrapedSoFar} truyện đang load (Trang {curPage}/{totPages})";
+                                }
                                 if (!string.IsNullOrWhiteSpace(title))
                                 {
                                     SourceCrawlStatusText = title;

@@ -188,3 +188,4 @@ path exe: Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC.Desktop.e
 path linux: Comic Downloader GMTPC AVALONIA\publish\ComicDownloaderGMTPC
 path android apk: Comic Downloader GMTPC AVALONIA\publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk
 ```
+
