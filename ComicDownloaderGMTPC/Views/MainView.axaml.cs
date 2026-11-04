@@ -2407,6 +2407,8 @@ public partial class MainView : UserControl
             }
         }
 
+        vm.SetHighlightedComicBook(item);
+
         int idx = vm.ComicBooks.IndexOf(item);
         if (idx >= 0)
         {
@@ -2476,6 +2478,7 @@ public partial class MainView : UserControl
 
         if (DataContext is MainViewModel clickVm)
         {
+            clickVm.SetHighlightedComicBook(item);
             int idx = clickVm.ComicBooks.IndexOf(item);
             if (idx >= 0)
             {
@@ -2717,7 +2720,10 @@ public partial class MainView : UserControl
 
         {
 
-            border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");
+            if (border.DataContext is ComicBookItem enteredItem && !enteredItem.IsHighlighted)
+            {
+                border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");
+            }
 
         }
 
@@ -2745,7 +2751,16 @@ public partial class MainView : UserControl
 
         {
 
-            border.BorderBrush = Avalonia.Media.Brush.Parse("#1E293B");
+            if (border.DataContext is ComicBookItem exitedItem)
+            {
+                border.BorderBrush = Avalonia.Media.Brush.Parse(exitedItem.QueueRowBorderBrush);
+                border.BorderThickness = exitedItem.QueueRowBorderThickness;
+                border.Background = Avalonia.Media.Brush.Parse(exitedItem.QueueRowBackground);
+            }
+            else
+            {
+                border.BorderBrush = Avalonia.Media.Brush.Parse("#1E293B");
+            }
 
         }
 
@@ -2864,6 +2879,7 @@ public partial class MainView : UserControl
                 if (DataContext is MainViewModel vm)
 
                 {
+                    vm.SetHighlightedComicBook(item);
 
                     if (vm.IsPopupPreview)
 
@@ -3047,9 +3063,12 @@ public partial class MainView : UserControl
 
         {
 
-            border.BorderBrush = Avalonia.Media.Brush.Parse("#FF2A85");
+            if (border.DataContext is ComicBookItem thumbEnteredItem && !thumbEnteredItem.IsHighlighted)
+            {
+                border.BorderBrush = Avalonia.Media.Brush.Parse("#FF2A85");
 
             border.BorderThickness = new Thickness(1.5);
+            }
 
         }
 
@@ -3127,9 +3146,18 @@ public partial class MainView : UserControl
 
         {
 
-            border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");
+            if (border.DataContext is ComicBookItem thumbExitedItem)
+            {
+                border.BorderBrush = Avalonia.Media.Brush.Parse(thumbExitedItem.ThumbnailCardBorderBrush);
+                border.BorderThickness = thumbExitedItem.ThumbnailCardBorderThickness;
+                border.Background = Avalonia.Media.Brush.Parse(thumbExitedItem.ThumbnailCardBackground);
+            }
+            else
+            {
+                border.BorderBrush = Avalonia.Media.Brush.Parse("#00E5FF");
 
             border.BorderThickness = new Thickness(1);
+            }
 
         }
 
@@ -3178,6 +3206,10 @@ public partial class MainView : UserControl
         if (sender is Control control && control.DataContext is ComicBookItem item)
 
         {
+            if (DataContext is MainViewModel hlVm)
+            {
+                hlVm.SetHighlightedComicBook(item);
+            }
 
             // Toggle selection hoặc hiển thị popup khi click
 

@@ -19,6 +19,23 @@ public partial class ComicBookItem : ObservableObject
     private bool _isSelectedInGrid;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(QueueRowBackground))]
+    [NotifyPropertyChangedFor(nameof(QueueRowBorderBrush))]
+    [NotifyPropertyChangedFor(nameof(QueueRowBorderThickness))]
+    [NotifyPropertyChangedFor(nameof(ThumbnailCardBackground))]
+    [NotifyPropertyChangedFor(nameof(ThumbnailCardBorderBrush))]
+    [NotifyPropertyChangedFor(nameof(ThumbnailCardBorderThickness))]
+    private bool _isHighlighted = false;
+
+    public string QueueRowBackground => IsHighlighted ? "#1E3A5F" : "#131B2E";
+    public string QueueRowBorderBrush => IsHighlighted ? "#00E5FF" : "#1E293B";
+    public Avalonia.Thickness QueueRowBorderThickness => IsHighlighted ? new Avalonia.Thickness(3.5, 1, 1, 1) : new Avalonia.Thickness(0, 0, 0, 1);
+
+    public string ThumbnailCardBackground => IsHighlighted ? "#1A2E4C" : "#091018";
+    public string ThumbnailCardBorderBrush => IsHighlighted ? "#F59E0B" : "#1E293B";
+    public Avalonia.Thickness ThumbnailCardBorderThickness => IsHighlighted ? new Avalonia.Thickness(2.5) : new Avalonia.Thickness(1);
+
+    [ObservableProperty]
     private string _title = string.Empty;
 
     [ObservableProperty]

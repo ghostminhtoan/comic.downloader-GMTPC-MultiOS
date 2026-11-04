@@ -803,3 +803,47 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
        Mọi thay đổi từ Tab Xử lý ảnh (thanh trượt, presets Webtoon, Khử ố, reset) lập tức hiển thị sống động trên Tab Download.
   4. *Căn Lề An Toàn Tuyệt Đối Trên Android*:
      - Tăng lề phải của `UniformGrid` bộ điều khiển từ `24px` lên `32px` (`Margin="0,0,32,0"`) tạo khoảng đệm an toàn tuyệt đối chống chạm nhầm cử chỉ vuốt cuộn màn hình mép phải trên điện thoại Android.
+
+### 63. Tính Năng Highlight Truyện Khi Click Chuột Trái (Windows/Linux) & Chạm Tap (Android) Tại Tab Download (Interactive Queue Highlight & Distinct Styling)
+- **Mục Tiêu & Trải Nghiệm Người Dùng (UX)**:
+  - Trên Windows & Linux: Khi click chuột trái vào bất kỳ truyện nào trong danh sách hàng đợi (cả chế độ List View lẫn Thumbnail View), truyện đó được làm nổi bật (Highlight) với màu nền và màu viền khác biệt hoàn toàn so với các truyện còn lại.
+  - Trên Android: Khi tap (chạm ngón tay) vào bất kỳ truyện nào, phản hồi thị giác Highlight xuất hiện ngay lập tức (Zero-latency) tại thời điểm tiếp xúc màn hình.
+  - Tại một thời điểm, chỉ có duy nhất truyện đang được chọn/thao tác mang trạng thái Highlight; truyện trước đó tự động trở về màu bình thường.
+- **Thiết Kế Giao Diện & Bảng Màu Nổi Bật Chuẩn Cyberpunk Dark Blue**:
+  1. *Chế Độ List View (Hàng Truyện Dạng Card / Row)*:
+     - Bình thường: Nền tối `#131B2E`, viền mờ `#1E293B`, viền dưới `0,0,0,1`.
+     - Khi Highlight: Nền chuyển sang xanh Sapphire sang trọng `#1E3A5F`, viền Neon Cyan `#00E5FF`, độ dày viền `3.5, 1, 1, 1` (accent stripe 3.5px bên trái tạo điểm nhấn định vị cực kỳ sắc nét và hiện đại).
+  2. *Chế Độ Thumbnail View (Lưới Thẻ Ảnh Đứng)*:
+     - Bình thường: Nền `#091018`, viền `#1E293B`, độ dày `1`.
+     - Khi Highlight: Nền chuyển sang `#1A2E4C`, viền Vàng Hổ Phách `#F59E0B` rực rỡ (chuẩn WPF dòng 87), độ dày viền `2.5` bao trọn viền card.
+- **Kiến Trúc Triển Khai (MVVM & Event Flow)**:
+  1. `ComicBookItem.cs`: Bổ sung ObservableProperty `IsHighlighted`, tự động tính toán và thông báo thay đổi cho `QueueRowBackground`, `QueueRowBorderBrush`, `QueueRowBorderThickness`, `ThumbnailCardBackground`, `ThumbnailCardBorderBrush`, `ThumbnailCardBorderThickness`.
+  2. `MainViewModel.cs`: Quản lý `HighlightedComicBook` và phương thức tập trung `SetHighlightedComicBook(ComicBookItem?)`, tự động hủy highlight truyện cũ và gán highlight truyện mới; tự động dọn dẹp khi truyện bị xóa khỏi hàng chờ (`ComicBooks.CollectionChanged`).
+  3. `MainView.axaml` & `MainView.axaml.cs`:
+     - Bind trực tiếp màu nền, viền và độ dày viền vào từng card hàng chờ.
+     - Xử lý sự kiện `OnQueueItemPointerPressed`, `OnQueueItemPointerReleased`, `OnThumbnailItemPointerPressed`, `OnQueueItemCheckBoxPointerPressed` đảm bảo cả chuột trái trên Desktop lẫn tap cảm ứng trên Android đều kích hoạt highlight tức thì 100%.
+     - Bảo toàn màu highlight khi di chuột qua (`PointerEntered`/`PointerExited`).
+
+### 64. Tối Ưu Toàn Diện Tính Năng Xử Lý Ảnh Khi Tải (In-Flight Image Enhancer Reliability), Đồng Bộ Autosave & Giao Diện Căn Lề Phải An Toàn Chống Chạm Nhầm Scrollbar
+- **Bối Cảnh & Vấn Đề Thực Tế**:
+  1. *Ảnh Tải Về Vẫn Là WebP, Chưa Thực Sự Đổi Sang JPG / Áp Dụng Bộ Lọc Khi Tải*:
+     - Khi người dùng chọn định dạng JPG và chất lượng 45 ở Tab Xử lý ảnh rồi quay lại Tab Download, ComboBox `DownloadEnhanceFormatIndex` khi re-render hoặc unselected bắn giá trị `-1`, làm setter rơi vào nhánh mặc định và ghi đè `EnhanceOutputFormat` thành `"original"`.
+     - `_downloadEngine.AutoProcessImages` và `GetImageEnhancerOptions` không được đồng bộ cưỡng bức trước các lệnh bắt đầu tải (`StartDownloadAsync`, `DownloadNewAsync`, `ResumeDownload`), khiến engine có thể bỏ qua bước xử lý ảnh in-flight.
+     - Sau khi `ImageEnhancerService.TryEnhanceImageFile` đổi tên file từ `destinationPath` (ví dụ `001.webp`) sang `finalEnhancedPath` (ví dụ `001.jpg`), biến `destinationPath` cũ không được cập nhật lại thành `finalEnhancedPath`, dẫn tới bước kiểm tra sau đó bị sai lệch.
+     - Ở nhánh kiểm tra file đã tải từ trước (`isExistingValid`), code cũ chỉ kiểm tra khác đuôi file `!string.Equals(currentExt, expectedTargetExt)`. Nếu người dùng chọn WebP hoặc Original với chất lượng 45 hoặc áp bộ lọc (Contrast, Brightness, Saturation) thì code bỏ qua không nén lại.
+  2. *Thất Thoát Cấu Hình Xử Lý Ảnh Khi Khởi Động Lại Ứng Dụng*:
+     - Header Markdown trong `autosave.md` chỉ ghi nhận `Xử lý ảnh: BẬT/TẮT` mà không ghi lại 7 thông số bộ lọc (Định dạng, Chất lượng, Tương phản, Độ sáng, Bão hòa, Độ nét, Khử nhiễu). Khi không có khối JSON Snapshot hoặc file markdown bị cắt cụt, toàn bộ thiết lập bị reset về mặc định.
+  3. *Lỗi Chạm Nhầm Scrollbar Trên Màn Hình Cảm Ứng Android*:
+     - Trên thiết bị Android màn hình dọc, cụm thanh Slider và NumericUpDown căn lề phải quá sát mép màn hình (`Margin="0,0,32,0"`), trong khi nút mũi tên lên/xuống `ButtonSpinner` chỉ rộng `14px`. Khi người dùng chạm ngón tay vào mũi tên, ngón tay dễ bị trượt sang mép phải chứa ScrollBar của `MainRootScrollViewer`, gây cuộn màn hình ngoài ý muốn thay vì tăng giảm số.
+- **Giải Pháp Kỹ Thuật & Kiến Trúc**:
+  1. *Phòng Thủ ComboBox & Đồng Bộ Engine Đa Tầng*:
+     - Thêm `if (value < 0) return;` vào setter của `DownloadEnhanceFormatIndex` trong `MainViewModel.cs`, ngăn chặn 100% tình trạng Avalonia ComboBox bắn `-1` ghi đè `EnhanceOutputFormat` về `"original"`.
+     - Cưỡng bức đồng bộ `_downloadEngine.AutoProcessImages = IsAutoProcessImages;` và `_downloadEngine.GetImageEnhancerOptions = GetDownloadImageEnhancerOptions;` tại đầu mọi phương thức bắt đầu/tiếp tục download (`DownloadSelectedComics`, `DownloadNewAsync`, `ToggleDownloadAsync`).
+     - Trong `DownloadEngineService.cs`: cập nhật ngay `destinationPath = finalEnhancedPath;` và `safeFallbackPath = finalEnhancedPath;` sau khi nâng cấp file thành công.
+     - Mở rộng điều kiện tối ưu ảnh có sẵn: `bool needsEnhance = !isSameExt || hasCustomFilter;` với `hasCustomFilter` tự động phát hiện mọi thay đổi Contrast, Brightness, Saturation, Sharpness, NoiseReduce hoặc Quality < 95.
+  2. *Lưu Trữ & Khôi Phục Autosave Toàn Diện 2 Tầng (Markdown Header + JSON Snapshot)*:
+     - Thêm dòng metadata vào Markdown Header: `> Cấu hình xử lý ảnh: Định dạng: {CurrentEnhanceOutputFormat} | Chất lượng: {CurrentEnhanceQuality} | Tương phản: {CurrentEnhanceContrast:0} | Độ sáng: {CurrentEnhanceBrightness:0} | Bão hòa: {CurrentEnhanceSaturation:0} | Độ nét: {CurrentEnhanceSharpness:0.0} | Khử nhiễu: {CurrentEnhanceNoiseReduce}`.
+     - Bổ sung Regex parser tương ứng trong `ParseQueueWithMetadataFromMarkdownContent`, đảm bảo khôi phục đầy đủ 100% kể cả khi snapshot JSON bị thiếu.
+  3. *Tối Ưu Giao Diện Công Thái Học Cảm Ứng (Touch Ergonomics)*:
+     - Tăng Margin bên phải của `UniformGrid` từ `32px` lên `48px` (`Margin="0,0,48,0"`), tạo khoảng đệm an toàn tuyệt đối với ScrollBar của `MainRootScrollViewer`.
+     - Mở rộng độ rộng `ButtonSpinner` từ `14px` lên `22px`, `NumericUpDown` từ `52px` lên `60px`, icon mũi tên `Path` từ `6x3.5` lên `9x5.5` giúp thao tác bấm ngón tay trên Android cực kỳ nhạy, chuẩn xác và không bao giờ bị nhầm thành Scroll.

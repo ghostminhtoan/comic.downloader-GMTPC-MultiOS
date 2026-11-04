@@ -1042,6 +1042,7 @@ public partial class MainViewModel : ViewModelBase
         };
         set
         {
+            if (value < 0) return;
             string chosen = value switch
             {
                 0 => "jpg",
@@ -1487,6 +1488,26 @@ public partial class MainViewModel : ViewModelBase
     };
 
     [ObservableProperty]
+    private ComicBookItem? _highlightedComicBook;
+
+    public void SetHighlightedComicBook(ComicBookItem? item)
+    {
+        if (HighlightedComicBook == item) return;
+
+        if (HighlightedComicBook != null)
+        {
+            HighlightedComicBook.IsHighlighted = false;
+        }
+
+        HighlightedComicBook = item;
+
+        if (HighlightedComicBook != null)
+        {
+            HighlightedComicBook.IsHighlighted = true;
+        }
+    }
+
+    [ObservableProperty]
     private string _selectedQueueViewMode = "List view";
 
     public bool IsListViewMode => !IsThumbnailMode;
@@ -1883,6 +1904,11 @@ public partial class MainViewModel : ViewModelBase
         _downloadEngine.BindLiveQueueSource(ComicBooks);
         ComicBooks.CollectionChanged += (s, e) =>
         {
+            if (HighlightedComicBook != null && !ComicBooks.Contains(HighlightedComicBook))
+            {
+                HighlightedComicBook.IsHighlighted = false;
+                HighlightedComicBook = null;
+            }
             if (IsFilterActive)
             {
                 RequestQueueFilter(50);
@@ -2777,6 +2803,8 @@ public partial class MainViewModel : ViewModelBase
             ToggleSplitCollapse(book);
         }
 
+        _downloadEngine.AutoProcessImages = IsAutoProcessImages;
+        _downloadEngine.GetImageEnhancerOptions = GetDownloadImageEnhancerOptions;
         AddLog("INFO", $"Bắt đầu tải {ComicBooks.Count(b => b.IsChecked)} truyện...");
         if (IsAutoScrollToActive)
         {
@@ -2806,6 +2834,8 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
+        _downloadEngine.AutoProcessImages = IsAutoProcessImages;
+        _downloadEngine.GetImageEnhancerOptions = GetDownloadImageEnhancerOptions;
         AddLog("INFO", $"Tiếp tục nạp thêm {newItems.Count} truyện vào hàng đợi tải...");
         if (IsAutoScrollToActive)
         {

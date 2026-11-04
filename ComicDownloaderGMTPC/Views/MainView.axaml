@@ -3813,7 +3813,7 @@
 
                                             <DataTemplate>
 
-                                                    <Border IsVisible="{Binding !IsFilteredOut}" Background="#131B2E" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Margin="0,0,0,2" CornerRadius="4" ClipToBounds="True"
+                                                    <Border IsVisible="{Binding !IsFilteredOut}" Background="{Binding QueueRowBackground}" BorderBrush="{Binding QueueRowBorderBrush}" BorderThickness="{Binding QueueRowBorderThickness}" Margin="0,0,0,2" CornerRadius="4" ClipToBounds="True"
 
                                                             AttachedToVisualTree="OnThumbnailElementAttached"
 
@@ -4503,7 +4503,7 @@
 
                                                 <DataTemplate>
 
-                                                    <Border IsVisible="{Binding !IsFilteredOut}" Width="195" Height="280" Margin="6" Background="#091018" BorderBrush="#00E5FF" BorderThickness="1" CornerRadius="3" Padding="8,6" ClipToBounds="True"
+                                                    <Border IsVisible="{Binding !IsFilteredOut}" Width="195" Height="280" Margin="6" Background="{Binding ThumbnailCardBackground}" BorderBrush="{Binding ThumbnailCardBorderBrush}" BorderThickness="{Binding ThumbnailCardBorderThickness}" CornerRadius="3" Padding="8,6" ClipToBounds="True"
 
                                                             AttachedToVisualTree="OnThumbnailElementAttached"
 
@@ -5835,7 +5835,7 @@
 
                                             <!-- Hàng 3: Bộ thông số tinh chỉnh (Chuẩn bố cục XnConvert: Slider ngang mỏng, NumericUpDown 3-digit nhỏ gọn, Nút Reset riêng ↺) -->
                                             <!-- Căn lề phải Margin="0,0,32,0" cách ly thanh cuộn ScrollBar chống chạm nhầm khi bấm mũi tên tăng giảm -->
-                                            <UniformGrid Columns="{Binding EnhanceDualColumns}" HorizontalAlignment="Stretch" Margin="0,0,32,0">
+                                            <UniformGrid Columns="{Binding EnhanceDualColumns}" HorizontalAlignment="Stretch" Margin="0,0,48,0">
 
                                                 <UniformGrid.Resources>
 
@@ -5909,11 +5909,11 @@
 
                                                     <Style Selector="NumericUpDown">
 
-                                                        <Setter Property="Height" Value="22" />
+                                                        <Setter Property="Height" Value="24" />
 
-                                                        <Setter Property="MinHeight" Value="22" />
+                                                        <Setter Property="MinHeight" Value="24" />
 
-                                                        <Setter Property="Width" Value="52" />
+                                                        <Setter Property="Width" Value="60" />
 
                                                         <Setter Property="Padding" Value="0" />
 
@@ -6003,7 +6003,7 @@
 
                                                                         CornerRadius="{TemplateBinding CornerRadius}">
 
-                                                                    <Grid ColumnDefinitions="*, 14">
+                                                                    <Grid ColumnDefinitions="*, 22">
 
                                                                         <ContentPresenter Name="PART_ContentPresenter"
 
@@ -6017,11 +6017,11 @@
 
                                                                                           Padding="{TemplateBinding Padding}" />
 
-                                                                        <Grid Grid.Column="1" RowDefinitions="*,*" Width="14" Margin="0" VerticalAlignment="Stretch">
+                                                                        <Grid Grid.Column="1" RowDefinitions="*,*" Width="22" Margin="0" VerticalAlignment="Stretch">
 
                                                                             <RepeatButton Name="PART_IncreaseButton"
 
-                                                                                          Grid.Row="0" Width="14" Padding="0" Margin="0,0,0,0.5"
+                                                                                          Grid.Row="0" Width="22" Padding="0" Margin="0,0,0,0.5"
 
                                                                                           BorderThickness="0" Background="#1E293B" Foreground="#94A3B8"
 
@@ -6029,13 +6029,13 @@
 
                                                                                           HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
 
-                                                                                <Path Data="M 0 3.5 L 3 0.5 L 6 3.5 Z" Fill="#94A3B8" Width="6" Height="3.5" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                <Path Data="M 0 3.5 L 3 0.5 L 6 3.5 Z" Fill="#94A3B8" Width="9" Height="5.5" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
                                                                             </RepeatButton>
 
                                                                             <RepeatButton Name="PART_DecreaseButton"
 
-                                                                                          Grid.Row="1" Width="14" Padding="0" Margin="0,0.5,0,0"
+                                                                                          Grid.Row="1" Width="22" Padding="0" Margin="0,0.5,0,0"
 
                                                                                           BorderThickness="0" Background="#1E293B" Foreground="#94A3B8"
 
@@ -6043,7 +6043,7 @@
 
                                                                                           HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
 
-                                                                                <Path Data="M 0 0.5 L 3 3.5 L 6 0.5 Z" Fill="#94A3B8" Width="6" Height="3.5" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                <Path Data="M 0 0.5 L 3 3.5 L 6 0.5 Z" Fill="#94A3B8" Width="9" Height="5.5" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
 
                                                                             </RepeatButton>
 
@@ -6091,7 +6091,7 @@
 
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="2,1">
 
-                                                    <Grid ColumnDefinitions="74, *, 22, 52" VerticalAlignment="Center">
+                                                    <Grid ColumnDefinitions="74, *, 22, 60" VerticalAlignment="Center">
 
                                                         <TextBlock Grid.Column="0" Text="Tương phản:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
 
@@ -6115,7 +6115,7 @@
 
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="2,1">
 
-                                                    <Grid ColumnDefinitions="74, *, 22, 52" VerticalAlignment="Center">
+                                                    <Grid ColumnDefinitions="74, *, 22, 60" VerticalAlignment="Center">
 
                                                         <TextBlock Grid.Column="0" Text="Độ sáng:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
 
@@ -6139,7 +6139,7 @@
 
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="2,1">
 
-                                                    <Grid ColumnDefinitions="74, *, 22, 52" VerticalAlignment="Center">
+                                                    <Grid ColumnDefinitions="74, *, 22, 60" VerticalAlignment="Center">
 
                                                         <TextBlock Grid.Column="0" Text="Bão hòa:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
 
@@ -6163,7 +6163,7 @@
 
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="2,1">
 
-                                                    <Grid ColumnDefinitions="74, *, 22, 52" VerticalAlignment="Center">
+                                                    <Grid ColumnDefinitions="74, *, 22, 60" VerticalAlignment="Center">
 
                                                         <TextBlock Grid.Column="0" Text="Độ nét:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
 
@@ -6187,7 +6187,7 @@
 
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="2,1">
 
-                                                    <Grid ColumnDefinitions="74, *, 22, 52" VerticalAlignment="Center">
+                                                    <Grid ColumnDefinitions="74, *, 22, 60" VerticalAlignment="Center">
 
                                                         <TextBlock Grid.Column="0" Text="Khử nhiễu:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
 
@@ -6211,7 +6211,7 @@
 
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="2,1">
 
-                                                    <Grid ColumnDefinitions="74, *, 22, 52" VerticalAlignment="Center">
+                                                    <Grid ColumnDefinitions="74, *, 22, 60" VerticalAlignment="Center">
 
                                                         <TextBlock Grid.Column="0" Text="Chất lượng:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
 
@@ -6235,7 +6235,7 @@
 
                                                 <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="2,1">
 
-                                                    <Grid ColumnDefinitions="74, *, 22, 52" VerticalAlignment="Center">
+                                                    <Grid ColumnDefinitions="74, *, 22, 60" VerticalAlignment="Center">
 
                                                         <TextBlock Grid.Column="0" Text="Số CPU:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" />
 

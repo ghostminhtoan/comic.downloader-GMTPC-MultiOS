@@ -2261,7 +2261,11 @@ public class DownloadEngineService
                                             string expectedTargetExt = ImageEnhancerService.GetTargetExtension(foundValidFile, options.OutputFormat);
                                             string currentExt = Path.GetExtension(foundValidFile).ToLowerInvariant();
 
-                                            bool needsEnhance = !string.Equals(currentExt, expectedTargetExt, StringComparison.OrdinalIgnoreCase);
+                                            bool isSameExt = string.Equals(currentExt, expectedTargetExt, StringComparison.OrdinalIgnoreCase);
+                                            bool hasCustomFilter = Math.Abs(options.Contrast) > 0.01f || Math.Abs(options.Brightness) > 0.01f ||
+                                                                   Math.Abs(options.Saturation - 100f) > 0.01f || options.Sharpness > 0.01f ||
+                                                                   options.NoiseReduce > 0 || options.Quality < 95;
+                                            bool needsEnhance = !isSameExt || hasCustomFilter;
                                             if (needsEnhance)
                                             {
                                                 bool enhanced = ImageEnhancerService.TryEnhanceImageFile(foundValidFile, options, out string finalEnhancedPath);
@@ -3341,6 +3345,7 @@ public class DownloadEngineService
                             bool enhanced = ImageEnhancerService.TryEnhanceImageFile(destinationPath, options, out string finalEnhancedPath);
                             if (enhanced)
                             {
+                                destinationPath = finalEnhancedPath;
                                 string fmtLabel = string.IsNullOrWhiteSpace(options.OutputFormat) ? "ORIGINAL" : options.OutputFormat.ToUpperInvariant();
                                 LogEmitted?.Invoke("INFO", $"[Xử lý ảnh khi tải] Đã tối ưu '{Path.GetFileName(destinationPath)}' -> '{Path.GetFileName(finalEnhancedPath)}' ({fmtLabel}, Q:{options.Quality}, Contrast:{options.Contrast:+0;-0;0}, Bright:{options.Brightness:+0;-0;0})");
                             }
@@ -3414,6 +3419,7 @@ public class DownloadEngineService
                                     bool enhanced = ImageEnhancerService.TryEnhanceImageFile(safeFallbackPath, options, out string finalEnhancedPath);
                                     if (enhanced)
                                     {
+                                        safeFallbackPath = finalEnhancedPath;
                                         string fmtLabel = string.IsNullOrWhiteSpace(options.OutputFormat) ? "ORIGINAL" : options.OutputFormat.ToUpperInvariant();
                                         LogEmitted?.Invoke("INFO", $"[Xử lý ảnh khi tải] Đã tối ưu '{Path.GetFileName(safeFallbackPath)}' -> '{Path.GetFileName(finalEnhancedPath)}' ({fmtLabel}, Q:{options.Quality})");
                                     }

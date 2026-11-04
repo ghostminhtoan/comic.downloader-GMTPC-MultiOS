@@ -626,6 +626,7 @@ public class QueueBackupService
         string autoProcText = CurrentIsAutoProcessImages ? "BẬT" : "TẮT";
         string prefixText = CurrentIsAddOrderPrefix ? $"BẬT (từ {CurrentOrderPrefixStartIndex})" : "TẮT";
         sb.AppendLine($"> Cấu hình tải: Số truyện cùng lúc: {concurrentComics} | Connection tải ảnh: {imageConnections} | Số luồng CPU: {linkCpuThreads} | Xử lý ảnh: {autoProcText} | Đánh STT: {prefixText}");
+        sb.AppendLine($"> Cấu hình xử lý ảnh: Định dạng: {CurrentEnhanceOutputFormat} | Chất lượng: {CurrentEnhanceQuality} | Tương phản: {CurrentEnhanceContrast:0} | Độ sáng: {CurrentEnhanceBrightness:0} | Bão hòa: {CurrentEnhanceSaturation:0} | Độ nét: {CurrentEnhanceSharpness:0.0} | Khử nhiễu: {CurrentEnhanceNoiseReduce}");
         sb.AppendLine();
         sb.AppendLine("| STT | Tên Truyện | Nguồn / URL | Trạng Thái | Tiến Độ | Chương Đang Tải | Trang Đang Tải | Chọn Chap | Subfolder | Thư Mục Lưu |");
         sb.AppendLine("| :---: | :--- | :--- | :---: | :---: | :--- | :--- | :--- | :--- | :--- |");
@@ -893,6 +894,49 @@ public class QueueBackupService
             {
                 restoreResult.OrderPrefixStartIndex = sttFrom;
             }
+            restoreResult.HasValidStructure = true;
+        }
+
+        var mFmt = System.Text.RegularExpressions.Regex.Match(content, @"Định dạng:\s*(JPG|JPEG|WEBP|ORIGINAL|GIF|PNG)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mFmt.Success)
+        {
+            restoreResult.EnhanceOutputFormat = mFmt.Groups[1].Value.ToLowerInvariant();
+            restoreResult.HasValidStructure = true;
+        }
+        var mQual = System.Text.RegularExpressions.Regex.Match(content, @"Chất lượng:\s*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mQual.Success && int.TryParse(mQual.Groups[1].Value, out int qVal) && qVal >= 10 && qVal <= 100)
+        {
+            restoreResult.EnhanceQuality = qVal;
+            restoreResult.HasValidStructure = true;
+        }
+        var mContrast = System.Text.RegularExpressions.Regex.Match(content, @"Tương phản:\s*([-+]?\d+(?:\.\d+)?)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mContrast.Success && float.TryParse(mContrast.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float cVal))
+        {
+            restoreResult.EnhanceContrast = cVal;
+            restoreResult.HasValidStructure = true;
+        }
+        var mBright = System.Text.RegularExpressions.Regex.Match(content, @"Độ sáng:\s*([-+]?\d+(?:\.\d+)?)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mBright.Success && float.TryParse(mBright.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float bVal))
+        {
+            restoreResult.EnhanceBrightness = bVal;
+            restoreResult.HasValidStructure = true;
+        }
+        var mSat = System.Text.RegularExpressions.Regex.Match(content, @"Bão hòa:\s*([-+]?\d+(?:\.\d+)?)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mSat.Success && float.TryParse(mSat.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float sVal))
+        {
+            restoreResult.EnhanceSaturation = sVal;
+            restoreResult.HasValidStructure = true;
+        }
+        var mSharp = System.Text.RegularExpressions.Regex.Match(content, @"Độ nét:\s*([-+]?\d+(?:\.\d+)?)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mSharp.Success && float.TryParse(mSharp.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float shVal))
+        {
+            restoreResult.EnhanceSharpness = shVal;
+            restoreResult.HasValidStructure = true;
+        }
+        var mNoise = System.Text.RegularExpressions.Regex.Match(content, @"Khử nhiễu:\s*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mNoise.Success && int.TryParse(mNoise.Groups[1].Value, out int nVal))
+        {
+            restoreResult.EnhanceNoiseReduce = nVal;
             restoreResult.HasValidStructure = true;
         }
 
