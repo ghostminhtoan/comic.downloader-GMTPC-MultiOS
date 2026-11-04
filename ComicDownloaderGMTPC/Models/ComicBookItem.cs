@@ -246,6 +246,16 @@ public partial class ComicBookItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(TitleBrush))]
     private bool _isCensorshipFullColorVariant;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TitleBrush))]
+    private bool _isImageDuplicate;
+
+    [ObservableProperty]
+    private ulong _coverDHash;
+
+    [ObservableProperty]
+    private string? _imageDuplicateGroupId;
+
     /// <summary>
     /// Màu sắc tiêu đề truyện chuẩn Color Rules Cyberpunk từ WPF
     /// </summary>
@@ -259,6 +269,7 @@ public partial class ComicBookItem : ObservableObject
             if (IsCensorshipUncensoredVariant) return "#FFE600"; // Yellow (#FFE600)
             if (IsCensorshipFullColorVariant) return "#E879F9"; // Light Purple (#FFD78B)
             if (IsNumberedVariantDuplicate) return "#2DD4BF"; // Mint (#33FFCC)
+            if (IsImageDuplicate) return "#FB7185"; // Rose/Coral cho truyện trùng ảnh bìa
             if (IsDuplicate || IsCensorshipColorDuplicate) return "#00E5FF"; // Cyan (#00F0FF)
             return "#FDE047"; // Vàng mặc định nguyên bản
         }

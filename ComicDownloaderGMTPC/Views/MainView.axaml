@@ -82,6 +82,44 @@
             <Setter Property="CornerRadius" Value="16, 0, 0, 16" />
             <Setter Property="HorizontalAlignment" Value="Right" />
         </Style>
+
+        <!-- Style cho các nút Toggle Lọc trong Hàng đợi -->
+        <Style Selector="ToggleButton.filter-toggle">
+            <Setter Property="Background" Value="#1E293B" />
+            <Setter Property="BorderBrush" Value="#334155" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#94A3B8" />
+        </Style>
+        <Style Selector="ToggleButton.filter-name-dup:checked">
+            <Setter Property="Background" Value="#D97706" />
+            <Setter Property="BorderBrush" Value="#F59E0B" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+        <Style Selector="ToggleButton.filter-name-dup:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#D97706" />
+            <Setter Property="BorderBrush" Value="#F59E0B" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+        <Style Selector="ToggleButton.filter-image-dup:checked">
+            <Setter Property="Background" Value="#BE185D" />
+            <Setter Property="BorderBrush" Value="#F43F5E" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+        <Style Selector="ToggleButton.filter-image-dup:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#BE185D" />
+            <Setter Property="BorderBrush" Value="#F43F5E" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+        <Style Selector="ToggleButton.filter-uncen:checked">
+            <Setter Property="Background" Value="#7C3AED" />
+            <Setter Property="BorderBrush" Value="#A855F7" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+        <Style Selector="ToggleButton.filter-uncen:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#7C3AED" />
+            <Setter Property="BorderBrush" Value="#A855F7" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
     </UserControl.Styles>
 
 
@@ -3583,17 +3621,42 @@
                                             </Button>
                                             <TextBlock Text="{Binding FilteredQueueCountText}" Foreground="#FDE047" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,2" IsVisible="{Binding IsFilterActive}"/>
                                             <!-- NÚT TOGGLE LỌC TRUYỆN TRÙNG (TÊN TRÙNG) -->
-                                            <ToggleButton IsChecked="{Binding IsFilterDuplicatesOnly}" CornerRadius="3" Margin="0,0,4,2" Padding="6,2" FontSize="10"
-                                                          ToolTip.Tip="Chỉ hiển thị các truyện trùng lặp hoặc có biến thể trùng trong hàng đợi">
+                                            <ToggleButton Classes="filter-toggle filter-name-dup" IsChecked="{Binding IsFilterDuplicatesOnly}" CornerRadius="3" Margin="0,0,4,2" Padding="6,2" FontSize="10"
+                                                          ToolTip.Tip="Chỉ hiển thị các truyện trùng tên trong hàng đợi (Click để lọc, chuột phải để chọn bản trùng)">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                                     <TextBlock Text="🔍" FontSize="10"/>
                                                     <TextBlock Text="Tên trùng" FontWeight="Bold"/>
                                                     <TextBlock Text="{Binding DuplicateBooksCount, StringFormat='({0})'}" Foreground="#00E5FF" FontWeight="Bold" IsVisible="{Binding DuplicateBooksCount}"/>
                                                 </StackPanel>
+                                                <ToggleButton.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="Tích chọn tất cả truyện trùng tên" Command="{Binding CheckAllDuplicatesCommand}"/>
+                                                        <MenuItem Header="✨ Tự chọn bản sao trùng tên (Giữ 1 bản tốt nhất)" Command="{Binding CheckNameDuplicatesKeepOneCommand}"/>
+                                                        <MenuItem Header="Bỏ tích chọn truyện trùng tên" Command="{Binding UncheckAllDuplicatesCommand}"/>
+                                                    </ContextMenu>
+                                                </ToggleButton.ContextMenu>
+                                            </ToggleButton>
+
+                                            <!-- NÚT TOGGLE LỌC TRUYỆN TRÙNG ẢNH BÌA -->
+                                            <ToggleButton Classes="filter-toggle filter-image-dup" IsChecked="{Binding IsFilterImageDuplicatesOnly}" CornerRadius="3" Margin="0,0,4,2" Padding="6,2" FontSize="10"
+                                                          ToolTip.Tip="Chỉ hiển thị các truyện có ảnh bìa trùng nhau (dù khác tên, khác ngôn ngữ dịch). Chuột phải để chọn bản trùng.">
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="🖼️" FontSize="10"/>
+                                                    <TextBlock Text="Trùng ảnh" FontWeight="Bold"/>
+                                                    <TextBlock Text="{Binding ImageDuplicateBooksCount, StringFormat='({0})'}" Foreground="#F43F5E" FontWeight="Bold" IsVisible="{Binding ImageDuplicateBooksCount}"/>
+                                                    <ProgressBar Width="24" Height="4" IsIndeterminate="True" Margin="2,0,0,0" IsVisible="{Binding IsScanningImageDuplicates}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                                <ToggleButton.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="Quét lại toàn bộ mã băm ảnh bìa" Command="{Binding ScanAndFilterImageDuplicatesCommand}"/>
+                                                        <MenuItem Header="Tích chọn tất cả truyện trùng ảnh" Command="{Binding CheckAllImageDuplicatesCommand}"/>
+                                                        <MenuItem Header="✨ Tự chọn bản sao trùng ảnh (Giữ 1 bản tốt nhất)" Command="{Binding CheckImageDuplicatesKeepOneCommand}"/>
+                                                    </ContextMenu>
+                                                </ToggleButton.ContextMenu>
                                             </ToggleButton>
 
                                             <!-- NÚT TOGGLE LỌC TRUYỆN UNCEN -->
-                                            <ToggleButton IsChecked="{Binding IsFilterUncenOnly}" CornerRadius="3" Margin="0,0,4,2" Padding="6,2" FontSize="10"
+                                            <ToggleButton Classes="filter-toggle filter-uncen" IsChecked="{Binding IsFilterUncenOnly}" CornerRadius="3" Margin="0,0,4,2" Padding="6,2" FontSize="10"
                                                           ToolTip.Tip="Chỉ hiển thị các truyện bản không che (Uncensored / Decensored)">
                                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                                     <TextBlock Text="🔞" FontSize="10"/>
@@ -3685,7 +3748,13 @@
 
                                             <Button Command="{Binding CheckErrorsCommand}" Content="⚠️ Lỗi" Background="#1E293B" Foreground="#F43F5E" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
 
-                                            <Button Command="{Binding CheckDuplicatesCommand}" Content="🔍 Trùng" Background="#1E293B" Foreground="#F59E0B" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" />
+                                            <Button Command="{Binding CheckDuplicatesCommand}" Content="🔍 Trùng" Background="#1E293B" Foreground="#F59E0B" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" ToolTip.Tip="Tích chọn toàn bộ các truyện trùng tên trong hàng đợi" />
+
+                                            <Button Command="{Binding CheckImageDuplicatesKeepOneCommand}" Background="#1E293B" BorderBrush="#EC4899" BorderThickness="1" Foreground="#FB7185" FontSize="10" Padding="5,2" CornerRadius="3" Margin="0,0,4,2" ToolTip.Tip="Tự động tích chọn các bản sao trùng ảnh để xóa nhanh (giữ lại 1 bản tốt nhất cho mỗi nhóm)">
+                                                <StackPanel Orientation="Horizontal" Spacing="2">
+                                                    <TextBlock Text="🖼️ Giữ 1 ảnh" FontWeight="Bold"/>
+                                                </StackPanel>
+                                            </Button>
 
                                             <Button Command="{Binding ToggleLockAllSubfoldersCommand}" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" Foreground="#F59E0B" FontSize="10" Padding="6,2" CornerRadius="3" Margin="0,0,4,2" ToolTip.Tip="Khóa hoặc mở khóa toàn bộ Subfolder của tất cả các truyện trong hàng đợi">
 
@@ -4320,6 +4389,12 @@
                                                                     <Border IsVisible="{Binding IsDuplicate}" Background="#78350F" CornerRadius="2" Padding="3,1" VerticalAlignment="Center" Margin="0,0,4,2">
 
                                                                         <TextBlock Text="TRÙNG" FontSize="8" FontWeight="Bold" Foreground="#FDE047" />
+
+                                                                    </Border>
+
+                                                                    <Border IsVisible="{Binding IsImageDuplicate}" Background="#831843" BorderBrush="#F43F5E" BorderThickness="1" CornerRadius="2" Padding="3,1" VerticalAlignment="Center" Margin="0,0,4,2" ToolTip.Tip="Truyện trùng ảnh bìa với truyện khác">
+
+                                                                        <TextBlock Text="TRÙNG ẢNH" FontSize="8" FontWeight="Bold" Foreground="#FDA4AF" />
 
                                                                     </Border>
 

@@ -1090,7 +1090,7 @@ public sealed class ThumbnailPreviewService
         return string.Empty;
     }
 
-    private string GetItemCacheDirectory(ComicBookItem item)
+    public string GetItemCacheDirectory(ComicBookItem item)
     {
         string domain = item.Domain?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(domain) && !string.IsNullOrWhiteSpace(item.Url))

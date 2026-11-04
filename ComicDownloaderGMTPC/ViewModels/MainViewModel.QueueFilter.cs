@@ -40,6 +40,18 @@ public partial class MainViewModel
     private bool _isFilterDuplicatesOnly = false;
 
     [ObservableProperty]
+    private bool _isFilterImageDuplicatesOnly = false;
+
+    [ObservableProperty]
+    private int _imageDuplicateBooksCount = 0;
+
+    [ObservableProperty]
+    private bool _isScanningImageDuplicates = false;
+
+    [ObservableProperty]
+    private string _imageDuplicateScanStatus = string.Empty;
+
+    [ObservableProperty]
     private bool _isFilterUncenOnly = false;
 
     [ObservableProperty]
@@ -74,7 +86,36 @@ public partial class MainViewModel
 
     partial void OnIsFilterDuplicatesOnlyChanged(bool value)
     {
+        if (value)
+        {
+            RecalculateDuplicates();
+            if (DuplicateBooksCount == 0)
+            {
+                AddLog("INFO", $"🔍 Không phát hiện truyện nào trùng tên trong hàng đợi (Tổng: {ComicBooks.Count} truyện).");
+            }
+            else
+            {
+                AddLog("INFO", $"🔍 Đã phát hiện và lọc hiển thị {DuplicateBooksCount} truyện trùng tên trong hàng đợi.");
+            }
+        }
+        else
+        {
+            AddLog("INFO", "🔍 Đã tắt bộ lọc trùng tên, hiển thị lại toàn bộ hàng đợi.");
+        }
         RequestQueueFilter(0);
+    }
+
+    partial void OnIsFilterImageDuplicatesOnlyChanged(bool value)
+    {
+        if (value)
+        {
+            _ = ScanAndFilterImageDuplicatesAsync();
+        }
+        else
+        {
+            AddLog("INFO", "🖼️ Đã tắt bộ lọc trùng ảnh bìa.");
+            RequestQueueFilter(0);
+        }
     }
 
     partial void OnIsFilterUncenOnlyChanged(bool value)
@@ -128,6 +169,7 @@ public partial class MainViewModel
     {
         QueueSearchFilter = string.Empty;
         IsFilterDuplicatesOnly = false;
+        IsFilterImageDuplicatesOnly = false;
         IsFilterUncenOnly = false;
         AdvancedSearch.Clear();
         RequestQueueFilter(0);
@@ -143,6 +185,162 @@ public partial class MainViewModel
     public void ToggleFilterUncen()
     {
         IsFilterUncenOnly = !IsFilterUncenOnly;
+    }
+
+    [RelayCommand]
+    public void ToggleFilterImageDuplicates()
+    {
+        IsFilterImageDuplicatesOnly = !IsFilterImageDuplicatesOnly;
+    }
+
+    [RelayCommand]
+    public async Task ScanAndFilterImageDuplicatesAsync()
+    {
+        if (ComicBooks.Count <= 1)
+        {
+            AddLog("INFO", "🖼️ Hàng đợi có ít hơn 2 truyện, không cần quét trùng ảnh.");
+            RequestQueueFilter(0);
+            return;
+        }
+
+        if (IsScanningImageDuplicates) return;
+        IsScanningImageDuplicates = true;
+        ImageDuplicateScanStatus = "Đang quét mã băm ảnh bìa...";
+        AddLog("INFO", $"🖼️ Bắt đầu quét nhận diện trùng lặp ảnh bìa cho {ComicBooks.Count} truyện...");
+
+        try
+        {
+            var result = await ImageHashService.DetectImageDuplicatesAsync(
+                ComicBooks,
+                maxDistance: ImageHashService.DefaultMaxHammingDistance,
+                onProgress: (current, total) =>
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        ImageDuplicateScanStatus = $"Đang phân tích ảnh: {current}/{total}";
+                    });
+                });
+
+            ImageDuplicateBooksCount = result.TotalDuplicateBooks;
+
+            if (result.TotalDuplicateBooks == 0)
+            {
+                AddLog("INFO", $"🖼️ Quét hoàn tất: Không phát hiện truyện nào trùng ảnh bìa trong {ComicBooks.Count} truyện.");
+            }
+            else
+            {
+                AddLog("SUCCESS", $"🖼️ Quét hoàn tất: Phát hiện {result.TotalDuplicateBooks} truyện trùng ảnh bìa ({result.TotalGroupsCount} nhóm bìa giống nhau).");
+            }
+
+            RequestQueueFilter(0);
+        }
+        catch (Exception ex)
+        {
+            AddLog("ERROR", $"Lỗi khi quét trùng ảnh bìa: {ex.Message}");
+        }
+        finally
+        {
+            IsScanningImageDuplicates = false;
+            ImageDuplicateScanStatus = string.Empty;
+        }
+    }
+
+    [RelayCommand]
+    public void CheckAllImageDuplicates()
+    {
+        int count = 0;
+        foreach (var b in ComicBooks)
+        {
+            if (b != null && b.IsImageDuplicate)
+            {
+                b.IsChecked = true;
+                count++;
+            }
+        }
+        AddLog("INFO", $"Đã tích chọn {count} truyện trùng ảnh.");
+    }
+
+    [RelayCommand]
+    public void CheckImageDuplicatesKeepOne()
+    {
+        var groups = ComicBooks
+            .Where(b => b != null && b.IsImageDuplicate && !string.IsNullOrEmpty(b.ImageDuplicateGroupId))
+            .GroupBy(b => b.ImageDuplicateGroupId!)
+            .ToList();
+
+        if (groups.Count == 0)
+        {
+            AddLog("INFO", "Không có nhóm truyện trùng ảnh nào để tự động chọn.");
+            return;
+        }
+
+        int checkedCount = 0;
+        foreach (var group in groups)
+        {
+            var items = group.ToList();
+            // Ưu tiên giữ lại bản Uncensored > nhiều trang nhất > bản đầu tiên
+            var keepItem = items
+                .OrderByDescending(b => b.IsCensorshipUncensoredVariant)
+                .ThenByDescending(b => b.TotalPages)
+                .First();
+
+            foreach (var item in items)
+            {
+                if (ReferenceEquals(item, keepItem))
+                {
+                    item.IsChecked = false;
+                }
+                else
+                {
+                    item.IsChecked = true;
+                    checkedCount++;
+                }
+            }
+        }
+
+        AddLog("SUCCESS", $"✨ Đã tự động tích chọn {checkedCount} bản sao trùng ảnh để sẵn sàng xóa (giữ lại 1 bản tốt nhất cho mỗi nhóm).");
+    }
+
+    [RelayCommand]
+    public void CheckNameDuplicatesKeepOne()
+    {
+        RecalculateDuplicates();
+        var groups = ComicBooks
+            .Where(b => b != null && (b.IsDuplicate || b.IsCensorshipColorDuplicate))
+            .GroupBy(b => DuplicateDetectionService.GetSimilarityCore(b.Title, false))
+            .Where(g => !string.IsNullOrEmpty(g.Key) && g.Count() > 1)
+            .ToList();
+
+        if (groups.Count == 0)
+        {
+            AddLog("INFO", "Không có nhóm truyện trùng tên nào để tự động chọn.");
+            return;
+        }
+
+        int checkedCount = 0;
+        foreach (var group in groups)
+        {
+            var items = group.ToList();
+            var keepItem = items
+                .OrderByDescending(b => b.IsCensorshipUncensoredVariant)
+                .ThenByDescending(b => b.TotalPages)
+                .First();
+
+            foreach (var item in items)
+            {
+                if (ReferenceEquals(item, keepItem))
+                {
+                    item.IsChecked = false;
+                }
+                else
+                {
+                    item.IsChecked = true;
+                    checkedCount++;
+                }
+            }
+        }
+
+        AddLog("SUCCESS", $"✨ Đã tự động tích chọn {checkedCount} bản sao trùng tên để sẵn sàng xóa (giữ lại 1 bản tốt nhất cho mỗi nhóm).");
     }
 
     [RelayCommand]
@@ -368,6 +566,7 @@ public partial class MainViewModel
 
         string filter = (QueueSearchFilter ?? string.Empty).Trim();
         bool filterDup = IsFilterDuplicatesOnly;
+        bool filterImageDup = IsFilterImageDuplicatesOnly;
         bool filterUncen = IsFilterUncenOnly;
 
         var posKeywords = AdvancedSearch.GetActivePositiveKeywords();
@@ -377,7 +576,7 @@ public partial class MainViewModel
         bool exactWordMatch = AdvancedSearch.IsExactWord;
 
         bool hasAdvanced = posKeywords.Count > 0 || nonNegKeywords.Count > 0 || nonPosKeywords.Count > 0 || negKeywords.Count > 0;
-        bool hasFilter = !string.IsNullOrWhiteSpace(filter) || hasAdvanced || filterDup || filterUncen;
+        bool hasFilter = !string.IsNullOrWhiteSpace(filter) || hasAdvanced || filterDup || filterImageDup || filterUncen;
 
         var booksSnapshot = ComicBooks.ToList();
         int totalCount = booksSnapshot.Count;
@@ -483,7 +682,13 @@ public partial class MainViewModel
                             isExcluded = true;
                         }
 
-                        // 7. Kiểm tra Lọc Uncen
+                        // 7. Kiểm tra Lọc trùng ảnh bìa
+                        if (!isExcluded && filterImageDup && !book.IsImageDuplicate)
+                        {
+                            isExcluded = true;
+                        }
+
+                        // 8. Kiểm tra Lọc Uncen
                         if (!isExcluded && filterUncen && !book.IsCensorshipUncensoredVariant)
                         {
                             isExcluded = true;
