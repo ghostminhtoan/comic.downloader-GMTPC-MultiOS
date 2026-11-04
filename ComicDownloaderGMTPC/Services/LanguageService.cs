@@ -365,6 +365,47 @@ public class LanguageService
         AddPair("CRAWL MORE", "CÀO THÊM");
         AddPair("Stop Crawl", "Dừng cào");
 
+        // Download Queue Enhancements & Grid View
+        AddPair("Grid", "Lưới");
+        AddPair("Grid View", "Chế độ lưới");
+        AddPair("Duplicate Names", "Tên trùng");
+        AddPair("Duplicate Images", "Trùng ảnh");
+        AddPair("Keep 1 Image", "Giữ 1 ảnh");
+        AddPair("Sort by Name", "Sắp xếp theo tên");
+        AddPair("Web Original Order", "Thứ tự gốc từ web");
+        AddPair("Reverse Queue", "Đảo ngược danh sách");
+        AddPair("Advanced Filter", "Lọc nâng cao");
+        AddPair("Popup Preview: ON", "POPUP PREVIEW: BẬT");
+        AddPair("Popup Preview: OFF", "POPUP PREVIEW: TẮT");
+        AddPair("Rescan Thumbnails", "QUÉT LẠI THUMBNAIL");
+        AddPair("Concurrent Comics", "Số truyện cùng lúc");
+        AddPair("Image Connections", "Connection tải ảnh");
+        AddPair("Auto Split Chapters", "TỰ ĐỘNG TÁCH CHƯƠNG");
+        AddPair("Add Prefix STT", "Đánh STT tên truyện");
+        AddPair("Clear STT", "Xóa STT");
+        AddPair("Bubble Mode", "Bong bóng");
+        AddPair("Process Images During Download", "Xử lý ảnh trong khi download");
+        AddPair("Format", "Định dạng");
+        AddPair("Auto Split Long Images", "Tự cắt ảnh dài");
+        AddPair("Select chap:", "Chọn chap:");
+        AddPair("Subfolder:", "Subfolder:");
+        AddPair("Apply", "Áp");
+        AddPair("Apply All & Lock", "ÁP DỤNG TẤT CẢ & KHÓA");
+        AddPair("Apply to New", "ÁP DỤNG TRUYỆN MỚI");
+        AddPair("Lock All Subfolders", "KHÓA TẤT CẢ SUBFOLDER");
+        AddPair("Unlock All Subfolders", "MỞ TẤT CẢ SUBFOLDER");
+        AddPair("Preview Comic", "XEM TRƯỚC TRUYỆN");
+        AddPair("Close", "ĐÓNG");
+        AddPair("Type:", "Thể loại:");
+        AddPair("Language:", "Ngôn ngữ:");
+        AddPair("Artist:", "Họa sĩ:");
+        AddPair("Parody:", "Parody:");
+        AddPair("latest chapter:", "chương mới nhất:");
+        AddPair("missing chapter:", "chương còn thiếu:");
+        AddPair("Status:", "Trạng thái:");
+        AddPair("Parent Folder", "THƯ MỤC GỐC");
+        AddPair("Branch:", "NHÁNH:");
+
         // Queue Toolbar
         AddPair("Select All", "Tất cả");
         AddPair("Unselect All", "Bỏ chọn");

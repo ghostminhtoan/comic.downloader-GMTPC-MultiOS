@@ -120,6 +120,16 @@
             <Setter Property="BorderBrush" Value="#A855F7" />
             <Setter Property="Foreground" Value="#FFFFFF" />
         </Style>
+        <Style Selector="ToggleButton.queue-grid-toggle:checked">
+            <Setter Property="Background" Value="#0D9488" />
+            <Setter Property="BorderBrush" Value="#14B8A6" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+        <Style Selector="ToggleButton.queue-grid-toggle:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#0D9488" />
+            <Setter Property="BorderBrush" Value="#14B8A6" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
     </UserControl.Styles>
 
 
@@ -3794,6 +3804,16 @@
 
                                             </StackPanel>
 
+                                            <!-- NÚT TOGGLE LƯỚI ĐA CỘT CHO LIST VIEW & LIST + THUMBNAIL (3 CỘT PC / 2 CỘT ANDROID) -->
+                                            <ToggleButton Classes="filter-toggle queue-grid-toggle" IsChecked="{Binding IsQueueGridMode}"
+                                                          CornerRadius="3" Margin="0,0,6,2" Padding="6,2" FontSize="10"
+                                                          ToolTip.Tip="Chuyển đổi chế độ Lưới đa cột (3 cột trên Windows/Linux, 2 cột trên Android) cho List view &amp; List + thumbnail column">
+                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                    <TextBlock Text="⊞" FontSize="11" FontWeight="Bold"/>
+                                                    <TextBlock Text="{Binding GridButtonText}" FontWeight="Bold"/>
+                                                </StackPanel>
+                                            </ToggleButton>
+
 
 
                                             <!-- NÚT POPUP PREVIEW (BẬT / TẮT) -->
@@ -3880,7 +3900,10 @@
 
                                             <DataTemplate>
 
-                                                    <Border IsVisible="{Binding !IsFilteredOut}" Background="{Binding QueueRowBackground}" BorderBrush="{Binding QueueRowBorderBrush}" BorderThickness="{Binding QueueRowBorderThickness}" Margin="0,0,0,2" CornerRadius="4" ClipToBounds="True"
+                                                    <Border IsVisible="{Binding !IsFilteredOut}"
+                                                            Width="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueGridItemWidth}"
+                                                            Margin="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueItemMargin}"
+                                                            Background="{Binding QueueRowBackground}" BorderBrush="{Binding QueueRowBorderBrush}" BorderThickness="{Binding QueueRowBorderThickness}" CornerRadius="4" ClipToBounds="True"
 
                                                             AttachedToVisualTree="OnThumbnailElementAttached"
 
@@ -4244,7 +4267,9 @@
 
                                                                     IsVisible="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).IsThumbnailColumnVisible}"
 
-                                                                    Width="60" Height="80" Margin="8,6,2,6"
+                                                                    Width="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueRowThumbnailWidth}"
+                                                                    Height="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueRowThumbnailHeight}"
+                                                                    Margin="8,6,2,6"
 
                                                                     Background="#091018" BorderBrush="#00E5FF" BorderThickness="1" CornerRadius="3" ClipToBounds="True"
 
@@ -4452,13 +4477,19 @@
 
                                                                     </Border>
 
-                                                                    <TextBlock Text="{Binding TotalChapters, StringFormat='{}{0} chaps'}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                    <TextBlock Text="{Binding DisplayChaptersCount}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,2" />
 
-                                                                    <TextBlock Text="{Binding LatestChapterDisplay, StringFormat='{}Latest: {0}'}" Foreground="#00E5FF" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                    <TextBlock FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2">
+                                                                        <Run Text="{Binding LatestChapterLabel}" Foreground="#94A3B8" />
+                                                                        <Run Text="{Binding LocalizedLatestChapter}" Foreground="#00E5FF" />
+                                                                    </TextBlock>
 
-                                                                    <TextBlock Text="{Binding MissingChapterDisplay, StringFormat='{}Missing: {0}'}" Foreground="{Binding MissingChapterBrush}" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                    <TextBlock FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2">
+                                                                        <Run Text="{Binding MissingChapterLabel}" Foreground="#94A3B8" />
+                                                                        <Run Text="{Binding LocalizedMissingChapter}" Foreground="{Binding MissingChapterBrush}" />
+                                                                    </TextBlock>
 
-                                                                    <TextBlock Text="{Binding DisplayStatusVi}" Foreground="#00E5FF" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+                                                                    <TextBlock Text="{Binding LocalizedStatus}" Foreground="#00E5FF" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
 
                                                                     <TextBlock Text="{Binding DetailProgressText}" Foreground="#34D399" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
 
@@ -4474,9 +4505,9 @@
 
                                                                     <Grid ColumnDefinitions="Auto, *">
 
-                                                                        <TextBlock Grid.Column="0" Text="📑 Chọn chap:" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Width="68" />
+                                                                        <TextBlock Grid.Column="0" Text="{Binding ChapterSelectionLabel}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Width="68" />
 
-                                                                        <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="VD: 1-10, 15.5 (để trống = tải hết)" FontSize="9" Height="24" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" />
+                                                                        <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="{Binding ChapterSelectionPlaceholder}" FontSize="9" Height="24" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" />
 
                                                                     </Grid>
 
@@ -4962,7 +4993,7 @@
 
                                                 <ItemsPanelTemplate>
 
-                                                    <VirtualizingStackPanel />
+                                                    <WrapPanel Orientation="Horizontal" />
 
                                                 </ItemsPanelTemplate>
 

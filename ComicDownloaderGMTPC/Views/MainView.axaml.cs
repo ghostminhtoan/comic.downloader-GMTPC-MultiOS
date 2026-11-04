@@ -436,6 +436,19 @@ public partial class MainView : UserControl
 
             AddHandler(ScrollViewer.ScrollChangedEvent, OnAnyScrollViewerScrollChanged, RoutingStrategies.Bubble);
 
+            // Tự động tính toán kích thước các cột trong chế độ Lưới (3 cột PC / 2 cột Android) khi ScrollViewer đổi độ rộng
+            var queueScroller = this.FindControl<ScrollViewer>("QueueScrollViewer");
+            if (queueScroller != null)
+            {
+                queueScroller.SizeChanged += (s, ev) =>
+                {
+                    if (DataContext is MainViewModel vm && ev.NewSize.Width > 50)
+                    {
+                        vm.UpdateQueueGridLayout(ev.NewSize.Width);
+                    }
+                };
+            }
+
         }
 
         // Tự động kiểm tra bản cập nhật Beta / Release mới nhất sau khi mở app 2.8s

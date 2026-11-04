@@ -1488,6 +1488,71 @@ public partial class MainViewModel : ViewModelBase
     };
 
     [ObservableProperty]
+    private bool _isQueueGridMode = false;
+
+    [ObservableProperty]
+    private double _queueGridItemWidth = double.NaN;
+
+    [ObservableProperty]
+    private Avalonia.Thickness _queueItemMargin = new(0, 0, 0, 2);
+
+    private double _lastQueueContainerWidth = 0;
+
+    public string GridButtonText => LanguageService.Instance.IsVietnamese ? "Lưới" : "Grid";
+
+    public double QueueRowThumbnailWidth => IsQueueGridMode && OperatingSystem.IsAndroid() ? 44 : 60;
+    public double QueueRowThumbnailHeight => IsQueueGridMode && OperatingSystem.IsAndroid() ? 60 : 80;
+
+    partial void OnIsQueueGridModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(QueueRowThumbnailWidth));
+        OnPropertyChanged(nameof(QueueRowThumbnailHeight));
+        UpdateQueueGridLayout(_lastQueueContainerWidth);
+        AddLog("INFO", value
+            ? $"⊞ Đã bật chế độ Lưới ({(OperatingSystem.IsAndroid() ? "2 cột" : "3 cột")})."
+            : "📄 Đã tắt chế độ Lưới, quay về hiển thị 1 cột.");
+    }
+
+    [RelayCommand]
+    public void ToggleQueueGridMode()
+    {
+        IsQueueGridMode = !IsQueueGridMode;
+    }
+
+    public void UpdateQueueGridLayout(double containerWidth)
+    {
+        if (containerWidth > 50)
+        {
+            _lastQueueContainerWidth = containerWidth;
+        }
+        else
+        {
+            containerWidth = _lastQueueContainerWidth;
+        }
+
+        if (containerWidth <= 50) return;
+
+        if (!IsQueueGridMode)
+        {
+            // Chế độ 1 cột: Trải rộng 100% chiều ngang hàng đợi
+            QueueGridItemWidth = Math.Max(260, containerWidth - 14);
+            QueueItemMargin = new Avalonia.Thickness(0, 0, 0, 2);
+        }
+        else
+        {
+            // Chế độ Lưới (Grid):
+            // - Trên Windows & Linux: 3 cột mỗi hàng
+            // - Trên Android: 2 cột mỗi hàng
+            int columns = OperatingSystem.IsAndroid() ? 2 : 3;
+            double totalSpacing = (columns - 1) * 6 + 16;
+            double colWidth = (containerWidth - totalSpacing) / columns;
+            double minAllowed = OperatingSystem.IsAndroid() ? 140 : 200;
+            QueueGridItemWidth = Math.Max(minAllowed, Math.Floor(colWidth));
+            QueueItemMargin = new Avalonia.Thickness(3, 2, 3, 2);
+        }
+    }
+
+    [ObservableProperty]
     private ComicBookItem? _highlightedComicBook;
 
     public void SetHighlightedComicBook(ComicBookItem? item)
@@ -2488,6 +2553,11 @@ public partial class MainViewModel : ViewModelBase
         }
 
         UpdateDualSortLanguageStrings();
+        OnPropertyChanged(nameof(GridButtonText));
+        foreach (var book in ComicBooks)
+        {
+            book?.NotifyLanguageChanged();
+        }
     }
 
     private void UpdateDualSortLanguageStrings()

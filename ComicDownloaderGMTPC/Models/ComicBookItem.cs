@@ -69,6 +69,7 @@ public partial class ComicBookItem : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ProgressBarBrush))]
     [NotifyPropertyChangedFor(nameof(DisplayStatusVi))]
+    [NotifyPropertyChangedFor(nameof(LocalizedStatus))]
     private string _status = "Waiting"; // Waiting, Downloading, Completed, Error, Stopped, Paused, Moving
 
     public string DisplayStatusVi => Status switch
@@ -85,6 +86,68 @@ public partial class ComicBookItem : ObservableObject
         "Moving" => "Đang di chuyển",
         _ => string.IsNullOrWhiteSpace(Status) ? "Chờ tải" : Status
     };
+
+    public string LocalizedStatus => Services.LanguageService.Instance.IsVietnamese
+        ? DisplayStatusVi
+        : (Status switch
+        {
+            "Waiting" => "Waiting",
+            "Ready" => "Ready",
+            "Extracting..." => "Extracting...",
+            "Downloading" => "Downloading",
+            "Completed" => "Completed",
+            "Hoàn tất" => "Completed",
+            "Error" => "Error",
+            "Stopped" => "Stopped",
+            "Paused" => "Paused",
+            "Moving" => "Moving",
+            _ => string.IsNullOrWhiteSpace(Status) ? "Waiting" : Status
+        });
+
+    public string DisplayChaptersCount => Services.LanguageService.Instance.IsVietnamese
+        ? $"{TotalChapters} chap"
+        : $"{TotalChapters} chaps";
+
+    public string LatestChapterLabel => Services.LanguageService.Instance.IsVietnamese ? "Mới nhất:" : "Latest:";
+    public string MissingChapterLabel => Services.LanguageService.Instance.IsVietnamese ? "Thiếu:" : "Missing:";
+
+    public string LocalizedLatestChapter
+    {
+        get
+        {
+            string disp = LatestChapterDisplay;
+            if (string.IsNullOrWhiteSpace(disp) || disp.Equals("N/A", StringComparison.OrdinalIgnoreCase)) return "N/A";
+            if (Services.LanguageService.Instance.IsVietnamese)
+            {
+                return disp.Replace("Pages", "trang").Replace("pages", "trang").Replace("Chaps", "chap").Replace("chaps", "chap");
+            }
+            return disp.Replace("trang", "Pages").Replace("Chương", "Chapter");
+        }
+    }
+
+    public string LocalizedMissingChapter
+    {
+        get
+        {
+            if (HasMissingChapterIssue) return MissingChapters;
+            return Services.LanguageService.Instance.IsVietnamese ? "đủ chap" : "Complete";
+        }
+    }
+
+    public string ChapterSelectionLabel => Services.LanguageService.Instance.IsVietnamese ? "📑 Chọn chap:" : "📑 Select chap:";
+    public string ChapterSelectionPlaceholder => Services.LanguageService.Instance.IsVietnamese ? "VD: 1-10, 15.5 (để trống = tải hết)" : "Ex: 1-10, 15.5 (empty = all)";
+
+    public void NotifyLanguageChanged()
+    {
+        OnPropertyChanged(nameof(DisplayChaptersCount));
+        OnPropertyChanged(nameof(LatestChapterLabel));
+        OnPropertyChanged(nameof(MissingChapterLabel));
+        OnPropertyChanged(nameof(LocalizedLatestChapter));
+        OnPropertyChanged(nameof(LocalizedMissingChapter));
+        OnPropertyChanged(nameof(LocalizedStatus));
+        OnPropertyChanged(nameof(ChapterSelectionLabel));
+        OnPropertyChanged(nameof(ChapterSelectionPlaceholder));
+    }
 
     public string ProgressBarBrush => Status switch
     {
