@@ -74,6 +74,8 @@ public partial class MainViewModel
     [ObservableProperty]
     private PictureSortItem? _batchStartItem;
 
+    private bool _batchInitialStartWasSelected = false;
+
     [ObservableProperty]
     private bool _isDualSortSelectAllActive = false;
 
@@ -173,7 +175,11 @@ public partial class MainViewModel
     {
         if (IsBatchModeActive)
         {
-            // Bấm lại khi đang chờ -> Hủy part dở dang nhưng giữ nguyên các ảnh đã chọn
+            // Bấm lại khi đang chờ -> Hủy part dở dang, khôi phục lại ảnh bắt đầu nếu có
+            if (BatchStartItem != null)
+            {
+                BatchStartItem.IsSelected = _batchInitialStartWasSelected;
+            }
             IsBatchModeActive = false;
             BatchStartItem = null;
             DualSortStatusText = $"Đã hủy Part {BatchPartNumber}. Giữ nguyên các ảnh đã chọn trước đó.";
@@ -212,10 +218,12 @@ public partial class MainViewModel
 
         if (BatchStartItem == null)
         {
-            // Chạm lần 1: Chọn ảnh bắt đầu Part X
+            // Chạm lần 1: Ghi nhận trạng thái gốc và chọn ảnh bắt đầu Part X
+            _batchInitialStartWasSelected = item.IsSelected;
             BatchStartItem = item;
-            item.IsSelected = true;
-            DualSortStatusText = $"Part {BatchPartNumber}: Đã chọn ảnh BẮT ĐẦU ('{item.FileName}'). Hãy chọn ảnh KẾT THÚC.";
+            item.IsSelected = !_batchInitialStartWasSelected; // Phản hồi thị giác tức thì
+            string actionGoal = _batchInitialStartWasSelected ? "BỎ CHỌN" : "CHỌN";
+            DualSortStatusText = $"Part {BatchPartNumber} ({actionGoal}): Đã chọn ảnh ĐẦU ('{item.FileName}'). Hãy chọn ảnh CUỐI.";
             RefreshBatchProperties();
         }
         else
@@ -230,15 +238,30 @@ public partial class MainViewModel
                 int minIdx = Math.Min(idxStart, idxEnd);
                 int maxIdx = Math.Max(idxStart, idxEnd);
 
+                // Nếu ảnh bắt đầu vốn đã tick sẵn, HOẶC toàn bộ dải từ min đến max đều đã tick sẵn -> UNTICK (IsSelected = false)
+                // Ngược lại -> TICK (IsSelected = true)
+                bool allCurrentlySelected = true;
                 for (int i = minIdx; i <= maxIdx; i++)
                 {
-                    targetList[i].IsSelected = true;
+                    if (targetList[i] != BatchStartItem && !targetList[i].IsSelected)
+                    {
+                        allCurrentlySelected = false;
+                        break;
+                    }
                 }
 
-                int countAdded = maxIdx - minIdx + 1;
-                DualSortStatusText = $"Part {BatchPartNumber} xong! Đã chọn dải {countAdded} ảnh (tổng cộng {targetList.Count(x => x.IsSelected)} ảnh đã chọn).";
+                bool targetState = !(_batchInitialStartWasSelected || allCurrentlySelected);
 
-                // Kết thúc Part X: tăng Part, quay lại single mode, không làm mất selection
+                for (int i = minIdx; i <= maxIdx; i++)
+                {
+                    targetList[i].IsSelected = targetState;
+                }
+
+                int countChanged = maxIdx - minIdx + 1;
+                string actionText = targetState ? "chọn" : "bỏ chọn";
+                DualSortStatusText = $"Part {BatchPartNumber} xong! Đã {actionText} dải {countChanged} ảnh (hiện có {targetList.Count(x => x.IsSelected)} ảnh đang chọn).";
+
+                // Kết thúc Part X: tăng Part, quay lại single mode
                 BatchPartNumber++;
                 BatchStartItem = null;
                 IsBatchModeActive = false;
@@ -246,9 +269,11 @@ public partial class MainViewModel
             }
             else
             {
+                // Đổi panel: bắt đầu lại với ảnh mới
+                _batchInitialStartWasSelected = item.IsSelected;
                 BatchStartItem = item;
-                item.IsSelected = true;
-                DualSortStatusText = $"Đã đổi panel. Đã chọn ảnh BẮT ĐẦU ('{item.FileName}'). Hãy chọn ảnh KẾT THÚC.";
+                item.IsSelected = !_batchInitialStartWasSelected;
+                DualSortStatusText = $"Đã đổi panel. Đã chọn ảnh ĐẦU ('{item.FileName}'). Hãy chọn ảnh CUỐI.";
                 RefreshBatchProperties();
             }
         }

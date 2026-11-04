@@ -10113,6 +10113,17 @@
 
                     <Border Height="1" Width="50" Background="#334155" HorizontalAlignment="Center" Margin="0,1,0,3" />
 
+                    <!-- Nút Chọn / Hủy chọn dải truyện theo Part (Start & End Part) trên Quick Float Button -->
+                    <Button Command="{Binding ToggleQueueBatchSelectModeCommand}"
+                            Background="{Binding QueueBatchButtonBg}" Foreground="{Binding QueueBatchButtonFg}"
+                            BorderBrush="{Binding QueueBatchButtonBorder}" BorderThickness="1"
+                            FontWeight="Bold" CornerRadius="12" Padding="2,3" Width="74" Height="28"
+                            ToolTip.Tip="Chọn / Hủy chọn dải nhiều truyện theo Part (Bấm Start -> Chạm truyện Đầu -> Chạm truyện Cuối)">
+                        <TextBlock Text="{Binding QueueBatchButtonText}" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
+
+                    <Border Height="1" Width="50" Background="#334155" HorizontalAlignment="Center" Margin="0,1,0,3" />
+
                     <!-- 1. Toggle Button Tải / Dừng tải -->
 
                     <Button Command="{Binding DownloadAllCommand}" IsVisible="{Binding !IsDownloading}"

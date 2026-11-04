@@ -2374,6 +2374,13 @@ public partial class MainView : UserControl
         if (sender is not Control ctrl || ctrl.DataContext is not ComicDownloaderGMTPC.Models.ComicBookItem item) return;
         if (DataContext is not MainViewModel vm) return;
 
+        if (vm.IsQueueBatchModeActive)
+        {
+            vm.HandleQueueBatchItemClick(item);
+            e.Handled = true;
+            return;
+        }
+
         var point = e.GetCurrentPoint(ctrl);
 
         // 1. Thao tác CHUỘT GIỮA (Middle Click): Đảo trạng thái Check/Uncheck
@@ -2429,6 +2436,14 @@ public partial class MainView : UserControl
         }
 
 
+
+        // Nếu đang trong chế độ Batch Select theo Part từ Quick Float Button
+        if (DataContext is MainViewModel batchPressedVm && batchPressedVm.IsQueueBatchModeActive)
+        {
+            batchPressedVm.HandleQueueBatchItemClick(item);
+            e.Handled = true;
+            return;
+        }
 
         // Xử lý sự kiện nếu người dùng click vào CheckBox trực tiếp
         if (e.Source is CheckBox)
@@ -2868,6 +2883,12 @@ public partial class MainView : UserControl
 
 
 
+        if (DataContext is MainViewModel batchRelVm && batchRelVm.IsQueueBatchModeActive)
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Pointer.Type == PointerType.Touch && !_queueTouchMoved && !_queueTouchLongPressTriggered)
 
         {
@@ -3240,6 +3261,12 @@ public partial class MainView : UserControl
             if (DataContext is MainViewModel vm)
 
             {
+                if (vm.IsQueueBatchModeActive)
+                {
+                    vm.HandleQueueBatchItemClick(item);
+                    e.Handled = true;
+                    return;
+                }
 
                 // Nếu click vào thẻ, chọn truyện này
 

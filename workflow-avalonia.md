@@ -847,3 +847,20 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   3. *Tối Ưu Giao Diện Công Thái Học Cảm Ứng (Touch Ergonomics)*:
      - Tăng Margin bên phải của `UniformGrid` từ `32px` lên `48px` (`Margin="0,0,48,0"`), tạo khoảng đệm an toàn tuyệt đối với ScrollBar của `MainRootScrollViewer`.
      - Mở rộng độ rộng `ButtonSpinner` từ `14px` lên `22px`, `NumericUpDown` từ `52px` lên `60px`, icon mũi tên `Path` từ `6x3.5` lên `9x5.5` giúp thao tác bấm ngón tay trên Android cực kỳ nhạy, chuẩn xác và không bao giờ bị nhầm thành Scroll.
+
+### 65. Tính Năng Chọn & Hủy Chọn Dải Truyện Hàng Loạt Theo Part (Queue Batch Select) Trên Quick Float Button & Nâng Cấp Khả Năng Untick Cho Lọc Ảnh Kép (Dual Picture Sort)
+- **Mục Tiêu & Trải Nghiệm Người Dùng (UX)**:
+  1. *Khắc Phục Lỗi Chỉ Tick Mà Chưa Untick Trong Tab Lọc Ảnh Kép (Dual Picture Sort)*:
+     - Trước đây, khi hoàn tất Part X trong lọc ảnh kép, code luôn ép `targetList[i].IsSelected = true`, chỉ hỗ trợ tick thêm ảnh vào danh sách chọn chứ không cho phép hủy chọn dải ảnh nếu các ảnh đã được tick sẵn.
+     - *Giải Pháp*: Tự động phát hiện trạng thái: Nếu ảnh đầu Part X vốn đã được tick sẵn (`_batchInitialStartWasSelected == true`) HOẶC tất cả các ảnh trong dải `minIdx` -> `maxIdx` đều đang được chọn, hệ thống tự động nhận diện đây là thao tác **BỎ CHỌN (UNTICK)** toàn bộ dải ảnh (`targetState = false`). Ngược lại, nếu dải chưa được chọn thì thực hiện **CHỌN (TICK)** toàn bộ dải (`targetState = true`). Khi hủy dở dang part, khôi phục lại ảnh đầu về trạng thái ban đầu.
+  2. *Thêm Tính Năng Chọn / Hủy Chọn Dải Truyện Theo Part (Start & End Part) Trên Quick Float Button Toàn Tab*:
+     - Tích hợp nút **`⚡ Part X`** ngay trên thanh phím nổi Quick Control Bar (`FloatingQuickControlBorder`) hiển thị xuyên suốt mọi tab.
+     - *Luồng Thao Tác Chuẩn*:
+       + Bấm nút `⚡ Part X` -> Nút chuyển sang nền cam hổ phách `#D97706`, text hiển thị `📍 PX: Đầu`.
+       + Chạm truyện ĐẦU trong hàng đợi (List View hoặc Thumbnail View) -> Ghi nhận điểm đầu Part, phản hồi thị giác tức thì, nút đổi sang `🏁 PX: Cuối`.
+       + Chạm truyện CUỐI trong hàng đợi -> Tự động xác định toàn bộ dải truyện nằm giữa:
+         * Nếu truyện đầu hoặc toàn bộ dải đã tick -> Tự động **BỎ CHỌN (UNTICK)** toàn bộ dải truyện.
+         * Nếu truyện đầu chưa tick -> Tự động **CHỌN (TICK)** toàn bộ dải truyện.
+       + Thông báo nhật ký rõ ràng: `🏁 Part X hoàn tất: Đã chọn/bỏ chọn dải Y truyện (từ vị trí #A đến #B)`.
+       + Tự động tăng `QueueBatchPartNumber` lên X+1, quay lại trạng thái bình thường sẵn sàng cho lần chọn dải tiếp theo.
+       + Bấm lại nút Part khi đang chọn dở dang sẽ hủy Part an toàn và khôi phục trạng thái truyện ban đầu.
