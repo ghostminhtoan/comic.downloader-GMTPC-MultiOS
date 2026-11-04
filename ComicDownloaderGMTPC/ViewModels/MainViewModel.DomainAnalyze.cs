@@ -589,22 +589,25 @@ public partial class MainViewModel
 
                     totalScraped += scrapedItems.Count;
 
-                    foreach (var item in scrapedItems)
+                    // Đảm bảo đồng bộ hoàn tất trên UI Thread và nạp bất kỳ item nào chưa kịp nạp, ngăn ngừa triệt để race condition
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                     {
-                        if (!ComicBooks.Any(b => b.Url.Equals(item.Url, StringComparison.OrdinalIgnoreCase)))
+                        foreach (var item in scrapedItems)
                         {
-                            if (!string.IsNullOrWhiteSpace(SubfolderInput))
+                            if (!ComicBooks.Any(b => b.Url.Equals(item.Url, StringComparison.OrdinalIgnoreCase)))
                             {
-                                item.Subfolder = SubfolderInput.Trim();
+                                if (!string.IsNullOrWhiteSpace(SubfolderInput))
+                                {
+                                    item.Subfolder = SubfolderInput.Trim();
+                                }
+                                item.Index = ComicBooks.Count + 1;
+                                ComicBooks.Add(item);
+                                addedThisTag++;
+                                totalAdded++;
                             }
-                            item.Index = ComicBooks.Count + 1;
-                            ComicBooks.Add(item);
-                            addedThisTag++;
-                            totalAdded++;
                         }
-                    }
-
-                    UpdateStats();
+                        UpdateStats();
+                    });
                     AddLog("SUCCESS", $"[Cào hàng loạt] Tag [{tagIdx + 1}/{tagUrls.Count}]: Cào được {scrapedItems.Count} truyện (+{addedThisTag} truyện mới vào Queue).");
                 }
 

@@ -4310,19 +4310,34 @@ public class ComicScraperService
         if (isHitomi)
         {
             bool isHitomiSearch = HitomiResolverService.IsHitomiSearchUrl(tagUrl);
-            List<int>? searchGalleryIds = null;
+            List<int>? allGalleryIds = null;
             if (isHitomiSearch)
             {
-                searchGalleryIds = await HitomiResolverService.ResolveHitomiSearchGalleryIdsAsync(tagUrl, _httpClient, ct).ConfigureAwait(false);
+                allGalleryIds = await HitomiResolverService.ResolveHitomiSearchGalleryIdsAsync(tagUrl, _httpClient, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                string nozomiUrl = GetHitomiNozomiUrl(tagUrl);
+                if (!string.IsNullOrWhiteSpace(nozomiUrl))
+                {
+                    // Tải toàn bộ file .nozomi (~4 KB) một lần duy nhất, tránh lỗi HTTP Range hay drop connection giữa chừng
+                    allGalleryIds = await HitomiResolverService.FetchNozomiGalleryIdsAsync(nozomiUrl, _httpClient, ct).ConfigureAwait(false);
+                    if (allGalleryIds.Count == 0)
+                    {
+                        var match = Regex.Match(tagUrl, @"/(tag|artist|character|series|group)/([^/#?]+)\.html");
+                        if (match.Success)
+                        {
+                            string fallbackNozomi = $"https://ltn.gold-usergeneratedcontent.net/n/{match.Groups[1].Value}/{match.Groups[2].Value}.nozomi";
+                            allGalleryIds = await HitomiResolverService.FetchNozomiGalleryIdsAsync(fallbackNozomi, _httpClient, ct).ConfigureAwait(false);
+                        }
+                    }
+                }
             }
 
-            string nozomiUrl = isHitomiSearch ? string.Empty : GetHitomiNozomiUrl(tagUrl);
-            if (!string.IsNullOrWhiteSpace(nozomiUrl) || (isHitomiSearch && searchGalleryIds != null && searchGalleryIds.Count > 0))
+            if (allGalleryIds != null && allGalleryIds.Count > 0)
             {
                 int totalHitomiPages = pageTo - pageFrom + 1;
-                int totalExpectedGalleries = (isHitomiSearch && searchGalleryIds != null)
-                    ? Math.Min(totalHitomiPages * 25, Math.Max(0, searchGalleryIds.Count - (pageFrom - 1) * 25))
-                    : (totalHitomiPages * 25);
+                int totalExpectedGalleries = Math.Min(totalHitomiPages * 25, Math.Max(0, allGalleryIds.Count - (pageFrom - 1) * 25));
                 if (totalExpectedGalleries <= 0) totalExpectedGalleries = 25;
                 int completedHitomiGalleries = 0;
 
@@ -4334,39 +4349,13 @@ public class ComicScraperService
                     try
                     {
                         var pageGalleryIds = new List<int>();
-
-                        if (isHitomiSearch && searchGalleryIds != null)
+                        int startIdx = (page - 1) * 25;
+                        int takeCount = Math.Min(25, allGalleryIds.Count - startIdx);
+                        if (startIdx >= 0 && startIdx < allGalleryIds.Count && takeCount > 0)
                         {
-                            int startIdx = (page - 1) * 25;
-                            int takeCount = Math.Min(25, searchGalleryIds.Count - startIdx);
-                            if (startIdx >= 0 && startIdx < searchGalleryIds.Count && takeCount > 0)
+                            for (int i = 0; i < takeCount; i++)
                             {
-                                for (int i = 0; i < takeCount; i++)
-                                {
-                                    int gId = searchGalleryIds[startIdx + i];
-                                    string cUrl = $"https://hitomi.la/galleries/{gId}.html";
-                                    if (seenUrls.Add(cUrl))
-                                    {
-                                        pageGalleryIds.Add(gId);
-                                    }
-                                }
-                            }
-                        }
-                        else if (!string.IsNullOrWhiteSpace(nozomiUrl))
-                        {
-                            long startByte = (long)(page - 1) * 25 * 4;
-                            long endByte = startByte + (25 * 4) - 1;
-
-                            using var req = new HttpRequestMessage(HttpMethod.Get, nozomiUrl);
-                            req.Headers.TryAddWithoutValidation("Referer", "https://hitomi.la/");
-                            req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startByte, endByte);
-                            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-                            if (!res.IsSuccessStatusCode) continue;
-
-                            byte[] bytes = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-                            for (int i = 0; i + 3 < bytes.Length; i += 4)
-                            {
-                                int gId = (bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3];
+                                int gId = allGalleryIds[startIdx + i];
                                 string cUrl = $"https://hitomi.la/galleries/{gId}.html";
                                 if (seenUrls.Add(cUrl))
                                 {
@@ -4374,6 +4363,8 @@ public class ComicScraperService
                                 }
                             }
                         }
+
+                        if (pageGalleryIds.Count == 0) continue;
 
                         var fetchedItems = new ComicBookItem?[pageGalleryIds.Count];
                         var galleryTasks = pageGalleryIds.Select(async (gId, idx) =>
