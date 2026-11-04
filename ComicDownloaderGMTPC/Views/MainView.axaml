@@ -3870,35 +3870,23 @@
 
                                     <!-- Danh sách các hàng truyện (List view & List + thumbnail column) -->
 
-                                    <ItemsControl x:Name="QueueItemsControl" Grid.Row="1" ItemsSource="{Binding ActiveQueueItemsSource}" MinHeight="260" Padding="0,0,0,70" IsVisible="{Binding !IsThumbnailMode}">
+                                    <ScrollViewer x:Name="QueueScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MinHeight="260" Padding="4,4,4,70" IsVisible="{Binding !IsThumbnailMode}" BringIntoViewOnFocusChange="False">
 
-                                        <ItemsControl.ItemsPanel>
+                                        <ItemsControl x:Name="QueueItemsControl" ItemsSource="{Binding ActiveQueueItemsSource}">
 
-                                            <ItemsPanelTemplate>
+                                            <ItemsControl.ItemsPanel>
 
-                                                <VirtualizingStackPanel />
+                                                <ItemsPanelTemplate>
 
-                                            </ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal" />
 
-                                        </ItemsControl.ItemsPanel>
+                                                </ItemsPanelTemplate>
 
-                                        <ItemsControl.Template>
+                                            </ItemsControl.ItemsPanel>
 
-                                            <ControlTemplate>
+                                            <ItemsControl.ItemTemplate>
 
-                                                <ScrollViewer x:Name="QueueScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{TemplateBinding Padding}" BringIntoViewOnFocusChange="False">
-
-                                                    <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
-
-                                                </ScrollViewer>
-
-                                            </ControlTemplate>
-
-                                        </ItemsControl.Template>
-
-                                        <ItemsControl.ItemTemplate>
-
-                                            <DataTemplate>
+                                                <DataTemplate>
 
                                                     <Border IsVisible="{Binding !IsFilteredOut}"
                                                             Width="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueGridItemWidth}"
@@ -4583,7 +4571,9 @@
 
                                             </ItemsControl.ItemTemplate>
 
-                                    </ItemsControl>
+                                        </ItemsControl>
+
+                                    </ScrollViewer>
 
 
 

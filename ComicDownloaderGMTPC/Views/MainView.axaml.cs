@@ -449,6 +449,31 @@ public partial class MainView : UserControl
                 };
             }
 
+            this.SizeChanged += (s, ev) =>
+            {
+                if (DataContext is MainViewModel vm && ev.NewSize.Width > 50)
+                {
+                    double w = (queueScroller != null && queueScroller.Bounds.Width > 50)
+                        ? queueScroller.Bounds.Width
+                        : ev.NewSize.Width - (OperatingSystem.IsAndroid() ? 10 : 20);
+                    vm.UpdateQueueGridLayout(w);
+                }
+            };
+
+            this.Loaded += (s, ev) =>
+            {
+                if (DataContext is MainViewModel vm)
+                {
+                    double w = (queueScroller != null && queueScroller.Bounds.Width > 50)
+                        ? queueScroller.Bounds.Width
+                        : this.Bounds.Width;
+                    if (w > 50)
+                    {
+                        vm.UpdateQueueGridLayout(w);
+                    }
+                }
+            };
+
         }
 
         // Tự động kiểm tra bản cập nhật Beta / Release mới nhất sau khi mở app 2.8s

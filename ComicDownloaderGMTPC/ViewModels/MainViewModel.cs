@@ -1507,7 +1507,10 @@ public partial class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(QueueRowThumbnailWidth));
         OnPropertyChanged(nameof(QueueRowThumbnailHeight));
-        UpdateQueueGridLayout(_lastQueueContainerWidth);
+        double effectiveWidth = _lastQueueContainerWidth > 50
+            ? _lastQueueContainerWidth
+            : (OperatingSystem.IsAndroid() ? 390 : 1340);
+        UpdateQueueGridLayout(effectiveWidth);
         AddLog("INFO", value
             ? $"⊞ Đã bật chế độ Lưới ({(OperatingSystem.IsAndroid() ? "2 cột" : "3 cột")})."
             : "📄 Đã tắt chế độ Lưới, quay về hiển thị 1 cột.");
@@ -1527,10 +1530,10 @@ public partial class MainViewModel : ViewModelBase
         }
         else
         {
-            containerWidth = _lastQueueContainerWidth;
+            containerWidth = _lastQueueContainerWidth > 50
+                ? _lastQueueContainerWidth
+                : (OperatingSystem.IsAndroid() ? 390 : 1340);
         }
-
-        if (containerWidth <= 50) return;
 
         if (!IsQueueGridMode)
         {
@@ -1541,14 +1544,15 @@ public partial class MainViewModel : ViewModelBase
         else
         {
             // Chế độ Lưới (Grid):
-            // - Trên Windows & Linux: 3 cột mỗi hàng
             // - Trên Android: 2 cột mỗi hàng
-            int columns = OperatingSystem.IsAndroid() ? 2 : 3;
-            double totalSpacing = (columns - 1) * 6 + 16;
+            // - Trên Windows & Linux: 3 cột mỗi hàng (nếu cửa sổ rộng) hoặc 2 cột (nếu cửa sổ hẹp)
+            int columns = OperatingSystem.IsAndroid() ? 2 : (containerWidth >= 1050 ? 3 : 2);
+            double marginBetween = 6;
+            double totalSpacing = (columns - 1) * marginBetween + 14;
             double colWidth = (containerWidth - totalSpacing) / columns;
             double minAllowed = OperatingSystem.IsAndroid() ? 140 : 200;
             QueueGridItemWidth = Math.Max(minAllowed, Math.Floor(colWidth));
-            QueueItemMargin = new Avalonia.Thickness(3, 2, 3, 2);
+            QueueItemMargin = new Avalonia.Thickness(marginBetween / 2, 2, marginBetween / 2, 2);
         }
     }
 
