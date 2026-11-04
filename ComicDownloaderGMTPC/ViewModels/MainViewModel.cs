@@ -1491,12 +1491,10 @@ public partial class MainViewModel : ViewModelBase
     private bool _isQueueGridMode = false;
 
     [ObservableProperty]
-    private double _queueGridItemWidth = double.NaN;
+    private ObservableCollection<QueueGridRow> _gridQueueRows = new();
 
-    [ObservableProperty]
-    private Avalonia.Thickness _queueItemMargin = new(0, 0, 0, 2);
-
-    private double _lastQueueContainerWidth = 0;
+    public bool IsQueueSingleColumnDisplayActive => !IsThumbnailMode && !IsQueueGridMode;
+    public bool IsQueueGridDisplayActive => !IsThumbnailMode && IsQueueGridMode;
 
     public string GridButtonText => LanguageService.Instance.IsVietnamese ? "Lưới" : "Grid";
 
@@ -1507,12 +1505,14 @@ public partial class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(QueueRowThumbnailWidth));
         OnPropertyChanged(nameof(QueueRowThumbnailHeight));
-        double effectiveWidth = _lastQueueContainerWidth > 50
-            ? _lastQueueContainerWidth
-            : (OperatingSystem.IsAndroid() ? 390 : 1340);
-        UpdateQueueGridLayout(effectiveWidth);
+        OnPropertyChanged(nameof(IsQueueSingleColumnDisplayActive));
+        OnPropertyChanged(nameof(IsQueueGridDisplayActive));
+        if (value)
+        {
+            RebuildGridQueueRows();
+        }
         AddLog("INFO", value
-            ? $"⊞ Đã bật chế độ Lưới ({(OperatingSystem.IsAndroid() ? "2 cột" : "3 cột")})."
+            ? $"⊞ Đã bật chế độ Lưới ảo hóa ({(OperatingSystem.IsAndroid() ? "2 cột" : "3 cột")})."
             : "📄 Đã tắt chế độ Lưới, quay về hiển thị 1 cột.");
     }
 
@@ -1522,38 +1522,32 @@ public partial class MainViewModel : ViewModelBase
         IsQueueGridMode = !IsQueueGridMode;
     }
 
-    public void UpdateQueueGridLayout(double containerWidth)
+    public void RebuildGridQueueRows()
     {
-        if (containerWidth > 50)
+        if (!IsQueueGridMode) return;
+
+        var source = (IsFilterActive && FilteredQueueItems != null ? FilteredQueueItems : ComicBooks)
+            .Where(b => b != null && !b.IsFilteredOut)
+            .ToList();
+
+        if (source.Count == 0)
         {
-            _lastQueueContainerWidth = containerWidth;
-        }
-        else
-        {
-            containerWidth = _lastQueueContainerWidth > 50
-                ? _lastQueueContainerWidth
-                : (OperatingSystem.IsAndroid() ? 390 : 1340);
+            GridQueueRows = new ObservableCollection<QueueGridRow>();
+            return;
         }
 
-        if (!IsQueueGridMode)
+        int cols = OperatingSystem.IsAndroid() ? 2 : 3;
+        var rows = new List<QueueGridRow>((source.Count + cols - 1) / cols);
+
+        for (int i = 0; i < source.Count; i += cols)
         {
-            // Chế độ 1 cột: Trải rộng 100% chiều ngang hàng đợi
-            QueueGridItemWidth = Math.Max(260, containerWidth - 14);
-            QueueItemMargin = new Avalonia.Thickness(0, 0, 0, 2);
+            var item1 = source[i];
+            var item2 = (i + 1 < source.Count) ? source[i + 1] : null;
+            var item3 = (cols == 3 && i + 2 < source.Count) ? source[i + 2] : null;
+            rows.Add(new QueueGridRow(item1, item2, item3, cols));
         }
-        else
-        {
-            // Chế độ Lưới (Grid):
-            // - Trên Android: 2 cột mỗi hàng
-            // - Trên Windows & Linux: 3 cột mỗi hàng (nếu cửa sổ rộng) hoặc 2 cột (nếu cửa sổ hẹp)
-            int columns = OperatingSystem.IsAndroid() ? 2 : (containerWidth >= 1050 ? 3 : 2);
-            double marginBetween = 6;
-            double totalSpacing = (columns - 1) * marginBetween + 14;
-            double colWidth = (containerWidth - totalSpacing) / columns;
-            double minAllowed = OperatingSystem.IsAndroid() ? 140 : 200;
-            QueueGridItemWidth = Math.Max(minAllowed, Math.Floor(colWidth));
-            QueueItemMargin = new Avalonia.Thickness(marginBetween / 2, 2, marginBetween / 2, 2);
-        }
+
+        GridQueueRows = new ObservableCollection<QueueGridRow>(rows);
     }
 
     [ObservableProperty]
@@ -1600,6 +1594,12 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsListViewMode));
         OnPropertyChanged(nameof(IsThumbnailColumnVisible));
         OnPropertyChanged(nameof(ActiveThumbnailItemsSource));
+        OnPropertyChanged(nameof(IsQueueSingleColumnDisplayActive));
+        OnPropertyChanged(nameof(IsQueueGridDisplayActive));
+        if (!thumbMode && IsQueueGridMode)
+        {
+            RebuildGridQueueRows();
+        }
         VisibleThumbnailScanRequested?.Invoke();
         if (thumbMode || value == "List + thumbnail column" || IsPopupPreview)
         {
@@ -1612,6 +1612,12 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsListViewMode));
         OnPropertyChanged(nameof(IsThumbnailColumnVisible));
         OnPropertyChanged(nameof(ActiveThumbnailItemsSource));
+        OnPropertyChanged(nameof(IsQueueSingleColumnDisplayActive));
+        OnPropertyChanged(nameof(IsQueueGridDisplayActive));
+        if (!value && IsQueueGridMode)
+        {
+            RebuildGridQueueRows();
+        }
         if (value && SelectedQueueViewMode != "Thumbnail view")
         {
             SelectedQueueViewMode = "Thumbnail view";
@@ -1982,6 +1988,10 @@ public partial class MainViewModel : ViewModelBase
             if (IsFilterActive)
             {
                 RequestQueueFilter(50);
+            }
+            if (IsQueueGridMode)
+            {
+                RebuildGridQueueRows();
             }
         };
         _downloadEngine.AddOrderPrefixToTitle = IsAddOrderPrefix;

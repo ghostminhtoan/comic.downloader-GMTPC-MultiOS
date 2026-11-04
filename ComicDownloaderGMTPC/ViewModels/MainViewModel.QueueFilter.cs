@@ -740,6 +740,10 @@ public partial class MainViewModel
 
                     OnPropertyChanged(nameof(ActiveQueueItemsSource));
                     OnPropertyChanged(nameof(ActiveThumbnailItemsSource));
+                    if (IsQueueGridMode)
+                    {
+                        RebuildGridQueueRows();
+                    }
                 }, Avalonia.Threading.DispatcherPriority.Background);
             }
             catch (OperationCanceledException) { }

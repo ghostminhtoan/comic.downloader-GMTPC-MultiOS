@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 using System.Collections.Generic;
 
@@ -436,41 +436,12 @@ public partial class MainView : UserControl
 
             AddHandler(ScrollViewer.ScrollChangedEvent, OnAnyScrollViewerScrollChanged, RoutingStrategies.Bubble);
 
-            // Tự động tính toán kích thước các cột trong chế độ Lưới (3 cột PC / 2 cột Android) khi ScrollViewer đổi độ rộng
-            var queueScroller = this.FindControl<ScrollViewer>("QueueScrollViewer");
-            if (queueScroller != null)
-            {
-                queueScroller.SizeChanged += (s, ev) =>
-                {
-                    if (DataContext is MainViewModel vm && ev.NewSize.Width > 50)
-                    {
-                        vm.UpdateQueueGridLayout(ev.NewSize.Width);
-                    }
-                };
-            }
-
-            this.SizeChanged += (s, ev) =>
-            {
-                if (DataContext is MainViewModel vm && ev.NewSize.Width > 50)
-                {
-                    double w = (queueScroller != null && queueScroller.Bounds.Width > 50)
-                        ? queueScroller.Bounds.Width
-                        : ev.NewSize.Width - (OperatingSystem.IsAndroid() ? 10 : 20);
-                    vm.UpdateQueueGridLayout(w);
-                }
-            };
-
+            // Tự động đồng bộ lưới đa cột ảo hóa khi nạp View
             this.Loaded += (s, ev) =>
             {
-                if (DataContext is MainViewModel vm)
+                if (DataContext is MainViewModel vm && vm.IsQueueGridMode)
                 {
-                    double w = (queueScroller != null && queueScroller.Bounds.Width > 50)
-                        ? queueScroller.Bounds.Width
-                        : this.Bounds.Width;
-                    if (w > 50)
-                    {
-                        vm.UpdateQueueGridLayout(w);
-                    }
+                    vm.RebuildGridQueueRows();
                 }
             };
 
@@ -1827,12 +1798,13 @@ public partial class MainView : UserControl
 
 
 
-            var queueItemsControl = this.FindControl<ItemsControl>("QueueItemsControl");
+            var queueItemsControl = vm.IsQueueGridMode
+                ? this.FindControl<ItemsControl>("GridQueueItemsControl")
+                : this.FindControl<ItemsControl>("QueueItemsControl");
 
-            var queueScrollViewer = this.FindControl<ScrollViewer>("QueueScrollViewer")
-
-                                 ?? queueItemsControl?.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
-
+            var queueScrollViewer = vm.IsQueueGridMode
+                ? (this.FindControl<ScrollViewer>("GridQueueScrollViewer") ?? queueItemsControl?.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault())
+                : (this.FindControl<ScrollViewer>("QueueScrollViewer") ?? queueItemsControl?.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault());
 
 
             ComicBookItem? lowestItem = null;
@@ -1877,9 +1849,17 @@ public partial class MainView : UserControl
 
             {
 
-                targetControl = queueItemsControl.ContainerFromIndex(lowestIndex) as Control
-
-                             ?? queueItemsControl.ContainerFromItem(lowestItem) as Control;
+                if (vm.IsQueueGridMode)
+                {
+                    int cols = OperatingSystem.IsAndroid() ? 2 : 3;
+                    int rowIndex = lowestIndex / cols;
+                    targetControl = queueItemsControl.ContainerFromIndex(rowIndex) as Control;
+                }
+                else
+                {
+                    targetControl = queueItemsControl.ContainerFromIndex(lowestIndex) as Control
+                                 ?? queueItemsControl.ContainerFromItem(lowestItem) as Control;
+                }
 
             }
 
@@ -2277,7 +2257,7 @@ public partial class MainView : UserControl
 
             ? this.FindControl<ItemsControl>("ThumbnailItemsControl")
 
-            : this.FindControl<ItemsControl>("QueueItemsControl");
+            : (vm.IsQueueGridMode ? this.FindControl<ItemsControl>("GridQueueItemsControl") : this.FindControl<ItemsControl>("QueueItemsControl"));
 
 
 

@@ -24,7 +24,691 @@
 
 
 
-    <UserControl.Styles>
+        <UserControl.Resources>
+        <!-- TEMPLATE THẺ TRUYỆN DÙNG CHUNG CHO CẢ CHẾ ĐỘ 1 CỘT VÀ CHẾ ĐỘ LƯỚI ẢO HÓA SIÊU MƯỢT -->
+        <DataTemplate x:Key="ComicQueueCardTemplate" DataType="models:ComicBookItem">
+<Border IsVisible="{Binding !IsFilteredOut}"
+                                                            
+                                                            Margin="0,0,0,2"
+                                                            Background="{Binding QueueRowBackground}" BorderBrush="{Binding QueueRowBorderBrush}" BorderThickness="{Binding QueueRowBorderThickness}" CornerRadius="4" ClipToBounds="True"
+
+                                                            AttachedToVisualTree="OnThumbnailElementAttached"
+
+                                                            DataContextChanged="OnThumbnailElementDataContextChanged"
+
+                                                            PointerEntered="OnQueueItemPointerEntered"
+
+                                                            PointerExited="OnQueueItemPointerExited"
+
+                                                            PointerPressed="OnQueueItemPointerPressed"
+
+                                                            PointerMoved="OnQueueItemPointerMoved"
+
+                                                            PointerReleased="OnQueueItemPointerReleased"
+
+                                                            PointerCaptureLost="OnQueueItemPointerCaptureLost">
+
+                                                        <Border.ContextMenu>
+
+                                                            <ContextMenu>
+
+                                                                <MenuItem Header="Tích chọn truyện này (Check)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CheckSingleBookCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="✔" Foreground="#38BDF8" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="Bỏ chọn truyện này (Uncheck)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).UncheckSingleBookCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="✕" Foreground="#64748B" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="Đảo chọn truyện này (Toggle)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleCheckSingleBookCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="🔄" Foreground="#F59E0B" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <Separator Background="#334155" />
+
+                                                                <MenuItem Header="Chọn tất cả truyện (Check All)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SelectAllCommand}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="☑" Foreground="#34D399" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="Bỏ chọn tất cả (Uncheck All)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).UnselectAllCommand}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="☐" Foreground="#94A3B8" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="Đảo chọn tất cả (Invert All)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).InvertSelectionCommand}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="🔀" Foreground="#A78BFA" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <Separator Background="#334155" />
+
+                                                                <MenuItem Header="Đưa lên đầu hàng đợi (Move to Top)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveToTopCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="▲" Foreground="#34D399" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="Đưa xuống cuối hàng đợi (Move to Bottom)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveToBottomCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="▼" Foreground="#F87171" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="🔤 Sắp xếp theo tên alphabet (A-Z / Z-A)"
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SortByNameAlphabetCommand}">
+                                                                    <MenuItem.Icon>
+                                                                        <TextBlock Text="🔤" Foreground="#FDE047" FontSize="12" VerticalAlignment="Center" />
+                                                                    </MenuItem.Icon>
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="⏮️ Khôi phục thứ tự gốc từ web (Restore Order)"
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).RestoreOriginalOrderCommand}">
+                                                                    <MenuItem.Icon>
+                                                                        <TextBlock Text="⏮️" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
+                                                                    </MenuItem.Icon>
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="🔃 Đảo ngược toàn bộ danh sách (Reverse Queue)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ReverseQueueCommand}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="🔃" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <Separator Background="#334155" />
+
+                                                                <MenuItem Header="🔍 Đưa tên truyện vào Tab Search (Tìm truyện)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SendTitleToSearchCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="🔍" Foreground="#F59E0B" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="🌐 Mở link trong trình duyệt (Browser)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenInBrowserCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="🌐" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="📁 Mở thư mục truyện (Open Folder)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenBookFolderCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="📁" Foreground="#FDE047" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="📖 Đọc truyện ngay (Open in Reader)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ReadBookInLibraryCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="📖" Foreground="#10B981" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <Separator Background="#334155" />
+
+                                                                <MenuItem Header="📋 Sao chép link truyện (Copy Link)"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CopyBookLinkCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="🔗" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="📋 Sao chép Tên + Link truyện"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CopyNameAndLinkCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="📑" Foreground="#F59E0B" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="📋 Sao chép link các Chapter"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CopyChaptersLinkCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="📚" Foreground="#A78BFA" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="📋 Sao chép toàn bộ link đã tick"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CopySelectedLinksCommand}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="📋" Foreground="#34D399" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <Separator Background="#334155" />
+
+                                                                <MenuItem Header="🔒/🔓 Khóa / Mở khóa Subfolder"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleLockSubfolderCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="🔐" Foreground="#F59E0B" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                                <MenuItem Header="🧩 Tách chương song song (Parallel Split)">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="🧩" Foreground="#F472B6" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                    <MenuItem Header="50 chapters / nhánh"
+
+                                                                              Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SplitChapters50Command}"
+
+                                                                              CommandParameter="{Binding .}" />
+
+                                                                    <MenuItem Header="100 chapters / nhánh"
+
+                                                                              Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SplitChapters100Command}"
+
+                                                                              CommandParameter="{Binding .}" />
+
+                                                                    <MenuItem Header="200 chapters / nhánh"
+
+                                                                              Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SplitChapters200Command}"
+
+                                                                              CommandParameter="{Binding .}" />
+
+                                                                    <MenuItem Header="300 chapters / nhánh"
+
+                                                                              Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SplitChapters300Command}"
+
+                                                                              CommandParameter="{Binding .}" />
+
+                                                                    <MenuItem Header="400 chapters / nhánh"
+
+                                                                              Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SplitChapters400Command}"
+
+                                                                              CommandParameter="{Binding .}" />
+
+                                                                </MenuItem>
+
+                                                                <Separator Background="#334155" />
+
+                                                                <MenuItem Header="🧹 Xóa STT tên truyện này (Clear STT)"
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ClearSingleBookOrderPrefixCommand}"
+                                                                          CommandParameter="{Binding .}">
+                                                                    <MenuItem.Icon>
+                                                                        <TextBlock Text="🧹" Foreground="#F87171" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+                                                                    </MenuItem.Icon>
+                                                                </MenuItem>
+                                                                <Separator Background="#334155" />
+                                                                <MenuItem Header="❌ Xóa khỏi hàng đợi"
+
+                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).DeleteItemCommand}"
+
+                                                                          CommandParameter="{Binding .}">
+
+                                                                    <MenuItem.Icon>
+
+                                                                        <TextBlock Text="✕" Foreground="#EF4444" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+
+                                                                    </MenuItem.Icon>
+
+                                                                </MenuItem>
+
+                                                            </ContextMenu>
+
+                                                        </Border.ContextMenu>
+
+                                                        <Grid ColumnDefinitions="Auto, *">
+
+                                                            <!-- Cột THUMBNAIL (Hiển thị khi chọn chế độ List + thumbnail column) -->
+
+                                                            <Border Grid.Column="0"
+
+                                                                    IsVisible="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).IsThumbnailColumnVisible}"
+
+                                                                    Width="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueRowThumbnailWidth}"
+                                                                    Height="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueRowThumbnailHeight}"
+                                                                    Margin="8,6,2,6"
+
+                                                                    Background="#091018" BorderBrush="#00E5FF" BorderThickness="1" CornerRadius="3" ClipToBounds="True"
+
+                                                                    VerticalAlignment="Center"
+
+                                                                    AttachedToVisualTree="OnThumbnailElementAttached"
+
+                                                                    DataContextChanged="OnThumbnailElementDataContextChanged"
+
+                                                                    PointerPressed="OnQueueThumbnailPointerPressed">
+
+                                                                <Grid>
+
+                                                                    <TextBlock Text="NO IMG" FontSize="8" FontWeight="Bold" Foreground="#475569"
+
+                                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+
+                                                                               IsVisible="{Binding ThumbnailBitmap, Converter={x:Static ObjectConverters.IsNull}}" />
+
+                                                                    <Image Source="{Binding ThumbnailBitmap}" Stretch="UniformToFill"
+
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+
+                                                                           RenderOptions.BitmapInterpolationMode="HighQuality" />
+
+                                                                    <Border Background="#80000000" IsVisible="{Binding IsThumbnailLoading}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+
+                                                                        <TextBlock Text="⏳" FontSize="12" Foreground="#00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                                                    </Border>
+
+                                                                </Grid>
+
+                                                            </Border>
+
+
+
+                                                            <Grid Grid.Column="1" RowDefinitions="Auto, Auto, Auto, Auto, Auto">
+
+                                                                <!-- Hàng 0: Header dành trọn chiều ngang cho Tiêu đề truyện (↳, Checkbox, Index, Tiêu đề) -->
+
+                                                                <Grid Grid.Row="0" ColumnDefinitions="Auto, Auto, Auto, *" VerticalAlignment="Center" Margin="8,6,8,2">
+
+                                                                    <TextBlock Grid.Column="0" Text="↳ " IsVisible="{Binding IsParallelSplitChild}"
+
+                                                                               Foreground="#F472B6" FontWeight="ExtraBold" FontSize="14"
+
+                                                                               VerticalAlignment="Center" Margin="14,0,2,0" ToolTip.Tip="Nhánh con tách chương" />
+
+                                                                    <CheckBox Grid.Column="1" IsChecked="{Binding IsChecked}" PointerPressed="OnQueueItemCheckBoxPointerPressed" Margin="0,0,6,0" VerticalAlignment="Center" />
+
+                                                                    <TextBlock Grid.Column="2" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" Width="26" VerticalAlignment="Center" />
+
+
+
+                                                                    <!-- Tiêu đề truyện chiếm 100% chiều ngang còn lại, cho phép hiển thị tối đa 2 dòng -->
+
+                                                                    <TextBlock Grid.Column="3" Text="{Binding Title}"
+
+                                                                               FontWeight="Bold" Foreground="{Binding TitleBrush}" FontSize="11.5"
+
+                                                                               TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+
+                                                                               VerticalAlignment="Center" Margin="2,0,0,0"
+
+                                                                               ToolTip.Tip="{Binding Title}" />
+
+                                                                </Grid>
+
+
+
+                                                                <!-- Hàng 1: Các nút thao tác hàng (🔍, 📂, 📖, ▲, ▼, ✕) & Badges nằm ngay bên dưới tên truyện -->
+
+                                                                <WrapPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="38,0,8,3">
+
+                                                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,2">
+
+                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SendTitleToSearchCommand}"
+
+                                                                                CommandParameter="{Binding .}" ToolTip.Tip="Chuyển tên truyện này sang Tab Search (Tìm truyện)"
+
+                                                                                Background="#1E293B" Foreground="#F59E0B" Padding="6,2" FontSize="9.5" CornerRadius="3">
+
+                                                                            <TextBlock Text="🔍" />
+
+                                                                        </Button>
+
+                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenBookFolderCommand}"
+
+                                                                                CommandParameter="{Binding .}" ToolTip.Tip="Mở thư mục"
+
+                                                                                Background="#1E293B" Foreground="#38BDF8" Padding="6,2" FontSize="9.5" CornerRadius="3">
+
+                                                                            <TextBlock Text="📂" />
+
+                                                                        </Button>
+
+                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ReadBookInLibraryCommand}"
+
+                                                                                CommandParameter="{Binding .}" ToolTip.Tip="Đọc truyện đã tải trong Trình Đọc Truyện"
+
+                                                                                Background="#1E293B" Foreground="#10B981" Padding="6,2" FontSize="9.5" CornerRadius="3">
+
+                                                                            <TextBlock Text="📖" />
+
+                                                                        </Button>
+
+                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveUpCommand}"
+
+                                                                                CommandParameter="{Binding .}"
+
+                                                                                Background="#1E293B" Foreground="#94A3B8" Padding="6,2" FontSize="9.5" CornerRadius="3">
+
+                                                                            <TextBlock Text="▲" />
+
+                                                                        </Button>
+
+                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveDownCommand}"
+
+                                                                                CommandParameter="{Binding .}"
+
+                                                                                Background="#1E293B" Foreground="#94A3B8" Padding="6,2" FontSize="9.5" CornerRadius="3">
+
+                                                                            <TextBlock Text="▼" />
+
+                                                                        </Button>
+
+                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).DeleteItemCommand}"
+
+                                                                                CommandParameter="{Binding .}"
+
+                                                                                Background="#1E293B" Foreground="#EF4444" Padding="6,2" FontSize="9.5" CornerRadius="3">
+
+                                                                            <TextBlock Text="✕" />
+
+                                                                        </Button>
+
+                                                                    </StackPanel>
+
+
+
+                                                                    <Border IsVisible="{Binding IsDuplicate}" Background="#78350F" CornerRadius="2" Padding="3,1" VerticalAlignment="Center" Margin="0,0,4,2">
+
+                                                                        <TextBlock Text="TRÙNG" FontSize="8" FontWeight="Bold" Foreground="#FDE047" />
+
+                                                                    </Border>
+
+                                                                    <Border IsVisible="{Binding IsImageDuplicate}" Background="#831843" BorderBrush="#F43F5E" BorderThickness="1" CornerRadius="2" Padding="3,1" VerticalAlignment="Center" Margin="0,0,4,2" ToolTip.Tip="Truyện trùng ảnh bìa với truyện khác">
+
+                                                                        <TextBlock Text="TRÙNG ẢNH" FontSize="8" FontWeight="Bold" Foreground="#FDA4AF" />
+
+                                                                    </Border>
+
+                                                                    <!-- Badge Thư mục gốc cho truyện cha đã tách -->
+
+                                                                    <Border IsVisible="{Binding IsParallelSplitParent}" Background="#064E3B" BorderBrush="#059669" BorderThickness="1" CornerRadius="2" Padding="4,1" VerticalAlignment="Center" Margin="0,0,4,2">
+
+                                                                        <TextBlock Text="📁 THƯ MỤC GỐC" FontSize="8" FontWeight="Bold" Foreground="#34D399" />
+
+                                                                    </Border>
+
+                                                                    <!-- Nút Thu gọn / Mở rộng cây thư mục con -->
+
+                                                                    <Button IsVisible="{Binding HasParallelSplitChildren}"
+
+                                                                            Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleSplitCollapseCommand}"
+
+                                                                            CommandParameter="{Binding .}"
+
+                                                                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
+
+                                                                            Padding="6,1" Height="20" CornerRadius="3" VerticalAlignment="Center" Margin="0,0,4,2"
+
+                                                                            ToolTip.Tip="Thu gọn hoặc mở rộng danh sách các nhánh con đã tách để theo dõi">
+
+                                                                        <TextBlock Text="{Binding ParallelSplitToggleText}" FontSize="8" FontWeight="ExtraBold" VerticalAlignment="Center" />
+
+                                                                    </Button>
+
+                                                                    <!-- Badge Nhánh con cho task con -->
+
+                                                                    <Border IsVisible="{Binding IsParallelSplitChild}" Background="#831843" BorderBrush="#DB2777" BorderThickness="1" CornerRadius="2" Padding="4,1" VerticalAlignment="Center" Margin="0,0,4,2">
+
+                                                                        <TextBlock Text="{Binding ChapterSelectionText, StringFormat='{}↳ NHÁNH: {0}'}" FontSize="8" FontWeight="Bold" Foreground="#F472B6" />
+
+                                                                    </Border>
+
+                                                                </WrapPanel>
+
+
+
+                                                                <!-- Hàng 2: Sub-info & Status (Domain, Subfolder, Latest Chapter, Missing Chapter, Trạng thái, Tiến trình) -->
+
+                                                                <WrapPanel Grid.Row="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="38,0,8,3">
+
+                                                                    <Border Background="#1E293B" CornerRadius="2" Padding="4,1" Margin="0,0,6,2">
+
+                                                                        <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="SemiBold" />
+
+                                                                    </Border>
+
+                                                                    <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="2" Padding="4,1" Margin="0,0,6,2" ToolTip.Tip="Subfolder lưu truyện">
+
+                                                                        <TextBlock Text="{Binding DisplaySubfolder, StringFormat='{}📁 {0}'}" FontSize="8" Foreground="#FDE047" FontWeight="SemiBold" />
+
+                                                                    </Border>
+
+                                                                    <TextBlock Text="{Binding DisplayChaptersCount}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,2" />
+
+                                                                    <TextBlock FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2">
+                                                                        <Run Text="{Binding LatestChapterLabel}" Foreground="#94A3B8" />
+                                                                        <Run Text="{Binding LocalizedLatestChapter}" Foreground="#00E5FF" />
+                                                                    </TextBlock>
+
+                                                                    <TextBlock FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2">
+                                                                        <Run Text="{Binding MissingChapterLabel}" Foreground="#94A3B8" />
+                                                                        <Run Text="{Binding LocalizedMissingChapter}" Foreground="{Binding MissingChapterBrush}" />
+                                                                    </TextBlock>
+
+                                                                    <TextBlock Text="{Binding LocalizedStatus}" Foreground="#00E5FF" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+
+                                                                    <TextBlock Text="{Binding DetailProgressText}" Foreground="#34D399" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
+
+                                                                </WrapPanel>
+
+
+
+                                                                <!-- Hàng 3: Nhập liệu (2 dòng riêng biệt, co giãn 100% không gian card, không bị chèn ép) -->
+
+                                                                <StackPanel Grid.Row="3" Margin="38,0,8,4" Spacing="3">
+
+                                                                    <!-- Dòng 3A: Chọn chap -->
+
+                                                                    <Grid ColumnDefinitions="Auto, *">
+
+                                                                        <TextBlock Grid.Column="0" Text="{Binding ChapterSelectionLabel}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Width="68" />
+
+                                                                        <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="{Binding ChapterSelectionPlaceholder}" FontSize="9" Height="24" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" />
+
+                                                                    </Grid>
+
+
+
+                                                                    <!-- Dòng 3B: Subfolder + Nút Khóa + Nút Áp dụng -->
+
+                                                                    <Grid ColumnDefinitions="Auto, *, Auto, Auto">
+
+                                                                        <TextBlock Grid.Column="0" Text="📁 Subfolder:" Foreground="#F59E0B" FontSize="9" VerticalAlignment="Center" Width="68" />
+
+                                                                        <TextBox Grid.Column="1" Text="{Binding Subfolder}" PlaceholderText="[default]" FontSize="9" Height="24" Background="#0B0F19" Foreground="#FDE047" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" ToolTip.Tip="Tên thư mục con tải về của truyện này (Ví dụ: chizuru). Để trống sẽ tự động vào '[default]'" />
+
+                                                                        <Button Grid.Column="2" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleLockSubfolderCommand}"
+
+                                                                                CommandParameter="{Binding .}"
+
+                                                                                Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
+
+                                                                                Padding="6,1" Height="24" CornerRadius="3" Margin="4,0,0,0"
+
+                                                                                ToolTip.Tip="{Binding SubfolderLockTooltip}">
+
+                                                                            <TextBlock Text="{Binding SubfolderLockIcon}" FontSize="10" VerticalAlignment="Center" />
+
+                                                                        </Button>
+
+                                                                        <Button Grid.Column="3" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ApplySingleBookSubfolderCommand}"
+
+                                                                                CommandParameter="{Binding .}"
+
+                                                                                Background="#065F46" BorderBrush="#10B981" BorderThickness="1" Foreground="#34D399"
+
+                                                                                Padding="6,1" Height="24" CornerRadius="3" Margin="4,0,0,0"
+
+                                                                                ToolTip.Tip="Áp dụng tên Subfolder này, tự động chuyển toàn bộ file đã tải sang thư mục mới và khóa cố định">
+
+                                                                            <TextBlock Text="✓ ÁP" FontSize="8.5" FontWeight="Bold" VerticalAlignment="Center" />
+
+                                                                        </Button>
+
+                                                                    </Grid>
+
+                                                                </StackPanel>
+
+
+
+                                                                <!-- Hàng 4: THANH PROGRESS BAR SÁT MÉP GÓC ĐÁY CARD 100% VỚI SỐ % OVERLAP NỔI BẬT KHÁC MÀU -->
+
+                                                                <Grid Grid.Row="4" Height="14" HorizontalAlignment="Stretch" Margin="0,2,0,0">
+
+                                                                    <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100" Height="14"
+
+                                                                                 CornerRadius="0" Foreground="{Binding ProgressBarBrush}" Background="#0B132B"
+
+                                                                                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch" BorderThickness="0" Margin="0" />
+
+                                                                    <TextBlock Text="{Binding ProgressPercentageText}"
+
+                                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+
+                                                                               Foreground="#FDE047" FontWeight="ExtraBold" FontSize="9" />
+
+                                                                </Grid>
+
+                                                            </Grid>
+
+                                                        </Grid>
+
+                                                    </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+<UserControl.Styles>
 
         <!-- Style ScrollBar dọc to bản cho Dual Picture Sort hỗ trợ chạm vuốt cảm ứng ngón tay -->
 
@@ -3868,714 +4552,51 @@
 
 
 
-                                    <!-- Danh sách các hàng truyện (List view & List + thumbnail column) -->
-
-                                    <ScrollViewer x:Name="QueueScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MinHeight="260" Padding="4,4,4,70" IsVisible="{Binding !IsThumbnailMode}" BringIntoViewOnFocusChange="False">
-
-                                        <ItemsControl x:Name="QueueItemsControl" ItemsSource="{Binding ActiveQueueItemsSource}">
-
-                                            <ItemsControl.ItemsPanel>
-
-                                                <ItemsPanelTemplate>
-
-                                                    <WrapPanel Orientation="Horizontal" />
-
-                                                </ItemsPanelTemplate>
-
-                                            </ItemsControl.ItemsPanel>
-
-                                            <ItemsControl.ItemTemplate>
-
-                                                <DataTemplate>
-
-                                                    <Border IsVisible="{Binding !IsFilteredOut}"
-                                                            Width="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueGridItemWidth}"
-                                                            Margin="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueItemMargin}"
-                                                            Background="{Binding QueueRowBackground}" BorderBrush="{Binding QueueRowBorderBrush}" BorderThickness="{Binding QueueRowBorderThickness}" CornerRadius="4" ClipToBounds="True"
-
-                                                            AttachedToVisualTree="OnThumbnailElementAttached"
-
-                                                            DataContextChanged="OnThumbnailElementDataContextChanged"
-
-                                                            PointerEntered="OnQueueItemPointerEntered"
-
-                                                            PointerExited="OnQueueItemPointerExited"
-
-                                                            PointerPressed="OnQueueItemPointerPressed"
-
-                                                            PointerMoved="OnQueueItemPointerMoved"
-
-                                                            PointerReleased="OnQueueItemPointerReleased"
-
-                                                            PointerCaptureLost="OnQueueItemPointerCaptureLost">
-
-                                                        <Border.ContextMenu>
-
-                                                            <ContextMenu>
-
-                                                                <MenuItem Header="Tích chọn truyện này (Check)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CheckSingleBookCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="✔" Foreground="#38BDF8" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="Bỏ chọn truyện này (Uncheck)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).UncheckSingleBookCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="✕" Foreground="#64748B" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="Đảo chọn truyện này (Toggle)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleCheckSingleBookCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="🔄" Foreground="#F59E0B" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <Separator Background="#334155" />
-
-                                                                <MenuItem Header="Chọn tất cả truyện (Check All)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SelectAllCommand}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="☑" Foreground="#34D399" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="Bỏ chọn tất cả (Uncheck All)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).UnselectAllCommand}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="☐" Foreground="#94A3B8" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="Đảo chọn tất cả (Invert All)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).InvertSelectionCommand}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="🔀" Foreground="#A78BFA" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <Separator Background="#334155" />
-
-                                                                <MenuItem Header="Đưa lên đầu hàng đợi (Move to Top)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveToTopCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="▲" Foreground="#34D399" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="Đưa xuống cuối hàng đợi (Move to Bottom)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveToBottomCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="▼" Foreground="#F87171" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="🔤 Sắp xếp theo tên alphabet (A-Z / Z-A)"
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SortByNameAlphabetCommand}">
-                                                                    <MenuItem.Icon>
-                                                                        <TextBlock Text="🔤" Foreground="#FDE047" FontSize="12" VerticalAlignment="Center" />
-                                                                    </MenuItem.Icon>
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="⏮️ Khôi phục thứ tự gốc từ web (Restore Order)"
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).RestoreOriginalOrderCommand}">
-                                                                    <MenuItem.Icon>
-                                                                        <TextBlock Text="⏮️" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
-                                                                    </MenuItem.Icon>
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="🔃 Đảo ngược toàn bộ danh sách (Reverse Queue)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ReverseQueueCommand}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="🔃" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <Separator Background="#334155" />
-
-                                                                <MenuItem Header="🔍 Đưa tên truyện vào Tab Search (Tìm truyện)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SendTitleToSearchCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="🔍" Foreground="#F59E0B" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="🌐 Mở link trong trình duyệt (Browser)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenInBrowserCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="🌐" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="📁 Mở thư mục truyện (Open Folder)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenBookFolderCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="📁" Foreground="#FDE047" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="📖 Đọc truyện ngay (Open in Reader)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ReadBookInLibraryCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="📖" Foreground="#10B981" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <Separator Background="#334155" />
-
-                                                                <MenuItem Header="📋 Sao chép link truyện (Copy Link)"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CopyBookLinkCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="🔗" Foreground="#38BDF8" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="📋 Sao chép Tên + Link truyện"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CopyNameAndLinkCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="📑" Foreground="#F59E0B" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="📋 Sao chép link các Chapter"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CopyChaptersLinkCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="📚" Foreground="#A78BFA" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="📋 Sao chép toàn bộ link đã tick"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CopySelectedLinksCommand}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="📋" Foreground="#34D399" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <Separator Background="#334155" />
-
-                                                                <MenuItem Header="🔒/🔓 Khóa / Mở khóa Subfolder"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleLockSubfolderCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="🔐" Foreground="#F59E0B" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                                <MenuItem Header="🧩 Tách chương song song (Parallel Split)">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="🧩" Foreground="#F472B6" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                    <MenuItem Header="50 chapters / nhánh"
-
-                                                                              Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SplitChapters50Command}"
-
-                                                                              CommandParameter="{Binding .}" />
-
-                                                                    <MenuItem Header="100 chapters / nhánh"
-
-                                                                              Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SplitChapters100Command}"
-
-                                                                              CommandParameter="{Binding .}" />
-
-                                                                    <MenuItem Header="200 chapters / nhánh"
-
-                                                                              Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SplitChapters200Command}"
-
-                                                                              CommandParameter="{Binding .}" />
-
-                                                                    <MenuItem Header="300 chapters / nhánh"
-
-                                                                              Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SplitChapters300Command}"
-
-                                                                              CommandParameter="{Binding .}" />
-
-                                                                    <MenuItem Header="400 chapters / nhánh"
-
-                                                                              Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SplitChapters400Command}"
-
-                                                                              CommandParameter="{Binding .}" />
-
-                                                                </MenuItem>
-
-                                                                <Separator Background="#334155" />
-
-                                                                <MenuItem Header="🧹 Xóa STT tên truyện này (Clear STT)"
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ClearSingleBookOrderPrefixCommand}"
-                                                                          CommandParameter="{Binding .}">
-                                                                    <MenuItem.Icon>
-                                                                        <TextBlock Text="🧹" Foreground="#F87171" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-                                                                    </MenuItem.Icon>
-                                                                </MenuItem>
-                                                                <Separator Background="#334155" />
-                                                                <MenuItem Header="❌ Xóa khỏi hàng đợi"
-
-                                                                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).DeleteItemCommand}"
-
-                                                                          CommandParameter="{Binding .}">
-
-                                                                    <MenuItem.Icon>
-
-                                                                        <TextBlock Text="✕" Foreground="#EF4444" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
-
-                                                                    </MenuItem.Icon>
-
-                                                                </MenuItem>
-
-                                                            </ContextMenu>
-
-                                                        </Border.ContextMenu>
-
-                                                        <Grid ColumnDefinitions="Auto, *">
-
-                                                            <!-- Cột THUMBNAIL (Hiển thị khi chọn chế độ List + thumbnail column) -->
-
-                                                            <Border Grid.Column="0"
-
-                                                                    IsVisible="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).IsThumbnailColumnVisible}"
-
-                                                                    Width="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueRowThumbnailWidth}"
-                                                                    Height="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).QueueRowThumbnailHeight}"
-                                                                    Margin="8,6,2,6"
-
-                                                                    Background="#091018" BorderBrush="#00E5FF" BorderThickness="1" CornerRadius="3" ClipToBounds="True"
-
-                                                                    VerticalAlignment="Center"
-
-                                                                    AttachedToVisualTree="OnThumbnailElementAttached"
-
-                                                                    DataContextChanged="OnThumbnailElementDataContextChanged"
-
-                                                                    PointerPressed="OnQueueThumbnailPointerPressed">
-
-                                                                <Grid>
-
-                                                                    <TextBlock Text="NO IMG" FontSize="8" FontWeight="Bold" Foreground="#475569"
-
-                                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
-
-                                                                               IsVisible="{Binding ThumbnailBitmap, Converter={x:Static ObjectConverters.IsNull}}" />
-
-                                                                    <Image Source="{Binding ThumbnailBitmap}" Stretch="UniformToFill"
-
-                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-
-                                                                           RenderOptions.BitmapInterpolationMode="HighQuality" />
-
-                                                                    <Border Background="#80000000" IsVisible="{Binding IsThumbnailLoading}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-
-                                                                        <TextBlock Text="⏳" FontSize="12" Foreground="#00E5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
-
-                                                                    </Border>
-
-                                                                </Grid>
-
-                                                            </Border>
-
-
-
-                                                            <Grid Grid.Column="1" RowDefinitions="Auto, Auto, Auto, Auto, Auto">
-
-                                                                <!-- Hàng 0: Header dành trọn chiều ngang cho Tiêu đề truyện (↳, Checkbox, Index, Tiêu đề) -->
-
-                                                                <Grid Grid.Row="0" ColumnDefinitions="Auto, Auto, Auto, *" VerticalAlignment="Center" Margin="8,6,8,2">
-
-                                                                    <TextBlock Grid.Column="0" Text="↳ " IsVisible="{Binding IsParallelSplitChild}"
-
-                                                                               Foreground="#F472B6" FontWeight="ExtraBold" FontSize="14"
-
-                                                                               VerticalAlignment="Center" Margin="14,0,2,0" ToolTip.Tip="Nhánh con tách chương" />
-
-                                                                    <CheckBox Grid.Column="1" IsChecked="{Binding IsChecked}" PointerPressed="OnQueueItemCheckBoxPointerPressed" Margin="0,0,6,0" VerticalAlignment="Center" />
-
-                                                                    <TextBlock Grid.Column="2" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" Width="26" VerticalAlignment="Center" />
-
-
-
-                                                                    <!-- Tiêu đề truyện chiếm 100% chiều ngang còn lại, cho phép hiển thị tối đa 2 dòng -->
-
-                                                                    <TextBlock Grid.Column="3" Text="{Binding Title}"
-
-                                                                               FontWeight="Bold" Foreground="{Binding TitleBrush}" FontSize="11.5"
-
-                                                                               TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
-
-                                                                               VerticalAlignment="Center" Margin="2,0,0,0"
-
-                                                                               ToolTip.Tip="{Binding Title}" />
-
-                                                                </Grid>
-
-
-
-                                                                <!-- Hàng 1: Các nút thao tác hàng (🔍, 📂, 📖, ▲, ▼, ✕) & Badges nằm ngay bên dưới tên truyện -->
-
-                                                                <WrapPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="38,0,8,3">
-
-                                                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,2">
-
-                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).SendTitleToSearchCommand}"
-
-                                                                                CommandParameter="{Binding .}" ToolTip.Tip="Chuyển tên truyện này sang Tab Search (Tìm truyện)"
-
-                                                                                Background="#1E293B" Foreground="#F59E0B" Padding="6,2" FontSize="9.5" CornerRadius="3">
-
-                                                                            <TextBlock Text="🔍" />
-
-                                                                        </Button>
-
-                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenBookFolderCommand}"
-
-                                                                                CommandParameter="{Binding .}" ToolTip.Tip="Mở thư mục"
-
-                                                                                Background="#1E293B" Foreground="#38BDF8" Padding="6,2" FontSize="9.5" CornerRadius="3">
-
-                                                                            <TextBlock Text="📂" />
-
-                                                                        </Button>
-
-                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ReadBookInLibraryCommand}"
-
-                                                                                CommandParameter="{Binding .}" ToolTip.Tip="Đọc truyện đã tải trong Trình Đọc Truyện"
-
-                                                                                Background="#1E293B" Foreground="#10B981" Padding="6,2" FontSize="9.5" CornerRadius="3">
-
-                                                                            <TextBlock Text="📖" />
-
-                                                                        </Button>
-
-                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveUpCommand}"
-
-                                                                                CommandParameter="{Binding .}"
-
-                                                                                Background="#1E293B" Foreground="#94A3B8" Padding="6,2" FontSize="9.5" CornerRadius="3">
-
-                                                                            <TextBlock Text="▲" />
-
-                                                                        </Button>
-
-                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).MoveDownCommand}"
-
-                                                                                CommandParameter="{Binding .}"
-
-                                                                                Background="#1E293B" Foreground="#94A3B8" Padding="6,2" FontSize="9.5" CornerRadius="3">
-
-                                                                            <TextBlock Text="▼" />
-
-                                                                        </Button>
-
-                                                                        <Button Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).DeleteItemCommand}"
-
-                                                                                CommandParameter="{Binding .}"
-
-                                                                                Background="#1E293B" Foreground="#EF4444" Padding="6,2" FontSize="9.5" CornerRadius="3">
-
-                                                                            <TextBlock Text="✕" />
-
-                                                                        </Button>
-
-                                                                    </StackPanel>
-
-
-
-                                                                    <Border IsVisible="{Binding IsDuplicate}" Background="#78350F" CornerRadius="2" Padding="3,1" VerticalAlignment="Center" Margin="0,0,4,2">
-
-                                                                        <TextBlock Text="TRÙNG" FontSize="8" FontWeight="Bold" Foreground="#FDE047" />
-
-                                                                    </Border>
-
-                                                                    <Border IsVisible="{Binding IsImageDuplicate}" Background="#831843" BorderBrush="#F43F5E" BorderThickness="1" CornerRadius="2" Padding="3,1" VerticalAlignment="Center" Margin="0,0,4,2" ToolTip.Tip="Truyện trùng ảnh bìa với truyện khác">
-
-                                                                        <TextBlock Text="TRÙNG ẢNH" FontSize="8" FontWeight="Bold" Foreground="#FDA4AF" />
-
-                                                                    </Border>
-
-                                                                    <!-- Badge Thư mục gốc cho truyện cha đã tách -->
-
-                                                                    <Border IsVisible="{Binding IsParallelSplitParent}" Background="#064E3B" BorderBrush="#059669" BorderThickness="1" CornerRadius="2" Padding="4,1" VerticalAlignment="Center" Margin="0,0,4,2">
-
-                                                                        <TextBlock Text="📁 THƯ MỤC GỐC" FontSize="8" FontWeight="Bold" Foreground="#34D399" />
-
-                                                                    </Border>
-
-                                                                    <!-- Nút Thu gọn / Mở rộng cây thư mục con -->
-
-                                                                    <Button IsVisible="{Binding HasParallelSplitChildren}"
-
-                                                                            Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleSplitCollapseCommand}"
-
-                                                                            CommandParameter="{Binding .}"
-
-                                                                            Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
-
-                                                                            Padding="6,1" Height="20" CornerRadius="3" VerticalAlignment="Center" Margin="0,0,4,2"
-
-                                                                            ToolTip.Tip="Thu gọn hoặc mở rộng danh sách các nhánh con đã tách để theo dõi">
-
-                                                                        <TextBlock Text="{Binding ParallelSplitToggleText}" FontSize="8" FontWeight="ExtraBold" VerticalAlignment="Center" />
-
-                                                                    </Button>
-
-                                                                    <!-- Badge Nhánh con cho task con -->
-
-                                                                    <Border IsVisible="{Binding IsParallelSplitChild}" Background="#831843" BorderBrush="#DB2777" BorderThickness="1" CornerRadius="2" Padding="4,1" VerticalAlignment="Center" Margin="0,0,4,2">
-
-                                                                        <TextBlock Text="{Binding ChapterSelectionText, StringFormat='{}↳ NHÁNH: {0}'}" FontSize="8" FontWeight="Bold" Foreground="#F472B6" />
-
-                                                                    </Border>
-
-                                                                </WrapPanel>
-
-
-
-                                                                <!-- Hàng 2: Sub-info & Status (Domain, Subfolder, Latest Chapter, Missing Chapter, Trạng thái, Tiến trình) -->
-
-                                                                <WrapPanel Grid.Row="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="38,0,8,3">
-
-                                                                    <Border Background="#1E293B" CornerRadius="2" Padding="4,1" Margin="0,0,6,2">
-
-                                                                        <TextBlock Text="{Binding Domain}" FontSize="8" Foreground="#38BDF8" FontWeight="SemiBold" />
-
-                                                                    </Border>
-
-                                                                    <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="2" Padding="4,1" Margin="0,0,6,2" ToolTip.Tip="Subfolder lưu truyện">
-
-                                                                        <TextBlock Text="{Binding DisplaySubfolder, StringFormat='{}📁 {0}'}" FontSize="8" Foreground="#FDE047" FontWeight="SemiBold" />
-
-                                                                    </Border>
-
-                                                                    <TextBlock Text="{Binding DisplayChaptersCount}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,2" />
-
-                                                                    <TextBlock FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2">
-                                                                        <Run Text="{Binding LatestChapterLabel}" Foreground="#94A3B8" />
-                                                                        <Run Text="{Binding LocalizedLatestChapter}" Foreground="#00E5FF" />
-                                                                    </TextBlock>
-
-                                                                    <TextBlock FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2">
-                                                                        <Run Text="{Binding MissingChapterLabel}" Foreground="#94A3B8" />
-                                                                        <Run Text="{Binding LocalizedMissingChapter}" Foreground="{Binding MissingChapterBrush}" />
-                                                                    </TextBlock>
-
-                                                                    <TextBlock Text="{Binding LocalizedStatus}" Foreground="#00E5FF" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
-
-                                                                    <TextBlock Text="{Binding DetailProgressText}" Foreground="#34D399" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,2" />
-
-                                                                </WrapPanel>
-
-
-
-                                                                <!-- Hàng 3: Nhập liệu (2 dòng riêng biệt, co giãn 100% không gian card, không bị chèn ép) -->
-
-                                                                <StackPanel Grid.Row="3" Margin="38,0,8,4" Spacing="3">
-
-                                                                    <!-- Dòng 3A: Chọn chap -->
-
-                                                                    <Grid ColumnDefinitions="Auto, *">
-
-                                                                        <TextBlock Grid.Column="0" Text="{Binding ChapterSelectionLabel}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Width="68" />
-
-                                                                        <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="{Binding ChapterSelectionPlaceholder}" FontSize="9" Height="24" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" />
-
-                                                                    </Grid>
-
-
-
-                                                                    <!-- Dòng 3B: Subfolder + Nút Khóa + Nút Áp dụng -->
-
-                                                                    <Grid ColumnDefinitions="Auto, *, Auto, Auto">
-
-                                                                        <TextBlock Grid.Column="0" Text="📁 Subfolder:" Foreground="#F59E0B" FontSize="9" VerticalAlignment="Center" Width="68" />
-
-                                                                        <TextBox Grid.Column="1" Text="{Binding Subfolder}" PlaceholderText="[default]" FontSize="9" Height="24" Background="#0B0F19" Foreground="#FDE047" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" ToolTip.Tip="Tên thư mục con tải về của truyện này (Ví dụ: chizuru). Để trống sẽ tự động vào '[default]'" />
-
-                                                                        <Button Grid.Column="2" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleLockSubfolderCommand}"
-
-                                                                                CommandParameter="{Binding .}"
-
-                                                                                Background="#1E293B" BorderBrush="#334155" BorderThickness="1"
-
-                                                                                Padding="6,1" Height="24" CornerRadius="3" Margin="4,0,0,0"
-
-                                                                                ToolTip.Tip="{Binding SubfolderLockTooltip}">
-
-                                                                            <TextBlock Text="{Binding SubfolderLockIcon}" FontSize="10" VerticalAlignment="Center" />
-
-                                                                        </Button>
-
-                                                                        <Button Grid.Column="3" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ApplySingleBookSubfolderCommand}"
-
-                                                                                CommandParameter="{Binding .}"
-
-                                                                                Background="#065F46" BorderBrush="#10B981" BorderThickness="1" Foreground="#34D399"
-
-                                                                                Padding="6,1" Height="24" CornerRadius="3" Margin="4,0,0,0"
-
-                                                                                ToolTip.Tip="Áp dụng tên Subfolder này, tự động chuyển toàn bộ file đã tải sang thư mục mới và khóa cố định">
-
-                                                                            <TextBlock Text="✓ ÁP" FontSize="8.5" FontWeight="Bold" VerticalAlignment="Center" />
-
-                                                                        </Button>
-
-                                                                    </Grid>
-
-                                                                </StackPanel>
-
-
-
-                                                                <!-- Hàng 4: THANH PROGRESS BAR SÁT MÉP GÓC ĐÁY CARD 100% VỚI SỐ % OVERLAP NỔI BẬT KHÁC MÀU -->
-
-                                                                <Grid Grid.Row="4" Height="14" HorizontalAlignment="Stretch" Margin="0,2,0,0">
-
-                                                                    <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100" Height="14"
-
-                                                                                 CornerRadius="0" Foreground="{Binding ProgressBarBrush}" Background="#0B132B"
-
-                                                                                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch" BorderThickness="0" Margin="0" />
-
-                                                                    <TextBlock Text="{Binding ProgressPercentageText}"
-
-                                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
-
-                                                                               Foreground="#FDE047" FontWeight="ExtraBold" FontSize="9" />
-
-                                                                </Grid>
-
-                                                            </Grid>
-
-                                                        </Grid>
-
-                                                    </Border>
-
-                                                </DataTemplate>
-
-                                            </ItemsControl.ItemTemplate>
-
-                                        </ItemsControl>
-
-                                    </ScrollViewer>
-
-
+                                    <!-- 1. DANH SÁCH 1 CỘT (LIST VIEW & LIST + THUMBNAIL) - VIRTUALIZING ẢO HÓA 60FPS -->
+                                    <ItemsControl x:Name="QueueItemsControl" Grid.Row="1" ItemsSource="{Binding ActiveQueueItemsSource}" MinHeight="260" Padding="0,0,0,70" IsVisible="{Binding IsQueueSingleColumnDisplayActive}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.Template>
+                                            <ControlTemplate>
+                                                <ScrollViewer x:Name="QueueScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{TemplateBinding Padding}" BringIntoViewOnFocusChange="False">
+                                                    <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                                                </ScrollViewer>
+                                            </ControlTemplate>
+                                        </ItemsControl.Template>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="models:ComicBookItem">
+                                                <ContentControl Content="{Binding .}" ContentTemplate="{StaticResource ComicQueueCardTemplate}" Margin="0,0,0,2" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- 2. DANH SÁCH LƯỚI ĐA CỘT (3 CỘT PC / 2 CỘT ANDROID) - VIRTUALIZING ẢO HÓA 60FPS TRIỆT TIÊU LAG -->
+                                    <ItemsControl x:Name="GridQueueItemsControl" Grid.Row="1" ItemsSource="{Binding GridQueueRows}" MinHeight="260" Padding="4,4,4,70" IsVisible="{Binding IsQueueGridDisplayActive}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.Template>
+                                            <ControlTemplate>
+                                                <ScrollViewer x:Name="GridQueueScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{TemplateBinding Padding}" BringIntoViewOnFocusChange="False">
+                                                    <ItemsPresenter Name="PART_GridItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                                                </ScrollViewer>
+                                            </ControlTemplate>
+                                        </ItemsControl.Template>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="models:QueueGridRow">
+                                                <UniformGrid Rows="1" Columns="{Binding ColumnsCount}" Margin="0,0,0,4">
+                                                    <ContentControl Grid.Column="0" Content="{Binding Col1}" ContentTemplate="{StaticResource ComicQueueCardTemplate}" Margin="3,1" IsVisible="{Binding HasCol1}" />
+                                                    <ContentControl Grid.Column="1" Content="{Binding Col2}" ContentTemplate="{StaticResource ComicQueueCardTemplate}" Margin="3,1" IsVisible="{Binding HasCol2}" />
+                                                    <ContentControl Grid.Column="2" Content="{Binding Col3}" ContentTemplate="{StaticResource ComicQueueCardTemplate}" Margin="3,1" IsVisible="{Binding HasCol3}" />
+                                                </UniformGrid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
 
                                     <!-- LƯỚI THẺ ẢNH THUMBNAIL (THUMBNAIL VIEW MODE - CHUẨN GIAO DIỆN WPF) -->
 
