@@ -537,6 +537,7 @@ public partial class MainViewModel
                     AddLog("INFO", $"[Cào hàng loạt] [{tagIdx + 1}/{tagUrls.Count}] Đang cào ({targetDomain}): {currentTagUrl} (Trang {DomainPageFrom} - {DomainPageTo})...");
 
                     int totalPagesInBatch = Math.Max(1, DomainPageTo - DomainPageFrom + 1);
+                    int addedThisTag = 0;
                     var scrapedItems = await _scraperService.ScrapeBatchComicsFromTagPagesAsync(
                         currentTagUrl,
                         DomainPageFrom,
@@ -563,10 +564,30 @@ public partial class MainViewModel
                                     SourceCrawlStatusText = title;
                                 }
                             });
+                        },
+                        onBatchItemsScraped: (pageBatch) =>
+                        {
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                foreach (var item in pageBatch)
+                                {
+                                    if (!ComicBooks.Any(b => b.Url.Equals(item.Url, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(SubfolderInput))
+                                        {
+                                            item.Subfolder = SubfolderInput.Trim();
+                                        }
+                                        item.Index = ComicBooks.Count + 1;
+                                        ComicBooks.Add(item);
+                                        addedThisTag++;
+                                        totalAdded++;
+                                    }
+                                }
+                                UpdateStats();
+                            });
                         });
 
                     totalScraped += scrapedItems.Count;
-                    int addedThisTag = 0;
 
                     foreach (var item in scrapedItems)
                     {

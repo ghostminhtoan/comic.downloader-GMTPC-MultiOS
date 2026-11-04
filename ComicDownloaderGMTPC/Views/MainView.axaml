@@ -94,7 +94,7 @@
 
             <!-- KHUNG CUỘN CHÍNH HỖ TRỢ ĐA NỀN TẢNG (DESKTOP & MOBILE/ANDROID) -->
 
-            <ScrollViewer x:Name="MainRootScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer x:Name="MainRootScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" BringIntoViewOnFocusChange="False">
 
             <Grid RowDefinitions="Auto, Auto, *, Auto" MinHeight="650">
 
@@ -3797,7 +3797,7 @@
 
                                             <ControlTemplate>
 
-                                                <ScrollViewer x:Name="QueueScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{TemplateBinding Padding}">
+                                                <ScrollViewer x:Name="QueueScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="{TemplateBinding Padding}" BringIntoViewOnFocusChange="False">
 
                                                     <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
 
@@ -4483,7 +4483,7 @@
 
                                     <!-- LƯỚI THẺ ẢNH THUMBNAIL (THUMBNAIL VIEW MODE - CHUẨN GIAO DIỆN WPF) -->
 
-                                    <ScrollViewer x:Name="ThumbnailScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="8,8,8,70" IsVisible="{Binding IsThumbnailMode}">
+                                    <ScrollViewer x:Name="ThumbnailScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="8,8,8,70" IsVisible="{Binding IsThumbnailMode}" BringIntoViewOnFocusChange="False">
 
                                         <ItemsControl x:Name="ThumbnailItemsControl" ItemsSource="{Binding ActiveThumbnailItemsSource}">
 

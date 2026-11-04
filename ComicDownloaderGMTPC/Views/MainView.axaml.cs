@@ -2425,6 +2425,9 @@ public partial class MainView : UserControl
     private void OnQueueItemPointerPressed(object? sender, PointerPressedEventArgs e)
 
     {
+        _queueTouchStartPos = e.GetCurrentPoint(this).Position;
+        _queueTouchMoved = false;
+        _queueTouchLongPressTriggered = false;
 
         if (sender is not Control ctrl || ctrl.DataContext is not ComicDownloaderGMTPC.Models.ComicBookItem item)
 
@@ -2439,7 +2442,10 @@ public partial class MainView : UserControl
         // Nếu đang trong chế độ Batch Select theo Part từ Quick Float Button
         if (DataContext is MainViewModel batchPressedVm && batchPressedVm.IsQueueBatchModeActive)
         {
-            // Hoãn lại để PointerReleased bắt Single Tap (tránh nhầm lẫn khi người dùng chạm giữ và kéo cuộn danh sách)
+            // Hoãn lại để PointerReleased bắt Single Tap (tránh nhầm lẫn khi người dùng chạm giữ và kéo cuộn danh sách).
+            // Ngăn chặn focus change / scroll / preview làm lệch vị trí trên Android & Desktop!
+            e.Handled = true;
+            return;
         }
 
         // Xử lý sự kiện nếu người dùng click vào CheckBox trực tiếp
@@ -2538,7 +2544,7 @@ public partial class MainView : UserControl
 
             var token = _queueTouchHoldCts.Token;
 
-            _queueTouchStartPos = point.Position;
+            _queueTouchStartPos = e.GetCurrentPoint(this).Position;
 
             _queueTouchMoved = false;
 
@@ -2800,15 +2806,15 @@ public partial class MainView : UserControl
 
     {
 
-        if (_queueTouchHoldCts != null && sender is Visual visual)
+        if (_queueTouchHoldCts != null || (DataContext is MainViewModel bVm && bVm.IsQueueBatchModeActive))
 
         {
 
-            var point = e.GetCurrentPoint(visual);
+            var curPt = e.GetCurrentPoint(this).Position;
 
-            double dx = point.Position.X - _queueTouchStartPos.X;
+            double dx = curPt.X - _queueTouchStartPos.X;
 
-            double dy = point.Position.Y - _queueTouchStartPos.Y;
+            double dy = curPt.Y - _queueTouchStartPos.Y;
 
             if (Math.Sqrt(dx * dx + dy * dy) > 15) // Người dùng đang cuộn danh sách (swipe/scroll)
 
@@ -2816,7 +2822,7 @@ public partial class MainView : UserControl
 
                 _queueTouchMoved = true;
 
-                _queueTouchHoldCts.Cancel();
+                _queueTouchHoldCts?.Cancel();
 
             }
 
@@ -2882,19 +2888,10 @@ public partial class MainView : UserControl
 
         if (DataContext is MainViewModel batchRelVm && batchRelVm.IsQueueBatchModeActive)
         {
-            _queueTouchHoldCts?.Cancel();
-            bool isSingleTap = false;
-            if (e.Pointer.Type == PointerType.Touch)
-            {
-                isSingleTap = !_queueTouchMoved && !_queueTouchLongPressTriggered;
-            }
-            else
-            {
-                var pt = e.GetCurrentPoint(this).Position;
-                double dx = pt.X - _queueTouchStartPos.X;
-                double dy = pt.Y - _queueTouchStartPos.Y;
-                isSingleTap = Math.Sqrt(dx * dx + dy * dy) <= 15;
-            }
+            var curPt = e.GetCurrentPoint(this).Position;
+            double dx = curPt.X - _queueTouchStartPos.X;
+            double dy = curPt.Y - _queueTouchStartPos.Y;
+            bool isSingleTap = !_queueTouchLongPressTriggered && (Math.Sqrt(dx * dx + dy * dy) <= 15);
 
             if (isSingleTap && sender is Control ctrl && ctrl.DataContext is ComicBookItem item)
             {
@@ -3033,18 +3030,10 @@ public partial class MainView : UserControl
     {
         if (DataContext is MainViewModel vm && vm.IsQueueBatchModeActive)
         {
-            bool isSingleTap = false;
-            if (e.Pointer.Type == PointerType.Touch)
-            {
-                isSingleTap = !_thumbTouchMoved;
-            }
-            else
-            {
-                var curPt = e.GetCurrentPoint(this).Position;
-                double dx = curPt.X - _thumbTouchStartPos.X;
-                double dy = curPt.Y - _thumbTouchStartPos.Y;
-                isSingleTap = Math.Sqrt(dx * dx + dy * dy) <= 15;
-            }
+            var curPt = e.GetCurrentPoint(this).Position;
+            double dx = curPt.X - _thumbTouchStartPos.X;
+            double dy = curPt.Y - _thumbTouchStartPos.Y;
+            bool isSingleTap = !_thumbTouchMoved && (Math.Sqrt(dx * dx + dy * dy) <= 15);
 
             if (isSingleTap && sender is Control ctrl && ctrl.DataContext is ComicBookItem item)
             {
@@ -3317,6 +3306,7 @@ public partial class MainView : UserControl
                 if (vm.IsQueueBatchModeActive)
                 {
                     // Hoãn lại để PointerReleased bắt Single Tap (tránh nhầm lẫn khi người dùng vuốt cuộn thumbnail)
+                    e.Handled = true;
                     return;
                 }
 

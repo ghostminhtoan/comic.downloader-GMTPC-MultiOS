@@ -4238,7 +4238,7 @@ public class ComicScraperService
         return result;
     }
 
-    public async Task<List<ComicBookItem>> ScrapeBatchComicsFromTagPagesAsync(string tagUrl, int pageFrom, int pageTo, string domain, CancellationToken ct = default, Action<int, int, int, string>? onProgress = null)
+    public async Task<List<ComicBookItem>> ScrapeBatchComicsFromTagPagesAsync(string tagUrl, int pageFrom, int pageTo, string domain, CancellationToken ct = default, Action<int, int, int, string>? onProgress = null, Action<List<ComicBookItem>>? onBatchItemsScraped = null)
     {
         var list = new List<ComicBookItem>();
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -4326,8 +4326,7 @@ public class ComicScraperService
                 if (totalExpectedGalleries <= 0) totalExpectedGalleries = 25;
                 int completedHitomiGalleries = 0;
 
-                int hitomiConcurrency = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
-                using var hitomiSem = new SemaphoreSlim(hitomiConcurrency, hitomiConcurrency);
+                // Tải song song 25 gallery mỗi lượt (chuẩn tốc độ WPF: 25 requests song song cùng lúc, không bị bóp nghẽn bởi CPU Semaphore)
                 await HitomiResolverService.RefreshGGAsync(_httpClient, ct).ConfigureAwait(false);
                 for (int page = pageFrom; page <= pageTo; page++)
                 {
@@ -4379,7 +4378,6 @@ public class ComicScraperService
                         var fetchedItems = new ComicBookItem?[pageGalleryIds.Count];
                         var galleryTasks = pageGalleryIds.Select(async (gId, idx) =>
                         {
-                            await hitomiSem.WaitAsync(ct).ConfigureAwait(false);
                             try
                             {
                                 string cUrl = $"https://hitomi.la/galleries/{gId}.html";
@@ -4446,18 +4444,26 @@ public class ComicScraperService
                                 int doneCount = Interlocked.Increment(ref completedHitomiGalleries);
                                 string reportTitle = fetchedItems[idx]?.Title ?? $"Hitomi Gallery {gId}";
                                 onProgress?.Invoke(doneCount, totalExpectedGalleries, doneCount, reportTitle);
-                                hitomiSem.Release();
                             }
-                        });
+                        }).ToList();
 
                         await Task.WhenAll(galleryTasks).ConfigureAwait(false);
+
+                        var pageBatch = new List<ComicBookItem>();
                         foreach (var item in fetchedItems)
                         {
                             if (item != null)
                             {
                                 item.Index = list.Count + 1;
                                 list.Add(item);
+                                pageBatch.Add(item);
                             }
+                        }
+
+                        // Bắn ngay 25 truyện vào UI sau mỗi trang (chuẩn WPF: 25 truyện / đợt)
+                        if (pageBatch.Count > 0)
+                        {
+                            onBatchItemsScraped?.Invoke(pageBatch);
                         }
                     }
                     catch { }
