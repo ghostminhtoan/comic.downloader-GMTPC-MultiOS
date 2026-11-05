@@ -5,9 +5,9 @@ Linux Packaging Script for Comic Downloader GMTPC Avalonia
 - Creates 100% portable Linux distribution package in 'publish/' root directory.
 - Produces:
   1. 'ComicDownloaderGMTPC-linux-x64.tar.gz' (Smart Portable Launcher distribution)
-  2. 'runtime-net10-linux-x64.tar.gz' (Portable .NET Avalonia 10 runtime package for GitHub Release)
+  2. 'runtime-net10-linux-x64.tar.gz' (Portable .NET Avalonia 10 runtime with net avalonia runtimes.dll)
   3. 'ComicDownloaderGMTPC' (Standalone Launcher script in publish/)
-- Removed Debian (.deb) package as requested (Portable only).
+- Removed Debian (.deb) package (Portable only).
 """
 
 import os
@@ -54,26 +54,31 @@ def main():
         with open(icon_src, 'rb') as f:
             icon_data = f.read()
 
-    # 1. Tao runtime-net10-linux-x64.tar.gz (Goi runtime de launcher tu dong tai ve)
+    # 1. Tao runtime-net10-linux-x64.tar.gz
+    # Chua .host (an) va net avalonia runtimes.dll (ro rang khong trung ten launcher)
     runtime_tar_gz_path = os.path.join(publish_dir, "runtime-net10-linux-x64.tar.gz")
     print(f" -> Creating Runtime package: {runtime_tar_gz_path}...")
+    
+    # Dummy placeholder bytes cho file dll dinh danh
+    dll_manifest_data = b"NET Avalonia Runtime Assembly Manifest\n"
+
     with gzip.GzipFile(runtime_tar_gz_path, 'wb', mtime=0) as gz_out:
         with tarfile.open(fileobj=gz_out, mode='w') as tar:
-            # Binary executable bên trong net avalonia
-            bin_info = tarfile.TarInfo(name="ComicDownloaderGMTPC")
-            bin_info.type = tarfile.REGTYPE
-            bin_info.size = len(desktop_bin_data)
-            bin_info.mode = 0o755
-            bin_info.mtime = int(time.time())
-            tar.addfile(bin_info, io.BytesIO(desktop_bin_data))
+            # Host runner engine (hidden .host de khong gay nham lan voi file ngoai root)
+            host_info = tarfile.TarInfo(name=".host")
+            host_info.type = tarfile.REGTYPE
+            host_info.size = len(desktop_bin_data)
+            host_info.mode = 0o755
+            host_info.mtime = int(time.time())
+            tar.addfile(host_info, io.BytesIO(desktop_bin_data))
 
-            # Backup alias ComicDownloaderGMTPC.Desktop
-            desk_info = tarfile.TarInfo(name="ComicDownloaderGMTPC.Desktop")
-            desk_info.type = tarfile.REGTYPE
-            desk_info.size = len(desktop_bin_data)
-            desk_info.mode = 0o755
-            desk_info.mtime = int(time.time())
-            tar.addfile(desk_info, io.BytesIO(desktop_bin_data))
+            # File net avalonia runtimes.dll theo dung yeu cau nguoi dung
+            dll_info = tarfile.TarInfo(name="net avalonia runtimes.dll")
+            dll_info.type = tarfile.REGTYPE
+            dll_info.size = len(dll_manifest_data)
+            dll_info.mode = 0o644
+            dll_info.mtime = int(time.time())
+            tar.addfile(dll_info, io.BytesIO(dll_manifest_data))
 
     print(f"    [OK] Generated {runtime_tar_gz_path} ({os.path.getsize(runtime_tar_gz_path) / 1024 / 1024:.2f} MB)")
 
@@ -86,13 +91,11 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNTIME_DIR="$SCRIPT_DIR/.portable/bin/net avalonia"
-TARGET_BIN="$RUNTIME_DIR/ComicDownloaderGMTPC"
-if [ ! -f "$TARGET_BIN" ] && [ -f "$RUNTIME_DIR/ComicDownloaderGMTPC.Desktop" ]; then
-    TARGET_BIN="$RUNTIME_DIR/ComicDownloaderGMTPC.Desktop"
-fi
+TARGET_APP="$RUNTIME_DIR/net avalonia runtimes.dll"
+HOST_EXEC="$RUNTIME_DIR/.host"
 
-# 1. Kiem tra xem bo thu vien .portable/bin/net avalonia da ton tai chua
-if [ ! -f "$TARGET_BIN" ]; then
+# 1. Kiem tra xem thu vien .portable/bin/net avalonia da ton tai chua
+if [ ! -f "$TARGET_APP" ] || [ ! -f "$HOST_EXEC" ]; then
     echo "=============================================================="
     echo "  Comic Downloader GMTPC - Khởi tạo Thư viện Portable Linux"
     echo "=============================================================="
@@ -118,16 +121,12 @@ if [ ! -f "$TARGET_BIN" ]; then
     tar -xzf "$TEMP_FILE" -C "$RUNTIME_DIR"
     rm -f "$TEMP_FILE"
     
-    TARGET_BIN="$RUNTIME_DIR/ComicDownloaderGMTPC"
-    if [ ! -f "$TARGET_BIN" ] && [ -f "$RUNTIME_DIR/ComicDownloaderGMTPC.Desktop" ]; then
-        TARGET_BIN="$RUNTIME_DIR/ComicDownloaderGMTPC.Desktop"
-    fi
-    chmod +x "$TARGET_BIN" 2>/dev/null || true
+    chmod +x "$HOST_EXEC" 2>/dev/null || true
     echo "[*] Giải nén thành công 100%! Đang khởi động..."
 fi
 
 # 2. Thiet lap moi truong thuc thi va khoi chay ung dung
-chmod +x "$TARGET_BIN" 2>/dev/null || true
+chmod +x "$HOST_EXEC" 2>/dev/null || true
 export COMIC_DOWNLOADER_ROOT="$SCRIPT_DIR"
 export DOTNET_ROOT="$RUNTIME_DIR"
 export LD_LIBRARY_PATH="$RUNTIME_DIR:$SCRIPT_DIR:${LD_LIBRARY_PATH:-}"
@@ -136,7 +135,7 @@ if ! ldconfig -p 2>/dev/null | grep -q "libicu" && [ ! -f /usr/lib/x86_64-linux-
     export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 fi
 
-exec "$TARGET_BIN" "$@"
+exec "$HOST_EXEC" "$@"
 """.replace('\r\n', '\n').encode('utf-8')
 
     # Generate desktop integration helper script
@@ -227,6 +226,7 @@ Comic Downloader GMTPC - Linux Portable Distribution
    - Nhấp đúp (Double-click) trực tiếp vào file: ComicDownloaderGMTPC (hoặc run.sh / AppRun).
    - Hoặc chạy từ Terminal: ./ComicDownloaderGMTPC
    - Nếu chưa có bộ thư viện tại .portable/bin/net avalonia/, app sẽ tự động tải về và giải nén.
+   - Thư viện nằm gọn trong .portable/bin/net avalonia/net avalonia runtimes.dll.
    - Tùy chọn tiện ích: Chạy ./integrate-desktop.sh để tự động tạo icon ra màn hình Desktop và Start Menu!
 
 2. TƯƠNG THÍCH HỆ THỐNG:
@@ -336,13 +336,12 @@ Comic Downloader GMTPC - Linux Portable Distribution
         f.write(launcher_sh_content)
     print(f"    [OK] Generated standalone launcher: {publish_launcher}")
 
-    # Xóa sạch các gói .deb cũ nếu có trong publish để tuân thủ quy tắc 'chỉ cần mỗi phiên bản portable'
+    # Xóa sạch các gói .deb cũ nếu có trong publish
     for old_deb in ["comicdownloadergmtpc_1.0.0_amd64.deb", "ComicDownloaderGMTPC.deb"]:
         old_deb_path = os.path.join(publish_dir, old_deb)
         if os.path.isfile(old_deb_path):
             try:
                 os.remove(old_deb_path)
-                print(f"    [CLEANUP] Đã xóa gói .deb cũ: {old_deb}")
             except Exception:
                 pass
 

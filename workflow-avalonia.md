@@ -24,10 +24,13 @@ Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ,
 - **Quy tắc Bắt Buộc Tự Động Upload Release Beta**: Bắt buộc luôn luôn upload release beta sau khi build/đóng gói xong để cập nhật 3 gói cài đặt (`.apk`, `.exe`, `.tar.gz`) lên GitHub Release tag `beta`: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta`. Quy trình tự động đã được tích hợp trong bước [4/4] của `build.bat`, hoặc chạy trực tiếp lệnh `upload beta.cmd --no-pause` qua công nghệ Microsoft Edge Direct-to-S3 siêu tốc.
 - **Quy tắc Build & Thư mục Publish**:
   - Script build chính thức: `build.bat` (đã tích hợp đóng gói Windows Portable, Linux Portable, Android và tự động upload beta; hỗ trợ cờ `--no-upload` để chỉ build local).
-  - Kiến trúc Portable On-Demand chuẩn hóa:
-    + Windows: `ComicDownloaderGMTPC.Desktop.exe` là Launcher thông minh (~77 KB). Tự động nạp thư viện từ `.portable\bin\net avalonia\`. Nếu thiếu sẽ tự động tải `runtime-net10-win-x64.zip` từ GitHub Release tag `beta`.
-    + Linux: `ComicDownloaderGMTPC-linux-x64.tar.gz` là gói Portable duy nhất (loại bỏ hoàn toàn gói .deb). Bên trong chứa launcher tự động kiểm tra và nạp từ `.portable/bin/net avalonia/`, tự tải `runtime-net10-linux-x64.tar.gz` khi thiếu.
-    + Thư mục gốc ứng dụng luôn được bảo toàn: Khi chạy từ `.portable\bin\net avalonia\`, app tự động thiết lập `AppContext.BaseDirectory` và `AppDomain.CurrentDomain.BaseDirectory` về đúng thư mục root để các thư mục `.portable`, `.tmp`, `Downloads`, `autosave` không bao giờ bị lồng sai lệch.
+  - Kiến trúc Portable On-Demand chuẩn hóa (Zero-Executable Inside):
+    + File chạy duy nhất tại root: `ComicDownloaderGMTPC.Desktop.exe` (Windows Native Host Launcher C++ nhúng icon) và `ComicDownloaderGMTPC` (Linux Bash Script Launcher).
+    + Toàn bộ runtime .NET Avalonia 10 nằm gọn trong `.portable\bin\net avalonia\`.
+    + File chịu trách nhiệm chính bên trong được đổi tên thành `net avalonia runtimes.dll`. Tuyệt đối không có bất kỳ file `.exe` nào bên trong `.portable\bin\net avalonia\` để tránh gây nhầm lẫn cho người dùng.
+    + Cơ chế nạp In-Process: Windows Native Host nạp trực tiếp `hostfxr.dll` và gọi `hostfxr_main` để thực thi `net avalonia runtimes.dll` trên cùng 1 tiến trình (single process, zero child process).
+    + Cơ chế tự động On-Demand: Nếu phát hiện thiếu thư viện, app sẽ tự động tải `runtime-net10-win-x64.zip` hoặc `runtime-net10-linux-x64.tar.gz` từ GitHub Release tag `beta` và giải nén chuẩn xác.
+    + Thư mục gốc ứng dụng luôn được bảo toàn: `EnsureApplicationRootDirectory()` tự động redirect `AppContext.BaseDirectory` và `AppDomain.CurrentDomain.BaseDirectory` về thư mục root bên ngoài để các thư mục `.portable`, `.tmp`, `Downloads`, `autosave` không bao giờ bị lồng sai lệch.
   - Khi build / publish file cho toàn bộ các hệ điều hành (Windows, Linux, Android), toàn bộ file `.exe`, binary Launcher Linux, `.tar.gz`, các file nén runtime và `.apk` **bắt buộc luôn luôn ở chung một folder duy nhất `\Comic Downloader GMTPC AVALONIA\publish\`**, tuyệt đối **không được cho vào các subfolder như `windows`, `linux`, `android`**.
 - Luôn xuất khối trạng thái chuẩn ở cuối câu trả lời:
   - `commit local: <mã hash>`

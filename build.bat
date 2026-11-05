@@ -35,8 +35,8 @@ if not exist "publish\.portable\bin\net avalonia" mkdir "publish\.portable\bin\n
 taskkill /F /IM ComicDownloaderGMTPC.Desktop.exe >nul 2>&1
 
 echo.
-echo [1/4] Publishing Windows (win-x64, Portable runtime in .portable\bin\net avalonia + Launcher)...
-dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o "publish\.portable\bin\net avalonia"
+echo [1/4] Publishing Windows (win-x64, net avalonia runtimes.dll in .portable\bin\net avalonia + Native Host)...
+dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false -o "publish\.portable\bin\net avalonia"
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Windows build failed!
     echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
@@ -44,7 +44,13 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-:: Clean intermediate files from net avalonia runtime
+:: Chuan hoa file thanh net avalonia runtimes.dll theo yeu cau cua nguoi dung
+copy /y "publish\.portable\bin\net avalonia\ComicDownloaderGMTPC.Desktop.dll" "publish\.portable\bin\net avalonia\net avalonia runtimes.dll" >nul 2>&1
+copy /y "publish\.portable\bin\net avalonia\ComicDownloaderGMTPC.Desktop.runtimeconfig.json" "publish\.portable\bin\net avalonia\net avalonia runtimes.runtimeconfig.json" >nul 2>&1
+copy /y "publish\.portable\bin\net avalonia\ComicDownloaderGMTPC.Desktop.deps.json" "publish\.portable\bin\net avalonia\net avalonia runtimes.deps.json" >nul 2>&1
+
+:: Xoa sach toan bo file .exe ben trong .portable\bin\net avalonia\ (chi giu lai DLLs va runtime)
+del /f /q "publish\.portable\bin\net avalonia\*.exe" >nul 2>&1
 del /f /q "publish\.portable\bin\net avalonia\*.pdb" >nul 2>&1
 del /f /q "publish\.portable\bin\net avalonia\*.xml" >nul 2>&1
 
@@ -55,11 +61,15 @@ if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Failed to create runtime-net10-win-x64.zip!
 )
 
-:: Compile Windows Launcher (ComicDownloaderGMTPC.Desktop.exe)
-echo  -^> Compiling Windows Portable Launcher (ComicDownloaderGMTPC.Desktop.exe)...
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /target:winexe /r:System.IO.Compression.FileSystem.dll /r:System.IO.Compression.dll /win32icon:"ComicDownloaderGMTPC.Desktop\app-icon.ico" /out:"publish\ComicDownloaderGMTPC.Desktop.exe" "Launcher\Windows\Launcher.cs"
+:: Bien dich Windows Native Host (ComicDownloaderGMTPC.Desktop.exe)
+echo  -^> Compiling Windows Native Host Launcher (ComicDownloaderGMTPC.Desktop.exe)...
+call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+rc.exe /fo "Launcher\Windows\NativeHost.res" "Launcher\Windows\NativeHost.rc" >nul 2>&1
+cl.exe /nologo /O2 /EHsc /W3 "Launcher\Windows\NativeHost.cpp" "Launcher\Windows\NativeHost.res" /Fe:"publish\ComicDownloaderGMTPC.Desktop.exe" /link /SUBSYSTEM:WINDOWS user32.lib shell32.lib >nul 2>&1
+del /f /q "Launcher\Windows\NativeHost.obj" >nul 2>&1
+del /f /q "Launcher\Windows\NativeHost.res" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Windows Launcher compilation failed!
+    echo [ERROR] Windows Native Host compilation failed!
     echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
     python -c "import time; time.sleep(20)"
     exit /b %ERRORLEVEL%
@@ -73,8 +83,8 @@ del /f /q "publish\*.json" >nul 2>&1
 del /f /q "publish\*.old" >nul 2>&1
 
 echo [OK] Windows Portable succeeded:
-echo      -^> publish\ComicDownloaderGMTPC.Desktop.exe (Launcher)
-echo      -^> publish\.portable\bin\net avalonia\ (Runtime)
+echo      -^> publish\ComicDownloaderGMTPC.Desktop.exe (Native Host Launcher)
+echo      -^> publish\.portable\bin\net avalonia\net avalonia runtimes.dll (100%% no .exe inside)
 echo      -^> publish\runtime-net10-win-x64.zip
 
 echo.
