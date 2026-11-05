@@ -95,12 +95,29 @@ public partial class MainView : UserControl
         // Bắt phím Escape hoặc phím Back (trên Android) để thoát toàn màn hình đối chiếu hoặc đóng Popup Preview
 
         AddHandler(KeyDownEvent, (s, e) =>
-
         {
-
             if (DataContext is MainViewModel vm)
-
             {
+                var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+                bool isTyping = focused is TextBox || focused is AutoCompleteBox;
+
+                // Phím Space trong tab Tải về (Download Queue): Đảo trạng thái Checkbox của các truyện đang select (chuẩn WPF)
+                if (e.Key == Key.Space && !isTyping && vm.SelectedRootTabIndex == 0)
+                {
+                    if (vm.ToggleSelectedQueueItemsChecked())
+                    {
+                        e.Handled = true;
+                        return;
+                    }
+                }
+
+                // Phím Ctrl + A trong tab Tải về (Download Queue): Chọn toàn bộ truyện
+                if (e.Key == Key.A && (e.KeyModifiers & KeyModifiers.Control) != 0 && !isTyping && vm.SelectedRootTabIndex == 0)
+                {
+                    vm.SelectAllQueueItems();
+                    e.Handled = true;
+                    return;
+                }
 
                 if (vm.IsHoverPreviewVisible && (e.Key == Key.Escape || e.Key == Key.Back))
 
@@ -115,15 +132,17 @@ public partial class MainView : UserControl
                 }
 
                 if (vm.IsEnhanceFullscreenVisible && (e.Key == Key.Escape || e.Key == Key.Back))
-
                 {
-
                     vm.IsEnhanceFullscreenVisible = false;
-
                     e.Handled = true;
-
                     return;
+                }
 
+                if (e.Key == Key.Escape && !isTyping && vm.SelectedRootTabIndex == 0 && vm.ComicBooks.Any(b => b != null && b.IsHighlighted))
+                {
+                    vm.ClearQueueSelection();
+                    e.Handled = true;
+                    return;
                 }
 
 
@@ -2408,36 +2427,11 @@ public partial class MainView : UserControl
             return;
         }
 
-        // 2. Thao tác SHIFT-CLICK: Chọn dải liên tục từ vị trí click trước tới hiện tại
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _lastQueueClickedIndex >= 0)
-        {
-            int currentIndex = vm.ComicBooks.IndexOf(item);
-            if (currentIndex >= 0)
-            {
-                int start = Math.Min(_lastQueueClickedIndex, currentIndex);
-                int end = Math.Max(_lastQueueClickedIndex, currentIndex);
-                bool targetState = !item.IsChecked;
-                for (int i = start; i <= end; i++)
-                {
-                    if (i < vm.ComicBooks.Count && !vm.ComicBooks[i].IsFilteredOut)
-                    {
-                        vm.ComicBooks[i].IsChecked = targetState;
-                    }
-                }
-                item.IsChecked = targetState;
-                _lastQueueClickedIndex = currentIndex;
-                e.Handled = true;
-                return;
-            }
-        }
-
-        vm.SetHighlightedComicBook(item);
-
-        int idx = vm.ComicBooks.IndexOf(item);
-        if (idx >= 0)
-        {
-            _lastQueueClickedIndex = idx;
-        }
+        // Bỏ mặc định Shift + Click để tick/untick nhiều checkbox theo yêu cầu của user.
+        // Hỗ trợ chọn truyện (Selection) theo chuẩn Windows Explorer:
+        bool isCtrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        bool isShift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        vm.HandleQueueItemSelection(item, isCtrl, isShift, ref _lastQueueClickedIndex);
     }
 
     private void OnQueueItemPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -2489,37 +2483,12 @@ public partial class MainView : UserControl
             return;
         }
 
-        // Thao tác SHIFT-CLICK trên thẻ truyện: Chọn dải liên tục
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _lastQueueClickedIndex >= 0 && DataContext is MainViewModel shiftVm)
+        // Xử lý chọn truyện theo phong cách Windows Explorer (Click, Ctrl+Click, Shift+Click)
+        if (DataContext is MainViewModel queueVm)
         {
-            int currentIndex = shiftVm.ComicBooks.IndexOf(item);
-            if (currentIndex >= 0)
-            {
-                int start = Math.Min(_lastQueueClickedIndex, currentIndex);
-                int end = Math.Max(_lastQueueClickedIndex, currentIndex);
-                bool targetState = !item.IsChecked;
-                for (int i = start; i <= end; i++)
-                {
-                    if (i < shiftVm.ComicBooks.Count && !shiftVm.ComicBooks[i].IsFilteredOut)
-                    {
-                        shiftVm.ComicBooks[i].IsChecked = targetState;
-                    }
-                }
-                item.IsChecked = targetState;
-                _lastQueueClickedIndex = currentIndex;
-                e.Handled = true;
-                return;
-            }
-        }
-
-        if (DataContext is MainViewModel clickVm)
-        {
-            clickVm.SetHighlightedComicBook(item);
-            int idx = clickVm.ComicBooks.IndexOf(item);
-            if (idx >= 0)
-            {
-                _lastQueueClickedIndex = idx;
-            }
+            bool isCtrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+            bool isShift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+            queueVm.HandleQueueItemSelection(item, isCtrl, isShift, ref _lastQueueClickedIndex);
         }
 
 
@@ -3328,18 +3297,15 @@ public partial class MainView : UserControl
                     return;
                 }
 
-                // Nếu click vào thẻ, chọn truyện này
-
-                item.IsChecked = !item.IsChecked;
+                // Chọn truyện theo phong cách Windows Explorer: Click thường, Ctrl+Click, Shift+Click
+                bool isCtrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+                bool isShift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+                vm.HandleQueueItemSelection(item, isCtrl, isShift, ref _lastQueueClickedIndex);
 
                 if (vm.IsPopupPreview)
-
                 {
-
                     vm.ShowHoverPreview(item);
-
                     UpdateHoverPreviewPosition(e);
-
                 }
 
             }

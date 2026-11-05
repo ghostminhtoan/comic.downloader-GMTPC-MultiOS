@@ -326,7 +326,7 @@ public partial class MainViewModel
                         DomainAnalyzeStatusText = $"✅ Đã phân tích & nạp truyện: {book.Title} ({book.TotalChapters} chaps)";
                         AddLog("SUCCESS", $"[Analyze] Đã nạp thành công bộ truyện vào Queue: {book.Title} ({book.TotalChapters} chaps)");
                         if (!DomainHistoryList.Contains(singleUrl)) DomainHistoryList.Insert(0, singleUrl);
-                        SelectedRootTabIndex = 2;
+                        SelectedRootTabIndex = 0;
                         return;
                     }
 
@@ -413,7 +413,7 @@ public partial class MainViewModel
                     {
                         StartScanMissing();
                         TriggerThumbnailPrefetchIfNeeded();
-                        SelectedRootTabIndex = 2;
+                        SelectedRootTabIndex = 0;
                     }
                 }
             }
@@ -616,7 +616,7 @@ public partial class MainViewModel
                 AddLog("SUCCESS", $"[Cào hàng loạt] Hoàn tất cào tổng cộng {totalScraped} truyện ({totalAdded} truyện mới đã được thêm vào Queue).");
                 
                 // Chuyển sang Tab Download Queue (Index 2) để người dùng xem ngay, không tự mở Tab Search (Index 1)
-                SelectedRootTabIndex = 2;
+                SelectedRootTabIndex = 0;
         }
         catch (OperationCanceledException)
         {

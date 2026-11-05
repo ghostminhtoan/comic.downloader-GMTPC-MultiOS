@@ -83,7 +83,7 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnSelectedRootTabIndexChanged(int value)
     {
-        if (value == 4 && LibraryVm.AllComics.Count == 0 && !LibraryVm.IsScanning)
+        if (value == 3 && LibraryVm.AllComics.Count == 0 && !LibraryVm.IsScanning)
         {
             _ = LibraryVm.ScanLibraryAsync();
         }
@@ -1060,7 +1060,7 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void OpenEnhanceSettingsTab()
     {
-        SelectedRootTabIndex = 3; // Chuyển sang Tab Công cụ
+        SelectedRootTabIndex = 2; // Chuyển sang Tab Công cụ
         SelectedToolsTabIndex = 2; // Chuyển sang Subtab Xử lý ảnh
     }
 
@@ -1555,19 +1555,135 @@ public partial class MainViewModel : ViewModelBase
 
     public void SetHighlightedComicBook(ComicBookItem? item)
     {
-        if (HighlightedComicBook == item) return;
-
-        if (HighlightedComicBook != null)
+        if (item == null)
         {
-            HighlightedComicBook.IsHighlighted = false;
+            ClearQueueSelection();
+            return;
         }
 
+        foreach (var b in ComicBooks)
+        {
+            if (b != null && b.IsHighlighted && b != item)
+            {
+                b.IsHighlighted = false;
+            }
+        }
+        item.IsHighlighted = true;
         HighlightedComicBook = item;
+    }
 
-        if (HighlightedComicBook != null)
+    /// <summary>
+    /// Xóa toàn bộ lựa chọn (selection highlight) trong hàng chờ.
+    /// </summary>
+    public void ClearQueueSelection()
+    {
+        foreach (var b in ComicBooks)
         {
-            HighlightedComicBook.IsHighlighted = true;
+            if (b != null && b.IsHighlighted)
+            {
+                b.IsHighlighted = false;
+            }
         }
+        HighlightedComicBook = null;
+    }
+
+    /// <summary>
+    /// Chọn toàn bộ các truyện hiển thị trong hàng chờ (Ctrl + A).
+    /// </summary>
+    public void SelectAllQueueItems()
+    {
+        var items = (IsFilterActive && FilteredQueueItems != null ? FilteredQueueItems : ComicBooks)
+            .Where(b => b != null && !b.IsFilteredOut);
+        foreach (var b in items)
+        {
+            b.IsHighlighted = true;
+        }
+    }
+
+    /// <summary>
+    /// Chọn truyện theo chuẩn Windows Explorer:
+    /// - Click thường: Bỏ chọn các truyện khác, chọn truyện này.
+    /// - Ctrl + Click: Đảo trạng thái chọn (toggle) của truyện này, giữ nguyên các truyện khác.
+    /// - Shift + Click: Chọn dải truyện từ mốc anchor trước đến truyện này.
+    /// </summary>
+    public void HandleQueueItemSelection(ComicBookItem item, bool isCtrl, bool isShift, ref int anchorIndex)
+    {
+        if (item == null) return;
+
+        var items = (IsFilterActive && FilteredQueueItems != null ? FilteredQueueItems : ComicBooks)
+            .Where(b => b != null && !b.IsFilteredOut)
+            .ToList();
+
+        int currentIndex = items.IndexOf(item);
+        if (currentIndex < 0) return;
+
+        if (isShift)
+        {
+            int start = anchorIndex >= 0 && anchorIndex < items.Count ? anchorIndex : 0;
+            int min = Math.Min(start, currentIndex);
+            int max = Math.Max(start, currentIndex);
+
+            if (!isCtrl)
+            {
+                // Giống Windows Explorer: nếu không giữ Ctrl thì xóa các lựa chọn khác ngoài dải
+                foreach (var b in ComicBooks)
+                {
+                    if (b != null && b.IsHighlighted)
+                    {
+                        b.IsHighlighted = false;
+                    }
+                }
+            }
+
+            for (int i = min; i <= max; i++)
+            {
+                items[i].IsHighlighted = true;
+            }
+            HighlightedComicBook = item;
+        }
+        else if (isCtrl)
+        {
+            item.IsHighlighted = !item.IsHighlighted;
+            HighlightedComicBook = item.IsHighlighted ? item : null;
+            anchorIndex = currentIndex;
+        }
+        else
+        {
+            // Click thường: Bỏ chọn các truyện khác và chỉ chọn duy nhất truyện này
+            foreach (var b in ComicBooks)
+            {
+                if (b != null && b.IsHighlighted && b != item)
+                {
+                    b.IsHighlighted = false;
+                }
+            }
+            item.IsHighlighted = true;
+            HighlightedComicBook = item;
+            anchorIndex = currentIndex;
+        }
+    }
+
+    /// <summary>
+    /// Đảo trạng thái Checkbox của tất cả các truyện đang được chọn (phím Space chuẩn WPF).
+    /// </summary>
+    public bool ToggleSelectedQueueItemsChecked()
+    {
+        var selected = ComicBooks.Where(b => b != null && b.IsHighlighted).ToList();
+        if (selected.Count == 0 && HighlightedComicBook != null)
+        {
+            selected.Add(HighlightedComicBook);
+        }
+
+        if (selected.Count > 0)
+        {
+            bool targetState = !selected[0].IsChecked;
+            foreach (var b in selected)
+            {
+                b.IsChecked = targetState;
+            }
+            return true;
+        }
+        return false;
     }
 
     [ObservableProperty]
@@ -2790,7 +2906,7 @@ public partial class MainViewModel : ViewModelBase
         UpdateStats();
         StartScanMissing();
         TriggerThumbnailPrefetchIfNeeded();
-        SelectedRootTabIndex = 2; // Tự động chuyển sang tab Download
+        SelectedRootTabIndex = 0; // Tự động chuyển sang tab Download
     }
 
     [RelayCommand]
@@ -2808,7 +2924,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         await GetLinkAsync();
-        SelectedRootTabIndex = 2; // Chuyển sang Tab Download để theo dõi tiến độ
+        SelectedRootTabIndex = 0; // Chuyển sang Tab Download để theo dõi tiến độ
     }
 
     // ==========================================
@@ -2821,7 +2937,7 @@ public partial class MainViewModel : ViewModelBase
         await ExtractUrlsFromTextAsync(UrlInput, clearExisting: true);
         if (ComicBooks.Count > 0)
         {
-            SelectedRootTabIndex = 2; // Chuyển sang Tab Download (Index 2), tuyệt đối không mở Tab Search (Index 1)
+            SelectedRootTabIndex = 0; // Chuyển sang Tab Download (Index 0), tuyệt đối không mở Tab Search (Index 4)
         }
     }
 
@@ -2831,7 +2947,7 @@ public partial class MainViewModel : ViewModelBase
         await ExtractUrlsFromTextAsync(UrlInput, clearExisting: false);
         if (ComicBooks.Count > 0)
         {
-            SelectedRootTabIndex = 2; // Chuyển sang Tab Download (Index 2), tuyệt đối không mở Tab Search (Index 1)
+            SelectedRootTabIndex = 0; // Chuyển sang Tab Download (Index 0), tuyệt đối không mở Tab Search (Index 4)
         }
     }
 
@@ -2856,7 +2972,7 @@ public partial class MainViewModel : ViewModelBase
 
             AddLog("INFO", "📋 Đang trích xuất liên kết từ Clipboard...");
             await ExtractUrlsFromTextAsync(text, clearExisting: false);
-            SelectedRootTabIndex = 2; // Chuyển sang Tab Download để theo dõi tiến độ
+            SelectedRootTabIndex = 0; // Chuyển sang Tab Download để theo dõi tiến độ
         }
         catch (Exception ex)
         {
@@ -3952,7 +4068,7 @@ public partial class MainViewModel : ViewModelBase
     public async Task ReadBookInLibraryAsync(ComicBookItem? item)
     {
         var target = item ?? SelectedComic;
-        SelectedRootTabIndex = 4;
+        SelectedRootTabIndex = 3;
 
         await LibraryVm.ScanLibraryAsync();
 
@@ -4350,6 +4466,88 @@ public partial class MainViewModel : ViewModelBase
         catch (Exception ex)
         {
             AddLog("ERROR", $"Lỗi cập nhật Beta: {ex.Message}");
+            UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+        }
+        finally
+        {
+            IsUpdating = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ReverseToBackupBetaAsync()
+    {
+        HasAvailableBetaUpdate = false;
+        if (IsUpdating)
+        {
+            AddLog("WARN", "Tiến trình cập nhật / khôi phục đang chạy, vui lòng đợi...");
+            return;
+        }
+
+        string[] backupUrls;
+        string platformName;
+
+        if (OperatingSystem.IsAndroid())
+        {
+            platformName = "Android APK (Backup)";
+            backupUrls = new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/backup.com.CompanyName.ComicDownloaderGMTPC-Signed.apk"
+            };
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            platformName = "Linux Portable .tar.gz (Backup)";
+            backupUrls = new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/backup.ComicDownloaderGMTPC-linux-x64.tar.gz"
+            };
+        }
+        else
+        {
+            platformName = "Windows Standalone EXE (Backup)";
+            backupUrls = new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/backup.ComicDownloaderGMTPC.Desktop.exe"
+            };
+        }
+
+        IsUpdating = true;
+        UpdateBetaButtonLabel = "⏳ Đang kết nối...";
+
+        try
+        {
+            AddLog("INFO", $"⏪ Bắt đầu tải và quay lại bản BACKUP ({platformName})...");
+
+            bool success = await AppUpdateService.Instance.DownloadAndInstallUpdateAsync(
+                backupUrls,
+                (level, msg) => AddLog(level, msg),
+                (percent) =>
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        UpdateBetaButtonLabel = $"⏳ {percent:F0}%";
+                    });
+                },
+                channel: "beta");
+
+            if (!success)
+            {
+                AddLog("WARN", "[Reverse to backup] Không thể tải bản backup. Vui lòng kiểm tra lại kết nối mạng hoặc xác nhận bản backup có sẵn trên GitHub Release.");
+                UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+            }
+            else if (OperatingSystem.IsWindows())
+            {
+                UpdateBetaButtonLabel = "🔄 Đang khởi động lại...";
+            }
+            else
+            {
+                UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("ERROR", $"Lỗi quay lại bản backup: {ex.Message}");
             UpdateBetaButtonLabel = "🧪 UPDATE BETA";
         }
         finally

@@ -193,12 +193,13 @@ def split_asset_name_ext(filename):
 def rotate_and_backup_existing_assets(target_names):
     """
     Quy trinh bao toan asset Release Beta theo flow moi:
-    1. Co 2 truong hop:
-       a. Neu chua co asset voi timedate cu thi rename asset voi ten goc kem hau to time date,
-          vi du: ComicDownloaderGMTPC.Desktop-2026-10-20-11.56.58.AM.Tuesday.exe
-       b. Neu da co asset cu voi timedate cu thi xoa asset co timedate cu do,
-          roi rename asset ten goc thanh asset co time date moi.
-    2. Giai phong ten goc de upload asset moi; neu upload bi loi thi ban cu van con nguyen ven lam backup.
+    - Tien to backup + ten goc, KHONG timedate:
+      vi du: backup.ComicDownloaderGMTPC.Desktop.exe
+             backup.ComicDownloaderGMTPC-linux-x64.tar.gz
+             backup.com.CompanyName.ComicDownloaderGMTPC-Signed.apk
+    - Neu da co asset backup cu (backup.<name> hoac timedate cu) thi xoa asset cu do,
+      roi rename asset ten goc thanh backup.<name>.
+    - Giai phong ten goc de upload asset moi; neu upload bi loi thi ban cu van con nguyen ven lam backup.
     """
     token = load_github_token()
     if not token:
@@ -220,14 +221,11 @@ def rotate_and_backup_existing_assets(target_names):
 
         assets = res.json().get("assets", [])
 
-        # Tao chuoi timestamp chuan: 2026-10-20-11.56.58.AM.Tuesday
-        now = datetime.datetime.now()
-        timestamp_str = now.strftime("%Y-%m-%d-%I.%M.%S.%p.%A")
-
         for target_name in target_names:
             base_stem, ext = split_asset_name_ext(target_name)
+            new_backup_name = f"backup.{target_name}"
 
-            # Regex nhan dien asset backup mang date time: <stem>-YYYY-MM-DD-...<ext>
+            # Regex nhan dien asset backup mang date time cu de don dep sach se
             backup_regex = re.compile(
                 r"^" + re.escape(base_stem) + r"-\d{4}-\d{2}-\d{2}-.*" + re.escape(ext) + r"$",
                 re.IGNORECASE
@@ -240,10 +238,10 @@ def rotate_and_backup_existing_assets(target_names):
                 a_name = a.get("name", "")
                 if a_name.lower() == target_name.lower():
                     exact_target_asset = a
-                elif backup_regex.match(a_name):
+                elif a_name.lower() == new_backup_name.lower() or backup_regex.match(a_name):
                     old_backup_assets.append(a)
 
-            # TH 1b: Neu da co asset cu voi timedate cu -> Xoa asset co timedate cu do
+            # Xoa asset backup cu (ca backup.<name> cu lan cac asset datetime cu)
             for old_a in old_backup_assets:
                 old_name = old_a.get("name")
                 old_id = old_a.get("id")
@@ -255,11 +253,10 @@ def rotate_and_backup_existing_assets(target_names):
                 except Exception as ex:
                     print(f"[API] Loi khi xoa asset backup cu '{old_name}': {ex}")
 
-            # TH 1a & 1b: Rename asset ten goc thanh asset co time date moi
+            # Rename asset ten goc thanh backup.<target_name>
             if exact_target_asset:
                 target_id = exact_target_asset.get("id")
                 target_curr_name = exact_target_asset.get("name")
-                new_backup_name = f"{base_stem}-{timestamp_str}{ext}"
                 print(f"[API] Dang rename asset goc '{target_curr_name}' (ID: {target_id}) -> '{new_backup_name}' (Backup an toan)...")
                 patch_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/assets/{target_id}"
                 try:
@@ -273,6 +270,82 @@ def rotate_and_backup_existing_assets(target_names):
 
     except Exception as ex:
         print(f"[API] Chu y trong qua trinh rotate va backup asset: {ex}")
+
+
+def reverse_to_backup_assets(target_names):
+    """
+    Option: Reverse to backup
+    Khoi phuc cac file backup.<target_name> thanh <target_name> tren GitHub Release tag beta:
+    - Neu asset goc hien tai <target_name> dang ton tai -> Xoa di.
+    - Doi ten asset backup.<target_name> thanh <target_name>.
+    """
+    token = load_github_token()
+    if not token:
+        print("[API] Khong tim thay GitHub token, khong the reverse to backup.")
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    try:
+        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/tags/{RELEASE_TAG}"
+        res = requests.get(url, headers=headers, timeout=15)
+        if res.status_code != 200:
+            print(f"[API] Khong lay duoc release beta: status {res.status_code}")
+            return False
+
+        assets = res.json().get("assets", [])
+        reversed_count = 0
+
+        for target_name in target_names:
+            backup_name = f"backup.{target_name}"
+            exact_target_asset = None
+            backup_asset = None
+
+            for a in assets:
+                a_name = a.get("name", "")
+                if a_name.lower() == target_name.lower():
+                    exact_target_asset = a
+                elif a_name.lower() == backup_name.lower():
+                    backup_asset = a
+
+            if not backup_asset:
+                print(f"[REVERSE] Khong tim thay ban backup '{backup_name}' tren Release tag {RELEASE_TAG}.")
+                continue
+
+            # Neu ban goc van con, xoa ban goc truoc de giai phong ten
+            if exact_target_asset:
+                orig_id = exact_target_asset.get("id")
+                print(f"[REVERSE] Dang xoa ban goc hien tai '{target_name}' (ID: {orig_id})...")
+                del_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/assets/{orig_id}"
+                try:
+                    requests.delete(del_url, headers=headers, timeout=15)
+                    print(f"[REVERSE] -> Da xoa '{target_name}'.")
+                except Exception as ex:
+                    print(f"[REVERSE] Loi xoa '{target_name}': {ex}")
+
+            # Doi ten backup.<name> thanh <name>
+            backup_id = backup_asset.get("id")
+            print(f"[REVERSE] Dang khoi phuc '{backup_name}' (ID: {backup_id}) -> '{target_name}'...")
+            patch_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/assets/{backup_id}"
+            try:
+                patch_res = requests.patch(patch_url, headers=headers, json={"name": target_name}, timeout=15)
+                if patch_res.status_code == 200:
+                    print(f"[REVERSE] -> Thanh cong! '{target_name}' da duoc khoi phuc ve ban backup.")
+                    reversed_count += 1
+                else:
+                    print(f"[REVERSE] Loi doi ten: status {patch_res.status_code} - {patch_res.text}")
+            except Exception as ex:
+                print(f"[REVERSE] Loi rename: {ex}")
+
+        return reversed_count > 0
+
+    except Exception as ex:
+        print(f"[REVERSE] Loi tong quat khi reverse to backup: {ex}")
+        return False
 
 
 class ProgressFileReader:
@@ -872,7 +945,16 @@ if __name__ == "__main__":
     parser.add_argument("--skip-pause", action="store_true", help="Khong dung man hinh sau khi upload")
     parser.add_argument("--min-speed", "--min-speed-mbps", type=float, default=10.0, help="Nguong toc do toi thieu (Mbps), mac dinh 10.0 Mbps")
     parser.add_argument("--max-wait", type=int, default=900, help="Thoi gian cho toi da (giay), mac dinh 900s")
+    parser.add_argument("--reverse", "--reverse-to-backup", action="store_true", help="Reverse to backup: Khoi phuc ban backup tren Release Beta")
     args, _ = parser.parse_known_args()
+
+    if args.reverse:
+        print("========================================================")
+        print("  REVERSE TO BACKUP: KHOI PHUC BAN BACKUP TREN RELEASE BETA")
+        print("========================================================")
+        target_names = [p.name for p in TARGET_FILES]
+        ok = reverse_to_backup_assets(target_names)
+        sys.exit(0 if ok else 1)
 
     try:
         perform_browser_upload(force_login=args.login, min_speed_mbps=args.min_speed, max_wait_sec=args.max_wait)

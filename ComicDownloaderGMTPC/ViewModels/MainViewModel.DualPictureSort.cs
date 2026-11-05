@@ -122,7 +122,7 @@ public partial class MainViewModel
     private bool _isDualSortBatchToolbarVisible = true;
 
     public bool IsDualSortBatchToolbarRealVisible =>
-        SelectedRootTabIndex == 3 && SelectedToolsTabIndex == 7 && IsDualSortBatchToolbarVisible;
+        SelectedRootTabIndex == 2 && SelectedToolsTabIndex == 7 && IsDualSortBatchToolbarVisible;
 
     public string DualSortBatchToggleBtnText => IsDualSortBatchToolbarVisible ? (_langService.CurrentLanguage == "VI" ? "⚡ BATCH TOOL: BẬT" : "⚡ BATCH TOOL: ON") : (_langService.CurrentLanguage == "VI" ? "⚡ BATCH TOOL: TẮT" : "⚡ BATCH TOOL: OFF");
     public string DualSortBatchToggleBtnBg => IsDualSortBatchToolbarVisible ? "#0284C7" : "#1E293B";
