@@ -64,6 +64,13 @@ public partial class MainView : UserControl
         AddHandler(PointerPressedEvent, (s, e) =>
         {
             ClearActiveTextBoxFocusIfNeeded(e.Source);
+
+            // Khi click chuột kèm phím Shift hoặc Ctrl: ẩn ngay Popup Preview nếu đang mở để không che chắn danh sách truyện
+            if ((e.KeyModifiers.HasFlag(KeyModifiers.Shift) || e.KeyModifiers.HasFlag(KeyModifiers.Control)) &&
+                DataContext is MainViewModel pVm && pVm.IsHoverPreviewVisible)
+            {
+                pVm.HideHoverPreview();
+            }
         }, RoutingStrategies.Tunnel);
 
         Loaded += OnMainViewLoaded;
@@ -106,6 +113,14 @@ public partial class MainView : UserControl
             {
                 var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
                 bool isTyping = focused is TextBox || focused is AutoCompleteBox;
+
+                // Ngay khi nhấn phím Shift hoặc Ctrl trên Windows & Linux: lập tức ẩn Popup Preview nếu đang hiện để người dùng nhìn rõ dải truyện cần chọn
+                if ((e.Key == Key.LeftShift || e.Key == Key.RightShift || e.Key == Key.LeftCtrl || e.Key == Key.RightCtrl ||
+                     e.KeyModifiers.HasFlag(KeyModifiers.Shift) || e.KeyModifiers.HasFlag(KeyModifiers.Control)) &&
+                    vm.IsHoverPreviewVisible)
+                {
+                    vm.HideHoverPreview();
+                }
 
                 // Phím Space trong tab Tải về (Download Queue): Đảo trạng thái Checkbox của các truyện đang select (chuẩn WPF)
                 if (e.Key == Key.Space && !isTyping && vm.SelectedRootTabIndex == 0)
@@ -2644,8 +2659,10 @@ public partial class MainView : UserControl
         if (DataContext is MainViewModel vm)
 
         {
+            bool isDesktopCtrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+            bool isDesktopShift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
 
-            if (vm.IsPopupPreview)
+            if (vm.IsPopupPreview && !isDesktopShift && !isDesktopCtrl)
 
             {
 
@@ -2653,6 +2670,10 @@ public partial class MainView : UserControl
 
                 UpdateHoverPreviewPosition(e);
 
+            }
+            else if (isDesktopShift || isDesktopCtrl)
+            {
+                vm.HideHoverPreview();
             }
 
             if (item.IsParallelSplitParent)
@@ -2684,6 +2705,13 @@ public partial class MainView : UserControl
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
 
         if (DataContext is not MainViewModel vm || !vm.IsPopupPreview) return;
+
+        // Nếu đang đè phím Shift hoặc Ctrl để chọn truyện: hủy hover preview
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) || e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            CancelQueueHoverPreview();
+            return;
+        }
 
 
 
@@ -3277,6 +3305,18 @@ public partial class MainView : UserControl
 
 
 
+        private void OnPopupPreviewPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        // Trên Desktop (Windows / Linux): Nhấp chuột vào Popup Preview (ngoài nút Đóng) sẽ ẩn ngay popup để không cản trở thao tác chọn truyện
+        if (!OperatingSystem.IsAndroid() && e.Source is not Button)
+        {
+            if (DataContext is MainViewModel vm)
+            {
+                vm.HideHoverPreview();
+            }
+        }
+    }
+
     private void OnPopupPreviewPointerExited(object? sender, PointerEventArgs e)
 
     {
@@ -3352,10 +3392,14 @@ public partial class MainView : UserControl
                 bool isShift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
                 vm.HandleQueueItemSelection(item, isCtrl, isShift, ref _lastQueueClickedIndex);
 
-                if (vm.IsPopupPreview)
+                if (vm.IsPopupPreview && !isShift && !isCtrl)
                 {
                     vm.ShowHoverPreview(item);
                     UpdateHoverPreviewPosition(e);
+                }
+                else if (isShift || isCtrl)
+                {
+                    vm.HideHoverPreview();
                 }
 
             }

@@ -10658,6 +10658,8 @@
 
                 CornerRadius="6" Padding="8" BoxShadow="0 12 30 6 #C0000000" ClipToBounds="True"
 
+                PointerPressed="OnPopupPreviewPointerPressed"
+
                 PointerExited="OnPopupPreviewPointerExited">
 
             <Grid RowDefinitions="Auto, *">
