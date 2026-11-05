@@ -97,10 +97,10 @@ HOST_EXEC="$RUNTIME_DIR/.host"
 # 1. Kiem tra xem thu vien .portable/bin/net avalonia da ton tai chua
 if [ ! -f "$TARGET_APP" ] || [ ! -f "$HOST_EXEC" ]; then
     echo "=============================================================="
-    echo "  Comic Downloader GMTPC - Khởi tạo Thư viện Portable Linux"
+    echo "  Comic Downloader GMTPC - Khoi tao Thu vien Portable Linux"
     echo "=============================================================="
-    echo "[*] Phát hiện chưa có thư viện tại: .portable/bin/net avalonia/"
-    echo "[*] Đang tự động tải bộ thư viện .NET Avalonia 10 từ GitHub Release..."
+    echo "[*] Phat hien chua co thu vien tai: .portable/bin/net avalonia/"
+    echo "[*] Dang tu dong tai bo thu vien .NET Avalonia 10 tu GitHub Release..."
     
     DOWNLOAD_URL="https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/runtime-net10-linux-x64.tar.gz"
     TEMP_DIR="$SCRIPT_DIR/.tmp"
@@ -112,17 +112,17 @@ if [ ! -f "$TARGET_APP" ] || [ ! -f "$HOST_EXEC" ]; then
     elif command -v wget >/dev/null 2>&1; then
         wget --show-progress -O "$TEMP_FILE" "$DOWNLOAD_URL"
     else
-        echo "[ERROR] Hệ thống thiếu cả curl và wget. Vui lòng cài đặt curl hoặc wget!"
+        echo "[ERROR] He thong thieu ca curl va wget. Vui long cai dat curl hoac wget!"
         exit 1
     fi
     
-    echo "[*] Đang giải nén vào: .portable/bin/net avalonia/..."
+    echo "[*] Dang giai nen vao: .portable/bin/net avalonia/..."
     mkdir -p "$RUNTIME_DIR"
     tar -xzf "$TEMP_FILE" -C "$RUNTIME_DIR"
     rm -f "$TEMP_FILE"
     
     chmod +x "$HOST_EXEC" 2>/dev/null || true
-    echo "[*] Giải nén thành công 100%! Đang khởi động..."
+    echo "[*] Giai nen thanh cong 100%! Dang khoi dong..."
 fi
 
 # 2. Thiet lap moi truong thuc thi va khoi chay ung dung

@@ -65,7 +65,7 @@ if %ERRORLEVEL% NEQ 0 (
 echo  -^> Compiling Windows Native Host Launcher (ComicDownloaderGMTPC.Desktop.exe)...
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
 rc.exe /fo "Launcher\Windows\NativeHost.res" "Launcher\Windows\NativeHost.rc" >nul 2>&1
-cl.exe /nologo /O2 /EHsc /W3 "Launcher\Windows\NativeHost.cpp" "Launcher\Windows\NativeHost.res" /Fe:"publish\ComicDownloaderGMTPC.Desktop.exe" /link /SUBSYSTEM:WINDOWS user32.lib shell32.lib >nul 2>&1
+cl.exe /nologo /O2 /EHsc /W3 /utf-8 "Launcher\Windows\NativeHost.cpp" "Launcher\Windows\NativeHost.res" /Fe:"publish\ComicDownloaderGMTPC.Desktop.exe" /link /SUBSYSTEM:WINDOWS user32.lib shell32.lib >nul 2>&1
 del /f /q "Launcher\Windows\NativeHost.obj" >nul 2>&1
 del /f /q "Launcher\Windows\NativeHost.res" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (

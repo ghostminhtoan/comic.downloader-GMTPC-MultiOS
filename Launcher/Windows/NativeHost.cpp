@@ -36,7 +36,7 @@ static bool RunCommand(const std::wstring& cmd) {
 static bool DownloadAndExtractRuntime(const std::wstring& appDir, const std::wstring& netAvaloniaDir) {
     AllocConsole();
     SetConsoleOutputCP(CP_UTF8);
-    SetConsoleTitleW(L"Comic Downloader GMTPC - Khởi tạo Thư viện Portable");
+    SetConsoleTitleW(L"Comic Downloader GMTPC - Khoi tao Thu vien Portable");
 
     std::wcout << L"==============================================================" << std::endl;
     std::wcout << L"  Comic Downloader GMTPC - Khoi tao Thu vien .NET Avalonia 10" << std::endl;
@@ -112,13 +112,13 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
     HMODULE hFxr = LoadLibraryW(fxrDll.c_str());
     if (!hFxr) {
-        MessageBoxW(NULL, L"Không thể nạp hostfxr.dll từ thư mục .portable\\bin\\net avalonia\\", L"Lỗi khởi động Comic Downloader GMTPC", MB_OK | MB_ICONERROR);
+        MessageBoxW(NULL, L"Khong the nap hostfxr.dll tu thu muc .portable\\bin\\net avalonia\\", L"Loi khoi dong Comic Downloader GMTPC", MB_OK | MB_ICONERROR);
         return 1;
     }
 
     hostfxr_main_fn pfnHostFxrMain = (hostfxr_main_fn)GetProcAddress(hFxr, "hostfxr_main");
     if (!pfnHostFxrMain) {
-        MessageBoxW(NULL, L"Không tìm thấy hàm hostfxr_main trong hostfxr.dll", L"Lỗi khởi động Comic Downloader GMTPC", MB_OK | MB_ICONERROR);
+        MessageBoxW(NULL, L"Khong tim thay ham hostfxr_main trong hostfxr.dll", L"Loi khoi dong Comic Downloader GMTPC", MB_OK | MB_ICONERROR);
         return 1;
     }
 
@@ -136,3 +136,4 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
     LocalFree(argv);
     return exitCode;
 }
+
