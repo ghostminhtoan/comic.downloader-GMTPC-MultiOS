@@ -19,9 +19,9 @@ title Comic Downloader GMTPC - Build & Upload Beta (Cross-Platform)
 
 echo ========================================================
 echo   Building and Publishing Comic Downloader GMTPC Avalonia
-echo   Cross-Platform Standalone Packages in Unified \publish\
-echo   1. Windows (win-x64, Standalone Single-File EXE)
-echo   2. Linux   (linux-x64, Standalone Binary, Portable tar.gz, DEB)
+echo   Cross-Platform Portable Packages in Unified \publish\
+echo   1. Windows (win-x64, Smart Portable Launcher + Runtime in .portable\bin\net avalonia)
+echo   2. Linux   (linux-x64, Smart Portable Launcher + Portable tar.gz)
 echo   3. Android (net10.0-android, Signed Standalone APK)
 echo   4. Upload  (Direct-to-S3 GitHub Release Beta Assets)
 echo ========================================================
@@ -29,13 +29,14 @@ echo ========================================================
 cd /d "%~dp0"
 
 if not exist "publish" mkdir "publish"
+if not exist "publish\.portable\bin\net avalonia" mkdir "publish\.portable\bin\net avalonia"
 
 :: Terminate running instance if any to prevent write-lock on executable
 taskkill /F /IM ComicDownloaderGMTPC.Desktop.exe >nul 2>&1
 
 echo.
-echo [1/4] Publishing Windows (win-x64, standalone single-file exe)...
-dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish
+echo [1/4] Publishing Windows (win-x64, Portable runtime in .portable\bin\net avalonia + Launcher)...
+dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o "publish\.portable\bin\net avalonia"
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Windows build failed!
     echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
@@ -43,19 +44,43 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-:: Clean intermediate files from publish root
+:: Clean intermediate files from net avalonia runtime
+del /f /q "publish\.portable\bin\net avalonia\*.pdb" >nul 2>&1
+del /f /q "publish\.portable\bin\net avalonia\*.xml" >nul 2>&1
+
+:: Create runtime-net10-win-x64.zip for on-demand downloading
+echo  -^> Creating Windows Runtime zip: publish\runtime-net10-win-x64.zip...
+python -c "import shutil, os; shutil.make_archive(r'publish\runtime-net10-win-x64', 'zip', r'publish\.portable\bin\net avalonia')"
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Failed to create runtime-net10-win-x64.zip!
+)
+
+:: Compile Windows Launcher (ComicDownloaderGMTPC.Desktop.exe)
+echo  -^> Compiling Windows Portable Launcher (ComicDownloaderGMTPC.Desktop.exe)...
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /target:winexe /r:System.IO.Compression.FileSystem.dll /r:System.IO.Compression.dll /win32icon:"ComicDownloaderGMTPC.Desktop\app-icon.ico" /out:"publish\ComicDownloaderGMTPC.Desktop.exe" "Launcher\Windows\Launcher.cs"
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Windows Launcher compilation failed!
+    echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
+    python -c "import time; time.sleep(20)"
+    exit /b %ERRORLEVEL%
+)
+
+:: Clean root publish intermediate files
 del /f /q "publish\*.dll" >nul 2>&1
 del /f /q "publish\*.pdb" >nul 2>&1
 del /f /q "publish\*.xml" >nul 2>&1
 del /f /q "publish\*.json" >nul 2>&1
 del /f /q "publish\*.old" >nul 2>&1
 
-echo [OK] Windows standalone single-file exe succeeded:
-echo      -^> publish\ComicDownloaderGMTPC.Desktop.exe
+echo [OK] Windows Portable succeeded:
+echo      -^> publish\ComicDownloaderGMTPC.Desktop.exe (Launcher)
+echo      -^> publish\.portable\bin\net avalonia\ (Runtime)
+echo      -^> publish\runtime-net10-win-x64.zip
 
 echo.
-echo [2/4] Publishing Linux (linux-x64, standalone binary, portable .tar.gz and .deb)...
-dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish
+echo [2/4] Publishing Linux (linux-x64, portable .tar.gz and runtime)...
+if exist "publish\.linux_staging" rd /s /q "publish\.linux_staging"
+dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o "publish\.linux_staging"
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Linux build failed!
     echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
@@ -63,14 +88,13 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-:: Clean intermediate files
-del /f /q "publish\*.dll" >nul 2>&1
-del /f /q "publish\*.pdb" >nul 2>&1
-del /f /q "publish\*.xml" >nul 2>&1
-del /f /q "publish\*.json" >nul 2>&1
-del /f /q "publish\*.old" >nul 2>&1
+:: Clean intermediate files in linux_staging
+del /f /q "publish\.linux_staging\*.dll" >nul 2>&1
+del /f /q "publish\.linux_staging\*.pdb" >nul 2>&1
+del /f /q "publish\.linux_staging\*.xml" >nul 2>&1
+del /f /q "publish\.linux_staging\*.json" >nul 2>&1
 
-:: Create Linux pure binary without .Desktop suffix, tar.gz and deb package
+:: Package Linux distributions directly in publish/
 if exist "package_linux.py" (
     python package_linux.py
     if !ERRORLEVEL! NEQ 0 (
@@ -79,16 +103,12 @@ if exist "package_linux.py" (
         python -c "import time; time.sleep(20)"
         exit /b !ERRORLEVEL!
     )
-) else (
-    if exist "publish\ComicDownloaderGMTPC.Desktop" (
-        copy /y "publish\ComicDownloaderGMTPC.Desktop" "publish\ComicDownloaderGMTPC" >nul 2>&1
-    )
 )
 
-echo [OK] Linux standalone distribution packages succeeded:
+echo [OK] Linux portable distribution packages succeeded:
 echo      -^> publish\ComicDownloaderGMTPC
 echo      -^> publish\ComicDownloaderGMTPC-linux-x64.tar.gz
-echo      -^> publish\comicdownloadergmtpc_1.0.0_amd64.deb
+echo      -^> publish\runtime-net10-linux-x64.tar.gz
 
 echo.
 echo [3/4] Building and Packaging Android (net10.0-android, Signed Standalone APK)...
@@ -133,10 +153,12 @@ if !ERRORLEVEL! NEQ 0 (
 echo.
 echo ========================================================
 echo   [SUCCESS] All Platforms Published Cleanly in \publish\!
-echo   - Windows:               publish\ComicDownloaderGMTPC.Desktop.exe
-echo   - Linux Executable:      publish\ComicDownloaderGMTPC
+echo   - Windows Launcher:      publish\ComicDownloaderGMTPC.Desktop.exe
+echo   - Windows Runtime:       publish\.portable\bin\net avalonia\
+echo   - Windows Runtime Zip:   publish\runtime-net10-win-x64.zip
+echo   - Linux Launcher:        publish\ComicDownloaderGMTPC
 echo   - Linux Portable tar.gz: publish\ComicDownloaderGMTPC-linux-x64.tar.gz
-echo   - Linux Debian Package:  publish\comicdownloadergmtpc_1.0.0_amd64.deb
+echo   - Linux Runtime tar.gz:  publish\runtime-net10-linux-x64.tar.gz
 echo   - Android APK:           publish\com.CompanyName.ComicDownloaderGMTPC-Signed.apk
 echo   - Release Beta:          https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/tag/beta
 echo ========================================================

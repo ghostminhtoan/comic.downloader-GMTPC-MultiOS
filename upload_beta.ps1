@@ -45,11 +45,21 @@ if (-not (Test-Path $publishDir)) {
 Write-Host "[1/4] Kiem tra cac goi cai dat trong thu muc publish..." -ForegroundColor Yellow
 Write-Host "      Duong dan: $publishDir" -ForegroundColor DarkGray
 
-$targetFiles = @(
+$mandatoryFiles = @(
     "com.CompanyName.ComicDownloaderGMTPC-Signed.apk",
     "ComicDownloaderGMTPC.Desktop.exe",
     "ComicDownloaderGMTPC-linux-x64.tar.gz"
 )
+$optionalRuntimeFiles = @(
+    "runtime-net10-win-x64.zip",
+    "runtime-net10-linux-x64.tar.gz"
+)
+$targetFiles = @($mandatoryFiles)
+foreach ($rt in $optionalRuntimeFiles) {
+    if (Test-Path (Join-Path $publishDir $rt)) {
+        $targetFiles += $rt
+    }
+}
 
 $missingFiles = @()
 $uploadList = @()

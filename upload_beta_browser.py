@@ -32,11 +32,20 @@ PUBLISH_DIR = BASE_DIR / "publish"
 PROFILE_DIR = BASE_DIR / ".edge_profile"
 TOKEN_FILE = BASE_DIR / "github_token.txt"
 
-TARGET_FILES = [
+ALL_TARGET_CANDIDATES = [
     PUBLISH_DIR / "com.CompanyName.ComicDownloaderGMTPC-Signed.apk",
     PUBLISH_DIR / "ComicDownloaderGMTPC.Desktop.exe",
     PUBLISH_DIR / "ComicDownloaderGMTPC-linux-x64.tar.gz",
+    PUBLISH_DIR / "runtime-net10-win-x64.zip",
+    PUBLISH_DIR / "runtime-net10-linux-x64.tar.gz",
 ]
+TARGET_FILES = [p for p in ALL_TARGET_CANDIDATES if p.exists()]
+if not TARGET_FILES:
+    TARGET_FILES = [
+        PUBLISH_DIR / "com.CompanyName.ComicDownloaderGMTPC-Signed.apk",
+        PUBLISH_DIR / "ComicDownloaderGMTPC.Desktop.exe",
+        PUBLISH_DIR / "ComicDownloaderGMTPC-linux-x64.tar.gz",
+    ]
 
 # Cau hinh giam sat toc do va retry
 MIN_UPLOAD_SPEED_MBPS = 10.0  # Nguong toc do toi thieu 10 Mbps (duoi 10 Mbps se tu dong huy va retry vo han)

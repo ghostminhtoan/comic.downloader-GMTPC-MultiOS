@@ -15,9 +15,50 @@ namespace ComicDownloaderGMTPC.Desktop;
 
 sealed class Program
 {
+    private static void EnsureApplicationRootDirectory()
+    {
+        try
+        {
+            string currentBase = AppContext.BaseDirectory.TrimEnd('/', '\\');
+            string normalized = currentBase.Replace('/', '\\');
+            string suffix = @"\.portable\bin\net avalonia";
+            if (normalized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                var dirInfo = new DirectoryInfo(currentBase);
+                var rootDir = dirInfo.Parent?.Parent?.Parent;
+                if (rootDir != null && rootDir.Exists)
+                {
+                    string rootPath = rootDir.FullName;
+                    if (!rootPath.EndsWith(Path.DirectorySeparatorChar.ToString()) && !rootPath.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+                    {
+                        rootPath += Path.DirectorySeparatorChar;
+                    }
+                    AppContext.SetData("APP_CONTEXT_BASE_DIRECTORY", rootPath);
+                    Environment.CurrentDirectory = rootDir.FullName;
+                }
+            }
+            else
+            {
+                string? envRoot = Environment.GetEnvironmentVariable("COMIC_DOWNLOADER_ROOT");
+                if (!string.IsNullOrEmpty(envRoot) && Directory.Exists(envRoot))
+                {
+                    string rootPath = envRoot;
+                    if (!rootPath.EndsWith(Path.DirectorySeparatorChar.ToString()) && !rootPath.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+                    {
+                        rootPath += Path.DirectorySeparatorChar;
+                    }
+                    AppContext.SetData("APP_CONTEXT_BASE_DIRECTORY", rootPath);
+                    Environment.CurrentDirectory = envRoot;
+                }
+            }
+        }
+        catch { }
+    }
+
     [STAThread]
     public static void Main(string[] args)
     {
+        EnsureApplicationRootDirectory();
         if (args.Any(a => string.Equals(a, "--test-scroll-drag", StringComparison.OrdinalIgnoreCase)))
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;

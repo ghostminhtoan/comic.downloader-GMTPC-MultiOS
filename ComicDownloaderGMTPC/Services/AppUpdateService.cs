@@ -530,21 +530,25 @@ public class AppUpdateService
             }
 
             var fi = new FileInfo(newExePath);
-            if (fi.Length < 1024 * 1024)
+            if (fi.Length < 10 * 1024)
             {
                 logCallback("ERROR", $"[Cập nhật tự động] Tệp tải về không hợp lệ (kích thước quá nhỏ: {fi.Length} bytes).");
                 return false;
             }
 
-            string currentExePath = Environment.ProcessPath ?? "";
-            if (string.IsNullOrWhiteSpace(currentExePath) || !File.Exists(currentExePath))
+            string currentExePath = Path.Combine(AppContext.BaseDirectory, "ComicDownloaderGMTPC.Desktop.exe");
+            if (!File.Exists(currentExePath))
             {
-                try
+                currentExePath = Environment.ProcessPath ?? "";
+                if (string.IsNullOrWhiteSpace(currentExePath) || !File.Exists(currentExePath))
                 {
-                    using var curProc = Process.GetCurrentProcess();
-                    currentExePath = curProc.MainModule?.FileName ?? "";
+                    try
+                    {
+                        using var curProc = Process.GetCurrentProcess();
+                        currentExePath = curProc.MainModule?.FileName ?? "";
+                    }
+                    catch { }
                 }
-                catch { }
             }
             if (string.IsNullOrWhiteSpace(currentExePath) || !File.Exists(currentExePath))
             {
