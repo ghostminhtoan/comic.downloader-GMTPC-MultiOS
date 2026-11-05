@@ -127,6 +127,7 @@ public partial class MainView : UserControl
                 {
                     if (vm.ToggleSelectedQueueItemsChecked())
                     {
+                        this.Focus();
                         e.Handled = true;
                         return;
                     }
@@ -458,6 +459,17 @@ public partial class MainView : UserControl
                 {
                     ScrollBarAutoExpandService.TriggerGlobalScrollExpand(this);
                 }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+
+                // Lắng nghe sự kiện bàn phím toàn cục trên TopLevel (Window) để phím Space liên tục đảo Checkbox không bao giờ bị mất focus
+                topLevel.AddHandler(InputElement.KeyDownEvent, (s, ev) =>
+                {
+                    HandleQueueSpaceKey(ev);
+                }, RoutingStrategies.Tunnel);
+
+                topLevel.AddHandler(InputElement.KeyUpEvent, (s, ev) =>
+                {
+                    HandleQueueSpaceKeyUp(ev);
+                }, RoutingStrategies.Tunnel);
             }
 
 
@@ -3305,7 +3317,39 @@ public partial class MainView : UserControl
 
 
 
-        private void OnPopupPreviewPointerPressed(object? sender, PointerPressedEventArgs e)
+            private void HandleQueueSpaceKey(KeyEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        var topLevel = TopLevel.GetTopLevel(this);
+        var focused = topLevel?.FocusManager?.GetFocusedElement();
+        bool isTyping = focused is TextBox || focused is AutoCompleteBox;
+
+        if (e.Key == Key.Space && !isTyping && vm.SelectedRootTabIndex == 0)
+        {
+            if (vm.ToggleSelectedQueueItemsChecked())
+            {
+                this.Focus();
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void HandleQueueSpaceKeyUp(KeyEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (e.Key == Key.Space && vm.SelectedRootTabIndex == 0)
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            var focused = topLevel?.FocusManager?.GetFocusedElement();
+            bool isTyping = focused is TextBox || focused is AutoCompleteBox;
+            if (!isTyping)
+            {
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void OnPopupPreviewPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         // Trên Desktop (Windows / Linux): Nhấp chuột vào Popup Preview (ngoài nút Đóng) sẽ ẩn ngay popup để không cản trở thao tác chọn truyện
         if (!OperatingSystem.IsAndroid() && e.Source is not Button)

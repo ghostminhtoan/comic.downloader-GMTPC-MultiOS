@@ -446,7 +446,7 @@
 
                                                                                VerticalAlignment="Center" Margin="14,0,2,0" ToolTip.Tip="Nhánh con tách chương" />
 
-                                                                    <CheckBox Grid.Column="1" IsChecked="{Binding IsChecked}" PointerPressed="OnQueueItemCheckBoxPointerPressed" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                                                    <CheckBox Grid.Column="1" Focusable="False" IsChecked="{Binding IsChecked}" PointerPressed="OnQueueItemCheckBoxPointerPressed" Margin="0,0,6,0" VerticalAlignment="Center" />
 
                                                                     <TextBlock Grid.Column="2" Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" Width="26" VerticalAlignment="Center" />
 
@@ -2234,7 +2234,7 @@
 
                                                             <Grid Grid.Row="0">
 
-                                                                <CheckBox IsChecked="{Binding IsChecked}" PointerPressed="OnQueueItemCheckBoxPointerPressed" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0" />
+                                                                <CheckBox Focusable="False" IsChecked="{Binding IsChecked}" PointerPressed="OnQueueItemCheckBoxPointerPressed" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0" />
 
 
 
