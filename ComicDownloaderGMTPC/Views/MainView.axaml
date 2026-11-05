@@ -27,7 +27,7 @@
         <UserControl.Resources>
         <!-- TEMPLATE THẺ TRUYỆN DÙNG CHUNG CHO CẢ CHẾ ĐỘ 1 CỘT VÀ CHẾ ĐỘ LƯỚI ẢO HÓA SIÊU MƯỢT -->
         <DataTemplate x:Key="ComicQueueCardTemplate" DataType="models:ComicBookItem">
-<Border IsVisible="{Binding !IsFilteredOut}"
+<Border Focusable="True" IsVisible="{Binding !IsFilteredOut}"
                                                             
                                                             Margin="0,0,0,2"
                                                             Background="{Binding QueueRowBackground}" BorderBrush="{Binding QueueRowBorderBrush}" BorderThickness="{Binding QueueRowBorderThickness}" CornerRadius="4" ClipToBounds="True"
@@ -634,7 +634,7 @@
 
                                                                         <TextBlock Grid.Column="0" Text="{Binding ChapterSelectionLabel}" Foreground="#94A3B8" FontSize="9" VerticalAlignment="Center" Width="68" />
 
-                                                                        <TextBox Grid.Column="1" Text="{Binding ChapterSelectionText}" PlaceholderText="{Binding ChapterSelectionPlaceholder}" FontSize="9" Height="24" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" />
+                                                                        <TextBox Grid.Column="1" KeyDown="OnQueueItemTextBoxKeyDown" Text="{Binding ChapterSelectionText}" PlaceholderText="{Binding ChapterSelectionPlaceholder}" FontSize="9" Height="24" Background="#0B0F19" Foreground="#F8FAFC" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" />
 
                                                                     </Grid>
 
@@ -646,7 +646,7 @@
 
                                                                         <TextBlock Grid.Column="0" Text="📁 Subfolder:" Foreground="#F59E0B" FontSize="9" VerticalAlignment="Center" Width="68" />
 
-                                                                        <TextBox Grid.Column="1" Text="{Binding Subfolder}" PlaceholderText="[default]" FontSize="9" Height="24" Background="#0B0F19" Foreground="#FDE047" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" ToolTip.Tip="Tên thư mục con tải về của truyện này (Ví dụ: chizuru). Để trống sẽ tự động vào '[default]'" />
+                                                                        <TextBox Grid.Column="1" KeyDown="OnQueueItemTextBoxKeyDown" Text="{Binding Subfolder}" PlaceholderText="[default]" FontSize="9" Height="24" Background="#0B0F19" Foreground="#FDE047" BorderBrush="#334155" CornerRadius="3" VerticalContentAlignment="Center" Padding="5,1" ToolTip.Tip="Tên thư mục con tải về của truyện này (Ví dụ: chizuru). Để trống sẽ tự động vào '[default]'" />
 
                                                                         <Button Grid.Column="2" Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ToggleLockSubfolderCommand}"
 
@@ -2082,7 +2082,7 @@
 
                                                 <DataTemplate>
 
-                                                    <Border IsVisible="{Binding !IsFilteredOut}" Width="195" Height="280" Margin="6" Background="{Binding ThumbnailCardBackground}" BorderBrush="{Binding ThumbnailCardBorderBrush}" BorderThickness="{Binding ThumbnailCardBorderThickness}" CornerRadius="3" Padding="8,6" ClipToBounds="True"
+                                                    <Border Focusable="True" IsVisible="{Binding !IsFilteredOut}" Width="195" Height="280" Margin="6" Background="{Binding ThumbnailCardBackground}" BorderBrush="{Binding ThumbnailCardBorderBrush}" BorderThickness="{Binding ThumbnailCardBorderThickness}" CornerRadius="3" Padding="8,6" ClipToBounds="True"
 
                                                             AttachedToVisualTree="OnThumbnailElementAttached"
 

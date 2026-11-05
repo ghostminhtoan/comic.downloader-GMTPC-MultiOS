@@ -58,7 +58,13 @@ public partial class MainView : UserControl
 
         InitializeComponent();
 
+        Focusable = true;
 
+        // Tự động thu hồi focus khỏi các ô TextBox nhập liệu (Chọn chap, Subfolder...) khi click ra ngoài thẻ/checkbox
+        AddHandler(PointerPressedEvent, (s, e) =>
+        {
+            ClearActiveTextBoxFocusIfNeeded(e.Source);
+        }, RoutingStrategies.Tunnel);
 
         Loaded += OnMainViewLoaded;
 
@@ -2064,6 +2070,44 @@ public partial class MainView : UserControl
 
 
 
+        private void ClearActiveTextBoxFocusIfNeeded(object? source)
+    {
+        try
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            var focused = topLevel?.FocusManager?.GetFocusedElement();
+            if (focused is TextBox or AutoCompleteBox)
+            {
+                // Nếu điểm click không nằm trong bất kỳ TextBox nào (người dùng click ra ngoài thẻ, checkbox, tiêu đề...)
+                if (!IsWithinTextBox(source as Visual))
+                {
+                    this.Focus();
+                }
+            }
+        }
+        catch { }
+    }
+
+    private static bool IsWithinTextBox(Visual? visual)
+    {
+        var cur = visual;
+        while (cur != null)
+        {
+            if (cur is TextBox or AutoCompleteBox) return true;
+            cur = cur.GetVisualParent();
+        }
+        return false;
+    }
+
+    private void OnQueueItemTextBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter || e.Key == Key.Escape)
+        {
+            this.Focus();
+            e.Handled = true;
+        }
+    }
+
     private static bool IsInteractiveChildControl(object? source, Control container)
 
     {
@@ -2411,6 +2455,8 @@ public partial class MainView : UserControl
         if (sender is not Control ctrl || ctrl.DataContext is not ComicDownloaderGMTPC.Models.ComicBookItem item) return;
         if (DataContext is not MainViewModel vm) return;
 
+        ClearActiveTextBoxFocusIfNeeded(ctrl);
+
         if (vm.IsQueueBatchModeActive)
         {
             // Trong chế độ chọn Part từ Quick Float Button: hoãn lại để PointerReleased bắt Single Tap, không chọn ngay khi vừa chạm
@@ -2482,6 +2528,8 @@ public partial class MainView : UserControl
             e.Handled = true;
             return;
         }
+
+        ClearActiveTextBoxFocusIfNeeded(ctrl);
 
         // Xử lý chọn truyện theo phong cách Windows Explorer (Click, Ctrl+Click, Shift+Click)
         if (DataContext is MainViewModel queueVm)
@@ -3296,6 +3344,8 @@ public partial class MainView : UserControl
                     e.Handled = true;
                     return;
                 }
+
+                ClearActiveTextBoxFocusIfNeeded(control);
 
                 // Chọn truyện theo phong cách Windows Explorer: Click thường, Ctrl+Click, Shift+Click
                 bool isCtrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
