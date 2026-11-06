@@ -2111,6 +2111,8 @@ public class DownloadEngineService
 
                             manifest,
 
+                            imageThreads,
+
                             (done, total) =>
 
                             {

@@ -229,6 +229,13 @@ Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ,
   - book slug chứa số: nhận dạng book từ chapter URL chỉ cắt sau marker chapter (`-chap-...` hoặc `/chuong...`), không xóa số cuối book slug.
   - book URL hợp lệ gồm cả `/{book-slug}.html` và `/truyen-tranh/{book-slug}`; `/truyen-tranh/{book-slug}` không được route nhầm thành category.
   - scan missing integer chapter: tên `ReaderChapterItem` lấy từ chapter URL/label (`chap 469`), không dùng title chứa tên book (tránh lỗi parse số từ book như `7 Viên...` thành chapter 7).
+- `cuutruyen.net`:
+  - Hỗ trợ đầy đủ routing: `homepage`, `tag` (có phân trang `/tag/<slug>?page=X`), `book` (`/mangas/<id>-<slug>`), `chapter` (`/mangas/<id>/chapters/<chap-id>`).
+  - Lấy thông tin qua API Cứu Truyện v2 (`/api/v2/mangas/<id>`, `/api/v2/chapters/<chap-id>`).
+  - Danh sách chapter lấy đầy đủ 100% không bị giới hạn (tương đương bấm "Xem thêm" đến hết), tự động đảo ngược mảng JSON gốc (`Reverse()`) để sắp xếp chapter tuần tự từ dưới lên (Chương 1 là chương đầu tiên).
+  - Tải ảnh song song tuân thủ nghiêm ngặt số connection cấu hình từ UI (`imageThreads` / `maxConnections`).
+  - Hỗ trợ tải nhiều truyện song song siêu tốc (`ConcurrentComicDownloads`) kết hợp Cloudflare Anycast CDN (`storage-charlie.cuutruyen.net`), bộ đệm DNS RAM và tự động reset bộ nhớ WebAssembly DRM định kỳ sau mỗi 300 ảnh.
+  - Giải mã DRM xáo trộn lát cắt in-process bằng `CuuTruyenDrmEngine` (WebAssembly Linear Memory + SkiaSharp Jpeg 90%).
 
 ### Hentai / ảnh
 - `daomeoden`
