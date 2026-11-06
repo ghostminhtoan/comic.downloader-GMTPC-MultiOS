@@ -477,6 +477,12 @@ public class ComicScraperService
             if (Regex.IsMatch(lowerUrl, @"/manga/\d+-")) return false;
             return lowerUrl.Contains("/manga") || lowerUrl.Contains("include=") || lowerUrl.Contains("?q=") || lowerUrl.Contains("&q=");
         }
+        if (lowerDomain.Contains("cuutruyen") || lowerUrl.Contains("cuutruyen"))
+        {
+            if (lowerUrl.Contains("/chapters/")) return false;
+            if (Regex.IsMatch(lowerUrl, @"/mangas/\d+")) return false;
+            return lowerUrl.Contains("/tag/") || lowerUrl.Contains("/mangas") || lowerUrl.Contains("?q=");
+        }
         if (lowerDomain.Contains("loppy") || lowerUrl.Contains("loppy"))
             return lowerUrl.Contains("/the-loai/") || lowerUrl.Contains("/genre/") ||
                    lowerUrl.Contains("/tac-gia/") || lowerUrl.Contains("/nhom-dich/");
@@ -538,6 +544,11 @@ public class ComicScraperService
             if (domain.Contains("moetruyen"))
             {
                 return await ScrapeMoetruyenBookAsync(url, index, domain, ct).ConfigureAwait(false);
+            }
+
+            if (domain.Contains("cuutruyen"))
+            {
+                return await CuuTruyenService.Instance.GetMangaBookAsync(url, index, ct).ConfigureAwait(false);
             }
 
             if (domain.Contains("damconuong"))
@@ -806,6 +817,13 @@ public class ComicScraperService
             {
                 var moeImages = await ExtractMoetruyenChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
                 if (moeImages.Count > 0) return moeImages;
+            }
+
+            if (domain.Contains("cuutruyen"))
+            {
+                var cuuPages = await CuuTruyenService.Instance.ExtractChapterPagesAsync(chapterUrl, ct).ConfigureAwait(false);
+                var cuuImages = cuuPages.Select(p => p.ImageUrl).Where(u => !string.IsNullOrWhiteSpace(u)).ToList();
+                if (cuuImages.Count > 0) return cuuImages;
             }
 
             if (domain.Contains("damconuong") || domain.Contains("mbpro") || chapterUrl.Contains("damconuong") || chapterUrl.Contains("mbpro"))
@@ -3994,6 +4012,17 @@ public class ComicScraperService
                 return result;
             }
 
+            bool isCuutruyenDomain = result.Domain.Contains("cuutruyen") || url.Contains("cuutruyen");
+            if (isCuutruyenDomain)
+            {
+                var cuuTag = await CuuTruyenService.Instance.AnalyzeTagAsync(url, 1, ct).ConfigureAwait(false);
+                result.TagTitle = $"Thể loại: {cuuTag.TagName}";
+                result.TotalPages = Math.Max(1, cuuTag.TotalPages);
+                result.IsSuccess = true;
+                result.StatusMessage = $"Phân tích thành công: {result.TotalPages:N0} trang ({cuuTag.TotalComics:N0} bộ truyện)";
+                return result;
+            }
+
             bool isEHentaiDomain = result.Domain.Contains("e-hentai") || result.Domain.Contains("ehentai") || result.Domain.Contains("exhentai") || url.Contains("e-hentai") || url.Contains("exhentai");
 
             if (isEHentaiDomain)
@@ -4478,6 +4507,17 @@ public class ComicScraperService
             try
             {
                 string pageUrl = BuildPagedTagUrl(tagUrl, page, domain);
+                if (domain.Contains("cuutruyen"))
+                {
+                    var cuuTag = await CuuTruyenService.Instance.AnalyzeTagAsync(pageUrl, page, ct).ConfigureAwait(false);
+                    var extracted = cuuTag.Comics.Select(c => (c.Url, c.Title, c.CoverUrl)).ToList();
+                    pageResults[offset] = extracted;
+                    int done = Interlocked.Increment(ref completedPagesCount);
+                    string lastTitle = extracted.LastOrDefault().Title ?? "";
+                    onProgress?.Invoke(done, totalPagesToFetch, done * Math.Max(1, extracted.Count), lastTitle);
+                    return;
+                }
+
                 string? html = null;
                 using var req = new HttpRequestMessage(HttpMethod.Get, pageUrl);
                 if (domain.Contains("comix"))
@@ -4613,6 +4653,17 @@ public class ComicScraperService
         }
 
         if (domain.Contains("moetruyen"))
+        {
+            if (page <= 1 && !baseUrl.Contains("page=")) return baseUrl;
+            if (Regex.IsMatch(baseUrl, @"([?&]page=)\d+"))
+            {
+                return Regex.Replace(baseUrl, @"([?&]page=)\d+", $"${{1}}{page}");
+            }
+            char sep = baseUrl.Contains('?') ? '&' : '?';
+            return $"{baseUrl}{sep}page={page}";
+        }
+
+        if (domain.Contains("cuutruyen"))
         {
             if (page <= 1 && !baseUrl.Contains("page=")) return baseUrl;
             if (Regex.IsMatch(baseUrl, @"([?&]page=)\d+"))
@@ -4786,6 +4837,7 @@ public class ComicScraperService
             else if (domain.Contains("loppytoonn") && link.Contains("/truyen/") && link.TrimEnd('/').Split('/').Length <= 5) isComicLink = true;
             else if (domain.Contains("daomeoden") && link.Contains("/truyen-tranh/")) isComicLink = true;
             else if (domain.Contains("moetruyen") && Regex.IsMatch(link, @"/manga/\d+-") && !link.Contains("/chapters/")) isComicLink = true;
+            else if (domain.Contains("cuutruyen") && Regex.IsMatch(link, @"/mangas/\d+") && !link.Contains("/chapters/")) isComicLink = true;
             else if (domain.Contains("vi-hentai") && link.Contains("/truyen/")) isComicLink = true;
             else if (domain.Contains("damconuong") && link.Contains("/truyen/") && !link.Contains("/chapter-") && !link.Contains("/chap-")) isComicLink = true;
             else if (domain.Contains("sayhentai") && (link.Contains("/story/") || link.Contains("/truyen/"))) isComicLink = true;

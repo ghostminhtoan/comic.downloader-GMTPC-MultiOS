@@ -901,3 +901,20 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
      - Trong `OnResume()`, ứng dụng tự động kiểm tra `_pendingInstallApkPath` và kích hoạt Package Installer ngay khi người dùng cấp quyền và quay lại app mà không cần bấm lại nút.
   4. *Cơ Chế Smart Cache Hit*:
      - Nếu tệp APK/EXE/tar.gz đã được tải đầy đủ trên máy (`Length == totalBytes`), `AppUpdateService.cs` tự động phát hiện, bỏ qua việc tải mạng và chuyển ngay sang bước kích hoạt cài đặt.
+
+### 68. Tích Hợp Nguồn Cứu Truyện (cuutruyen.net) Giải Mã DRM WebAssembly Pure C# (.NET 10) & Bóc Tách 100% Chapter
+- **Mục Tiêu & Trải Nghiệm Người Dùng (UX)**:
+  1. *Giải Mã DRM WebAssembly Pure C# (.NET 10) Không Cần Trình Duyệt Ngoài (`CuuTruyenService.cs`, `CuuTruyenDrmEngine`)*:
+     - Tích hợp package `WebAssembly` (2.1.0) và nhúng module `cuutruyen_drm.wasm` vào Avalonia Resource (`avares://ComicDownloaderGMTPC/Assets/cuutruyen_drm.wasm`), biên dịch JIT thực thi trực tiếp trên .NET 10.
+     - Hook các import `innerHTML` ("effort-mournful-county-flagstick"), `getItem` ("\u200b4283056037"), `width`, `drawImage` để sinh chính xác mảng lát cắt hoán vị (Draw Calls) cho từng trang ảnh.
+     - Tái cấu trúc ảnh bị xáo trộn (DRM Slice Scrambling) siêu tốc bằng `SkiaSharp` thuần, xuất ảnh JPEG 95% sắc nét 100%, tương thích hoàn hảo trên Windows, Linux và Android mà không cần Chrome/Headless browser.
+  2. *Bóc Tách Trọn Vẹn 100% Chapter Vượt Nút "Xem Thêm"*:
+     - Truy vấn trực tiếp API `https://cuutruyen.net/api/v2/mangas/{id}/chapters`, lấy đầy đủ từ Chapter 1 đến Chapter mới nhất, triệt tiêu hoàn toàn vấn đề bị cụt danh sách chương do bẫy nút "Xem thêm" hoặc Virtual Scroller của web.
+     - Sắp xếp chapters thông minh theo Natural Sort số chương (`c.ChapterNumber`), hỗ trợ đầy đủ các bộ truyện dài như "Cậu chính là thủ phạm đúng không?" (18 chapters).
+  3. *Tích Hợp Phân Tích Tag Đa Trang & Batch Scraping*:
+     - Hỗ trợ phân tích danh mục theo Tag có phân trang qua API `https://cuutruyen.net/api/v2/tags/{slug}?page={page}&per_page=20` (ví dụ: `https://cuutruyen.net/tag/historical` gồm 3 trang, 51+ truyện).
+     - Điều hướng phân trang mượt mà cho các tính năng Cào Mới, Cào Thêm, Lấy Link & Tải Vào Queue.
+  4. *Đường Truyền Kết Nối Chống Chặn Nhà Mạng (DPI Bypass)*:
+     - Tích hợp `SocketsHttpHandler` kết hợp `DoHResolver` (Cloudflare DoH 1.1.1.1) và `SniFragmentStream` (phân mảnh gói TLS ClientHello 5 bytes) giúp vượt mọi rào cản chặn SNI của các ISP tại Việt Nam.
+     - Tự động fallback sang cụm CDN `storage-bravo.cuutruyen.net` và `storage-charlie.cuutruyen.net` đảm bảo tốc độ tải ảnh đạt tối đa.
+

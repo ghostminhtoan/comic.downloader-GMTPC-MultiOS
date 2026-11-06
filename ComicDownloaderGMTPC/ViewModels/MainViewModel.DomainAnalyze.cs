@@ -59,6 +59,9 @@ public partial class MainViewModel
     private string _domainMoetruyenTagUrl = "https://moetruyen.net/manga?include=Comedy";
 
     [ObservableProperty]
+    private string _domainCuutruyenTagUrl = "https://cuutruyen.net/tag/historical";
+
+    [ObservableProperty]
     private string _domainVihentaiTagUrl = "https://vi-hentai.pro/the-loai/khong-che";
 
     [ObservableProperty]
@@ -678,6 +681,7 @@ public partial class MainViewModel
         if (domain.Contains("thuviensach") || domain.Contains("dilib")) return DomainThuviensachTagUrl;
         if (domain.Contains("daomeoden")) return DomainDaomeodenTagUrl;
         if (domain.Contains("moetruyen")) return DomainMoetruyenTagUrl;
+        if (domain.Contains("cuutruyen")) return DomainCuutruyenTagUrl;
         if (domain.Contains("vi-hentai") || domain.Contains("vihentai")) return DomainVihentaiTagUrl;
         if (domain.Contains("damconuong")) return DomainDamconuongTagUrl;
         if (domain.Contains("sayhentai")) return DomainSayhentaiTagUrl;
@@ -700,6 +704,7 @@ public partial class MainViewModel
         else if (domain.Contains("thuviensach") || domain.Contains("dilib")) DomainThuviensachTagUrl = value;
         else if (domain.Contains("daomeoden")) DomainDaomeodenTagUrl = value;
         else if (domain.Contains("moetruyen")) DomainMoetruyenTagUrl = value;
+        else if (domain.Contains("cuutruyen")) DomainCuutruyenTagUrl = value;
         else if (domain.Contains("vi-hentai") || domain.Contains("vihentai")) DomainVihentaiTagUrl = value;
         else if (domain.Contains("damconuong")) DomainDamconuongTagUrl = value;
         else if (domain.Contains("sayhentai")) DomainSayhentaiTagUrl = value;
@@ -722,6 +727,7 @@ public partial class MainViewModel
         if (domain.Contains("thuviensach") || domain.Contains("dilib")) return "https://thuviensach.vn/";
         if (domain.Contains("daomeoden")) return "https://daomeoden.net/";
         if (domain.Contains("moetruyen")) return "https://moetruyen.net/";
+        if (domain.Contains("cuutruyen")) return "https://cuutruyen.net/";
         if (domain.Contains("vi-hentai") || domain.Contains("vihentai")) return "https://vi-hentai.pro/";
         if (domain.Contains("damconuong")) return "https://damconuong.shop/";
         if (domain.Contains("sayhentai")) return "https://sayhentai.cx/";
@@ -744,6 +750,7 @@ public partial class MainViewModel
         if (domain.Contains("thuviensach") || domain.Contains("dilib")) return "https://thuviensach.vn/truyen-tranh/shounen/";
         if (domain.Contains("daomeoden")) return "https://daomeoden.net/the-loai/romance.html";
         if (domain.Contains("moetruyen")) return "https://moetruyen.net/manga?include=Comedy";
+        if (domain.Contains("cuutruyen")) return "https://cuutruyen.net/tag/historical";
         if (domain.Contains("vi-hentai") || domain.Contains("vihentai")) return "https://vi-hentai.pro/the-loai/khong-che";
         if (domain.Contains("damconuong")) return "https://damconuong.pet/the-loai/manhwa-18";
         if (domain.Contains("sayhentai")) return "https://sayhentai.cx/genre/romance";

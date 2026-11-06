@@ -22,5 +22,6 @@
     <PackageReference Include="SixLabors.ImageSharp" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SharpCompress" />
+    <PackageReference Include="WebAssembly" />
   </ItemGroup>
 </Project>

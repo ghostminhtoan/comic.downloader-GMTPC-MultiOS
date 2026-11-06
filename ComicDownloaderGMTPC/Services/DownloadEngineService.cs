@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 
 // FILE SUMMARY: DownloadEngineService.cs
 
@@ -2085,6 +2085,98 @@ public class DownloadEngineService
 
                 }
 
+                // XỬ LÝ CHUYÊN BIỆT CHO CỨU TRUYỆN (DRM WASM SLICE SCRAMBLING DECRYPTION THUẦN C#)
+
+                if (book.Domain != null && book.Domain.Contains("cuutruyen"))
+
+                {
+
+                    book.StatusMessage = $"Đang giải mã và tải {chapter.Title}...";
+
+                    ProgressUpdated?.Invoke();
+
+
+
+                    int cuuDone = 0;
+
+                    try
+
+                    {
+
+                        cuuDone = await CuuTruyenService.Instance.DownloadChapterPagesAsync(
+
+                            chapter.Url,
+
+                            chapterDir,
+
+                            manifest,
+
+                            (done, total) =>
+
+                            {
+
+                                chapter.DownloadedPages = done;
+
+                                chapter.TotalPages = total;
+
+                                book.UpdateProgressThrottled(
+
+                                    completedChapters,
+
+                                    totalChapters,
+
+                                    done,
+
+                                    total,
+
+                                    $"Đang tải {chapter.Title}: {done}/{total} trang",
+
+                                    force: done == total);
+
+                                ReportOverallProgress(book, $"{book.Title} • {chapter.Title} ({done}/{total})", force: false);
+
+                            },
+
+                            ct).ConfigureAwait(false);
+
+                    }
+
+                    catch (Exception ex)
+
+                    {
+
+                        LogEmitted?.Invoke("ERROR", $"Lỗi tải chapter '{chapter.Title}' Cứu Truyện: {ex.Message}");
+
+                    }
+
+
+
+                    SaveManifest(manifestFile, manifest);
+
+                    if (cuuDone > 0)
+
+                    {
+
+                        consecutiveExtractErrors = 0;
+
+                        completedChapters++;
+
+                        chapter.Status = "Completed";
+
+                        chapter.TotalPages = Math.Max(chapter.TotalPages, manifest.Count);
+
+                        chapter.DownloadedPages = chapter.TotalPages;
+
+                        book.UpdateProgress(completedChapters, totalChapters, chapter.DownloadedPages, chapter.TotalPages);
+
+                        ProgressUpdated?.Invoke();
+
+                    }
+
+                    continue;
+
+                }
+
 
 
                 var readerUrls = new List<string>();
@@ -2980,6 +3072,14 @@ public class DownloadEngineService
                     {
 
                         effectiveReferer = "https://moetruyen.net/";
+
+                    }
+
+                    else if (targetUrl.Contains("cuutruyen", StringComparison.OrdinalIgnoreCase) || (refererUrl != null && refererUrl.Contains("cuutruyen", StringComparison.OrdinalIgnoreCase)))
+
+                    {
+
+                        effectiveReferer = "https://cuutruyen.net/";
 
                     }
 

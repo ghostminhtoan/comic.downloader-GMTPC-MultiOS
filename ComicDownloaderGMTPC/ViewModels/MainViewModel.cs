@@ -5207,6 +5207,7 @@ public partial class MainViewModel : ViewModelBase
         SearchDomains.Add(new SearchDomainItem { DisplayName = "mangadex", Tag = "mangadex", Host = "mangadex.org", IsChecked = false, Category = "Manga" });
         SearchDomains.Add(new SearchDomainItem { DisplayName = "daomeoden", Tag = "daomeoden", Host = "daomeoden.net", IsChecked = false, Category = "Manga" });
         SearchDomains.Add(new SearchDomainItem { DisplayName = "moetruyen", Tag = "moetruyen", Host = "moetruyen.net", IsChecked = false, Category = "Manga" });
+        SearchDomains.Add(new SearchDomainItem { DisplayName = "cuutruyen", Tag = "cuutruyen", Host = "cuutruyen.net", IsChecked = false, Category = "Manga" });
         SearchDomains.Add(new SearchDomainItem { DisplayName = "damconuong.shop", Tag = "damconuong.shop", Host = "damconuong.shop", IsChecked = false, Category = "Hentai" });
         SearchDomains.Add(new SearchDomainItem { DisplayName = "hentaivn", Tag = "hentaivn", Host = "vi-hentai.pro", IsChecked = false, Category = "Hentai" });
         SearchDomains.Add(new SearchDomainItem { DisplayName = "sayhentai", Tag = "sayhentai", Host = "sayhentai.cx", IsChecked = false, Category = "Hentai" });
