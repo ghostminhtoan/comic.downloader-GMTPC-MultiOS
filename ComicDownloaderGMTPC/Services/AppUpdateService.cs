@@ -397,11 +397,6 @@ public class AppUpdateService
                     : (OperatingSystem.IsWindows() ? "ComicDownloaderGMTPC.Desktop.exe" : "ComicDownloaderGMTPC-linux-x64.tar.gz");
                 string targetPath = Path.Combine(updateDir, fileName);
 
-                if (File.Exists(targetPath))
-                {
-                    try { File.Delete(targetPath); } catch { }
-                }
-
                 string fileTypeDesc = OperatingSystem.IsAndroid() 
                     ? "APK Android" 
                     : (OperatingSystem.IsWindows() ? "Windows EXE" : "Linux Portable .tar.gz");
@@ -415,8 +410,29 @@ public class AppUpdateService
 
                 bool downloadSucceeded = false;
 
+                // Kiểm tra nếu tệp đã tải hoàn chỉnh trước đó (kích thước khớp chính xác) thì bỏ qua tải và kích hoạt cài đặt ngay
+                if (File.Exists(targetPath) && totalBytes > 0)
+                {
+                    try
+                    {
+                        var existingFi = new FileInfo(targetPath);
+                        if (existingFi.Length == totalBytes)
+                        {
+                            logCallback("INFO", $"[Cập nhật tự động] Phát hiện gói {fileTypeDesc} ({totalMb:F1} MB) đã có sẵn trên máy. Bỏ qua tải và tiến hành cài đặt ngay...");
+                            progressCallback?.Invoke(100.0);
+                            downloadSucceeded = true;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!downloadSucceeded && File.Exists(targetPath))
+                {
+                    try { File.Delete(targetPath); } catch { }
+                }
+
                 // 1. Kích hoạt cơ chế Multi-Segment 16 Connections (IDM-style) nếu tệp lớn (> 5 MB, đặc biệt là APK Android)
-                if (totalBytes > MultiSegmentThresholdBytes)
+                if (!downloadSucceeded && totalBytes > MultiSegmentThresholdBytes)
                 {
                     logCallback("INFO", $"[Cập nhật tự động] Đã tìm thấy gói {fileTypeDesc} ({totalMb:F1} MB). Kích hoạt cơ chế tải đa luồng 16 Connections...");
                     downloadSucceeded = await DownloadFileMultiSegmentAsync(

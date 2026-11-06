@@ -1,4 +1,4 @@
-﻿// ====================================================================================================
+// ====================================================================================================
 // FILE SUMMARY: MainViewModel.cs
 // ----------------------------------------------------------------------------------------------------
 // VAI TRÒ & MỤC ĐÍCH:
@@ -62,10 +62,10 @@ public partial class MainViewModel : ViewModelBase
     private bool _isUpdating = false;
 
     [ObservableProperty]
-    private string _updateButtonLabel = "🚀 UPDATE RELEASE";
+    private string _updateButtonLabel = "🚀 CẬP NHẬT RELEASE";
 
     [ObservableProperty]
-    private string _updateBetaButtonLabel = "🧪 UPDATE BETA";
+    private string _updateBetaButtonLabel = "🧪 CẬP NHẬT BETA";
 
     [ObservableProperty]
     private bool _hasAvailableReleaseUpdate = false;
@@ -2678,8 +2678,8 @@ public partial class MainViewModel : ViewModelBase
 
         if (!IsUpdating)
         {
-            UpdateButtonLabel = isVi ? "🚀 CẬP NHẬT RELEASE" : "🚀 UPDATE RELEASE";
-            UpdateBetaButtonLabel = isVi ? "🧪 CẬP NHẬT BETA" : "🧪 UPDATE BETA";
+            UpdateButtonLabel = GetDefaultUpdateButtonLabel();
+            UpdateBetaButtonLabel = GetDefaultUpdateBetaButtonLabel();
         }
 
         UpdateDualSortLanguageStrings();
@@ -4154,6 +4154,9 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    private string GetDefaultUpdateButtonLabel() => _langService.IsVietnamese ? "🚀 CẬP NHẬT RELEASE" : "🚀 UPDATE RELEASE";
+    private string GetDefaultUpdateBetaButtonLabel() => _langService.IsVietnamese ? "🧪 CẬP NHẬT BETA" : "🧪 UPDATE BETA";
+
     [RelayCommand]
     public async Task AutoUpdateAsync()
     {
@@ -4217,7 +4220,7 @@ public partial class MainViewModel : ViewModelBase
             if (!success)
             {
                 AddLog("WARN", "[Cập nhật tự động] Không thể tải bản cập nhật Stable. Vui lòng kiểm tra lại kết nối mạng và thử lại sau.");
-                UpdateButtonLabel = "🚀 UPDATE RELEASE";
+                UpdateButtonLabel = GetDefaultUpdateButtonLabel();
             }
             else if (OperatingSystem.IsWindows())
             {
@@ -4225,13 +4228,13 @@ public partial class MainViewModel : ViewModelBase
             }
             else
             {
-                UpdateButtonLabel = "🚀 UPDATE RELEASE";
+                UpdateButtonLabel = GetDefaultUpdateButtonLabel();
             }
         }
         catch (Exception ex)
         {
             AddLog("ERROR", $"Lỗi cập nhật tự động: {ex.Message}");
-            UpdateButtonLabel = "🚀 UPDATE RELEASE";
+            UpdateButtonLabel = GetDefaultUpdateButtonLabel();
         }
         finally
         {
@@ -4259,7 +4262,7 @@ public partial class MainViewModel : ViewModelBase
         {
             AddLog("INFO", "🔍 [Release] Đang kết nối máy chủ GitHub kiểm tra mã hash bản cập nhật...");
             var check = await AppUpdateService.Instance.CheckUpdateAsync(updateUrls, "release");
-            UpdateButtonLabel = "🚀 UPDATE RELEASE";
+            UpdateButtonLabel = GetDefaultUpdateButtonLabel();
 
             if (check.Success)
             {
@@ -4289,7 +4292,7 @@ public partial class MainViewModel : ViewModelBase
         catch (Exception ex)
         {
             HasAvailableReleaseUpdate = false;
-            UpdateButtonLabel = "🚀 UPDATE RELEASE";
+            UpdateButtonLabel = GetDefaultUpdateButtonLabel();
             AddLog("ERROR", $"Lỗi kiểm tra Release: {ex.Message}");
         }
     }
@@ -4314,7 +4317,7 @@ public partial class MainViewModel : ViewModelBase
         {
             AddLog("INFO", "🔍 [Beta] Đang kết nối máy chủ GitHub kiểm tra mã hash bản cập nhật...");
             var check = await AppUpdateService.Instance.CheckUpdateAsync(updateUrls, "beta");
-            UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+            UpdateBetaButtonLabel = GetDefaultUpdateBetaButtonLabel();
 
             if (check.Success)
             {
@@ -4344,7 +4347,7 @@ public partial class MainViewModel : ViewModelBase
         catch (Exception ex)
         {
             HasAvailableBetaUpdate = false;
-            UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+            UpdateBetaButtonLabel = GetDefaultUpdateBetaButtonLabel();
             AddLog("ERROR", $"Lỗi kiểm tra Beta: {ex.Message}");
         }
     }
@@ -4452,7 +4455,7 @@ public partial class MainViewModel : ViewModelBase
             if (!success)
             {
                 AddLog("WARN", "[Cập nhật Beta] Không thể tải bản cập nhật Beta. Vui lòng kiểm tra lại kết nối mạng và thử lại sau.");
-                UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+                UpdateBetaButtonLabel = GetDefaultUpdateBetaButtonLabel();
             }
             else if (OperatingSystem.IsWindows())
             {
@@ -4460,13 +4463,13 @@ public partial class MainViewModel : ViewModelBase
             }
             else
             {
-                UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+                UpdateBetaButtonLabel = GetDefaultUpdateBetaButtonLabel();
             }
         }
         catch (Exception ex)
         {
             AddLog("ERROR", $"Lỗi cập nhật Beta: {ex.Message}");
-            UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+            UpdateBetaButtonLabel = GetDefaultUpdateBetaButtonLabel();
         }
         finally
         {
@@ -4534,7 +4537,7 @@ public partial class MainViewModel : ViewModelBase
             if (!success)
             {
                 AddLog("WARN", "[Reverse to backup] Không thể tải bản backup. Vui lòng kiểm tra lại kết nối mạng hoặc xác nhận bản backup có sẵn trên GitHub Release.");
-                UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+                UpdateBetaButtonLabel = GetDefaultUpdateBetaButtonLabel();
             }
             else if (OperatingSystem.IsWindows())
             {
@@ -4542,13 +4545,13 @@ public partial class MainViewModel : ViewModelBase
             }
             else
             {
-                UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+                UpdateBetaButtonLabel = GetDefaultUpdateBetaButtonLabel();
             }
         }
         catch (Exception ex)
         {
             AddLog("ERROR", $"Lỗi quay lại bản backup: {ex.Message}");
-            UpdateBetaButtonLabel = "🧪 UPDATE BETA";
+            UpdateBetaButtonLabel = GetDefaultUpdateBetaButtonLabel();
         }
         finally
         {

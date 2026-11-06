@@ -886,3 +886,18 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   4. *Khắc Phục Lỗi Splash Screen Bị Treo 75% Rồi Nhảy Lên 100%*:
      - Thiết lập cơ chế `SplashViewModel.ReportGlobalProgress` bám sát các mốc nạp dữ liệu thật của hệ thống từ 5% -> 18% -> 32% -> 45% -> 52% -> 62% -> 70% -> 78% -> 84% -> 90% -> 94% -> 97% -> 100%.
      - Đồng bộ quy trình `RunStartupFlowAsync` chuẩn hóa cho cả 3 nền tảng (Desktop, Android Activity, Linux SingleView).
+
+
+### 67. Bộ Tải Cập Nhật Đa Luồng 16 Connections (IDM-style) & Khắc Phục Triệt Để Lỗi Cập Nhật Beta Android
+- **Mục Tiêu & Trải Nghiệm Người Dùng (UX)**:
+  1. *Cơ Chế Tải Đa Luồng 16 Connections Kèm Resume Cho Update*:
+     - Tích hợp công nghệ tải song song 16 connections (HTTP Range chunks) cho cả kênh Release và Beta trên `AppUpdateService.cs`, tăng tốc độ tải file lớn (>100MB như APK Android) lên gấp 5-10 lần trong điều kiện mạng yếu.
+     - Hỗ trợ Auto-Resume: tự động tải tiếp từ các file chunk `.part` mà không cần tải lại từ đầu nếu đường truyền bị gián đoạn.
+  2. *Khắc Phục Lỗi Nút Cập Nhật Bị Reset Sang Tiếng Anh ("UPDATE BETA")*:
+     - Bổ sung helper method `GetDefaultUpdateButtonLabel()` và `GetDefaultUpdateBetaButtonLabel()` dựa trên `_langService.IsVietnamese`.
+     - Thay thế toàn bộ các gán cứng tiếng Anh bằng các hàm helper, bảo toàn trạng thái song ngữ Việt/Anh khi tải xong hoặc kiểm tra cập nhật.
+  3. *Khắc Phục Race Condition Trên Trình Cài Đặt Gói Android (`REQUEST_INSTALL_PACKAGES`)*:
+     - Khi `!PackageManager.CanRequestPackageInstalls()`, ứng dụng mở màn hình Cài đặt nguồn không rõ và lưu `_pendingInstallApkPath`, đồng thời `return` ngay lập tức để không gọi `StartActivity(installIntent)` trước khi có quyền.
+     - Trong `OnResume()`, ứng dụng tự động kiểm tra `_pendingInstallApkPath` và kích hoạt Package Installer ngay khi người dùng cấp quyền và quay lại app mà không cần bấm lại nút.
+  4. *Cơ Chế Smart Cache Hit*:
+     - Nếu tệp APK/EXE/tar.gz đã được tải đầy đủ trên máy (`Length == totalBytes`), `AppUpdateService.cs` tự động phát hiện, bỏ qua việc tải mạng và chuyển ngay sang bước kích hoạt cài đặt.

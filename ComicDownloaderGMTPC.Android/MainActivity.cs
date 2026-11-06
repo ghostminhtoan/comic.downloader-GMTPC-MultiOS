@@ -144,7 +144,7 @@ public class MainActivity : AvaloniaMainActivity
 
     public static MainActivity? CurrentInstance { get; private set; }
 
-
+    private static string? _pendingInstallApkPath;
 
     private static readonly System.Threading.SemaphoreSlim _audioGate = new(1, 1);
 
@@ -1758,6 +1758,24 @@ public class MainActivity : AvaloniaMainActivity
 
         catch { }
 
+        // Tự động kích hoạt cài đặt APK nếu người dùng vừa quay lại từ màn hình cấp quyền Cài đặt ứng dụng không rõ nguồn gốc
+        try
+        {
+            if (!string.IsNullOrEmpty(_pendingInstallApkPath))
+            {
+                if (!OperatingSystem.IsAndroidVersionAtLeast(26) || (PackageManager != null && PackageManager.CanRequestPackageInstalls()))
+                {
+                    string apkToInstall = _pendingInstallApkPath;
+                    _pendingInstallApkPath = null;
+                    RunOnUiThread(() => OnInstallApkRequested(apkToInstall));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi tự động cài đặt APK sau cấp quyền: {ex.Message}");
+        }
+
 
 
     }
@@ -2980,7 +2998,7 @@ public class MainActivity : AvaloniaMainActivity
 
                     {
 
-
+                        _pendingInstallApkPath = apkPath;
 
                         try
 
@@ -3031,6 +3049,8 @@ public class MainActivity : AvaloniaMainActivity
 
 
                         }
+
+                        return;
 
 
 
