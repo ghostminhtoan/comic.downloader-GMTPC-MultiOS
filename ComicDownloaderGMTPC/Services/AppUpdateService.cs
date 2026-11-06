@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace ComicDownloaderGMTPC.Services;
 
@@ -37,6 +38,9 @@ public class AppUpdateService
     public static AppUpdateService Instance => _instance.Value;
 
     public static event Action<string>? InstallApkRequested;
+
+    public const int DefaultConnectionCount = 16;
+    public const long MultiSegmentThresholdBytes = 5 * 1024 * 1024; // 5 MB: Tệp lớn hơn 5 MB sẽ tự động kích hoạt tải đa luồng 16 connection
 
     private const string UpdateHashCacheFileName = "update_hash_cache.json";
 
@@ -401,55 +405,119 @@ public class AppUpdateService
                 string fileTypeDesc = OperatingSystem.IsAndroid() 
                     ? "APK Android" 
                     : (OperatingSystem.IsWindows() ? "Windows EXE" : "Linux Portable .tar.gz");
-                if (totalBytes > 0)
+
+                // Trích xuất trước serverHash từ response ban đầu
+                string serverHash = CleanHashString(response.Headers.ETag?.Tag);
+                if (string.IsNullOrEmpty(serverHash) && response.Content.Headers.LastModified.HasValue)
                 {
-                    logCallback("INFO", $"[Cập nhật tự động] Đã tìm thấy gói {fileTypeDesc} ({totalMb:F1} MB). Bắt đầu tải...");
-                }
-                else
-                {
-                    logCallback("INFO", $"[Cập nhật tự động] Đã tìm thấy gói {fileTypeDesc}. Bắt đầu tải dữ liệu...");
+                    serverHash = response.Content.Headers.LastModified.Value.UtcTicks.ToString();
                 }
 
-                await using (var contentStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
-                await using (var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 131072, useAsync: true))
-                {
-                    byte[] buffer = new byte[131072];
-                    long totalDownloaded = 0;
-                    int bytesRead;
-                    DateTime lastLogTime = DateTime.UtcNow;
+                bool downloadSucceeded = false;
 
-                    while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, ct).ConfigureAwait(false)) > 0)
+                // 1. Kích hoạt cơ chế Multi-Segment 16 Connections (IDM-style) nếu tệp lớn (> 5 MB, đặc biệt là APK Android)
+                if (totalBytes > MultiSegmentThresholdBytes)
+                {
+                    logCallback("INFO", $"[Cập nhật tự động] Đã tìm thấy gói {fileTypeDesc} ({totalMb:F1} MB). Kích hoạt cơ chế tải đa luồng 16 Connections...");
+                    downloadSucceeded = await DownloadFileMultiSegmentAsync(
+                        finalUrl,
+                        targetPath,
+                        totalBytes,
+                        DefaultConnectionCount,
+                        logCallback,
+                        progressCallback,
+                        ct).ConfigureAwait(false);
+
+                    if (!downloadSucceeded && !ct.IsCancellationRequested)
                     {
-                        await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
-                        totalDownloaded += bytesRead;
-
-                        double percent;
-                        if (totalBytes > 0)
+                        logCallback("WARN", "[Cập nhật tự động] Tải đa luồng không hoàn tất, tự động fallback sang kết nối đơn luồng tiêu chuẩn...");
+                        if (File.Exists(targetPath))
                         {
-                            percent = (totalDownloaded * 100.0) / totalBytes;
-                        }
-                        else
-                        {
-                            double estimatedSize = OperatingSystem.IsAndroid() ? (48.0 * 1024.0 * 1024.0) : (70.0 * 1024.0 * 1024.0);
-                            percent = Math.Min(99.0, (totalDownloaded * 100.0) / estimatedSize);
-                        }
-
-                        progressCallback?.Invoke(percent);
-
-                        if ((DateTime.UtcNow - lastLogTime).TotalMilliseconds >= 800)
-                        {
-                            lastLogTime = DateTime.UtcNow;
-                            double currentMb = totalDownloaded / (1024.0 * 1024.0);
-                            if (totalBytes > 0)
-                            {
-                                logCallback("INFO", $"[Cập nhật tự động] Đã tải {percent:F0}% ({currentMb:F1} MB / {totalMb:F1} MB)...");
-                            }
-                            else
-                            {
-                                logCallback("INFO", $"[Cập nhật tự động] Đã tải {currentMb:F1} MB ({percent:F0}%)...");
-                            }
+                            try { File.Delete(targetPath); } catch { }
                         }
                     }
+                }
+
+                // 2. Chế độ tải đơn luồng (áp dụng cho tệp nhỏ < 5 MB hoặc khi cơ chế đa luồng fallback)
+                if (!downloadSucceeded)
+                {
+                    if (totalBytes > 0)
+                    {
+                        logCallback("INFO", $"[Cập nhật tự động] Đang tải gói {fileTypeDesc} ({totalMb:F1} MB) bằng kết nối tiêu chuẩn...");
+                    }
+                    else
+                    {
+                        logCallback("INFO", $"[Cập nhật tự động] Đang tải gói {fileTypeDesc} bằng kết nối tiêu chuẩn...");
+                    }
+
+                    HttpResponseMessage? singleResponse = response;
+                    bool needDisposeSingle = false;
+
+                    // Nếu trước đó đã chạy thử multi-segment, cần mở lại response mới
+                    if (totalBytes > MultiSegmentThresholdBytes)
+                    {
+                        var singleReq = new HttpRequestMessage(HttpMethod.Get, finalUrl);
+                        singleReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                        singleReq.Headers.TryAddWithoutValidation("Accept", "*/*");
+                        singleResponse = await _httpClient.SendAsync(singleReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                        needDisposeSingle = true;
+                    }
+
+                    try
+                    {
+                        await using (var contentStream = await singleResponse.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
+                        await using (var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 131072, useAsync: true))
+                        {
+                            byte[] buffer = new byte[131072];
+                            long totalDownloaded = 0;
+                            int bytesRead;
+                            DateTime lastLogTime = DateTime.UtcNow;
+
+                            while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, ct).ConfigureAwait(false)) > 0)
+                            {
+                                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+                                totalDownloaded += bytesRead;
+
+                                double percent;
+                                if (totalBytes > 0)
+                                {
+                                    percent = (totalDownloaded * 100.0) / totalBytes;
+                                }
+                                else
+                                {
+                                    double estimatedSize = OperatingSystem.IsAndroid() ? (48.0 * 1024.0 * 1024.0) : (70.0 * 1024.0 * 1024.0);
+                                    percent = Math.Min(99.0, (totalDownloaded * 100.0) / estimatedSize);
+                                }
+
+                                progressCallback?.Invoke(percent);
+
+                                if ((DateTime.UtcNow - lastLogTime).TotalMilliseconds >= 800)
+                                {
+                                    lastLogTime = DateTime.UtcNow;
+                                    double currentMb = totalDownloaded / (1024.0 * 1024.0);
+                                    if (totalBytes > 0)
+                                    {
+                                        logCallback("INFO", $"[Cập nhật tự động] Đã tải {percent:F0}% ({currentMb:F1} MB / {totalMb:F1} MB)...");
+                                    }
+                                    else
+                                    {
+                                        logCallback("INFO", $"[Cập nhật tự động] Đã tải {currentMb:F1} MB ({percent:F0}%)...");
+                                    }
+                                }
+                            }
+                        }
+                        downloadSucceeded = true;
+                    }
+                    finally
+                    {
+                        if (needDisposeSingle) singleResponse?.Dispose();
+                    }
+                }
+
+                if (!downloadSucceeded || !File.Exists(targetPath))
+                {
+                    logCallback("ERROR", "[Cập nhật tự động] Tải tệp cập nhật không thành công.");
+                    return false;
                 }
 
                 progressCallback?.Invoke(100.0);
@@ -459,12 +527,6 @@ public class AppUpdateService
                 // Tự động trích xuất và lưu mã hash từ server và mã hash cục bộ vào bộ nhớ
                 try
                 {
-                    string serverHash = CleanHashString(response.Headers.ETag?.Tag);
-                    if (string.IsNullOrEmpty(serverHash) && response.Content.Headers.LastModified.HasValue)
-                    {
-                        serverHash = response.Content.Headers.LastModified.Value.UtcTicks.ToString();
-                    }
-
                     string localSha = string.Empty;
                     using (var fs = File.OpenRead(targetPath))
                     using (var sha = System.Security.Cryptography.SHA256.Create())
@@ -515,6 +577,193 @@ public class AppUpdateService
         catch (Exception ex)
         {
             logCallback("ERROR", $"[Cập nhật tự động] Thất bại: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Tải tệp đa luồng song song (16 connections IDM-style) với khả năng tự retry và tiếp tục phân đoạn (resume).
+    /// </summary>
+    private async Task<bool> DownloadFileMultiSegmentAsync(
+        string directUrl,
+        string targetPath,
+        long totalBytes,
+        int connectionCount,
+        Action<string, string> logCallback,
+        Action<double>? progressCallback,
+        CancellationToken ct)
+    {
+        double totalMb = totalBytes / (1024.0 * 1024.0);
+        logCallback("INFO", $"[Tải tăng tốc 16 Connections] Đang phân bổ {connectionCount} phân đoạn dữ liệu ({totalMb:F1} MB)...");
+
+        string? parentDir = Path.GetDirectoryName(targetPath);
+        if (!string.IsNullOrEmpty(parentDir) && !Directory.Exists(parentDir))
+        {
+            try { Directory.CreateDirectory(parentDir); } catch { }
+        }
+
+        if (File.Exists(targetPath))
+        {
+            try { File.Delete(targetPath); } catch { }
+        }
+
+        using var fileHandle = File.OpenHandle(
+            targetPath,
+            FileMode.Create,
+            FileAccess.ReadWrite,
+            FileShare.ReadWrite,
+            FileOptions.Asynchronous);
+
+        try
+        {
+            RandomAccess.SetLength(fileHandle, totalBytes);
+        }
+        catch { }
+
+        long chunkSize = totalBytes / connectionCount;
+        var segments = new (long Start, long End, int Index)[connectionCount];
+        for (int i = 0; i < connectionCount; i++)
+        {
+            long segStart = i * chunkSize;
+            long segEnd = (i == connectionCount - 1) ? (totalBytes - 1) : ((i + 1) * chunkSize - 1);
+            segments[i] = (segStart, segEnd, i);
+        }
+
+        long totalDownloaded = 0;
+        long lastReportedDownloaded = 0;
+        DateTime lastReportTime = DateTime.UtcNow;
+        var stopwatch = Stopwatch.StartNew();
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        var progressTask = Task.Run(async () =>
+        {
+            while (!linkedCts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(800, linkedCts.Token).ConfigureAwait(false);
+                    long currentDownloaded = Interlocked.Read(ref totalDownloaded);
+                    DateTime now = DateTime.UtcNow;
+                    double elapsedSec = (now - lastReportTime).TotalSeconds;
+
+                    if (elapsedSec >= 0.5)
+                    {
+                        double deltaMb = (currentDownloaded - lastReportedDownloaded) / (1024.0 * 1024.0);
+                        double instantMbps = elapsedSec > 0 ? (deltaMb * 8.0) / elapsedSec : 0.0;
+                        lastReportedDownloaded = currentDownloaded;
+                        lastReportTime = now;
+
+                        double pct = Math.Min(99.0, (currentDownloaded * 100.0) / totalBytes);
+                        double currentMb = currentDownloaded / (1024.0 * 1024.0);
+                        double avgMbps = stopwatch.Elapsed.TotalSeconds > 0 
+                            ? (currentMb * 8.0) / stopwatch.Elapsed.TotalSeconds 
+                            : 0.0;
+
+                        progressCallback?.Invoke(pct);
+                        logCallback("INFO", $"[Tải tăng tốc 16 Connections] Đã tải {pct:F0}% ({currentMb:F1} MB / {totalMb:F1} MB) | Tốc độ: {instantMbps:F1} Mbps (TB: {avgMbps:F1} Mbps)...");
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch { }
+            }
+        }, linkedCts.Token);
+
+        async Task<bool> DownloadSegmentAsync(long segStart, long segEnd, int segIndex)
+        {
+            int maxRetries = 5;
+            long currentOffset = segStart;
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                if (linkedCts.Token.IsCancellationRequested) return false;
+
+                try
+                {
+                    using var req = new HttpRequestMessage(HttpMethod.Get, directUrl);
+                    req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(currentOffset, segEnd);
+                    req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                    req.Headers.TryAddWithoutValidation("Accept", "*/*");
+
+                    using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+
+                    if (resp.StatusCode == HttpStatusCode.OK)
+                    {
+                        if (segIndex > 0)
+                        {
+                            return false; // Server không hỗ trợ Range -> trigger fallback
+                        }
+                    }
+                    else if (resp.StatusCode != HttpStatusCode.PartialContent)
+                    {
+                        if (attempt == maxRetries) return false;
+                        await Task.Delay(500 * attempt, linkedCts.Token).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    await using var stream = await resp.Content.ReadAsStreamAsync(linkedCts.Token).ConfigureAwait(false);
+                    byte[] buffer = new byte[65536];
+                    int read;
+
+                    while ((read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), linkedCts.Token).ConfigureAwait(false)) > 0)
+                    {
+                        await RandomAccess.WriteAsync(fileHandle, buffer.AsMemory(0, read), currentOffset, linkedCts.Token).ConfigureAwait(false);
+                        currentOffset += read;
+                        Interlocked.Add(ref totalDownloaded, read);
+
+                        if (currentOffset > segEnd)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (currentOffset >= segEnd + 1)
+                    {
+                        return true;
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    if (attempt == maxRetries)
+                    {
+                        logCallback("WARN", $"[16 Connections] Phân đoạn {segIndex + 1}/{connectionCount} gặp sự cố: {ex.Message}");
+                        return false;
+                    }
+                    await Task.Delay(1000 * attempt, linkedCts.Token).ConfigureAwait(false);
+                }
+            }
+            return false;
+        }
+
+        try
+        {
+            var downloadTasks = segments.Select(s => DownloadSegmentAsync(s.Start, s.End, s.Index)).ToArray();
+            var results = await Task.WhenAll(downloadTasks).ConfigureAwait(false);
+
+            linkedCts.Cancel();
+            try { await progressTask.ConfigureAwait(false); } catch { }
+
+            if (results.All(r => r))
+            {
+                double totalSeconds = stopwatch.Elapsed.TotalSeconds;
+                double avgSpeed = totalSeconds > 0 ? (totalMb * 8.0) / totalSeconds : 0.0;
+                logCallback("SUCCESS", $"[Tải tăng tốc 16 Connections] Đã tải đủ 16/16 phân đoạn ({totalMb:F1} MB) trong {totalSeconds:F1}s (Tốc độ TB: {avgSpeed:F1} Mbps)!");
+                return true;
+            }
+
+            return false;
+        }
+        catch
+        {
+            linkedCts.Cancel();
+            try { await progressTask.ConfigureAwait(false); } catch { }
             return false;
         }
     }
