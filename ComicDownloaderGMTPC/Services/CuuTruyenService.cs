@@ -415,6 +415,26 @@ public sealed class CuuTruyenService
         if (match.Success) return match.Groups["slug"].Value;
         return string.Empty;
     }
+
+    /// <summary>
+    /// Chuẩn hóa URL ảnh (avatar/cover/trang truyện) từ Cứu Truyện sang Cloudflare CDN hoạt động tốt nhất.
+    /// Thay thế các domain đã chết (storage-ct.lrclib.net, storage-ct-riften.site) sang storage-charlie.cuutruyen.net.
+    /// </summary>
+    public static string NormalizeImageUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+        string normalized = url
+            .Replace("https://storage-ct.lrclib.net", "https://storage-charlie.cuutruyen.net")
+            .Replace("https://storage-bravo.cuutruyen.net", "https://storage-charlie.cuutruyen.net")
+            .Replace("https://storage-ct-riften.site", "https://storage-charlie.cuutruyen.net");
+
+        if (normalized.StartsWith("/"))
+        {
+            normalized = "https://storage-charlie.cuutruyen.net" + normalized;
+        }
+
+        return normalized;
+    }
     #endregion
 
     #region API Methods
@@ -460,9 +480,35 @@ public sealed class CuuTruyenService
             item.PreviewArtist = aName.GetString() ?? string.Empty;
         }
 
-        if (mangaData.TryGetProperty("cover_url", out var coverProp))
+        // Lấy chính xác avatar truyện (ảnh dọc / chân dung nhân vật đại diện, tỉ lệ 2:3)
+        // Trường "cover_url" trong API Cứu Truyện chính là avatar của truyện trên web (224x336)
+        // TUYỆT ĐỐI KHÔNG dùng "panorama_url" vì đó là ảnh banner nền ngang to đùng (1280x600)
+        string coverUrl = string.Empty;
+        if (mangaData.TryGetProperty("cover_url", out var coverProp) && !string.IsNullOrWhiteSpace(coverProp.GetString()))
         {
-            item.CoverUrl = coverProp.GetString() ?? string.Empty;
+            coverUrl = NormalizeImageUrl(coverProp.GetString()!);
+        }
+        else if (mangaData.TryGetProperty("cover_mobile_url", out var coverMobileProp) && !string.IsNullOrWhiteSpace(coverMobileProp.GetString()))
+        {
+            coverUrl = NormalizeImageUrl(coverMobileProp.GetString()!);
+        }
+        item.CoverUrl = coverUrl;
+
+        // Bóc tách toàn bộ Tags
+        if (mangaData.TryGetProperty("tags", out var tagsProp) && tagsProp.ValueKind == JsonValueKind.Array)
+        {
+            var tagNames = new List<string>();
+            foreach (var t in tagsProp.EnumerateArray())
+            {
+                if (t.TryGetProperty("name", out var tn) && !string.IsNullOrWhiteSpace(tn.GetString()))
+                {
+                    tagNames.Add(tn.GetString()!);
+                }
+            }
+            if (tagNames.Count > 0)
+            {
+                item.PreviewTagsText = "Tags: " + string.Join(", ", tagNames);
+            }
         }
 
         // 2. Lấy TOÀN BỘ danh sách chapter: GET https://cuutruyen.net/api/v2/mangas/{mangaId}/chapters
@@ -626,7 +672,15 @@ public sealed class CuuTruyenService
             {
                 int mId = m.TryGetProperty("id", out var idProp) ? idProp.GetInt32() : 0;
                 string mName = m.TryGetProperty("name", out var nProp) ? nProp.GetString() ?? $"Truyện {mId}" : $"Truyện {mId}";
-                string mCover = m.TryGetProperty("cover_url", out var cProp) ? cProp.GetString() ?? string.Empty : string.Empty;
+                string mCover = string.Empty;
+                if (m.TryGetProperty("cover_url", out var cProp) && !string.IsNullOrWhiteSpace(cProp.GetString()))
+                {
+                    mCover = NormalizeImageUrl(cProp.GetString()!);
+                }
+                else if (m.TryGetProperty("cover_mobile_url", out var cmProp) && !string.IsNullOrWhiteSpace(cmProp.GetString()))
+                {
+                    mCover = NormalizeImageUrl(cmProp.GetString()!);
+                }
                 string mAuthor = m.TryGetProperty("author_name", out var aProp) ? aProp.GetString() ?? string.Empty : string.Empty;
 
                 comics.Add(new ComicBookItem
@@ -765,6 +819,51 @@ public sealed class CuuTruyenService
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
         return doneCount;
+    }
+
+    /// <summary>
+    /// Tải mảng byte ảnh trực tiếp (avatar truyện, thumbnail, trang chapter) từ Cứu Truyện với DoH và SniFragmentStream chống chặn ISP,
+    /// tự động fallback giữa storage-charlie và storage-bravo.
+    /// </summary>
+    public async Task<byte[]?> DownloadImageBytesAsync(string imageUrl, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrl)) return null;
+
+        string primaryUrl = NormalizeImageUrl(imageUrl);
+        string fallbackUrl = primaryUrl.Contains("storage-charlie")
+            ? primaryUrl.Replace("storage-charlie", "storage-bravo")
+            : primaryUrl.Replace("storage-bravo", "storage-charlie");
+
+        // Thử primaryUrl trước (Cloudflare Anycast tốc độ cao)
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, primaryUrl);
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (res.IsSuccessStatusCode)
+            {
+                byte[] bytes = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                if (bytes.Length > 0) return bytes;
+            }
+        }
+        catch
+        {
+            // Thử fallback sang host thứ 2
+        }
+
+        // Thử fallbackUrl nếu primaryUrl thất bại
+        try
+        {
+            using var reqFb = new HttpRequestMessage(HttpMethod.Get, fallbackUrl);
+            using var resFb = await _httpClient.SendAsync(reqFb, ct).ConfigureAwait(false);
+            if (resFb.IsSuccessStatusCode)
+            {
+                byte[] bytes = await resFb.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                if (bytes.Length > 0) return bytes;
+            }
+        }
+        catch { }
+
+        return null;
     }
     #endregion
 }

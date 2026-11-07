@@ -722,32 +722,46 @@ public sealed class ThumbnailPreviewService
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, imageUrl);
-            if (imageUrl.Contains("ehgt.org", StringComparison.OrdinalIgnoreCase) ||
-                imageUrl.Contains("e-hentai.org", StringComparison.OrdinalIgnoreCase) ||
-                imageUrl.Contains("exhentai.org", StringComparison.OrdinalIgnoreCase))
-            {
-                request.Headers.Referrer = new Uri("https://e-hentai.org/");
-                request.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always; sl=dm_1");
-            }
-            else if (!string.IsNullOrWhiteSpace(refererUrl) && Uri.TryCreate(refererUrl, UriKind.Absolute, out var refUri))
-            {
-                request.Headers.Referrer = refUri;
-            }
-            else if (imageUrl.Contains("thuviensach.vn", StringComparison.OrdinalIgnoreCase))
-            {
-                request.Headers.Referrer = new Uri("https://thuviensach.vn/");
-            }
-            else if (imageUrl.Contains("gold-usergeneratedcontent.net", StringComparison.OrdinalIgnoreCase) || imageUrl.Contains("hitomi.la", StringComparison.OrdinalIgnoreCase))
-            {
-                request.Headers.Referrer = new Uri("https://hitomi.la/");
-            }
+            byte[]? bytes = null;
 
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) return false;
+            // Cứu Truyện: Tải qua DoH và SniFragmentStream chống nhà mạng chặn SNI/DPI
+            if (imageUrl.Contains("cuutruyen.net", StringComparison.OrdinalIgnoreCase) ||
+                imageUrl.Contains("storage-charlie", StringComparison.OrdinalIgnoreCase) ||
+                imageUrl.Contains("storage-bravo", StringComparison.OrdinalIgnoreCase) ||
+                imageUrl.Contains("storage-ct.lrclib.net", StringComparison.OrdinalIgnoreCase))
+            {
+                bytes = await CuuTruyenService.Instance.DownloadImageBytesAsync(imageUrl, ct).ConfigureAwait(false);
+                if (bytes == null || bytes.Length < 64) return false;
+            }
+            else
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, imageUrl);
+                if (imageUrl.Contains("ehgt.org", StringComparison.OrdinalIgnoreCase) ||
+                    imageUrl.Contains("e-hentai.org", StringComparison.OrdinalIgnoreCase) ||
+                    imageUrl.Contains("exhentai.org", StringComparison.OrdinalIgnoreCase))
+                {
+                    request.Headers.Referrer = new Uri("https://e-hentai.org/");
+                    request.Headers.TryAddWithoutValidation("Cookie", "nw=1; nw=always; sl=dm_1");
+                }
+                else if (!string.IsNullOrWhiteSpace(refererUrl) && Uri.TryCreate(refererUrl, UriKind.Absolute, out var refUri))
+                {
+                    request.Headers.Referrer = refUri;
+                }
+                else if (imageUrl.Contains("thuviensach.vn", StringComparison.OrdinalIgnoreCase))
+                {
+                    request.Headers.Referrer = new Uri("https://thuviensach.vn/");
+                }
+                else if (imageUrl.Contains("gold-usergeneratedcontent.net", StringComparison.OrdinalIgnoreCase) || imageUrl.Contains("hitomi.la", StringComparison.OrdinalIgnoreCase))
+                {
+                    request.Headers.Referrer = new Uri("https://hitomi.la/");
+                }
 
-            byte[] bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-            if (bytes == null || bytes.Length < 64) return false;
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode) return false;
+
+                bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                if (bytes == null || bytes.Length < 64) return false;
+            }
 
             // Xác thực dữ liệu tải về thực sự là ảnh hợp lệ (tránh trang HTML Cloudflare / 404 giả 200)
             using var verifyStream = new MemoryStream(bytes);
@@ -1018,6 +1032,39 @@ public sealed class ThumbnailPreviewService
                         }
                     }
                 }
+            }
+            // Cứu Truyện: Bóc tách chính xác avatar truyện (ảnh dọc chân dung, tỉ lệ 2:3) và Tags qua API
+            else if (link.Contains("cuutruyen.net", StringComparison.OrdinalIgnoreCase))
+            {
+                int mangaId = CuuTruyenService.ExtractMangaId(link);
+                if (mangaId > 0)
+                {
+                    try
+                    {
+                        var cuuItem = await CuuTruyenService.Instance.GetMangaBookAsync(link, ct: ct).ConfigureAwait(false);
+                        if (!string.IsNullOrWhiteSpace(cuuItem.CoverUrl))
+                        {
+                            AddCandidate(cuuItem.CoverUrl, link);
+                            await RunOnUiAsync(() => item.CoverUrl = cuuItem.CoverUrl);
+                        }
+                        if (!string.IsNullOrWhiteSpace(cuuItem.PreviewArtist))
+                        {
+                            await RunOnUiAsync(() => item.PreviewArtist = cuuItem.PreviewArtist);
+                        }
+                        if (!string.IsNullOrWhiteSpace(cuuItem.PreviewTagsText))
+                        {
+                            await RunOnUiAsync(() => item.PreviewTagsText = cuuItem.PreviewTagsText);
+                            try
+                            {
+                                string cacheDir = GetItemCacheDirectory(item);
+                                File.WriteAllText(Path.Combine(cacheDir, "cover.tags.txt"), cuuItem.PreviewTagsText);
+                            }
+                            catch { }
+                        }
+                    }
+                    catch { }
+                }
+                if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
             }
             // Các domain khác (SayHentai, Damconuong, Daomeoden, Vi-Hentai, Loppytoon)
             else

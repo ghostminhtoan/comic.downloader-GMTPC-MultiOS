@@ -232,6 +232,8 @@ Chuẩn làm việc repo Avalonia hiện tại. Mục tiêu: sửa đúng chỗ,
 - `cuutruyen.net`:
   - Hỗ trợ đầy đủ routing: `homepage`, `tag` (có phân trang `/tag/<slug>?page=X`), `book` (`/mangas/<id>-<slug>`), `chapter` (`/mangas/<id>/chapters/<chap-id>`).
   - Lấy thông tin qua API Cứu Truyện v2 (`/api/v2/mangas/<id>`, `/api/v2/chapters/<chap-id>`).
+  - Thumbnail & Avatar truyện: Bóc tách chính xác ảnh avatar đại diện của truyện (chân dung đứng tỉ lệ 2:3 từ trường `cover_url` trong API, tuyệt đối không lấy ảnh banner ngang `panorama_url`). Chuẩn hóa domain ảnh từ các host đã chết (`storage-ct.lrclib.net`) sang Cloudflare CDN `storage-charlie.cuutruyen.net`.
+  - Tải thumbnail an toàn: `ThumbnailPreviewService` tải ảnh qua kết nối DoH + `SniFragmentStream` của `CuuTruyenService` để triệt tiêu việc nhà mạng chặn SNI/DPI, tự động fallback `storage-bravo`. Đồng thời tự động bóc tách mảng `tags` hiển thị popup hover preview.
   - Danh sách chapter lấy đầy đủ 100% không bị giới hạn (tương đương bấm "Xem thêm" đến hết), tự động đảo ngược mảng JSON gốc (`Reverse()`) để sắp xếp chapter tuần tự từ dưới lên (Chương 1 là chương đầu tiên).
   - Tải ảnh song song tuân thủ nghiêm ngặt số connection cấu hình từ UI (`imageThreads` / `maxConnections`).
   - Hỗ trợ tải nhiều truyện song song siêu tốc (`ConcurrentComicDownloads`) kết hợp Cloudflare Anycast CDN (`storage-charlie.cuutruyen.net`), bộ đệm DNS RAM và tự động reset bộ nhớ WebAssembly DRM định kỳ sau mỗi 300 ảnh.
