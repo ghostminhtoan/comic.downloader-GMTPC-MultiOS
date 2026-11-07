@@ -3424,20 +3424,34 @@ public class DownloadEngineService
 
 
             // Chỉ lưu khi dữ liệu là ảnh THỰC SỰ hợp lệ (Dung lượng >= 512b và đúng Magic Bytes)
-
             if (IsValidImageData(data))
-
             {
-
+                // Dọn sạch tệp rỗng hoặc hỏng (<= 512b) từ phiên tải lỗi trước đó nếu có
                 try
-
                 {
+                    if (File.Exists(destinationPath))
+                    {
+                        var oldFi = new FileInfo(destinationPath);
+                        if (oldFi.Length <= 512) File.Delete(destinationPath);
+                    }
+                }
+                catch { }
 
-                    await File.WriteAllBytesAsync(destinationPath, data!, ct).ConfigureAwait(false);
+                string tempPath = $"{destinationPath}.tmp_{Guid.NewGuid():N}.tmp";
+                try
+                {
+                    await File.WriteAllBytesAsync(tempPath, data!, ct).ConfigureAwait(false);
+
+                    var tempFi = new FileInfo(tempPath);
+                    if (!tempFi.Exists || tempFi.Length < 512)
+                    {
+                        throw new IOException($"Tệp ảnh tạm '{tempPath}' không hợp lệ hoặc rỗng ({tempFi.Length} bytes).");
+                    }
+
+                    // Atomic Rename/Swap: Đảm bảo chống rách ảnh / 0-byte khi sập nguồn hoặc đứt mạng
+                    File.Move(tempPath, destinationPath, overwrite: true);
 
                     Interlocked.Add(ref _totalBytesDownloadedInWindow, data!.Length);
-
-
 
                     if (AutoProcessImages && File.Exists(destinationPath))
                     {
@@ -3459,60 +3473,46 @@ public class DownloadEngineService
                     }
 
                     if (AutoSplitLongImages && File.Exists(destinationPath))
-
                     {
-
                         try
-
                         {
-
                             bool wasSplit = ImageSplitterService.TrySplitImageFile(destinationPath, AutoSplitHeight, AutoSplitQuality);
-
                             if (wasSplit)
-
                             {
-
                                 LogEmitted?.Invoke("INFO", $"[Cắt ảnh dài] Đã tự động cắt ảnh '{Path.GetFileName(destinationPath)}' (ngưỡng {AutoSplitHeight}px)");
-
                             }
-
                         }
-
                         catch { }
-
                     }
 
-
-
                     return true;
-
                 }
-
                 catch (UnauthorizedAccessException uex)
-
                 {
-
                     LogEmitted?.Invoke("ERROR", $"[Lỗi quyền bộ nhớ] Từ chối truy cập ghi tệp '{Path.GetFileName(destinationPath)}': {uex.Message}");
 
-
-
                     if (OperatingSystem.IsAndroid())
-
                     {
-
+                        string? safeTempPath = null;
                         try
-
                         {
-
                             string safeAppStorage = GetAppSpecificExternalPath();
-
                             string safeFallbackPath = destinationPath.Replace("/storage/emulated/0/Download/ComicDownloads", safeAppStorage, StringComparison.OrdinalIgnoreCase);
-
                             string fallbackDir = Path.GetDirectoryName(safeFallbackPath)!;
-
                             if (!Directory.Exists(fallbackDir)) Directory.CreateDirectory(fallbackDir);
 
-                            File.WriteAllBytes(safeFallbackPath, data!);
+                            safeTempPath = $"{safeFallbackPath}.tmp_{Guid.NewGuid():N}.tmp";
+                            File.WriteAllBytes(safeTempPath, data!);
+                            var safeTempFi = new FileInfo(safeTempPath);
+                            if (safeTempFi.Exists && safeTempFi.Length >= 512)
+                            {
+                                File.Move(safeTempPath, safeFallbackPath, overwrite: true);
+                            }
+                            else
+                            {
+                                throw new IOException($"Tệp fallback tạm '{safeTempPath}' không hợp lệ.");
+                            }
+
                             if (AutoProcessImages && File.Exists(safeFallbackPath))
                             {
                                 try
@@ -3530,24 +3530,29 @@ public class DownloadEngineService
                             }
 
                             Interlocked.Add(ref _totalBytesDownloadedInWindow, data!.Length);
-
                             LogEmitted?.Invoke("SUCCESS", $"[Lưu an toàn] Đã chuyển hướng lưu ảnh vào thư mục riêng của app: {Path.GetFileName(safeFallbackPath)}");
-
                             return true;
-
                         }
-
                         catch { }
-
+                        finally
+                        {
+                            if (!string.IsNullOrEmpty(safeTempPath) && File.Exists(safeTempPath))
+                            {
+                                try { File.Delete(safeTempPath); } catch { }
+                            }
+                        }
                     }
 
-
-
                     return false;
-
                 }
-
                 catch { }
+                finally
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        try { File.Delete(tempPath); } catch { }
+                    }
+                }
 
             }
 

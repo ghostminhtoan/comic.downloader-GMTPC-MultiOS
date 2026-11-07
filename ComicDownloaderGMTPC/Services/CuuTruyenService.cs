@@ -748,18 +748,27 @@ public sealed class CuuTruyenService
                     ct.ThrowIfCancellationRequested();
 
                     // Kiểm tra nếu đã tải xong và có trong manifest
-                    if (File.Exists(filePath) && new FileInfo(filePath).Length > 1024)
+                    if (File.Exists(filePath))
                     {
-                        if (manifest != null)
+                        var fi = new FileInfo(filePath);
+                        if (fi.Length > 1024)
                         {
-                            lock (_manifestLock)
+                            if (manifest != null)
                             {
-                                manifest[page.ImageUrl] = filePath;
+                                lock (_manifestLock)
+                                {
+                                    manifest[page.ImageUrl] = filePath;
+                                }
                             }
+                            int c = Interlocked.Increment(ref doneCount);
+                            onProgress?.Invoke(c, total);
+                            return;
                         }
-                        int c = Interlocked.Increment(ref doneCount);
-                        onProgress?.Invoke(c, total);
-                        return;
+                        else
+                        {
+                            // Dọn dẹp file 0-byte hoặc hỏng từ lần tải dang dở trước
+                            try { File.Delete(filePath); } catch { }
+                        }
                     }
 
                     // Tải raw bytes với fallback tự động giữa storage-charlie và storage-bravo
@@ -798,17 +807,37 @@ public sealed class CuuTruyenService
                         finalBytes = CuuTruyenDrmEngine.Instance.DescrambleImage(rawBytes, page.Width, page.Height, page.DrmData);
                     }
 
-                    await File.WriteAllBytesAsync(filePath, finalBytes, ct).ConfigureAwait(false);
-                    if (manifest != null)
+                    // Atomic File Storage: Ghi vào file .tmp trước, chỉ rename khi hoàn tất 100% để chống file 0-byte
+                    string tempFilePath = Path.Combine(chapterDir, $".tmp_{Guid.NewGuid():N}.tmp");
+                    try
                     {
-                        lock (_manifestLock)
+                        await File.WriteAllBytesAsync(tempFilePath, finalBytes, ct).ConfigureAwait(false);
+                        var tempFi = new FileInfo(tempFilePath);
+                        if (!tempFi.Exists || tempFi.Length < 512)
                         {
-                            manifest[page.ImageUrl] = filePath;
+                            throw new IOException($"Dữ liệu ảnh Cứu Truyện tải về không hợp lệ hoặc rỗng ({tempFi?.Length ?? 0}b).");
+                        }
+
+                        File.Move(tempFilePath, filePath, overwrite: true);
+
+                        if (manifest != null)
+                        {
+                            lock (_manifestLock)
+                            {
+                                manifest[page.ImageUrl] = filePath;
+                            }
+                        }
+
+                        int current = Interlocked.Increment(ref doneCount);
+                        onProgress?.Invoke(current, total);
+                    }
+                    finally
+                    {
+                        if (File.Exists(tempFilePath))
+                        {
+                            try { File.Delete(tempFilePath); } catch { }
                         }
                     }
-
-                    int current = Interlocked.Increment(ref doneCount);
-                    onProgress?.Invoke(current, total);
                 }
                 finally
                 {
