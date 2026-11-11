@@ -119,6 +119,7 @@ namespace ComicDownloaderGMTPC.Android;
 
 
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.KeyboardHidden | ConfigChanges.Density | ConfigChanges.FontScale)]
+[MetaData("android.app.shortcuts", Resource = "@xml/shortcuts")]
 
 
 
@@ -131,6 +132,12 @@ public class MainActivity : AvaloniaMainActivity
 
 
     private const int StoragePermissionRequestCode = 1001;
+
+    public const string ActionReceiveSharedLink = "com.CompanyName.ComicDownloaderGMTPC.ACTION_RECEIVE_SHARED_LINK";
+
+    public const string ExtraSharedLinkText = "extra_shared_link_text";
+
+    private const string ExtraSharedLinkConsumed = "extra_shared_link_consumed";
 
 
 
@@ -1284,11 +1291,18 @@ public class MainActivity : AvaloniaMainActivity
 
 
 
-        // Xử lý mở tệp truyện nếu app được kích hoạt từ ứng dụng ngoài qua Intent
+        // Đăng ký Direct Share Shortcut để app hiển thị ngay trên Android Sharesheet
+        try
+        {
+            ShareLinkShortcutHelper.PublishDirectShareShortcut(ApplicationContext ?? this);
+        }
+        catch { }
 
-
-
-        HandleIncomingFileIntent(Intent);
+        // Xử lý link chia sẻ hoặc mở tệp truyện nếu app được kích hoạt từ ứng dụng ngoài qua Intent
+        if (!HandleIncomingShareLinkIntent(Intent))
+        {
+            HandleIncomingFileIntent(Intent);
+        }
 
 
 
@@ -1316,10 +1330,68 @@ public class MainActivity : AvaloniaMainActivity
 
 
 
-        HandleIncomingFileIntent(intent);
+        if (!HandleIncomingShareLinkIntent(intent))
+        {
+            HandleIncomingFileIntent(intent);
+        }
 
 
 
+    }
+
+    private static bool IsTextOrLinkMimeType(string? mimeType)
+    {
+        if (string.IsNullOrWhiteSpace(mimeType)) return false;
+        return mimeType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)
+            || mimeType.StartsWith("text/uri-list", StringComparison.OrdinalIgnoreCase)
+            || mimeType.StartsWith("text/x-uri", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool HandleIncomingShareLinkIntent(Intent? intent)
+    {
+        if (intent == null) return false;
+        if (intent.GetBooleanExtra(ExtraSharedLinkConsumed, false)) return false;
+
+        string? action = intent.Action;
+        bool isSharedLinkAction = string.Equals(action, ActionReceiveSharedLink, StringComparison.Ordinal);
+        bool isExternalTextSend = (string.Equals(action, Intent.ActionSend, StringComparison.Ordinal) ||
+                                   string.Equals(action, Intent.ActionSendMultiple, StringComparison.Ordinal)) &&
+                                  IsTextOrLinkMimeType(intent.Type);
+
+        if (!isSharedLinkAction && !isExternalTextSend)
+        {
+            return false;
+        }
+
+        try
+        {
+            string? sharedText = intent.GetStringExtra(ExtraSharedLinkText);
+            if (string.IsNullOrWhiteSpace(sharedText))
+            {
+                sharedText = ShareLinkActivity.ExtractSharedTextFromIntent(this, intent);
+            }
+
+            intent.PutExtra(ExtraSharedLinkConsumed, true);
+            intent.RemoveExtra(ExtraSharedLinkText);
+
+            ShareLinkShortcutHelper.ReportDirectShareUsed(ApplicationContext ?? this);
+            ShareLinkShortcutHelper.PublishDirectShareShortcut(ApplicationContext ?? this);
+
+            if (!string.IsNullOrWhiteSpace(sharedText))
+            {
+                App.EnqueueSharedLinkText(sharedText);
+                if (App.IsMainViewReady && App.TryGetSharedMainViewModel() is { } vm)
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = vm.DrainPendingSharedLinksAsync());
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("ComicGMTPC_Share", $"Lỗi nhận link chia sẻ trong MainActivity: {ex.Message}");
+        }
+
+        return true;
     }
 
 
@@ -1661,6 +1733,12 @@ public class MainActivity : AvaloniaMainActivity
 
 
         Services.ThermalAndPowerOptimizationService.Instance.SetAppInBackground(false);
+
+        try
+        {
+            ShareLinkShortcutHelper.PublishDirectShareShortcut(ApplicationContext ?? this);
+        }
+        catch { }
 
 
 

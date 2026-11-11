@@ -23,6 +23,29 @@ public partial class App : Application
     public static MainViewModel? TryGetSharedMainViewModel() => _sharedMainViewModel;
     public static bool HasSharedMainViewModel => _sharedMainViewModel != null;
 
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<string> _pendingSharedLinkTexts = new();
+    public static bool IsMainViewReady { get; private set; }
+
+    public static void EnqueueSharedLinkText(string? rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return;
+        _pendingSharedLinkTexts.Enqueue(rawText.Trim());
+    }
+
+    public static bool TryDequeueSharedLinkText(out string rawText)
+    {
+        while (_pendingSharedLinkTexts.TryDequeue(out var item))
+        {
+            if (!string.IsNullOrWhiteSpace(item))
+            {
+                rawText = item;
+                return true;
+            }
+        }
+        rawText = string.Empty;
+        return false;
+    }
+
     private static System.Threading.Mutex? _singleInstanceMutex;
 
     public override void Initialize()
@@ -1251,12 +1274,22 @@ public partial class App : Application
             splashVm.ReportProgress(100, "Sẵn sàng! Đang mở ứng dụng...");
             await Task.Delay(100).ConfigureAwait(false);
 
-            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(onReady);
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                onReady();
+                IsMainViewReady = true;
+                _ = SharedMainViewModel.DrainPendingSharedLinksAsync();
+            });
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[BOOT ERROR] {ex}");
-            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(onReady);
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                onReady();
+                IsMainViewReady = true;
+                _ = SharedMainViewModel.DrainPendingSharedLinksAsync();
+            });
         }
     }
 }

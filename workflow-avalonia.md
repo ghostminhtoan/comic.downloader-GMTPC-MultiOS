@@ -927,3 +927,19 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
      - Tích hợp `SocketsHttpHandler` kết hợp `DoHResolver` (Cloudflare DoH 1.1.1.1) và `SniFragmentStream` (phân mảnh gói TLS ClientHello 5 bytes) giúp vượt mọi rào cản chặn SNI của các ISP tại Việt Nam.
      - Tự động fallback sang cụm CDN `storage-bravo.cuutruyen.net` và `storage-charlie.cuutruyen.net` đảm bảo tốc độ tải ảnh đạt tối đa.
 
+### 69. Hỗ Trợ Chia Sẻ Link Từ Trình Duyệt & Ứng Dụng Khác Lên Android Sharesheet (Direct Share & Instant Share Target)
+- **Mục Tiêu & Trải Nghiệm Người Dùng (UX)**:
+  - Cho phép người dùng khi đang lướt trình duyệt (Chrome, Edge, Samsung Internet, Firefox, Cốc Cốc...) hoặc các app khác (Telegram, Zalo, Facebook...) nhấn **Chia sẻ (Share)** liên kết truyện thì ứng dụng **ComicDownloaderGMTPC** xuất hiện ngay lập tức ở hàng trên cùng (Direct Share) và danh sách chia sẻ chính mà **không cần bấm vào "Khác" ("More")**.
+  - Khi chạm chọn app, tự động mở ứng dụng (hỗ trợ cả Cold Start lẫn Warm Start đang chạy nền), chuyển thẳng sang Tab Download, trích xuất sạch URL từ văn bản chia sẻ (kèm thông báo Toast), nạp vào hàng chờ mà không xóa danh sách hiện có (`clearExisting: false`).
+- **Kiến Trúc Triển Khai**:
+  1. **Direct Share / Sharing Shortcuts (`ComicDownloaderGMTPC.Android/Resources/xml/shortcuts.xml`, `MainActivity.cs`, `ShareLinkActivity.cs`)**:
+     - Khai báo `<share-target android:targetClass="com.CompanyName.ComicDownloaderGMTPC.ShareLinkActivity">` hỗ trợ `text/plain` và `text/uri-list` với category `com.CompanyName.ComicDownloaderGMTPC.category.SHARE_LINK`.
+     - Gắn `[MetaData("android.app.shortcuts", Resource = "@xml/shortcuts")]` lên `MainActivity` (giữ nguyên tên Java class gốc `crc64...MainActivity` để bảo toàn shortcut màn hình chính).
+     - `ShareLinkShortcutHelper.PublishDirectShareShortcut`: xuất bản dynamic shortcut qua `ShortcutManagerCompat.PushDynamicShortcut` (`SetLongLived(true)`, `SetRank(0)`, `SetPerson(...)` với `SetImportant(true)`, `SetExcludedFromSurfaces(ShortcutInfoCompat.SurfaceLauncher)`), đồng thời gọi `ReportShortcutUsed` khi nhận link chia sẻ để hệ thống Android luôn ưu tiên ghim app ở hàng Direct Share trên cùng.
+  2. **Activity Tiếp Nhận Chia Sẻ Chuyên Biệt (`ShareLinkActivity.cs`)**:
+     - Đăng ký `[IntentFilter]` cho `Intent.ActionSend` (`text/plain`, `text/uri-list`) và `Intent.ActionSendMultiple` (`text/plain`) với theme trong suốt `Theme.Translucent.NoTitleBar`, `NoHistory = true`, `ExcludeFromRecents = true`.
+     - Bóc tách an toàn chuỗi chia sẻ từ `ExtraText` (dùng `GetCharSequenceExtra` hỗ trợ cả `SpannableString`), `ExtraText` dạng mảng (`ActionSendMultiple`), `ClipData`, `DataString` và fallback `ExtraSubject`, rồi điều hướng ngay về `MainActivity` (`SingleTask`).
+  3. **Hàng Đợi Tiếp Nhận Đa Trạng Thái (`App.axaml.cs`, `MainViewModel.cs`)**:
+     - `MainActivity.HandleIncomingShareLinkIntent` chặn và đánh dấu tiêu thụ (`ExtraSharedLinkConsumed`) trước `HandleIncomingFileIntent` để tránh forward nhầm link sang `ComicReaderActivity` hoặc chạy lại khi xoay màn hình.
+     - `App.EnqueueSharedLinkText` + `App.IsMainViewReady` phối hợp với `MainViewModel.DrainPendingSharedLinksAsync` và `ImportSharedLinkTextAsync` (tuần tự hóa qua `_sharedLinkImportLock`, trích xuất URL bằng Regex `https?://...`, giữ nguyên hàng chờ hiện tại).
+

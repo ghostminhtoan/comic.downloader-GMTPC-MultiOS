@@ -2980,6 +2980,82 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    private readonly SemaphoreSlim _sharedLinkImportLock = new(1, 1);
+
+    public async Task DrainPendingSharedLinksAsync()
+    {
+        while (App.TryDequeueSharedLinkText(out var sharedText))
+        {
+            await ImportSharedLinkTextAsync(sharedText);
+        }
+    }
+
+    public async Task ImportSharedLinkTextAsync(string? rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return;
+
+        await _sharedLinkImportLock.WaitAsync();
+        try
+        {
+            var matches = System.Text.RegularExpressions.Regex.Matches(
+                rawText,
+                @"https?://[^\s<>""'()\[\]{}]+",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            var extractedUrls = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                if (!match.Success) continue;
+                string cleaned = match.Value.Trim().TrimEnd('.', ',', ';', '!', '?');
+                if (Uri.TryCreate(cleaned, UriKind.Absolute, out var uri) &&
+                    (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
+                    seen.Add(cleaned))
+                {
+                    extractedUrls.Add(cleaned);
+                }
+            }
+
+            SelectedRootTabIndex = 0;
+
+            if (extractedUrls.Count == 0)
+            {
+                UrlInput = rawText.Trim();
+                bool isVi = _langService.CurrentLanguage == "VI";
+                string warnTitle = isVi ? "KHÔNG THẤY LINK HỢP LỆ" : "NO VALID URL FOUND";
+                string warnMsg = isVi
+                    ? "Nội dung chia sẻ không chứa liên kết http/https hợp lệ."
+                    : "The shared content does not contain a valid http/https link.";
+                ShowCenterToast(warnTitle, warnMsg, "⚠️", "SHARE", 2800);
+                AddLog("WARN", warnMsg);
+                return;
+            }
+
+            string joinedUrls = string.Join(Environment.NewLine, extractedUrls);
+            UrlInput = joinedUrls;
+
+            bool vi = _langService.CurrentLanguage == "VI";
+            string toastTitle = vi ? "ĐÃ NHẬN LINK CHIA SẺ" : "SHARED LINK RECEIVED";
+            string toastBody = vi
+                ? $"Đang phân tích {extractedUrls.Count} liên kết truyện được chia sẻ từ ứng dụng ngoài..."
+                : $"Extracting {extractedUrls.Count} shared comic link(s)...";
+            ShowCenterToast(toastTitle, toastBody, "🔗", "SHARE", 2500);
+            AddLog("INFO", $"🔗 {toastBody}");
+
+            await ExtractUrlsFromTextAsync(joinedUrls, clearExisting: false);
+            SelectedRootTabIndex = 0;
+        }
+        catch (Exception ex)
+        {
+            AddLog("ERROR", $"Lỗi xử lý liên kết chia sẻ: {ex.Message}");
+        }
+        finally
+        {
+            IsSourceCrawlBusy = false;
+            _sharedLinkImportLock.Release();
+        }
+    }
+
     [RelayCommand]
     public void ClearLinks()
     {
