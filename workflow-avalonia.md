@@ -943,3 +943,23 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
      - `MainActivity.HandleIncomingShareLinkIntent` chặn và đánh dấu tiêu thụ (`ExtraSharedLinkConsumed`) trước `HandleIncomingFileIntent` để tránh forward nhầm link sang `ComicReaderActivity` hoặc chạy lại khi xoay màn hình.
      - `App.EnqueueSharedLinkText` + `App.IsMainViewReady` phối hợp với `MainViewModel.DrainPendingSharedLinksAsync` và `ImportSharedLinkTextAsync` (tuần tự hóa qua `_sharedLinkImportLock`, trích xuất URL bằng Regex `https?://...`, giữ nguyên hàng chờ hiện tại).
 
+
+### 70. Nút (+) Vệ Tinh Thêm Link Nhanh Từ Clipboard & Nút Toggle Bật/Tắt Trực Tiếp Trên Bong Bóng Nổi (Android & Desktop)
+- **Mục Tiêu & Trải Nghiệm Người Dùng (UX)**:
+  - Cho phép người dùng khi đang duyệt web hoặc đọc truyện trong các ứng dụng khác chỉ cần **Sao chép (Copy) liên kết** rồi bấm ngay vào **Nút (+) Vệ tinh** nằm cạnh Bong bóng nổi để nạp truyện thẳng vào hàng chờ tải ngầm mà **hoàn toàn không cần chuyển qua lại hay mở ứng dụng**.
+  - **Tích Hợp Nút Toggle Ngay Trên Thân Bong Bóng (Bubble)**: Trên thân tròn của Bong bóng nổi có một nút toggle mini (~18dp) ở góc trên đối diện với badge tiến trình %. Người dùng chạm nhẹ là có thể Bật hoặc Tắt nút (+) vệ tinh bên cạnh tức thì, kèm rung phản hồi nhẹ (Haptic feedback) và thông báo Toast.
+  - Lưu trạng thái bền vững trong `instance_config.json` (`IsBubbleQuickAddButtonEnabled`) và đồng bộ 2 chiều với CheckBox trong tab Cài đặt của ứng dụng chính.
+- **Kiến Trúc Triển Khai Đa Nền Tảng**:
+  1. **Android System Overlay & In-App Bubble (`FloatingBubbleManager.cs`, `ShareLinkActivity.cs`)**:
+     - *Nút Toggle Trên Thân Bubble (`_toggleQuickAddView`)*: TextView bo tròn oval đặt ở góc trên bên trong (Top-Left khi Bubble ở nửa phải, Top-Right khi Bubble ở nửa trái). Trạng thái BẬT hiển thị Cyber Cyan `⚡`, trạng thái TẮT hiển thị Slate `○`. Chặn nổi bọt sự kiện qua `ToggleTouchListener` (`return true`) để không kích hoạt mở `MainActivity` hay kéo thả.
+     - *Nút (+) Vệ Tinh (`_quickAddSatelliteView`)*: FrameLayout tròn 36dp viền sáng màu Sky Blue `#38BDF8`, luôn tự động quay vào phía trong màn hình (`SyncSatellitePosition`). Khi Bubble vào trạng thái nhàn rỗi (Auto-dock thụt mép 60% sau 3.5s), nút (+) tự động ẩn; khi người dùng chạm vào Bubble, nút (+) bung ra mượt mà.
+     - *Giải Pháp Vượt Rào Cản Clipboard Android 10–16 Không Gián Đoạn*: Khi bấm nút (+), kích hoạt `ShareLinkActivity.LaunchQuickAddFromClipboard(context)`. Activity trong suốt (`Theme.Translucent.NoTitleBar`, `NoHistory = true`) đọc `ClipboardManager` hợp lệ 100% không bị chặn bảo mật, bóc tách URL, gọi `App.EnqueueSharedLinkText`, kích hoạt `MainViewModel.DrainPendingSharedLinksAsync`, hiện Toast `"📥 Đã nạp link vào hàng chờ tải!"` và `Finish()` ngay lập tức trong ~50ms mà không làm mất focus trình duyệt của người dùng.
+     - *Tùy Chọn Trong Menu Ấn Giữ 3 Giây (`ShowBubbleOptionsDialog`)*: Bổ sung mục chọn nhanh `"⚡ Hiện nút (+) thêm link nhanh"` / `"⚪ Ẩn nút (+) thêm link nhanh"`.
+  2. **Desktop Windows & Linux (`FloatingBubbleWindow.axaml`, `FloatingBubbleWindow.axaml.cs`)**:
+     - Mở rộng bố cục lưới 3 cột `Grid`: Cột 0 (`QuickAddLeftButton` 36x36), Cột 1 (Thân Bubble 76x76), Cột 2 (`QuickAddRightButton` 36x36).
+     - Nút `ToggleQuickAddBorder` đặt tại góc trên của thân Bubble. Khi click, đảo trạng thái cấu hình và cập nhật visual.
+     - Khi bấm nút (+), đọc dữ liệu bộ nhớ tạm thông qua `IClipboard.TryGetTextAsync()` (`Avalonia.Input.Platform`), nạp link vào hàng chờ và cập nhật hiệu ứng badge `"OK"`.
+     - Bộ lọc `IsDescendantOf` trong sự kiện Tunnel `OnBubblePointerPressed` bảo đảm click vào nút (+) hoặc nút Toggle không kích hoạt kéo thả hoặc khôi phục `MainWindow`.
+  3. **Cấu Hình & Đồng Bộ Trạng Thái (`InstanceConfigService.cs`, `MainViewModel.cs`, `MainView.axaml`)**:
+     - Thêm thuộc tính `IsBubbleQuickAddButtonEnabled` kèm sự kiện `BubbleQuickAddButtonEnabledChanged` phát tín hiệu thời gian thực cho mọi cửa sổ Bong bóng.
+     - CheckBox `"➕ Hiển thị nút (+) thêm link nhanh cạnh Bong bóng nổi"` được tích hợp trực tiếp vào Khối 5 (Chế độ Bong bóng nổi) trong tab Cài đặt.

@@ -36,6 +36,12 @@ public static class FloatingBubbleManager
     private static ImageView? _iconImageView;
     private static CircularProgressRingView? _progressRingView;
     private static GradientDrawable? _badgeBg;
+    private static TextView? _toggleQuickAddView;
+    private static View? _quickAddSatelliteView;
+    private static WindowManagerLayoutParams? _satelliteLayoutParams;
+    private static FrameLayout.LayoutParams? _inAppSatelliteLp;
+    private static int _satelliteSizePx;
+    private static int _satelliteSpacingPx;
 
     private static readonly Handler _mainHandler = new(Looper.MainLooper!);
     
@@ -335,6 +341,27 @@ public static class FloatingBubbleManager
             _bubbleView.SetOnTouchListener(touchListener);
 
             _windowManager.AddView(_bubbleView, _systemLayoutParams);
+
+            _quickAddSatelliteView = CreateQuickAddSatelliteView(context);
+            _satelliteLayoutParams = new WindowManagerLayoutParams(
+                _satelliteSizePx,
+                _satelliteSizePx,
+                windowType,
+                flags,
+                Format.Translucent)
+            {
+                Gravity = GravityFlags.Top | GravityFlags.Left,
+                X = _isRightSide
+                    ? (_systemLayoutParams.X - _satelliteSizePx - _satelliteSpacingPx)
+                    : (_systemLayoutParams.X + _bubbleSizePx + _satelliteSpacingPx),
+                Y = _systemLayoutParams.Y + (_bubbleSizePx - _satelliteSizePx) / 2
+            };
+            if (!InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled)
+            {
+                _quickAddSatelliteView.Visibility = ViewStates.Gone;
+            }
+            _windowManager.AddView(_quickAddSatelliteView, _satelliteLayoutParams);
+
             _isShowing = true;
 
             // Đăng ký nhận tiến trình để cập nhật badge và đánh thức độ mờ nhẹ
@@ -414,6 +441,23 @@ public static class FloatingBubbleManager
                 _bubbleView.Elevation = DpToPx(activity, 25);
                 _bubbleView.TranslationZ = DpToPx(activity, 15);
             }
+
+            _quickAddSatelliteView = CreateQuickAddSatelliteView(activity);
+            _inAppSatelliteLp = new FrameLayout.LayoutParams(_satelliteSizePx, _satelliteSizePx)
+            {
+                Gravity = GravityFlags.Top | GravityFlags.Left,
+                LeftMargin = _isRightSide
+                    ? (_inAppLayoutParams.LeftMargin - _satelliteSizePx - _satelliteSpacingPx)
+                    : (_inAppLayoutParams.LeftMargin + _bubbleSizePx + _satelliteSpacingPx),
+                TopMargin = _inAppLayoutParams.TopMargin + (_bubbleSizePx - _satelliteSizePx) / 2
+            };
+            if (!InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled)
+            {
+                _quickAddSatelliteView.Visibility = ViewStates.Gone;
+            }
+            rootContainer.AddView(_quickAddSatelliteView, _inAppSatelliteLp);
+            _quickAddSatelliteView.BringToFront();
+
             rootContainer.RequestLayout();
             rootContainer.Invalidate();
             _isShowing = true;
@@ -520,6 +564,30 @@ public static class FloatingBubbleManager
         _badgeTextView.Visibility = ViewStates.Gone; // Chỉ hiện khi có tiến trình
         container.AddView(_badgeTextView, badgeLp);
 
+        // Nút Toggle Bật/Tắt dấu (+) thêm link nhanh ở góc trên
+        _toggleQuickAddView = new TextView(context);
+        _toggleQuickAddView.SetTextSize(ComplexUnitType.Dip, 8.5f);
+        _toggleQuickAddView.Gravity = GravityFlags.Center;
+        _toggleQuickAddView.SetTypeface(null, TypefaceStyle.Bold);
+
+        UpdateToggleQuickAddVisual();
+
+        int toggleSize = DpToPx(context, 18);
+        int toggleMargin = DpToPx(context, 3);
+        var initialToggleGravity = _isRightSide ? (GravityFlags.Top | GravityFlags.Left) : (GravityFlags.Top | GravityFlags.Right);
+        var toggleLp = new FrameLayout.LayoutParams(toggleSize, toggleSize)
+        {
+            Gravity = initialToggleGravity,
+            LeftMargin = _isRightSide ? toggleMargin : 0,
+            RightMargin = _isRightSide ? 0 : toggleMargin,
+            TopMargin = toggleMargin
+        };
+        _toggleQuickAddView.SetOnTouchListener(new ToggleTouchListener(() =>
+        {
+            ToggleQuickAddState(context);
+        }));
+        container.AddView(_toggleQuickAddView, toggleLp);
+
         return container;
     }
 
@@ -622,6 +690,157 @@ public static class FloatingBubbleManager
 
         _badgeTextView.LayoutParameters = lp;
         _badgeTextView.RequestLayout();
+
+        UpdateTogglePosition(isRightSide);
+        SyncSatellitePosition();
+    }
+
+    private static void UpdateTogglePosition(bool isRightSide)
+    {
+        if (_toggleQuickAddView == null) return;
+        var context = _toggleQuickAddView.Context;
+        if (context == null) return;
+
+        int toggleSize = DpToPx(context, 18);
+        int toggleMargin = DpToPx(context, 3);
+
+        var gravity = isRightSide
+            ? (GravityFlags.Top | GravityFlags.Left)
+            : (GravityFlags.Top | GravityFlags.Right);
+
+        var lp = new FrameLayout.LayoutParams(toggleSize, toggleSize)
+        {
+            Gravity = gravity,
+            LeftMargin = isRightSide ? toggleMargin : 0,
+            RightMargin = isRightSide ? 0 : toggleMargin,
+            TopMargin = toggleMargin
+        };
+
+        _toggleQuickAddView.LayoutParameters = lp;
+        _toggleQuickAddView.RequestLayout();
+    }
+
+    private static void UpdateToggleQuickAddVisual()
+    {
+        if (_toggleQuickAddView == null) return;
+        bool isEnabled = InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
+
+        var bg = new GradientDrawable();
+        bg.SetShape(ShapeType.Oval);
+        if (isEnabled)
+        {
+            bg.SetColor((int)new Color(0x00, 0xE5, 0xFF)); // Cyber Cyan
+            _toggleQuickAddView.Text = "⚡";
+            _toggleQuickAddView.SetTextColor(new Color(0x0F, 0x17, 0x2A));
+        }
+        else
+        {
+            bg.SetColor((int)new Color(0x33, 0x41, 0x55)); // Slate
+            _toggleQuickAddView.Text = "○";
+            _toggleQuickAddView.SetTextColor(new Color(0x94, 0xA3, 0xB8));
+        }
+        _toggleQuickAddView.Background = bg;
+    }
+
+    public static void ToggleQuickAddState(Context context)
+    {
+        bool newState = !InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
+        InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled = newState;
+        UpdateToggleQuickAddVisual();
+        SyncSatellitePosition();
+        string msg = newState ? "⚡ Đã bật nút (+) thêm link cạnh bong bóng" : "⚪ Đã ẩn nút (+) thêm link";
+        try { Toast.MakeText(context, msg, ToastLength.Short)?.Show(); } catch { }
+    }
+
+    public static void SyncSatellitePosition()
+    {
+        if (_quickAddSatelliteView == null) return;
+        bool isEnabled = InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
+        if (!isEnabled || _isDocked)
+        {
+            _quickAddSatelliteView.Visibility = ViewStates.Gone;
+            return;
+        }
+
+        _quickAddSatelliteView.Visibility = ViewStates.Visible;
+
+        if (_isSystemOverlay && _satelliteLayoutParams != null && _systemLayoutParams != null && _windowManager != null)
+        {
+            int satX = _isRightSide
+                ? (_systemLayoutParams.X - _satelliteSizePx - _satelliteSpacingPx)
+                : (_systemLayoutParams.X + _bubbleSizePx + _satelliteSpacingPx);
+            int satY = _systemLayoutParams.Y + (_bubbleSizePx - _satelliteSizePx) / 2;
+
+            _satelliteLayoutParams.X = satX;
+            _satelliteLayoutParams.Y = satY;
+            try
+            {
+                _windowManager.UpdateViewLayout(_quickAddSatelliteView, _satelliteLayoutParams);
+            }
+            catch { }
+        }
+        else if (!_isSystemOverlay && _inAppSatelliteLp != null && _inAppLayoutParams != null && _quickAddSatelliteView != null)
+        {
+            int satLeft = _isRightSide
+                ? (_inAppLayoutParams.LeftMargin - _satelliteSizePx - _satelliteSpacingPx)
+                : (_inAppLayoutParams.LeftMargin + _bubbleSizePx + _satelliteSpacingPx);
+            int satTop = _inAppLayoutParams.TopMargin + (_bubbleSizePx - _satelliteSizePx) / 2;
+
+            _inAppSatelliteLp.LeftMargin = satLeft;
+            _inAppSatelliteLp.TopMargin = satTop;
+            _quickAddSatelliteView.LayoutParameters = _inAppSatelliteLp;
+            _quickAddSatelliteView.RequestLayout();
+        }
+    }
+
+    private static View CreateQuickAddSatelliteView(Context context)
+    {
+        _satelliteSizePx = DpToPx(context, 36);
+        _satelliteSpacingPx = DpToPx(context, 8);
+
+        var satButton = new FrameLayout(context);
+        var bg = new GradientDrawable();
+        bg.SetShape(ShapeType.Oval);
+        bg.SetColors(new int[] {
+            (int)new Color(0x00, 0xE5, 0xFF), // Cyber Cyan
+            (int)new Color(0x02, 0x84, 0xC7)  // Sky 600
+        });
+        bg.SetStroke(DpToPx(context, 1.5f), new Color(0x38, 0xBD, 0xF8));
+        satButton.Background = bg;
+
+        if (OperatingSystem.IsAndroidVersionAtLeast(21))
+        {
+            satButton.Elevation = DpToPx(context, 12);
+        }
+
+        var plusText = new TextView(context);
+        plusText.Text = "+";
+        plusText.SetTextSize(ComplexUnitType.Dip, 20f);
+        plusText.SetTextColor(Color.White);
+        plusText.SetTypeface(null, TypefaceStyle.Bold);
+        plusText.Gravity = GravityFlags.Center;
+
+        var textLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MatchParent, FrameLayout.LayoutParams.MatchParent)
+        {
+            Gravity = GravityFlags.Center
+        };
+        satButton.AddView(plusText, textLp);
+
+        satButton.SetOnClickListener(new QuickAddClickListener(() =>
+        {
+            try
+            {
+                satButton.Animate()?.ScaleX(1.2f)?.ScaleY(1.2f)?.SetDuration(100)?.WithEndAction(new Java.Lang.Runnable(() =>
+                {
+                    satButton.Animate()?.ScaleX(1.0f)?.ScaleY(1.0f)?.SetDuration(100)?.Start();
+                }))?.Start();
+            }
+            catch { }
+
+            ShareLinkActivity.LaunchQuickAddFromClipboard(context);
+        }));
+
+        return satButton;
     }
 
     private static void StartIdleTimer(long delayMs = 3500)
@@ -639,6 +858,10 @@ public static class FloatingBubbleManager
     {
         if (_bubbleView == null || _isDocked) return;
         _isDocked = true;
+        if (_quickAddSatelliteView != null)
+        {
+            _quickAddSatelliteView.Visibility = ViewStates.Gone;
+        }
 
         var context = _bubbleView.Context;
         if (context == null) return;
@@ -686,6 +909,7 @@ public static class FloatingBubbleManager
     public static void WakeUpAndRestore()
     {
         if (_bubbleView == null) return;
+        SyncSatellitePosition();
 
         // Khôi phục độ mờ 100%
         _bubbleView.Animate()
@@ -882,6 +1106,20 @@ public static class FloatingBubbleManager
                         _inAppContainer.RemoveView(_bubbleView);
                     }
                 }
+                if (_quickAddSatelliteView != null)
+                {
+                    if (_isSystemOverlay && _windowManager != null)
+                    {
+                        try { _windowManager.RemoveView(_quickAddSatelliteView); } catch { }
+                    }
+                    else if (!_isSystemOverlay && _inAppContainer != null)
+                    {
+                        try { _inAppContainer.RemoveView(_quickAddSatelliteView); } catch { }
+                    }
+                    _quickAddSatelliteView = null;
+                    _satelliteLayoutParams = null;
+                    _inAppSatelliteLp = null;
+                }
             }
             catch (Exception ex)
             {
@@ -897,6 +1135,7 @@ public static class FloatingBubbleManager
                 _progressRingView = null;
                 _badgeBg = null;
                 _iconImageView = null;
+                _toggleQuickAddView = null;
                 _isDocked = false;
                 _isShowing = false;
             }
@@ -924,8 +1163,10 @@ public static class FloatingBubbleManager
                 var builder = new AlertDialog.Builder(dialogCtx);
                 builder.SetTitle("🫧 Tùy chọn Bong bóng GMTPC");
 
+                bool isQuickAddEnabled = InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
                 string[] options = new string[]
                 {
+                    isQuickAddEnabled ? "⚪ Ẩn nút (+) thêm link nhanh" : "⚡ Hiện nút (+) thêm link nhanh",
                     "🚫 Tắt bong bóng",
                     "🛑 Tắt app hoàn toàn"
                 };
@@ -935,6 +1176,10 @@ public static class FloatingBubbleManager
                     int selected = args.Which;
                     if (selected == 0)
                     {
+                        ToggleQuickAddState(dialogCtx);
+                    }
+                    else if (selected == 1)
+                    {
                         HideBubble();
                         try
                         {
@@ -942,7 +1187,7 @@ public static class FloatingBubbleManager
                         }
                         catch { }
                     }
-                    else if (selected == 1)
+                    else if (selected == 2)
                     {
                         ExitAppCompletely(dialogCtx);
                     }
@@ -1107,6 +1352,7 @@ public static class FloatingBubbleManager
                             _wm.UpdateViewLayout(v, _lp);
                         }
                         catch { }
+                        SyncSatellitePosition();
                     }
                     return true;
 
@@ -1194,6 +1440,7 @@ public static class FloatingBubbleManager
                     {
                         _wm.UpdateViewLayout(_bubbleView, _lp);
                     }
+                    SyncSatellitePosition();
                 }
                 catch { }
             };
@@ -1320,6 +1567,7 @@ public static class FloatingBubbleManager
                             v.LayoutParameters = _lp;
                         }
                         catch { }
+                        SyncSatellitePosition();
                     }
                     return true;
 
@@ -1542,5 +1790,27 @@ public static class FloatingBubbleManager
     {
         float density = context.Resources?.DisplayMetrics?.Density ?? 1.0f;
         return (int)Math.Ceiling(dp * density);
+    }
+
+    private class QuickAddClickListener : Java.Lang.Object, View.IOnClickListener
+    {
+        private readonly Action _onClick;
+        public QuickAddClickListener(Action onClick) => _onClick = onClick;
+        public void OnClick(View? v) => _onClick?.Invoke();
+    }
+
+    private class ToggleTouchListener : Java.Lang.Object, View.IOnTouchListener
+    {
+        private readonly Action _onToggle;
+        public ToggleTouchListener(Action onToggle) => _onToggle = onToggle;
+        public bool OnTouch(View? v, MotionEvent? e)
+        {
+            if (e == null) return false;
+            if (e.Action == MotionEventActions.Up)
+            {
+                _onToggle?.Invoke();
+            }
+            return true;
+        }
     }
 }

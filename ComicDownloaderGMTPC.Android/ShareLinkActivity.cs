@@ -4,6 +4,7 @@ using System.Text;
 using Android.App;
 using Android.Content;
 using Android.OS;
+using Android.Widget;
 using AndroidX.Core.Content.PM;
 using AndroidX.Core.Graphics.Drawable;
 
@@ -108,12 +109,35 @@ public static class ShareLinkShortcutHelper
     DataMimeType = "text/plain")]
 public class ShareLinkActivity : Activity
 {
+    public const string ActionQuickAddFromClipboard = "com.CompanyName.ComicDownloaderGMTPC.action.QUICK_ADD_CLIPBOARD";
+
+    public static void LaunchQuickAddFromClipboard(Context context)
+    {
+        try
+        {
+            var intent = new Intent(context, typeof(ShareLinkActivity));
+            intent.SetAction(ActionQuickAddFromClipboard);
+            intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.ClearTop | ActivityFlags.SingleTop);
+            context.StartActivity(intent);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("ComicGMTPC_Share", $"Không thể mở ShareLinkActivity QuickAdd: {ex.Message}");
+        }
+    }
+
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
 
         try
         {
+            if (string.Equals(Intent?.Action, ActionQuickAddFromClipboard, StringComparison.Ordinal))
+            {
+                HandleQuickAddFromClipboard();
+                return;
+            }
+
             string? sharedText = ExtractSharedTextFromIntent(this, Intent);
 
             ShareLinkShortcutHelper.ReportDirectShareUsed(ApplicationContext ?? this);
@@ -131,6 +155,56 @@ public class ShareLinkActivity : Activity
         catch (Exception ex)
         {
             global::Android.Util.Log.Error("ComicGMTPC_Share", $"Lỗi xử lý ShareLinkActivity: {ex}");
+        }
+        finally
+        {
+            Finish();
+        }
+    }
+
+    private void HandleQuickAddFromClipboard()
+    {
+        try
+        {
+            var clipboard = (ClipboardManager?)GetSystemService(ClipboardService);
+            string? text = null;
+            if (clipboard != null && clipboard.HasPrimaryClip && clipboard.PrimaryClip != null && clipboard.PrimaryClip.ItemCount > 0)
+            {
+                var item = clipboard.PrimaryClip.GetItemAt(0);
+                text = item?.Text ?? item?.Uri?.ToString() ?? item?.CoerceToText(this)?.ToString();
+            }
+
+            if (!string.IsNullOrWhiteSpace(text) && (text.Contains("http://", StringComparison.OrdinalIgnoreCase) || text.Contains("https://", StringComparison.OrdinalIgnoreCase)))
+            {
+                App.EnqueueSharedLinkText(text);
+                ShareLinkShortcutHelper.ReportDirectShareUsed(ApplicationContext ?? this);
+
+                try
+                {
+                    if (App.IsMainViewReady && MainActivity.CurrentInstance != null)
+                    {
+                        MainActivity.CurrentInstance.RunOnUiThread(() =>
+                        {
+                            var vm = App.TryGetSharedMainViewModel();
+                            if (vm != null)
+                            {
+                                _ = vm.DrainPendingSharedLinksAsync();
+                            }
+                        });
+                    }
+                }
+                catch { }
+
+                Toast.MakeText(this, "📥 Đã nạp link vào hàng chờ tải!", ToastLength.Short)?.Show();
+            }
+            else
+            {
+                Toast.MakeText(this, "📋 Bộ nhớ tạm không có link truyện (URL)", ToastLength.Short)?.Show();
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("ComicGMTPC_Share", $"Lỗi đọc clipboard: {ex.Message}");
         }
         finally
         {

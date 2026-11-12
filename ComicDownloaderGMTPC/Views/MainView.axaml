@@ -8911,7 +8911,12 @@
 
                                                                       FontWeight="Bold" FontSize="12" Foreground="#F8FAFC" />
 
-                                                            <TextBlock Text="• Tự động thụt 60% vào mép và giảm độ mờ còn 45% sau 3.5 giây không chạm&#x0a;• Tự động khôi phục 100% độ rõ khi chạm hoặc có tiến trình tải mới&#x0a;• Chạm nhanh vào bong bóng để mở lại ứng dụng tức thì"
+                                                            <CheckBox IsChecked="{Binding IsBubbleQuickAddButtonEnabled, Mode=TwoWay}"
+                                                                      Content="➕ Hiển thị nút (+) thêm link nhanh cạnh Bong bóng nổi"
+                                                                      FontWeight="Bold" FontSize="11.5" Foreground="#38BDF8" Margin="0,2,0,0"
+                                                                      ToolTip.Tip="Hiển thị nút (+) vệ tinh bên cạnh Bong bóng. Cho phép bấm 1 chạm để nạp ngay link truyện từ bộ nhớ tạm (Clipboard) vào hàng chờ tải mà không cần vào lại ứng dụng. Có thể bật/tắt trực tiếp bằng nút toggle trên Bong bóng." />
+
+                                                            <TextBlock Text="• Tự động thụt 60% vào mép và giảm độ mờ còn 45% sau 3.5 giây không chạm&#x0a;• Tự động khôi phục 100% độ rõ khi chạm hoặc có tiến trình tải mới&#x0a;• Chạm nhanh vào bong bóng để mở lại ứng dụng tức thì&#x0a;• Có nút toggle trên bong bóng để bật/tắt nút (+) thêm link nhanh tức thì"
 
                                                                        Foreground="#A78BFA" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" />
 

@@ -178,6 +178,17 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [ObservableProperty]
+    private bool _isBubbleQuickAddButtonEnabled = InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
+
+    partial void OnIsBubbleQuickAddButtonEnabledChanged(bool value)
+    {
+        if (InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled != value)
+        {
+            InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled = value;
+        }
+    }
+
+    [ObservableProperty]
     private bool _isExitConfirmOpen = false;
 
     [ObservableProperty]
@@ -2220,6 +2231,17 @@ public partial class MainViewModel : ViewModelBase
         bg.TaskProgressChanged += OnBackgroundTaskProgressChanged;
         bg.AnyTaskRunningChanged += OnAnyTaskRunningChanged;
         bg.BubbleModeChanged += OnBubbleModeChanged;
+
+        InstanceConfigService.Instance.BubbleQuickAddButtonEnabledChanged += enabled =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (IsBubbleQuickAddButtonEnabled != enabled)
+                {
+                    IsBubbleQuickAddButtonEnabled = enabled;
+                }
+            });
+        };
 
         long lastEnhanceLogTick = 0;
         _imageEnhancer.LogEmitted += (level, msg) =>

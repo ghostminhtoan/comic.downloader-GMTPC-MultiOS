@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ComicDownloaderGMTPC.Views.FloatingBubbleWindow"
         Title="Comic GMTPC Bubble"
-        Width="76" Height="76"
+        Width="126" Height="76"
         CanResize="False"
         WindowDecorations="None"
         Background="Transparent"
@@ -11,51 +11,122 @@
         ShowInTaskbar="False"
         WindowStartupLocation="Manual">
 
-    <Grid Width="76" Height="76" Background="Transparent" ClipToBounds="False">
-        <!-- Vòng tiến trình tròn Circular Progress Ring -->
-        <ContentControl x:Name="RingHost" Width="76" Height="76" IsHitTestVisible="False" />
+    <Grid x:Name="RootLayoutGrid" Width="126" Height="76" Background="Transparent" ClipToBounds="False">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="76" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
 
-        <!-- Nền tròn bóng chính -->
-        <Border x:Name="BubbleBody"
-                Width="56" Height="56"
-                CornerRadius="28"
-                BorderBrush="#C084FC"
-                BorderThickness="2.5"
-                ClipToBounds="True"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Cursor="Hand">
+        <!-- Nút (+) Vệ tinh Bên Trái (hiển thị khi Bubble neo ở nửa bên phải màn hình) -->
+        <Border Grid.Column="0" x:Name="QuickAddLeftButton"
+                Width="36" Height="36"
+                CornerRadius="18"
+                BorderBrush="#38BDF8" BorderThickness="1.5"
+                HorizontalAlignment="Right" VerticalAlignment="Center"
+                Margin="0,0,6,0"
+                Cursor="Hand"
+                PointerPressed="OnQuickAddButtonPointerPressed"
+                BoxShadow="0 2 8 0 #80000000"
+                ToolTip.Tip="Thêm link nhanh từ Clipboard vào hàng chờ tải (không cần mở app)">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
-                    <GradientStop Color="#4F46E5" Offset="0.0" />
-                    <GradientStop Color="#0F172A" Offset="1.0" />
+                    <GradientStop Color="#00E5FF" Offset="0.0" />
+                    <GradientStop Color="#0284C7" Offset="1.0" />
                 </LinearGradientBrush>
             </Border.Background>
-
-            <!-- Icon app ở tâm -->
-            <Image Source="/Assets/Icon.png"
-                   Width="32" Height="32"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   IsHitTestVisible="False" />
+            <TextBlock Text="+" FontSize="22" FontWeight="Bold" Foreground="White"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
         </Border>
 
-        <!-- Badge con số tiến trình % động -->
-        <Border x:Name="BadgeBorder"
-                CornerRadius="6"
-                Padding="4,1"
-                Background="#00E5FF"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Bottom"
-                Margin="2"
-                IsVisible="False"
-                IsHitTestVisible="False"
-                BoxShadow="0 2 6 0 #80000000">
-            <TextBlock x:Name="BadgeText"
-                       Text="0%"
-                       FontSize="9.5"
-                       FontWeight="Bold"
-                       Foreground="#0F172A" />
+        <!-- Thân Bong bóng chính 76x76 -->
+        <Grid Grid.Column="1" Width="76" Height="76" Background="Transparent" ClipToBounds="False">
+            <!-- Vòng tiến trình tròn Circular Progress Ring -->
+            <ContentControl x:Name="RingHost" Width="76" Height="76" IsHitTestVisible="False" />
+
+            <!-- Nền tròn bóng chính -->
+            <Border x:Name="BubbleBody"
+                    Width="56" Height="56"
+                    CornerRadius="28"
+                    BorderBrush="#C084FC"
+                    BorderThickness="2.5"
+                    ClipToBounds="True"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Cursor="Hand">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                        <GradientStop Color="#4F46E5" Offset="0.0" />
+                        <GradientStop Color="#0F172A" Offset="1.0" />
+                    </LinearGradientBrush>
+                </Border.Background>
+
+                <!-- Icon app ở tâm -->
+                <Image Source="/Assets/Icon.png"
+                       Width="32" Height="32"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False" />
+            </Border>
+
+            <!-- Nút Toggle Bật/Tắt dấu (+) trên thân Bubble (Góc trên) -->
+            <Border x:Name="ToggleQuickAddBorder"
+                    Width="18" Height="18"
+                    CornerRadius="9"
+                    Background="#00E5FF"
+                    BorderBrush="#0F172A" BorderThickness="1"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Margin="8,8,0,0"
+                    Cursor="Hand"
+                    PointerPressed="OnToggleQuickAddPointerPressed"
+                    BoxShadow="0 1 4 0 #80000000"
+                    ToolTip.Tip="Chạm để Bật/Tắt nút (+) thêm link nhanh cạnh bong bóng">
+                <TextBlock x:Name="ToggleQuickAddText"
+                           Text="⚡"
+                           FontSize="9"
+                           FontWeight="Bold"
+                           Foreground="#0F172A"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+
+            <!-- Badge con số tiến trình % động (Góc dưới) -->
+            <Border x:Name="BadgeBorder"
+                    CornerRadius="6"
+                    Padding="4,1"
+                    Background="#00E5FF"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Margin="2"
+                    IsVisible="False"
+                    IsHitTestVisible="False"
+                    BoxShadow="0 2 6 0 #80000000">
+                <TextBlock x:Name="BadgeText"
+                           Text="0%"
+                           FontSize="9.5"
+                           FontWeight="Bold"
+                           Foreground="#0F172A" />
+            </Border>
+        </Grid>
+
+        <!-- Nút (+) Vệ tinh Bên Phải (hiển thị khi Bubble neo ở nửa bên trái màn hình) -->
+        <Border Grid.Column="2" x:Name="QuickAddRightButton"
+                Width="36" Height="36"
+                CornerRadius="18"
+                BorderBrush="#38BDF8" BorderThickness="1.5"
+                HorizontalAlignment="Left" VerticalAlignment="Center"
+                Margin="6,0,0,0"
+                Cursor="Hand"
+                PointerPressed="OnQuickAddButtonPointerPressed"
+                BoxShadow="0 2 8 0 #80000000"
+                ToolTip.Tip="Thêm link nhanh từ Clipboard vào hàng chờ tải (không cần mở app)">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="#00E5FF" Offset="0.0" />
+                    <GradientStop Color="#0284C7" Offset="1.0" />
+                </LinearGradientBrush>
+            </Border.Background>
+            <TextBlock Text="+" FontSize="22" FontWeight="Bold" Foreground="White"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
         </Border>
     </Grid>
 </Window>

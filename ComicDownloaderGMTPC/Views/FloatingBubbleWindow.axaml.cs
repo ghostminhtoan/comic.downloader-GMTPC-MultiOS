@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -172,6 +173,9 @@ public partial class FloatingBubbleWindow : Window
 
         // Khởi tạo trạng thái ban đầu
         SyncCurrentTaskState();
+        InstanceConfigService.Instance.BubbleQuickAddButtonEnabledChanged -= OnBubbleQuickAddButtonEnabledChanged;
+        InstanceConfigService.Instance.BubbleQuickAddButtonEnabledChanged += OnBubbleQuickAddButtonEnabledChanged;
+        UpdateQuickAddVisualState();
         StartIdleTimer();
     }
 
@@ -179,15 +183,34 @@ public partial class FloatingBubbleWindow : Window
     {
         _idleTimer.Stop();
         _longPressTimer.Stop();
+        InstanceConfigService.Instance.BubbleQuickAddButtonEnabledChanged -= OnBubbleQuickAddButtonEnabledChanged;
         BackgroundExecutionService.Instance.TaskProgressChanged -= OnTaskProgressChanged;
         BackgroundExecutionService.Instance.AnyTaskRunningChanged -= OnAnyTaskRunningChanged;
     }
 
     #region Mouse Dragging & Gesture Interactions
 
+    private static bool IsDescendantOf(Visual? visual, Visual? ancestor)
+    {
+        if (visual == null || ancestor == null) return false;
+        var current = visual;
+        while (current != null)
+        {
+            if (ReferenceEquals(current, ancestor)) return true;
+            current = current.GetVisualParent();
+        }
+        return false;
+    }
+
     private void OnBubblePointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var pointProps = e.GetCurrentPoint(this).Properties;
+
+        // Bỏ qua sự kiện kéo thả nếu nhấn vào nút Toggle hoặc nút QuickAdd
+        if (e.Source is Visual visual && (IsDescendantOf(visual, QuickAddLeftButton) || IsDescendantOf(visual, QuickAddRightButton) || IsDescendantOf(visual, ToggleQuickAddBorder)))
+        {
+            return;
+        }
 
         // Chuột phải -> Mở menu ngay lập tức
         if (pointProps.IsRightButtonPressed)
@@ -338,6 +361,8 @@ public partial class FloatingBubbleWindow : Window
         Dispatcher.UIThread.Post(() =>
         {
             Opacity = 0.45;
+            if (QuickAddLeftButton != null) QuickAddLeftButton.IsVisible = false;
+            if (QuickAddRightButton != null) QuickAddRightButton.IsVisible = false;
 
             // Nếu đang ở sát mép màn hình: Tự động thụt 55% thân bóng vào mép
             if (_isAtEdge && !_isDocked)
@@ -365,6 +390,7 @@ public partial class FloatingBubbleWindow : Window
     private void WakeUpAndRestore()
     {
         Opacity = 1.0;
+        UpdateQuickAddVisualState();
 
         if (_isDocked)
         {
@@ -424,6 +450,21 @@ public partial class FloatingBubbleWindow : Window
             BackgroundExecutionService.Instance.ForceExit();
         };
 
+        bool isQuickAddEnabled = InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
+        var itemToggleQuickAdd = new MenuItem
+        {
+            Header = isQuickAddEnabled ? "⚪ Ẩn nút (+) thêm link" : "⚡ Hiện nút (+) thêm link",
+            FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x00, 0xE5, 0xFF))
+        };
+        itemToggleQuickAdd.Click += (_, _) =>
+        {
+            InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled = !InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
+            UpdateQuickAddVisualState();
+        };
+
+        menu.Items.Add(itemToggleQuickAdd);
+        menu.Items.Add(new Separator());
         menu.Items.Add(itemCloseBubble);
         menu.Items.Add(new Separator());
         menu.Items.Add(itemExitApp);
@@ -440,6 +481,111 @@ public partial class FloatingBubbleWindow : Window
         // Khi Bubble ở nửa bên PHẢI màn hình: Badge % đặt ở góc dưới bên TRÁI
         // Khi Bubble ở nửa bên TRÁI màn hình: Badge % đặt ở góc dưới bên PHẢI
         BadgeBorder.HorizontalAlignment = isRightSide ? Avalonia.Layout.HorizontalAlignment.Left : Avalonia.Layout.HorizontalAlignment.Right;
+        if (ToggleQuickAddBorder != null)
+        {
+            ToggleQuickAddBorder.HorizontalAlignment = isRightSide ? Avalonia.Layout.HorizontalAlignment.Left : Avalonia.Layout.HorizontalAlignment.Right;
+            ToggleQuickAddBorder.Margin = isRightSide ? new Thickness(8, 8, 0, 0) : new Thickness(0, 8, 8, 0);
+        }
+        UpdateQuickAddVisualState();
+    }
+
+    private void OnBubbleQuickAddButtonEnabledChanged(bool enabled)
+    {
+        Dispatcher.UIThread.Post(UpdateQuickAddVisualState);
+    }
+
+    private void OnToggleQuickAddPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        e.Handled = true;
+        WakeUpAndRestore();
+        InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled = !InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
+        UpdateQuickAddVisualState();
+    }
+
+    private async void OnQuickAddButtonPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        e.Handled = true;
+        WakeUpAndRestore();
+
+        try
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            string? text = null;
+            if (topLevel?.Clipboard != null)
+            {
+                text = await topLevel.Clipboard.TryGetTextAsync();
+            }
+
+            if (!string.IsNullOrWhiteSpace(text) && (text.Contains("http://", StringComparison.OrdinalIgnoreCase) || text.Contains("https://", StringComparison.OrdinalIgnoreCase)))
+            {
+                App.EnqueueSharedLinkText(text);
+                var vm = (_mainWindow?.DataContext as ViewModels.MainViewModel) ?? App.TryGetSharedMainViewModel();
+                if (vm != null)
+                {
+                    _ = vm.DrainPendingSharedLinksAsync();
+                }
+
+                BadgeText.Text = "OK";
+                BadgeBorder.Background = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
+                BadgeBorder.IsVisible = true;
+
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.0) };
+                timer.Tick += (_, _) =>
+                {
+                    timer.Stop();
+                    SyncCurrentTaskState();
+                };
+                timer.Start();
+            }
+            else
+            {
+                BadgeText.Text = "CLIP?";
+                BadgeBorder.Background = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44));
+                BadgeBorder.IsVisible = true;
+
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.0) };
+                timer.Tick += (_, _) =>
+                {
+                    timer.Stop();
+                    SyncCurrentTaskState();
+                };
+                timer.Start();
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Quick add clipboard desktop error: {ex.Message}");
+        }
+    }
+
+    public void UpdateQuickAddVisualState()
+    {
+        bool isEnabled = InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
+
+        if (ToggleQuickAddBorder != null)
+        {
+            ToggleQuickAddBorder.Background = isEnabled
+                ? new SolidColorBrush(Color.FromRgb(0x00, 0xE5, 0xFF))
+                : new SolidColorBrush(Color.FromRgb(0x33, 0x41, 0x55));
+        }
+
+        if (ToggleQuickAddText != null)
+        {
+            ToggleQuickAddText.Text = isEnabled ? "⚡" : "○";
+            ToggleQuickAddText.Foreground = isEnabled
+                ? new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A))
+                : new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8));
+        }
+
+        bool shouldShow = isEnabled && !_isDocked;
+        if (QuickAddLeftButton != null)
+        {
+            QuickAddLeftButton.IsVisible = shouldShow && _isRightSide;
+        }
+        if (QuickAddRightButton != null)
+        {
+            QuickAddRightButton.IsVisible = shouldShow && !_isRightSide;
+        }
     }
 
     private void OnTaskProgressChanged(BackgroundTaskInfo task)
