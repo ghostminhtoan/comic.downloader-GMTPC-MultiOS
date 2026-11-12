@@ -982,14 +982,35 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   1. **Độc Lập TaskAffinity Cho Cửa Sổ Trích Xuất Clipboard (`ShareLinkActivity.cs`)**:
      - Cấu hình `TaskAffinity = ""` và `LaunchMode = LaunchMode.Multiple` kết hợp cờ `ActivityFlags.MultipleTask | ActivityFlags.NewTask | ActivityFlags.NoAnimation | ActivityFlags.ExcludeFromRecents`.
      - Chạy hoàn toàn trên Task độc lập, tuyệt đối không gộp chung hay kéo Task của `MainActivity` lên foreground.
-     - Sau khi nạp link: gọi `MoveTaskToBack(true)` và `FinishAndRemoveTask()`, hệ điều hành tự động giữ nguyên và trao quyền cho trình duyệt web người dùng đang dùng.
+     - Sau khi nạp link: gọi `Finish()` đóng cửa sổ tàng hình an toàn, hệ điều hành tự động giữ nguyên và trao quyền cho trình duyệt web người dùng đang dùng mà không kích hoạt `OnTaskRemoved` hay làm ảnh hưởng tiến trình chính.
   2. **Bổ Sung Nút Toggle & Nút Vệ Tinh (✕) Force Stop (`FloatingBubbleManager.cs`, `InstanceConfigService.cs`)**:
      - `_toggleCloseView`: TextView mini 18dp ở góc trên đối diện `_toggleQuickAddView`, chạm để bật/tắt nút (✕) vệ tinh, lưu cấu hình vào `IsBubbleCloseButtonEnabled`.
      - `_closeSatelliteView`: Nút vệ tinh tròn 36dp màu đỏ Crimson Gradient (`#EF4444` ➔ `#B91C1C`), viền neon `#F87171`, icon `✕` trắng đậm.
      - Cơ chế bố cục cụm vệ tinh kép song song (`SyncSatellitePosition`): Khi cả `(+)` và `(✕)` cùng bật, tự động xếp dọc cách nhau 6dp, căn giữa theo chiều cao 60dp của Bubble; khi chỉ bật 1 nút thì tự động căn giữa.
      - Khi bấm `(✕)`: gọi `ForceStopApp(context)`, ẩn Bubble, dừng `ComicBackgroundService`, gọi `FinishAffinity()` và kill tiến trình qua `Process.KillProcess(Process.MyPid())` + `JavaSystem.Exit(0)`.
      - Menu ấn giữ 3s (`ShowBubbleOptionsDialog`): bổ sung mục `"🛑 Hiện nút (✕) tắt app"` / `"⚪ Ẩn nút (✕) tắt app"`.
-  3. **Xử Lý Sự Kiện Recent Apps Swipe-Up (`ComicBackgroundService.cs`)**:
+  3. **Xử Lý Sự Kiện Recent Apps Swipe-Up An Toàn (`ComicBackgroundService.cs`)**:
      - Override `OnTaskRemoved(Intent? rootIntent)` trong `ComicBackgroundService`:
-     - Tự động gọi `FloatingBubbleManager.HideBubble()`, hủy Foreground Service, giải phóng WakeLock, hủy NotificationId.
-     - Sau đó kích hoạt `Process.KillProcess(Process.MyPid())` và `JavaSystem.Exit(0)` để force stop tắt sạch toàn bộ tiến trình ứng dụng.
+     - Bổ sung rào chắn bảo vệ kiểm tra: Bỏ qua nếu task vừa đóng là `ShareLinkActivity` hoặc nếu `MainActivity` vẫn đang chạy (`CurrentInstance != null && !IsFinishing && !IsDestroyed`).
+     - Chỉ khi `MainActivity` thực sự bị vuốt tắt khỏi Recent Apps mới dọn dẹp Bubble, hủy Foreground Service và kết thúc tiến trình.
+
+### 72. Sửa Lỗi Crash Khi Quay Lại Ứng Dụng Sau Khi Bấm Nút (+) Thêm Link Từ Trình Duyệt Ngoài (Android)
+- **Triệu Chứng**:
+  - Khi đang ở trong app Comic Downloader GMTPC, bấm nút `(+)` của Bubble thì get link truyện bình thường.
+  - Nhưng khi đang ở app khác như trình duyệt web mà copy link rồi bấm nút `(+)` của Bubble, khi quay lại app Comic Downloader GMTPC thì app bị văng/crash.
+- **Nguyên Nhân Cốt Lõi**:
+  1. Khi ở ứng dụng khác (trình duyệt), hệ thống Android 10+ chặn đọc clipboard ngầm, nên Bubble kích hoạt `ShareLinkActivity.LaunchQuickAddFromClipboard` để lấy Window Focus đọc clipboard.
+  2. Trước đây trong khối `finally` của `ShareLinkActivity.ProcessClipboardQuickAdd()`, mã nguồn gọi `FinishAndRemoveTask()`.
+  3. Khi một task bị đóng qua `FinishAndRemoveTask()`, Android OS tự động bắn callback `Service.OnTaskRemoved(rootIntent)` tới `ComicBackgroundService`.
+  4. Trong `ComicBackgroundService.OnTaskRemoved`, trước đây chưa kiểm tra nguồn gốc task và gọi mù quáng `Process.KillProcess(Process.MyPid())` vì tưởng người dùng vuốt tắt app từ Recent Apps!
+  5. Hậu quả: Tiến trình ứng dụng bị bắn hạ SIGKILL ngay trong lúc người dùng vẫn đang ở trình duyệt; khi người dùng mở lại app từ Recent Apps hoặc Launcher, Android cố khôi phục `MainActivity` từ `savedInstanceState` không tương thích với vòng đời Avalonia và gây crash sập app.
+  6. Ngoài ra, việc gọi trực tiếp `MainActivity.CurrentInstance.RunOnUiThread(...)` từ `ShareLinkActivity` và `FloatingBubbleManager` không an toàn bằng việc post thông qua `Avalonia.Threading.Dispatcher.UIThread`.
+- **Giải Pháp Triệt Để**:
+  1. **Thay thế `FinishAndRemoveTask()` bằng `Finish()` trong `ShareLinkActivity.cs`**:
+     - `ShareLinkActivity` đã được cấu hình sẵn `ExcludeFromRecents = true`, `NoHistory = true`, và `TaskAffinity = ""`. Việc gọi `Finish()` đóng cửa sổ tàng hình tức thì, hoàn trả focus cho trình duyệt mà tuyệt đối không kích hoạt `Service.OnTaskRemoved` và không phá hủy task của `MainActivity`.
+  2. **Bổ Sung Rào Chắn Bảo Vệ Trong `ComicBackgroundService.OnTaskRemoved`**:
+     - Kiểm tra nếu `rootIntent?.Component?.ClassName` chứa `"ShareLinkActivity"` hoặc nếu `MainActivity.CurrentInstance` vẫn đang tồn tại bình thường (`!IsFinishing && !IsDestroyed`), lập tức `return` bỏ qua, không bao giờ kill process nhầm.
+  3. **Chuẩn Hóa Luồng Drain Link Qua `Dispatcher.UIThread`**:
+     - Đồng bộ cả `ShareLinkActivity` và `FloatingBubbleManager` sử dụng `Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = vm.DrainPendingSharedLinksAsync())`.
+  4. **Tự Động Phân Tích Link Tồn Đọng Tại `MainActivity.OnResume()`**:
+     - Khi người dùng chuyển từ trình duyệt quay lại giao diện chính `MainActivity`, tự động kích hoạt `DrainPendingSharedLinksAsync()` để nạp truyện tức thì vào danh sách hàng chờ nếu có link mới.

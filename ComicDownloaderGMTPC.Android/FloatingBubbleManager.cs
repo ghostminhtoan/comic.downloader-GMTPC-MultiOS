@@ -994,15 +994,11 @@ public static class FloatingBubbleManager
                         App.EnqueueSharedLinkText(foundUrl);
                         ShareLinkShortcutHelper.ReportDirectShareUsed(context.ApplicationContext ?? context);
 
-                        if (App.IsMainViewReady && MainActivity.CurrentInstance != null)
+                        if (App.IsMainViewReady && App.TryGetSharedMainViewModel() is { } vm)
                         {
-                            MainActivity.CurrentInstance.RunOnUiThread(() =>
+                            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                             {
-                                var vm = App.TryGetSharedMainViewModel();
-                                if (vm != null)
-                                {
-                                    _ = vm.DrainPendingSharedLinksAsync();
-                                }
+                                _ = vm.DrainPendingSharedLinksAsync();
                             });
                         }
 

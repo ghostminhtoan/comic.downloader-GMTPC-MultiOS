@@ -1298,6 +1298,16 @@ public class MainActivity : AvaloniaMainActivity
         }
         catch { }
 
+        // Tự động phân tích và nạp link chia sẻ còn tồn đọng nếu được thêm ngầm khi app ở background
+        try
+        {
+            if (App.IsMainViewReady && App.TryGetSharedMainViewModel() is { } vm)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = vm.DrainPendingSharedLinksAsync());
+            }
+        }
+        catch { }
+
         // Xử lý link chia sẻ hoặc mở tệp truyện nếu app được kích hoạt từ ứng dụng ngoài qua Intent
         if (!HandleIncomingShareLinkIntent(Intent))
         {
@@ -1737,6 +1747,16 @@ public class MainActivity : AvaloniaMainActivity
         try
         {
             ShareLinkShortcutHelper.PublishDirectShareShortcut(ApplicationContext ?? this);
+        }
+        catch { }
+
+        // Tự động phân tích và nạp link chia sẻ còn tồn đọng nếu được thêm ngầm khi app ở background
+        try
+        {
+            if (App.IsMainViewReady && App.TryGetSharedMainViewModel() is { } vm)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = vm.DrainPendingSharedLinksAsync());
+            }
         }
         catch { }
 

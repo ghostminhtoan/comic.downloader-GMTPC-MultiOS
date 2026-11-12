@@ -236,15 +236,11 @@ public class ShareLinkActivity : Activity
 
                 try
                 {
-                    if (App.IsMainViewReady && MainActivity.CurrentInstance != null)
+                    if (App.IsMainViewReady && App.TryGetSharedMainViewModel() is { } vm)
                     {
-                        MainActivity.CurrentInstance.RunOnUiThread(() =>
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                         {
-                            var vm = App.TryGetSharedMainViewModel();
-                            if (vm != null)
-                            {
-                                _ = vm.DrainPendingSharedLinksAsync();
-                            }
+                            _ = vm.DrainPendingSharedLinksAsync();
                         });
                     }
                 }
@@ -265,8 +261,7 @@ public class ShareLinkActivity : Activity
         {
             try
             {
-                MoveTaskToBack(true);
-                FinishAndRemoveTask();
+                Finish();
                 DisableActivityTransitions();
             }
             catch

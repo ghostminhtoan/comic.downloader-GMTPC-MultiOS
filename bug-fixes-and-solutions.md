@@ -2291,3 +2291,38 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC/Services/HitomiResolverService.cs`
   - `ComicDownloaderGMTPC/Services/ComicScraperService.cs`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+---
+
+### BUG-063: Lỗi Văng/Crash Ứng Dụng Khi Quay Lại Từ Trình Duyệt Sau Khi Bấm Nút (+) Thêm Link Trên Floating Bubble (Android)
+
+- **Hiện tượng**:
+  - Khi đang ở bên trong ứng dụng Comic Downloader GMTPC, copy link và bấm dấu (+) của Bubble thì ứng dụng tự động bóc tách link truyện và thêm vào hàng chờ bình thường.
+  - Nhưng khi đang ở ứng dụng ngoài như trình duyệt web (Chrome, Firefox...) mà copy link rồi bấm dấu (+) của Bubble thì ứng dụng vẫn báo Toast đã nạp link, nhưng khi bấm quay lại ứng dụng Comic Downloader GMTPC thì ứng dụng bị văng/crash ngay lập tức.
+
+- **Nguyên nhân kỹ thuật**:
+  1. **Android 10+ Background Clipboard Security**: Khi người dùng ở app ngoài, tiến trình nền không có Input Focus nên `FloatingBubbleManager.TryDirectClipboardQuickAdd` trả về `false`.
+  2. **Kích hoạt Activity trung gian**: Ứng dụng khởi động `ShareLinkActivity.LaunchQuickAddFromClipboard` tàng hình để lấy Window Focus nhằm trích xuất liên kết từ bộ nhớ tạm.
+  3. **Tác dụng phụ tai hại của `FinishAndRemoveTask()`**: Trong khối `finally` của `ShareLinkActivity.ProcessClipboardQuickAdd()`, mã nguồn gọi `FinishAndRemoveTask()`.
+  4. **Kích hoạt nhầm `ComicBackgroundService.OnTaskRemoved()`**: Khi bất kỳ Activity nào gọi `FinishAndRemoveTask()`, hệ điều hành Android tự động kích hoạt callback `Service.OnTaskRemoved(rootIntent)` trên toàn bộ background services của ứng dụng.
+  5. **Force Stop mù quáng**: Trong `ComicBackgroundService.OnTaskRemoved`, trước đây chưa kiểm tra nguồn gốc task và gọi thẳng lệnh kill process `Process.KillProcess(Process.MyPid())` và `JavaSystem.Exit(0)` vì mặc định coi đây là sự kiện người dùng vuốt tắt ứng dụng từ màn hình Recent Apps!
+  6. **Crash khi khôi phục tiến trình chết**: Hậu quả là tiến trình app bị SIGKILL âm thầm ngay khi đang ở trình duyệt; khi người dùng mở lại app từ Recent Apps hoặc Launcher, Android cố khôi phục `MainActivity` từ `savedInstanceState` không tương thích với Avalonia SingleView, dẫn đến crash văng app.
+  7. **Chạy sai Thread Dispatcher**: Việc gọi `MainActivity.CurrentInstance.RunOnUiThread(...)` từ `ShareLinkActivity` và `FloatingBubbleManager` không đảm bảo an toàn bằng `Avalonia.Threading.Dispatcher.UIThread.Post(...)`.
+
+- **Giải pháp triệt để**:
+  1. **Thay `FinishAndRemoveTask()` bằng `Finish()` trong `ShareLinkActivity.cs`**:
+     - `ShareLinkActivity` đã có `ExcludeFromRecents = true`, `NoHistory = true`, và `TaskAffinity = ""`. Chỉ cần gọi `Finish()` đóng Activity tàng hình lập tức mà không bao giờ kích hoạt `Service.OnTaskRemoved` hay làm ảnh hưởng task chính.
+  2. **Bổ sung rào chắn bảo vệ trong `ComicBackgroundService.OnTaskRemoved()`**:
+     - Kiểm tra nếu `rootIntent?.Component?.ClassName` chứa `"ShareLinkActivity"` hoặc nếu `MainActivity.CurrentInstance` vẫn đang hoạt động (`!IsFinishing && !IsDestroyed`), lập tức `return` bỏ qua, tuyệt đối không kill process.
+  3. **Chuẩn hóa luồng UI qua `Dispatcher.UIThread`**:
+     - Cả `ShareLinkActivity` và `FloatingBubbleManager` đều sử dụng `Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = vm.DrainPendingSharedLinksAsync())`.
+  4. **Tự động Drain Link Tồn Đọng Tại `MainActivity.OnResume()`**:
+     - Bổ sung cơ chế tự động gọi `DrainPendingSharedLinksAsync()` ngay khi `MainActivity` thức giấc trở lại foreground.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC.Android/ShareLinkActivity.cs`
+  - `ComicDownloaderGMTPC.Android/ComicBackgroundService.cs`
+  - `ComicDownloaderGMTPC.Android/FloatingBubbleManager.cs`
+  - `ComicDownloaderGMTPC.Android/MainActivity.cs`
+  - `Comic Downloader GMTPC AVALONIA/workflow-avalonia.md`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

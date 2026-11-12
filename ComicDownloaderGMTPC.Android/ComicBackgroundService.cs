@@ -1038,6 +1038,21 @@ public class ComicBackgroundService : Service
         base.OnTaskRemoved(rootIntent);
         try
         {
+            // Kiểm tra an toàn: Tuyệt đối không tắt app nếu task vừa đóng không phải là MainActivity (ví dụ ShareLinkActivity)
+            // hoặc nếu MainActivity vẫn đang hoạt động bình thường không trong trạng thái Finishing/Destroyed.
+            string? className = rootIntent?.Component?.ClassName;
+            if (!string.IsNullOrEmpty(className) && className.Contains("ShareLinkActivity", StringComparison.OrdinalIgnoreCase))
+            {
+                global::Android.Util.Log.Info("ComicGMTPC", "OnTaskRemoved: Bỏ qua vì task vừa đóng là ShareLinkActivity.");
+                return;
+            }
+
+            if (MainActivity.CurrentInstance != null && !MainActivity.CurrentInstance.IsFinishing && !MainActivity.CurrentInstance.IsDestroyed)
+            {
+                global::Android.Util.Log.Info("ComicGMTPC", "OnTaskRemoved: Bỏ qua vì MainActivity vẫn đang hoạt động.");
+                return;
+            }
+
             global::Android.Util.Log.Info("ComicGMTPC", "OnTaskRemoved: Người dùng đã vuốt tắt ứng dụng từ Recent Apps -> Thực hiện Force Stop.");
 
             // 1. Dọn dẹp và ẩn Bong bóng nổi
