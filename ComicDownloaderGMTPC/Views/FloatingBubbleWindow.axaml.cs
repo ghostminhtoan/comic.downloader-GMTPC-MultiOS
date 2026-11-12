@@ -461,7 +461,20 @@ public partial class FloatingBubbleWindow : Window
             UpdateQuickAddVisualState();
         };
 
+        bool isCloseEnabled = InstanceConfigService.Instance.IsBubbleCloseButtonEnabled;
+        var itemToggleClose = new MenuItem
+        {
+            Header = isCloseEnabled ? "⚪ Ẩn nút (✕) tắt app" : "🛑 Hiện nút (✕) tắt app",
+            FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xF4, 0x3F, 0x5E))
+        };
+        itemToggleClose.Click += (_, _) =>
+        {
+            InstanceConfigService.Instance.IsBubbleCloseButtonEnabled = !InstanceConfigService.Instance.IsBubbleCloseButtonEnabled;
+        };
+
         menu.Items.Add(itemToggleQuickAdd);
+        menu.Items.Add(itemToggleClose);
         menu.Items.Add(new Separator());
         menu.Items.Add(itemCloseBubble);
         menu.Items.Add(new Separator());

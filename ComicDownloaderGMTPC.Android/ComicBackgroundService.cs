@@ -1029,6 +1029,61 @@ public class ComicBackgroundService : Service
 
 
 
+    /// <summary>
+    /// Kích hoạt khi người dùng vuốt ứng dụng khỏi màn hình Recent Apps (đa nhiệm).
+    /// Tiến hành Force Stop tắt hoàn toàn ứng dụng, giải phóng RAM và tiến trình.
+    /// </summary>
+    public override void OnTaskRemoved(Intent? rootIntent)
+    {
+        base.OnTaskRemoved(rootIntent);
+        try
+        {
+            global::Android.Util.Log.Info("ComicGMTPC", "OnTaskRemoved: Người dùng đã vuốt tắt ứng dụng từ Recent Apps -> Thực hiện Force Stop.");
+
+            // 1. Dọn dẹp và ẩn Bong bóng nổi
+            try
+            {
+                FloatingBubbleManager.HideBubble();
+            }
+            catch { }
+
+            // 2. Dừng Foreground Service và giải phóng WakeLock
+            try
+            {
+                if (OperatingSystem.IsAndroidVersionAtLeast(24))
+                {
+                    StopForeground(StopForegroundFlags.Remove);
+                }
+                else
+                {
+                    StopForeground(true);
+                }
+                StopSelf();
+                ReleaseWakeLock();
+
+                var nm = NotificationManagerCompat.From(this);
+                nm?.Cancel(NotificationId);
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi xử lý OnTaskRemoved: {ex.Message}");
+        }
+        finally
+        {
+            // 3. Force stop tắt hẳn app ngay lập tức
+            try
+            {
+                global::Android.OS.Process.KillProcess(global::Android.OS.Process.MyPid());
+                Java.Lang.JavaSystem.Exit(0);
+            }
+            catch { }
+        }
+    }
+
+
+
     public static void Stop(Context context)
 
     {

@@ -189,6 +189,17 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [ObservableProperty]
+    private bool _isBubbleCloseButtonEnabled = InstanceConfigService.Instance.IsBubbleCloseButtonEnabled;
+
+    partial void OnIsBubbleCloseButtonEnabledChanged(bool value)
+    {
+        if (InstanceConfigService.Instance.IsBubbleCloseButtonEnabled != value)
+        {
+            InstanceConfigService.Instance.IsBubbleCloseButtonEnabled = value;
+        }
+    }
+
+    [ObservableProperty]
     private bool _isExitConfirmOpen = false;
 
     [ObservableProperty]
@@ -2239,6 +2250,17 @@ public partial class MainViewModel : ViewModelBase
                 if (IsBubbleQuickAddButtonEnabled != enabled)
                 {
                     IsBubbleQuickAddButtonEnabled = enabled;
+                }
+            });
+        };
+
+        InstanceConfigService.Instance.BubbleCloseButtonEnabledChanged += enabled =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (IsBubbleCloseButtonEnabled != enabled)
+                {
+                    IsBubbleCloseButtonEnabled = enabled;
                 }
             });
         };

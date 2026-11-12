@@ -971,3 +971,25 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   3. **Cấu Hình & Đồng Bộ Trạng Thái (`InstanceConfigService.cs`, `MainViewModel.cs`, `MainView.axaml`)**:
      - Thêm thuộc tính `IsBubbleQuickAddButtonEnabled` kèm sự kiện `BubbleQuickAddButtonEnabledChanged` phát tín hiệu thời gian thực cho mọi cửa sổ Bong bóng.
      - CheckBox `"➕ Hiển thị nút (+) thêm link nhanh cạnh Bong bóng nổi"` được tích hợp trực tiếp vào Khối 5 (Chế độ Bong bóng nổi) trong tab Cài đặt.
+
+
+### 71. Nút (✕) Vệ Tinh Force Stop Tắt Hẳn App, Độc Lập Task Trình Duyệt Khi Bấm (+) & Tự Động Force Stop Khi Vuốt Recent Apps (Android)
+- **Mục Tiêu & Trải Nghiệm Người Dùng (UX)**:
+  - **Bấm Nút (+) Giữ Nguyên Trình Duyệt**: Khi người dùng chạm nút (+) trên Bubble để nạp link từ clipboard, ứng dụng hoàn toàn không bao giờ đem màn hình chính `MainActivity` lên che trình duyệt; sau khi nạp link vào hàng chờ ngầm (kèm Toast báo thành công), người dùng vẫn ở lại 100% trong trình duyệt web mà không phải mở lại.
+  - **Nút Toggle & Nút (✕) Vệ Tinh Tắt Hẳn Ứng Dụng**: Trên thân Bubble bổ sung thêm nút toggle mini thứ 2 (icon `✕` đỏ khi bật, `○` khi tắt) để bật/tắt nút vệ tinh `(✕)` cạnh Bubble. Khi bấm nút vệ tinh `(✕)` (màu đỏ neon 36dp xếp dọc cân đối cùng nút `(+)`), ứng dụng sẽ thực hiện **Force Stop** tắt hoàn toàn ứng dụng, dừng Foreground Service, hủy notification và tắt sạch tiến trình.
+  - **Tự Động Force Stop Khi Vuốt Tắt App Trong Recent Apps**: Khi người dùng vào màn hình Đa nhiệm (Recent Apps) và vuốt thẻ ứng dụng lên để đóng (Dismiss Task), toàn bộ Foreground Service và Bong bóng nổi sẽ tự động dọn dẹp và gọi Force Stop để tắt hẳn tiến trình, không để app chạy ngầm ngoài ý muốn.
+- **Kiến Trúc Triển Khai**:
+  1. **Độc Lập TaskAffinity Cho Cửa Sổ Trích Xuất Clipboard (`ShareLinkActivity.cs`)**:
+     - Cấu hình `TaskAffinity = ""` và `LaunchMode = LaunchMode.Multiple` kết hợp cờ `ActivityFlags.MultipleTask | ActivityFlags.NewTask | ActivityFlags.NoAnimation | ActivityFlags.ExcludeFromRecents`.
+     - Chạy hoàn toàn trên Task độc lập, tuyệt đối không gộp chung hay kéo Task của `MainActivity` lên foreground.
+     - Sau khi nạp link: gọi `MoveTaskToBack(true)` và `FinishAndRemoveTask()`, hệ điều hành tự động giữ nguyên và trao quyền cho trình duyệt web người dùng đang dùng.
+  2. **Bổ Sung Nút Toggle & Nút Vệ Tinh (✕) Force Stop (`FloatingBubbleManager.cs`, `InstanceConfigService.cs`)**:
+     - `_toggleCloseView`: TextView mini 18dp ở góc trên đối diện `_toggleQuickAddView`, chạm để bật/tắt nút (✕) vệ tinh, lưu cấu hình vào `IsBubbleCloseButtonEnabled`.
+     - `_closeSatelliteView`: Nút vệ tinh tròn 36dp màu đỏ Crimson Gradient (`#EF4444` ➔ `#B91C1C`), viền neon `#F87171`, icon `✕` trắng đậm.
+     - Cơ chế bố cục cụm vệ tinh kép song song (`SyncSatellitePosition`): Khi cả `(+)` và `(✕)` cùng bật, tự động xếp dọc cách nhau 6dp, căn giữa theo chiều cao 60dp của Bubble; khi chỉ bật 1 nút thì tự động căn giữa.
+     - Khi bấm `(✕)`: gọi `ForceStopApp(context)`, ẩn Bubble, dừng `ComicBackgroundService`, gọi `FinishAffinity()` và kill tiến trình qua `Process.KillProcess(Process.MyPid())` + `JavaSystem.Exit(0)`.
+     - Menu ấn giữ 3s (`ShowBubbleOptionsDialog`): bổ sung mục `"🛑 Hiện nút (✕) tắt app"` / `"⚪ Ẩn nút (✕) tắt app"`.
+  3. **Xử Lý Sự Kiện Recent Apps Swipe-Up (`ComicBackgroundService.cs`)**:
+     - Override `OnTaskRemoved(Intent? rootIntent)` trong `ComicBackgroundService`:
+     - Tự động gọi `FloatingBubbleManager.HideBubble()`, hủy Foreground Service, giải phóng WakeLock, hủy NotificationId.
+     - Sau đó kích hoạt `Process.KillProcess(Process.MyPid())` và `JavaSystem.Exit(0)` để force stop tắt sạch toàn bộ tiến trình ứng dụng.

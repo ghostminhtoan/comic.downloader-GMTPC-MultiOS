@@ -17,6 +17,29 @@ public sealed class InstanceConfigService
     private bool _isManualDownloadMode = false;
     private string _manualDownloadMode = "Direct"; // "Direct" (Trực tiếp) hoặc "Embedded" (Nhúng)
     private bool _isBubbleQuickAddButtonEnabled = true;
+    private bool _isBubbleCloseButtonEnabled = true;
+
+    /// <summary>
+    /// Bắn tín hiệu khi trạng thái nút (✕) tắt app cạnh Bong bóng thay đổi.
+    /// </summary>
+    public event Action<bool>? BubbleCloseButtonEnabledChanged;
+
+    /// <summary>
+    /// Checkbox bật/tắt nút (✕) tắt hẳn app cạnh Bong bóng nổi (mặc định là bật: true).
+    /// </summary>
+    public bool IsBubbleCloseButtonEnabled
+    {
+        get => _isBubbleCloseButtonEnabled;
+        set
+        {
+            if (_isBubbleCloseButtonEnabled != value)
+            {
+                _isBubbleCloseButtonEnabled = value;
+                SaveConfig();
+                BubbleCloseButtonEnabledChanged?.Invoke(value);
+            }
+        }
+    }
 
     /// <summary>
     /// Bắn tín hiệu khi trạng thái nút (+) thêm link nhanh trên Bong bóng thay đổi.
@@ -131,6 +154,14 @@ public sealed class InstanceConfigService
                 {
                     _isBubbleQuickAddButtonEnabled = true;
                 }
+                if (doc.RootElement.TryGetProperty("IsBubbleCloseButtonEnabled", out var propClose))
+                {
+                    _isBubbleCloseButtonEnabled = propClose.GetBoolean();
+                }
+                else
+                {
+                    _isBubbleCloseButtonEnabled = true;
+                }
             }
             else
             {
@@ -138,6 +169,7 @@ public sealed class InstanceConfigService
                 _isManualDownloadMode = false;   // Mặc định là TẮT
                 _manualDownloadMode = "Direct";
                 _isBubbleQuickAddButtonEnabled = true; // Mặc định là BẬT
+                _isBubbleCloseButtonEnabled = true;    // Mặc định là BẬT
             }
         }
         catch
@@ -146,6 +178,7 @@ public sealed class InstanceConfigService
             _isManualDownloadMode = false;
             _manualDownloadMode = "Direct";
             _isBubbleQuickAddButtonEnabled = true;
+            _isBubbleCloseButtonEnabled = true;
         }
     }
 
@@ -164,7 +197,8 @@ public sealed class InstanceConfigService
                 IsMultiInstanceEnabled = _isMultiInstanceEnabled,
                 IsManualDownloadMode = _isManualDownloadMode,
                 ManualDownloadMode = _manualDownloadMode,
-                IsBubbleQuickAddButtonEnabled = _isBubbleQuickAddButtonEnabled
+                IsBubbleQuickAddButtonEnabled = _isBubbleQuickAddButtonEnabled,
+                IsBubbleCloseButtonEnabled = _isBubbleCloseButtonEnabled
             };
             string json = JsonSerializer.Serialize(model, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_configFilePath, json);

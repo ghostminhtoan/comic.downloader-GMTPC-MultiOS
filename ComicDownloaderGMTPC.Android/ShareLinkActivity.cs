@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Android.App;
 using Android.Content;
+using Android.Content.PM;
 using Android.OS;
 using Android.Widget;
 using AndroidX.Core.Content.PM;
@@ -94,6 +95,8 @@ public static class ShareLinkShortcutHelper
     Theme = "@android:style/Theme.Translucent.NoTitleBar",
     NoHistory = true,
     ExcludeFromRecents = true,
+    TaskAffinity = "",
+    LaunchMode = LaunchMode.Multiple,
     Exported = true)]
 [IntentFilter(
     new[] { Intent.ActionSend },
@@ -121,7 +124,7 @@ public class ShareLinkActivity : Activity
         {
             var intent = new Intent(context, typeof(ShareLinkActivity));
             intent.SetAction(ActionQuickAddFromClipboard);
-            intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.ClearTop | ActivityFlags.SingleTop);
+            intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.MultipleTask | ActivityFlags.NoAnimation | ActivityFlags.ExcludeFromRecents);
             context.StartActivity(intent);
         }
         catch (Exception ex)
@@ -262,10 +265,14 @@ public class ShareLinkActivity : Activity
         {
             try
             {
-                Finish();
+                MoveTaskToBack(true);
+                FinishAndRemoveTask();
                 DisableActivityTransitions();
             }
-            catch { }
+            catch
+            {
+                try { Finish(); } catch { }
+            }
         }
     }
 
