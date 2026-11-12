@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Android.Animation;
 using Android.App;
 using Android.Content;
@@ -756,7 +756,7 @@ public static class FloatingBubbleManager
     {
         if (_quickAddSatelliteView == null) return;
         bool isEnabled = InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
-        if (!isEnabled || _isDocked)
+        if (!isEnabled)
         {
             _quickAddSatelliteView.Visibility = ViewStates.Gone;
             return;
@@ -791,6 +791,46 @@ public static class FloatingBubbleManager
             _quickAddSatelliteView.LayoutParameters = _inAppSatelliteLp;
             _quickAddSatelliteView.RequestLayout();
         }
+    }
+
+    private static bool TryDirectClipboardQuickAdd(Context context)
+    {
+        try
+        {
+            var clipboard = (ClipboardManager?)context.GetSystemService(Context.ClipboardService);
+            if (clipboard != null && clipboard.HasPrimaryClip && clipboard.PrimaryClip != null && clipboard.PrimaryClip.ItemCount > 0)
+            {
+                var item = clipboard.PrimaryClip.GetItemAt(0);
+                string? text = item?.Text ?? item?.Uri?.ToString() ?? item?.CoerceToText(context)?.ToString();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(text, @"https?://[^\s<>""'()\[\]{}]+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        string foundUrl = match.Value.Trim().TrimEnd('.', ',', ';', '!', '?');
+                        App.EnqueueSharedLinkText(foundUrl);
+                        ShareLinkShortcutHelper.ReportDirectShareUsed(context.ApplicationContext ?? context);
+
+                        if (App.IsMainViewReady && MainActivity.CurrentInstance != null)
+                        {
+                            MainActivity.CurrentInstance.RunOnUiThread(() =>
+                            {
+                                var vm = App.TryGetSharedMainViewModel();
+                                if (vm != null)
+                                {
+                                    _ = vm.DrainPendingSharedLinksAsync();
+                                }
+                            });
+                        }
+
+                        Toast.MakeText(context, "📥 Đã nạp link vào hàng chờ tải!", ToastLength.Short)?.Show();
+                        return true;
+                    }
+                }
+            }
+        }
+        catch { }
+        return false;
     }
 
     private static View CreateQuickAddSatelliteView(Context context)
@@ -837,6 +877,13 @@ public static class FloatingBubbleManager
             }
             catch { }
 
+            // Bước 1: Thử Fast Path đọc clipboard trực tiếp nếu đang có quyền focus (ví dụ In-App hoặc Android <= 9)
+            if (TryDirectClipboardQuickAdd(context))
+            {
+                return;
+            }
+
+            // Bước 2: Kích hoạt ShareLinkActivity để nhận Window Focus đọc clipboard trên Android 10+
             ShareLinkActivity.LaunchQuickAddFromClipboard(context);
         }));
 
@@ -858,9 +905,13 @@ public static class FloatingBubbleManager
     {
         if (_bubbleView == null || _isDocked) return;
         _isDocked = true;
-        if (_quickAddSatelliteView != null)
+
+        if (_quickAddSatelliteView != null && InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled)
         {
-            _quickAddSatelliteView.Visibility = ViewStates.Gone;
+            _quickAddSatelliteView.Animate()
+                ?.Alpha(0.45f)
+                ?.SetDuration(300)
+                ?.Start();
         }
 
         var context = _bubbleView.Context;
@@ -893,6 +944,15 @@ public static class FloatingBubbleManager
                     ?.SetDuration(280)
                     ?.SetInterpolator(new DecelerateInterpolator())
                     ?.Start();
+                if (_quickAddSatelliteView != null && InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled)
+                {
+                    _quickAddSatelliteView.Animate()
+                        ?.TranslationX(targetTransX)
+                        ?.Alpha(0.45f)
+                        ?.SetDuration(280)
+                        ?.SetInterpolator(new DecelerateInterpolator())
+                        ?.Start();
+                }
             }
         }
         else
@@ -916,6 +976,14 @@ public static class FloatingBubbleManager
             ?.Alpha(1.0f)
             ?.SetDuration(150)
             ?.Start();
+
+        if (_quickAddSatelliteView != null && InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled)
+        {
+            _quickAddSatelliteView.Animate()
+                ?.Alpha(1.0f)
+                ?.SetDuration(150)
+                ?.Start();
+        }
 
         // Nếu đang thụt vào mép, trượt bung ra toàn bộ
         if (_isDocked)
@@ -946,6 +1014,14 @@ public static class FloatingBubbleManager
                             StartIdleTimer();
                         }))
                         ?.Start();
+                    if (_quickAddSatelliteView != null && InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled)
+                    {
+                        _quickAddSatelliteView.Animate()
+                            ?.TranslationX(0f)
+                            ?.SetDuration(200)
+                            ?.SetInterpolator(new DecelerateInterpolator())
+                            ?.Start();
+                    }
                 }
             }
             else
@@ -982,6 +1058,7 @@ public static class FloatingBubbleManager
                     {
                         _systemLayoutParams.X = (int)e.Animation.AnimatedValue!;
                         _windowManager.UpdateViewLayout(_bubbleView, _systemLayoutParams);
+                        SyncSatellitePosition();
                     }
                 }
                 catch { }
@@ -1655,6 +1732,7 @@ public static class FloatingBubbleManager
                     {
                         _bubbleView.LayoutParameters = _lp;
                     }
+                    SyncSatellitePosition();
                 }
                 catch { }
             };

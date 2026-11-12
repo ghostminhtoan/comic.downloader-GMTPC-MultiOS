@@ -111,6 +111,10 @@ public class ShareLinkActivity : Activity
 {
     public const string ActionQuickAddFromClipboard = "com.CompanyName.ComicDownloaderGMTPC.action.QUICK_ADD_CLIPBOARD";
 
+    private bool _isClipboardHandled = false;
+    private readonly Handler _handler = new(Looper.MainLooper!);
+    private Java.Lang.Runnable? _timeoutFallbackRunnable;
+
     public static void LaunchQuickAddFromClipboard(Context context)
     {
         try
@@ -134,7 +138,26 @@ public class ShareLinkActivity : Activity
         {
             if (string.Equals(Intent?.Action, ActionQuickAddFromClipboard, StringComparison.Ordinal))
             {
-                HandleQuickAddFromClipboard();
+                DisableActivityTransitions();
+
+                // Thiết lập View vô hình để Activity được trao Window Focus từ hệ thống Android 10+
+                var dummyView = new global::Android.Views.View(this)
+                {
+                    Focusable = true,
+                    FocusableInTouchMode = true
+                };
+                SetContentView(dummyView);
+                dummyView.RequestFocus();
+
+                // Lên lịch fallback dự phòng sau 350ms trong trường hợp OEM ROM hoãn OnWindowFocusChanged
+                _timeoutFallbackRunnable = new Java.Lang.Runnable(() =>
+                {
+                    if (!_isClipboardHandled && !IsFinishing && !IsDestroyed)
+                    {
+                        ProcessClipboardQuickAdd();
+                    }
+                });
+                _handler.PostDelayed(_timeoutFallbackRunnable, 350);
                 return;
             }
 
@@ -158,25 +181,54 @@ public class ShareLinkActivity : Activity
         }
         finally
         {
-            Finish();
+            if (!string.Equals(Intent?.Action, ActionQuickAddFromClipboard, StringComparison.Ordinal))
+            {
+                Finish();
+            }
         }
     }
 
-    private void HandleQuickAddFromClipboard()
+    public override void OnWindowFocusChanged(bool hasFocus)
     {
+        base.OnWindowFocusChanged(hasFocus);
+
+        if (hasFocus && string.Equals(Intent?.Action, ActionQuickAddFromClipboard, StringComparison.Ordinal))
+        {
+            if (!_isClipboardHandled)
+            {
+                if (_timeoutFallbackRunnable != null)
+                {
+                    _handler.RemoveCallbacks(_timeoutFallbackRunnable);
+                    _timeoutFallbackRunnable = null;
+                }
+                // Delay 40ms để bảo đảm WindowManagerService và ClipboardService hoàn tất cấp quyền truy cập
+                _handler.PostDelayed(ProcessClipboardQuickAdd, 40);
+            }
+        }
+    }
+
+    protected override void OnDestroy()
+    {
+        base.OnDestroy();
+        if (_timeoutFallbackRunnable != null)
+        {
+            _handler.RemoveCallbacks(_timeoutFallbackRunnable);
+            _timeoutFallbackRunnable = null;
+        }
+    }
+
+    private void ProcessClipboardQuickAdd()
+    {
+        if (_isClipboardHandled) return;
+        _isClipboardHandled = true;
+
         try
         {
-            var clipboard = (ClipboardManager?)GetSystemService(ClipboardService);
-            string? text = null;
-            if (clipboard != null && clipboard.HasPrimaryClip && clipboard.PrimaryClip != null && clipboard.PrimaryClip.ItemCount > 0)
-            {
-                var item = clipboard.PrimaryClip.GetItemAt(0);
-                text = item?.Text ?? item?.Uri?.ToString() ?? item?.CoerceToText(this)?.ToString();
-            }
+            string? foundUrlOrText = ExtractBestUrlFromClipboard();
 
-            if (!string.IsNullOrWhiteSpace(text) && (text.Contains("http://", StringComparison.OrdinalIgnoreCase) || text.Contains("https://", StringComparison.OrdinalIgnoreCase)))
+            if (!string.IsNullOrWhiteSpace(foundUrlOrText))
             {
-                App.EnqueueSharedLinkText(text);
+                App.EnqueueSharedLinkText(foundUrlOrText);
                 ShareLinkShortcutHelper.ReportDirectShareUsed(ApplicationContext ?? this);
 
                 try
@@ -208,7 +260,112 @@ public class ShareLinkActivity : Activity
         }
         finally
         {
-            Finish();
+            try
+            {
+                Finish();
+                DisableActivityTransitions();
+            }
+            catch { }
+        }
+    }
+
+    private void DisableActivityTransitions()
+    {
+        try
+        {
+#pragma warning disable CA1422
+            OverridePendingTransition(0, 0);
+#pragma warning restore CA1422
+        }
+        catch { }
+    }
+
+    private string? ExtractBestUrlFromClipboard()
+    {
+        try
+        {
+            var clipboard = (ClipboardManager?)GetSystemService(ClipboardService);
+            if (clipboard == null || !clipboard.HasPrimaryClip || clipboard.PrimaryClip == null || clipboard.PrimaryClip.ItemCount == 0)
+            {
+                return null;
+            }
+
+            var clipData = clipboard.PrimaryClip;
+            var parts = new List<string>();
+
+            for (int i = 0; i < clipData.ItemCount; i++)
+            {
+                var item = clipData.GetItemAt(i);
+                if (item == null) continue;
+
+                if (!string.IsNullOrWhiteSpace(item.Text))
+                {
+                    parts.Add(item.Text);
+                }
+                string? uriStr = item.Uri?.ToString();
+                if (!string.IsNullOrWhiteSpace(uriStr))
+                {
+                    parts.Add(uriStr);
+                }
+                if (!string.IsNullOrWhiteSpace(item.HtmlText))
+                {
+                    parts.Add(item.HtmlText);
+                }
+                try
+                {
+                    string? coerced = item.CoerceToText(this)?.ToString();
+                    if (!string.IsNullOrWhiteSpace(coerced) && !parts.Contains(coerced))
+                    {
+                        parts.Add(coerced);
+                    }
+                }
+                catch { }
+            }
+
+            if (parts.Count == 0) return null;
+
+            var urlRegex = new System.Text.RegularExpressions.Regex(@"https?://[^\s<>""'()\[\]{}]+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var foundUrls = new List<string>();
+            var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var part in parts)
+            {
+                var matches = urlRegex.Matches(part);
+                foreach (System.Text.RegularExpressions.Match m in matches)
+                {
+                    if (m.Success)
+                    {
+                        string url = m.Value.Trim().TrimEnd('.', ',', ';', '!', '?', ')', ']');
+                        if (seenUrls.Add(url))
+                        {
+                            foundUrls.Add(url);
+                        }
+                    }
+                }
+            }
+
+            if (foundUrls.Count > 0)
+            {
+                return string.Join(System.Environment.NewLine, foundUrls);
+            }
+
+            // Fallback nếu người dùng copy link không chứa tiền tố http/https
+            foreach (var part in parts)
+            {
+                string trimmed = part.Trim();
+                if (trimmed.Contains(".") && !trimmed.Contains(" ") &&
+                    (trimmed.Contains("/manga") || trimmed.Contains("/truyen") || trimmed.Contains("cuutruyen") || trimmed.Contains("nettruyen") || trimmed.Contains("blogtruyen") || trimmed.Contains("truyenqq") || trimmed.Contains("cmanga")))
+                {
+                    return "https://" + trimmed.TrimStart('/', ':');
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC_Share", $"Lỗi trích xuất URL từ clipboard: {ex.Message}");
+            return null;
         }
     }
 

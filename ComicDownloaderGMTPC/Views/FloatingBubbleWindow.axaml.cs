@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
@@ -361,8 +361,6 @@ public partial class FloatingBubbleWindow : Window
         Dispatcher.UIThread.Post(() =>
         {
             Opacity = 0.45;
-            if (QuickAddLeftButton != null) QuickAddLeftButton.IsVisible = false;
-            if (QuickAddRightButton != null) QuickAddRightButton.IsVisible = false;
 
             // Nếu đang ở sát mép màn hình: Tự động thụt 55% thân bóng vào mép
             if (_isAtEdge && !_isDocked)
@@ -577,7 +575,7 @@ public partial class FloatingBubbleWindow : Window
                 : new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8));
         }
 
-        bool shouldShow = isEnabled && !_isDocked;
+        bool shouldShow = isEnabled;
         if (QuickAddLeftButton != null)
         {
             QuickAddLeftButton.IsVisible = shouldShow && _isRightSide;
