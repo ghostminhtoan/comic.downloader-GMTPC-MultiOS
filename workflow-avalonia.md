@@ -987,8 +987,10 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
      - `_toggleCloseView`: TextView mini 18dp ở góc trên đối diện `_toggleQuickAddView`, chạm để bật/tắt nút (✕) vệ tinh, lưu cấu hình vào `IsBubbleCloseButtonEnabled`.
      - `_closeSatelliteView`: Nút vệ tinh tròn 36dp màu đỏ Crimson Gradient (`#EF4444` ➔ `#B91C1C`), viền neon `#F87171`, icon `✕` trắng đậm.
      - Cơ chế bố cục cụm vệ tinh kép song song (`SyncSatellitePosition`): Khi cả `(+)` và `(✕)` cùng bật, tự động xếp dọc cách nhau 6dp, căn giữa theo chiều cao 60dp của Bubble; khi chỉ bật 1 nút thì tự động căn giữa.
-     - Khi bấm `(✕)`: gọi `ForceStopApp(context)`, ẩn Bubble, dừng `ComicBackgroundService`, gọi `FinishAffinity()` và kill tiến trình qua `Process.KillProcess(Process.MyPid())` + `JavaSystem.Exit(0)`.
-     - Menu ấn giữ 3s (`ShowBubbleOptionsDialog`): bổ sung mục `"🛑 Hiện nút (✕) tắt app"` / `"⚪ Ẩn nút (✕) tắt app"`.
+     - Khi bấm `(✕)`: hiển thị hộp thoại `ShowBubbleCloseOptionsDialog` cung cấp 2 tùy chọn trực quan:
+       + `🚫 Tắt bubble`: Chỉ ẩn Bong bóng nổi khỏi màn hình, app và tiến trình tải ngầm vẫn hoạt động bình thường.
+       + `🛑 Tắt hẳn app`: Gọi `ForceStopApp(context)` tắt hoàn toàn ứng dụng, dừng Foreground Service, hủy notification và tắt sạch tiến trình.
+     - Menu ấn giữ 3s (`ShowBubbleOptionsDialog`): bổ sung mục `"🛑 Hiện nút (✕) đóng/tắt"` / `"⚪ Ẩn nút (✕) đóng/tắt"`.
   3. **Xử Lý Sự Kiện Recent Apps Swipe-Up An Toàn (`ComicBackgroundService.cs`)**:
      - Override `OnTaskRemoved(Intent? rootIntent)` trong `ComicBackgroundService`:
      - Bổ sung rào chắn bảo vệ kiểm tra: Bỏ qua nếu task vừa đóng là `ShareLinkActivity` hoặc nếu `MainActivity` vẫn đang chạy (`CurrentInstance != null && !IsFinishing && !IsDestroyed`).

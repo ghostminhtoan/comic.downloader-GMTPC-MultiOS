@@ -850,7 +850,7 @@ public static class FloatingBubbleManager
         InstanceConfigService.Instance.IsBubbleCloseButtonEnabled = newState;
         UpdateToggleCloseVisual();
         SyncSatellitePosition();
-        string msg = newState ? "🛑 Đã bật nút (✕) tắt app cạnh bong bóng" : "⚪ Đã ẩn nút (✕) tắt app";
+        string msg = newState ? "🛑 Đã bật nút (✕) đóng/tắt cạnh bong bóng" : "⚪ Đã ẩn nút (✕) đóng/tắt";
         try { Toast.MakeText(context, msg, ToastLength.Short)?.Show(); } catch { }
     }
 
@@ -1113,10 +1113,89 @@ public static class FloatingBubbleManager
             }
             catch { }
 
-            ForceStopApp(context);
+            ShowBubbleCloseOptionsDialog(context);
         }));
 
         return satButton;
+    }
+
+    /// <summary>
+    /// Hiển thị hộp thoại khi chạm nút (✕) vệ tinh, cung cấp 2 tùy chọn rõ ràng cho người dùng:
+    /// 1. Tắt bubble (chỉ ẩn bong bóng nổi, app vẫn tiếp tục chạy ngầm tải truyện)
+    /// 2. Tắt hẳn app (Force Stop toàn diện)
+    /// </summary>
+    public static void ShowBubbleCloseOptionsDialog(Context context)
+    {
+        _mainHandler.Post(() =>
+        {
+            try
+            {
+                var activity = context as Activity ?? MainActivity.CurrentInstance;
+                bool isActivityValid = activity != null && !activity.IsFinishing && !activity.IsDestroyed;
+
+                Context dialogCtx = isActivityValid
+                    ? (Context)activity!
+                    : new ContextThemeWrapper(context.ApplicationContext ?? context, global::Android.Resource.Style.ThemeDeviceDefaultDialogAlert);
+
+                var builder = new AlertDialog.Builder(dialogCtx);
+
+                bool isVi = LanguageService.Instance.IsVietnamese;
+                builder.SetTitle(isVi ? "Tùy chọn đóng" : "Close options");
+
+                string[] options = new string[]
+                {
+                    isVi ? "🚫 Tắt bubble" : "🚫 Close bubble",
+                    isVi ? "🛑 Tắt hẳn app" : "🛑 Exit app completely"
+                };
+
+                builder.SetItems(options, (sender, args) =>
+                {
+                    int selected = args.Which;
+                    if (selected == 0)
+                    {
+                        HideBubble();
+                        try
+                        {
+                            BackgroundExecutionService.Instance.SetBubbleMode(false);
+                        }
+                        catch { }
+
+                        try
+                        {
+                            string msg = isVi ? "Đã tắt bong bóng" : "Bubble closed";
+                            Toast.MakeText(dialogCtx, msg, ToastLength.Short)?.Show();
+                        }
+                        catch { }
+                    }
+                    else if (selected == 1)
+                    {
+                        ForceStopApp(dialogCtx);
+                    }
+                });
+
+                builder.SetNegativeButton(isVi ? "Hủy" : "Cancel", (sender, args) => { });
+
+                var dialog = builder.Create();
+                if (dialog?.Window != null)
+                {
+                    if (!isActivityValid || _isSystemOverlay)
+                    {
+                        if (CanDrawOverlays(context))
+                        {
+                            var windowType = OperatingSystem.IsAndroidVersionAtLeast(26)
+                                ? WindowManagerTypes.ApplicationOverlay
+                                : WindowManagerTypes.Phone;
+                            dialog.Window.SetType(windowType);
+                        }
+                    }
+                    dialog.Show();
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("ComicGMTPC_Bubble", $"Lỗi hiển thị dialog tùy chọn đóng bubble: {ex.Message}");
+            }
+        });
     }
 
     /// <summary>
@@ -1126,7 +1205,9 @@ public static class FloatingBubbleManager
     {
         try
         {
-            Toast.MakeText(context, "🛑 Đang tắt hoàn toàn ứng dụng...", ToastLength.Short)?.Show();
+            bool isVi = LanguageService.Instance.IsVietnamese;
+            string msg = isVi ? "🛑 Đang tắt hoàn toàn ứng dụng..." : "🛑 Exiting app completely...";
+            Toast.MakeText(context, msg, ToastLength.Short)?.Show();
         }
         catch { }
 
@@ -1561,7 +1642,7 @@ public static class FloatingBubbleManager
                 string[] options = new string[]
                 {
                     isQuickAddEnabled ? "⚪ Ẩn nút (+) thêm link nhanh" : "⚡ Hiện nút (+) thêm link nhanh",
-                    isCloseEnabled ? "⚪ Ẩn nút (✕) tắt app" : "🛑 Hiện nút (✕) tắt app",
+                    isCloseEnabled ? "⚪ Ẩn nút (✕) đóng/tắt" : "🛑 Hiện nút (✕) đóng/tắt",
                     "🚫 Tắt bong bóng",
                     "🛑 Tắt app hoàn toàn"
                 };

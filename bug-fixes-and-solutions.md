@@ -2318,6 +2318,10 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
      - Cả `ShareLinkActivity` và `FloatingBubbleManager` đều sử dụng `Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = vm.DrainPendingSharedLinksAsync())`.
   4. **Tự động Drain Link Tồn Đọng Tại `MainActivity.OnResume()`**:
      - Bổ sung cơ chế tự động gọi `DrainPendingSharedLinksAsync()` ngay khi `MainActivity` thức giấc trở lại foreground.
+  5. **Hộp thoại tùy chọn 2 chức năng khi bấm nút (✕) vệ tinh**:
+     - Khi người dùng chạm nút (✕), ứng dụng hiển thị `ShowBubbleCloseOptionsDialog` với 2 lựa chọn rõ ràng:
+       + `🚫 Tắt bubble`: Chỉ ẩn bong bóng nổi khỏi màn hình, ứng dụng và các tác vụ tải ngầm tiếp tục chạy.
+       + `🛑 Tắt hẳn app`: Kích hoạt `ForceStopApp` tắt hoàn toàn ứng dụng và giải phóng toàn bộ tiến trình.
 
 - **File can thiệp**:
   - `ComicDownloaderGMTPC.Android/ShareLinkActivity.cs`
