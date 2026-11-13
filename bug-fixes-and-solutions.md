@@ -2374,3 +2374,43 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC.Android/FloatingBubbleManager.cs`
   - `Comic Downloader GMTPC AVALONIA/workflow-avalonia.md`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+---
+
+### BUG-065: Menu Ngữ Cảnh Bổ Sung "Chọn Tất Cả" (Select All) & Khắc Phục Triệt Để Lỗi Không Hiện Bàn Phím Ảo Ở Lần Chạm Đầu Tiên (Android & Avalonia)
+
+- **Hiện tượng & Bối cảnh**:
+  1. Khi người dùng highlight (bôi đen) hoặc nhấn giữ ô nhập ký tự (`TextBox`) để gọi menu ngữ cảnh, mặc định Avalonia Fluent Theme chỉ hiển thị "Cắt", "Sao chép", "Dán" mà hoàn toàn thiếu mục "Chọn tất cả" ("Select All").
+  2. Trên Android, khi bấm vào một ô nhập ký tự thường xuyên không thấy bàn phím ảo xuất hiện ở lần chạm đầu tiên; người dùng buộc phải bấm sang một ô khác rồi bấm ngược lại ô cũ thì bàn phím mới chịu bật lên.
+
+- **Nguyên nhân kỹ thuật sâu xa**:
+  1. **Thiếu Select All trong ContextFlyout mặc định của Avalonia**:
+     - Template mặc định của `TextBox` trong theme Avalonia Fluent chỉ khai báo 3 MenuItem cho `Cut`, `Copy`, `Paste`. Avalonia không tích hợp sẵn `SelectAll` vào ContextFlyout.
+  2. **Nguyên nhân không hiện bàn phím ảo ở lần chạm đầu tiên**:
+     - *Tình huống A (TextBox đã có focus sẵn)*: Khi view được nạp (hoặc khi ô trước đó đã có focus nhưng người dùng đã vuốt ẩn bàn phím ảo bằng cử chỉ Back), thuộc tính `IsFocused` của `TextBox` đã là `true`. Khi người dùng chạm lại vào ô, phương thức `Focus()` của Avalonia nhận thấy `IsFocused == true` nên bỏ qua, sự kiện `OnGotFocus` KHÔNG ĐƯỢC KÍCH HOẠT. Do `OnGotFocus` không chạy, Avalonia không bao giờ gửi yêu cầu mở bàn phím đến hệ điều hành Android! Người dùng buộc phải chạm sang ô khác (để ô cũ mất focus) rồi chạm lại ô cũ (để chuyển từ `false` sang `true`, kích hoạt `OnGotFocus`).
+     - *Tình huống B (Android View Focus và InputMethodManager Flags)*: Trên Android, `imm.ShowSoftInput(view, ShowFlags.Implicit)` yêu cầu Android View (`AvaloniaView`) phải đang có Window Focus và View Focus. Khi chạm lần đầu vào canvas Skia, Android View có thể chưa kịp hoàn tất đồng bộ View Focus nên cờ `Implicit` bị Android từ chối âm thầm. Chỉ đến lần chạm thứ hai, Android View đã có focus ổn định thì bàn phím mới hiện ra.
+
+- **Giải pháp xử lý triệt để**:
+  1. **Menu Ngữ Cảnh Chuẩn Hoá Toàn Cầu Có "🔘 Chọn tất cả" Cho 100% TextBox**:
+     - Triển khai trong `TextEditingProtectionService`: Đăng ký Class Handler toàn cục cho `Control.LoadedEvent`, `Control.ContextRequestedEvent`, `InputElement.PointerPressedEvent`, và `InputElement.GotFocusEvent`.
+     - Tự động tạo và gắn `MenuFlyout` độc lập cho từng `TextBox` gồm đầy đủ 4 thao tác:
+       + `✂️ Cắt` (`Cut`): Tự động bật khi có bôi đen (`SelectionStart != SelectionEnd`) và không phải `IsReadOnly` hoặc `PasswordChar`.
+       + `📋 Sao chép` (`Copy`): Tự động bật khi có bôi đen và không phải `PasswordChar`.
+       + `📥 Dán` (`Paste`): Tự động bật khi không phải `IsReadOnly`.
+       + `🔘 Chọn tất cả` (`Select All`): Tự động bật khi ô có ký tự (`!string.IsNullOrEmpty(tb.Text)`). Khi bấm, gọi ngay `tb.SelectAll()` chọn toàn bộ văn bản.
+     - Hỗ trợ đổi ngôn ngữ động theo `LanguageService.Instance.IsVietnamese` (Tiếng Việt / English).
+  2. **Cưỡng Chế Kích Hoạt Bàn Phím Ảo Tức Thì Qua PointerPressed & Tapped**:
+     - Bắt sự kiện `InputElement.PointerPressedEvent` và `InputElement.TappedEvent` ở cả hai tầng Tunneling và Bubbling trên mọi `TextBox`.
+     - Kể cả khi `tb.IsFocused` đã là `true`, vẫn lập tức gọi `TriggerShowKeyboard(tb)`.
+     - `TriggerShowKeyboard` phát tín hiệu gọi native platform ngay lập tức, đồng thời thực hiện cơ chế retry an toàn ở `DispatcherPriority.Input` (~50ms) và `DispatcherPriority.Background` (~150ms) để bắt dính 100% chu kỳ dispatch sự kiện của Android.
+  3. **Kết Nối Trực Tiếp Native Android Platform**:
+     - Trong `MainActivity.cs` và `ComicReaderActivity.cs`, ủy quyền `RequestShowSoftKeyboard`:
+       + Trên Android 11+ (API 30+): Gọi trực tiếp `Window.InsetsController.Show(WindowInsets.Type.Ime())` - chuẩn API hiện đại của Google, không phụ thuộc vào trạng thái focus của View.
+       + Trên mọi phiên bản Android: Yêu cầu focus trên view hiện hành (`currentFocus.RequestFocus()`) và gọi `imm.ShowSoftInput(target, ShowFlags.Forced)` nếu `ShowFlags.Implicit` chưa kích hoạt được bàn phím.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/TextEditingProtectionService.cs`
+  - `ComicDownloaderGMTPC.Android/MainActivity.cs`
+  - `ComicDownloaderGMTPC.Android/ComicReaderActivity.cs`
+  - `Comic Downloader GMTPC AVALONIA/workflow-avalonia.md`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

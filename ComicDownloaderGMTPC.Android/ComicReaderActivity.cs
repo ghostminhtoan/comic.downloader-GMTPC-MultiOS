@@ -818,6 +818,10 @@ public class ComicReaderActivity : AvaloniaActivity
                 try
                 {
                     UpdateSystemGestureExclusion(isTyping);
+                    if (isTyping)
+                    {
+                        MainActivity.ShowSoftKeyboard(this);
+                    }
                 }
                 catch { }
             });

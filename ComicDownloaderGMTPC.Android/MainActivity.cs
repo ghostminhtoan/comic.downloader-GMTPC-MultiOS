@@ -47,6 +47,7 @@ using Android.Runtime;
 
 
 using Android.Views;
+using Android.Views.InputMethods;
 
 
 
@@ -1280,10 +1281,17 @@ public class MainActivity : AvaloniaMainActivity
 
 
         // Bảo vệ cử chỉ hệ thống và vùng điều hướng đáy khi đang gõ trong TextBox
-
-
-
         Services.TextEditingProtectionService.TypingStateChanged += OnTypingStateChanged;
+        Services.TextEditingProtectionService.RequestShowSoftKeyboard = () =>
+        {
+            var act = (Activity?)ComicReaderActivity.CurrentInstance ?? CurrentInstance ?? this;
+            ShowSoftKeyboard(act);
+        };
+        Services.TextEditingProtectionService.RequestHideSoftKeyboard = () =>
+        {
+            var act = (Activity?)ComicReaderActivity.CurrentInstance ?? CurrentInstance ?? this;
+            HideSoftKeyboard(act);
+        };
 
 
 
@@ -2113,61 +2121,93 @@ public class MainActivity : AvaloniaMainActivity
 
 
     private void OnTypingStateChanged(bool isTyping)
-
-
-
     {
-
-
-
         try
-
-
-
         {
-
-
-
             RunOnUiThread(() =>
-
-
-
             {
-
-
-
                 try
-
-
-
                 {
-
-
-
                     UpdateSystemGestureExclusion(isTyping);
+                    if (isTyping)
+                    {
+                        ShowSoftKeyboard(this);
+                    }
+                }
+                catch { }
+            });
+        }
+        catch { }
+    }
 
-
-
+    /// <summary>
+    /// Kích hoạt hiển thị bàn phím ảo tức thì trên Android (hỗ trợ cả WindowInsetsController trên API 30+ và InputMethodManager).
+    /// </summary>
+    public static void ShowSoftKeyboard(Activity? activity)
+    {
+        if (activity == null || activity.IsFinishing || activity.IsDestroyed) return;
+        activity.RunOnUiThread(() =>
+        {
+            try
+            {
+                var decorView = activity.Window?.DecorView;
+                var currentFocus = activity.CurrentFocus ?? decorView;
+                if (currentFocus != null && !currentFocus.IsFocused)
+                {
+                    currentFocus.RequestFocus();
                 }
 
+                // 1. Chuẩn Android 11+ (API 30+): WindowInsetsController trực tiếp hiện bàn phím ảo
+                if (OperatingSystem.IsAndroidVersionAtLeast(30) && activity.Window?.InsetsController != null)
+                {
+                    activity.Window.InsetsController.Show(WindowInsets.Type.Ime());
+                }
 
+                // 2. Chuẩn InputMethodManager trên mọi phiên bản Android
+                var imm = (InputMethodManager?)activity.GetSystemService(InputMethodService);
+                if (imm != null)
+                {
+                    var target = currentFocus ?? decorView;
+                    if (target != null)
+                    {
+                        if (!imm.ShowSoftInput(target, ShowFlags.Implicit))
+                        {
+                            imm.ShowSoftInput(target, ShowFlags.Forced);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Warn("ComicGMTPC_SoftInput", $"Lỗi ShowSoftKeyboard: {ex.Message}");
+            }
+        });
+    }
 
-                catch { }
+    /// <summary>
+    /// Ẩn bàn phím ảo khi hoàn tất nhập liệu hoặc mất focus.
+    /// </summary>
+    public static void HideSoftKeyboard(Activity? activity)
+    {
+        if (activity == null || activity.IsFinishing || activity.IsDestroyed) return;
+        activity.RunOnUiThread(() =>
+        {
+            try
+            {
+                if (OperatingSystem.IsAndroidVersionAtLeast(30) && activity.Window?.InsetsController != null)
+                {
+                    activity.Window.InsetsController.Hide(WindowInsets.Type.Ime());
+                }
 
-
-
-            });
-
-
-
-        }
-
-
-
-        catch { }
-
-
-
+                var imm = (InputMethodManager?)activity.GetSystemService(InputMethodService);
+                var currentFocus = activity.CurrentFocus ?? activity.Window?.DecorView;
+                if (imm != null && currentFocus != null)
+                {
+                    imm.HideSoftInputFromWindow(currentFocus.WindowToken, HideSoftInputFlags.None);
+                }
+            }
+            catch { }
+        });
     }
 
 

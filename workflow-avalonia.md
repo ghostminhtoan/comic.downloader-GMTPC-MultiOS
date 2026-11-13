@@ -1033,3 +1033,18 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   - Bubble phóng to 1.22x và nảy đàn hồi về 1.0x kèm rung Haptic mỗi khi link được thêm thành công.
 - **Đảo vị trí vệ tinh thông minh (Smart Satellite Alignment)**:
   - Tự động hướng các nút vệ tinh (✕) hoặc Mini HUD vào trong lòng màn hình dựa theo vị trí mép trái hoặc mép phải.
+
+---
+
+### Chuẩn Hóa Menu Ngữ Cảnh TextBox & Tối Ưu Hiển Thị Bàn Phím Ảo Android
+
+- **Menu ngữ cảnh toàn cục (TextBox ContextFlyout)**:
+  - 100% `TextBox` trong ứng dụng (kể cả ô nhập URL, ô tìm kiếm, ô thư mục, popup dialog) đều được tự động gắn `MenuFlyout` chuẩn gồm:
+    + ✂️ Cắt (Cut)
+    + 📋 Sao chép (Copy)
+    + 📥 Dán (Paste)
+    + 🔘 Chọn tất cả (Select All)
+  - Tự động kích hoạt khi người dùng bôi đen văn bản, nhấn giữ (long-press) hoặc bấm vào núm kéo chọn trên màn hình cảm ứng Android / chuột phải Desktop.
+- **Cơ chế cưỡng chế bật bàn phím ảo ngay ở lần chạm đầu tiên**:
+  - Lắng nghe `PointerPressedEvent` và `TappedEvent` toàn hệ thống: Ngay khi ngón tay chạm vào ô nhập ký tự, hệ thống kích hoạt hiển thị bàn phím ảo ngay lập tức mà không phụ thuộc vào việc ô đó đã có focus từ trước hay chưa.
+  - Sử dụng `WindowInsetsController.Show(WindowInsets.Type.Ime())` trên Android 11+ và `imm.ShowSoftInput(ShowFlags.Forced)` trên toàn bộ thiết bị Android, kết hợp cơ chế retry 3 lớp (Immediate, Input Priority, Background Priority) đảm bảo bàn phím luôn luôn xuất hiện mượt mà ngay lần chạm đầu tiên.
