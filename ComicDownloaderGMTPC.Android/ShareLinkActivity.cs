@@ -110,6 +110,10 @@ public static class ShareLinkShortcutHelper
     new[] { Intent.ActionSendMultiple },
     Categories = new[] { Intent.CategoryDefault },
     DataMimeType = "text/plain")]
+[IntentFilter(
+    new[] { Intent.ActionProcessText },
+    Categories = new[] { Intent.CategoryDefault },
+    DataMimeType = "text/plain")]
 public class ShareLinkActivity : Activity
 {
     public const string ActionQuickAddFromClipboard = "com.CompanyName.ComicDownloaderGMTPC.action.QUICK_ADD_CLIPBOARD";
@@ -161,6 +165,28 @@ public class ShareLinkActivity : Activity
                     }
                 });
                 _handler.PostDelayed(_timeoutFallbackRunnable, 350);
+                return;
+            }
+
+            if (string.Equals(Intent?.Action, Intent.ActionProcessText, StringComparison.Ordinal))
+            {
+                DisableActivityTransitions();
+                string? text = Intent?.GetCharSequenceExtra(Intent.ExtraProcessText)?.ToString();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    App.EnqueueSharedLinkText(text);
+                    ShareLinkShortcutHelper.ReportDirectShareUsed(ApplicationContext ?? this);
+                    if (App.IsMainViewReady && App.TryGetSharedMainViewModel() is { } vm)
+                    {
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            _ = vm.DrainPendingSharedLinksAsync();
+                        });
+                    }
+                    Toast.MakeText(this, "⚡ [Trực tiếp] Đã nạp link vào hàng chờ tải!", ToastLength.Short)?.Show();
+                    FloatingBubbleManager.TriggerPulseEffect();
+                }
+                Finish();
                 return;
             }
 
@@ -247,6 +273,7 @@ public class ShareLinkActivity : Activity
                 catch { }
 
                 Toast.MakeText(this, "📥 Đã nạp link vào hàng chờ tải!", ToastLength.Short)?.Show();
+                FloatingBubbleManager.TriggerPulseEffect();
             }
             else
             {

@@ -1016,3 +1016,20 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
      - Đồng bộ cả `ShareLinkActivity` và `FloatingBubbleManager` sử dụng `Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = vm.DrainPendingSharedLinksAsync())`.
   4. **Tự Động Phân Tích Link Tồn Đọng Tại `MainActivity.OnResume()`**:
      - Khi người dùng chuyển từ trình duyệt quay lại giao diện chính `MainActivity`, tự động kích hoạt `DrainPendingSharedLinksAsync()` để nạp truyện tức thì vào danh sách hàng chờ nếu có link mới.
+
+---
+
+### Quy Trình & Tính Năng Bong Bóng Nổi (Floating Bubble) Thông Minh Trên Android
+
+- **Kiến trúc cử chỉ (Smart Gestures)**:
+  - **Single-Tap (Chạm 1 lần)**: Khôi phục và mở lại giao diện `MainActivity` ngay tức thì (debounce 320ms để phân biệt double-tap).
+  - **Double-Tap (Chạm 2 lần)**: Tự động trích xuất link từ clipboard, nạp thẳng vào hàng chờ tải ngầm, rung Haptic phản hồi và kích hoạt Cyber Pulse.
+  - **Nhấn giữ 500ms**: Hiển thị thẻ Mini HUD Glassmorphism trong suốt bo góc xem tên truyện, chap đang tải, % tiến trình, tốc độ `x.x MB/s`, và 2 nút mini `⏯️ Tạm dừng/Tiếp tục` và `⏭️ Bỏ qua chap`. Tự động ẩn sau 3.5s.
+  - **Nhấn giữ 3000ms**: Mở menu cài đặt nhanh Bubble (đổi kích cỡ 48dp/60dp/72dp, đổi độ mờ nhàn rỗi 30%-75%, bật/tắt nút đóng vệ tinh, tắt Bubble, tắt app hoàn toàn).
+  - **Kéo thả xuống đáy màn hình**: Thùng rác đỏ tròn 64dp xuất hiện; kéo vào vùng dưới 85dp thì thùng rác nở 1.3x rung Haptic bắt dính; thả tay thì Bubble bị xóa và tắt (`HideBubble()`).
+- **Nạp link trực tiếp từ menu bôi đen (`ACTION_PROCESS_TEXT`)**:
+  - Bôi đen link ở mọi trình duyệt (Chrome, Firefox, Edge, Samsung Internet...) -> Menu xuất hiện mục tải truyện ComicDownloaderGMTPC -> Link chui thẳng vào Queue tải ngầm mà không làm gián đoạn người dùng.
+- **Hiệu ứng Cyber Pulse Feedback**:
+  - Bubble phóng to 1.22x và nảy đàn hồi về 1.0x kèm rung Haptic mỗi khi link được thêm thành công.
+- **Đảo vị trí vệ tinh thông minh (Smart Satellite Alignment)**:
+  - Tự động hướng các nút vệ tinh (✕) hoặc Mini HUD vào trong lòng màn hình dựa theo vị trí mép trái hoặc mép phải.

@@ -2330,3 +2330,47 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC.Android/MainActivity.cs`
   - `Comic Downloader GMTPC AVALONIA/workflow-avalonia.md`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+---
+
+### BUG-064: Cải Tiến Toàn Diện Trải Nghiệm Bong Bóng Nổi (Floating Bubble) Android: Chạm Mở App, Double-Tap Nạp Link, Menu Bôi Đen Trực Tiếp (ACTION_PROCESS_TEXT), Cyber Pulse, Thẻ Mini HUD Glassmorphism, Thùng Rác Đáy Màn Hình Chuẩn Chat Head
+
+- **Bối cảnh & Yêu cầu**:
+  1. Thao tác nút (+) vệ tinh trước đây rườm rà, dễ chạm nhầm khi kéo thả Bubble.
+  2. Cần thao tác cực nhanh: Chạm 1 lần vào thân Bubble để mở app, Chạm 2 lần (Double-Tap) để tự động nạp link từ Clipboard vào Queue ngầm mà không cần mở app hay bấm nút (+).
+  3. Cần hỗ trợ bôi đen link trực tiếp trên trình duyệt (Chrome, Edge, Samsung Internet, Firefox...) hiện mục nạp tải truyện GMTPC qua `ACTION_PROCESS_TEXT`.
+  4. Thiếu phản hồi xúc giác/thị giác khi link được nạp ngầm thành công.
+  5. Cần xem nhanh tốc độ tải (MB/s), % tiến trình và thao tác Tạm dừng/Bỏ qua chap mà không cần mở toàn bộ ứng dụng.
+  6. Thao tác tắt Bubble cần tự nhiên: Kéo thả xuống đáy màn hình vào thùng rác đỏ chuẩn Facebook Messenger Chat Head.
+  7. Tùy biến kích thước (Nhỏ 48dp, Vừa 60dp, Lớn 72dp) và độ mờ nhàn rỗi (30% - 75%).
+
+- **Giải pháp kỹ thuật chi tiết**:
+  1. **Tái cấu trúc cử chỉ Chạm (Single-Tap vs Double-Tap Debounce 320ms)**:
+     - Trong `SystemBubbleTouchListener` và `InAppBubbleTouchListener`: Sử dụng cơ chế đo khoảng cách thời gian giữa 2 lần tap liên tiếp (`SystemClock.UptimeMillis()`).
+     - Khi chạm 1 lần: Đặt timer debounce 320ms; nếu sau 320ms không có chạm lần 2 -> Kích hoạt `OpenMainActivity(context)` mở lại app.
+     - Khi chạm 2 lần trong vòng 320ms -> Hủy timer mở app, gọi ngay `TriggerDoubleTapQuickAdd(context)` đọc link từ clipboard, nạp vào hàng chờ tải ngầm, rung Haptic và kích hoạt hiệu ứng Cyber Pulse.
+     - Gỡ bỏ hoàn toàn nút toggle `+` và nút vệ tinh `(+)` trên thân Bubble, giúp giao diện tròn trịa, tối giản và hiện đại.
+  2. **Menu Bôi Đen Trực Tiếp (`ACTION_PROCESS_TEXT`)**:
+     - Khai báo Intent Filter `[IntentFilter(new[] { Intent.ActionProcessText }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "text/plain")]` cho `ShareLinkActivity`.
+     - Trong `ShareLinkActivity.OnCreate`: Bóc tách text được bôi đen qua `Intent.ExtraProcessText`, nạp thẳng vào Queue tải ngầm qua `App.EnqueueSharedLinkText`, `vm.DrainPendingSharedLinksAsync()`, hiện Toast thông báo, kích hoạt Cyber Pulse trên Bubble và `Finish()` ngay lập tức.
+  3. **Hiệu Ứng Sóng Xung Kích Cyber Pulse Feedback**:
+     - `FloatingBubbleManager.TriggerPulseEffect()`: Khi link nạp thành công, Bubble phóng to 1.22x trong 120ms với `DecelerateInterpolator`, sau đó nảy đàn hồi về 1.0x trong 160ms với `OvershootInterpolator(1.2f)` kèm rung Haptic xác nhận.
+  4. **Thẻ Mini HUD Tốc Độ & Tiến Trình (Glassmorphism Mini Card)**:
+     - Khi nhấn giữ thân Bubble 500ms: Tự động hiển thị thẻ card nổi bo tròn 14dp với viền neon Cyan Cyber, độ mờ Slate `#0F172A` nổi cạnh Bubble trong 3.5 giây rồi tự ẩn.
+     - Hiển thị đầy đủ: Tên truyện đang tải, Chi tiết chap / % tiến trình, Tốc độ tải thực tế `x.x MB/s`, thanh ProgressBar ngang, và 2 nút bấm thao tác nhanh: `⏯️ Tạm dừng/Tiếp tục` (`NativeNotificationTogglePauseRequested`) và `⏭️ Bỏ qua chap` (`NativeNotificationContextualAction1Requested`). Chạm vào card mở ngay ứng dụng.
+  5. **Thùng Rác Đáy Màn Hình Chuẩn Facebook Messenger (Trash Drop Target)**:
+     - Khi người dùng bắt đầu kéo Bubble (`_isDragging = true`): Ở chính giữa đáy màn hình xuất hiện vòng tròn Thùng rác đỏ 64dp với icon `(✕)` trắng nổi bật.
+     - Tính toán khoảng cách tọa độ thực giữa tâm Bubble và tâm Thùng rác: Khi khoảng cách dưới 85dp, Thùng rác tự động phóng to 1.3x, đổi màu đỏ rực `#DC2626` và rung Haptic báo bắt dính.
+     - Khi thả tay trong vùng thùng rác: Bubble biến mất, gọi `HideBubble()`, Toast '🚫 Đã tắt bong bóng' và rung Haptic xác nhận. Nếu thả ngoài vùng: Thùng rác mờ biến mất, Bubble hít vào mép viền màn hình bình thường.
+  6. **Đảo Vị Trí Vệ Tinh Trực Quan (Smart Satellite Alignment)**:
+     - Tự động nhận diện nửa màn hình: Khi Bubble ở nửa bên phải, nút vệ tinh (✕) hoặc Mini HUD xòe sang bên trái (hướng vào trong lòng màn hình). Khi Bubble ở nửa bên trái, nút vệ tinh hoặc Mini HUD xòe sang bên phải.
+  7. **Tùy Biến Độ Mờ & Kích Thước Bubble Trong Cài Đặt**:
+     - Thêm cấu hình trong `InstanceConfigService`: `BubbleSize` ('Small' 48dp, 'Medium' 60dp, 'Large' 72dp), `BubbleIdleAlpha` (0.30f đến 0.75f, mặc định 0.45f), `BubbleDockOffsetRatio` (0.35f đến 0.85f, mặc định 0.60f).
+     - Menu giữ 3s trên Bubble hỗ trợ đổi trực tiếp kích cỡ và độ mờ tức thì mà không cần vào sâu Cài đặt.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/InstanceConfigService.cs`
+  - `ComicDownloaderGMTPC.Android/ShareLinkActivity.cs`
+  - `ComicDownloaderGMTPC.Android/FloatingBubbleManager.cs`
+  - `Comic Downloader GMTPC AVALONIA/workflow-avalonia.md`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

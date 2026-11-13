@@ -16,8 +16,82 @@ public sealed class InstanceConfigService
     private bool _isMultiInstanceEnabled = false;
     private bool _isManualDownloadMode = false;
     private string _manualDownloadMode = "Direct"; // "Direct" (Trực tiếp) hoặc "Embedded" (Nhúng)
-    private bool _isBubbleQuickAddButtonEnabled = true;
+    private bool _isBubbleQuickAddButtonEnabled = false; // Người dùng không cần nút (+) nữa
     private bool _isBubbleCloseButtonEnabled = true;
+    private string _bubbleSize = "Medium"; // "Small" (48dp), "Medium" (60dp), "Large" (72dp)
+    private float _bubbleIdleAlpha = 0.45f; // Độ mờ khi nhàn rỗi (0.2f - 0.8f)
+    private float _bubbleDockOffsetRatio = 0.60f; // Mức thụt vào mép (0.4f - 0.85f)
+
+    /// <summary>
+    /// Bắn tín hiệu khi tùy biến giao diện/kích thước/độ mờ Bong bóng thay đổi.
+    /// </summary>
+    public event Action? BubbleStyleChanged;
+
+    /// <summary>
+    /// Kích thước Bong bóng nổi: "Small" (48dp), "Medium" (60dp), "Large" (72dp).
+    /// </summary>
+    public string BubbleSize
+    {
+        get => _bubbleSize;
+        set
+        {
+            string norm = value switch
+            {
+                "Small" => "Small",
+                "Large" => "Large",
+                _ => "Medium"
+            };
+            if (_bubbleSize != norm)
+            {
+                _bubbleSize = norm;
+                SaveConfig();
+                BubbleStyleChanged?.Invoke();
+            }
+        }
+    }
+
+    public int BubbleSizeDp => _bubbleSize switch
+    {
+        "Small" => 48,
+        "Large" => 72,
+        _ => 60
+    };
+
+    /// <summary>
+    /// Độ mờ khi Bong bóng nổi ở trạng thái nhàn rỗi / thụt mép (0.2f đến 0.8f, mặc định 0.45f).
+    /// </summary>
+    public float BubbleIdleAlpha
+    {
+        get => _bubbleIdleAlpha;
+        set
+        {
+            float clamped = Math.Clamp(value, 0.15f, 0.90f);
+            if (Math.Abs(_bubbleIdleAlpha - clamped) > 0.01f)
+            {
+                _bubbleIdleAlpha = clamped;
+                SaveConfig();
+                BubbleStyleChanged?.Invoke();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tỷ lệ thụt vào mép màn hình khi nhàn rỗi (0.35f đến 0.85f, mặc định 0.60f).
+    /// </summary>
+    public float BubbleDockOffsetRatio
+    {
+        get => _bubbleDockOffsetRatio;
+        set
+        {
+            float clamped = Math.Clamp(value, 0.35f, 0.85f);
+            if (Math.Abs(_bubbleDockOffsetRatio - clamped) > 0.01f)
+            {
+                _bubbleDockOffsetRatio = clamped;
+                SaveConfig();
+                BubbleStyleChanged?.Invoke();
+            }
+        }
+    }
 
     /// <summary>
     /// Bắn tín hiệu khi trạng thái nút (✕) tắt app cạnh Bong bóng thay đổi.
@@ -162,14 +236,34 @@ public sealed class InstanceConfigService
                 {
                     _isBubbleCloseButtonEnabled = true;
                 }
+                if (doc.RootElement.TryGetProperty("BubbleSize", out var propSize))
+                {
+                    _bubbleSize = propSize.GetString() switch
+                    {
+                        "Small" => "Small",
+                        "Large" => "Large",
+                        _ => "Medium"
+                    };
+                }
+                if (doc.RootElement.TryGetProperty("BubbleIdleAlpha", out var propAlpha))
+                {
+                    _bubbleIdleAlpha = (float)propAlpha.GetDouble();
+                }
+                if (doc.RootElement.TryGetProperty("BubbleDockOffsetRatio", out var propRatio))
+                {
+                    _bubbleDockOffsetRatio = (float)propRatio.GetDouble();
+                }
             }
             else
             {
                 _isMultiInstanceEnabled = false; // Mặc định là TẮT
                 _isManualDownloadMode = false;   // Mặc định là TẮT
                 _manualDownloadMode = "Direct";
-                _isBubbleQuickAddButtonEnabled = true; // Mặc định là BẬT
+                _isBubbleQuickAddButtonEnabled = false; // Người dùng không cần nút (+) nữa
                 _isBubbleCloseButtonEnabled = true;    // Mặc định là BẬT
+                _bubbleSize = "Medium";
+                _bubbleIdleAlpha = 0.45f;
+                _bubbleDockOffsetRatio = 0.60f;
             }
         }
         catch
@@ -177,8 +271,11 @@ public sealed class InstanceConfigService
             _isMultiInstanceEnabled = false;
             _isManualDownloadMode = false;
             _manualDownloadMode = "Direct";
-            _isBubbleQuickAddButtonEnabled = true;
+            _isBubbleQuickAddButtonEnabled = false;
             _isBubbleCloseButtonEnabled = true;
+            _bubbleSize = "Medium";
+            _bubbleIdleAlpha = 0.45f;
+            _bubbleDockOffsetRatio = 0.60f;
         }
     }
 
@@ -198,7 +295,10 @@ public sealed class InstanceConfigService
                 IsManualDownloadMode = _isManualDownloadMode,
                 ManualDownloadMode = _manualDownloadMode,
                 IsBubbleQuickAddButtonEnabled = _isBubbleQuickAddButtonEnabled,
-                IsBubbleCloseButtonEnabled = _isBubbleCloseButtonEnabled
+                IsBubbleCloseButtonEnabled = _isBubbleCloseButtonEnabled,
+                BubbleSize = _bubbleSize,
+                BubbleIdleAlpha = _bubbleIdleAlpha,
+                BubbleDockOffsetRatio = _bubbleDockOffsetRatio
             };
             string json = JsonSerializer.Serialize(model, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_configFilePath, json);
