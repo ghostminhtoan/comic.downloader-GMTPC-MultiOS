@@ -591,6 +591,11 @@ public class ComicScraperService
                 return await ScrapeComixtoBookAsync(url, index, domain, ct).ConfigureAwait(false);
             }
 
+            if (domain.Contains("rule34") || url.Contains("rule34.lol"))
+            {
+                return await ScrapeRule34BookAsync(url, index, domain, ct).ConfigureAwait(false);
+            }
+
             string? html = null;
             try
             {
@@ -744,6 +749,11 @@ public class ComicScraperService
             if (domain.Contains("comix") || chapterUrl.Contains("comix.to"))
             {
                 return await ExtractComixtoChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
+            }
+
+            if (domain.Contains("rule34") || chapterUrl.Contains("rule34.lol"))
+            {
+                return await ExtractRule34ChapterImagesAsync(chapterUrl, ct).ConfigureAwait(false);
             }
 
             string? html = null;
@@ -6638,6 +6648,321 @@ public class ComicScraperService
         }
         catch { }
         return new List<string>();
+    }
+
+    private async Task<ComicBookItem> ScrapeRule34BookAsync(string url, int index, string domain, CancellationToken ct)
+    {
+        url = DomainRoutingService.NormalizeUrl(url);
+        var book = new ComicBookItem
+        {
+            Index = index,
+            Url = url,
+            Domain = domain,
+            Status = "Extracting...",
+            StatusMessage = "Fetching rule34 metadata..."
+        };
+
+        try
+        {
+            // Kiểm tra các định dạng URL:
+            // 1. Comic / Gallery: /galleries/{id} hoặc /comics/{id}
+            // 2. Single Image / Video Post: /images/{id}
+            var galleryMatch = Regex.Match(url, @"/(?:galleries|comics)/(?<id>\d+)", RegexOptions.IgnoreCase);
+            var imageMatch = Regex.Match(url, @"/images/(?<id>\d+)", RegexOptions.IgnoreCase);
+
+            if (galleryMatch.Success)
+            {
+                string id = galleryMatch.Groups["id"].Value;
+                string apiUrl = $"https://www.rule34.lol/api/v1/json/comics/{id}";
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                req.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+
+                if (!res.IsSuccessStatusCode)
+                {
+                    book.Title = $"rule34 Gallery {id}";
+                    book.Status = "Error";
+                    book.StatusMessage = $"HTTP {(int)res.StatusCode}";
+                    return book;
+                }
+
+                string rawJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(rawJson);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("comic", out var comicElem))
+                {
+                    book.Title = $"rule34 Gallery {id}";
+                    book.Status = "Error";
+                    book.StatusMessage = "Invalid comic JSON response";
+                    return book;
+                }
+
+                string title = string.Empty;
+                if (comicElem.TryGetProperty("title", out var titleProp))
+                {
+                    title = titleProp.GetString()?.Trim() ?? string.Empty;
+                }
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    title = $"rule34 Gallery {id}";
+                }
+                book.Title = title;
+
+                if (comicElem.TryGetProperty("description", out var descProp))
+                {
+                    book.PreviewTagsText = descProp.GetString() ?? string.Empty;
+                }
+
+                int pageCount = 0;
+                if (comicElem.TryGetProperty("page_count", out var pcProp))
+                {
+                    pageCount = pcProp.GetInt32();
+                }
+
+                // Lấy ảnh bìa từ trang đầu tiên nếu có
+                if (comicElem.TryGetProperty("pages", out var pagesElem) && pagesElem.ValueKind == JsonValueKind.Array && pagesElem.GetArrayLength() > 0)
+                {
+                    var firstPage = pagesElem[0];
+                    if (firstPage.TryGetProperty("image_id", out var imgIdProp))
+                    {
+                        long firstImgId = imgIdProp.GetInt64();
+                        try
+                        {
+                            string imgApiUrl = $"https://www.rule34.lol/api/v1/json/images/{firstImgId}";
+                            using var imgReq = new HttpRequestMessage(HttpMethod.Get, imgApiUrl);
+                            imgReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                            using var imgRes = await _httpClient.SendAsync(imgReq, ct).ConfigureAwait(false);
+                            if (imgRes.IsSuccessStatusCode)
+                            {
+                                string imgJson = await imgRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                                using var imgDoc = JsonDocument.Parse(imgJson);
+                                if (imgDoc.RootElement.TryGetProperty("image", out var imgObj) &&
+                                    imgObj.TryGetProperty("representations", out var reps))
+                                {
+                                    if (reps.TryGetProperty("medium", out var mProp)) book.CoverUrl = mProp.GetString() ?? string.Empty;
+                                    else if (reps.TryGetProperty("small", out var sProp)) book.CoverUrl = sProp.GetString() ?? string.Empty;
+                                    else if (reps.TryGetProperty("full", out var fProp)) book.CoverUrl = fProp.GetString() ?? string.Empty;
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                book.Chapters = new List<ChapterItem>
+                {
+                    new ChapterItem
+                    {
+                        ChapterNumber = 1,
+                        Title = "Full Gallery",
+                        Url = url,
+                        Status = "Waiting",
+                        TotalPages = pageCount
+                    }
+                };
+                book.TotalChapters = 1;
+                book.Status = "Ready";
+                book.StatusMessage = $"Đã tải thông tin (1 chapter, {pageCount} trang)";
+                return book;
+            }
+            else if (imageMatch.Success)
+            {
+                string id = imageMatch.Groups["id"].Value;
+                string imgApiUrl = $"https://www.rule34.lol/api/v1/json/images/{id}";
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, imgApiUrl);
+                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+
+                if (!res.IsSuccessStatusCode)
+                {
+                    book.Title = $"rule34 Post {id}";
+                    book.Status = "Error";
+                    book.StatusMessage = $"HTTP {(int)res.StatusCode}";
+                    return book;
+                }
+
+                string rawJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(rawJson);
+                if (doc.RootElement.TryGetProperty("image", out var imgObj))
+                {
+                    string fmt = imgObj.TryGetProperty("format", out var fmtProp) ? fmtProp.GetString() ?? "media" : "media";
+                    book.Title = $"rule34 Post {id} ({fmt.ToUpperInvariant()})";
+
+                    if (imgObj.TryGetProperty("tags", out var tagsElem) && tagsElem.ValueKind == JsonValueKind.Array)
+                    {
+                        var tagList = new List<string>();
+                        foreach (var t in tagsElem.EnumerateArray())
+                        {
+                            string? s = t.GetString();
+                            if (!string.IsNullOrWhiteSpace(s)) tagList.Add(s);
+                        }
+                        book.PreviewTagsText = string.Join(", ", tagList);
+                    }
+
+                    if (imgObj.TryGetProperty("representations", out var reps))
+                    {
+                        if (reps.TryGetProperty("medium", out var mProp)) book.CoverUrl = mProp.GetString() ?? string.Empty;
+                        else if (reps.TryGetProperty("thumb", out var tProp)) book.CoverUrl = tProp.GetString() ?? string.Empty;
+                        else if (reps.TryGetProperty("full", out var fProp)) book.CoverUrl = fProp.GetString() ?? string.Empty;
+                    }
+
+                    book.Chapters = new List<ChapterItem>
+                    {
+                        new ChapterItem
+                        {
+                            ChapterNumber = 1,
+                            Title = "Media",
+                            Url = url,
+                            Status = "Waiting",
+                            TotalPages = 1
+                        }
+                    };
+                    book.TotalChapters = 1;
+                    book.Status = "Ready";
+                    book.StatusMessage = "Đã tải thông tin (1 file)";
+                    return book;
+                }
+            }
+
+            book.Title = ExtractFallbackTitleFromUrl(url);
+            book.Status = "Error";
+            book.StatusMessage = "Không nhận diện được định dạng URL rule34";
+        }
+        catch (OperationCanceledException)
+        {
+            book.Title = ExtractFallbackTitleFromUrl(url);
+            book.Status = "Stopped";
+            book.StatusMessage = "Extraction cancelled";
+        }
+        catch (Exception ex)
+        {
+            book.Title = ExtractFallbackTitleFromUrl(url);
+            book.Status = "Error";
+            book.StatusMessage = ex.Message;
+        }
+
+        return book;
+    }
+
+    private async Task<List<string>> ExtractRule34ChapterImagesAsync(string chapterUrl, CancellationToken ct)
+    {
+        var images = new List<string>();
+        if (string.IsNullOrWhiteSpace(chapterUrl)) return images;
+
+        try
+        {
+            var galleryMatch = Regex.Match(chapterUrl, @"/(?:galleries|comics)/(?<id>\d+)", RegexOptions.IgnoreCase);
+            var imageMatch = Regex.Match(chapterUrl, @"/images/(?<id>\d+)", RegexOptions.IgnoreCase);
+
+            if (galleryMatch.Success)
+            {
+                string id = galleryMatch.Groups["id"].Value;
+                string apiUrl = $"https://www.rule34.lol/api/v1/json/comics/{id}";
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                if (!res.IsSuccessStatusCode) return images;
+
+                string rawJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(rawJson);
+                if (!doc.RootElement.TryGetProperty("comic", out var comicElem) ||
+                    !comicElem.TryGetProperty("pages", out var pagesElem) ||
+                    pagesElem.ValueKind != JsonValueKind.Array)
+                {
+                    return images;
+                }
+
+                var pageList = new List<(int pos, long imageId)>();
+                int fallbackPos = 0;
+                foreach (var page in pagesElem.EnumerateArray())
+                {
+                    int pos = fallbackPos++;
+                    if (page.TryGetProperty("position", out var posProp)) pos = posProp.GetInt32();
+                    if (page.TryGetProperty("image_id", out var imgIdProp))
+                    {
+                        pageList.Add((pos, imgIdProp.GetInt64()));
+                    }
+                }
+
+                pageList.Sort((a, b) => a.pos.CompareTo(b.pos));
+
+                var results = new string[pageList.Count];
+                var parallelOptions = new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = 8,
+                    CancellationToken = ct
+                };
+
+                await Parallel.ForEachAsync(Enumerable.Range(0, pageList.Count), parallelOptions, async (idx, token) =>
+                {
+                    long imageId = pageList[idx].imageId;
+                    try
+                    {
+                        string imgApiUrl = $"https://www.rule34.lol/api/v1/json/images/{imageId}";
+                        using var imgReq = new HttpRequestMessage(HttpMethod.Get, imgApiUrl);
+                        imgReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                        using var imgRes = await _httpClient.SendAsync(imgReq, token).ConfigureAwait(false);
+                        if (imgRes.IsSuccessStatusCode)
+                        {
+                            string imgJson = await imgRes.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                            using var imgDoc = JsonDocument.Parse(imgJson);
+                            if (imgDoc.RootElement.TryGetProperty("image", out var imgObj) &&
+                                imgObj.TryGetProperty("representations", out var reps))
+                            {
+                                string mediaUrl = string.Empty;
+                                if (reps.TryGetProperty("full", out var fProp)) mediaUrl = fProp.GetString() ?? string.Empty;
+                                if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("large", out var lProp)) mediaUrl = lProp.GetString() ?? string.Empty;
+                                if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("tall", out var tProp)) mediaUrl = tProp.GetString() ?? string.Empty;
+                                if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("medium", out var mProp)) mediaUrl = mProp.GetString() ?? string.Empty;
+                                results[idx] = mediaUrl;
+                            }
+                        }
+                    }
+                    catch { }
+                }).ConfigureAwait(false);
+
+                foreach (var mediaUrl in results)
+                {
+                    if (!string.IsNullOrWhiteSpace(mediaUrl))
+                    {
+                        images.Add(mediaUrl);
+                    }
+                }
+            }
+            else if (imageMatch.Success)
+            {
+                string id = imageMatch.Groups["id"].Value;
+                string imgApiUrl = $"https://www.rule34.lol/api/v1/json/images/{id}";
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, imgApiUrl);
+                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                if (res.IsSuccessStatusCode)
+                {
+                    string imgJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var imgDoc = JsonDocument.Parse(imgJson);
+                    if (imgDoc.RootElement.TryGetProperty("image", out var imgObj) &&
+                        imgObj.TryGetProperty("representations", out var reps))
+                    {
+                        string mediaUrl = string.Empty;
+                        if (reps.TryGetProperty("full", out var fProp)) mediaUrl = fProp.GetString() ?? string.Empty;
+                        if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("large", out var lProp)) mediaUrl = lProp.GetString() ?? string.Empty;
+                        if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("medium", out var mProp)) mediaUrl = mProp.GetString() ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(mediaUrl))
+                        {
+                            images.Add(mediaUrl);
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return images;
     }
 
     private void SyncCookiesFromNativeWebView(string url)

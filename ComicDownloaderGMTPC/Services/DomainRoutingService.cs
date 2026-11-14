@@ -40,6 +40,7 @@ public static class DomainRoutingService
             if (host.Contains("e-hentai") || host.Contains("exhentai")) return "e-hentai.org";
             if (host.Contains("hitomi")) return "hitomi.la";
             if (host.Contains("luscious")) return "luscious.net";
+            if (host.Contains("rule34")) return "rule34.lol";
             if (host.Contains("comix")) return "comix.to";
 
             return host;
@@ -75,6 +76,7 @@ public static class DomainRoutingService
         if (key.Contains("hentaiera")) return "hentaiera";
         if (key.Contains("hitomi")) return "hitomi";
         if (key.Contains("luscious")) return "luscious";
+        if (key.Contains("rule34")) return "rule34";
         if (key.Contains("e-hentai") || key.Contains("exhentai")) return "e-hentai";
         if (key.Contains("thuviensach") || key.Contains("dilib")) return "thuviensach";
         if (key.Contains("hako") || key.Contains("docln")) return "hako";

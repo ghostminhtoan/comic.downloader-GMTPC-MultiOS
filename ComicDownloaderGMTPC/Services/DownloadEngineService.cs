@@ -2318,7 +2318,7 @@ public class DownloadEngineService
 
                                 if (foundValidFile == null)
                                 {
-                                    foreach (var altExt in new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif" })
+                                    foreach (var altExt in new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif", ".webm", ".mp4" })
                                     {
                                         string altPath = Path.Combine(chapterDir, $"{pageBaseName}{altExt}");
                                         if (File.Exists(altPath))
@@ -2391,7 +2391,7 @@ public class DownloadEngineService
                                     {
                                         manifest[pageFileName] = pageUrl;
                                         // Ghi nhận cả định dạng thực tế nếu In-flight Image Enhancer đã chuyển đổi sang (.jpg, .webp, v.v.)
-                                        foreach (var altExt in new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif" })
+                                        foreach (var altExt in new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif", ".webm", ".mp4" })
                                         {
                                             string altName = $"{pageBaseName}{altExt}";
                                             if (File.Exists(Path.Combine(chapterDir, altName)))
@@ -2749,6 +2749,14 @@ public class DownloadEngineService
         if (data.Length >= 4 && ((data[0] == 0x49 && data[1] == 0x49 && data[2] == 0x2A && data[3] == 0x00) ||
 
                                 (data[0] == 0x4D && data[1] == 0x4D && data[2] == 0x00 && data[3] == 0x2A)))
+
+            return true;
+
+
+
+        // 8. WebM / Matroska Video: 1A 45 DF A3
+
+        if (data.Length >= 4 && data[0] == 0x1A && data[1] == 0x45 && data[2] == 0xDF && data[3] == 0xA3)
 
             return true;
 
@@ -3120,6 +3128,16 @@ public class DownloadEngineService
                     {
 
                         effectiveReferer = "https://hitomi.la/";
+
+                    }
+
+                    else if (targetUrl.Contains("rule34", StringComparison.OrdinalIgnoreCase) ||
+
+                             (refererUrl != null && refererUrl.Contains("rule34", StringComparison.OrdinalIgnoreCase)))
+
+                    {
+
+                        effectiveReferer = "https://www.rule34.lol/";
 
                     }
 
@@ -4171,6 +4189,10 @@ public class DownloadEngineService
             case ".webp":
 
             case ".avif":
+
+            case ".webm":
+
+            case ".mp4":
 
                 return ext;
 
