@@ -47,7 +47,7 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 
 using System.Text.Json;
-
+using System.Text.RegularExpressions;
 using System.Threading;
 
 using System.Threading.Tasks;
@@ -1898,48 +1898,36 @@ public class DownloadEngineService
 
 
                 // Luôn cập nhật động theo Subfolder mới nhất của book (đề phòng người dùng đổi Subfolder trong lúc tải)
-
                 string currentRawSubfolder = string.IsNullOrWhiteSpace(book.Subfolder) ? "[default]" : book.Subfolder.Trim();
-
                 string currentSubFolder = MakeSafeFilename(currentRawSubfolder, 50);
-
                 if (string.IsNullOrWhiteSpace(currentSubFolder)) currentSubFolder = "[default]";
-
-
 
                 string currentTargetServerDir = Path.Combine(effectiveRoot, serverFolder, currentSubFolder);
 
-                string currentBookDir = Path.Combine(currentTargetServerDir, safeBookName);
+                // Nhận diện bài đăng ảnh/video đơn lẻ của rule34 (/images/{id}) hoặc post đơn lẻ non-comic
+                bool isRule34SingleImage = book.Domain != null && book.Domain.Contains("rule34") &&
+                                           (book.Url.Contains("/images/") || (!book.Url.Contains("/comics/") && !book.Url.Contains("/galleries/") && targetChapters.Count == 1 && targetChapters[0].TotalPages <= 1));
 
+                // Với ảnh/video đơn lẻ của rule34, toàn bộ tải vào đúng 1 folder chung của tag (currentTargetServerDir), không tạo subfolder cho từng ảnh
+                string currentBookDir = isRule34SingleImage ? currentTargetServerDir : Path.Combine(currentTargetServerDir, safeBookName);
                 book.LocalDirectory = currentBookDir;
-
                 SafeCreateDirectory(currentBookDir);
 
-
-
                 string chapterDir;
-
                 bool isMultiMode = mode != null && (mode.Contains("Multi", StringComparison.OrdinalIgnoreCase) || mode.Contains("Nhiều", StringComparison.OrdinalIgnoreCase));
 
-
-
-                if (isMultiMode)
-
+                if (isRule34SingleImage)
                 {
-
+                    chapterDir = currentTargetServerDir;
+                }
+                else if (isMultiMode)
+                {
                     chapterDir = Path.Combine(currentTargetServerDir, MakeSafeFilename($"{safeBookName}-{chapterDirName}", 100));
-
                 }
-
                 else
-
                 {
-
                     chapterDir = isSingleGallery ? currentBookDir : Path.Combine(currentBookDir, chapterDirName);
-
                 }
-
-
 
                 chapterDir = SafeCreateDirectory(chapterDir);
 
@@ -2294,7 +2282,37 @@ public class DownloadEngineService
                                 string pageUrl = item.Url;
                                 string pageExt = GetSafeImageExtensionFromUrl(pageUrl);
                                 string pageBaseName = $"{(pIdx + 1):D3}";
-                                string pageFileName = $"{pageBaseName}{pageExt}";
+                                string pageFileName;
+
+                                if (isRule34SingleImage)
+                                {
+                                    string imgIdMatch = Regex.Match(book.Url, @"/images/(?<id>\d+)", RegexOptions.IgnoreCase).Groups["id"].Value;
+                                    if (string.IsNullOrWhiteSpace(imgIdMatch))
+                                    {
+                                        imgIdMatch = Regex.Match(safeBookName, @"\b(?<id>\d+)\b").Groups["id"].Value;
+                                    }
+
+                                    string cleanTitle = safeBookName;
+                                    if (!string.IsNullOrWhiteSpace(imgIdMatch) && !cleanTitle.Contains(imgIdMatch))
+                                    {
+                                        cleanTitle = $"{imgIdMatch}_{cleanTitle}";
+                                    }
+
+                                    string existingExt = Path.GetExtension(cleanTitle);
+                                    if (!string.IsNullOrWhiteSpace(existingExt) && existingExt.Length <= 5 && existingExt.Length >= 3)
+                                    {
+                                        pageFileName = cleanTitle;
+                                    }
+                                    else
+                                    {
+                                        pageFileName = $"{cleanTitle}{pageExt}";
+                                    }
+                                }
+                                else
+                                {
+                                    pageFileName = $"{pageBaseName}{pageExt}";
+                                }
+
                                 string pageFilePath = Path.Combine(chapterDir, pageFileName);
 
                                 // Kiểm tra file tồn tại: Chỉ chấp nhận nếu file > 512 bytes và có trong manifest.
@@ -2318,9 +2336,10 @@ public class DownloadEngineService
 
                                 if (foundValidFile == null)
                                 {
+                                    string matchBase = isRule34SingleImage ? Path.GetFileNameWithoutExtension(pageFileName) : pageBaseName;
                                     foreach (var altExt in new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif", ".webm", ".mp4" })
                                     {
-                                        string altPath = Path.Combine(chapterDir, $"{pageBaseName}{altExt}");
+                                        string altPath = Path.Combine(chapterDir, $"{matchBase}{altExt}");
                                         if (File.Exists(altPath))
                                         {
                                             var fi = new FileInfo(altPath);
@@ -2391,9 +2410,10 @@ public class DownloadEngineService
                                     {
                                         manifest[pageFileName] = pageUrl;
                                         // Ghi nhận cả định dạng thực tế nếu In-flight Image Enhancer đã chuyển đổi sang (.jpg, .webp, v.v.)
+                                        string matchBase = isRule34SingleImage ? Path.GetFileNameWithoutExtension(pageFileName) : pageBaseName;
                                         foreach (var altExt in new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif", ".webm", ".mp4" })
                                         {
-                                            string altName = $"{pageBaseName}{altExt}";
+                                            string altName = $"{matchBase}{altExt}";
                                             if (File.Exists(Path.Combine(chapterDir, altName)))
                                             {
                                                 manifest[altName] = pageUrl;

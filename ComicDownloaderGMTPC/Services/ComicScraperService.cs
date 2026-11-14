@@ -4005,12 +4005,21 @@ public class ComicScraperService
                     decodedQuery = "all";
                 }
 
-                // Nếu là comic tag (/comics/tags/{tag-slug}), kết hợp với tag comic (ví dụ: comic,monster girl)
-                string apiQuery = isComicTag ? $"comic,{decodedQuery}" : decodedQuery;
+                // Nếu là comic tag (/comics/tags/{tag-slug}), sử dụng danh mục Comic Book
+                if (isComicTag)
+                {
+                    var matchedComics = FilterRule34ComicsByTag(decodedQuery);
+                    int calculatedPages = (int)Math.Ceiling(matchedComics.Count / 15.0);
+                    result.TotalPages = Math.Max(1, calculatedPages);
+                    result.TagTitle = $"Comic Tag: {decodedQuery}";
+                    result.IsSuccess = true;
+                    result.StatusMessage = $"Phân tích thành công: {result.TotalPages:N0} trang ({matchedComics.Count:N0} bộ truyện) ({result.TagTitle})";
+                    return result;
+                }
 
                 // Gọi REST API tìm kiếm ảnh/video theo tag: /api/v1/json/search/images?q={query}&per_page=15
-                // Mặc định không truyền filter_id để khớp đúng 100% với số lượng trên web của tag
-                string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(apiQuery)}&per_page=15";
+                // Mặc định không truyền filter_id để khớp đúng 100% với số lượng trên web của tag (ví dụ: 626 kết quả -> 42 trang, 1383 kết quả -> 93 trang)
+                string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(decodedQuery)}&per_page=15";
                 using var rule34Req = new HttpRequestMessage(HttpMethod.Get, searchApiUrl);
                 rule34Req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
                 rule34Req.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
@@ -4026,34 +4035,9 @@ public class ComicScraperService
                         totalCount = totalProp.GetInt32();
                     }
 
-                    // Fallback cho comic tag nếu từ số nhiều không có kết quả (ví dụ: monster girls -> monster girl)
-                    if (totalCount == 0 && isComicTag && decodedQuery.EndsWith("s", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string singularQuery = decodedQuery.Substring(0, decodedQuery.Length - 1).Trim();
-                        string fallbackApiQuery = $"comic,{singularQuery}";
-                        try
-                        {
-                            string fallbackUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(fallbackApiQuery)}&per_page=15";
-                            using var fallbackReq = new HttpRequestMessage(HttpMethod.Get, fallbackUrl);
-                            fallbackReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
-                            using var fallbackRes = await _httpClient.SendAsync(fallbackReq, ct).ConfigureAwait(false);
-                            if (fallbackRes.IsSuccessStatusCode)
-                            {
-                                string fbJson = await fallbackRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                                using var fbDoc = JsonDocument.Parse(fbJson);
-                                if (fbDoc.RootElement.TryGetProperty("total", out var fbTotalProp) && fbTotalProp.GetInt32() > 0)
-                                {
-                                    totalCount = fbTotalProp.GetInt32();
-                                    decodedQuery = singularQuery;
-                                }
-                            }
-                        }
-                        catch { }
-                    }
-
                     int calculatedPages = (int)Math.Ceiling(totalCount / 15.0);
                     result.TotalPages = Math.Max(1, calculatedPages);
-                    result.TagTitle = isComicTag ? $"Comic Tag: {decodedQuery}" : $"Tag: {decodedQuery}";
+                    result.TagTitle = $"Tag: {decodedQuery}";
                     result.IsSuccess = true;
                     result.StatusMessage = $"Phân tích thành công: {result.TotalPages:N0} trang ({totalCount:N0} ảnh/video) ({result.TagTitle})";
                     return result;
@@ -4416,39 +4400,60 @@ public class ComicScraperService
             string decodedQuery = tagSlug.Replace("+", " ").Trim();
             if (string.IsNullOrWhiteSpace(decodedQuery)) decodedQuery = "all";
 
-            // Nếu là comic tag, kết hợp cú pháp tìm kiếm comic,{tag}
-            string apiQuery = isComicTag ? $"comic,{decodedQuery}" : decodedQuery;
-
-            // Kiểm tra xem query có cần fallback singular không nếu là comic tag (ví dụ: monster girls -> monster girl)
-            if (isComicTag && decodedQuery.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+            // Nếu là comic tag (/comics/tags/{tag-slug}), bóc tách danh sách các bộ truyện (mỗi bộ truyện gồm nhiều ảnh)
+            if (isComicTag)
             {
-                try
+                var matchedComics = FilterRule34ComicsByTag(decodedQuery);
+                int totalPagesToCrawl = pageTo - pageFrom + 1;
+                for (int p = pageFrom; p <= pageTo; p++)
                 {
-                    string checkUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(apiQuery)}&per_page=1";
-                    using var checkReq = new HttpRequestMessage(HttpMethod.Get, checkUrl);
-                    checkReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
-                    using var checkRes = _httpClient.Send(checkReq);
-                    if (checkRes.IsSuccessStatusCode)
+                    if (ct.IsCancellationRequested) break;
+                    int skip = (p - 1) * 15;
+                    var pageComics = matchedComics.Skip(skip).Take(15).ToList();
+                    var pageBatch = new List<ComicBookItem>();
+                    string latestTitle = string.Empty;
+
+                    foreach (var c in pageComics)
                     {
-                        using var checkDoc = JsonDocument.Parse(checkRes.Content.ReadAsStream());
-                        if (checkDoc.RootElement.TryGetProperty("total", out var totProp) && totProp.GetInt32() == 0)
+                        string itemUrl = c.Url;
+                        if (!seenUrls.Add(itemUrl)) continue;
+
+                        string itemTitle = !string.IsNullOrWhiteSpace(c.Title) ? c.Title : $"rule34 Comic {c.Id}";
+                        var bookItem = new ComicBookItem
                         {
-                            string singular = decodedQuery.Substring(0, decodedQuery.Length - 1).Trim();
-                            apiQuery = $"comic,{singular}";
-                        }
+                            Index = list.Count + 1,
+                            Url = itemUrl,
+                            Title = itemTitle,
+                            CoverUrl = c.CoverUrl,
+                            Domain = "rule34.lol",
+                            Status = "Waiting",
+                            StatusMessage = $"Sẵn sàng tải ({c.PageCount} trang)"
+                        };
+
+                        list.Add(bookItem);
+                        pageBatch.Add(bookItem);
+                        latestTitle = itemTitle;
+                    }
+
+                    onProgress?.Invoke(p - pageFrom + 1, totalPagesToCrawl, list.Count, latestTitle);
+
+                    if (pageBatch.Count > 0)
+                    {
+                        onBatchItemsScraped?.Invoke(pageBatch);
                     }
                 }
-                catch { }
+
+                return list;
             }
 
-            int totalPagesToCrawl = pageTo - pageFrom + 1;
+            int totalPagesToCrawlNonComic = pageTo - pageFrom + 1;
             for (int p = pageFrom; p <= pageTo; p++)
             {
                 if (ct.IsCancellationRequested) break;
 
                 try
                 {
-                    string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(apiQuery)}&page={p}&per_page=15";
+                    string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(decodedQuery)}&page={p}&per_page=15";
                     using var req = new HttpRequestMessage(HttpMethod.Get, searchApiUrl);
                     req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
                     req.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
@@ -4506,6 +4511,7 @@ public class ComicScraperService
                                     Title = itemTitle,
                                     CoverUrl = coverUrl,
                                     Domain = "rule34.lol",
+                                    Subfolder = decodedQuery, // Đặt tên subfolder là tên tag để tất cả ảnh/video gom chung vào 1 folder tag
                                     Status = "Waiting",
                                     StatusMessage = "Sẵn sàng tải"
                                 };
@@ -4515,7 +4521,7 @@ public class ComicScraperService
                                 latestTitle = itemTitle;
                             }
 
-                            onProgress?.Invoke(p - pageFrom + 1, totalPagesToCrawl, list.Count, latestTitle);
+                            onProgress?.Invoke(p - pageFrom + 1, totalPagesToCrawlNonComic, list.Count, latestTitle);
 
                             if (pageBatch.Count > 0)
                             {
@@ -7265,5 +7271,153 @@ public class ComicScraperService
             }
         }
         catch { }
+    }
+
+    // ====================================================================================================
+    // Quản lý Catalog & Tìm kiếm Bộ Truyện Rule34 Comics (Độc quyền Comic Books nhiều trang)
+    // ====================================================================================================
+    public class Rule34ComicEntry
+    {
+        public int id { get; set; }
+        public string url { get; set; } = string.Empty;
+        public string title { get; set; } = string.Empty;
+        public int page_count { get; set; }
+        public long? first_image_id { get; set; }
+        public List<string> tags { get; set; } = new();
+
+        public int Id => id;
+        public string Url => url;
+        public string Title => title;
+        public int PageCount => page_count;
+        public long? FirstImageId => first_image_id;
+        public List<string> Tags => tags;
+        public string CoverUrl => first_image_id.HasValue ? $"https://cdn.rule34.lol/img/thumb/{first_image_id.Value}.jpg" : string.Empty;
+    }
+
+    private static List<Rule34ComicEntry>? _rule34ComicsCatalog;
+    private static readonly object _rule34CatalogLock = new();
+
+    public static List<Rule34ComicEntry> GetOrLoadRule34ComicsCatalog()
+    {
+        if (_rule34ComicsCatalog != null) return _rule34ComicsCatalog;
+
+        lock (_rule34CatalogLock)
+        {
+            if (_rule34ComicsCatalog != null) return _rule34ComicsCatalog;
+
+            string? json = null;
+
+            // 1. Thử nạp từ Avalonia AssetLoader
+            try
+            {
+                var uri = new Uri("avares://ComicDownloaderGMTPC/Assets/rule34_comics.json");
+                if (Avalonia.Platform.AssetLoader.Exists(uri))
+                {
+                    using var stream = Avalonia.Platform.AssetLoader.Open(uri);
+                    using var reader = new StreamReader(stream, Encoding.UTF8);
+                    json = reader.ReadToEnd();
+                }
+            }
+            catch { }
+
+            // 2. Thử nạp từ BaseDirectory
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string p1 = Path.Combine(baseDir, "Assets", "rule34_comics.json");
+                string p2 = Path.Combine(baseDir, "rule34_comics.json");
+                if (File.Exists(p1)) json = File.ReadAllText(p1, Encoding.UTF8);
+                else if (File.Exists(p2)) json = File.ReadAllText(p2, Encoding.UTF8);
+            }
+
+            // 3. Thử nạp từ CurrentDirectory
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                string curDir = Directory.GetCurrentDirectory();
+                string p3 = Path.Combine(curDir, "Assets", "rule34_comics.json");
+                string p4 = Path.Combine(curDir, "rule34_comics.json");
+                if (File.Exists(p3)) json = File.ReadAllText(p3, Encoding.UTF8);
+                else if (File.Exists(p4)) json = File.ReadAllText(p4, Encoding.UTF8);
+            }
+
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                try
+                {
+                    var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var list = JsonSerializer.Deserialize<List<Rule34ComicEntry>>(json, opts);
+                    if (list != null && list.Count > 0)
+                    {
+                        list.Sort((a, b) => b.Id.CompareTo(a.Id));
+                        _rule34ComicsCatalog = list;
+                        return _rule34ComicsCatalog;
+                    }
+                }
+                catch { }
+            }
+
+            _rule34ComicsCatalog = new List<Rule34ComicEntry>();
+            return _rule34ComicsCatalog;
+        }
+    }
+
+    public static List<Rule34ComicEntry> FilterRule34ComicsByTag(string tagQuery)
+    {
+        var catalog = GetOrLoadRule34ComicsCatalog();
+        string q = (tagQuery ?? string.Empty).ToLowerInvariant().Trim();
+        if (string.IsNullOrWhiteSpace(q) || q == "all")
+        {
+            return new List<Rule34ComicEntry>(catalog);
+        }
+
+        var words = q.Split(new[] { ' ', '+', '_' }, StringSplitOptions.RemoveEmptyEntries);
+        string singularQ = (q.EndsWith("s", StringComparison.OrdinalIgnoreCase) && q.Length > 2)
+            ? q[..^1]
+            : q;
+        var singularWords = words.Select(w => (w.EndsWith("s", StringComparison.OrdinalIgnoreCase) && w.Length > 2) ? w[..^1] : w).ToArray();
+
+        var matched = new List<Rule34ComicEntry>();
+        foreach (var comic in catalog)
+        {
+            var tags = comic.Tags;
+            string title = comic.Title.ToLowerInvariant();
+
+            // 1. Khớp chính xác toàn bộ tag (nguyên mẫu hoặc số ít)
+            if (tags.Any(t => t.Equals(q, StringComparison.OrdinalIgnoreCase) || t.Equals(singularQ, StringComparison.OrdinalIgnoreCase)))
+            {
+                matched.Add(comic);
+                continue;
+            }
+
+            // 2. Một trong các tag chứa cụm tìm kiếm
+            if (tags.Any(t => t.Contains(q, StringComparison.OrdinalIgnoreCase) || t.Contains(singularQ, StringComparison.OrdinalIgnoreCase)))
+            {
+                matched.Add(comic);
+                continue;
+            }
+
+            // 3. Mọi từ khóa xuất hiện trong danh sách tags hoặc title
+            bool allWordsMatch = true;
+            for (int i = 0; i < words.Length; i++)
+            {
+                string w = words[i];
+                string sw = singularWords[i];
+                bool found = tags.Any(t => t.Contains(w, StringComparison.OrdinalIgnoreCase) || t.Contains(sw, StringComparison.OrdinalIgnoreCase))
+                             || title.Contains(w, StringComparison.OrdinalIgnoreCase)
+                             || title.Contains(sw, StringComparison.OrdinalIgnoreCase);
+                if (!found)
+                {
+                    allWordsMatch = false;
+                    break;
+                }
+            }
+
+            if (allWordsMatch)
+            {
+                matched.Add(comic);
+            }
+        }
+
+        return matched;
     }
 }
