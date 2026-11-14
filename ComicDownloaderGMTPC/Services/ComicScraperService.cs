@@ -4497,11 +4497,21 @@ public class ComicScraperService
                                 }
 
                                 string coverUrl = string.Empty;
+                                string directMediaUrl = string.Empty;
                                 if (img.TryGetProperty("representations", out var reps))
                                 {
+                                    if (reps.TryGetProperty("full", out var fProp)) directMediaUrl = fProp.GetString() ?? string.Empty;
+                                    if (string.IsNullOrWhiteSpace(directMediaUrl) && reps.TryGetProperty("large", out var lProp)) directMediaUrl = lProp.GetString() ?? string.Empty;
+                                    if (string.IsNullOrWhiteSpace(directMediaUrl) && reps.TryGetProperty("medium", out var medProp)) directMediaUrl = medProp.GetString() ?? string.Empty;
+
                                     if (reps.TryGetProperty("medium", out var mProp)) coverUrl = mProp.GetString() ?? string.Empty;
                                     else if (reps.TryGetProperty("thumb", out var tProp)) coverUrl = tProp.GetString() ?? string.Empty;
-                                    else if (reps.TryGetProperty("full", out var fProp)) coverUrl = fProp.GetString() ?? string.Empty;
+                                    else if (reps.TryGetProperty("full", out var fullProp)) coverUrl = fullProp.GetString() ?? string.Empty;
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(directMediaUrl))
+                                {
+                                    _rule34MediaUrlCache[itemUrl] = directMediaUrl;
                                 }
 
                                 var bookItem = new ComicBookItem
@@ -4515,6 +4525,23 @@ public class ComicScraperService
                                     Status = "Waiting",
                                     StatusMessage = "Sẵn sàng tải"
                                 };
+
+                                if (!string.IsNullOrWhiteSpace(directMediaUrl))
+                                {
+                                    bookItem.Chapters = new List<ChapterItem>
+                                    {
+                                        new ChapterItem
+                                        {
+                                            ChapterNumber = 1,
+                                            Title = "Media",
+                                            Url = itemUrl,
+                                            Status = "Waiting",
+                                            TotalPages = 1,
+                                            ImageUrls = new List<string> { directMediaUrl }
+                                        }
+                                    };
+                                    bookItem.TotalChapters = 1;
+                                }
 
                                 list.Add(bookItem);
                                 pageBatch.Add(bookItem);
@@ -7027,22 +7054,68 @@ public class ComicScraperService
             }
             else if (imageMatch.Success)
             {
-                string id = imageMatch.Groups["id"].Value;
-                string imgApiUrl = $"https://www.rule34.lol/api/v1/json/images/{id}";
-
-                using var req = new HttpRequestMessage(HttpMethod.Get, imgApiUrl);
-                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
-                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-
-                if (!res.IsSuccessStatusCode)
+                // Kiểm tra trước trong cache đã lưu từ lúc crawl tag để không gọi API tránh 429 Rate Limit
+                if (_rule34MediaUrlCache.TryGetValue(url, out string? cachedMediaUrl) && !string.IsNullOrWhiteSpace(cachedMediaUrl))
                 {
-                    book.Title = $"rule34 Post {id}";
-                    book.Status = "Error";
-                    book.StatusMessage = $"HTTP {(int)res.StatusCode}";
+                    book.Chapters = new List<ChapterItem>
+                    {
+                        new ChapterItem
+                        {
+                            ChapterNumber = 1,
+                            Title = "Media",
+                            Url = url,
+                            Status = "Waiting",
+                            TotalPages = 1,
+                            ImageUrls = new List<string> { cachedMediaUrl }
+                        }
+                    };
+                    book.TotalChapters = 1;
+                    book.Status = "Ready";
+                    book.StatusMessage = "Đã tải thông tin từ cache (1 file)";
                     return book;
                 }
 
-                string rawJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                string id = imageMatch.Groups["id"].Value;
+                string imgApiUrl = $"https://www.rule34.lol/api/v1/json/images/{id}";
+
+                string rawJson = string.Empty;
+                for (int attempt = 1; attempt <= 4; attempt++)
+                {
+                    if (ct.IsCancellationRequested) break;
+
+                    using var req = new HttpRequestMessage(HttpMethod.Get, imgApiUrl);
+                    req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                    using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+
+                    if (res.IsSuccessStatusCode)
+                    {
+                        rawJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                        break;
+                    }
+
+                    int statusCode = (int)res.StatusCode;
+                    if (statusCode == 429 && attempt < 4)
+                    {
+                        await Task.Delay(2000 * attempt, ct).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    if (attempt == 4 || statusCode != 429)
+                    {
+                        book.Title = $"rule34 Post {id}";
+                        book.Status = "Error";
+                        book.StatusMessage = $"HTTP {statusCode}";
+                        return book;
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(rawJson))
+                {
+                    book.Title = $"rule34 Post {id}";
+                    book.Status = "Error";
+                    book.StatusMessage = "Empty API response";
+                    return book;
+                }
                 using var doc = JsonDocument.Parse(rawJson);
                 if (doc.RootElement.TryGetProperty("image", out var imgObj))
                 {
@@ -7208,15 +7281,40 @@ public class ComicScraperService
             }
             else if (imageMatch.Success)
             {
+                // Kiểm tra cache trước để lấy ngay không cần tốn request tới rule34 API
+                if (_rule34MediaUrlCache.TryGetValue(chapterUrl, out string? cachedMediaUrl) && !string.IsNullOrWhiteSpace(cachedMediaUrl))
+                {
+                    images.Add(cachedMediaUrl);
+                    return images;
+                }
+
                 string id = imageMatch.Groups["id"].Value;
                 string imgApiUrl = $"https://www.rule34.lol/api/v1/json/images/{id}";
 
-                using var req = new HttpRequestMessage(HttpMethod.Get, imgApiUrl);
-                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
-                using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
-                if (res.IsSuccessStatusCode)
+                string imgJson = string.Empty;
+                for (int attempt = 1; attempt <= 4; attempt++)
                 {
-                    string imgJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    if (ct.IsCancellationRequested) break;
+
+                    using var req = new HttpRequestMessage(HttpMethod.Get, imgApiUrl);
+                    req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                    using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+
+                    if (res.IsSuccessStatusCode)
+                    {
+                        imgJson = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                        break;
+                    }
+
+                    int statusCode = (int)res.StatusCode;
+                    if (statusCode == 429 && attempt < 4)
+                    {
+                        await Task.Delay(2000 * attempt, ct).ConfigureAwait(false);
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(imgJson))
+                {
                     using var imgDoc = JsonDocument.Parse(imgJson);
                     if (imgDoc.RootElement.TryGetProperty("image", out var imgObj) &&
                         imgObj.TryGetProperty("representations", out var reps))
@@ -7227,6 +7325,7 @@ public class ComicScraperService
                         if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("medium", out var mProp)) mediaUrl = mProp.GetString() ?? string.Empty;
                         if (!string.IsNullOrWhiteSpace(mediaUrl))
                         {
+                            _rule34MediaUrlCache[chapterUrl] = mediaUrl;
                             images.Add(mediaUrl);
                         }
                     }
@@ -7272,6 +7371,10 @@ public class ComicScraperService
         }
         catch { }
     }
+
+    // Bộ nhớ đệm URL ảnh/video gốc đã bóc tách từ API search của rule34 (Key: URL bài viết /images/{id}, Value: URL media trực tiếp)
+    // Giúp khi tải hàng trăm ảnh không phải gọi lại API /images/{id} làm trigger 429 Rate Limit
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _rule34MediaUrlCache = new(StringComparer.OrdinalIgnoreCase);
 
     // ====================================================================================================
     // Quản lý Catalog & Tìm kiếm Bộ Truyện Rule34 Comics (Độc quyền Comic Books nhiều trang)
