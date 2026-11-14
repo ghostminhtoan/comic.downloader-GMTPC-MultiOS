@@ -1983,34 +1983,103 @@ public class DownloadEngineService
 
                 var manifest = LoadManifest(manifestFile);
 
+                bool isAlreadyDownloaded = false;
 
-
-                if (manifest.Count > 0 &&
-
-                    (string.Equals(chapter.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
-
-                     (chapter.TotalPages > 0 && manifest.Count >= chapter.TotalPages)) &&
-
-                    AreAllManifestFilesValid(chapterDir, manifest))
-
+                if (isRule34SingleImage)
                 {
+                    string imgIdMatch = Regex.Match(book.Url, @"/images/(?<id>\d+)", RegexOptions.IgnoreCase).Groups["id"].Value;
+                    if (string.IsNullOrWhiteSpace(imgIdMatch))
+                    {
+                        imgIdMatch = Regex.Match(safeBookName, @"\b(?<id>\d+)\b").Groups["id"].Value;
+                    }
 
+                    if (!string.IsNullOrWhiteSpace(imgIdMatch))
+                    {
+                        // 1. Kiểm tra trong manifest xem có file nào chứa imgIdMatch và tồn tại hợp lệ trên đĩa không
+                        lock (manifest)
+                        {
+                            foreach (var kvp in manifest)
+                            {
+                                string fileName = kvp.Key;
+                                if (fileName.StartsWith($"{imgIdMatch}_", StringComparison.OrdinalIgnoreCase) ||
+                                    fileName.StartsWith($"{imgIdMatch}.", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    string checkPath = Path.Combine(chapterDir, fileName);
+                                    if (File.Exists(checkPath) && new FileInfo(checkPath).Length > 512)
+                                    {
+                                        isAlreadyDownloaded = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2. Kiểm tra trực tiếp trên đĩa nếu manifest chưa kịp cập nhật
+                        if (!isAlreadyDownloaded && Directory.Exists(chapterDir))
+                        {
+                            try
+                            {
+                                var matchedFiles = Directory.GetFiles(chapterDir, $"{imgIdMatch}_*")
+                                    .Concat(Directory.GetFiles(chapterDir, $"{imgIdMatch}.*"));
+                                foreach (var f in matchedFiles)
+                                {
+                                    if (new FileInfo(f).Length > 512)
+                                    {
+                                        isAlreadyDownloaded = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+
+                    if (!isAlreadyDownloaded && chapter.ImageUrls != null && chapter.ImageUrls.Count > 0)
+                    {
+                        string targetImageUrl = chapter.ImageUrls[0];
+                        lock (manifest)
+                        {
+                            if (manifest.ContainsValue(targetImageUrl))
+                            {
+                                var entry = manifest.FirstOrDefault(kvp => kvp.Value == targetImageUrl);
+                                if (!string.IsNullOrEmpty(entry.Key))
+                                {
+                                    string checkPath = Path.Combine(chapterDir, entry.Key);
+                                    if (File.Exists(checkPath) && new FileInfo(checkPath).Length > 512)
+                                    {
+                                        isAlreadyDownloaded = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    isAlreadyDownloaded = manifest.Count > 0 &&
+                        (string.Equals(chapter.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                         (chapter.TotalPages > 0 && manifest.Count >= chapter.TotalPages)) &&
+                        AreAllManifestFilesValid(chapterDir, manifest);
+                }
+
+                if (isAlreadyDownloaded)
+                {
                     completedChapters++;
-
                     chapter.Status = "Completed";
-
-                    chapter.TotalPages = Math.Max(chapter.TotalPages, manifest.Count);
-
-                    chapter.DownloadedPages = chapter.TotalPages;
-
-                    book.StatusMessage = $"Bỏ qua chương đã tải đủ: {chapter.Title}";
-
+                    if (isRule34SingleImage)
+                    {
+                        chapter.TotalPages = 1;
+                        chapter.DownloadedPages = 1;
+                    }
+                    else
+                    {
+                        chapter.TotalPages = Math.Max(chapter.TotalPages, manifest.Count);
+                        chapter.DownloadedPages = chapter.TotalPages;
+                    }
+                    book.StatusMessage = $"Bỏ qua bài đã tải đủ: {chapter.Title}";
                     book.UpdateProgress(completedChapters, totalChapters, chapter.DownloadedPages, chapter.TotalPages);
-
                     ProgressUpdated?.Invoke();
-
                     continue;
-
                 }
 
 
@@ -2831,12 +2900,15 @@ public class DownloadEngineService
 
 
         // 8. WebM / Matroska Video: 1A 45 DF A3
-
         if (data.Length >= 4 && data[0] == 0x1A && data[1] == 0x45 && data[2] == 0xDF && data[3] == 0xA3)
-
             return true;
 
-
+        // 9. ISO Base Media File Format / MP4 / QuickTime: 'ftyp', 'moov', 'mdat'
+        if (data.Length >= 8 &&
+            ((data[4] == 0x66 && data[5] == 0x74 && data[6] == 0x79 && data[7] == 0x70) ||
+             (data[4] == 0x6D && data[5] == 0x6F && data[6] == 0x6F && data[7] == 0x76) ||
+             (data[4] == 0x6D && data[5] == 0x64 && data[6] == 0x61 && data[7] == 0x74)))
+            return true;
 
         return false;
 
@@ -4020,22 +4092,30 @@ public class DownloadEngineService
 
 
 
+    private static readonly object _manifestFileLock = new object();
+
     private static void SaveManifest(string path, Dictionary<string, string> manifest)
-
     {
-
-        try
-
+        lock (_manifestFileLock)
         {
+            try
+            {
+                var diskManifest = LoadManifest(path);
+                lock (manifest)
+                {
+                    foreach (var kvp in manifest)
+                    {
+                        diskManifest[kvp.Key] = kvp.Value;
+                    }
+                }
 
-            string json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
-
-            File.WriteAllText(path, json);
-
+                string json = JsonSerializer.Serialize(diskManifest, new JsonSerializerOptions { WriteIndented = true });
+                string tempFile = $"{path}.tmp_{Guid.NewGuid():N}";
+                File.WriteAllText(tempFile, json);
+                File.Move(tempFile, path, overwrite: true);
+            }
+            catch {}
         }
-
-        catch {}
-
     }
 
 

@@ -63,6 +63,10 @@ public class ImageEnhancerService
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
             return false;
 
+        string ext = Path.GetExtension(filePath).ToLowerInvariant();
+        if (ext is ".webm" or ".mp4" or ".mkv" or ".avi" or ".mov")
+            return false;
+
         options ??= new ImageEnhancerOptions { OverwriteOriginal = true, OutputFormat = "original" };
 
         string targetExt = GetTargetExtension(filePath, options.OutputFormat);
