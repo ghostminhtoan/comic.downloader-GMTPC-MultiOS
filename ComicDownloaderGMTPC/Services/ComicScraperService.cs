@@ -3975,12 +3975,13 @@ public class ComicScraperService
             if (isRule34Domain)
             {
                 // Trích xuất slug hoặc query từ URL
-                // Định dạng tag thường: https://www.rule34.lol/tags/{tag-slug}
+                // Định dạng tag thường: https://www.rule34.lol/tags/{tag-slug} (ví dụ: yoruichi%2Bshihoin hoặc yoruichi+shihoin)
                 // Định dạng comic tag: https://www.rule34.lol/comics/tags/{tag-slug}
                 // Định dạng search query: https://www.rule34.lol/tags/{tag-slug}?page=2 hoặc search?q=...
+                string normalizedUrl = Uri.UnescapeDataString(url);
                 string tagSlug = string.Empty;
-                var comicTagMatch = Regex.Match(url, @"/comics/tags/(?<slug>[^/?#]+)", RegexOptions.IgnoreCase);
-                var generalTagMatch = Regex.Match(url, @"/tags/(?<slug>[^/?#]+)", RegexOptions.IgnoreCase);
+                var comicTagMatch = Regex.Match(normalizedUrl, @"/comics/tags/(?<slug>[^/?#]+)", RegexOptions.IgnoreCase);
+                var generalTagMatch = Regex.Match(normalizedUrl, @"/tags/(?<slug>[^/?#]+)", RegexOptions.IgnoreCase);
 
                 if (comicTagMatch.Success)
                 {
@@ -3992,18 +3993,19 @@ public class ComicScraperService
                 }
                 else
                 {
-                    var qMatch = Regex.Match(url, @"[?&]q=(?<q>[^&#]+)", RegexOptions.IgnoreCase);
+                    var qMatch = Regex.Match(normalizedUrl, @"[?&]q=(?<q>[^&#]+)", RegexOptions.IgnoreCase);
                     if (qMatch.Success) tagSlug = qMatch.Groups["q"].Value;
                 }
 
-                string decodedQuery = Uri.UnescapeDataString(tagSlug.Replace("+", " ")).Trim();
+                string decodedQuery = tagSlug.Replace("+", " ").Trim();
                 if (string.IsNullOrWhiteSpace(decodedQuery))
                 {
                     decodedQuery = "all";
                 }
 
-                // Gọi REST API tìm kiếm ảnh/video theo tag: /api/v1/json/search/images?q={query}&per_page=15&filter_id=2
-                string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(decodedQuery)}&per_page=15&filter_id=2";
+                // Gọi REST API tìm kiếm ảnh/video theo tag: /api/v1/json/search/images?q={query}&per_page=15
+                // Mặc định không truyền filter_id để khớp đúng 100% với số lượng trên web của tag (ví dụ: 626 kết quả -> 42 trang, 1383 kết quả -> 93 trang)
+                string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(decodedQuery)}&per_page=15";
                 using var rule34Req = new HttpRequestMessage(HttpMethod.Get, searchApiUrl);
                 rule34Req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
                 rule34Req.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
@@ -4360,9 +4362,10 @@ public class ComicScraperService
         bool isRule34 = domain.Contains("rule34") || tagUrl.Contains("rule34.lol");
         if (isRule34)
         {
+            string normalizedTagUrl = Uri.UnescapeDataString(tagUrl);
             string tagSlug = string.Empty;
-            var comicTagMatch = Regex.Match(tagUrl, @"/comics/tags/(?<slug>[^/?#]+)", RegexOptions.IgnoreCase);
-            var generalTagMatch = Regex.Match(tagUrl, @"/tags/(?<slug>[^/?#]+)", RegexOptions.IgnoreCase);
+            var comicTagMatch = Regex.Match(normalizedTagUrl, @"/comics/tags/(?<slug>[^/?#]+)", RegexOptions.IgnoreCase);
+            var generalTagMatch = Regex.Match(normalizedTagUrl, @"/tags/(?<slug>[^/?#]+)", RegexOptions.IgnoreCase);
 
             if (comicTagMatch.Success)
             {
@@ -4374,11 +4377,11 @@ public class ComicScraperService
             }
             else
             {
-                var qMatch = Regex.Match(tagUrl, @"[?&]q=(?<q>[^&#]+)", RegexOptions.IgnoreCase);
+                var qMatch = Regex.Match(normalizedTagUrl, @"[?&]q=(?<q>[^&#]+)", RegexOptions.IgnoreCase);
                 if (qMatch.Success) tagSlug = qMatch.Groups["q"].Value;
             }
 
-            string decodedQuery = Uri.UnescapeDataString(tagSlug.Replace("+", " ")).Trim();
+            string decodedQuery = tagSlug.Replace("+", " ").Trim();
             if (string.IsNullOrWhiteSpace(decodedQuery)) decodedQuery = "all";
 
             int totalPagesToCrawl = pageTo - pageFrom + 1;
@@ -4388,7 +4391,7 @@ public class ComicScraperService
 
                 try
                 {
-                    string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(decodedQuery)}&page={p}&per_page=15&filter_id=2";
+                    string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(decodedQuery)}&page={p}&per_page=15";
                     using var req = new HttpRequestMessage(HttpMethod.Get, searchApiUrl);
                     req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
                     req.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
