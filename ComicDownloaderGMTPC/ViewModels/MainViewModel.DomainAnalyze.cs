@@ -95,6 +95,9 @@ public partial class MainViewModel
     private string _domainHentaiforceTagUrl = "https://hentaiforce.net/search?q=-tomboy+%22uncensored%22+%22dark+skin+female%22+-futanari+category%3A%22doujin%22";
 
     [ObservableProperty]
+    private string _domainRule34TagUrl = "https://www.rule34.lol/tags/yorha%2B2b";
+
+    [ObservableProperty]
     private string _domainEhentaiTagUrl = "https://e-hentai.org/?f_search=female%3A%22dark+skin%24%22+other%3A%22uncensored%24%22+-female%3Afutanari+female%3A%22big+breasts%22";
 
     [ObservableProperty]
@@ -688,6 +691,7 @@ public partial class MainViewModel
         if (domain.Contains("hentai2read")) return DomainHentai2readTagUrl;
         if (domain.Contains("hitomi")) return DomainHitomiTagUrl;
         if (domain.Contains("hentaiforce")) return DomainHentaiforceTagUrl;
+        if (domain.Contains("rule34")) return DomainRule34TagUrl;
         if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return DomainEhentaiTagUrl;
         if (domain.Contains("comix")) return DomainComixtoTagUrl;
         return UrlInput;
@@ -711,6 +715,7 @@ public partial class MainViewModel
         else if (domain.Contains("hentai2read")) DomainHentai2readTagUrl = value;
         else if (domain.Contains("hitomi")) DomainHitomiTagUrl = value;
         else if (domain.Contains("hentaiforce")) DomainHentaiforceTagUrl = value;
+        else if (domain.Contains("rule34")) DomainRule34TagUrl = value;
         else if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) DomainEhentaiTagUrl = value;
         else if (domain.Contains("comix")) DomainComixtoTagUrl = value;
         UrlInput = value;
@@ -734,6 +739,7 @@ public partial class MainViewModel
         if (domain.Contains("hentai2read")) return "https://hentai2read.com/";
         if (domain.Contains("hitomi")) return "https://hitomi.la/";
         if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/";
+        if (domain.Contains("rule34")) return "https://www.rule34.lol/";
         if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return "https://e-hentai.org/";
         if (domain.Contains("comix")) return "https://comix.to/";
         return "https://google.com";
@@ -757,6 +763,7 @@ public partial class MainViewModel
         if (domain.Contains("hentai2read")) return "https://hentai2read.com/genre/comedy/";
         if (domain.Contains("hitomi")) return "https://hitomi.la/type/manga-all.html";
         if (domain.Contains("hentaiforce")) return "https://hentaiforce.net/search?q=-tomboy+%22uncensored%22+%22dark+skin+female%22+-futanari+category%3A%22doujin%22";
+        if (domain.Contains("rule34")) return "https://www.rule34.lol/tags/yorha%2B2b";
         if (domain.Contains("e-hentai") || domain.Contains("ehentai") || domain.Contains("exhentai")) return "https://e-hentai.org/?f_search=female%3A%22dark+skin%24%22+other%3A%22uncensored%24%22+-female%3Afutanari+female%3A%22big+breasts%22";
         if (domain.Contains("comix")) return "https://comix.to/browse?genres_in=98897";
         return "";

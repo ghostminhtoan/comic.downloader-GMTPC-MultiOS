@@ -1893,7 +1893,7 @@ public class DownloadEngineService
 
                      string.Equals(chapter.Title, "Chapter 1", StringComparison.OrdinalIgnoreCase) ||
 
-                     (book.Domain != null && (book.Domain.Contains("hitomi") || book.Domain.Contains("e-hentai") || book.Domain.Contains("exhentai") || book.Domain.Contains("hentaiforce"))));
+                     (book.Domain != null && (book.Domain.Contains("hitomi") || book.Domain.Contains("e-hentai") || book.Domain.Contains("exhentai") || book.Domain.Contains("hentaiforce") || book.Domain.Contains("rule34"))));
 
 
 
