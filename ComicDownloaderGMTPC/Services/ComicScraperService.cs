@@ -4498,9 +4498,13 @@ public class ComicScraperService
 
                                 string coverUrl = string.Empty;
                                 string directMediaUrl = string.Empty;
+
+                                // Ưu tiên view_url nếu có (chứa link gốc chính xác của ảnh hoặc video webm)
+                                if (img.TryGetProperty("view_url", out var viewUrlProp)) directMediaUrl = viewUrlProp.GetString() ?? string.Empty;
+
                                 if (img.TryGetProperty("representations", out var reps))
                                 {
-                                    if (reps.TryGetProperty("full", out var fProp)) directMediaUrl = fProp.GetString() ?? string.Empty;
+                                    if (string.IsNullOrWhiteSpace(directMediaUrl) && reps.TryGetProperty("full", out var fProp)) directMediaUrl = fProp.GetString() ?? string.Empty;
                                     if (string.IsNullOrWhiteSpace(directMediaUrl) && reps.TryGetProperty("large", out var lProp)) directMediaUrl = lProp.GetString() ?? string.Empty;
                                     if (string.IsNullOrWhiteSpace(directMediaUrl) && reps.TryGetProperty("medium", out var medProp)) directMediaUrl = medProp.GetString() ?? string.Empty;
 
@@ -7148,11 +7152,23 @@ public class ComicScraperService
                         book.PreviewTagsText = string.Join(", ", tagList);
                     }
 
+                    string singleMediaUrl = string.Empty;
+                    if (imgObj.TryGetProperty("view_url", out var vUrlProp)) singleMediaUrl = vUrlProp.GetString() ?? string.Empty;
+
                     if (imgObj.TryGetProperty("representations", out var reps))
                     {
+                        if (string.IsNullOrWhiteSpace(singleMediaUrl) && reps.TryGetProperty("full", out var fullProp)) singleMediaUrl = fullProp.GetString() ?? string.Empty;
+                        if (string.IsNullOrWhiteSpace(singleMediaUrl) && reps.TryGetProperty("large", out var largeProp)) singleMediaUrl = largeProp.GetString() ?? string.Empty;
+                        if (string.IsNullOrWhiteSpace(singleMediaUrl) && reps.TryGetProperty("medium", out var medProp)) singleMediaUrl = medProp.GetString() ?? string.Empty;
+
                         if (reps.TryGetProperty("medium", out var mProp)) book.CoverUrl = mProp.GetString() ?? string.Empty;
                         else if (reps.TryGetProperty("thumb", out var tProp)) book.CoverUrl = tProp.GetString() ?? string.Empty;
                         else if (reps.TryGetProperty("full", out var fProp)) book.CoverUrl = fProp.GetString() ?? string.Empty;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(singleMediaUrl))
+                    {
+                        _rule34MediaUrlCache[url] = singleMediaUrl;
                     }
 
                     book.Chapters = new List<ChapterItem>
@@ -7163,7 +7179,8 @@ public class ComicScraperService
                             Title = "Media",
                             Url = url,
                             Status = "Waiting",
-                            TotalPages = 1
+                            TotalPages = 1,
+                            ImageUrls = !string.IsNullOrWhiteSpace(singleMediaUrl) ? new List<string> { singleMediaUrl } : new List<string>()
                         }
                     };
                     book.TotalChapters = 1;
@@ -7316,19 +7333,53 @@ public class ComicScraperService
                 if (!string.IsNullOrWhiteSpace(imgJson))
                 {
                     using var imgDoc = JsonDocument.Parse(imgJson);
-                    if (imgDoc.RootElement.TryGetProperty("image", out var imgObj) &&
-                        imgObj.TryGetProperty("representations", out var reps))
+                    if (imgDoc.RootElement.TryGetProperty("image", out var imgObj))
                     {
                         string mediaUrl = string.Empty;
-                        if (reps.TryGetProperty("full", out var fProp)) mediaUrl = fProp.GetString() ?? string.Empty;
-                        if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("large", out var lProp)) mediaUrl = lProp.GetString() ?? string.Empty;
-                        if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("medium", out var mProp)) mediaUrl = mProp.GetString() ?? string.Empty;
+                        if (imgObj.TryGetProperty("view_url", out var vProp)) mediaUrl = vProp.GetString() ?? string.Empty;
+
+                        if (imgObj.TryGetProperty("representations", out var reps))
+                        {
+                            if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("full", out var fProp)) mediaUrl = fProp.GetString() ?? string.Empty;
+                            if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("large", out var lProp)) mediaUrl = lProp.GetString() ?? string.Empty;
+                            if (string.IsNullOrWhiteSpace(mediaUrl) && reps.TryGetProperty("medium", out var mProp)) mediaUrl = mProp.GetString() ?? string.Empty;
+                        }
+
                         if (!string.IsNullOrWhiteSpace(mediaUrl))
                         {
                             _rule34MediaUrlCache[chapterUrl] = mediaUrl;
                             images.Add(mediaUrl);
                         }
                     }
+                }
+
+                // Fallback bóc tách HTML từ trang gốc /images/{id} nếu API không trả về media URL
+                if (images.Count == 0)
+                {
+                    try
+                    {
+                        using var pageReq = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
+                        pageReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                        pageReq.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+                        using var pageRes = await _httpClient.SendAsync(pageReq, ct).ConfigureAwait(false);
+                        string pageHtml = pageRes.IsSuccessStatusCode ? await pageRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false) : string.Empty;
+
+                        if (string.IsNullOrWhiteSpace(pageHtml) && NativeWebViewService.Instance.IsAvailable)
+                        {
+                            pageHtml = await NativeWebViewService.Instance.FetchHtmlAsync(chapterUrl, 30, ct).ConfigureAwait(false) ?? string.Empty;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(pageHtml))
+                        {
+                            string htmlMediaUrl = ExtractRule34MediaFromHtml(pageHtml, chapterUrl);
+                            if (!string.IsNullOrWhiteSpace(htmlMediaUrl))
+                            {
+                                _rule34MediaUrlCache[chapterUrl] = htmlMediaUrl;
+                                images.Add(htmlMediaUrl);
+                            }
+                        }
+                    }
+                    catch { }
                 }
             }
         }
@@ -7375,6 +7426,41 @@ public class ComicScraperService
     // Bộ nhớ đệm URL ảnh/video gốc đã bóc tách từ API search của rule34 (Key: URL bài viết /images/{id}, Value: URL media trực tiếp)
     // Giúp khi tải hàng trăm ảnh không phải gọi lại API /images/{id} làm trigger 429 Rate Limit
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _rule34MediaUrlCache = new(StringComparer.OrdinalIgnoreCase);
+
+    public static string ExtractRule34MediaFromHtml(string html, string pageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return string.Empty;
+
+        // 1. Tìm thẻ video/source có slot="media" hoặc id="image-display" hoặc type="video/..."
+        // Ví dụ: <video slot="media" id="image-display" ...><source src="https://cdn.rule34.lol/.../large.webm?v=..." type="video/webm">
+        var videoSourceMatch = Regex.Match(html, @"<(?:video|source)\s+[^>]*?(?:src|data-src)=['""](?<src>https?://[^'""]+?\.(?:webm|mp4)[^'""]*)['""]", RegexOptions.IgnoreCase);
+        if (videoSourceMatch.Success)
+        {
+            return videoSourceMatch.Groups["src"].Value;
+        }
+
+        // 2. Tìm thẻ img có id="image-display" hoặc class="image-scaled"
+        // Ví dụ: <img id="image-display" src="https://cdn.rule34.lol/media/...jpg?v=..." class="image-scaled">
+        var imgDisplayMatch = Regex.Match(html, @"<img\s+[^>]*?(?:id=['""]image-display['""]|class=['""][^'""]*image-scaled[^'""]*)[^>]*?(?:src|data-src)=['""](?<src>https?://[^'""]+?\.(?:jpg|jpeg|png|gif|webp|avif)[^'""]*)['""]", RegexOptions.IgnoreCase);
+        if (!imgDisplayMatch.Success)
+        {
+            // Đảo ngược vị trí src trước id/class
+            imgDisplayMatch = Regex.Match(html, @"<img\s+[^>]*?(?:src|data-src)=['""](?<src>https?://[^'""]+?\.(?:jpg|jpeg|png|gif|webp|avif)[^'""]*)['""][^>]*?(?:id=['""]image-display['""]|class=['""][^'""]*image-scaled[^'""]*)", RegexOptions.IgnoreCase);
+        }
+        if (imgDisplayMatch.Success)
+        {
+            return imgDisplayMatch.Groups["src"].Value;
+        }
+
+        // 3. Fallback bóc bất kỳ media cdn.rule34.lol nào trong trang
+        var cdnMatch = Regex.Match(html, @"['""](?<src>https://cdn\.rule34\.lol/(?:img|media)/[^'""]+?\.(?:jpg|jpeg|png|gif|webp|webm|mp4)[^'""]*)['""]", RegexOptions.IgnoreCase);
+        if (cdnMatch.Success)
+        {
+            return cdnMatch.Groups["src"].Value;
+        }
+
+        return string.Empty;
+    }
 
     // ====================================================================================================
     // Quản lý Catalog & Tìm kiếm Bộ Truyện Rule34 Comics (Độc quyền Comic Books nhiều trang)
