@@ -8,6 +8,9 @@
   
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <None Update="Assets\rule34_comics.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7467,19 +7468,43 @@ public class ComicScraperService
     // ====================================================================================================
     public class Rule34ComicEntry
     {
+        [JsonPropertyName("id")]
         public int id { get; set; }
+
+        [JsonPropertyName("url")]
         public string url { get; set; } = string.Empty;
+
+        [JsonPropertyName("title")]
         public string title { get; set; } = string.Empty;
+
+        [JsonPropertyName("page_count")]
         public int page_count { get; set; }
+
+        [JsonPropertyName("first_image_id")]
         public long? first_image_id { get; set; }
+
+        [JsonPropertyName("tags")]
         public List<string> tags { get; set; } = new();
 
+        [JsonIgnore]
         public int Id => id;
+
+        [JsonIgnore]
         public string Url => url;
+
+        [JsonIgnore]
         public string Title => title;
+
+        [JsonIgnore]
         public int PageCount => page_count;
+
+        [JsonIgnore]
         public long? FirstImageId => first_image_id;
+
+        [JsonIgnore]
         public List<string> Tags => tags;
+
+        [JsonIgnore]
         public string CoverUrl => first_image_id.HasValue ? $"https://cdn.rule34.lol/img/thumb/{first_image_id.Value}.jpg" : string.Empty;
     }
 
@@ -7527,6 +7552,23 @@ public class ComicScraperService
                 string p4 = Path.Combine(curDir, "rule34_comics.json");
                 if (File.Exists(p3)) json = File.ReadAllText(p3, Encoding.UTF8);
                 else if (File.Exists(p4)) json = File.ReadAllText(p4, Encoding.UTF8);
+            }
+
+            // 4. Thử tìm kiếm ngược lên các thư mục cha (cho test runner hoặc custom host)
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                try
+                {
+                    var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+                    for (int depth = 0; depth < 5 && dir != null; depth++, dir = dir.Parent)
+                    {
+                        string p5 = Path.Combine(dir.FullName, "ComicDownloaderGMTPC", "Assets", "rule34_comics.json");
+                        string p6 = Path.Combine(dir.FullName, "Assets", "rule34_comics.json");
+                        if (File.Exists(p5)) { json = File.ReadAllText(p5, Encoding.UTF8); break; }
+                        if (File.Exists(p6)) { json = File.ReadAllText(p6, Encoding.UTF8); break; }
+                    }
+                }
+                catch { }
             }
 
             if (!string.IsNullOrWhiteSpace(json))
