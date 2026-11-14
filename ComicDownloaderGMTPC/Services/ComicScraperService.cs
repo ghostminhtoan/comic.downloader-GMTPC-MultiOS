@@ -4017,9 +4017,9 @@ public class ComicScraperService
                     return result;
                 }
 
-                // Gọi REST API tìm kiếm ảnh/video theo tag: /api/v1/json/search/images?q={query}&per_page=15
-                // Mặc định không truyền filter_id để khớp đúng 100% với số lượng trên web của tag (ví dụ: 626 kết quả -> 42 trang, 1383 kết quả -> 93 trang)
-                string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(decodedQuery)}&per_page=15";
+                // Gọi REST API tìm kiếm ảnh/video theo tag: /api/v1/json/search/images?q={query}&filter_id=2&per_page=15
+                // filter_id=2 ("Everything") để quét toàn bộ media (kể cả animated/sensitive), khớp chính xác 100% với số lượng trên web của tag (ví dụ: yoruichi shihoin -> 656 kết quả = 44 trang)
+                string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(decodedQuery)}&filter_id=2&per_page=15";
                 using var rule34Req = new HttpRequestMessage(HttpMethod.Get, searchApiUrl);
                 rule34Req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
                 rule34Req.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
@@ -4453,7 +4453,7 @@ public class ComicScraperService
 
                 try
                 {
-                    string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(decodedQuery)}&page={p}&per_page=15";
+                    string searchApiUrl = $"https://www.rule34.lol/api/v1/json/search/images?q={Uri.EscapeDataString(decodedQuery)}&filter_id=2&page={p}&per_page=15";
                     using var req = new HttpRequestMessage(HttpMethod.Get, searchApiUrl);
                     req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
                     req.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");

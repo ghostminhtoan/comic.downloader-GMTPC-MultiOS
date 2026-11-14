@@ -1671,19 +1671,34 @@ public class DownloadEngineService
 
         string safeBookName = MakeSafeFilename(book.Title, 80);
 
-        string bookDir = Path.Combine(targetServerDir, safeBookName);
+        bool isEarlyRule34SingleImage = book.Domain != null && book.Domain.Contains("rule34") &&
+                                       (book.Url.Contains("/images/") || (!book.Url.Contains("/comics/") && !book.Url.Contains("/galleries/")));
+
+        string bookDir = isEarlyRule34SingleImage ? targetServerDir : Path.Combine(targetServerDir, safeBookName);
 
         book.LocalDirectory = bookDir;
 
-
-
         try
-
         {
-
-            bookDir = SafeCreateDirectory(bookDir);
-
-            book.LocalDirectory = bookDir;
+            if (isEarlyRule34SingleImage)
+            {
+                SafeCreateDirectory(targetServerDir);
+                try
+                {
+                    // Dọn dẹp thư mục rỗng cũ nếu phiên bản trước vô tình tạo thư mục trùng tên với file ảnh/video
+                    string accidentalDir = Path.Combine(targetServerDir, safeBookName);
+                    if (Directory.Exists(accidentalDir) && Directory.GetFileSystemEntries(accidentalDir).Length == 0)
+                    {
+                        Directory.Delete(accidentalDir, false);
+                    }
+                }
+                catch { }
+            }
+            else
+            {
+                bookDir = SafeCreateDirectory(bookDir);
+                book.LocalDirectory = bookDir;
+            }
 
 
 
@@ -1912,6 +1927,37 @@ public class DownloadEngineService
                 string currentBookDir = isRule34SingleImage ? currentTargetServerDir : Path.Combine(currentTargetServerDir, safeBookName);
                 book.LocalDirectory = currentBookDir;
                 SafeCreateDirectory(currentBookDir);
+
+                if (isRule34SingleImage)
+                {
+                    try
+                    {
+                        // Dọn dẹp folder rỗng trùng tên file do phiên bản trước tạo
+                        string oldSubDir = Path.Combine(currentTargetServerDir, safeBookName);
+                        if (Directory.Exists(oldSubDir) && Directory.GetFileSystemEntries(oldSubDir).Length == 0)
+                        {
+                            Directory.Delete(oldSubDir, false);
+                        }
+
+                        // Dọn dẹp toàn bộ các thư mục rỗng trong thư mục tag đích để xoá sạch các thư mục rỗng cũ
+                        if (Directory.Exists(currentTargetServerDir))
+                        {
+                            var subDirs = Directory.GetDirectories(currentTargetServerDir);
+                            foreach (var sd in subDirs)
+                            {
+                                try
+                                {
+                                    if (Directory.GetFileSystemEntries(sd).Length == 0)
+                                    {
+                                        Directory.Delete(sd, false);
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                    catch { }
+                }
 
                 string chapterDir;
                 bool isMultiMode = mode != null && (mode.Contains("Multi", StringComparison.OrdinalIgnoreCase) || mode.Contains("Nhiều", StringComparison.OrdinalIgnoreCase));
@@ -2314,6 +2360,16 @@ public class DownloadEngineService
                                 }
 
                                 string pageFilePath = Path.Combine(chapterDir, pageFileName);
+
+                                // Nếu trước đó có thư mục rỗng trùng tên với file đích, xoá thư mục rỗng để Windows cho phép ghi file
+                                try
+                                {
+                                    if (Directory.Exists(pageFilePath) && Directory.GetFileSystemEntries(pageFilePath).Length == 0)
+                                    {
+                                        Directory.Delete(pageFilePath, false);
+                                    }
+                                }
+                                catch { }
 
                                 // Kiểm tra file tồn tại: Chỉ chấp nhận nếu file > 512 bytes và có trong manifest.
                                 // Hỗ trợ linh hoạt cả khi file đã được chuyển đổi sang định dạng khác (.jpg, .webp, .png, .gif) do In-flight Image Enhancement
@@ -3464,10 +3520,14 @@ public class DownloadEngineService
             // Chỉ lưu khi dữ liệu là ảnh THỰC SỰ hợp lệ (Dung lượng >= 512b và đúng Magic Bytes)
             if (IsValidImageData(data))
             {
-                // Dọn sạch tệp rỗng hoặc hỏng (<= 512b) từ phiên tải lỗi trước đó nếu có
+                // Dọn sạch tệp rỗng hoặc hỏng (<= 512b) hoặc thư mục rỗng cùng tên từ phiên tải lỗi trước đó nếu có
                 try
                 {
-                    if (File.Exists(destinationPath))
+                    if (Directory.Exists(destinationPath) && Directory.GetFileSystemEntries(destinationPath).Length == 0)
+                    {
+                        Directory.Delete(destinationPath, false);
+                    }
+                    else if (File.Exists(destinationPath))
                     {
                         var oldFi = new FileInfo(destinationPath);
                         if (oldFi.Length <= 512) File.Delete(destinationPath);
