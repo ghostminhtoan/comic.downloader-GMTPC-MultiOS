@@ -1,0 +1,507 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using SkiaSharp;
+
+namespace ComicDownloaderGMTPC.Services;
+
+/// <summary>
+/// Bộ trích xuất khung hình Video native cho Windows sử dụng Windows Media Foundation (WMF).
+/// Tận dụng 100% API chuẩn của Microsoft Windows (mfplat.dll, mfreadwrite.dll) có sẵn trên Windows 7, 8, 10, 11:
+/// - 0MB tăng thêm cho ứng dụng
+/// - Trích xuất frame thật sự tại bất kỳ mốc thời gian nào xuyên suốt full thời lượng video (.mp4, .mov, .mkv, .ts, .avi, .wmv)
+/// - Không phụ thuộc ffmpeg hay codec cài ngoài
+/// </summary>
+[SupportedOSPlatform("windows")]
+public static class WindowsMediaFoundationExtractor
+{
+    private static bool _mfInitialized = false;
+    private static readonly object _initLock = new();
+
+    private static void EnsureMFInitialized()
+    {
+        if (!_mfInitialized)
+        {
+            lock (_initLock)
+            {
+                if (!_mfInitialized)
+                {
+                    try
+                    {
+                        MFStartup(0x00020070, 0);
+                        _mfInitialized = true;
+                    }
+                    catch { }
+                }
+            }
+        }
+    }
+
+    public static List<byte[]> ExtractFrames(string videoPath, int maxFrames, int maxWidth, int maxHeight, long durationMs)
+    {
+        var list = new List<byte[]>();
+        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath))
+            return list;
+
+        try
+        {
+            EnsureMFInitialized();
+
+            // 1. Tạo Source Reader kèm xử lý Video Processing để tự động gắn Video Decoder và Color Converter
+            int hr = MFCreateAttributes(out IMFAttributes pAttr, 1);
+            if (hr == 0 && pAttr != null)
+            {
+                pAttr.SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1);
+            }
+
+            hr = MFCreateSourceReaderFromURL(videoPath, pAttr, out IMFSourceReader reader);
+            if (hr != 0 || reader == null) return list;
+
+            try
+            {
+                // Chọn stream video đầu tiên
+                reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, false);
+                reader.SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM, true);
+
+                // Yêu cầu chuyển đổi sang RGB32 không nén
+                hr = MFCreateMediaType(out IMFMediaType pType);
+                if (hr == 0 && pType != null)
+                {
+                    try
+                    {
+                        pType.SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+                        pType.SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+                        reader.SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, IntPtr.Zero, pType);
+                    }
+                    finally
+                    {
+                        Marshal.ReleaseComObject(pType);
+                    }
+                }
+
+                // Lấy kích thước video gốc qua Shell COM nếu có
+                int videoW = 0, videoH = 0;
+                try
+                {
+                    VideoThumbnailService.GetVideoThumbnailBytes(videoPath, 1280, 1280, out videoW, out videoH);
+                }
+                catch { }
+
+                if (durationMs <= 0)
+                {
+                    durationMs = VideoMetadataParser.GetVideoDurationMs(videoPath);
+                }
+
+                int count = Math.Max(8, Math.Min(24, maxFrames));
+                long totalHns = durationMs > 0 ? durationMs * 10_000L : 300_000_000L; // Mặc định 30s nếu không đọc được
+                long spanHns = (long)(totalHns * 0.95);
+                long stepHns = Math.Max(10_000_000L, spanHns / count);
+
+                for (int i = 0; i < count; i++)
+                {
+                    long seekHns = i * stepHns;
+                    var pv = new PROPVARIANT { vt = 20, hVal = seekHns };
+                    try
+                    {
+                        reader.SetCurrentPosition(Guid.Empty, ref pv);
+                    }
+                    catch { }
+                    finally
+                    {
+                        PropVariantClear(ref pv);
+                    }
+
+                    // Đọc mẫu khung hình (sample)
+                    hr = reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out IMFSample sample);
+                    if (hr == 0 && sample != null)
+                    {
+                        try
+                        {
+                            byte[]? frameBytes = ConvertSampleToJpegBytes(sample, ref videoW, ref videoH, maxWidth, maxHeight);
+                            if (frameBytes != null && frameBytes.Length > 0)
+                            {
+                                list.Add(frameBytes);
+                            }
+                        }
+                        finally
+                        {
+                            Marshal.ReleaseComObject(sample);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(reader);
+            }
+        }
+        catch { }
+
+        return list;
+    }
+
+    public static byte[]? ExtractFrameAtTime(string videoPath, long timeMs, int maxWidth, int maxHeight)
+    {
+        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath))
+            return null;
+
+        try
+        {
+            EnsureMFInitialized();
+
+            int hr = MFCreateAttributes(out IMFAttributes pAttr, 1);
+            if (hr == 0 && pAttr != null)
+            {
+                pAttr.SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1);
+            }
+
+            hr = MFCreateSourceReaderFromURL(videoPath, pAttr, out IMFSourceReader reader);
+            if (hr != 0 || reader == null) return null;
+
+            try
+            {
+                reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, false);
+                reader.SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM, true);
+
+                hr = MFCreateMediaType(out IMFMediaType pType);
+                if (hr == 0 && pType != null)
+                {
+                    try
+                    {
+                        pType.SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+                        pType.SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+                        reader.SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, IntPtr.Zero, pType);
+                    }
+                    finally
+                    {
+                        Marshal.ReleaseComObject(pType);
+                    }
+                }
+
+                int videoW = 0, videoH = 0;
+                try
+                {
+                    VideoThumbnailService.GetVideoThumbnailBytes(videoPath, 1280, 1280, out videoW, out videoH);
+                }
+                catch { }
+
+                long seekHns = timeMs * 10_000L;
+                var pv = new PROPVARIANT { vt = 20, hVal = seekHns };
+                try
+                {
+                    reader.SetCurrentPosition(Guid.Empty, ref pv);
+                }
+                catch { }
+                finally
+                {
+                    PropVariantClear(ref pv);
+                }
+
+                hr = reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out IMFSample sample);
+                if (hr == 0 && sample != null)
+                {
+                    try
+                    {
+                        return ConvertSampleToJpegBytes(sample, ref videoW, ref videoH, maxWidth, maxHeight);
+                    }
+                    finally
+                    {
+                        Marshal.ReleaseComObject(sample);
+                    }
+                }
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(reader);
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    private static unsafe byte[]? ConvertSampleToJpegBytes(IMFSample sample, ref int videoW, ref int videoH, int maxWidth, int maxHeight)
+    {
+        try
+        {
+            sample.ConvertToContiguousBuffer(out IMFMediaBuffer buffer);
+            if (buffer == null) return null;
+
+            try
+            {
+                buffer.Lock(out IntPtr pData, out _, out int cbLength);
+                if (pData != IntPtr.Zero && cbLength >= 16)
+                {
+                    try
+                    {
+                        // Suy luận kích thước nếu chưa biết
+                        if (videoW <= 0 || videoH <= 0 || (videoW * videoH * 4 != cbLength))
+                        {
+                            int totalPixels = cbLength / 4;
+                            if (totalPixels == 1280 * 720) { videoW = 1280; videoH = 720; }
+                            else if (totalPixels == 1920 * 1080) { videoW = 1920; videoH = 1080; }
+                            else if (totalPixels == 854 * 480) { videoW = 854; videoH = 480; }
+                            else if (totalPixels == 640 * 360) { videoW = 640; videoH = 360; }
+                            else if (totalPixels == 480 * 270) { videoW = 480; videoH = 270; }
+                            else
+                            {
+                                // Giả định tỷ lệ 16:9 phổ biến
+                                videoW = (int)Math.Round(Math.Sqrt(totalPixels * 16.0 / 9.0));
+                                videoH = totalPixels / Math.Max(1, videoW);
+                            }
+                        }
+
+                        if (videoW <= 0 || videoH <= 0) return null;
+
+                        int targetW = maxWidth > 0 ? Math.Min(maxWidth, videoW) : videoW;
+                        int targetH = (int)Math.Round((double)videoH * targetW / videoW);
+                        if (maxHeight > 0 && targetH > maxHeight)
+                        {
+                            targetH = maxHeight;
+                            targetW = (int)Math.Round((double)videoW * targetH / videoH);
+                        }
+
+                        targetW = Math.Max(1, targetW);
+                        targetH = Math.Max(1, targetH);
+
+                        var info = new SKImageInfo(videoW, videoH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                        using var bmp = new SKBitmap();
+                        bmp.InstallPixels(info, pData);
+
+                        using var surface = SKSurface.Create(new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Premul));
+                        var canvas = surface.Canvas;
+                        canvas.Clear(SKColors.Black);
+
+                        var srcRect = new SKRect(0, 0, videoW, videoH);
+                        var destRect = new SKRect(0, 0, targetW, targetH);
+
+                        using var paint = new SKPaint { IsAntialias = true };
+                        canvas.DrawBitmap(bmp, srcRect, destRect, paint);
+
+                        using var img = surface.Snapshot();
+                        using var data = img.Encode(SKEncodedImageFormat.Jpeg, 85);
+                        return data.ToArray();
+                    }
+                    finally
+                    {
+                        buffer.Unlock();
+                    }
+                }
+                else
+                {
+                    buffer.Unlock();
+                }
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(buffer);
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    #region P/Invoke & COM Interfaces
+    private const uint MF_SOURCE_READER_FIRST_VIDEO_STREAM = 0xFFFFFFFC;
+    private const uint MF_SOURCE_READER_ALL_STREAMS = 0xFFFFFFFE;
+
+    private static readonly Guid MFMediaType_Video = new("73646976-0000-0010-8000-00AA00389B71");
+    private static readonly Guid MFVideoFormat_RGB32 = new("00000016-0000-0010-8000-00AA00389B71");
+    private static readonly Guid MF_MT_MAJOR_TYPE = new("48eba18e-f8c9-4687-bf11-0a74c9f96a8f");
+    private static readonly Guid MF_MT_SUBTYPE = new("f7e34c9a-42e8-4714-b74b-cb29d72c35e5");
+    private static readonly Guid MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING = new("fb394f3d-ccf1-42ee-bbb3-f9b845d5681d");
+
+    [DllImport("mfplat.dll", ExactSpelling = true)]
+    private static extern int MFStartup(uint version, uint dwFlags);
+
+    [DllImport("mfplat.dll", ExactSpelling = true)]
+    private static extern int MFCreateAttributes([MarshalAs(UnmanagedType.Interface)] out IMFAttributes ppMFAttributes, uint cInitialSize);
+
+    [DllImport("mfreadwrite.dll", ExactSpelling = true)]
+    private static extern int MFCreateSourceReaderFromURL([MarshalAs(UnmanagedType.LPWStr)] string pwszURL, [MarshalAs(UnmanagedType.Interface)] IMFAttributes? pAttributes, [MarshalAs(UnmanagedType.Interface)] out IMFSourceReader ppSourceReader);
+
+    [DllImport("mfplat.dll", ExactSpelling = true)]
+    private static extern int MFCreateMediaType([MarshalAs(UnmanagedType.Interface)] out IMFMediaType ppMFType);
+
+    [DllImport("ole32.dll", ExactSpelling = true)]
+    private static extern int PropVariantClear(ref PROPVARIANT pvar);
+
+    [ComImport]
+    [Guid("70ae66f2-c809-4e4f-8915-bdcb406b7993")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMFSourceReader
+    {
+        [PreserveSig] int GetStreamSelection(uint dwStreamIndex, [MarshalAs(UnmanagedType.Bool)] out bool pfSelected);
+        [PreserveSig] int SetStreamSelection(uint dwStreamIndex, [MarshalAs(UnmanagedType.Bool)] bool fSelected);
+        [PreserveSig] int GetNativeMediaType(uint dwStreamIndex, uint dwMediaTypeIndex, out IMFMediaType ppMediaType);
+        [PreserveSig] int GetCurrentMediaType(uint dwStreamIndex, out IMFMediaType ppMediaType);
+        [PreserveSig] int SetCurrentMediaType(uint dwStreamIndex, IntPtr pdwReserved, IMFMediaType pMediaType);
+        [PreserveSig] int SetCurrentPosition([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidTimeFormat, [In] ref PROPVARIANT varPosition);
+        [PreserveSig] int ReadSample(uint dwStreamIndex, uint dwControlFlags, out uint pdwActualStreamIndex, out uint pdwStreamFlags, out ulong pllTimestamp, out IMFSample ppSample);
+        [PreserveSig] int Flush(uint dwStreamIndex);
+        [PreserveSig] int GetServiceForStream(uint dwStreamIndex, [In, MarshalAs(UnmanagedType.LPStruct)] Guid guidService, [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid, out IntPtr ppvObject);
+        [PreserveSig] int GetPresentationAttribute(uint dwStreamIndex, [In, MarshalAs(UnmanagedType.LPStruct)] Guid guidAttribute, out PROPVARIANT pvarAttribute);
+    }
+
+    [ComImport]
+    [Guid("44ae0fa8-ea31-4109-8d2e-4cae4997c555")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMFMediaType
+    {
+        // Flattened IMFAttributes
+        [PreserveSig] int GetItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, IntPtr pValue);
+        [PreserveSig] int GetItemType([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out int pType);
+        [PreserveSig] int CompareItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, IntPtr Value, [MarshalAs(UnmanagedType.Bool)] out bool pbResult);
+        [PreserveSig] int Compare([MarshalAs(UnmanagedType.Interface)] IMFAttributes pTheirs, int MatchType, [MarshalAs(UnmanagedType.Bool)] out bool pbResult);
+        [PreserveSig] int GetUINT32([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out uint punValue);
+        [PreserveSig] int GetUINT64([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out ulong punValue);
+        [PreserveSig] int GetDouble([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out double pfValue);
+        [PreserveSig] int GetGUID([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out Guid pguidValue);
+        [PreserveSig] int GetStringLength([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out uint pcchLength);
+        [PreserveSig] int GetString([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pwszValue, uint cchBufSize, out uint pcchLength);
+        [PreserveSig] int GetAllocatedString([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] out string ppwszValue, out uint pcchLength);
+        [PreserveSig] int GetBlobSize([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out uint pcbBlobSize);
+        [PreserveSig] int GetBlob([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [Out, MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize, out uint pcbBlobSize);
+        [PreserveSig] int GetAllocatedBlob([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out IntPtr ppBuf, out uint pcbSize);
+        [PreserveSig] int GetUnknown([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid, [MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+        [PreserveSig] int SetItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, IntPtr Value);
+        [PreserveSig] int DeleteItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey);
+        [PreserveSig] int DeleteAllItems();
+        [PreserveSig] int SetUINT32([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, uint unValue);
+        [PreserveSig] int SetUINT64([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, ulong unValue);
+        [PreserveSig] int SetDouble([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, double fValue);
+        [PreserveSig] int SetGUID([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [In, MarshalAs(UnmanagedType.LPStruct)] Guid guidValue);
+        [PreserveSig] int SetString([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] string wszValue);
+        [PreserveSig] int SetBlob([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize);
+        [PreserveSig] int SetUnknown([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+        [PreserveSig] int LockStore();
+        [PreserveSig] int UnlockStore();
+        [PreserveSig] int GetCount(out uint pcItems);
+        [PreserveSig] int GetItemByIndex(uint unIndex, out Guid pguidKey, IntPtr pValue);
+        [PreserveSig] int CopyAllItems([MarshalAs(UnmanagedType.Interface)] IMFAttributes pDest);
+
+        // IMFMediaType specific
+        [PreserveSig] int GetMajorType(out Guid pguidMajorType);
+        [PreserveSig] int IsCompressedFormat([MarshalAs(UnmanagedType.Bool)] out bool pfCompressed);
+        [PreserveSig] int IsEqual(IMFMediaType pIMediaType, out uint pdwFlags);
+        [PreserveSig] int GetRepresentation(Guid guidRepresentation, out IntPtr ppvRepresentation);
+        [PreserveSig] int FreeRepresentation(Guid guidRepresentation, IntPtr pvRepresentation);
+    }
+
+    [ComImport]
+    [Guid("2cd2d921-c447-44a7-a13c-4adabfc247e3")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMFAttributes
+    {
+        [PreserveSig] int GetItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, IntPtr pValue);
+        [PreserveSig] int GetItemType([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out int pType);
+        [PreserveSig] int CompareItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, IntPtr Value, [MarshalAs(UnmanagedType.Bool)] out bool pbResult);
+        [PreserveSig] int Compare([MarshalAs(UnmanagedType.Interface)] IMFAttributes pTheirs, int MatchType, [MarshalAs(UnmanagedType.Bool)] out bool pbResult);
+        [PreserveSig] int GetUINT32([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out uint punValue);
+        [PreserveSig] int GetUINT64([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out ulong punValue);
+        [PreserveSig] int GetDouble([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out double pfValue);
+        [PreserveSig] int GetGUID([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out Guid pguidValue);
+        [PreserveSig] int GetStringLength([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out uint pcchLength);
+        [PreserveSig] int GetString([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pwszValue, uint cchBufSize, out uint pcchLength);
+        [PreserveSig] int GetAllocatedString([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] out string ppwszValue, out uint pcchLength);
+        [PreserveSig] int GetBlobSize([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out uint pcbBlobSize);
+        [PreserveSig] int GetBlob([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [Out, MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize, out uint pcbBlobSize);
+        [PreserveSig] int GetAllocatedBlob([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out IntPtr ppBuf, out uint pcbSize);
+        [PreserveSig] int GetUnknown([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid, [MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+        [PreserveSig] int SetItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, IntPtr Value);
+        [PreserveSig] int DeleteItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey);
+        [PreserveSig] int DeleteAllItems();
+        [PreserveSig] int SetUINT32([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, uint unValue);
+        [PreserveSig] int SetUINT64([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, ulong unValue);
+        [PreserveSig] int SetDouble([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, double fValue);
+        [PreserveSig] int SetGUID([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [In, MarshalAs(UnmanagedType.LPStruct)] Guid guidValue);
+        [PreserveSig] int SetString([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] string wszValue);
+        [PreserveSig] int SetBlob([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize);
+        [PreserveSig] int SetUnknown([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+        [PreserveSig] int LockStore();
+        [PreserveSig] int UnlockStore();
+        [PreserveSig] int GetCount(out uint pcItems);
+        [PreserveSig] int GetItemByIndex(uint unIndex, out Guid pguidKey, IntPtr pValue);
+        [PreserveSig] int CopyAllItems([MarshalAs(UnmanagedType.Interface)] IMFAttributes pDest);
+    }
+
+    [ComImport]
+    [Guid("c40a00f2-b93a-4d80-ae8c-5a1c634f58e4")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMFSample
+    {
+        // Flattened IMFAttributes
+        [PreserveSig] int GetItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, IntPtr pValue);
+        [PreserveSig] int GetItemType([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out int pType);
+        [PreserveSig] int CompareItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, IntPtr Value, [MarshalAs(UnmanagedType.Bool)] out bool pbResult);
+        [PreserveSig] int Compare([MarshalAs(UnmanagedType.Interface)] IMFAttributes pTheirs, int MatchType, [MarshalAs(UnmanagedType.Bool)] out bool pbResult);
+        [PreserveSig] int GetUINT32([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out uint punValue);
+        [PreserveSig] int GetUINT64([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out ulong punValue);
+        [PreserveSig] int GetDouble([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out double pfValue);
+        [PreserveSig] int GetGUID([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out Guid pguidValue);
+        [PreserveSig] int GetStringLength([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out uint pcchLength);
+        [PreserveSig] int GetString([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pwszValue, uint cchBufSize, out uint pcchLength);
+        [PreserveSig] int GetAllocatedString([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] out string ppwszValue, out uint pcchLength);
+        [PreserveSig] int GetBlobSize([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out uint pcbBlobSize);
+        [PreserveSig] int GetBlob([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [Out, MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize, out uint pcbBlobSize);
+        [PreserveSig] int GetAllocatedBlob([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, out IntPtr ppBuf, out uint pcbSize);
+        [PreserveSig] int GetUnknown([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid, [MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+        [PreserveSig] int SetItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, IntPtr Value);
+        [PreserveSig] int DeleteItem([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey);
+        [PreserveSig] int DeleteAllItems();
+        [PreserveSig] int SetUINT32([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, uint unValue);
+        [PreserveSig] int SetUINT64([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, ulong unValue);
+        [PreserveSig] int SetDouble([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, double fValue);
+        [PreserveSig] int SetGUID([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [In, MarshalAs(UnmanagedType.LPStruct)] Guid guidValue);
+        [PreserveSig] int SetString([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] string wszValue);
+        [PreserveSig] int SetBlob([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize);
+        [PreserveSig] int SetUnknown([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidKey, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+        [PreserveSig] int LockStore();
+        [PreserveSig] int UnlockStore();
+        [PreserveSig] int GetCount(out uint pcItems);
+        [PreserveSig] int GetItemByIndex(uint unIndex, out Guid pguidKey, IntPtr pValue);
+        [PreserveSig] int CopyAllItems([MarshalAs(UnmanagedType.Interface)] IMFAttributes pDest);
+
+        // IMFSample specific
+        [PreserveSig] int GetSampleFlags(out uint pdwSampleFlags);
+        [PreserveSig] int SetSampleFlags(uint dwSampleFlags);
+        [PreserveSig] int GetSampleTime(out long phnsSampleTime);
+        [PreserveSig] int SetSampleTime(long hnsSampleTime);
+        [PreserveSig] int GetSampleDuration(out long phnsSampleDuration);
+        [PreserveSig] int SetSampleDuration(long hnsSampleDuration);
+        [PreserveSig] int GetBufferCount(out uint pdwBufferCount);
+        [PreserveSig] int GetBufferByIndex(uint dwIndex, out IMFMediaBuffer ppBuffer);
+        [PreserveSig] int ConvertToContiguousBuffer(out IMFMediaBuffer ppBuffer);
+        [PreserveSig] int AddBuffer(IMFMediaBuffer pBuffer);
+        [PreserveSig] int RemoveBufferByIndex(uint dwIndex);
+        [PreserveSig] int RemoveAllBuffers();
+        [PreserveSig] int GetTotalLength(out uint pcbTotalLength);
+        [PreserveSig] int CopyToBuffer(IMFMediaBuffer pBuffer);
+    }
+
+    [ComImport]
+    [Guid("045fa593-8799-42b8-bc8d-8968c6453507")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMFMediaBuffer
+    {
+        [PreserveSig] int Lock(out IntPtr ppbBuffer, out int pcbMaxLength, out int pcbCurrentLength);
+        [PreserveSig] int Unlock();
+        [PreserveSig] int GetCurrentLength(out int pcbCurrentLength);
+        [PreserveSig] int SetCurrentLength(int cbCurrentLength);
+        [PreserveSig] int GetMaxLength(out int pcbMaxLength);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PROPVARIANT
+    {
+        public ushort vt;
+        public ushort wReserved1;
+        public ushort wReserved2;
+        public ushort wReserved3;
+        public long hVal;
+    }
+    #endregion
+}

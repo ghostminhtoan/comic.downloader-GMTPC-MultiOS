@@ -40,11 +40,40 @@ public static class VideoThumbnailService
     {
         if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath)) return null;
 
+        // 1. Android Native MediaMetadataRetriever
         if (ExternalNativeFrameAtTimeProvider != null)
         {
             try
             {
                 byte[]? b = ExternalNativeFrameAtTimeProvider(videoPath, timeMs, maxWidth, maxHeight);
+                if (b != null && b.Length > 0)
+                {
+                    return new Bitmap(new MemoryStream(b));
+                }
+            }
+            catch { }
+        }
+
+        // 2. Windows Native Windows Media Foundation (0ms, 0 external dependency)
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                byte[]? b = WindowsMediaFoundationExtractor.ExtractFrameAtTime(videoPath, timeMs, maxWidth, maxHeight);
+                if (b != null && b.Length > 0)
+                {
+                    return new Bitmap(new MemoryStream(b));
+                }
+            }
+            catch { }
+        }
+
+        // 3. Linux qua FFmpeg
+        if (OperatingSystem.IsLinux() || (!OperatingSystem.IsWindows() && !OperatingSystem.IsAndroid()))
+        {
+            try
+            {
+                byte[]? b = ExtractFfmpegFrameAtTime(videoPath, timeMs, maxWidth, maxHeight);
                 if (b != null && b.Length > 0)
                 {
                     return new Bitmap(new MemoryStream(b));
@@ -284,7 +313,18 @@ public static class VideoThumbnailService
             catch { }
         }
 
-        // 2b. Nếu trên Linux hoặc môi trường có ffmpeg
+        // 2b. Nếu trên Windows: Sử dụng native Windows Media Foundation (0 phụ thuộc ngoài, trích xuất full duration)
+        if (frameBytesList.Count < 2 && OperatingSystem.IsWindows())
+        {
+            try
+            {
+                long durMs = GetVideoDurationMs(videoPath);
+                frameBytesList = WindowsMediaFoundationExtractor.ExtractFrames(videoPath, maxFrames, maxWidth, maxHeight, durMs);
+            }
+            catch { }
+        }
+
+        // 2c. Nếu trên Linux hoặc môi trường có ffmpeg
         if (frameBytesList.Count < 2 && (OperatingSystem.IsLinux() || (!OperatingSystem.IsWindows() && !OperatingSystem.IsAndroid())))
         {
             try
@@ -294,7 +334,7 @@ public static class VideoThumbnailService
             catch { }
         }
 
-        // 2c. Nếu chưa có frame: Thử trích xuất native poster và sinh Cinematic Motion Frames
+        // 2d. Nếu chưa có frame: Thử trích xuất native poster và sinh Cinematic Motion Frames
         if (frameBytesList.Count < 2)
         {
             byte[]? posterBytes = GetVideoThumbnailBytes(videoPath, maxWidth, maxHeight, out _, out _);
@@ -470,6 +510,44 @@ public static class VideoThumbnailService
         }
         catch { }
         return list;
+    }
+
+    private static byte[]? ExtractFfmpegFrameAtTime(string videoPath, long timeMs, int maxWidth, int maxHeight)
+    {
+        try
+        {
+            double seekSec = Math.Max(0, timeMs / 1000.0);
+            string tempDir = Path.Combine(AppContext.BaseDirectory, ".tmp", "ffmpeg_exact_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                string outPath = Path.Combine(tempDir, "exact.jpg");
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "ffmpeg",
+                    Arguments = $"-y -ss {seekSec:F2} -i \"{videoPath}\" -vframes 1 -vf \"scale='min({maxWidth},iw)':-1\" -q:v 2 \"{outPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                using var p = Process.Start(psi);
+                if (p != null)
+                {
+                    p.WaitForExit(2000);
+                    if (File.Exists(outPath) && new FileInfo(outPath).Length > 0)
+                    {
+                        return File.ReadAllBytes(outPath);
+                    }
+                }
+            }
+            finally
+            {
+                try { Directory.Delete(tempDir, true); } catch { }
+            }
+        }
+        catch { }
+        return null;
     }
 
     private static string GetCacheFilePath(string videoPath, int maxWidth, int maxHeight)

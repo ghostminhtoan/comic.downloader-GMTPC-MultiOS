@@ -289,6 +289,32 @@ public partial class ComicBookItem : ObservableObject
         OnPropertyChanged(nameof(VideoPlayPauseIcon));
     }
 
+    public long CurrentPlaybackPositionMs { get; set; } = 0;
+
+    public void UpdatePlaybackTime(long curTimeMs)
+    {
+        CurrentPlaybackPositionMs = curTimeMs;
+        _isInternalSeekUpdating = true;
+        try
+        {
+            double pct = VideoDurationMs > 0 ? (double)curTimeMs / VideoDurationMs * 100.0 : 0;
+            VideoSeekPosition = pct;
+            VideoPlayProgress = VideoDurationMs > 0 ? (double)curTimeMs / VideoDurationMs : 0;
+            VideoCurrentTimeText = VideoMetadataParser.FormatDuration(curTimeMs);
+            VideoSeekTimeText = VideoDurationMs > 0 ? $"{VideoCurrentTimeText} / {VideoDurationText}" : VideoCurrentTimeText;
+
+            if (VideoCachedFrames != null && VideoCachedFrames.Count > 0 && VideoDurationMs > 0)
+            {
+                int idx = (int)Math.Clamp(Math.Round((double)curTimeMs / VideoDurationMs * (VideoCachedFrames.Count - 1)), 0, VideoCachedFrames.Count - 1);
+                HighResPreviewBitmap = VideoCachedFrames[idx];
+            }
+        }
+        finally
+        {
+            _isInternalSeekUpdating = false;
+        }
+    }
+
     public void UpdatePlaybackProgress(int frameIndex, int totalFrames)
     {
         if (totalFrames <= 0) return;
@@ -298,6 +324,7 @@ public partial class ComicBookItem : ObservableObject
             VideoPlayProgress = (double)(frameIndex + 1) / totalFrames;
             VideoSeekPosition = (double)frameIndex / Math.Max(1, totalFrames - 1) * 100.0;
             long curMs = VideoDurationMs > 0 ? (long)Math.Round((double)frameIndex / Math.Max(1, totalFrames - 1) * VideoDurationMs) : 0;
+            CurrentPlaybackPositionMs = curMs;
             VideoCurrentTimeText = VideoMetadataParser.FormatDuration(curMs);
             VideoSeekTimeText = VideoDurationMs > 0 ? $"{VideoCurrentTimeText} / {VideoDurationText}" : $"{frameIndex + 1}/{totalFrames}";
         }
@@ -311,6 +338,7 @@ public partial class ComicBookItem : ObservableObject
     {
         if (_isInternalSeekUpdating) return;
         long targetMs = VideoDurationMs > 0 ? (long)Math.Round(value / 100.0 * VideoDurationMs) : 0;
+        CurrentPlaybackPositionMs = targetMs;
         VideoCurrentTimeText = VideoMetadataParser.FormatDuration(targetMs);
         if (VideoCachedFrames != null && VideoCachedFrames.Count > 0)
         {
@@ -323,6 +351,35 @@ public partial class ComicBookItem : ObservableObject
         else
         {
             VideoSeekTimeText = VideoDurationMs > 0 ? $"{VideoCurrentTimeText} / {VideoDurationText}" : $"{Math.Round(value)}%";
+        }
+
+        // On-demand trích xuất chính xác nếu có video path
+        string? vPath = OriginalCoverLocalPath;
+        if (!string.IsNullOrEmpty(vPath) && System.IO.File.Exists(vPath) && targetMs >= 0)
+        {
+            string validPath = vPath;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var exactBmp = VideoThumbnailService.GetFrameAtTime(validPath, targetMs, 1280, 1280);
+                    if (exactBmp != null)
+                    {
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            if (OriginalCoverLocalPath == validPath)
+                            {
+                                HighResPreviewBitmap = exactBmp;
+                            }
+                            else
+                            {
+                                exactBmp.Dispose();
+                            }
+                        });
+                    }
+                }
+                catch { }
+            });
         }
     }
 

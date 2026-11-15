@@ -444,6 +444,7 @@ public partial class MainViewModel
 
     private List<Bitmap>? _dualSortVideoCachedFrames;
     private bool _isInternalDualSortSeekUpdating = false;
+    private long _dualSortVideoCurrentPlaybackMs = 0;
 
     [RelayCommand]
     public void ToggleDualSortVideoPlayPause()
@@ -456,6 +457,7 @@ public partial class MainViewModel
     {
         if (_isInternalDualSortSeekUpdating) return;
         long targetMs = DualSortVideoDurationMs > 0 ? (long)Math.Round(value / 100.0 * DualSortVideoDurationMs) : 0;
+        _dualSortVideoCurrentPlaybackMs = targetMs;
         DualSortVideoCurrentTimeText = VideoMetadataParser.FormatDuration(targetMs);
         if (_dualSortVideoCachedFrames != null && _dualSortVideoCachedFrames.Count > 0)
         {
@@ -469,8 +471,8 @@ public partial class MainViewModel
             DualSortVideoSeekTimeText = DualSortVideoDurationMs > 0 ? $"{DualSortVideoCurrentTimeText} / {DualSortVideoDurationText}" : $"{Math.Round(value)}%";
         }
 
-        // On-demand trích xuất chính xác nếu có provider
-        if (DualSortPreviewItem != null && VideoThumbnailService.ExternalNativeFrameAtTimeProvider != null && targetMs > 0)
+        // On-demand trích xuất khung hình chính xác tại mốc thời gian tua (Windows WMF / Android / Linux FFmpeg)
+        if (DualSortPreviewItem != null && targetMs >= 0)
         {
             string vPath = DualSortPreviewItem.FilePath;
             Task.Run(() =>
@@ -2144,11 +2146,12 @@ public partial class MainViewModel
                         DualSortVideoSeekTimeText = durMs > 0 ? $"00:00 / {durText}" : "00:00";
                     });
 
-                    // Nạp chuỗi frames chuyển động và khởi chạy vòng lặp phát video mượt mà (Autoplay Loop)
-                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 20, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
+                    // Nạp chuỗi frames chuyển động và khởi chạy vòng lặp phát video thời gian thực chuẩn từng giây
+                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 24, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 2)
                     {
                         _dualSortVideoCachedFrames = frames;
+                        _dualSortVideoCurrentPlaybackMs = 0;
                         Dispatcher.UIThread.Post(() =>
                         {
                             if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
@@ -2159,17 +2162,23 @@ public partial class MainViewModel
                             }
                         });
 
-                        int currentFrame = 0;
                         while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                         {
                             if (!IsDualSortVideoPaused)
                             {
-                                var curBmp = frames[currentFrame];
-                                int fNum = currentFrame + 1;
-                                int totalF = frames.Count;
-                                double pct = (double)currentFrame / Math.Max(1, totalF - 1) * 100.0;
-                                long curTimeMs = durMs > 0 ? (long)Math.Round((double)currentFrame / Math.Max(1, totalF - 1) * durMs) : 0;
-                                string curTimeStr = VideoMetadataParser.FormatDuration(curTimeMs);
+                                _dualSortVideoCurrentPlaybackMs += 1000;
+                                if (durMs > 0 && _dualSortVideoCurrentPlaybackMs >= durMs)
+                                {
+                                    _dualSortVideoCurrentPlaybackMs = 0;
+                                }
+
+                                long curMs = _dualSortVideoCurrentPlaybackMs;
+                                double pct = durMs > 0 ? (double)curMs / durMs * 100.0 : 0;
+                                string curTimeStr = VideoMetadataParser.FormatDuration(curMs);
+                                int frameIdx = (durMs > 0 && frames.Count > 0)
+                                    ? (int)Math.Clamp(Math.Round((double)curMs / durMs * (frames.Count - 1)), 0, frames.Count - 1)
+                                    : 0;
+                                var curBmp = frames[frameIdx];
 
                                 Dispatcher.UIThread.Post(() =>
                                 {
@@ -2181,7 +2190,7 @@ public partial class MainViewModel
                                         {
                                             DualSortVideoSeekPosition = pct;
                                             DualSortVideoCurrentTimeText = curTimeStr;
-                                            DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : $"{fNum}/{totalF}";
+                                            DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : curTimeStr;
                                         }
                                         finally
                                         {
@@ -2189,11 +2198,9 @@ public partial class MainViewModel
                                         }
                                     }
                                 }, DispatcherPriority.Render);
-
-                                currentFrame = (currentFrame + 1) % frames.Count;
                             }
 
-                            await Task.Delay(130, cts.Token);
+                            await Task.Delay(1000, cts.Token);
                         }
                     }
                     return;
