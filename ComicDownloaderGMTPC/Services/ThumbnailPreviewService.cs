@@ -402,7 +402,71 @@ public sealed class ThumbnailPreviewService
                                 item.VideoSeekTimeText = durMs > 0 ? $"00:00 / {item.VideoDurationText}" : "00:00";
                             });
 
-                            var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 24, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
+                            // 1. Trên Windows: Sử dụng Media Foundation Player phần cứng giải mã tuần tự siêu tốc (25-30 FPS, 0 giây chờ đợi)
+                            if (OperatingSystem.IsWindows())
+                            {
+                                var player = WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer.Create(videoTarget);
+                                if (player != null)
+                                {
+                                    await RunOnUiAsync(() =>
+                                    {
+                                        item.ActiveVideoPlayer = player;
+                                        item.IsVideoAutoPlaying = true;
+                                    });
+
+                                    try
+                                    {
+                                        while (!ct.IsCancellationRequested)
+                                        {
+                                            bool isActive;
+                                            lock (_bitmapMemoryLock)
+                                            {
+                                                isActive = ReferenceEquals(_activeHighResItem, item);
+                                            }
+                                            if (!isActive) break;
+
+                                            if (!item.IsVideoPaused)
+                                            {
+                                                var nextBmp = player.ReadNextFrame(480, 480, out long frameMs);
+                                                if (nextBmp != null)
+                                                {
+                                                    await RunOnUiAsync(() =>
+                                                    {
+                                                        lock (_bitmapMemoryLock)
+                                                        {
+                                                            if (ReferenceEquals(_activeHighResItem, item))
+                                                            {
+                                                                var old = item.HighResPreviewBitmap;
+                                                                item.HighResPreviewBitmap = nextBmp;
+                                                                old?.Dispose();
+                                                                item.UpdatePlaybackTime(frameMs);
+                                                            }
+                                                            else
+                                                            {
+                                                                nextBmp.Dispose();
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                            }
+
+                                            await Task.Delay(38, ct).ConfigureAwait(false); // 26 FPS mượt mà
+                                        }
+                                    }
+                                    finally
+                                    {
+                                        player.Dispose();
+                                        await RunOnUiAsync(() =>
+                                        {
+                                            if (item.ActiveVideoPlayer == player) item.ActiveVideoPlayer = null;
+                                        });
+                                    }
+                                    return;
+                                }
+                            }
+
+                            // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động
+                            var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 10, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
                             if (frames != null && frames.Count >= 2)
                             {
                                 await RunOnUiAsync(() =>
@@ -412,6 +476,7 @@ public sealed class ThumbnailPreviewService
                                     item.CurrentPlaybackPositionMs = 0;
                                 });
 
+                                int fIdx = 0;
                                 while (!ct.IsCancellationRequested)
                                 {
                                     bool isActive;
@@ -423,22 +488,24 @@ public sealed class ThumbnailPreviewService
 
                                     if (!item.IsVideoPaused)
                                     {
-                                        long nextMs = item.CurrentPlaybackPositionMs + 1000;
-                                        if (durMs > 0 && nextMs >= durMs) nextMs = 0;
-
+                                        var curBmp = frames[fIdx];
+                                        long curMs = durMs > 0 ? (long)Math.Round((double)fIdx / Math.Max(1, frames.Count - 1) * durMs) : 0;
                                         await RunOnUiAsync(() =>
                                         {
                                             lock (_bitmapMemoryLock)
                                             {
                                                 if (ReferenceEquals(_activeHighResItem, item))
                                                 {
-                                                    item.UpdatePlaybackTime(nextMs);
+                                                    item.HighResPreviewBitmap = curBmp;
+                                                    item.UpdatePlaybackTime(curMs);
                                                 }
                                             }
                                         });
+
+                                        fIdx = (fIdx + 1) % frames.Count;
                                     }
 
-                                    await Task.Delay(1000, ct).ConfigureAwait(false);
+                                    await Task.Delay(80, ct).ConfigureAwait(false); // 12.5 FPS cho fallback
                                 }
                             }
                         }

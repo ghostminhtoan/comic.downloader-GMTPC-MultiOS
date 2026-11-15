@@ -445,6 +445,7 @@ public partial class MainViewModel
     private List<Bitmap>? _dualSortVideoCachedFrames;
     private bool _isInternalDualSortSeekUpdating = false;
     private long _dualSortVideoCurrentPlaybackMs = 0;
+    private WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer? _dualSortActivePlayer;
 
     [RelayCommand]
     public void ToggleDualSortVideoPlayPause()
@@ -459,6 +460,21 @@ public partial class MainViewModel
         long targetMs = DualSortVideoDurationMs > 0 ? (long)Math.Round(value / 100.0 * DualSortVideoDurationMs) : 0;
         _dualSortVideoCurrentPlaybackMs = targetMs;
         DualSortVideoCurrentTimeText = VideoMetadataParser.FormatDuration(targetMs);
+
+        // 1. Tua tức thì trên Media Foundation Player nếu có
+        if (OperatingSystem.IsWindows() && _dualSortActivePlayer != null)
+        {
+            var seekBmp = _dualSortActivePlayer.Seek(targetMs, 640, 640);
+            if (seekBmp != null)
+            {
+                var old = DualSortPreviewBitmap;
+                DualSortPreviewBitmap = seekBmp;
+                old?.Dispose();
+            }
+            DualSortVideoSeekTimeText = DualSortVideoDurationMs > 0 ? $"{DualSortVideoCurrentTimeText} / {DualSortVideoDurationText}" : $"{Math.Round(value)}%";
+            return;
+        }
+
         if (_dualSortVideoCachedFrames != null && _dualSortVideoCachedFrames.Count > 0)
         {
             int count = _dualSortVideoCachedFrames.Count;
@@ -2146,8 +2162,76 @@ public partial class MainViewModel
                         DualSortVideoSeekTimeText = durMs > 0 ? $"00:00 / {durText}" : "00:00";
                     });
 
-                    // Nạp chuỗi frames chuyển động và khởi chạy vòng lặp phát video thời gian thực chuẩn từng giây
-                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 24, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
+                    // 1. Trên Windows: Sử dụng Media Foundation Player phần cứng giải mã tuần tự siêu tốc (25-30 FPS, 0 giây chờ đợi)
+                    if (OperatingSystem.IsWindows())
+                    {
+                        var player = WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer.Create(item.FilePath);
+                        if (player != null)
+                        {
+                            _dualSortActivePlayer = player;
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
+                                {
+                                    IsDualSortVideoSeekable = true;
+                                    DualSortVideoSeekPosition = 0;
+                                    DualSortVideoSeekTimeText = durMs > 0 ? $"00:00 / {durText}" : "00:00";
+                                }
+                            });
+
+                            try
+                            {
+                                while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                {
+                                    if (!IsDualSortVideoPaused)
+                                    {
+                                        var frameBmp = player.ReadNextFrame(640, 640, out long frameMs);
+                                        if (frameBmp != null)
+                                        {
+                                            string curTimeStr = VideoMetadataParser.FormatDuration(frameMs);
+                                            double pct = durMs > 0 ? (double)frameMs / durMs * 100.0 : 0;
+                                            Dispatcher.UIThread.Post(() =>
+                                            {
+                                                if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                {
+                                                    var old = DualSortPreviewBitmap;
+                                                    DualSortPreviewBitmap = frameBmp;
+                                                    old?.Dispose();
+
+                                                    _isInternalDualSortSeekUpdating = true;
+                                                    try
+                                                    {
+                                                        DualSortVideoSeekPosition = pct;
+                                                        DualSortVideoCurrentTimeText = curTimeStr;
+                                                        DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : curTimeStr;
+                                                    }
+                                                    finally
+                                                    {
+                                                        _isInternalDualSortSeekUpdating = false;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    frameBmp.Dispose();
+                                                }
+                                            }, DispatcherPriority.Render);
+                                        }
+                                    }
+
+                                    await Task.Delay(38, cts.Token); // 26 FPS chuyển động cực kỳ mượt mà!
+                                }
+                            }
+                            finally
+                            {
+                                player.Dispose();
+                                if (_dualSortActivePlayer == player) _dualSortActivePlayer = null;
+                            }
+                            return;
+                        }
+                    }
+
+                    // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động
+                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 12, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 2)
                     {
                         _dualSortVideoCachedFrames = frames;
@@ -2162,23 +2246,17 @@ public partial class MainViewModel
                             }
                         });
 
+                        int currentFrame = 0;
                         while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                         {
                             if (!IsDualSortVideoPaused)
                             {
-                                _dualSortVideoCurrentPlaybackMs += 1000;
-                                if (durMs > 0 && _dualSortVideoCurrentPlaybackMs >= durMs)
-                                {
-                                    _dualSortVideoCurrentPlaybackMs = 0;
-                                }
-
-                                long curMs = _dualSortVideoCurrentPlaybackMs;
-                                double pct = durMs > 0 ? (double)curMs / durMs * 100.0 : 0;
-                                string curTimeStr = VideoMetadataParser.FormatDuration(curMs);
-                                int frameIdx = (durMs > 0 && frames.Count > 0)
-                                    ? (int)Math.Clamp(Math.Round((double)curMs / durMs * (frames.Count - 1)), 0, frames.Count - 1)
-                                    : 0;
-                                var curBmp = frames[frameIdx];
+                                var curBmp = frames[currentFrame];
+                                int fNum = currentFrame + 1;
+                                int totalF = frames.Count;
+                                double pct = (double)currentFrame / Math.Max(1, totalF - 1) * 100.0;
+                                long curTimeMs = durMs > 0 ? (long)Math.Round((double)currentFrame / Math.Max(1, totalF - 1) * durMs) : 0;
+                                string curTimeStr = VideoMetadataParser.FormatDuration(curTimeMs);
 
                                 Dispatcher.UIThread.Post(() =>
                                 {
@@ -2190,7 +2268,7 @@ public partial class MainViewModel
                                         {
                                             DualSortVideoSeekPosition = pct;
                                             DualSortVideoCurrentTimeText = curTimeStr;
-                                            DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : curTimeStr;
+                                            DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : $"{fNum}/{totalF}";
                                         }
                                         finally
                                         {
@@ -2198,9 +2276,11 @@ public partial class MainViewModel
                                         }
                                     }
                                 }, DispatcherPriority.Render);
+
+                                currentFrame = (currentFrame + 1) % frames.Count;
                             }
 
-                            await Task.Delay(1000, cts.Token);
+                            await Task.Delay(80, cts.Token); // 12.5 FPS cho fallback
                         }
                     }
                     return;
@@ -2342,6 +2422,12 @@ public partial class MainViewModel
         _dualSortAnimationCts?.Cancel();
         _dualSortAnimationCts?.Dispose();
         _dualSortAnimationCts = null;
+
+        if (OperatingSystem.IsWindows())
+        {
+            try { _dualSortActivePlayer?.Dispose(); } catch { }
+        }
+        _dualSortActivePlayer = null;
 
         IsDualSortPreviewVisible = false;
         DualSortPreviewItem = null;

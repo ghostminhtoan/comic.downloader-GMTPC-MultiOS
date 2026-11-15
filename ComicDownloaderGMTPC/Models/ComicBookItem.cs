@@ -291,6 +291,8 @@ public partial class ComicBookItem : ObservableObject
 
     public long CurrentPlaybackPositionMs { get; set; } = 0;
 
+    public object? ActiveVideoPlayer { get; set; }
+
     public void UpdatePlaybackTime(long curTimeMs)
     {
         CurrentPlaybackPositionMs = curTimeMs;
@@ -340,6 +342,21 @@ public partial class ComicBookItem : ObservableObject
         long targetMs = VideoDurationMs > 0 ? (long)Math.Round(value / 100.0 * VideoDurationMs) : 0;
         CurrentPlaybackPositionMs = targetMs;
         VideoCurrentTimeText = VideoMetadataParser.FormatDuration(targetMs);
+
+        // 1. Tua tức thì trên Media Foundation Player nếu có
+        if (OperatingSystem.IsWindows() && ActiveVideoPlayer is WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer player)
+        {
+            var seekBmp = player.Seek(targetMs, 640, 640);
+            if (seekBmp != null)
+            {
+                var old = HighResPreviewBitmap;
+                HighResPreviewBitmap = seekBmp;
+                old?.Dispose();
+            }
+            VideoSeekTimeText = VideoDurationMs > 0 ? $"{VideoCurrentTimeText} / {VideoDurationText}" : $"{Math.Round(value)}%";
+            return;
+        }
+
         if (VideoCachedFrames != null && VideoCachedFrames.Count > 0)
         {
             int count = VideoCachedFrames.Count;
