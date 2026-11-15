@@ -141,14 +141,17 @@ public static class VideoThumbnailService
             catch { }
         }
 
+        bool isRealFrame = resultBytes != null && resultBytes.Length > 0;
+
         // 3. Nếu không trích xuất được frame, tự động sinh Poster Card nghệ thuật bằng SkiaSharp
-        if (resultBytes == null || resultBytes.Length == 0)
+        if (!isRealFrame)
         {
             resultBytes = CreatePosterCardBytes(videoPath, maxWidth, maxHeight, out width, out height);
         }
 
-        // 3. Lưu vào bộ đệm cache trên ổ đĩa để tái sử dụng tức thì 0ms
-        if (resultBytes != null && resultBytes.Length > 0)
+        // 4. Lưu vào bộ đệm cache trên ổ đĩa: Chỉ lưu khi trích xuất được frame thật
+        // Tuyệt đối không cache Poster Card giả để tránh làm kẹt video ở khung đen vĩnh viễn
+        if (isRealFrame && resultBytes != null && resultBytes.Length > 0)
         {
             try
             {
@@ -212,7 +215,7 @@ public static class VideoThumbnailService
         }
         catch { }
 
-        string rawKey = $"{videoPath}_{len}_{time}";
+        string rawKey = $"{videoPath}_{len}_{time}_v2";
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(rawKey));
         string hashStr = Convert.ToHexString(hash).Substring(0, 24).ToLowerInvariant();
 
@@ -451,7 +454,7 @@ public static class VideoThumbnailService
         }
         catch { }
 
-        string rawKey = $"{videoPath}_{len}_{time}";
+        string rawKey = $"{videoPath}_{len}_{time}_v2";
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(rawKey));
         string hashStr = Convert.ToHexString(hash).Substring(0, 24).ToLowerInvariant();
 
