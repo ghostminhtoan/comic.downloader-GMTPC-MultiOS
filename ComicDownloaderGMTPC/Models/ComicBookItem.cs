@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ComicDownloaderGMTPC.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace ComicDownloaderGMTPC.Models;
 
@@ -256,6 +257,57 @@ public partial class ComicBookItem : ObservableObject
 
     [ObservableProperty]
     private double _videoPlayProgress;
+
+    [ObservableProperty]
+    private bool _isVideoPaused;
+
+    [ObservableProperty]
+    private double _videoSeekPosition;
+
+    [ObservableProperty]
+    private string _videoSeekTimeText = string.Empty;
+
+    public string VideoPlayPauseIcon => IsVideoPaused ? "▶" : "⏸";
+
+    public List<Avalonia.Media.Imaging.Bitmap>? VideoCachedFrames { get; set; }
+
+    private bool _isInternalSeekUpdating = false;
+
+    [RelayCommand]
+    public void ToggleVideoPlayPause()
+    {
+        IsVideoPaused = !IsVideoPaused;
+        OnPropertyChanged(nameof(VideoPlayPauseIcon));
+    }
+
+    public void UpdatePlaybackProgress(int frameIndex, int totalFrames)
+    {
+        if (totalFrames <= 0) return;
+        _isInternalSeekUpdating = true;
+        try
+        {
+            VideoPlayProgress = (double)(frameIndex + 1) / totalFrames;
+            VideoSeekPosition = (double)frameIndex / Math.Max(1, totalFrames - 1) * 100.0;
+            VideoSeekTimeText = $"{frameIndex + 1}/{totalFrames}";
+        }
+        finally
+        {
+            _isInternalSeekUpdating = false;
+        }
+    }
+
+    partial void OnVideoSeekPositionChanged(double value)
+    {
+        if (_isInternalSeekUpdating) return;
+        if (VideoCachedFrames != null && VideoCachedFrames.Count > 0)
+        {
+            int count = VideoCachedFrames.Count;
+            int idx = (int)Math.Clamp(Math.Round(value * (count - 1) / 100.0), 0, count - 1);
+            HighResPreviewBitmap = VideoCachedFrames[idx];
+            VideoPlayProgress = (double)(idx + 1) / count;
+            VideoSeekTimeText = $"{idx + 1}/{count}";
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPreviewTags))]

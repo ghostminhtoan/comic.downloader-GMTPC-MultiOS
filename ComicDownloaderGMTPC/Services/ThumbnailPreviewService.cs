@@ -393,10 +393,14 @@ public sealed class ThumbnailPreviewService
                     {
                         try
                         {
-                            var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 14, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
+                            var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 16, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
                             if (frames != null && frames.Count >= 2)
                             {
-                                await RunOnUiAsync(() => item.IsVideoAutoPlaying = true);
+                                await RunOnUiAsync(() =>
+                                {
+                                    item.VideoCachedFrames = frames;
+                                    item.IsVideoAutoPlaying = true;
+                                });
                                 int fIdx = 0;
                                 while (!ct.IsCancellationRequested)
                                 {
@@ -407,21 +411,25 @@ public sealed class ThumbnailPreviewService
                                     }
                                     if (!isActive) break;
 
-                                    var curBmp = frames[fIdx];
-                                    await RunOnUiAsync(() =>
+                                    if (!item.IsVideoPaused)
                                     {
-                                        lock (_bitmapMemoryLock)
+                                        var curBmp = frames[fIdx];
+                                        await RunOnUiAsync(() =>
                                         {
-                                            if (ReferenceEquals(_activeHighResItem, item))
+                                            lock (_bitmapMemoryLock)
                                             {
-                                                item.HighResPreviewBitmap = curBmp;
-                                                item.VideoPlayProgress = (double)(fIdx + 1) / frames.Count;
+                                                if (ReferenceEquals(_activeHighResItem, item))
+                                                {
+                                                    item.HighResPreviewBitmap = curBmp;
+                                                    item.UpdatePlaybackProgress(fIdx, frames.Count);
+                                                }
                                             }
-                                        }
-                                    });
+                                        });
+
+                                        fIdx = (fIdx + 1) % frames.Count;
+                                    }
 
                                     await Task.Delay(130, ct).ConfigureAwait(false);
-                                    fIdx = (fIdx + 1) % frames.Count;
                                 }
                             }
                         }

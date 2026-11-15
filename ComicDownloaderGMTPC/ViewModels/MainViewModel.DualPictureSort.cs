@@ -419,6 +419,42 @@ public partial class MainViewModel
     [ObservableProperty]
     private string _dualSortPreviewAnimatedBadge = string.Empty;
 
+    [ObservableProperty]
+    private bool _isDualSortVideoSeekable = false;
+
+    [ObservableProperty]
+    private bool _isDualSortVideoPaused = false;
+
+    [ObservableProperty]
+    private double _dualSortVideoSeekPosition = 0;
+
+    [ObservableProperty]
+    private string _dualSortVideoSeekTimeText = string.Empty;
+
+    public string DualSortVideoPlayPauseIcon => IsDualSortVideoPaused ? "▶" : "⏸";
+
+    private List<Bitmap>? _dualSortVideoCachedFrames;
+    private bool _isInternalDualSortSeekUpdating = false;
+
+    [RelayCommand]
+    public void ToggleDualSortVideoPlayPause()
+    {
+        IsDualSortVideoPaused = !IsDualSortVideoPaused;
+        OnPropertyChanged(nameof(DualSortVideoPlayPauseIcon));
+    }
+
+    partial void OnDualSortVideoSeekPositionChanged(double value)
+    {
+        if (_isInternalDualSortSeekUpdating) return;
+        if (_dualSortVideoCachedFrames != null && _dualSortVideoCachedFrames.Count > 0)
+        {
+            int count = _dualSortVideoCachedFrames.Count;
+            int idx = (int)Math.Clamp(Math.Round(value * (count - 1) / 100.0), 0, count - 1);
+            DualSortPreviewBitmap = _dualSortVideoCachedFrames[idx];
+            DualSortVideoSeekTimeText = $"{idx + 1}/{count}";
+        }
+    }
+
     public string DualSortPreviewButtonText => IsDualSortPreviewEnabled ? (_langService.CurrentLanguage == "VI" ? "👁️ PREVIEW: BẬT" : "👁️ PREVIEW: ON") : (_langService.CurrentLanguage == "VI" ? "👁️ PREVIEW: TẮT" : "👁️ PREVIEW: OFF");
     public string DualSortPreviewButtonBg => IsDualSortPreviewEnabled ? "#064E3B" : "#1E293B";
     public string DualSortPreviewButtonBorder => IsDualSortPreviewEnabled ? "#10B981" : "#475569";
@@ -2021,6 +2057,11 @@ public partial class MainViewModel
         IsDualSortPreviewVisible = true;
         IsDualSortPreviewAnimated = false;
         DualSortPreviewAnimatedBadge = string.Empty;
+        IsDualSortVideoSeekable = false;
+        IsDualSortVideoPaused = false;
+        DualSortVideoSeekPosition = 0;
+        DualSortVideoSeekTimeText = string.Empty;
+        _dualSortVideoCachedFrames = null;
 
         var cts = new CancellationTokenSource();
         _dualSortAnimationCts = cts;
@@ -2051,23 +2092,52 @@ public partial class MainViewModel
                     });
 
                     // Nạp chuỗi frames chuyển động và khởi chạy vòng lặp phát video mượt mà (Autoplay Loop)
-                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 14, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
+                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 16, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 2)
                     {
+                        _dualSortVideoCachedFrames = frames;
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
+                            {
+                                IsDualSortVideoSeekable = true;
+                                DualSortVideoSeekPosition = 0;
+                                DualSortVideoSeekTimeText = $"1/{frames.Count}";
+                            }
+                        });
+
                         int currentFrame = 0;
                         while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                         {
-                            var curBmp = frames[currentFrame];
-                            Dispatcher.UIThread.Post(() =>
+                            if (!IsDualSortVideoPaused)
                             {
-                                if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                var curBmp = frames[currentFrame];
+                                int fNum = currentFrame + 1;
+                                int totalF = frames.Count;
+                                double pct = (double)currentFrame / Math.Max(1, totalF - 1) * 100.0;
+
+                                Dispatcher.UIThread.Post(() =>
                                 {
-                                    DualSortPreviewBitmap = curBmp;
-                                }
-                            }, DispatcherPriority.Render);
+                                    if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                    {
+                                        DualSortPreviewBitmap = curBmp;
+                                        _isInternalDualSortSeekUpdating = true;
+                                        try
+                                        {
+                                            DualSortVideoSeekPosition = pct;
+                                            DualSortVideoSeekTimeText = $"{fNum}/{totalF}";
+                                        }
+                                        finally
+                                        {
+                                            _isInternalDualSortSeekUpdating = false;
+                                        }
+                                    }
+                                }, DispatcherPriority.Render);
+
+                                currentFrame = (currentFrame + 1) % frames.Count;
+                            }
 
                             await Task.Delay(130, cts.Token);
-                            currentFrame = (currentFrame + 1) % frames.Count;
                         }
                     }
                     return;
@@ -2215,6 +2285,11 @@ public partial class MainViewModel
         DualSortPreviewBitmap = null;
         IsDualSortPreviewAnimated = false;
         DualSortPreviewAnimatedBadge = string.Empty;
+        IsDualSortVideoSeekable = false;
+        IsDualSortVideoPaused = false;
+        _dualSortVideoCachedFrames = null;
+        DualSortVideoSeekPosition = 0;
+        DualSortVideoSeekTimeText = string.Empty;
     }
 
     // ==========================================
