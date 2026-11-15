@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using SkiaSharp;
@@ -167,6 +170,238 @@ public static class VideoThumbnailService
         {
             return CreatePosterCardFromInfo("Video", videoBytes.Length, ext, maxWidth, maxHeight, out width, out height);
         }
+    }
+
+    public static async Task<List<Bitmap>> GetOrExtractVideoFramesAsync(string videoPath, int maxFrames = 14, int maxWidth = 480, int maxHeight = 480, System.Threading.CancellationToken ct = default)
+    {
+        var result = new List<Bitmap>();
+        if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath)) return result;
+
+        long len = 0;
+        long time = 0;
+        try
+        {
+            var fi = new FileInfo(videoPath);
+            if (fi.Exists)
+            {
+                len = fi.Length;
+                time = fi.LastWriteTimeUtc.Ticks;
+            }
+        }
+        catch { }
+
+        string rawKey = $"{videoPath}_{len}_{time}";
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(rawKey));
+        string hashStr = Convert.ToHexString(hash).Substring(0, 24).ToLowerInvariant();
+
+        string framesDir = Path.Combine(AppContext.BaseDirectory, ".tmp", "preview-cache", "video-frames", $"{hashStr}_{maxWidth}x{maxHeight}");
+
+        // 1. Kiểm tra cache frame trên đĩa
+        if (Directory.Exists(framesDir))
+        {
+            try
+            {
+                var cachedFiles = Directory.GetFiles(framesDir, "frame_*.jpg");
+                Array.Sort(cachedFiles, NaturalSortComparer.Instance);
+                if (cachedFiles.Length >= 2)
+                {
+                    foreach (var f in cachedFiles)
+                    {
+                        if (ct.IsCancellationRequested) break;
+                        byte[] fb = await File.ReadAllBytesAsync(f, ct).ConfigureAwait(false);
+                        if (fb.Length > 0)
+                        {
+                            result.Add(new Bitmap(new MemoryStream(fb)));
+                        }
+                    }
+                    if (result.Count >= 2) return result;
+                }
+            }
+            catch { }
+        }
+
+        // 2. Trích xuất frame mới
+        var frameBytesList = new List<byte[]>();
+
+        // 2a. Nếu trên Linux hoặc môi trường có ffmpeg
+        if (OperatingSystem.IsLinux() || (!OperatingSystem.IsWindows() && !OperatingSystem.IsAndroid()))
+        {
+            try
+            {
+                frameBytesList = ExtractFfmpegFrames(videoPath, maxFrames, maxWidth, maxHeight);
+            }
+            catch { }
+        }
+
+        // 2b. Nếu chưa có frame: Thử trích xuất native poster và sinh Cinematic Motion Frames
+        if (frameBytesList.Count < 2)
+        {
+            byte[]? posterBytes = GetVideoThumbnailBytes(videoPath, maxWidth, maxHeight, out _, out _);
+            if (posterBytes != null && posterBytes.Length > 0)
+            {
+                frameBytesList = GenerateCinematicMotionFrames(posterBytes, maxFrames, maxWidth, maxHeight);
+            }
+        }
+
+        if (frameBytesList.Count == 0) return result;
+
+        // 3. Lưu vào cache trên đĩa để nạp tức thì 0ms ở các lần sau
+        try
+        {
+            if (!Directory.Exists(framesDir)) Directory.CreateDirectory(framesDir);
+            for (int i = 0; i < frameBytesList.Count; i++)
+            {
+                string framePath = Path.Combine(framesDir, $"frame_{i:D2}.jpg");
+                await File.WriteAllBytesAsync(framePath, frameBytesList[i], ct).ConfigureAwait(false);
+            }
+        }
+        catch { }
+
+        // 4. Tạo Avalonia Bitmap danh sách
+        foreach (var b in frameBytesList)
+        {
+            if (ct.IsCancellationRequested) break;
+            try
+            {
+                result.Add(new Bitmap(new MemoryStream(b)));
+            }
+            catch { }
+        }
+
+        return result;
+    }
+
+    public static async Task<List<Bitmap>> GetOrExtractVideoFramesFromBufferAsync(byte[] videoBytes, string ext, int maxFrames = 14, int maxWidth = 480, int maxHeight = 480, System.Threading.CancellationToken ct = default)
+    {
+        var result = new List<Bitmap>();
+        if (videoBytes == null || videoBytes.Length == 0) return result;
+
+        string tempDir = Path.Combine(AppContext.BaseDirectory, ".tmp", "video_thumb_temp");
+        try
+        {
+            if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+            string safeExt = string.IsNullOrWhiteSpace(ext) ? ".webm" : (ext.StartsWith('.') ? ext : "." + ext);
+            string tempFile = Path.Combine(tempDir, $"{Guid.NewGuid():N}{safeExt}");
+            await File.WriteAllBytesAsync(tempFile, videoBytes, ct).ConfigureAwait(false);
+
+            try
+            {
+                return await GetOrExtractVideoFramesAsync(tempFile, maxFrames, maxWidth, maxHeight, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                try { File.Delete(tempFile); } catch { }
+            }
+        }
+        catch
+        {
+            return result;
+        }
+    }
+
+    public static List<byte[]> GenerateCinematicMotionFrames(byte[] posterBytes, int frameCount = 14, int maxWidth = 480, int maxHeight = 480)
+    {
+        var list = new List<byte[]>();
+        if (posterBytes == null || posterBytes.Length == 0) return list;
+
+        try
+        {
+            using var codec = SKCodec.Create(new MemoryStream(posterBytes));
+            if (codec == null) return list;
+
+            using var origBitmap = SKBitmap.Decode(codec);
+            if (origBitmap == null || origBitmap.Width <= 0 || origBitmap.Height <= 0) return list;
+
+            int origW = origBitmap.Width;
+            int origH = origBitmap.Height;
+            int targetW = Math.Min(maxWidth, origW);
+            int targetH = (int)Math.Round((double)origH * targetW / origW);
+            targetH = Math.Max(10, Math.Min(maxHeight, targetH));
+
+            var targetInfo = new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Premul);
+
+            for (int i = 0; i < frameCount; i++)
+            {
+                double progress = (double)i / Math.Max(1, frameCount - 1);
+                // Hiệu ứng Ken Burns mượt mà: Zoom 100% -> 109%, pan nhẹ sang ngang
+                double zoom = 1.0 + 0.09 * Math.Sin(progress * Math.PI);
+                double visibleW = origW / zoom;
+                double visibleH = origH / zoom;
+                double offsetX = (origW - visibleW) * (0.2 + 0.6 * progress);
+                double offsetY = (origH - visibleH) * (0.3 + 0.4 * progress);
+
+                var srcRect = new SKRect((float)offsetX, (float)offsetY, (float)(offsetX + visibleW), (float)(offsetY + visibleH));
+                var destRect = new SKRect(0, 0, targetW, targetH);
+
+                using var surface = SKSurface.Create(targetInfo);
+                var canvas = surface.Canvas;
+                canvas.Clear(SKColors.Black);
+                using (var bmpPaint = new SKPaint { IsAntialias = true })
+                {
+                    canvas.DrawBitmap(origBitmap, srcRect, destRect, bmpPaint);
+                }
+
+                // Vẽ vạch timeline video chạy mượt ở đáy khung ảnh preview
+                using (var progressPaint = new SKPaint
+                {
+                    Color = new SKColor(0, 229, 255, 200), // Cyan neon video playback bar
+                    Style = SKPaintStyle.Fill,
+                    IsAntialias = true
+                })
+                {
+                    float barW = (float)(targetW * progress);
+                    canvas.DrawRect(0, targetH - 3, barW, 3, progressPaint);
+                }
+
+                using var snap = surface.Snapshot();
+                using var encoded = snap.Encode(SKEncodedImageFormat.Jpeg, 88);
+                list.Add(encoded.ToArray());
+            }
+        }
+        catch { }
+
+        return list;
+    }
+
+    private static List<byte[]> ExtractFfmpegFrames(string videoPath, int maxFrames, int maxWidth, int maxHeight)
+    {
+        var list = new List<byte[]>();
+        try
+        {
+            string tempDir = Path.Combine(AppContext.BaseDirectory, ".tmp", "ffmpeg_frames_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                string outPattern = Path.Combine(tempDir, "f_%03d.jpg");
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "ffmpeg",
+                    Arguments = $"-y -i \"{videoPath}\" -vf \"fps={Math.Max(1, maxFrames / 4)},scale='min({maxWidth},iw)':-1\" -vframes {maxFrames} \"{outPattern}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                using var p = Process.Start(psi);
+                if (p != null)
+                {
+                    p.WaitForExit(3000);
+                    var files = Directory.GetFiles(tempDir, "f_*.jpg");
+                    Array.Sort(files);
+                    foreach (var f in files)
+                    {
+                        byte[] b = File.ReadAllBytes(f);
+                        if (b.Length > 0) list.Add(b);
+                    }
+                }
+            }
+            finally
+            {
+                try { Directory.Delete(tempDir, true); } catch { }
+            }
+        }
+        catch { }
+        return list;
     }
 
     private static string GetCacheFilePath(string videoPath, int maxWidth, int maxHeight)

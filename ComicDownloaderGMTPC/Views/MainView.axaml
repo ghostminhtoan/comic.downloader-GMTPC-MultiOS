@@ -10935,13 +10935,21 @@
 
                                 <!-- Badge icon video nhỏ trên góc ảnh bìa nếu là file video -->
                                 <Border IsVisible="{Binding ActiveHoverItem.IsVideoItem}"
-                                        Background="#CC7C3AED" CornerRadius="4" Padding="6,2" Margin="6"
+                                        Background="#E67C3AED" CornerRadius="4" Padding="7,3" Margin="6"
                                         HorizontalAlignment="Right" VerticalAlignment="Top">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
                                         <TextBlock Text="▶" FontSize="10" Foreground="#FFFFFF" FontWeight="Bold" VerticalAlignment="Center" />
+                                        <TextBlock Text="TỰ PHÁT (LOOP)" FontSize="9.5" Foreground="#00E5FF" FontWeight="ExtraBold" VerticalAlignment="Center" IsVisible="{Binding ActiveHoverItem.IsVideoAutoPlaying}" />
                                         <TextBlock Text="{Binding ActiveHoverItem.VideoBadge}" FontSize="10" Foreground="#FDE047" FontWeight="ExtraBold" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Border>
+
+                                <!-- Thanh timeline tiến trình tự phát video (Looping Progress Bar) -->
+                                <ProgressBar IsVisible="{Binding ActiveHoverItem.IsVideoAutoPlaying}"
+                                             Value="{Binding ActiveHoverItem.VideoPlayProgress}"
+                                             Minimum="0" Maximum="1" Height="3"
+                                             Foreground="#00E5FF" Background="#40000000"
+                                             VerticalAlignment="Bottom" HorizontalAlignment="Stretch" />
 
                                 <!-- Overlay Đang tải ảnh bìa -->
                                 <Border Background="#80000000" IsVisible="{Binding ActiveHoverItem.IsThumbnailLoading}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">

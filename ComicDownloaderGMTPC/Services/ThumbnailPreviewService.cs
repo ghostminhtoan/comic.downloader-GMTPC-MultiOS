@@ -368,6 +368,83 @@ public sealed class ThumbnailPreviewService
             catch { }
         }
 
+        // Tự động phát (Autoplay Loop) video trong Popup Preview khi hover vào item video
+        if (item.IsVideoItem)
+        {
+            try
+            {
+                string? videoTarget = null;
+                if (!string.IsNullOrWhiteSpace(item.LocalDirectory) && Directory.Exists(item.LocalDirectory))
+                {
+                    videoTarget = Directory.GetFiles(item.LocalDirectory, "*.*").FirstOrDefault(f => VideoThumbnailService.IsVideoFile(f));
+                }
+                if (string.IsNullOrWhiteSpace(videoTarget) && !string.IsNullOrWhiteSpace(item.OriginalCoverLocalPath) && File.Exists(item.OriginalCoverLocalPath))
+                {
+                    videoTarget = item.OriginalCoverLocalPath;
+                }
+                if (string.IsNullOrWhiteSpace(videoTarget) && File.Exists(originalFile))
+                {
+                    videoTarget = originalFile;
+                }
+
+                if (!string.IsNullOrWhiteSpace(videoTarget))
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 14, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
+                            if (frames != null && frames.Count >= 2)
+                            {
+                                await RunOnUiAsync(() => item.IsVideoAutoPlaying = true);
+                                int fIdx = 0;
+                                while (!ct.IsCancellationRequested)
+                                {
+                                    bool isActive;
+                                    lock (_bitmapMemoryLock)
+                                    {
+                                        isActive = ReferenceEquals(_activeHighResItem, item);
+                                    }
+                                    if (!isActive) break;
+
+                                    var curBmp = frames[fIdx];
+                                    await RunOnUiAsync(() =>
+                                    {
+                                        lock (_bitmapMemoryLock)
+                                        {
+                                            if (ReferenceEquals(_activeHighResItem, item))
+                                            {
+                                                item.HighResPreviewBitmap = curBmp;
+                                                item.VideoPlayProgress = (double)(fIdx + 1) / frames.Count;
+                                            }
+                                        }
+                                    });
+
+                                    await Task.Delay(130, ct).ConfigureAwait(false);
+                                    fIdx = (fIdx + 1) % frames.Count;
+                                }
+                            }
+                        }
+                        catch { }
+                        finally
+                        {
+                            await RunOnUiAsync(() =>
+                            {
+                                lock (_bitmapMemoryLock)
+                                {
+                                    if (ReferenceEquals(_activeHighResItem, item))
+                                    {
+                                        item.IsVideoAutoPlaying = false;
+                                    }
+                                }
+                            });
+                        }
+                    }, ct);
+                }
+            }
+            catch { }
+        }
+
         if (string.IsNullOrWhiteSpace(item.PreviewTagsText) || string.IsNullOrWhiteSpace(item.PreviewType) || string.IsNullOrWhiteSpace(item.PreviewLanguage))
         {
             bool loaded = false;

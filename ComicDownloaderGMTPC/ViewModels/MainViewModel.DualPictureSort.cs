@@ -2031,7 +2031,7 @@ public partial class MainViewModel
             {
                 if (!File.Exists(item.FilePath)) return;
 
-                // 0. Xử lý xem trước Video (.webm, .mp4, .mkv, .ts)
+                // 0. Xử lý xem trước Video (.webm, .mp4, .mkv, .ts) - Tự động phát (Autoplay Loop) không cần bấm Play
                 if (VideoThumbnailService.IsVideoFile(item.FilePath))
                 {
                     string vExt = Path.GetExtension(item.FilePath).TrimStart('.').ToUpperInvariant();
@@ -2042,13 +2042,34 @@ public partial class MainViewModel
                         {
                             DualSortPreviewBitmap = videoBmp;
                             IsDualSortPreviewAnimated = true;
-                            DualSortPreviewAnimatedBadge = $"🎬 {vExt}";
+                            DualSortPreviewAnimatedBadge = $"▶ VIDEO ({vExt} • TỰ PHÁT)";
                         }
                         else
                         {
                             videoBmp?.Dispose();
                         }
                     });
+
+                    // Nạp chuỗi frames chuyển động và khởi chạy vòng lặp phát video mượt mà (Autoplay Loop)
+                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 14, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
+                    if (frames != null && frames.Count >= 2)
+                    {
+                        int currentFrame = 0;
+                        while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                        {
+                            var curBmp = frames[currentFrame];
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                {
+                                    DualSortPreviewBitmap = curBmp;
+                                }
+                            }, DispatcherPriority.Render);
+
+                            await Task.Delay(130, cts.Token);
+                            currentFrame = (currentFrame + 1) % frames.Count;
+                        }
+                    }
                     return;
                 }
 

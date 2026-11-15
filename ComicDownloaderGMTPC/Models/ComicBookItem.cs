@@ -252,6 +252,12 @@ public partial class ComicBookItem : ObservableObject
     private bool _isThumbnailLoading;
 
     [ObservableProperty]
+    private bool _isVideoAutoPlaying;
+
+    [ObservableProperty]
+    private double _videoPlayProgress;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPreviewTags))]
     private string _previewTagsText = string.Empty;
 
