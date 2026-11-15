@@ -59,7 +59,7 @@ public partial class MainViewModel
     private readonly Stack<List<PictureSortHistoryEntry>> _dualSortRedoBatches = new();
     private static readonly HashSet<string> _validImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".avif", ".jfif"
+        ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".avif", ".jfif", ".webm", ".mkv", ".ts", ".mp4"
     };
 
     // ==========================================
@@ -1180,36 +1180,45 @@ public partial class MainViewModel
 
                 try
                 {
-                    // 1. Đọc metadata kích thước ảnh gốc siêu tốc bằng SKCodec (chỉ đọc header, không nạp toàn bộ ảnh)
                     int origW = 0;
                     int origH = 0;
-                    try
-                    {
-                        using var headerStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                        using var codec = SKCodec.Create(headerStream);
-                        if (codec != null)
-                        {
-                            origW = codec.Info.Width;
-                            origH = codec.Info.Height;
-                        }
-                    }
-                    catch { }
-
-                    // 2. Tạo thumbnail trực tiếp bằng Avalonia Bitmap.DecodeToWidth (chuẩn 100% mọi định dạng JPG, PNG, WEBP, GIF, BMP)
                     Bitmap? thumbBmp = null;
-                    try
+
+                    if (VideoThumbnailService.IsVideoFile(item.FilePath))
                     {
-                        using var imgStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                        thumbBmp = Bitmap.DecodeToWidth(imgStream, 480);
+                        // 1. Trích xuất frame thumbnail video (.mp4, .webm, .mkv, .ts)
+                        thumbBmp = VideoThumbnailService.GetVideoThumbnail(item.FilePath, 480, 480, out origW, out origH);
                     }
-                    catch
+                    else
                     {
+                        // 1. Đọc metadata kích thước ảnh gốc siêu tốc bằng SKCodec (chỉ đọc header, không nạp toàn bộ ảnh)
                         try
                         {
-                            using var fallbackStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                            thumbBmp = new Bitmap(fallbackStream);
+                            using var headerStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                            using var codec = SKCodec.Create(headerStream);
+                            if (codec != null)
+                            {
+                                origW = codec.Info.Width;
+                                origH = codec.Info.Height;
+                            }
                         }
                         catch { }
+
+                        // 2. Tạo thumbnail trực tiếp bằng Avalonia Bitmap.DecodeToWidth (chuẩn 100% mọi định dạng JPG, PNG, WEBP, GIF, BMP)
+                        try
+                        {
+                            using var imgStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                            thumbBmp = Bitmap.DecodeToWidth(imgStream, 480);
+                        }
+                        catch
+                        {
+                            try
+                            {
+                                using var fallbackStream = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                                thumbBmp = new Bitmap(fallbackStream);
+                            }
+                            catch { }
+                        }
                     }
 
                     if (thumbBmp != null)
@@ -1260,15 +1269,31 @@ public partial class MainViewModel
             {
                 if (File.Exists(item.FilePath))
                 {
-                    using var fs = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    var fullBmp = new Bitmap(fs);
-                    Dispatcher.UIThread.Post(() =>
+                    Bitmap? fullBmp = null;
+                    if (VideoThumbnailService.IsVideoFile(item.FilePath))
                     {
-                        if (DualSortSelectedPreview == item)
+                        fullBmp = VideoThumbnailService.GetVideoThumbnail(item.FilePath, 1280, 1280, out _, out _);
+                    }
+                    else
+                    {
+                        using var fs = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        fullBmp = new Bitmap(fs);
+                    }
+
+                    if (fullBmp != null)
+                    {
+                        Dispatcher.UIThread.Post(() =>
                         {
-                            DualSortPreviewBitmap = fullBmp;
-                        }
-                    });
+                            if (DualSortSelectedPreview == item)
+                            {
+                                DualSortPreviewBitmap = fullBmp;
+                            }
+                            else
+                            {
+                                fullBmp.Dispose();
+                            }
+                        });
+                    }
                 }
             }
             catch { }
@@ -1290,15 +1315,31 @@ public partial class MainViewModel
             {
                 if (File.Exists(item.FilePath))
                 {
-                    using var fs = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    var fullBmp = new Bitmap(fs);
-                    Dispatcher.UIThread.Post(() =>
+                    Bitmap? fullBmp = null;
+                    if (VideoThumbnailService.IsVideoFile(item.FilePath))
                     {
-                        if (DualSortSelectedPreview == item)
+                        fullBmp = VideoThumbnailService.GetVideoThumbnail(item.FilePath, 1280, 1280, out _, out _);
+                    }
+                    else
+                    {
+                        using var fs = new FileStream(item.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        fullBmp = new Bitmap(fs);
+                    }
+
+                    if (fullBmp != null)
+                    {
+                        Dispatcher.UIThread.Post(() =>
                         {
-                            DualSortPreviewBitmap = fullBmp;
-                        }
-                    });
+                            if (DualSortSelectedPreview == item)
+                            {
+                                DualSortPreviewBitmap = fullBmp;
+                            }
+                            else
+                            {
+                                fullBmp.Dispose();
+                            }
+                        });
+                    }
                 }
             }
             catch { }
@@ -1989,6 +2030,27 @@ public partial class MainViewModel
             try
             {
                 if (!File.Exists(item.FilePath)) return;
+
+                // 0. Xử lý xem trước Video (.webm, .mp4, .mkv, .ts)
+                if (VideoThumbnailService.IsVideoFile(item.FilePath))
+                {
+                    string vExt = Path.GetExtension(item.FilePath).TrimStart('.').ToUpperInvariant();
+                    var videoBmp = VideoThumbnailService.GetVideoThumbnail(item.FilePath, 1280, 1280, out _, out _);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
+                        {
+                            DualSortPreviewBitmap = videoBmp;
+                            IsDualSortPreviewAnimated = true;
+                            DualSortPreviewAnimatedBadge = $"🎬 {vExt}";
+                        }
+                        else
+                        {
+                            videoBmp?.Dispose();
+                        }
+                    });
+                    return;
+                }
 
                 // 1. Nạp nhanh ảnh gốc tĩnh ban đầu để người dùng xem ngay lập tức (0ms latency)
                 try

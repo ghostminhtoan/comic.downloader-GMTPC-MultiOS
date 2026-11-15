@@ -22,7 +22,7 @@ public static class FolderOrFilePickerService
 {
     private static readonly string[] ValidImageExtensions = new[]
     {
-        "*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif", "*.avif", "*.jxl"
+        "*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif", "*.avif", "*.jxl", "*.webm", "*.mkv", "*.ts", "*.mp4"
     };
 
     public static async Task<string?> PickFolderWithFileViewAsync(TopLevel? topLevel, string? initialPath, string language = "VI")

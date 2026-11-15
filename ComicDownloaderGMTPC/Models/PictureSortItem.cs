@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Avalonia.Media.Imaging;
+using ComicDownloaderGMTPC.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ComicDownloaderGMTPC.Models;
@@ -51,6 +52,9 @@ public partial class PictureSortItem : ObservableObject
 
     public string ItemBgBrush => IsSelected ? "#1E293B" : "#0B1120";
     public string ItemBorderBrush => IsSelected ? "#0284C7" : "#1E293B";
+
+    public bool IsVideo => VideoThumbnailService.IsVideoFile(FilePath);
+    public string VideoBadge => IsVideo ? Path.GetExtension(FilePath).TrimStart('.').ToUpperInvariant() : string.Empty;
 
     [ObservableProperty]
     private bool _isLoading;

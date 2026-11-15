@@ -132,6 +132,13 @@ public partial class App : Application
                 return;
             }
 
+            if (desktop.Args != null && desktop.Args.Any(a => string.Equals(a, "--test-video-preview", StringComparison.OrdinalIgnoreCase)))
+            {
+                base.OnFrameworkInitializationCompleted();
+                _ = RunVideoPreviewTestAsync(desktop);
+                return;
+            }
+
             // 2. Kiểm tra nếu mở tệp trực tiếp từ hệ điều hành (Double-click file hoặc Context Menu)
             // Khởi động trực tiếp TRÌNH ĐỌC TRUYỆN ĐỘC LẬP SIÊU NHẸ (STANDALONE READER MODE),
             // TUYỆT ĐỐI KHÔNG khởi tạo MainWindow / MainViewModel (không nạp Scraper, WebView, Database)!
@@ -1291,5 +1298,78 @@ public partial class App : Application
                 _ = SharedMainViewModel.DrainPendingSharedLinksAsync();
             });
         }
+    }
+
+    private static async Task RunVideoPreviewTestAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        Console.WriteLine("================================================================================");
+        Console.WriteLine("[TEST SUITE] KIỂM THỬ TÍNH NĂNG PREVIEW VIDEO & LỌC ẢNH KÉP (.WEBM, .MP4, .MKV, .TS)");
+        Console.WriteLine("================================================================================");
+
+        int passCount = 0;
+        int totalTests = 4;
+
+        // Test 1: Kiểm tra nhận diện định dạng video
+        bool isV1 = VideoThumbnailService.IsVideoFile("sample.webm");
+        bool isV2 = VideoThumbnailService.IsVideoFile("sample.mp4");
+        bool isV3 = VideoThumbnailService.IsVideoFile("sample.mkv");
+        bool isV4 = VideoThumbnailService.IsVideoFile("sample.ts");
+        bool isNotV = VideoThumbnailService.IsVideoFile("sample.png");
+        bool test1Ok = isV1 && isV2 && isV3 && isV4 && !isNotV;
+        Console.WriteLine($"[TEST 1] Nhận diện định dạng video: webm={isV1}, mp4={isV2}, mkv={isV3}, ts={isV4}, png={!isNotV} => {(test1Ok ? "PASS ✅" : "FAIL ❌")}");
+        if (test1Ok) passCount++;
+
+        // Test 2: Kiểm tra Magic Bytes video data
+        byte[] webmMagic = new byte[] { 0x1A, 0x45, 0xDF, 0xA3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        byte[] mp4Magic = new byte[] { 0x00, 0x00, 0x00, 0x20, (byte)'f', (byte)'t', (byte)'y', (byte)'p', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        byte[] pngMagic = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        bool test2Ok = VideoThumbnailService.IsVideoData(webmMagic) && VideoThumbnailService.IsVideoData(mp4Magic) && !VideoThumbnailService.IsVideoData(pngMagic);
+        Console.WriteLine($"[TEST 2] Nhận diện Magic Bytes: WebM={VideoThumbnailService.IsVideoData(webmMagic)}, MP4={VideoThumbnailService.IsVideoData(mp4Magic)}, PNG={!VideoThumbnailService.IsVideoData(pngMagic)} => {(test2Ok ? "PASS ✅" : "FAIL ❌")}");
+        if (test2Ok) passCount++;
+
+        // Test 3: Trích xuất frame thumbnail từ file WebM thực tế
+        string sampleDir = Path.Combine(AppContext.BaseDirectory, "Downloads", "rule34", "yoruichi shihoin");
+        if (!Directory.Exists(sampleDir))
+        {
+            sampleDir = Path.Combine(Directory.GetCurrentDirectory(), "Comic Downloader GMTPC AVALONIA", "publish", "Downloads", "rule34", "yoruichi shihoin");
+        }
+        if (!Directory.Exists(sampleDir))
+        {
+            sampleDir = Path.Combine(Directory.GetCurrentDirectory(), "publish", "Downloads", "rule34", "yoruichi shihoin");
+        }
+
+        string[]? webmFiles = Directory.Exists(sampleDir) ? Directory.GetFiles(sampleDir, "*.webm") : Array.Empty<string>();
+        if (webmFiles.Length > 0)
+        {
+            string testFile = webmFiles[0];
+            int outW = 0, outH = 0;
+            byte[]? thumbBytes = VideoThumbnailService.GetVideoThumbnailBytes(testFile, 480, 480, out outW, out outH);
+            bool test3Ok = thumbBytes != null && thumbBytes.Length > 0 && outW > 0 && outH > 0;
+            Console.WriteLine($"[TEST 3] Trích xuất frame từ {Path.GetFileName(testFile)}: Size={thumbBytes?.Length} bytes, Res={outW}x{outH} => {(test3Ok ? "PASS ✅" : "FAIL ❌")}");
+            if (test3Ok) passCount++;
+        }
+        else
+        {
+            // Fallback tạo Poster Card
+            int outW = 0, outH = 0;
+            byte[]? thumbBytes = VideoThumbnailService.ExtractThumbnailBytesFromVideoBuffer(webmMagic, ".webm", 480, 480, out outW, out outH);
+            bool test3Ok = thumbBytes != null && thumbBytes.Length > 0;
+            Console.WriteLine($"[TEST 3] Fallback Poster Card: Size={thumbBytes?.Length} bytes => {(test3Ok ? "PASS ✅" : "FAIL ❌")}");
+            if (test3Ok) passCount++;
+        }
+
+        // Test 4: PictureSortItem model hỗ trợ video badge
+        string testVideoPath = webmFiles.Length > 0 ? webmFiles[0] : "video_sample.mp4";
+        var sortItem = new PictureSortItem(testVideoPath);
+        bool test4Ok = sortItem.IsVideo && (sortItem.VideoBadge == "WEBM" || sortItem.VideoBadge == "MP4");
+        Console.WriteLine($"[TEST 4] PictureSortItem model: IsVideo={sortItem.IsVideo}, Badge='{sortItem.VideoBadge}' => {(test4Ok ? "PASS ✅" : "FAIL ❌")}");
+        if (test4Ok) passCount++;
+
+        Console.WriteLine($"================================================================================");
+        Console.WriteLine($"KẾT QUẢ TỔNG THỂ: {passCount}/{totalTests} tests PASS.");
+        Console.WriteLine("================================================================================");
+
+        await Task.Delay(50);
+        desktop.Shutdown(passCount == totalTests ? 0 : 1);
     }
 }

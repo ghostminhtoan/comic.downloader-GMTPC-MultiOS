@@ -22,7 +22,7 @@ public sealed class LibraryScannerService
 
     public static readonly HashSet<string> ValidImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".jfif"
+        ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".jfif", ".webm", ".mkv", ".ts", ".mp4"
     };
 
     public static readonly HashSet<string> ValidArchiveExtensions = new(StringComparer.OrdinalIgnoreCase)

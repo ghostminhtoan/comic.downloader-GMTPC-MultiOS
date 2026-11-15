@@ -180,7 +180,8 @@ public sealed class ThumbnailPreviewService
     {
         string combined = $"{url} {domain}".ToLowerInvariant();
 
-        return combined.Contains("hentaiforce.net/view/") ||
+        return combined.Contains("rule34") ||
+               combined.Contains("hentaiforce.net/view/") ||
                combined.Contains("truyenqq") ||
                combined.Contains("dilib.vn") ||
                combined.Contains("thuviensach.vn") ||
@@ -289,13 +290,14 @@ public sealed class ThumbnailPreviewService
                 byte[] bytes = await File.ReadAllBytesAsync(originalFile, ct).ConfigureAwait(false);
                 if (bytes.Length > 0)
                 {
-                    await RunOnUiAsync(() =>
+                    if (VideoThumbnailService.IsVideoFile(originalFile) || VideoThumbnailService.IsVideoData(bytes))
                     {
-                        try
+                        var videoHighResBmp = VideoThumbnailService.GetVideoThumbnail(originalFile, 640, 640, out _, out _);
+                        if (videoHighResBmp != null)
                         {
-                            item.OriginalCoverLocalPath = originalFile;
-                            if (Avalonia.Application.Current != null)
+                            await RunOnUiAsync(() =>
                             {
+                                item.OriginalCoverLocalPath = originalFile;
                                 lock (_bitmapMemoryLock)
                                 {
                                     if (_activeHighResItem != null && !ReferenceEquals(_activeHighResItem, item))
@@ -304,21 +306,43 @@ public sealed class ThumbnailPreviewService
                                     }
                                     _activeHighResItem = item;
                                 }
+                                item.HighResPreviewBitmap = videoHighResBmp;
+                            });
+                        }
+                    }
+                    else
+                    {
+                        await RunOnUiAsync(() =>
+                        {
+                            try
+                            {
+                                item.OriginalCoverLocalPath = originalFile;
+                                if (Avalonia.Application.Current != null)
+                                {
+                                    lock (_bitmapMemoryLock)
+                                    {
+                                        if (_activeHighResItem != null && !ReferenceEquals(_activeHighResItem, item))
+                                        {
+                                            _activeHighResItem.HighResPreviewBitmap = null;
+                                        }
+                                        _activeHighResItem = item;
+                                    }
 
-                                using var ms = new MemoryStream(bytes);
-                                try
-                                {
-                                    item.HighResPreviewBitmap = Bitmap.DecodeToWidth(ms, 340);
-                                }
-                                catch
-                                {
-                                    ms.Position = 0;
-                                    item.HighResPreviewBitmap = new Bitmap(ms);
+                                    using var ms = new MemoryStream(bytes);
+                                    try
+                                    {
+                                        item.HighResPreviewBitmap = Bitmap.DecodeToWidth(ms, 340);
+                                    }
+                                    catch
+                                    {
+                                        ms.Position = 0;
+                                        item.HighResPreviewBitmap = new Bitmap(ms);
+                                    }
                                 }
                             }
-                        }
-                        catch { }
-                    });
+                            catch { }
+                        });
+                    }
                 }
             }
             catch { }
@@ -650,6 +674,24 @@ public sealed class ThumbnailPreviewService
             byte[] bytes = await File.ReadAllBytesAsync(filePath).ConfigureAwait(false);
             if (bytes.Length == 0) return;
 
+            if (VideoThumbnailService.IsVideoFile(filePath) || VideoThumbnailService.IsVideoData(bytes))
+            {
+                var videoThumb = VideoThumbnailService.GetVideoThumbnail(filePath, 220, 220, out _, out _);
+                if (videoThumb != null)
+                {
+                    await RunOnUiAsync(() =>
+                    {
+                        item.ThumbnailLocalPath = filePath;
+                        if (!string.IsNullOrWhiteSpace(originalPath))
+                        {
+                            item.OriginalCoverLocalPath = originalPath;
+                        }
+                        item.ThumbnailBitmap = videoThumb;
+                    });
+                    return;
+                }
+            }
+
             await RunOnUiAsync(() =>
             {
                 try
@@ -690,7 +732,19 @@ public sealed class ThumbnailPreviewService
             if (origBytes.Length == 0) return;
 
             using var codec = SKCodec.Create(new MemoryStream(origBytes));
-            if (codec == null) return;
+            if (codec == null)
+            {
+                // Nếu không decode được bằng SKCodec, kiểm tra xem có phải file video (.mp4, .webm, .mkv, .ts) không
+                if (VideoThumbnailService.IsVideoFile(originalFile) || VideoThumbnailService.IsVideoData(origBytes))
+                {
+                    byte[]? videoThumbBytes = VideoThumbnailService.GetVideoThumbnailBytes(originalFile, 340, 480, out _, out _);
+                    if (videoThumbBytes != null && videoThumbBytes.Length > 0)
+                    {
+                        File.WriteAllBytes(thumbFile, videoThumbBytes);
+                    }
+                }
+                return;
+            }
 
             using var originalBitmap = SKBitmap.Decode(codec);
             if (originalBitmap == null) return;
