@@ -479,10 +479,11 @@ public partial class MainViewModel
         // 1. Tua tức thì trên Media Foundation Player phần cứng (Windows)
         if (OperatingSystem.IsWindows() && _dualSortActivePlayer != null)
         {
-            var targetWb = _dualSortWbA ?? _dualSortWbB;
+            // Luân phiên hoán đổi giữa buffer A và B để Avalonia DataBinding luôn phát hiện thay đổi đối tượng và render lại ngay lập tức
+            var targetWb = (DualSortPreviewBitmap == _dualSortWbA) ? (_dualSortWbB ?? _dualSortWbA) : (_dualSortWbA ?? _dualSortWbB);
             if (targetWb != null)
             {
-                bool ok = _dualSortActivePlayer.SeekDirect(targetMs, targetWb);
+                bool ok = _dualSortActivePlayer.SeekDirect(targetMs, targetWb, out _);
                 if (ok)
                 {
                     DualSortPreviewBitmap = targetWb;
@@ -537,6 +538,21 @@ public partial class MainViewModel
                 catch { }
             });
         }
+    }
+
+    /// <summary>
+    /// Tua video tương đối: mũi tên trái/phải tua 5s, Ctrl + trái/phải tua 10s
+    /// </summary>
+    public void SeekDualSortVideoRelative(double deltaSeconds)
+    {
+        if (!IsDualSortPreviewVisible || DualSortVideoDurationMs <= 0) return;
+
+        double curSec = _dualSortAudioPlayer?.CurrentPositionSeconds ?? (_dualSortVideoCurrentPlaybackMs / 1000.0);
+        double maxSec = DualSortVideoDurationMs / 1000.0;
+        double newSec = Math.Clamp(curSec + deltaSeconds, 0, maxSec);
+
+        double newPct = maxSec > 0 ? (newSec / maxSec * 100.0) : 0;
+        DualSortVideoSeekPosition = newPct;
     }
 
     public string DualSortPreviewButtonText => IsDualSortPreviewEnabled ? (_langService.CurrentLanguage == "VI" ? "👁️ PREVIEW: BẬT" : "👁️ PREVIEW: ON") : (_langService.CurrentLanguage == "VI" ? "👁️ PREVIEW: TẮT" : "👁️ PREVIEW: OFF");
@@ -2228,7 +2244,8 @@ public partial class MainViewModel
                                         var targetWb = useA ? _dualSortWbA : _dualSortWbB;
                                         if (targetWb != null)
                                         {
-                                            bool frameRead = player.ReadNextFrameDirect(targetWb, out long frameMs);
+                                            long targetAudioMs = (long)((_dualSortAudioPlayer?.CurrentPositionSeconds ?? 0) * 1000.0);
+                                            bool frameRead = player.ReadNextFrameSynced(targetAudioMs, targetWb, out long frameMs);
                                             if (frameRead)
                                             {
                                                 string curTimeStr = VideoMetadataParser.FormatDuration(frameMs);
@@ -2257,6 +2274,12 @@ public partial class MainViewModel
                                                 }, DispatcherPriority.Render);
 
                                                 useA = !useA;
+
+                                                // Đồng bộ thời gian thực: Bù trừ phần chênh lệch thời gian giữa frame và audio
+                                                long diff = frameMs - targetAudioMs;
+                                                int sleepMs = (int)Math.Clamp(diff, 10, 33);
+                                                await Task.Delay(sleepMs, cts.Token);
+                                                continue;
                                             }
                                             else
                                             {
@@ -2278,36 +2301,60 @@ public partial class MainViewModel
                         }
                     }
 
-                    // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động (tối đa 8-10 frames)
+                    // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát theo nhịp thời gian thực 1:1 cùng Audio
                     var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 10, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 2)
                     {
                         _dualSortVideoCachedFrames = frames;
                         _dualSortVideoCurrentPlaybackMs = 0;
 
-                        int currentFrame = 0;
+                        int lastRenderedFrameIdx = -1;
+                        var playbackSw = System.Diagnostics.Stopwatch.StartNew();
+
                         while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                         {
                             if (!IsDualSortVideoPaused)
                             {
-                                var curBmp = frames[currentFrame];
-                                int fNum = currentFrame + 1;
+                                double curSec = _dualSortAudioPlayer?.CurrentPositionSeconds ?? (playbackSw.Elapsed.TotalSeconds);
+                                long curMs = (long)(curSec * 1000.0);
+
+                                if (durMs > 0 && curMs >= durMs)
+                                {
+                                    // Hết video -> lặp lại audio và timeline từ 0
+                                    playbackSw.Restart();
+                                    curMs = 0;
+                                    try { _dualSortAudioPlayer?.Seek(0); } catch { }
+                                }
+
                                 int totalF = frames.Count;
-                                double pct = (double)currentFrame / Math.Max(1, totalF - 1) * 100.0;
-                                long curTimeMs = durMs > 0 ? (long)Math.Round((double)currentFrame / Math.Max(1, totalF - 1) * durMs) : 0;
-                                string curTimeStr = VideoMetadataParser.FormatDuration(curTimeMs);
+                                int targetIdx = durMs > 0 ? (int)Math.Clamp((double)curMs / durMs * (totalF - 1), 0, totalF - 1) : 0;
+                                string curTimeStr = VideoMetadataParser.FormatDuration(curMs);
+                                double pct = durMs > 0 ? (double)curMs / durMs * 100.0 : 0;
+
+                                if (targetIdx != lastRenderedFrameIdx)
+                                {
+                                    var curBmp = frames[targetIdx];
+                                    lastRenderedFrameIdx = targetIdx;
+
+                                    Dispatcher.UIThread.Post(() =>
+                                    {
+                                        if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                        {
+                                            DualSortPreviewBitmap = curBmp;
+                                        }
+                                    }, DispatcherPriority.Render);
+                                }
 
                                 Dispatcher.UIThread.Post(() =>
                                 {
                                     if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                                     {
-                                        DualSortPreviewBitmap = curBmp;
                                         _isInternalDualSortSeekUpdating = true;
                                         try
                                         {
                                             DualSortVideoSeekPosition = pct;
                                             DualSortVideoCurrentTimeText = curTimeStr;
-                                            DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : $"{fNum}/{totalF}";
+                                            DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : $"{targetIdx + 1}/{totalF}";
                                         }
                                         finally
                                         {
@@ -2315,16 +2362,10 @@ public partial class MainViewModel
                                         }
                                     }
                                 }, DispatcherPriority.Render);
-
-                                currentFrame = (currentFrame + 1) % frames.Count;
-                                if (currentFrame == 0)
-                                {
-                                    try { _dualSortAudioPlayer?.Seek(0); } catch { }
-                                }
                             }
 
-                            // Chuyển frame mượt mà 120ms (8.3 FPS), KHÔNG delay hàng chục giây nữa!
-                            await Task.Delay(120, cts.Token);
+                            // Cập nhật timeline mỗi 100ms để thời gian và seekbar chạy đều từng giây một cách mượt mà (chuẩn 1.0x)
+                            await Task.Delay(100, cts.Token);
                         }
                     }
                     return;

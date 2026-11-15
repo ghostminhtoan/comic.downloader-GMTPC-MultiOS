@@ -462,7 +462,8 @@ public sealed class ThumbnailPreviewService
 
                                             if (!item.IsVideoPaused)
                                             {
-                                                var nextBmp = player.ReadNextFrame(480, 480, out long frameMs);
+                                                long targetAudioMs = (long)((item.ActiveAudioPlayer?.CurrentPositionSeconds ?? 0) * 1000.0);
+                                                var nextBmp = player.ReadNextFrame(480, 480, out long frameMs, targetAudioMs);
                                                 if (nextBmp != null)
                                                 {
                                                     await RunOnUiAsync(() =>
@@ -482,6 +483,11 @@ public sealed class ThumbnailPreviewService
                                                             }
                                                         }
                                                     });
+
+                                                    long diff = frameMs - targetAudioMs;
+                                                    int sleepMs = (int)Math.Clamp(diff, 10, 33);
+                                                    await Task.Delay(sleepMs, ct).ConfigureAwait(false);
+                                                    continue;
                                                 }
                                                 else
                                                 {
@@ -511,7 +517,7 @@ public sealed class ThumbnailPreviewService
                                 }
                             }
 
-                            // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động
+                            // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát đều từng giây cùng Audio
                             var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 10, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
                             if (frames != null && frames.Count >= 2)
                             {
@@ -529,7 +535,9 @@ public sealed class ThumbnailPreviewService
                                     catch { }
                                 });
 
-                                int fIdx = 0;
+                                int lastIdx = -1;
+                                var playbackSw = System.Diagnostics.Stopwatch.StartNew();
+
                                 while (!ct.IsCancellationRequested)
                                 {
                                     bool isActive;
@@ -541,28 +549,48 @@ public sealed class ThumbnailPreviewService
 
                                     if (!item.IsVideoPaused)
                                     {
-                                        var curBmp = frames[fIdx];
-                                        long curMs = durMs > 0 ? (long)Math.Round((double)fIdx / Math.Max(1, frames.Count - 1) * durMs) : 0;
+                                        double curSec = item.ActiveAudioPlayer?.CurrentPositionSeconds ?? playbackSw.Elapsed.TotalSeconds;
+                                        long curMs = (long)(curSec * 1000.0);
+
+                                        if (durMs > 0 && curMs >= durMs)
+                                        {
+                                            // Hết video -> lặp lại
+                                            playbackSw.Restart();
+                                            curMs = 0;
+                                            try { item.ActiveAudioPlayer?.Seek(0); } catch { }
+                                        }
+
+                                        int targetIdx = durMs > 0 ? (int)Math.Clamp((double)curMs / durMs * (frames.Count - 1), 0, frames.Count - 1) : 0;
+                                        if (targetIdx != lastIdx)
+                                        {
+                                            var curBmp = frames[targetIdx];
+                                            lastIdx = targetIdx;
+                                            await RunOnUiAsync(() =>
+                                            {
+                                                lock (_bitmapMemoryLock)
+                                                {
+                                                    if (ReferenceEquals(_activeHighResItem, item))
+                                                    {
+                                                        item.HighResPreviewBitmap = curBmp;
+                                                    }
+                                                }
+                                            });
+                                        }
+
                                         await RunOnUiAsync(() =>
                                         {
                                             lock (_bitmapMemoryLock)
                                             {
                                                 if (ReferenceEquals(_activeHighResItem, item))
                                                 {
-                                                    item.HighResPreviewBitmap = curBmp;
                                                     item.UpdatePlaybackTime(curMs);
                                                 }
                                             }
                                         });
-
-                                        fIdx = (fIdx + 1) % frames.Count;
-                                        if (fIdx == 0)
-                                        {
-                                            try { item.ActiveAudioPlayer?.Seek(0); } catch { }
-                                        }
                                     }
 
-                                    await Task.Delay(120, ct).ConfigureAwait(false); // 8.3 FPS cho fallback mượt mà
+                                    // Cập nhật timeline mỗi 100ms để thời gian và seekbar chạy đều từng giây một cách mượt mà (chuẩn 1.0x)
+                                    await Task.Delay(100, ct).ConfigureAwait(false);
                                 }
                             }
                         }
@@ -1642,6 +1670,31 @@ public sealed class ThumbnailPreviewService
         if (string.IsNullOrWhiteSpace(url)) return false;
         string lower = url.ToLowerInvariant();
         return lower.Contains("nhentai.") || lower.Contains("truyenqq");
+    }
+
+    public bool HasActiveVideo
+    {
+        get
+        {
+            lock (_bitmapMemoryLock)
+            {
+                return _activeHighResItem != null && _activeHighResItem.IsVideoItem;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tua video tương đối cho item đang active preview (5s hoặc 10s)
+    /// </summary>
+    public void SeekActiveVideoRelative(double deltaSeconds)
+    {
+        lock (_bitmapMemoryLock)
+        {
+            if (_activeHighResItem != null && _activeHighResItem.IsVideoItem)
+            {
+                _activeHighResItem.SeekRelative(deltaSeconds);
+            }
+        }
     }
 }
 

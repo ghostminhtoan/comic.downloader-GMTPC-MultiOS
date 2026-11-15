@@ -13,6 +13,7 @@ public interface INativeAudioPlayerInstance : IDisposable
     void Resume();
     void Seek(double seconds);
     void Stop();
+    double CurrentPositionSeconds { get; }
 }
 
 /// <summary>
@@ -33,6 +34,8 @@ public sealed class NativeAudioPlaybackService : IDisposable
     private Process? _linuxProcess;
     private bool _isDisposed;
     private bool _isPaused;
+    private readonly Stopwatch _clock = new();
+    private double _clockOffsetSec;
 
     public bool IsPlaying { get; private set; }
 
@@ -79,6 +82,8 @@ public sealed class NativeAudioPlaybackService : IDisposable
                             }
                             try { wmp.controls.play(); } catch { }
                             IsPlaying = true;
+                            _clockOffsetSec = Math.Max(0, startSeconds);
+                            _clock.Restart();
                             return;
                         }
                     }
@@ -93,6 +98,11 @@ public sealed class NativeAudioPlaybackService : IDisposable
                 {
                     _androidPlayer = ExternalAndroidAudioPlayerProvider(filePath, startSeconds);
                     IsPlaying = _androidPlayer != null;
+                    if (IsPlaying)
+                    {
+                        _clockOffsetSec = Math.Max(0, startSeconds);
+                        _clock.Restart();
+                    }
                     return;
                 }
                 catch { }
@@ -115,6 +125,11 @@ public sealed class NativeAudioPlaybackService : IDisposable
                     };
                     _linuxProcess = Process.Start(psi);
                     IsPlaying = _linuxProcess != null && !_linuxProcess.HasExited;
+                    if (IsPlaying)
+                    {
+                        _clockOffsetSec = Math.Max(0, startSeconds);
+                        _clock.Restart();
+                    }
                 }
                 catch { }
             }
@@ -147,6 +162,9 @@ public sealed class NativeAudioPlaybackService : IDisposable
                 }
                 catch { }
             }
+
+            _isPaused = true;
+            _clock.Stop();
         }
     }
 
@@ -176,6 +194,9 @@ public sealed class NativeAudioPlaybackService : IDisposable
                     }
                     catch { }
                 }
+
+                _isPaused = false;
+                _clock.Start();
             }
         }
     }
@@ -184,12 +205,13 @@ public sealed class NativeAudioPlaybackService : IDisposable
     {
         lock (_lock)
         {
+            double safeSec = Math.Max(0, seconds);
             if (OperatingSystem.IsWindows() && _wmpRaw != null)
             {
                 try
                 {
                     dynamic wmp = _wmpRaw;
-                    wmp.controls.currentPosition = Math.Max(0, seconds);
+                    wmp.controls.currentPosition = safeSec;
                 }
                 catch { }
             }
@@ -198,10 +220,13 @@ public sealed class NativeAudioPlaybackService : IDisposable
             {
                 try
                 {
-                    _androidPlayer.Seek(seconds);
+                    _androidPlayer.Seek(safeSec);
                 }
                 catch { }
             }
+
+            _clockOffsetSec = safeSec;
+            _clock.Restart();
         }
     }
 
@@ -216,11 +241,29 @@ public sealed class NativeAudioPlaybackService : IDisposable
                     try
                     {
                         dynamic wmp = _wmpRaw;
-                        return (double)wmp.controls.currentPosition;
+                        double wmpPos = (double)wmp.controls.currentPosition;
+                        if (wmpPos > 0 || _clock.ElapsedMilliseconds > 600)
+                            return wmpPos;
                     }
                     catch { }
                 }
-                return 0;
+
+                if (_androidPlayer != null)
+                {
+                    try
+                    {
+                        double aPos = _androidPlayer.CurrentPositionSeconds;
+                        if (aPos >= 0) return aPos;
+                    }
+                    catch { }
+                }
+
+                // Fallback tính theo đồng hồ thời gian thực siêu chính xác cho Linux / Fallback
+                if (IsPlaying)
+                {
+                    return _clockOffsetSec + (_isPaused ? 0 : _clock.Elapsed.TotalSeconds);
+                }
+                return _clockOffsetSec;
             }
         }
     }
@@ -231,6 +274,8 @@ public sealed class NativeAudioPlaybackService : IDisposable
         {
             IsPlaying = false;
             _isPaused = false;
+            _clock.Reset();
+            _clockOffsetSec = 0;
 
             if (OperatingSystem.IsWindows() && _wmpRaw != null)
             {

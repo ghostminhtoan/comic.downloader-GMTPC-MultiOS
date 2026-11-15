@@ -424,6 +424,19 @@ public partial class ComicBookItem : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Tua video tương đối: mũi tên trái/phải tua 5s, Ctrl + trái/phải tua 10s
+    /// </summary>
+    public void SeekRelative(double deltaSeconds)
+    {
+        if (VideoDurationMs <= 0) return;
+        double curSec = ActiveAudioPlayer?.CurrentPositionSeconds ?? (CurrentPlaybackPositionMs / 1000.0);
+        double maxSec = VideoDurationMs / 1000.0;
+        double newSec = Math.Clamp(curSec + deltaSeconds, 0, maxSec);
+        double newPct = maxSec > 0 ? (newSec / maxSec * 100.0) : 0;
+        VideoSeekPosition = newPct;
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPreviewTags))]
     private string _previewTagsText = string.Empty;

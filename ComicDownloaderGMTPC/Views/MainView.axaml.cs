@@ -114,10 +114,50 @@ public partial class MainView : UserControl
                 var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
                 bool isTyping = focused is TextBox || focused is AutoCompleteBox;
 
-                // Ngay khi nhấn phím Shift hoặc Ctrl trên Windows & Linux: lập tức ẩn Popup Preview nếu đang hiện để người dùng nhìn rõ dải truyện cần chọn
-                if ((e.Key == Key.LeftShift || e.Key == Key.RightShift || e.Key == Key.LeftCtrl || e.Key == Key.RightCtrl ||
-                     e.KeyModifiers.HasFlag(KeyModifiers.Shift) || e.KeyModifiers.HasFlag(KeyModifiers.Control)) &&
-                    vm.IsHoverPreviewVisible)
+                // Phím tắt tua video khi hover preview hoặc mở preview video (Windows & Linux):
+                // Mũi tên Trái / Phải: tua lùi / tới 5s
+                // Ctrl + Trái / Phải: tua lùi / tới 10s
+                bool isDualSortVideo = vm.IsDualSortPreviewVisible && vm.IsDualSortPreviewAnimated;
+                bool isHoverVideo = vm.IsHoverPreviewVisible && (ThumbnailPreviewService.Instance.HasActiveVideo || vm.ActiveHoverItem?.IsVideoItem == true);
+
+                if (isDualSortVideo || isHoverVideo)
+                {
+                    if (e.Key == Key.Left)
+                    {
+                        bool isCtrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
+                        double delta = isCtrl ? -10.0 : -5.0;
+                        if (isDualSortVideo)
+                        {
+                            vm.SeekDualSortVideoRelative(delta);
+                        }
+                        if (isHoverVideo)
+                        {
+                            ThumbnailPreviewService.Instance.SeekActiveVideoRelative(delta);
+                        }
+                        e.Handled = true;
+                        return;
+                    }
+
+                    if (e.Key == Key.Right)
+                    {
+                        bool isCtrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
+                        double delta = isCtrl ? 10.0 : 5.0;
+                        if (isDualSortVideo)
+                        {
+                            vm.SeekDualSortVideoRelative(delta);
+                        }
+                        if (isHoverVideo)
+                        {
+                            ThumbnailPreviewService.Instance.SeekActiveVideoRelative(delta);
+                        }
+                        e.Handled = true;
+                        return;
+                    }
+                }
+
+                // Ngay khi nhấn phím Shift trên Windows & Linux: lập tức ẩn Popup Preview nếu đang hiện để người dùng nhìn rõ dải truyện cần chọn
+                if ((e.Key == Key.LeftShift || e.Key == Key.RightShift || e.KeyModifiers.HasFlag(KeyModifiers.Shift)) &&
+                    vm.IsHoverPreviewVisible && !isHoverVideo)
                 {
                     vm.HideHoverPreview();
                 }

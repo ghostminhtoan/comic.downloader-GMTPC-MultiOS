@@ -27,19 +27,67 @@ public static class AndroidVideoThumbnailService
 
     private static INativeAudioPlayerInstance? PlayAndroidAudio(string filePath, double startSeconds)
     {
+        if (string.IsNullOrWhiteSpace(filePath)) return null;
+
+        IDisposable? streamHandle = null;
         try
         {
             var mp = new MediaPlayer();
-            var ctx = global::Android.App.Application.Context;
+            var ctx = MainActivity.CurrentInstance ?? global::Android.App.Application.Context;
+
             if (filePath.StartsWith("content://", StringComparison.OrdinalIgnoreCase))
             {
                 var uri = global::Android.Net.Uri.Parse(filePath);
-                if (uri != null) mp.SetDataSource(ctx, uri);
+                if (uri != null)
+                {
+                    try
+                    {
+                        var pfd = ctx.ContentResolver?.OpenFileDescriptor(uri, "r");
+                        if (pfd != null && pfd.FileDescriptor != null && pfd.FileDescriptor.Valid())
+                        {
+                            mp.SetDataSource(pfd.FileDescriptor);
+                            streamHandle = pfd;
+                        }
+                    }
+                    catch { }
+
+                    if (streamHandle == null)
+                    {
+                        mp.SetDataSource(ctx, uri);
+                    }
+                }
             }
             else
             {
-                mp.SetDataSource(filePath);
+                var jFile = new Java.IO.File(filePath);
+                if (jFile.Exists() && jFile.CanRead())
+                {
+                    try
+                    {
+                        var fis = new Java.IO.FileInputStream(jFile);
+                        if (fis.FD != null && fis.FD.Valid())
+                        {
+                            long length = jFile.Length();
+                            if (length > 0)
+                            {
+                                mp.SetDataSource(fis.FD, 0, length);
+                            }
+                            else
+                            {
+                                mp.SetDataSource(fis.FD);
+                            }
+                            streamHandle = fis;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (streamHandle == null)
+                {
+                    mp.SetDataSource(filePath);
+                }
             }
+
             mp.Prepare();
             if (startSeconds > 0)
             {
@@ -47,10 +95,12 @@ public static class AndroidVideoThumbnailService
             }
             mp.Start();
 
-            return new AndroidMediaPlayerHandle(mp);
+            return new AndroidMediaPlayerHandle(mp, streamHandle);
         }
-        catch
+        catch (Exception ex)
         {
+            global::Android.Util.Log.Warn("ComicGMTPC_Audio", $"[AndroidAudio] Play error for '{filePath}': {ex.Message}");
+            try { streamHandle?.Dispose(); } catch { }
             return null;
         }
     }
@@ -58,7 +108,29 @@ public static class AndroidVideoThumbnailService
     private sealed class AndroidMediaPlayerHandle : INativeAudioPlayerInstance
     {
         private MediaPlayer? _mp;
-        public AndroidMediaPlayerHandle(MediaPlayer mp) { _mp = mp; }
+        private IDisposable? _streamHandle;
+
+        public AndroidMediaPlayerHandle(MediaPlayer mp, IDisposable? streamHandle)
+        {
+            _mp = mp;
+            _streamHandle = streamHandle;
+        }
+
+        public double CurrentPositionSeconds
+        {
+            get
+            {
+                try
+                {
+                    if (_mp != null)
+                    {
+                        return _mp.CurrentPosition / 1000.0;
+                    }
+                }
+                catch { }
+                return 0;
+            }
+        }
 
         public void Pause()
         {
@@ -120,6 +192,13 @@ public static class AndroidVideoThumbnailService
                     _mp.Dispose();
                     _mp = null;
                 }
+            }
+            catch { }
+
+            try
+            {
+                _streamHandle?.Dispose();
+                _streamHandle = null;
             }
             catch { }
         }

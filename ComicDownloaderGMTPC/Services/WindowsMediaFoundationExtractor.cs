@@ -414,6 +414,11 @@ public static class WindowsMediaFoundationExtractor
 
         public bool ReadNextFrameDirect(WriteableBitmap targetBitmap, out long timestampMs)
         {
+            return ReadNextFrameSynced(-1, targetBitmap, out timestampMs);
+        }
+
+        public bool ReadNextFrameSynced(long targetAudioMs, WriteableBitmap targetBitmap, out long timestampMs)
+        {
             timestampMs = 0;
             lock (_lock)
             {
@@ -421,26 +426,44 @@ public static class WindowsMediaFoundationExtractor
 
                 try
                 {
-                    int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint flags, out ulong timeHns, out IMFSample sample);
-                    if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0)
+                    int dropCount = 0;
+                    while (dropCount < 15)
                     {
-                        // Hết video -> Tua về đầu để lặp lại
-                        _reader.Flush(MF_SOURCE_READER_FIRST_VIDEO_STREAM);
-                        var pv0 = new PROPVARIANT { vt = 20, hVal = 0 };
-                        try { _reader.SetCurrentPosition(Guid.Empty, ref pv0); } finally { PropVariantClear(ref pv0); }
-                        return false;
-                    }
-
-                    if (hr == 0 && sample != null)
-                    {
-                        try
+                        int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint flags, out ulong timeHns, out IMFSample sample);
+                        if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0)
                         {
-                            timestampMs = (long)(timeHns / 10000L);
-                            return RenderSampleToWriteableBitmap(sample, targetBitmap);
+                            // Hết video -> Tua về đầu để lặp lại
+                            _reader.Flush(MF_SOURCE_READER_FIRST_VIDEO_STREAM);
+                            var pv0 = new PROPVARIANT { vt = 20, hVal = 0 };
+                            try { _reader.SetCurrentPosition(Guid.Empty, ref pv0); } finally { PropVariantClear(ref pv0); }
+                            return false;
                         }
-                        finally
+
+                        if (hr == 0 && sample != null)
                         {
-                            Marshal.ReleaseComObject(sample);
+                            long sampleMs = (long)(timeHns / 10000L);
+
+                            // Nếu frame này đang bị trễ so với audio hơn 50ms -> bỏ qua frame cũ (drop late frame) để video bắt kịp nhịp audio
+                            if (targetAudioMs > 0 && sampleMs < targetAudioMs - 50 && dropCount < 12)
+                            {
+                                Marshal.ReleaseComObject(sample);
+                                dropCount++;
+                                continue;
+                            }
+
+                            try
+                            {
+                                timestampMs = sampleMs;
+                                return RenderSampleToWriteableBitmap(sample, targetBitmap);
+                            }
+                            finally
+                            {
+                                Marshal.ReleaseComObject(sample);
+                            }
+                        }
+                        else
+                        {
+                            break;
                         }
                     }
                 }
@@ -452,6 +475,12 @@ public static class WindowsMediaFoundationExtractor
 
         public bool SeekDirect(long targetMs, WriteableBitmap targetBitmap)
         {
+            return SeekDirect(targetMs, targetBitmap, out _);
+        }
+
+        public bool SeekDirect(long targetMs, WriteableBitmap targetBitmap, out long timestampMs)
+        {
+            timestampMs = targetMs;
             lock (_lock)
             {
                 if (_isDisposed || _reader == null) return false;
@@ -472,9 +501,11 @@ public static class WindowsMediaFoundationExtractor
                     }
 
                     IMFSample? sample = null;
-                    for (int attempt = 0; attempt < 5; attempt++)
+                    ulong timeHns = 0;
+                    for (int attempt = 0; attempt < 8; attempt++)
                     {
-                        int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out sample);
+                        int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint flags, out timeHns, out sample);
+                        if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0) break;
                         if (hr == 0 && sample != null) break;
                     }
 
@@ -482,6 +513,7 @@ public static class WindowsMediaFoundationExtractor
                     {
                         try
                         {
+                            timestampMs = (long)(timeHns / 10000L);
                             return RenderSampleToWriteableBitmap(sample, targetBitmap);
                         }
                         finally
@@ -573,7 +605,7 @@ public static class WindowsMediaFoundationExtractor
             return false;
         }
 
-        public Bitmap? ReadNextFrame(int maxWidth, int maxHeight, out long timestampMs)
+        public Bitmap? ReadNextFrame(int maxWidth, int maxHeight, out long timestampMs, long targetAudioMs = -1)
         {
             timestampMs = 0;
             lock (_lock)
@@ -582,29 +614,47 @@ public static class WindowsMediaFoundationExtractor
 
                 try
                 {
-                    int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint flags, out ulong timeHns, out IMFSample sample);
-                    if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0)
+                    int dropCount = 0;
+                    while (dropCount < 15)
                     {
-                        // Hết video -> Tua về đầu để lặp lại
-                        Seek(0, maxWidth, maxHeight);
-                        return null;
-                    }
-
-                    if (hr == 0 && sample != null)
-                    {
-                        try
+                        int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint flags, out ulong timeHns, out IMFSample sample);
+                        if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0)
                         {
-                            timestampMs = (long)(timeHns / 10000L);
-                            byte[]? jpeg = ConvertSampleToJpegBytes(sample, ref _videoW, ref _videoH, maxWidth, maxHeight);
-                            if (jpeg != null && jpeg.Length > 0)
+                            // Hết video -> Tua về đầu để lặp lại
+                            Seek(0, maxWidth, maxHeight);
+                            return null;
+                        }
+
+                        if (hr == 0 && sample != null)
+                        {
+                            long sampleMs = (long)(timeHns / 10000L);
+
+                            // Bỏ qua frame cũ nếu audio đã chạy trước hơn 50ms
+                            if (targetAudioMs > 0 && sampleMs < targetAudioMs - 50 && dropCount < 12)
                             {
-                                using var ms = new MemoryStream(jpeg);
-                                return new Bitmap(ms);
+                                Marshal.ReleaseComObject(sample);
+                                dropCount++;
+                                continue;
+                            }
+
+                            try
+                            {
+                                timestampMs = sampleMs;
+                                byte[]? jpeg = ConvertSampleToJpegBytes(sample, ref _videoW, ref _videoH, maxWidth, maxHeight);
+                                if (jpeg != null && jpeg.Length > 0)
+                                {
+                                    using var ms = new MemoryStream(jpeg);
+                                    return new Bitmap(ms);
+                                }
+                            }
+                            finally
+                            {
+                                Marshal.ReleaseComObject(sample);
                             }
                         }
-                        finally
+                        else
                         {
-                            Marshal.ReleaseComObject(sample);
+                            break;
                         }
                     }
                 }
