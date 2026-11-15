@@ -265,7 +265,16 @@ public partial class ComicBookItem : ObservableObject
     private double _videoSeekPosition;
 
     [ObservableProperty]
-    private string _videoSeekTimeText = string.Empty;
+    private string _videoSeekTimeText = "00:00 / 00:00";
+
+    [ObservableProperty]
+    private long _videoDurationMs;
+
+    [ObservableProperty]
+    private string _videoDurationText = "00:00";
+
+    [ObservableProperty]
+    private string _videoCurrentTimeText = "00:00";
 
     public string VideoPlayPauseIcon => IsVideoPaused ? "▶" : "⏸";
 
@@ -288,7 +297,9 @@ public partial class ComicBookItem : ObservableObject
         {
             VideoPlayProgress = (double)(frameIndex + 1) / totalFrames;
             VideoSeekPosition = (double)frameIndex / Math.Max(1, totalFrames - 1) * 100.0;
-            VideoSeekTimeText = $"{frameIndex + 1}/{totalFrames}";
+            long curMs = VideoDurationMs > 0 ? (long)Math.Round((double)frameIndex / Math.Max(1, totalFrames - 1) * VideoDurationMs) : 0;
+            VideoCurrentTimeText = VideoMetadataParser.FormatDuration(curMs);
+            VideoSeekTimeText = VideoDurationMs > 0 ? $"{VideoCurrentTimeText} / {VideoDurationText}" : $"{frameIndex + 1}/{totalFrames}";
         }
         finally
         {
@@ -299,13 +310,19 @@ public partial class ComicBookItem : ObservableObject
     partial void OnVideoSeekPositionChanged(double value)
     {
         if (_isInternalSeekUpdating) return;
+        long targetMs = VideoDurationMs > 0 ? (long)Math.Round(value / 100.0 * VideoDurationMs) : 0;
+        VideoCurrentTimeText = VideoMetadataParser.FormatDuration(targetMs);
         if (VideoCachedFrames != null && VideoCachedFrames.Count > 0)
         {
             int count = VideoCachedFrames.Count;
             int idx = (int)Math.Clamp(Math.Round(value * (count - 1) / 100.0), 0, count - 1);
             HighResPreviewBitmap = VideoCachedFrames[idx];
             VideoPlayProgress = (double)(idx + 1) / count;
-            VideoSeekTimeText = $"{idx + 1}/{count}";
+            VideoSeekTimeText = VideoDurationMs > 0 ? $"{VideoCurrentTimeText} / {VideoDurationText}" : $"{idx + 1}/{count}";
+        }
+        else
+        {
+            VideoSeekTimeText = VideoDurationMs > 0 ? $"{VideoCurrentTimeText} / {VideoDurationText}" : $"{Math.Round(value)}%";
         }
     }
 

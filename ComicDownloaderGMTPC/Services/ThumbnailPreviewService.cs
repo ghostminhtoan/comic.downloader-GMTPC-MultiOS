@@ -393,7 +393,16 @@ public sealed class ThumbnailPreviewService
                     {
                         try
                         {
-                            var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 16, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
+                            long durMs = VideoThumbnailService.GetVideoDurationMs(videoTarget);
+                            await RunOnUiAsync(() =>
+                            {
+                                item.VideoDurationMs = durMs;
+                                item.VideoDurationText = VideoMetadataParser.FormatDuration(durMs);
+                                item.VideoCurrentTimeText = "00:00";
+                                item.VideoSeekTimeText = durMs > 0 ? $"00:00 / {item.VideoDurationText}" : "00:00";
+                            });
+
+                            var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 20, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
                             if (frames != null && frames.Count >= 2)
                             {
                                 await RunOnUiAsync(() =>

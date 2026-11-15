@@ -429,7 +429,16 @@ public partial class MainViewModel
     private double _dualSortVideoSeekPosition = 0;
 
     [ObservableProperty]
-    private string _dualSortVideoSeekTimeText = string.Empty;
+    private string _dualSortVideoSeekTimeText = "00:00 / 00:00";
+
+    [ObservableProperty]
+    private long _dualSortVideoDurationMs = 0;
+
+    [ObservableProperty]
+    private string _dualSortVideoDurationText = "00:00";
+
+    [ObservableProperty]
+    private string _dualSortVideoCurrentTimeText = "00:00";
 
     public string DualSortVideoPlayPauseIcon => IsDualSortVideoPaused ? "▶" : "⏸";
 
@@ -446,12 +455,46 @@ public partial class MainViewModel
     partial void OnDualSortVideoSeekPositionChanged(double value)
     {
         if (_isInternalDualSortSeekUpdating) return;
+        long targetMs = DualSortVideoDurationMs > 0 ? (long)Math.Round(value / 100.0 * DualSortVideoDurationMs) : 0;
+        DualSortVideoCurrentTimeText = VideoMetadataParser.FormatDuration(targetMs);
         if (_dualSortVideoCachedFrames != null && _dualSortVideoCachedFrames.Count > 0)
         {
             int count = _dualSortVideoCachedFrames.Count;
             int idx = (int)Math.Clamp(Math.Round(value * (count - 1) / 100.0), 0, count - 1);
             DualSortPreviewBitmap = _dualSortVideoCachedFrames[idx];
-            DualSortVideoSeekTimeText = $"{idx + 1}/{count}";
+            DualSortVideoSeekTimeText = DualSortVideoDurationMs > 0 ? $"{DualSortVideoCurrentTimeText} / {DualSortVideoDurationText}" : $"{idx + 1}/{count}";
+        }
+        else
+        {
+            DualSortVideoSeekTimeText = DualSortVideoDurationMs > 0 ? $"{DualSortVideoCurrentTimeText} / {DualSortVideoDurationText}" : $"{Math.Round(value)}%";
+        }
+
+        // On-demand trích xuất chính xác nếu có provider
+        if (DualSortPreviewItem != null && VideoThumbnailService.ExternalNativeFrameAtTimeProvider != null && targetMs > 0)
+        {
+            string vPath = DualSortPreviewItem.FilePath;
+            Task.Run(() =>
+            {
+                try
+                {
+                    var exactBmp = VideoThumbnailService.GetFrameAtTime(vPath, targetMs, 1280, 1280);
+                    if (exactBmp != null)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (DualSortPreviewItem?.FilePath == vPath && IsDualSortPreviewVisible)
+                            {
+                                DualSortPreviewBitmap = exactBmp;
+                            }
+                            else
+                            {
+                                exactBmp.Dispose();
+                            }
+                        });
+                    }
+                }
+                catch { }
+            });
         }
     }
 
@@ -2091,8 +2134,18 @@ public partial class MainViewModel
                         }
                     });
 
+                    long durMs = VideoThumbnailService.GetVideoDurationMs(item.FilePath);
+                    string durText = VideoMetadataParser.FormatDuration(durMs);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        DualSortVideoDurationMs = durMs;
+                        DualSortVideoDurationText = durText;
+                        DualSortVideoCurrentTimeText = "00:00";
+                        DualSortVideoSeekTimeText = durMs > 0 ? $"00:00 / {durText}" : "00:00";
+                    });
+
                     // Nạp chuỗi frames chuyển động và khởi chạy vòng lặp phát video mượt mà (Autoplay Loop)
-                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 16, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
+                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 20, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 2)
                     {
                         _dualSortVideoCachedFrames = frames;
@@ -2102,7 +2155,7 @@ public partial class MainViewModel
                             {
                                 IsDualSortVideoSeekable = true;
                                 DualSortVideoSeekPosition = 0;
-                                DualSortVideoSeekTimeText = $"1/{frames.Count}";
+                                DualSortVideoSeekTimeText = durMs > 0 ? $"00:00 / {durText}" : $"1/{frames.Count}";
                             }
                         });
 
@@ -2115,6 +2168,8 @@ public partial class MainViewModel
                                 int fNum = currentFrame + 1;
                                 int totalF = frames.Count;
                                 double pct = (double)currentFrame / Math.Max(1, totalF - 1) * 100.0;
+                                long curTimeMs = durMs > 0 ? (long)Math.Round((double)currentFrame / Math.Max(1, totalF - 1) * durMs) : 0;
+                                string curTimeStr = VideoMetadataParser.FormatDuration(curTimeMs);
 
                                 Dispatcher.UIThread.Post(() =>
                                 {
@@ -2125,7 +2180,8 @@ public partial class MainViewModel
                                         try
                                         {
                                             DualSortVideoSeekPosition = pct;
-                                            DualSortVideoSeekTimeText = $"{fNum}/{totalF}";
+                                            DualSortVideoCurrentTimeText = curTimeStr;
+                                            DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : $"{fNum}/{totalF}";
                                         }
                                         finally
                                         {
@@ -2289,7 +2345,10 @@ public partial class MainViewModel
         IsDualSortVideoPaused = false;
         _dualSortVideoCachedFrames = null;
         DualSortVideoSeekPosition = 0;
-        DualSortVideoSeekTimeText = string.Empty;
+        DualSortVideoDurationMs = 0;
+        DualSortVideoDurationText = "00:00";
+        DualSortVideoCurrentTimeText = "00:00";
+        DualSortVideoSeekTimeText = "00:00 / 00:00";
     }
 
     // ==========================================

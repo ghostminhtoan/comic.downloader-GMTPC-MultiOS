@@ -10979,10 +10979,10 @@
                                         ToolTip.Tip="Chạm hoặc kéo để tua video qua đoạn intro giống nhau" />
 
                                 <!-- Chỉ số Frame / Vị trí Tua -->
-                                <Border Grid.Column="2" Background="#1E293B" CornerRadius="3" Padding="5,2" Margin="6,0,0,0" VerticalAlignment="Center">
+                                <Border Grid.Column="2" Background="#1E293B" CornerRadius="3" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding ActiveHoverItem.VideoSeekTimeText}"
                                                FontSize="10" FontWeight="Bold" Foreground="#FDE047"
-                                               MinWidth="38" TextAlignment="Center" />
+                                               MinWidth="72" TextAlignment="Center" />
                                 </Border>
                             </Grid>
                         </Border>
@@ -11722,10 +11722,10 @@
                                 ToolTip.Tip="Chạm hoặc kéo để tua video qua đoạn intro giống nhau" />
 
                         <!-- Chỉ số Frame / Vị trí Tua -->
-                        <Border Grid.Column="2" Background="#1E293B" CornerRadius="3" Padding="5,2" Margin="6,0,0,0" VerticalAlignment="Center">
+                        <Border Grid.Column="2" Background="#1E293B" CornerRadius="3" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="{Binding DualSortVideoSeekTimeText}"
                                        FontSize="10" FontWeight="Bold" Foreground="#FDE047"
-                                       MinWidth="38" TextAlignment="Center" />
+                                       MinWidth="72" TextAlignment="Center" />
                         </Border>
                     </Grid>
                 </Border>

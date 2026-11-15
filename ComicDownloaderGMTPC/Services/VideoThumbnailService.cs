@@ -29,6 +29,32 @@ public static class VideoThumbnailService
 
     public static Func<string, int, int, byte[]?>? ExternalNativeThumbnailProvider { get; set; }
     public static Func<string, int, int, int, List<byte[]>>? ExternalNativeFramesProvider { get; set; }
+    public static Func<string, long, int, int, byte[]?>? ExternalNativeFrameAtTimeProvider { get; set; }
+
+    public static long GetVideoDurationMs(string videoPath)
+    {
+        return VideoMetadataParser.GetVideoDurationMs(videoPath);
+    }
+
+    public static Bitmap? GetFrameAtTime(string videoPath, long timeMs, int maxWidth, int maxHeight)
+    {
+        if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath)) return null;
+
+        if (ExternalNativeFrameAtTimeProvider != null)
+        {
+            try
+            {
+                byte[]? b = ExternalNativeFrameAtTimeProvider(videoPath, timeMs, maxWidth, maxHeight);
+                if (b != null && b.Length > 0)
+                {
+                    return new Bitmap(new MemoryStream(b));
+                }
+            }
+            catch { }
+        }
+
+        return null;
+    }
 
     public static bool IsVideoFile(string? pathOrUrl)
     {
@@ -403,30 +429,37 @@ public static class VideoThumbnailService
         var list = new List<byte[]>();
         try
         {
+            long durationMs = VideoMetadataParser.GetVideoDurationMs(videoPath);
+            int count = Math.Max(8, Math.Min(24, maxFrames));
+            double durSec = durationMs > 0 ? durationMs / 1000.0 : 15.0;
+            double stepSec = Math.Max(0.5, (durSec * 0.95) / count);
+
             string tempDir = Path.Combine(AppContext.BaseDirectory, ".tmp", "ffmpeg_frames_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
             try
             {
-                string outPattern = Path.Combine(tempDir, "f_%03d.jpg");
-                var psi = new ProcessStartInfo
+                for (int i = 0; i < count; i++)
                 {
-                    FileName = "ffmpeg",
-                    Arguments = $"-y -i \"{videoPath}\" -vf \"fps={Math.Max(1, maxFrames / 4)},scale='min({maxWidth},iw)':-1\" -vframes {maxFrames} \"{outPattern}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
-                using var p = Process.Start(psi);
-                if (p != null)
-                {
-                    p.WaitForExit(3000);
-                    var files = Directory.GetFiles(tempDir, "f_*.jpg");
-                    Array.Sort(files);
-                    foreach (var f in files)
+                    double seekSec = i * stepSec;
+                    string outPath = Path.Combine(tempDir, $"f_{i:D3}.jpg");
+                    var psi = new ProcessStartInfo
                     {
-                        byte[] b = File.ReadAllBytes(f);
-                        if (b.Length > 0) list.Add(b);
+                        FileName = "ffmpeg",
+                        Arguments = $"-y -ss {seekSec:F2} -i \"{videoPath}\" -vframes 1 -vf \"scale='min({maxWidth},iw)':-1\" -q:v 3 \"{outPath}\"",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    };
+                    using var p = Process.Start(psi);
+                    if (p != null)
+                    {
+                        p.WaitForExit(1500);
+                        if (File.Exists(outPath) && new FileInfo(outPath).Length > 0)
+                        {
+                            byte[] b = File.ReadAllBytes(outPath);
+                            if (b.Length > 0) list.Add(b);
+                        }
                     }
                 }
             }

@@ -21,6 +21,7 @@ public static class AndroidVideoThumbnailService
     {
         VideoThumbnailService.ExternalNativeThumbnailProvider = ExtractThumbnail;
         VideoThumbnailService.ExternalNativeFramesProvider = ExtractFrames;
+        VideoThumbnailService.ExternalNativeFrameAtTimeProvider = ExtractFrameAtTime;
     }
 
     public static byte[]? ExtractThumbnail(string videoPath, int maxWidth, int maxHeight)
@@ -34,7 +35,7 @@ public static class AndroidVideoThumbnailService
             retriever = new MediaMetadataRetriever();
             streamHandle = SetDataSourceSafe(retriever, videoPath);
 
-            long durationMs = TryGetDurationMs(retriever);
+            long durationMs = TryGetDurationMs(retriever, videoPath);
             long durationUs = durationMs > 0 ? durationMs * 1000 : 0;
 
             global::Android.Graphics.Bitmap? bmp = TryGetAnyFrame(retriever, durationUs, maxWidth, maxHeight);
@@ -75,17 +76,19 @@ public static class AndroidVideoThumbnailService
             retriever = new MediaMetadataRetriever();
             streamHandle = SetDataSourceSafe(retriever, videoPath);
 
-            long durationMs = TryGetDurationMs(retriever);
-            int count = Math.Max(2, Math.Min(16, maxFrames));
-            long durationUs = durationMs > 0 ? durationMs * 1000 : 5_000_000; // 5 giây mặc định nếu không đọc được duration
-            long stepUs = Math.Max(100_000, durationUs / count);
+            long durationMs = TryGetDurationMs(retriever, videoPath);
+            int count = Math.Max(8, Math.Min(24, maxFrames));
+            long durationUs = durationMs > 0 ? durationMs * 1000 : 15_000_000;
+            // Phân bổ đều khung hình xuyên suốt toàn bộ thời lượng video (từ 0% đến 96%)
+            long spanUs = durationUs > 0 ? (long)(durationUs * 0.96) : 10_000_000;
+            long stepUs = Math.Max(100_000, spanUs / count);
 
             for (int i = 0; i < count; i++)
             {
                 long timeUs = i * stepUs;
                 global::Android.Graphics.Bitmap? bmp = null;
 
-                // 1. Thử với Option.Closest (Giải mã chính xác P-frame/B-frame cho video ngắn)
+                // 1. Thử với Option.Closest (Giải mã chính xác P-frame/B-frame trên toàn bộ timeline)
                 try
                 {
                     bmp = retriever.GetFrameAtTime(timeUs, Option.Closest);
@@ -142,74 +145,77 @@ public static class AndroidVideoThumbnailService
         return list;
     }
 
+    public static byte[]? ExtractFrameAtTime(string videoPath, long timeMs, int maxWidth, int maxHeight)
+    {
+        if (string.IsNullOrWhiteSpace(videoPath)) return null;
+
+        MediaMetadataRetriever? retriever = null;
+        IDisposable? streamHandle = null;
+        try
+        {
+            retriever = new MediaMetadataRetriever();
+            streamHandle = SetDataSourceSafe(retriever, videoPath);
+
+            long timeUs = Math.Max(0, timeMs * 1000);
+            global::Android.Graphics.Bitmap? bmp = null;
+
+            try
+            {
+                bmp = retriever.GetFrameAtTime(timeUs, Option.Closest);
+            }
+            catch { }
+
+            if (bmp == null)
+            {
+                try
+                {
+                    bmp = retriever.GetFrameAtTime(timeUs, Option.ClosestSync);
+                }
+                catch { }
+            }
+
+            if (bmp != null)
+            {
+                bmp = ScaleBitmapIfNeeded(bmp, maxWidth, maxHeight);
+                using (bmp)
+                using (var ms = new MemoryStream())
+                {
+                    bmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Jpeg!, 80, ms);
+                    return ms.ToArray();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC_Thumb", $"[AndroidVideo] ExtractFrameAtTime error at {timeMs}ms: {ex.Message}");
+        }
+        finally
+        {
+            try { streamHandle?.Dispose(); } catch { }
+            try { retriever?.Release(); } catch { }
+            try { retriever?.Dispose(); } catch { }
+        }
+
+        return null;
+    }
+
     private static global::Android.Graphics.Bitmap? TryGetAnyFrame(MediaMetadataRetriever retriever, long durationUs, int maxWidth, int maxHeight)
     {
         global::Android.Graphics.Bitmap? bmp = null;
 
-        // Chiến lược 1: FrameAtTime mặc định của hệ điều hành
-        try
-        {
-            bmp = retriever.FrameAtTime;
-        }
-        catch { }
-
-        // Chiến lược 2: Frame tại thời điểm 0 với Option.Closest
-        if (bmp == null)
-        {
-            try
-            {
-                bmp = retriever.GetFrameAtTime(0, Option.Closest);
-            }
-            catch { }
-        }
-
-        // Chiến lược 3: Frame tại 0.5s với Option.ClosestSync (thường có keyframe đầu tiên)
-        if (bmp == null)
-        {
-            try
-            {
-                bmp = retriever.GetFrameAtTime(500_000, Option.ClosestSync);
-            }
-            catch { }
-        }
-
-        // Chiến lược 4: Frame tại 1.0s
-        if (bmp == null)
-        {
-            try
-            {
-                bmp = retriever.GetFrameAtTime(1_000_000, Option.ClosestSync);
-            }
-            catch { }
-        }
-
-        // Chiến lược 5: Frame tại 0.1s với Option.Closest
-        if (bmp == null)
-        {
-            try
-            {
-                bmp = retriever.GetFrameAtTime(100_000, Option.Closest);
-            }
-            catch { }
-        }
-
-        // Chiến lược 6: Frame theo tỉ lệ % duration nếu video dài
-        if (bmp == null && durationUs > 0)
-        {
-            try
-            {
-                bmp = retriever.GetFrameAtTime(durationUs / 10, Option.Closest);
-            }
-            catch { }
-        }
+        try { bmp = retriever.FrameAtTime; } catch { }
+        if (bmp == null) { try { bmp = retriever.GetFrameAtTime(0, Option.Closest); } catch { } }
+        if (bmp == null) { try { bmp = retriever.GetFrameAtTime(500_000, Option.ClosestSync); } catch { } }
+        if (bmp == null) { try { bmp = retriever.GetFrameAtTime(1_000_000, Option.ClosestSync); } catch { } }
+        if (bmp == null) { try { bmp = retriever.GetFrameAtTime(100_000, Option.Closest); } catch { } }
 
         if (bmp == null && durationUs > 0)
         {
-            try
-            {
-                bmp = retriever.GetFrameAtTime(durationUs / 4, Option.Closest);
-            }
-            catch { }
+            try { bmp = retriever.GetFrameAtTime(durationUs / 10, Option.Closest); } catch { }
+        }
+        if (bmp == null && durationUs > 0)
+        {
+            try { bmp = retriever.GetFrameAtTime(durationUs / 4, Option.Closest); } catch { }
         }
 
         if (bmp != null)
@@ -244,12 +250,17 @@ public static class AndroidVideoThumbnailService
         return orig;
     }
 
-    private static long TryGetDurationMs(MediaMetadataRetriever retriever)
+    private static long TryGetDurationMs(MediaMetadataRetriever retriever, string videoPath)
     {
+        // 1. Ưu tiên đọc trực tiếp từ Container Box (mvhd / EBML Info) chuẩn xác 100%
+        long parsed = VideoMetadataParser.GetVideoDurationMs(videoPath);
+        if (parsed > 0) return parsed;
+
+        // 2. Fallback đọc từ MediaMetadataRetriever
         try
         {
             string? durStr = retriever.ExtractMetadata(MetadataKey.Duration);
-            if (!string.IsNullOrEmpty(durStr) && long.TryParse(durStr, out long d))
+            if (!string.IsNullOrEmpty(durStr) && long.TryParse(durStr, out long d) && d > 0)
             {
                 return d;
             }
@@ -262,7 +273,6 @@ public static class AndroidVideoThumbnailService
     {
         Context ctx = MainActivity.CurrentInstance ?? global::Android.App.Application.Context;
 
-        // 1. Xử lý Content URI (SAF Storage)
         if (videoPath.StartsWith("content://", StringComparison.OrdinalIgnoreCase))
         {
             var uri = global::Android.Net.Uri.Parse(videoPath);
@@ -288,7 +298,6 @@ public static class AndroidVideoThumbnailService
             }
         }
 
-        // 2. Mở qua FileDescriptor từ Java.IO.FileInputStream (Giải quyết triệt để lỗi 0x80000000 trên Android 10+)
         try
         {
             var jFile = new Java.IO.File(videoPath);
@@ -312,7 +321,6 @@ public static class AndroidVideoThumbnailService
         }
         catch { }
 
-        // 3. Mở qua Android.Net.Uri.FromFile
         try
         {
             var fileUri = global::Android.Net.Uri.FromFile(new Java.IO.File(videoPath));
@@ -324,7 +332,6 @@ public static class AndroidVideoThumbnailService
         }
         catch { }
 
-        // 4. Fallback đường dẫn chuỗi
         retriever.SetDataSource(videoPath);
         return null;
     }
