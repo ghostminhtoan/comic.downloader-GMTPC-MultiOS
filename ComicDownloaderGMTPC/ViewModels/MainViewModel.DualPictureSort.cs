@@ -447,7 +447,8 @@ public partial class MainViewModel
     private long _dualSortVideoCurrentPlaybackMs = 0;
     private WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer? _dualSortActivePlayer;
     private NativeAudioPlaybackService? _dualSortAudioPlayer;
-    private WriteableBitmap? _dualSortWriteableBitmap;
+    private WriteableBitmap? _dualSortWbA;
+    private WriteableBitmap? _dualSortWbB;
 
     [RelayCommand]
     public void ToggleDualSortVideoPlayPause()
@@ -478,15 +479,13 @@ public partial class MainViewModel
         // 1. Tua tức thì trên Media Foundation Player phần cứng (Windows)
         if (OperatingSystem.IsWindows() && _dualSortActivePlayer != null)
         {
-            if (_dualSortWriteableBitmap != null)
+            var targetWb = _dualSortWbA ?? _dualSortWbB;
+            if (targetWb != null)
             {
-                bool ok = _dualSortActivePlayer.SeekDirect(targetMs, _dualSortWriteableBitmap);
+                bool ok = _dualSortActivePlayer.SeekDirect(targetMs, targetWb);
                 if (ok)
                 {
-                    if (DualSortPreviewBitmap != _dualSortWriteableBitmap)
-                    {
-                        DualSortPreviewBitmap = _dualSortWriteableBitmap;
-                    }
+                    DualSortPreviewBitmap = targetWb;
                     return;
                 }
             }
@@ -496,7 +495,7 @@ public partial class MainViewModel
             {
                 var old = DualSortPreviewBitmap;
                 DualSortPreviewBitmap = seekBmp;
-                if (old != null && old != _dualSortWriteableBitmap) old.Dispose();
+                if (old != null && old != _dualSortWbA && old != _dualSortWbB) old.Dispose();
                 return;
             }
         }
@@ -526,7 +525,7 @@ public partial class MainViewModel
                             {
                                 var old = DualSortPreviewBitmap;
                                 DualSortPreviewBitmap = exactBmp;
-                                if (old != null && old != _dualSortWriteableBitmap) old.Dispose();
+                                if (old != null && old != _dualSortWbA && old != _dualSortWbB) old.Dispose();
                             }
                             else
                             {
@@ -2188,67 +2187,86 @@ public partial class MainViewModel
                         }
                     });
 
-                    // 1. Trên Windows: Sử dụng Media Foundation Player phần cứng giải mã tuần tự siêu tốc (30 FPS, 0 giây chờ đợi, Zero-JPEG direct write)
+                    // 1. Trên Windows: Sử dụng Media Foundation Player phần cứng GPU (30 FPS, 0 giây chờ đợi, Double Buffering Zero-Lag)
                     if (OperatingSystem.IsWindows())
                     {
                         var player = WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer.Create(item.FilePath);
                         if (player != null)
                         {
                             _dualSortActivePlayer = player;
-                            _dualSortWriteableBitmap = new WriteableBitmap(new PixelSize(640, 360), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+                            int vW = player.VideoWidth > 0 ? player.VideoWidth : 640;
+                            int vH = player.VideoHeight > 0 ? player.VideoHeight : 360;
+
+                            if (vW > 1280 || vH > 720)
+                            {
+                                float s = Math.Min(1280f / vW, 720f / vH);
+                                vW = Math.Max(1, (int)(vW * s));
+                                vH = Math.Max(1, (int)(vH * s));
+                            }
+
+                            // Tạo Double Buffering WriteableBitmap để Avalonia luôn refresh texture GPU mượt mà 60fps
+                            _dualSortWbA = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+                            _dualSortWbB = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
 
                             // Render frame đầu tiên ngay lập tức
-                            bool firstFrameOk = player.ReadNextFrameDirect(_dualSortWriteableBitmap, out _);
+                            bool firstFrameOk = player.ReadNextFrameDirect(_dualSortWbA, out _);
                             Dispatcher.UIThread.Post(() =>
                             {
                                 if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
                                 {
-                                    DualSortPreviewBitmap = _dualSortWriteableBitmap;
+                                    DualSortPreviewBitmap = _dualSortWbA;
                                 }
                             });
 
                             try
                             {
+                                bool useA = false;
                                 while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                                 {
                                     if (!IsDualSortVideoPaused)
                                     {
-                                        bool frameRead = player.ReadNextFrameDirect(_dualSortWriteableBitmap, out long frameMs);
-                                        if (frameRead)
+                                        var targetWb = useA ? _dualSortWbA : _dualSortWbB;
+                                        if (targetWb != null)
                                         {
-                                            string curTimeStr = VideoMetadataParser.FormatDuration(frameMs);
-                                            double pct = durMs > 0 ? (double)frameMs / durMs * 100.0 : 0;
-                                            Dispatcher.UIThread.Post(() =>
+                                            bool frameRead = player.ReadNextFrameDirect(targetWb, out long frameMs);
+                                            if (frameRead)
                                             {
-                                                if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
-                                                {
-                                                    if (DualSortPreviewBitmap != _dualSortWriteableBitmap)
-                                                    {
-                                                        DualSortPreviewBitmap = _dualSortWriteableBitmap;
-                                                    }
+                                                string curTimeStr = VideoMetadataParser.FormatDuration(frameMs);
+                                                double pct = durMs > 0 ? (double)frameMs / durMs * 100.0 : 0;
+                                                var curRenderedWb = targetWb;
 
-                                                    _isInternalDualSortSeekUpdating = true;
-                                                    try
+                                                Dispatcher.UIThread.Post(() =>
+                                                {
+                                                    if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                                                     {
-                                                        DualSortVideoSeekPosition = pct;
-                                                        DualSortVideoCurrentTimeText = curTimeStr;
-                                                        DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : curTimeStr;
+                                                        // Gán luân phiên để Avalonia DataBinding luôn redraw 100% mượt mà trên GPU
+                                                        DualSortPreviewBitmap = curRenderedWb;
+
+                                                        _isInternalDualSortSeekUpdating = true;
+                                                        try
+                                                        {
+                                                            DualSortVideoSeekPosition = pct;
+                                                            DualSortVideoCurrentTimeText = curTimeStr;
+                                                            DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : curTimeStr;
+                                                        }
+                                                        finally
+                                                        {
+                                                            _isInternalDualSortSeekUpdating = false;
+                                                        }
                                                     }
-                                                    finally
-                                                    {
-                                                        _isInternalDualSortSeekUpdating = false;
-                                                    }
-                                                }
-                                            }, DispatcherPriority.Render);
-                                        }
-                                        else
-                                        {
-                                            // Hết video -> lặp lại audio
-                                            try { _dualSortAudioPlayer?.Seek(0); } catch { }
+                                                }, DispatcherPriority.Render);
+
+                                                useA = !useA;
+                                            }
+                                            else
+                                            {
+                                                // Hết video -> lặp lại audio
+                                                try { _dualSortAudioPlayer?.Seek(0); } catch { }
+                                            }
                                         }
                                     }
 
-                                    await Task.Delay(33, cts.Token); // 30 FPS chuyển động siêu mượt!
+                                    await Task.Delay(33, cts.Token); // 30 FPS mượt mà
                                 }
                             }
                             finally
@@ -2260,8 +2278,8 @@ public partial class MainViewModel
                         }
                     }
 
-                    // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động (tối đa 6-8 frames)
-                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 8, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
+                    // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động (tối đa 8-10 frames)
+                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 10, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 2)
                     {
                         _dualSortVideoCachedFrames = frames;
@@ -2305,9 +2323,8 @@ public partial class MainViewModel
                                 }
                             }
 
-                            // Chạy theo từng giây giống video bình thường
-                            int frameIntervalMs = durMs > 0 ? Math.Max(250, (int)(durMs / frames.Count)) : 500;
-                            await Task.Delay(frameIntervalMs, cts.Token);
+                            // Chuyển frame mượt mà 120ms (8.3 FPS), KHÔNG delay hàng chục giây nữa!
+                            await Task.Delay(120, cts.Token);
                         }
                     }
                     return;
@@ -2466,12 +2483,14 @@ public partial class MainViewModel
 
         var curBmp = DualSortPreviewBitmap;
         DualSortPreviewBitmap = null;
-        if (curBmp != null && curBmp != _dualSortWriteableBitmap)
+        if (curBmp != null && curBmp != _dualSortWbA && curBmp != _dualSortWbB)
         {
             try { curBmp.Dispose(); } catch { }
         }
-        try { _dualSortWriteableBitmap?.Dispose(); } catch { }
-        _dualSortWriteableBitmap = null;
+        try { _dualSortWbA?.Dispose(); } catch { }
+        try { _dualSortWbB?.Dispose(); } catch { }
+        _dualSortWbA = null;
+        _dualSortWbB = null;
 
         IsDualSortPreviewVisible = false;
         DualSortPreviewItem = null;

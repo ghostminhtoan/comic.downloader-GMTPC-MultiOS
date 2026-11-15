@@ -520,6 +520,13 @@ public sealed class ThumbnailPreviewService
                                     item.VideoCachedFrames = frames;
                                     item.IsVideoAutoPlaying = true;
                                     item.CurrentPlaybackPositionMs = 0;
+                                    try
+                                    {
+                                        item.ActiveAudioPlayer?.Stop();
+                                        item.ActiveAudioPlayer?.Dispose();
+                                        item.ActiveAudioPlayer = NativeAudioPlaybackService.CreateAndPlay(videoTarget, 0);
+                                    }
+                                    catch { }
                                 });
 
                                 int fIdx = 0;
@@ -549,9 +556,13 @@ public sealed class ThumbnailPreviewService
                                         });
 
                                         fIdx = (fIdx + 1) % frames.Count;
+                                        if (fIdx == 0)
+                                        {
+                                            try { item.ActiveAudioPlayer?.Seek(0); } catch { }
+                                        }
                                     }
 
-                                    await Task.Delay(80, ct).ConfigureAwait(false); // 12.5 FPS cho fallback
+                                    await Task.Delay(120, ct).ConfigureAwait(false); // 8.3 FPS cho fallback mượt mà
                                 }
                             }
                         }
@@ -565,6 +576,13 @@ public sealed class ThumbnailPreviewService
                                     if (ReferenceEquals(_activeHighResItem, item))
                                     {
                                         item.IsVideoAutoPlaying = false;
+                                        try
+                                        {
+                                            item.ActiveAudioPlayer?.Stop();
+                                            item.ActiveAudioPlayer?.Dispose();
+                                            item.ActiveAudioPlayer = null;
+                                        }
+                                        catch { }
                                     }
                                 }
                             });
