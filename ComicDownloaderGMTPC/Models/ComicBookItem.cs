@@ -39,6 +39,10 @@ public partial class ComicBookItem : ObservableObject
     public Avalonia.Thickness ThumbnailCardBorderThickness => IsHighlighted ? new Avalonia.Thickness(2.5) : new Avalonia.Thickness(1);
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVideoItem))]
+    [NotifyPropertyChangedFor(nameof(VideoBadge))]
+    [NotifyPropertyChangedFor(nameof(ShowNoImagePlaceholder))]
+    [NotifyPropertyChangedFor(nameof(ShowVideoPlaceholder))]
     private string _title = string.Empty;
 
     [ObservableProperty]
@@ -51,6 +55,10 @@ public partial class ComicBookItem : ObservableObject
     private int _appliedOrderNumber = 0;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVideoItem))]
+    [NotifyPropertyChangedFor(nameof(VideoBadge))]
+    [NotifyPropertyChangedFor(nameof(ShowNoImagePlaceholder))]
+    [NotifyPropertyChangedFor(nameof(ShowVideoPlaceholder))]
     private string _url = string.Empty;
 
     [ObservableProperty]
@@ -188,6 +196,10 @@ public partial class ComicBookItem : ObservableObject
     private string _speedText = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVideoItem))]
+    [NotifyPropertyChangedFor(nameof(VideoBadge))]
+    [NotifyPropertyChangedFor(nameof(ShowNoImagePlaceholder))]
+    [NotifyPropertyChangedFor(nameof(ShowVideoPlaceholder))]
     private string _coverUrl = string.Empty;
 
     [ObservableProperty]
@@ -282,10 +294,20 @@ public partial class ComicBookItem : ObservableObject
 
     private bool _isInternalSeekUpdating = false;
 
+    public ComicDownloaderGMTPC.Services.NativeAudioPlaybackService? ActiveAudioPlayer { get; set; }
+
     [RelayCommand]
     public void ToggleVideoPlayPause()
     {
         IsVideoPaused = !IsVideoPaused;
+        if (IsVideoPaused)
+        {
+            try { ActiveAudioPlayer?.Pause(); } catch { }
+        }
+        else
+        {
+            try { ActiveAudioPlayer?.Resume(); } catch { }
+        }
         OnPropertyChanged(nameof(VideoPlayPauseIcon));
     }
 
@@ -342,6 +364,8 @@ public partial class ComicBookItem : ObservableObject
         long targetMs = VideoDurationMs > 0 ? (long)Math.Round(value / 100.0 * VideoDurationMs) : 0;
         CurrentPlaybackPositionMs = targetMs;
         VideoCurrentTimeText = VideoMetadataParser.FormatDuration(targetMs);
+
+        try { ActiveAudioPlayer?.Seek(targetMs / 1000.0); } catch { }
 
         // 1. Tua tức thì trên Media Foundation Player nếu có
         if (OperatingSystem.IsWindows() && ActiveVideoPlayer is WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer player)

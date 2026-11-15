@@ -738,7 +738,7 @@ public static class VideoThumbnailService
         return CreatePosterCardFromInfo(fileName, fileSize, ext, maxWidth, maxHeight, out width, out height);
     }
 
-    private static byte[] CreatePosterCardFromInfo(string fileName, long fileSize, string ext, int maxWidth, int maxHeight, out int width, out int height)
+    public static byte[] CreatePosterCardFromInfo(string fileName, long fileSize, string ext, int maxWidth, int maxHeight, out int width, out int height)
     {
         width = Math.Max(480, Math.Min(640, maxWidth));
         height = (int)Math.Round(width * 9.0 / 16.0); // Chuẩn tỉ lệ video 16:9

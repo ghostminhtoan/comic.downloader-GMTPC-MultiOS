@@ -283,6 +283,16 @@ public sealed class ThumbnailPreviewService
             try
             {
                 var initialPoster = VideoThumbnailService.GetVideoThumbnail(item.Title, 480, 480, out _, out _);
+                if (initialPoster == null)
+                {
+                    byte[]? posterCardBytes = VideoThumbnailService.CreatePosterCardFromInfo(item.Title, 0, item.VideoBadge, 480, 360, out _, out _);
+                    if (posterCardBytes != null && posterCardBytes.Length > 0)
+                    {
+                        using var ms = new MemoryStream(posterCardBytes);
+                        initialPoster = new Bitmap(ms);
+                    }
+                }
+
                 if (initialPoster != null)
                 {
                     await RunOnUiAsync(() =>
@@ -290,6 +300,10 @@ public sealed class ThumbnailPreviewService
                         if (item.ThumbnailBitmap == null && item.HighResPreviewBitmap == null)
                         {
                             item.ThumbnailBitmap = initialPoster;
+                        }
+                        else
+                        {
+                            initialPoster.Dispose();
                         }
                     });
                 }
@@ -323,6 +337,13 @@ public sealed class ThumbnailPreviewService
                                     if (_activeHighResItem != null && !ReferenceEquals(_activeHighResItem, item))
                                     {
                                         _activeHighResItem.HighResPreviewBitmap = null;
+                                        try
+                                        {
+                                            _activeHighResItem.ActiveAudioPlayer?.Stop();
+                                            _activeHighResItem.ActiveAudioPlayer?.Dispose();
+                                            _activeHighResItem.ActiveAudioPlayer = null;
+                                        }
+                                        catch { }
                                     }
                                     _activeHighResItem = item;
                                 }
@@ -344,6 +365,13 @@ public sealed class ThumbnailPreviewService
                                         if (_activeHighResItem != null && !ReferenceEquals(_activeHighResItem, item))
                                         {
                                             _activeHighResItem.HighResPreviewBitmap = null;
+                                            try
+                                            {
+                                                _activeHighResItem.ActiveAudioPlayer?.Stop();
+                                                _activeHighResItem.ActiveAudioPlayer?.Dispose();
+                                                _activeHighResItem.ActiveAudioPlayer = null;
+                                            }
+                                            catch { }
                                         }
                                         _activeHighResItem = item;
                                     }
@@ -412,6 +440,13 @@ public sealed class ThumbnailPreviewService
                                     {
                                         item.ActiveVideoPlayer = player;
                                         item.IsVideoAutoPlaying = true;
+                                        try
+                                        {
+                                            item.ActiveAudioPlayer?.Stop();
+                                            item.ActiveAudioPlayer?.Dispose();
+                                            item.ActiveAudioPlayer = NativeAudioPlaybackService.CreateAndPlay(videoTarget, 0);
+                                        }
+                                        catch { }
                                     });
 
                                     try
@@ -448,9 +483,13 @@ public sealed class ThumbnailPreviewService
                                                         }
                                                     });
                                                 }
+                                                else
+                                                {
+                                                    try { item.ActiveAudioPlayer?.Seek(0); } catch { }
+                                                }
                                             }
 
-                                            await Task.Delay(38, ct).ConfigureAwait(false); // 26 FPS mượt mà
+                                            await Task.Delay(33, ct).ConfigureAwait(false); // 30 FPS mượt mà
                                         }
                                     }
                                     finally
@@ -459,6 +498,13 @@ public sealed class ThumbnailPreviewService
                                         await RunOnUiAsync(() =>
                                         {
                                             if (item.ActiveVideoPlayer == player) item.ActiveVideoPlayer = null;
+                                            try
+                                            {
+                                                item.ActiveAudioPlayer?.Stop();
+                                                item.ActiveAudioPlayer?.Dispose();
+                                                item.ActiveAudioPlayer = null;
+                                            }
+                                            catch { }
                                         });
                                     }
                                     return;

@@ -22,6 +22,107 @@ public static class AndroidVideoThumbnailService
         VideoThumbnailService.ExternalNativeThumbnailProvider = ExtractThumbnail;
         VideoThumbnailService.ExternalNativeFramesProvider = ExtractFrames;
         VideoThumbnailService.ExternalNativeFrameAtTimeProvider = ExtractFrameAtTime;
+        NativeAudioPlaybackService.ExternalAndroidAudioPlayerProvider = PlayAndroidAudio;
+    }
+
+    private static INativeAudioPlayerInstance? PlayAndroidAudio(string filePath, double startSeconds)
+    {
+        try
+        {
+            var mp = new MediaPlayer();
+            var ctx = global::Android.App.Application.Context;
+            if (filePath.StartsWith("content://", StringComparison.OrdinalIgnoreCase))
+            {
+                var uri = global::Android.Net.Uri.Parse(filePath);
+                if (uri != null) mp.SetDataSource(ctx, uri);
+            }
+            else
+            {
+                mp.SetDataSource(filePath);
+            }
+            mp.Prepare();
+            if (startSeconds > 0)
+            {
+                mp.SeekTo((int)(startSeconds * 1000));
+            }
+            mp.Start();
+
+            return new AndroidMediaPlayerHandle(mp);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private sealed class AndroidMediaPlayerHandle : INativeAudioPlayerInstance
+    {
+        private MediaPlayer? _mp;
+        public AndroidMediaPlayerHandle(MediaPlayer mp) { _mp = mp; }
+
+        public void Pause()
+        {
+            try
+            {
+                if (_mp != null && _mp.IsPlaying)
+                {
+                    _mp.Pause();
+                }
+            }
+            catch { }
+        }
+
+        public void Resume()
+        {
+            try
+            {
+                if (_mp != null && !_mp.IsPlaying)
+                {
+                    _mp.Start();
+                }
+            }
+            catch { }
+        }
+
+        public void Seek(double seconds)
+        {
+            try
+            {
+                if (_mp != null)
+                {
+                    int msec = Math.Max(0, (int)(seconds * 1000));
+                    _mp.SeekTo(msec);
+                }
+            }
+            catch { }
+        }
+
+        public void Stop()
+        {
+            try
+            {
+                if (_mp != null)
+                {
+                    if (_mp.IsPlaying) _mp.Stop();
+                }
+            }
+            catch { }
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                if (_mp != null)
+                {
+                    if (_mp.IsPlaying) _mp.Stop();
+                    _mp.Release();
+                    _mp.Dispose();
+                    _mp = null;
+                }
+            }
+            catch { }
+        }
     }
 
     public static byte[]? ExtractThumbnail(string videoPath, int maxWidth, int maxHeight)
@@ -77,7 +178,7 @@ public static class AndroidVideoThumbnailService
             streamHandle = SetDataSourceSafe(retriever, videoPath);
 
             long durationMs = TryGetDurationMs(retriever, videoPath);
-            int count = Math.Max(8, Math.Min(24, maxFrames));
+            int count = Math.Max(4, Math.Min(8, maxFrames));
             long durationUs = durationMs > 0 ? durationMs * 1000 : 15_000_000;
             // Phân bổ đều khung hình xuyên suốt toàn bộ thời lượng video (từ 0% đến 96%)
             long spanUs = durationUs > 0 ? (long)(durationUs * 0.96) : 10_000_000;
@@ -88,19 +189,19 @@ public static class AndroidVideoThumbnailService
                 long timeUs = i * stepUs;
                 global::Android.Graphics.Bitmap? bmp = null;
 
-                // 1. Thử với Option.Closest (Giải mã chính xác P-frame/B-frame trên toàn bộ timeline)
+                // 1. Thử với Option.ClosestSync (Giải mã Keyframe siêu tốc ~10ms trên GPU)
                 try
                 {
-                    bmp = retriever.GetFrameAtTime(timeUs, Option.Closest);
+                    bmp = retriever.GetFrameAtTime(timeUs, Option.ClosestSync);
                 }
                 catch { }
 
-                // 2. Thử với Option.ClosestSync
+                // 2. Thử với Option.Closest nếu ClosestSync không ra
                 if (bmp == null)
                 {
                     try
                     {
-                        bmp = retriever.GetFrameAtTime(timeUs, Option.ClosestSync);
+                        bmp = retriever.GetFrameAtTime(timeUs, Option.Closest);
                     }
                     catch { }
                 }

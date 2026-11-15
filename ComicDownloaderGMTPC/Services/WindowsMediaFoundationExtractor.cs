@@ -382,6 +382,159 @@ public static class WindowsMediaFoundationExtractor
             _durationMs = durationMs;
         }
 
+        public bool ReadNextFrameDirect(WriteableBitmap targetBitmap, out long timestampMs)
+        {
+            timestampMs = 0;
+            lock (_lock)
+            {
+                if (_isDisposed || _reader == null) return false;
+
+                try
+                {
+                    int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint flags, out ulong timeHns, out IMFSample sample);
+                    if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0)
+                    {
+                        // Hết video -> Tua về đầu để lặp lại
+                        _reader.Flush(MF_SOURCE_READER_FIRST_VIDEO_STREAM);
+                        var pv0 = new PROPVARIANT { vt = 20, hVal = 0 };
+                        try { _reader.SetCurrentPosition(Guid.Empty, ref pv0); } finally { PropVariantClear(ref pv0); }
+                        return false;
+                    }
+
+                    if (hr == 0 && sample != null)
+                    {
+                        try
+                        {
+                            timestampMs = (long)(timeHns / 10000L);
+                            return RenderSampleToWriteableBitmap(sample, targetBitmap);
+                        }
+                        finally
+                        {
+                            Marshal.ReleaseComObject(sample);
+                        }
+                    }
+                }
+                catch { }
+
+                return false;
+            }
+        }
+
+        public bool SeekDirect(long targetMs, WriteableBitmap targetBitmap)
+        {
+            lock (_lock)
+            {
+                if (_isDisposed || _reader == null) return false;
+
+                try
+                {
+                    _reader.Flush(MF_SOURCE_READER_FIRST_VIDEO_STREAM);
+
+                    long hns = Math.Max(0, targetMs * 10000L);
+                    var pv = new PROPVARIANT { vt = 20, hVal = hns };
+                    try
+                    {
+                        _reader.SetCurrentPosition(Guid.Empty, ref pv);
+                    }
+                    finally
+                    {
+                        PropVariantClear(ref pv);
+                    }
+
+                    IMFSample? sample = null;
+                    for (int attempt = 0; attempt < 5; attempt++)
+                    {
+                        int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out sample);
+                        if (hr == 0 && sample != null) break;
+                    }
+
+                    if (sample != null)
+                    {
+                        try
+                        {
+                            return RenderSampleToWriteableBitmap(sample, targetBitmap);
+                        }
+                        finally
+                        {
+                            Marshal.ReleaseComObject(sample);
+                        }
+                    }
+                }
+                catch { }
+
+                return false;
+            }
+        }
+
+        private unsafe bool RenderSampleToWriteableBitmap(IMFSample sample, WriteableBitmap targetBitmap)
+        {
+            try
+            {
+                sample.ConvertToContiguousBuffer(out IMFMediaBuffer buffer);
+                if (buffer == null) return false;
+
+                try
+                {
+                    buffer.Lock(out IntPtr pData, out _, out int cbLength);
+                    if (pData != IntPtr.Zero && cbLength >= 16)
+                    {
+                        try
+                        {
+                            if (_videoW <= 0 || _videoH <= 0 || (_videoW * _videoH * 4 != cbLength))
+                            {
+                                int totalPixels = cbLength / 4;
+                                if (totalPixels == 1280 * 720) { _videoW = 1280; _videoH = 720; }
+                                else if (totalPixels == 1920 * 1080) { _videoW = 1920; _videoH = 1080; }
+                                else if (totalPixels == 854 * 480) { _videoW = 854; _videoH = 480; }
+                                else if (totalPixels == 640 * 360) { _videoW = 640; _videoH = 360; }
+                                else if (totalPixels == 480 * 270) { _videoW = 480; _videoH = 270; }
+                                else
+                                {
+                                    _videoW = (int)Math.Round(Math.Sqrt(totalPixels * 16.0 / 9.0));
+                                    _videoH = totalPixels / Math.Max(1, _videoW);
+                                }
+                            }
+
+                            if (_videoW <= 0 || _videoH <= 0) return false;
+
+                            int targetW = targetBitmap.PixelSize.Width;
+                            int targetH = targetBitmap.PixelSize.Height;
+
+                            using var frameLock = targetBitmap.Lock();
+                            var srcInfo = new SKImageInfo(_videoW, _videoH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                            using var srcBmp = new SKBitmap();
+                            srcBmp.InstallPixels(srcInfo, pData);
+
+                            var dstInfo = new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                            using var dstSurface = SKSurface.Create(dstInfo, frameLock.Address, frameLock.RowBytes);
+                            var canvas = dstSurface.Canvas;
+                            canvas.Clear(SKColors.Black);
+
+                            using var paint = new SKPaint { IsAntialias = true };
+                            canvas.DrawBitmap(srcBmp, new SKRect(0, 0, _videoW, _videoH), new SKRect(0, 0, targetW, targetH), paint);
+
+                            return true;
+                        }
+                        finally
+                        {
+                            buffer.Unlock();
+                        }
+                    }
+                    else
+                    {
+                        buffer.Unlock();
+                    }
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(buffer);
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
         public Bitmap? ReadNextFrame(int maxWidth, int maxHeight, out long timestampMs)
         {
             timestampMs = 0;
@@ -431,6 +584,8 @@ public static class WindowsMediaFoundationExtractor
 
                 try
                 {
+                    _reader.Flush(MF_SOURCE_READER_FIRST_VIDEO_STREAM);
+
                     long hns = Math.Max(0, targetMs * 10000L);
                     var pv = new PROPVARIANT { vt = 20, hVal = hns };
                     try
@@ -442,8 +597,14 @@ public static class WindowsMediaFoundationExtractor
                         PropVariantClear(ref pv);
                     }
 
-                    int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out IMFSample sample);
-                    if (hr == 0 && sample != null)
+                    IMFSample? sample = null;
+                    for (int attempt = 0; attempt < 5; attempt++)
+                    {
+                        int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out sample);
+                        if (hr == 0 && sample != null) break;
+                    }
+
+                    if (sample != null)
                     {
                         try
                         {
