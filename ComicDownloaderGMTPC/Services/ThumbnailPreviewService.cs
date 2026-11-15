@@ -277,6 +277,26 @@ public sealed class ThumbnailPreviewService
             _failedUrlCache.TryRemove(cachedUrl, out _);
         }
 
+        // Với item Video: nếu chưa có thumbnail, hiển thị ngay Poster Card ban đầu với icon Play để người dùng không nhìn thấy khoảng trống hoặc NO IMG
+        if (item.IsVideoItem && item.HighResPreviewBitmap == null && item.ThumbnailBitmap == null)
+        {
+            try
+            {
+                var initialPoster = VideoThumbnailService.GetVideoThumbnail(item.Title, 480, 480, out _, out _);
+                if (initialPoster != null)
+                {
+                    await RunOnUiAsync(() =>
+                    {
+                        if (item.ThumbnailBitmap == null && item.HighResPreviewBitmap == null)
+                        {
+                            item.ThumbnailBitmap = initialPoster;
+                        }
+                    });
+                }
+            }
+            catch { }
+        }
+
         await EnsureThumbnailCacheAsync(item, ct, isPriority: true).ConfigureAwait(false);
 
         string cacheDir = GetItemCacheDirectory(item);
@@ -391,6 +411,67 @@ public sealed class ThumbnailPreviewService
                                     }
                                 });
                                 SaveItemMetadataCache(cacheDir, item);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                else if (link.Contains("rule34.lol/images/", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var match = Regex.Match(link, @"/images/(\d+)", RegexOptions.IgnoreCase);
+                        if (match.Success)
+                        {
+                            string imgId = match.Groups[1].Value;
+                            string api = $"https://www.rule34.lol/api/v1/json/images/{imgId}";
+                            using var req = new HttpRequestMessage(HttpMethod.Get, api);
+                            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+                            if (res.IsSuccessStatusCode)
+                            {
+                                string jsonStr = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                                using var doc = JsonDocument.Parse(jsonStr);
+                                if (doc.RootElement.TryGetProperty("image", out var imgObj))
+                                {
+                                    var tagList = new List<string>();
+                                    if (imgObj.TryGetProperty("tags", out var tagsElem) && tagsElem.ValueKind == JsonValueKind.Array)
+                                    {
+                                        foreach (var t in tagsElem.EnumerateArray())
+                                        {
+                                            string? s = t.GetString();
+                                            if (!string.IsNullOrWhiteSpace(s)) tagList.Add(s);
+                                        }
+                                    }
+
+                                    string typeStr = item.IsVideoItem ? "Video (WebM/MP4)" : "Image";
+                                    if (imgObj.TryGetProperty("format", out var fmtProp) && !string.IsNullOrWhiteSpace(fmtProp.GetString()))
+                                    {
+                                        typeStr = fmtProp.GetString()!.ToUpperInvariant();
+                                    }
+
+                                    string? artistStr = null;
+                                    var artistTags = tagList.Where(t => t.StartsWith("artist:", StringComparison.OrdinalIgnoreCase)).ToList();
+                                    if (artistTags.Count > 0)
+                                    {
+                                        artistStr = string.Join(", ", artistTags.Select(a => a.Substring("artist:".Length).Trim()));
+                                    }
+
+                                    string tagStr = tagList.Count > 0 ? "Tags: " + string.Join(", ", tagList.Take(30)) : string.Empty;
+
+                                    await RunOnUiAsync(() =>
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(tagStr)) item.PreviewTagsText = tagStr;
+                                        item.PreviewType = typeStr;
+                                        if (!string.IsNullOrWhiteSpace(artistStr)) item.PreviewArtist = artistStr;
+                                    });
+
+                                    try
+                                    {
+                                        SaveItemMetadataCache(cacheDir, item);
+                                    }
+                                    catch { }
+                                }
                             }
                         }
                     }
@@ -809,6 +890,11 @@ public sealed class ThumbnailPreviewService
                 {
                     request.Headers.Referrer = new Uri("https://hitomi.la/");
                 }
+                else if (imageUrl.Contains("rule34", StringComparison.OrdinalIgnoreCase))
+                {
+                    request.Headers.Referrer = new Uri("https://www.rule34.lol/");
+                    request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                }
 
                 using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode) return false;
@@ -817,16 +903,38 @@ public sealed class ThumbnailPreviewService
                 if (bytes == null || bytes.Length < 64) return false;
             }
 
-            // Xác thực dữ liệu tải về thực sự là ảnh hợp lệ (tránh trang HTML Cloudflare / 404 giả 200)
-            using var verifyStream = new MemoryStream(bytes);
-            using var codec = SKCodec.Create(verifyStream);
-            if (codec == null) return false;
-
             string? dir = Path.GetDirectoryName(destinationPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
                 Directory.CreateDirectory(dir);
             }
+
+            bool isVideo = VideoThumbnailService.IsVideoData(bytes) || VideoThumbnailService.IsVideoFile(imageUrl);
+            if (isVideo)
+            {
+                string ext = Path.GetExtension(imageUrl);
+                if (string.IsNullOrEmpty(ext)) ext = ".webm";
+
+                // Trích xuất frame poster ảnh JPEG chất lượng cao từ buffer video (.webm, .mp4)
+                byte[]? frameBytes = VideoThumbnailService.ExtractThumbnailBytesFromVideoBuffer(bytes, ext, 640, 640, out int outW, out int outH);
+                if (frameBytes != null && frameBytes.Length > 0)
+                {
+                    await File.WriteAllBytesAsync(destinationPath, frameBytes, ct).ConfigureAwait(false);
+                    string thumbPath = destinationPath.Replace("cover.jpg", "cover.thumb.jpg");
+                    await File.WriteAllBytesAsync(thumbPath, frameBytes, ct).ConfigureAwait(false);
+                    return true;
+                }
+                else
+                {
+                    await File.WriteAllBytesAsync(destinationPath, bytes, ct).ConfigureAwait(false);
+                    return true;
+                }
+            }
+
+            // Xác thực dữ liệu tải về thực sự là ảnh hợp lệ (tránh trang HTML Cloudflare / 404 giả 200)
+            using var verifyStream = new MemoryStream(bytes);
+            using var codec = SKCodec.Create(verifyStream);
+            if (codec == null) return false;
 
             await File.WriteAllBytesAsync(destinationPath, bytes, ct).ConfigureAwait(false);
             return true;
@@ -1114,6 +1222,59 @@ public sealed class ThumbnailPreviewService
                                 File.WriteAllText(Path.Combine(cacheDir, "cover.tags.txt"), cuuItem.PreviewTagsText);
                             }
                             catch { }
+                        }
+                    }
+                    catch { }
+                }
+                if (urls.Count > 0) _candidateUrlCache[link] = urls[0];
+            }
+            // Rule34: Gọi API lấy representations và tags trực tiếp
+            else if (link.Contains("rule34", StringComparison.OrdinalIgnoreCase))
+            {
+                var imgMatch = Regex.Match(link, @"/images/(?<id>\d+)", RegexOptions.IgnoreCase);
+                if (imgMatch.Success)
+                {
+                    string id = imgMatch.Groups["id"].Value;
+                    string imgApiUrl = $"https://www.rule34.lol/api/v1/json/images/{id}";
+                    try
+                    {
+                        using var apiReq = new HttpRequestMessage(HttpMethod.Get, imgApiUrl);
+                        apiReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                        using var apiRes = await _httpClient.SendAsync(apiReq, ct).ConfigureAwait(false);
+                        if (apiRes.IsSuccessStatusCode)
+                        {
+                            string json = await apiRes.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                            using var doc = JsonDocument.Parse(json);
+                            if (doc.RootElement.TryGetProperty("image", out var imgObj))
+                            {
+                                if (imgObj.TryGetProperty("representations", out var reps))
+                                {
+                                    if (reps.TryGetProperty("thumb_small", out var tsProp)) AddCandidate(tsProp.GetString(), link);
+                                    if (reps.TryGetProperty("thumb", out var tProp)) AddCandidate(tProp.GetString(), link);
+                                    if (reps.TryGetProperty("small", out var sProp)) AddCandidate(sProp.GetString(), link);
+                                    if (reps.TryGetProperty("medium", out var mProp)) AddCandidate(mProp.GetString(), link);
+                                }
+                                if (imgObj.TryGetProperty("tags", out var tagsElem) && tagsElem.ValueKind == JsonValueKind.Array)
+                                {
+                                    var tagList = new List<string>();
+                                    foreach (var t in tagsElem.EnumerateArray())
+                                    {
+                                        string? s = t.GetString();
+                                        if (!string.IsNullOrWhiteSpace(s)) tagList.Add(s);
+                                    }
+                                    if (tagList.Count > 0)
+                                    {
+                                        string tagStr = "Tags: " + string.Join(", ", tagList.Take(25));
+                                        await RunOnUiAsync(() => item.PreviewTagsText = tagStr);
+                                        try
+                                        {
+                                            string cacheDir = GetItemCacheDirectory(item);
+                                            File.WriteAllText(Path.Combine(cacheDir, "cover.tags.txt"), tagStr);
+                                        }
+                                        catch { }
+                                    }
+                                }
+                            }
                         }
                     }
                     catch { }

@@ -10904,35 +10904,64 @@
 
                     <StackPanel Spacing="6" Margin="0,0,2,0">
 
-                        <!-- Khung Ảnh Bìa Độ Phân Giải Cao (cover.jpg) -->
-
-                        <Border Background="#05080D" CornerRadius="2" MinHeight="180" MaxHeight="380" ClipToBounds="True">
-
+                        <!-- Khung Ảnh Bìa / Poster Video (cover.jpg) -->
+                        <Border Background="#05080D" CornerRadius="4" MinHeight="180" MaxHeight="380" ClipToBounds="True" BorderBrush="#1E293B" BorderThickness="1">
                             <Grid>
-
+                                <!-- 1. Placeholder khi không có ảnh (cho truyện tranh / ảnh tĩnh thông thường) -->
                                 <TextBlock Text="NO IMG" FontSize="14" FontWeight="Bold" Foreground="#475569"
-
                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           IsVisible="{Binding ActiveHoverItem.ShowNoImagePlaceholder}" />
 
-                                           IsVisible="{Binding ActiveHoverItem.EffectivePopupBitmap, Converter={x:Static ObjectConverters.IsNull}}" />
-
-                                <Image Source="{Binding ActiveHoverItem.EffectivePopupBitmap}"
-
-                                       Stretch="Uniform" MaxHeight="370"
-
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-
-                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
-
-                                <Border Background="#80000000" IsVisible="{Binding ActiveHoverItem.IsThumbnailLoading}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-
-                                    <TextBlock Text="⏳ Đang tải ảnh bìa..." FontSize="11" Foreground="#00E5FF" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
-
+                                <!-- 2. Placeholder chuyên dụng cho Video / Audio khi đang nạp ảnh hoặc chưa có poster frame -->
+                                <Border IsVisible="{Binding ActiveHoverItem.ShowVideoPlaceholder}"
+                                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                        Background="#0B132B" Padding="16">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                                        <Border Width="56" Height="56" CornerRadius="28" Background="#7C3AED" HorizontalAlignment="Center">
+                                            <TextBlock Text="▶" FontSize="24" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="3,0,0,0" />
+                                        </Border>
+                                        <TextBlock Text="{Binding ActiveHoverItem.VideoBadge, StringFormat='VIDEO / AUDIO ({0})'}"
+                                                   FontSize="12" FontWeight="Bold" Foreground="#A78BFA" HorizontalAlignment="Center" />
+                                        <TextBlock Text="Nhấn nút 'PHÁT VIDEO / AUDIO' bên dưới để xem/nghe trực tiếp"
+                                                   FontSize="10" Foreground="#94A3B8" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="240" HorizontalAlignment="Center" />
+                                    </StackPanel>
                                 </Border>
 
-                            </Grid>
+                                <!-- 3. Hiển thị Ảnh bìa / Poster Frame độ phân giải cao -->
+                                <Image Source="{Binding ActiveHoverItem.EffectivePopupBitmap}"
+                                       Stretch="Uniform" MaxHeight="370"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
 
+                                <!-- Badge icon video nhỏ trên góc ảnh bìa nếu là file video -->
+                                <Border IsVisible="{Binding ActiveHoverItem.IsVideoItem}"
+                                        Background="#CC7C3AED" CornerRadius="4" Padding="6,2" Margin="6"
+                                        HorizontalAlignment="Right" VerticalAlignment="Top">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="▶" FontSize="10" Foreground="#FFFFFF" FontWeight="Bold" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding ActiveHoverItem.VideoBadge}" FontSize="10" Foreground="#FDE047" FontWeight="ExtraBold" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Overlay Đang tải ảnh bìa -->
+                                <Border Background="#80000000" IsVisible="{Binding ActiveHoverItem.IsThumbnailLoading}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                    <TextBlock Text="⏳ Đang tải ảnh bìa / frame..." FontSize="11" Foreground="#00E5FF" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Grid>
                         </Border>
+
+                        <!-- Nút phát Video / Audio trực tiếp nổi bật bằng trình phát hệ thống (VLC / Media Player / Trình duyệt) -->
+                        <Button Command="{Binding OpenActiveHoverItemMediaCommand}"
+                                IsVisible="{Binding ActiveHoverItem.IsVideoItem}"
+                                Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold"
+                                FontSize="11.5" Padding="12,7" CornerRadius="4" Margin="0,2,0,2"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                ToolTip.Tip="Mở phát Video / Audio trực tiếp bằng trình phát đa phương tiện hệ thống (VLC, Media Player, Trình duyệt)">
+                            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                <TextBlock Text="▶ PHÁT VIDEO / AUDIO" FontWeight="ExtraBold" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding ActiveHoverItem.VideoBadge, StringFormat='({0})'}" FontSize="10.5" Foreground="#FDE047" FontWeight="Bold" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
 
 
 

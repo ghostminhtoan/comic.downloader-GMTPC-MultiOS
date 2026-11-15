@@ -1876,6 +1876,56 @@ public partial class MainViewModel : ViewModelBase
         ActiveHoverItem = null;
     }
 
+    [RelayCommand]
+    public void OpenActiveHoverItemMedia()
+    {
+        var item = ActiveHoverItem;
+        if (item == null) return;
+
+        try
+        {
+            // 1. Nếu video đã tải xong về ổ đĩa, ưu tiên mở file local
+            if (!string.IsNullOrWhiteSpace(item.LocalDirectory) && Directory.Exists(item.LocalDirectory))
+            {
+                var files = Directory.GetFiles(item.LocalDirectory, "*.*")
+                    .Where(f => VideoThumbnailService.IsVideoFile(f))
+                    .ToList();
+                if (files.Count > 0)
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(files[0]) { UseShellExecute = true });
+                    return;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.OriginalCoverLocalPath) && File.Exists(item.OriginalCoverLocalPath) && VideoThumbnailService.IsVideoFile(item.OriginalCoverLocalPath))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(item.OriginalCoverLocalPath) { UseShellExecute = true });
+                return;
+            }
+
+            // 2. Nếu chưa tải về máy, lấy URL media online để mở trực tiếp trên trình duyệt / player hệ thống
+            string? onlineMediaUrl = null;
+            if (item.Chapters != null && item.Chapters.Count > 0 && item.Chapters[0].ImageUrls != null && item.Chapters[0].ImageUrls.Count > 0)
+            {
+                onlineMediaUrl = item.Chapters[0].ImageUrls[0];
+            }
+            if (string.IsNullOrWhiteSpace(onlineMediaUrl))
+            {
+                onlineMediaUrl = item.CoverUrl;
+            }
+            if (string.IsNullOrWhiteSpace(onlineMediaUrl))
+            {
+                onlineMediaUrl = item.Url;
+            }
+
+            if (!string.IsNullOrWhiteSpace(onlineMediaUrl))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(onlineMediaUrl) { UseShellExecute = true });
+            }
+        }
+        catch { }
+    }
+
     [ObservableProperty]
     private int _parallelCheckCount = OperatingSystem.IsAndroid()
         ? 3

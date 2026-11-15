@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using ComicDownloaderGMTPC.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ComicDownloaderGMTPC.Models;
@@ -198,13 +200,53 @@ public partial class ComicBookItem : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EffectivePopupBitmap))]
+    [NotifyPropertyChangedFor(nameof(ShowNoImagePlaceholder))]
+    [NotifyPropertyChangedFor(nameof(ShowVideoPlaceholder))]
     private Avalonia.Media.Imaging.Bitmap? _thumbnailBitmap;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EffectivePopupBitmap))]
+    [NotifyPropertyChangedFor(nameof(ShowNoImagePlaceholder))]
+    [NotifyPropertyChangedFor(nameof(ShowVideoPlaceholder))]
     private Avalonia.Media.Imaging.Bitmap? _highResPreviewBitmap;
 
     public Avalonia.Media.Imaging.Bitmap? EffectivePopupBitmap => HighResPreviewBitmap ?? ThumbnailBitmap;
+
+    public bool ShowNoImagePlaceholder => EffectivePopupBitmap == null && !IsVideoItem;
+    public bool ShowVideoPlaceholder => EffectivePopupBitmap == null && IsVideoItem;
+
+    public bool IsVideoItem
+    {
+        get
+        {
+            if (VideoThumbnailService.IsVideoFile(Title)) return true;
+            if (VideoThumbnailService.IsVideoFile(CoverUrl)) return true;
+            if (VideoThumbnailService.IsVideoFile(Url)) return true;
+            if (Chapters != null && Chapters.Count > 0)
+            {
+                var firstCh = Chapters[0];
+                if (firstCh.ImageUrls != null && firstCh.ImageUrls.Count > 0 && VideoThumbnailService.IsVideoFile(firstCh.ImageUrls[0])) return true;
+            }
+            return false;
+        }
+    }
+
+    public string VideoBadge => IsVideoItem ? (GetVideoExt() ?? "VIDEO") : string.Empty;
+
+    private string? GetVideoExt()
+    {
+        foreach (var candidate in new[] { Title, CoverUrl, Url, Chapters?.FirstOrDefault()?.ImageUrls?.FirstOrDefault() })
+        {
+            if (!string.IsNullOrWhiteSpace(candidate) && VideoThumbnailService.IsVideoFile(candidate))
+            {
+                int q = candidate.IndexOf('?');
+                string clean = q >= 0 ? candidate.Substring(0, q) : candidate;
+                string ext = System.IO.Path.GetExtension(clean).TrimStart('.').ToUpperInvariant();
+                if (!string.IsNullOrEmpty(ext)) return ext;
+            }
+        }
+        return null;
+    }
 
     [ObservableProperty]
     private bool _isThumbnailLoading;

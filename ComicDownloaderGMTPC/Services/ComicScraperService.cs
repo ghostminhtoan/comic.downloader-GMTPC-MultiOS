@@ -7162,8 +7162,11 @@ public class ComicScraperService
                         if (string.IsNullOrWhiteSpace(singleMediaUrl) && reps.TryGetProperty("large", out var largeProp)) singleMediaUrl = largeProp.GetString() ?? string.Empty;
                         if (string.IsNullOrWhiteSpace(singleMediaUrl) && reps.TryGetProperty("medium", out var medProp)) singleMediaUrl = medProp.GetString() ?? string.Empty;
 
-                        if (reps.TryGetProperty("medium", out var mProp)) book.CoverUrl = mProp.GetString() ?? string.Empty;
+                        if (reps.TryGetProperty("thumb_small", out var tsProp)) book.CoverUrl = tsProp.GetString() ?? string.Empty;
                         else if (reps.TryGetProperty("thumb", out var tProp)) book.CoverUrl = tProp.GetString() ?? string.Empty;
+                        else if (reps.TryGetProperty("small", out var sProp)) book.CoverUrl = sProp.GetString() ?? string.Empty;
+                        else if (reps.TryGetProperty("medium", out var mProp)) book.CoverUrl = mProp.GetString() ?? string.Empty;
+                        else if (reps.TryGetProperty("large", out var lProp)) book.CoverUrl = lProp.GetString() ?? string.Empty;
                         else if (reps.TryGetProperty("full", out var fProp)) book.CoverUrl = fProp.GetString() ?? string.Empty;
                     }
 
