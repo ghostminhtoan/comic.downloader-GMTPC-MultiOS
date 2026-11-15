@@ -27,6 +27,9 @@ public static class VideoThumbnailService
         ".webm", ".mp4", ".mkv", ".ts", ".m2ts", ".avi", ".mov", ".flv", ".wmv"
     };
 
+    public static Func<string, int, int, byte[]?>? ExternalNativeThumbnailProvider { get; set; }
+    public static Func<string, int, int, int, List<byte[]>>? ExternalNativeFramesProvider { get; set; }
+
     public static bool IsVideoFile(string? pathOrUrl)
     {
         if (string.IsNullOrWhiteSpace(pathOrUrl)) return false;
@@ -109,8 +112,27 @@ public static class VideoThumbnailService
 
         byte[]? resultBytes = null;
 
-        // 1. Thử trích xuất native poster frame trên Windows Shell COM
-        if (OperatingSystem.IsWindows())
+        // 1. Thử trích xuất native poster frame qua External Provider (Android MediaMetadataRetriever...)
+        if (ExternalNativeThumbnailProvider != null)
+        {
+            try
+            {
+                resultBytes = ExternalNativeThumbnailProvider(videoPath, maxWidth, maxHeight);
+                if (resultBytes != null && resultBytes.Length > 0)
+                {
+                    using var codec = SKCodec.Create(new MemoryStream(resultBytes));
+                    if (codec != null)
+                    {
+                        width = codec.Info.Width;
+                        height = codec.Info.Height;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 2. Thử trích xuất native poster frame trên Windows Shell COM
+        if ((resultBytes == null || resultBytes.Length == 0) && OperatingSystem.IsWindows())
         {
             try
             {
@@ -119,7 +141,7 @@ public static class VideoThumbnailService
             catch { }
         }
 
-        // 2. Nếu không trích xuất được frame, tự động sinh Poster Card nghệ thuật bằng SkiaSharp
+        // 3. Nếu không trích xuất được frame, tự động sinh Poster Card nghệ thuật bằng SkiaSharp
         if (resultBytes == null || resultBytes.Length == 0)
         {
             resultBytes = CreatePosterCardBytes(videoPath, maxWidth, maxHeight, out width, out height);
@@ -223,8 +245,18 @@ public static class VideoThumbnailService
         // 2. Trích xuất frame mới
         var frameBytesList = new List<byte[]>();
 
-        // 2a. Nếu trên Linux hoặc môi trường có ffmpeg
-        if (OperatingSystem.IsLinux() || (!OperatingSystem.IsWindows() && !OperatingSystem.IsAndroid()))
+        // 2a. Nếu có External Provider (Android MediaMetadataRetriever frames extraction)
+        if (ExternalNativeFramesProvider != null)
+        {
+            try
+            {
+                frameBytesList = ExternalNativeFramesProvider(videoPath, maxFrames, maxWidth, maxHeight);
+            }
+            catch { }
+        }
+
+        // 2b. Nếu trên Linux hoặc môi trường có ffmpeg
+        if (frameBytesList.Count < 2 && (OperatingSystem.IsLinux() || (!OperatingSystem.IsWindows() && !OperatingSystem.IsAndroid())))
         {
             try
             {
@@ -233,7 +265,7 @@ public static class VideoThumbnailService
             catch { }
         }
 
-        // 2b. Nếu chưa có frame: Thử trích xuất native poster và sinh Cinematic Motion Frames
+        // 2c. Nếu chưa có frame: Thử trích xuất native poster và sinh Cinematic Motion Frames
         if (frameBytesList.Count < 2)
         {
             byte[]? posterBytes = GetVideoThumbnailBytes(videoPath, maxWidth, maxHeight, out _, out _);

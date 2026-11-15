@@ -393,6 +393,7 @@ public class MainActivity : AvaloniaMainActivity
         try
         {
             ComicDownloaderGMTPC.Services.NativeWebViewService.Instance = new AndroidNativeWebViewService();
+            AndroidVideoThumbnailService.Register();
         }
         catch { }
 
