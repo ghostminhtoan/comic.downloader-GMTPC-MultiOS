@@ -1322,8 +1322,24 @@ public partial class MainViewModel
 
                     if (VideoThumbnailService.IsVideoFile(item.FilePath))
                     {
-                        // 1. Trích xuất frame thumbnail video (.mp4, .webm, .mkv, .ts)
-                        thumbBmp = VideoThumbnailService.GetVideoThumbnail(item.FilePath, 480, 480, out origW, out origH);
+                        // 1. Phân tích kích thước video gốc thật từ container (720x1280, 1920x1080...)
+                        try
+                        {
+                            if (VideoMetadataParser.GetVideoDimensions(item.FilePath, out int vw, out int vh) && vw > 0 && vh > 0)
+                            {
+                                origW = vw;
+                                origH = vh;
+                            }
+                        }
+                        catch { }
+
+                        // 2. Trích xuất frame thumbnail video (.mp4, .webm, .mkv, .ts)
+                        thumbBmp = VideoThumbnailService.GetVideoThumbnail(item.FilePath, 480, 480, out int tw, out int th);
+                        if (origW <= 0 || origH <= 0)
+                        {
+                            origW = tw;
+                            origH = th;
+                        }
                     }
                     else
                     {
@@ -2212,6 +2228,12 @@ public partial class MainViewModel
                             _dualSortActivePlayer = player;
                             int vW = player.VideoWidth > 0 ? player.VideoWidth : 640;
                             int vH = player.VideoHeight > 0 ? player.VideoHeight : 360;
+
+                            // Cập nhật ngay kích thước gốc chuẩn vào PictureSortItem để footer hiển thị đúng kích thước thật (720x1280)
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                item.UpdateDimensions(vW, vH);
+                            });
 
                             // Khởi tạo WriteableBitmap khớp chính xác với độ phân giải gốc của video để đạt Zero-Copy Buffer.MemoryCopy (0.1ms, 60+ FPS)
                             _dualSortWbA = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);

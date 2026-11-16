@@ -34,6 +34,31 @@ public static class VideoMetadataParser
         return 0;
     }
 
+    public static bool GetVideoDimensions(string videoPath, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath)) return false;
+
+        try
+        {
+            string ext = Path.GetExtension(videoPath).ToLowerInvariant();
+            if (ext == ".mp4" || ext == ".mov" || ext == ".m4v" || ext == ".3gp")
+            {
+                if (ParseMp4Dimensions(videoPath, out width, out height))
+                    return true;
+            }
+            else if (ext == ".webm" || ext == ".mkv")
+            {
+                if (ParseMatroskaDimensions(videoPath, out width, out height))
+                    return true;
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
     #region MP4 / MOV Parser ('moov' -> 'mvhd')
     private static long ParseMp4DurationMs(string filePath)
     {
@@ -118,6 +143,101 @@ public static class VideoMetadataParser
 
         return 0;
     }
+
+    private static bool ParseMp4Dimensions(string filePath, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        try
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var br = new BinaryReader(fs);
+
+            long fileLength = fs.Length;
+            while (fs.Position < fileLength - 8)
+            {
+                long boxStart = fs.Position;
+                uint boxSize = ReadBigEndianUInt32(br);
+                byte[] typeBytes = br.ReadBytes(4);
+                if (typeBytes.Length < 4) break;
+                string boxType = Encoding.ASCII.GetString(typeBytes);
+
+                long actualBoxSize = boxSize == 1 ? (long)ReadBigEndianUInt64(br) : (boxSize == 0 ? fileLength - boxStart : boxSize);
+                if (actualBoxSize < 8) break;
+
+                if (boxType == "moov")
+                {
+                    long moovEnd = boxStart + actualBoxSize;
+                    while (fs.Position < moovEnd - 8)
+                    {
+                        long trakStart = fs.Position;
+                        uint trakSize = ReadBigEndianUInt32(br);
+                        byte[] trakTypeBytes = br.ReadBytes(4);
+                        if (trakTypeBytes.Length < 4) break;
+                        string trakType = Encoding.ASCII.GetString(trakTypeBytes);
+
+                        long actualTrakSize = trakSize == 1 ? (long)ReadBigEndianUInt64(br) : trakSize;
+                        if (actualTrakSize < 8) break;
+
+                        if (trakType == "trak")
+                        {
+                            long trakEnd = trakStart + actualTrakSize;
+                            while (fs.Position < trakEnd - 8)
+                            {
+                                long subStart = fs.Position;
+                                uint subSize = ReadBigEndianUInt32(br);
+                                byte[] subTypeBytes = br.ReadBytes(4);
+                                if (subTypeBytes.Length < 4) break;
+                                string subType = Encoding.ASCII.GetString(subTypeBytes);
+
+                                long actualSubSize = subSize == 1 ? (long)ReadBigEndianUInt64(br) : subSize;
+                                if (actualSubSize < 8) break;
+
+                                if (subType == "tkhd")
+                                {
+                                    byte version = br.ReadByte();
+                                    br.ReadBytes(3); // flags
+
+                                    if (version == 1)
+                                    {
+                                        br.ReadBytes(32); // creation(8) + mod(8) + track_id(4) + res(4) + duration(8)
+                                    }
+                                    else
+                                    {
+                                        br.ReadBytes(20); // creation(4) + mod(4) + track_id(4) + res(4) + duration(4)
+                                    }
+
+                                    br.ReadBytes(8 + 2 + 2 + 2 + 2 + 36); // res(8) + layer(2) + alt(2) + vol(2) + res(2) + matrix(36)
+                                    uint wFixed = ReadBigEndianUInt32(br);
+                                    uint hFixed = ReadBigEndianUInt32(br);
+
+                                    int trackW = (int)(wFixed >> 16);
+                                    int trackH = (int)(hFixed >> 16);
+
+                                    if (trackW > 0 && trackH > 0)
+                                    {
+                                        width = trackW;
+                                        height = trackH;
+                                        return true;
+                                    }
+                                }
+
+                                fs.Position = subStart + actualSubSize;
+                            }
+                        }
+
+                        fs.Position = trakStart + actualTrakSize;
+                    }
+                    break;
+                }
+
+                fs.Position = boxStart + actualBoxSize;
+            }
+        }
+        catch { }
+
+        return false;
+    }
     #endregion
 
     #region WebM / MKV Parser (EBML Info -> Duration & TimestampScale)
@@ -199,6 +319,91 @@ public static class VideoMetadataParser
         catch { }
 
         return 0;
+    }
+
+    private static bool ParseMatroskaDimensions(string filePath, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        try
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            int bufferSize = (int)Math.Min(262144, fs.Length);
+            byte[] buf = new byte[bufferSize];
+            int read = fs.Read(buf, 0, bufferSize);
+            if (read < 16) return false;
+
+            if (buf[0] != 0x1A || buf[1] != 0x45 || buf[2] != 0xDF || buf[3] != 0xA3) return false;
+
+            int i = 4;
+            while (i < read - 6)
+            {
+                // PixelWidth: Element ID 0xB0 (trong Video settings của Track)
+                if (buf[i] == 0xB0 && i > 0 && buf[i - 1] != 0)
+                {
+                    int wLen = ParseEbmlVint(buf, i + 1, read, out int wVintBytes);
+                    if (wLen >= 1 && wLen <= 4 && i + 1 + wVintBytes + wLen <= read)
+                    {
+                        int valW = 0;
+                        for (int b = 0; b < wLen; b++)
+                        {
+                            valW = (valW << 8) | buf[i + 1 + wVintBytes + b];
+                        }
+
+                        // Tìm PixelHeight (0xBA) trong phạm vi 60 bytes tiếp theo
+                        int searchEnd = Math.Min(read - 4, i + 1 + wVintBytes + wLen + 60);
+                        for (int j = i + 1 + wVintBytes + wLen; j < searchEnd; j++)
+                        {
+                            if (buf[j] == 0xBA)
+                            {
+                                int hLen = ParseEbmlVint(buf, j + 1, read, out int hVintBytes);
+                                if (hLen >= 1 && hLen <= 4 && j + 1 + hVintBytes + hLen <= read)
+                                {
+                                    int valH = 0;
+                                    for (int b = 0; b < hLen; b++)
+                                    {
+                                        valH = (valH << 8) | buf[j + 1 + hVintBytes + b];
+                                    }
+
+                                    if (valW > 0 && valH > 0)
+                                    {
+                                        width = valW;
+                                        height = valH;
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                i++;
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    private static int ParseEbmlVint(byte[] buf, int offset, int maxLen, out int vintBytes)
+    {
+        vintBytes = 0;
+        if (offset >= maxLen) return 0;
+        byte b = buf[offset];
+        int mask = 0x80;
+        int length = 1;
+        while (mask > 0 && (b & mask) == 0)
+        {
+            mask >>= 1;
+            length++;
+        }
+        if (length > 8 || offset + length > maxLen) return 0;
+        vintBytes = length;
+        int val = b & (mask - 1);
+        for (int i = 1; i < length; i++)
+        {
+            val = (val << 8) | buf[offset + i];
+        }
+        return val;
     }
     #endregion
 
