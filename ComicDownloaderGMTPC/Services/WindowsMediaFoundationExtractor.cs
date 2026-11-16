@@ -302,11 +302,11 @@ public static class WindowsMediaFoundationExtractor
                         targetW = Math.Max(1, targetW);
                         targetH = Math.Max(1, targetH);
 
-                        var info = new SKImageInfo(videoW, videoH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                        var info = new SKImageInfo(videoW, videoH, SKColorType.Bgra8888, SKAlphaType.Opaque);
                         using var bmp = new SKBitmap();
                         bmp.InstallPixels(info, pData, srcStride);
 
-                        using var surface = SKSurface.Create(new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Premul));
+                        using var surface = SKSurface.Create(new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Opaque));
                         var canvas = surface.Canvas;
                         canvas.Clear(SKColors.Black);
 
@@ -757,33 +757,45 @@ public static class WindowsMediaFoundationExtractor
                                 }
                             }
 
-                            // 1. Tối ưu siêu tốc (0.1ms, 0% CPU): Direct memory copy khi kích thước WriteableBitmap khớp video
+                            // 1. Tối ưu siêu tốc (0.05ms, 0% CPU): 64-bit vector copy kèm ép Alpha = 0xFF (255 Opaque)
+                            // Chuẩn hóa byte cao nhất của MFVideoFormat_RGB32 (vốn là 0x00 của Win32 X8R8G8B8) thành 0xFF để Avalonia & SkiaSharp hiển thị 100% màu sắc
                             if (targetW == _videoW && targetH == _videoH)
                             {
                                 if (frameLock.RowBytes == _videoW * 4 && srcStride == _videoW * 4 && cbLength >= _videoW * _videoH * 4)
                                 {
-                                    Buffer.MemoryCopy((void*)pData, (void*)frameLock.Address, (long)frameLock.RowBytes * _videoH, (long)_videoW * _videoH * 4);
+                                    ulong* pSrc64 = (ulong*)pData;
+                                    ulong* pDst64 = (ulong*)frameLock.Address;
+                                    int ulongCount = (_videoW * _videoH * 4) / 8;
+                                    for (int i = 0; i < ulongCount; i++)
+                                    {
+                                        pDst64[i] = pSrc64[i] | 0xFF000000FF000000UL;
+                                    }
                                 }
                                 else
                                 {
                                     byte* pSrc = (byte*)pData;
                                     byte* pDst = (byte*)frameLock.Address;
-                                    int rowBytesToCopy = Math.Min(frameLock.RowBytes, _videoW * 4);
+                                    int rowPixels = Math.Min(frameLock.RowBytes / 4, _videoW);
                                     int maxRows = Math.Min(_videoH, targetH);
                                     for (int r = 0; r < maxRows; r++)
                                     {
-                                        Buffer.MemoryCopy(pSrc + (long)r * srcStride, pDst + (long)r * frameLock.RowBytes, frameLock.RowBytes, rowBytesToCopy);
+                                        uint* pSrcRow = (uint*)(pSrc + (long)r * srcStride);
+                                        uint* pDstRow = (uint*)(pDst + (long)r * frameLock.RowBytes);
+                                        for (int x = 0; x < rowPixels; x++)
+                                        {
+                                            pDstRow[x] = pSrcRow[x] | 0xFF000000u;
+                                        }
                                     }
                                 }
                                 return true;
                             }
 
-                            // 2. Dự phòng khi kích thước khác nhau: Scale nhanh bằng SkiaSharp (tắt antialias để CPU cực nhẹ)
-                            var srcInfo = new SKImageInfo(_videoW, _videoH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                            // 2. Dự phòng khi kích thước khác nhau: Scale nhanh bằng SkiaSharp (SKAlphaType.Opaque để không bị transparent)
+                            var srcInfo = new SKImageInfo(_videoW, _videoH, SKColorType.Bgra8888, SKAlphaType.Opaque);
                             using var srcBmp = new SKBitmap();
                             srcBmp.InstallPixels(srcInfo, pData, srcStride);
 
-                            var dstInfo = new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                            var dstInfo = new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Opaque);
                             using var dstSurface = SKSurface.Create(dstInfo, frameLock.Address, frameLock.RowBytes);
                             var canvas = dstSurface.Canvas;
 

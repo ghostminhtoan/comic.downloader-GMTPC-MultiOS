@@ -3892,37 +3892,57 @@ public partial class MainView : UserControl
 
 
     private System.Threading.CancellationTokenSource? _dualSortControlsHideCts;
+    private System.Threading.CancellationTokenSource? _dualSortPopupCloseCts;
+    private bool _isPointerInsideDualSortPopup = false;
+
+    private void ResetDualSortControlsAutoHide(MainViewModel vm)
+    {
+        vm.DualSortControlsOpacity = 1.0;
+        _dualSortControlsHideCts?.Cancel();
+        _dualSortControlsHideCts = new System.Threading.CancellationTokenSource();
+        var ct = _dualSortControlsHideCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(3500, ct);
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (!ct.IsCancellationRequested && vm.IsDualSortPreviewVisible && !vm.IsDualSortVideoPaused && !vm.IsScrubbingDragging)
+                    {
+                        // Chế độ toàn màn hình: Ẩn hẳn (0.0). Chế độ popup nhỏ: Làm mờ nhẹ (0.35) để không che khuất nhưng người dùng vẫn thấy
+                        vm.DualSortControlsOpacity = vm.IsDualSortPreviewMaximized ? 0.0 : 0.35;
+                    }
+                });
+            }
+            catch { }
+        });
+    }
+
+    private void OnDualSortPreviewPopupPointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        _isPointerInsideDualSortPopup = true;
+        _dualSortPopupCloseCts?.Cancel();
+        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible)
+        {
+            ResetDualSortControlsAutoHide(vm);
+        }
+    }
 
     private void OnDualSortPreviewPopupPointerMoved(object? sender, PointerEventArgs e)
     {
         if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && vm.IsDualSortVideoSeekable)
         {
-            vm.DualSortControlsOpacity = 1.0;
-            _dualSortControlsHideCts?.Cancel();
-            _dualSortControlsHideCts = new System.Threading.CancellationTokenSource();
-            var ct = _dualSortControlsHideCts.Token;
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(2500, ct);
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    {
-                        if (!ct.IsCancellationRequested && vm.IsDualSortPreviewVisible && !vm.IsDualSortVideoPaused && !vm.IsScrubbingDragging)
-                        {
-                            vm.DualSortControlsOpacity = 0.0;
-                        }
-                    });
-                }
-                catch { }
-            });
+            ResetDualSortControlsAutoHide(vm);
         }
     }
 
     private void OnDualSortPreviewPopupPointerExited(object? sender, PointerEventArgs e)
     {
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
+        _isPointerInsideDualSortPopup = false;
 
         if (DataContext is MainViewModel vm)
         {
@@ -4095,41 +4115,40 @@ public partial class MainView : UserControl
 
 
     private void OnDualSortSourceItemPointerExited(object? sender, PointerEventArgs e)
-
     {
-
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
-
         CancelDualSortHoverPreview();
 
-        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible)
-
+        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && !vm.IsDualSortPreviewMaximized)
         {
-
             var popup = this.FindControl<Border>("DualSortPreviewPopupBorder");
-
             if (popup != null)
-
             {
-
                 var posInPopup = e.GetPosition(popup);
-
                 if (posInPopup.X >= 0 && posInPopup.X <= popup.Bounds.Width &&
-
                     posInPopup.Y >= 0 && posInPopup.Y <= popup.Bounds.Height)
-
                 {
-
                     return;
-
                 }
-
             }
 
-            vm.CloseDualSortPreview();
+            _dualSortPopupCloseCts?.Cancel();
+            _dualSortPopupCloseCts = new System.Threading.CancellationTokenSource();
+            var ct = _dualSortPopupCloseCts.Token;
 
+            _ = Task.Delay(350, ct).ContinueWith(t =>
+            {
+                if (t.IsCanceled) return;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (ct.IsCancellationRequested || _isPointerInsideDualSortPopup) return;
+                    if (DataContext is MainViewModel currentVm && currentVm.IsDualSortPreviewVisible && !currentVm.IsDualSortPreviewMaximized)
+                    {
+                        currentVm.CloseDualSortPreview();
+                    }
+                });
+            }, TaskContinuationOptions.OnlyOnRanToCompletion);
         }
-
     }
 
 
@@ -4427,41 +4446,40 @@ public partial class MainView : UserControl
 
 
     private void OnDualSortSortedItemPointerExited(object? sender, PointerEventArgs e)
-
     {
-
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
-
         CancelDualSortHoverPreview();
 
-        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible)
-
+        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && !vm.IsDualSortPreviewMaximized)
         {
-
             var popup = this.FindControl<Border>("DualSortPreviewPopupBorder");
-
             if (popup != null)
-
             {
-
                 var posInPopup = e.GetPosition(popup);
-
                 if (posInPopup.X >= 0 && posInPopup.X <= popup.Bounds.Width &&
-
                     posInPopup.Y >= 0 && posInPopup.Y <= popup.Bounds.Height)
-
                 {
-
                     return;
-
                 }
-
             }
 
-            vm.CloseDualSortPreview();
+            _dualSortPopupCloseCts?.Cancel();
+            _dualSortPopupCloseCts = new System.Threading.CancellationTokenSource();
+            var ct = _dualSortPopupCloseCts.Token;
 
+            _ = Task.Delay(350, ct).ContinueWith(t =>
+            {
+                if (t.IsCanceled) return;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (ct.IsCancellationRequested || _isPointerInsideDualSortPopup) return;
+                    if (DataContext is MainViewModel currentVm && currentVm.IsDualSortPreviewVisible && !currentVm.IsDualSortPreviewMaximized)
+                    {
+                        currentVm.CloseDualSortPreview();
+                    }
+                });
+            }, TaskContinuationOptions.OnlyOnRanToCompletion);
         }
-
     }
 
 

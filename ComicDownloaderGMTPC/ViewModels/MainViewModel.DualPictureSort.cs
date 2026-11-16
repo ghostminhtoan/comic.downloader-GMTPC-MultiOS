@@ -2436,6 +2436,9 @@ public partial class MainViewModel
         _dualSortAnimationCts = null;
 
         DualSortPreviewItem = item;
+        DualSortPreviewBitmap = null;
+        DualSortControlsOpacity = 1.0;
+        IsScrubbingDragging = false;
         IsDualSortPreviewVisible = true;
         IsDualSortPreviewAnimated = false;
         DualSortPreviewAnimatedBadge = string.Empty;
@@ -2505,8 +2508,9 @@ public partial class MainViewModel
                             });
 
                             // Khởi tạo WriteableBitmap khớp chính xác với độ phân giải gốc của video để đạt Zero-Copy Buffer.MemoryCopy (0.1ms, 60+ FPS)
-                            _dualSortWbA = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
-                            _dualSortWbB = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+                            // Sử dụng AlphaFormat.Opaque để Avalonia hiển thị 100% màu sắc frame video chuẩn xác, loại trừ triệt để lỗi màn hình đen
+                            _dualSortWbA = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Opaque);
+                            _dualSortWbB = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Opaque);
 
                             // Render frame đầu tiên ngay lập tức
                             bool firstFrameOk = player.ReadNextFrameDirect(_dualSortWbA, out _);
@@ -2915,6 +2919,8 @@ public partial class MainViewModel
 
         IsDualSortPreviewVisible = false;
         IsDualSortPreviewMaximized = false;
+        DualSortControlsOpacity = 1.0;
+        IsScrubbingDragging = false;
         DualSortLooperPointAMs = null;
         DualSortLooperPointBMs = null;
         IsDualSortScrubbingVisible = false;

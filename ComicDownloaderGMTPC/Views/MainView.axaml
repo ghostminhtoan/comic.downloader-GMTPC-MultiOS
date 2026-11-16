@@ -11624,6 +11624,7 @@
                 ZIndex="2700"
                 Background="#F8091018" BorderBrush="#38BDF8" BorderThickness="1.5"
                 BoxShadow="0 16 40 8 #D0000000"
+                PointerEntered="OnDualSortPreviewPopupPointerEntered"
                 PointerMoved="OnDualSortPreviewPopupPointerMoved"
                 PointerExited="OnDualSortPreviewPopupPointerExited">
             <Border.Styles>
@@ -11654,8 +11655,8 @@
             </Border.Styles>
 
             <StackPanel Spacing="6">
-                <!-- Thanh tiêu đề Popup Preview kèm Nút Phóng to & Nút Tắt -->
-                <Grid ColumnDefinitions="*, Auto" Margin="2,0,0,2" Opacity="{Binding DualSortControlsOpacity}">
+                <!-- Thanh tiêu đề Popup Preview kèm Nút Phóng to & Nút Tắt: Luôn luôn hiển thị để người dùng có thể tắt hoặc phóng to bất cứ lúc nào -->
+                <Grid ColumnDefinitions="*, Auto" Margin="2,0,0,2">
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <TextBlock Text="🔍 XEM ẢNH" FontSize="11" FontWeight="ExtraBold" Foreground="#38BDF8" VerticalAlignment="Center" />
                         <Border Background="#7C3AED" CornerRadius="4" Padding="5,1" VerticalAlignment="Center"
@@ -11684,7 +11685,7 @@
                 </Grid>
 
                 <!-- Khung Ảnh Lớn Độ Phân Giải Cao -->
-                <Border x:Name="DualSortImageContainer" Background="#05080D" CornerRadius="4" MinHeight="260" MaxHeight="450" ClipToBounds="True"
+                <Border x:Name="DualSortImageContainer" Background="#05080D" CornerRadius="4" MinHeight="160" MaxHeight="450" ClipToBounds="True"
                         PointerWheelChanged="OnDualSortVideoPointerWheelChanged"
                         Tapped="OnDualSortVideoTapped"
                         DoubleTapped="OnDualSortVideoDoubleTapped">
@@ -11713,6 +11714,11 @@
                         Opacity="{Binding DualSortControlsOpacity}"
                         Background="#0B132B" BorderBrush="#3B82F6" BorderThickness="1"
                         CornerRadius="5" Padding="6,4" Margin="0,4,0,2">
+                    <Border.Transitions>
+                        <Transitions>
+                            <DoubleTransition Property="Opacity" Duration="0:0:0.25" />
+                        </Transitions>
+                    </Border.Transitions>
                     <StackPanel Spacing="4">
                         <!-- Hàng 1: Slider Tua Video kèm Bong bóng Scrubbing Hover Preview -->
                         <Grid>
