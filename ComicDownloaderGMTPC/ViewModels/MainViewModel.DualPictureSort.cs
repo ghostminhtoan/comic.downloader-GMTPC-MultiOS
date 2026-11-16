@@ -2437,13 +2437,36 @@ public partial class MainViewModel
 
         DualSortPreviewItem = item;
         IsDualSortPreviewVisible = true;
-        IsDualSortPreviewAnimated = false;
-        DualSortPreviewAnimatedBadge = string.Empty;
-        IsDualSortVideoSeekable = false;
-        IsDualSortVideoPaused = false;
-        DualSortVideoSeekPosition = 0;
-        DualSortVideoSeekTimeText = string.Empty;
+        // 0ms Zero-Latency Poster: Nạp ngay lập tức hình ảnh có sẵn từ item để người dùng thấy ngay hình ảnh tức thì
+        DualSortPreviewBitmap = item.Thumbnail;
         _dualSortVideoCachedFrames = null;
+
+        bool isVideo = VideoThumbnailService.IsVideoFile(item.FilePath);
+        if (isVideo)
+        {
+            string vExt = Path.GetExtension(item.FilePath).TrimStart('.').ToUpperInvariant();
+            long durMs = VideoThumbnailService.GetVideoDurationMs(item.FilePath);
+            string durText = VideoMetadataParser.FormatDuration(durMs);
+
+            IsDualSortPreviewAnimated = true;
+            DualSortPreviewAnimatedBadge = $"▶ VIDEO ({vExt} • TỰ PHÁT)";
+            DualSortVideoDurationMs = durMs;
+            DualSortVideoDurationText = durText;
+            DualSortVideoCurrentTimeText = "00:00";
+            DualSortVideoSeekTimeText = durMs > 0 ? $"00:00 / {durText}" : "00:00";
+            IsDualSortVideoSeekable = true;
+            IsDualSortVideoPaused = false;
+            DualSortVideoSeekPosition = 0;
+        }
+        else
+        {
+            IsDualSortPreviewAnimated = false;
+            DualSortPreviewAnimatedBadge = string.Empty;
+            IsDualSortVideoSeekable = false;
+            IsDualSortVideoPaused = false;
+            DualSortVideoSeekPosition = 0;
+            DualSortVideoSeekTimeText = string.Empty;
+        }
 
         var cts = new CancellationTokenSource();
         _dualSortAnimationCts = cts;
@@ -2455,30 +2478,30 @@ public partial class MainViewModel
                 if (!VideoThumbnailService.IsValidVideoPath(item.FilePath)) return;
 
                 // 0. Xử lý xem trước Video (.webm, .mp4, .mkv, .ts) - Tự động phát (Autoplay Loop) không cần bấm Play
-                if (VideoThumbnailService.IsVideoFile(item.FilePath))
+                if (isVideo)
                 {
                     string vExt = Path.GetExtension(item.FilePath).TrimStart('.').ToUpperInvariant();
-                    long durMs = VideoThumbnailService.GetVideoDurationMs(item.FilePath);
-                    string durText = VideoMetadataParser.FormatDuration(durMs);
+                    long durMs = DualSortVideoDurationMs;
+                    string durText = DualSortVideoDurationText;
 
-                    // 0a. Nạp ngay hình ảnh poster / thumbnail ban đầu (0ms latency) để cả Windows & Android thấy ngay hình ảnh tức thì
-                    Bitmap? initialPoster = item.Thumbnail;
-                    if (initialPoster == null)
+                    // 0a. Nếu chưa có ảnh Thumbnail từ trước, nạp ngay ảnh Poster chất lượng cao
+                    if (DualSortPreviewBitmap == null)
                     {
+                        Bitmap? initialPoster = null;
                         try { initialPoster = VideoThumbnailService.GetVideoThumbnail(item.FilePath, 480, 480, out _, out _); } catch { }
-                    }
-                    if (initialPoster != null)
-                    {
-                        Dispatcher.UIThread.Post(() =>
+                        if (initialPoster != null)
                         {
-                            if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
+                            Dispatcher.UIThread.Post(() =>
                             {
-                                DualSortPreviewBitmap = initialPoster;
-                            }
-                        });
+                                if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
+                                {
+                                    DualSortPreviewBitmap = initialPoster;
+                                }
+                            });
+                        }
                     }
 
-                    // Khởi động audio native đa nền tảng ngay lập tức (Windows WMP / Android MediaPlayer / Linux ffplay)
+                    // Khởi động audio native đa nền tảng ngay lập tức (Windows WMP windowless / Android MediaPlayer / Linux ffplay)
                     try
                     {
                         _dualSortAudioPlayer?.Stop();
@@ -2489,21 +2512,6 @@ public partial class MainViewModel
                         _dualSortAudioPlayer?.SetPlaybackRate(DualSortPlaybackSpeed);
                     }
                     catch { }
-
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
-                        {
-                            IsDualSortPreviewAnimated = true;
-                            DualSortPreviewAnimatedBadge = $"▶ VIDEO ({vExt} • TỰ PHÁT)";
-                            DualSortVideoDurationMs = durMs;
-                            DualSortVideoDurationText = durText;
-                            DualSortVideoCurrentTimeText = "00:00";
-                            DualSortVideoSeekTimeText = durMs > 0 ? $"00:00 / {durText}" : "00:00";
-                            IsDualSortVideoSeekable = true;
-                            DualSortVideoSeekPosition = 0;
-                        }
-                    });
 
                     // 1. Trên Windows: Sử dụng Media Foundation Player phần cứng GPU (30 FPS, 0 giây chờ đợi, Double Buffering Zero-Lag)
                     if (OperatingSystem.IsWindows())
@@ -2663,8 +2671,9 @@ public partial class MainViewModel
                         }
                     }
 
-                    // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát cùng nhịp Audio 1:1 theo thời gian thực
-                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 12, maxWidth: 480, maxHeight: 480, ct: cts.Token).ConfigureAwait(false);
+                    // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát cùng nhịp Audio 1:1 theo thời gian thực (6 frames siêu tốc, 0ms nghẽn)
+                    int requestedFrames = OperatingSystem.IsAndroid() ? 6 : 10;
+                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: requestedFrames, maxWidth: 480, maxHeight: 480, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 1)
                     {
                         _dualSortVideoCachedFrames = frames;

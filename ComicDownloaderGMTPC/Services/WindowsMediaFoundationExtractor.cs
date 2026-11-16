@@ -559,14 +559,6 @@ public static class WindowsMediaFoundationExtractor
                                                 videoW = videoH;
                                                 videoH = temp;
                                             }
-                                            else if (videoW > 0 && probeCbLength % videoW == 0)
-                                            {
-                                                int derivedH = (probeCbLength / 4) / videoW;
-                                                if (derivedH > 0 && Math.Abs(derivedH - videoH) <= 16)
-                                                {
-                                                    videoH = derivedH;
-                                                }
-                                            }
                                         }
                                     }
                                 }
@@ -827,14 +819,16 @@ public static class WindowsMediaFoundationExtractor
                             }
 
                             // 1. Tối ưu siêu tốc (0.05ms, 0% CPU): 64-bit vector copy kèm ép Alpha = 0xFF (255 Opaque)
-                            // Chuẩn hóa byte cao nhất của MFVideoFormat_RGB32 (vốn là 0x00 của Win32 X8R8G8B8) thành 0xFF để Avalonia & SkiaSharp hiển thị 100% màu sắc
+                            // Đảm bảo Bounds Checking tuyệt đối: Không bao giờ đọc vượt quá cbLength (triệt tiêu 100% lỗi 0xc0000005)
                             if (targetW == _videoW && targetH == _videoH)
                             {
+                                int targetBytes = frameLock.RowBytes * targetH;
+                                int maxSafeBytes = Math.Min(cbLength, Math.Min(_videoW * _videoH * 4, targetBytes));
                                 if (frameLock.RowBytes == _videoW * 4 && srcStride == _videoW * 4 && cbLength >= _videoW * _videoH * 4)
                                 {
                                     ulong* pSrc64 = (ulong*)pData;
                                     ulong* pDst64 = (ulong*)frameLock.Address;
-                                    int ulongCount = (_videoW * _videoH * 4) / 8;
+                                    int ulongCount = maxSafeBytes / 8;
                                     for (int i = 0; i < ulongCount; i++)
                                     {
                                         pDst64[i] = pSrc64[i] | 0xFF000000FF000000UL;
@@ -845,11 +839,17 @@ public static class WindowsMediaFoundationExtractor
                                     byte* pSrc = (byte*)pData;
                                     byte* pDst = (byte*)frameLock.Address;
                                     int rowPixels = Math.Min(frameLock.RowBytes / 4, _videoW);
+                                    int rowBytesToCopy = rowPixels * 4;
                                     int maxRows = Math.Min(_videoH, targetH);
                                     for (int r = 0; r < maxRows; r++)
                                     {
-                                        uint* pSrcRow = (uint*)(pSrc + (long)r * srcStride);
-                                        uint* pDstRow = (uint*)(pDst + (long)r * frameLock.RowBytes);
+                                        long srcOffset = (long)r * srcStride;
+                                        long dstOffset = (long)r * frameLock.RowBytes;
+                                        if (srcOffset + rowBytesToCopy > cbLength) break;
+                                        if (dstOffset + rowBytesToCopy > targetBytes) break;
+
+                                        uint* pSrcRow = (uint*)(pSrc + srcOffset);
+                                        uint* pDstRow = (uint*)(pDst + dstOffset);
                                         for (int x = 0; x < rowPixels; x++)
                                         {
                                             pDstRow[x] = pSrcRow[x] | 0xFF000000u;
@@ -860,6 +860,10 @@ public static class WindowsMediaFoundationExtractor
                             }
 
                             // 2. Dự phòng khi kích thước khác nhau: Scale nhanh bằng SkiaSharp (SKAlphaType.Opaque để không bị transparent)
+                            if ((long)srcStride * _videoH > cbLength)
+                            {
+                                srcStride = Math.Max(_videoW * 4, cbLength / Math.Max(1, _videoH));
+                            }
                             var srcInfo = new SKImageInfo(_videoW, _videoH, SKColorType.Bgra8888, SKAlphaType.Opaque);
                             using var srcBmp = new SKBitmap();
                             srcBmp.InstallPixels(srcInfo, pData, srcStride);

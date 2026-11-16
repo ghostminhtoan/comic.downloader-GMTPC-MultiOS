@@ -62,7 +62,7 @@ public sealed class NativeAudioPlaybackService : IDisposable
             _isDisposed = false;
             _isPaused = false;
 
-            // 1. Windows: Sử dụng WMPlayer.OCX COM có sẵn 100% trên mọi Windows
+            // 1. Windows: Sử dụng WMPlayer.OCX COM ở chế độ Headless / Windowless (0% visual window, 0% popup ngoài preview)
             if (OperatingSystem.IsWindows())
             {
                 try
@@ -75,6 +75,8 @@ public sealed class NativeAudioPlaybackService : IDisposable
                         {
                             _wmpRaw = inst;
                             dynamic wmp = inst;
+                            try { wmp.windowlessVideo = true; } catch { }
+                            try { wmp.uiMode = "invisible"; } catch { }
                             try { wmp.settings.autoStart = true; } catch { }
                             try { wmp.settings.volume = _isMuted ? 0 : _volume; } catch { }
                             try { wmp.settings.mute = _isMuted; } catch { }

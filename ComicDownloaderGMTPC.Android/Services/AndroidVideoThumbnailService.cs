@@ -258,7 +258,7 @@ public static class AndroidVideoThumbnailService
             streamHandle = SetDataSourceSafe(retriever, videoPath);
 
             long durationMs = TryGetDurationMs(retriever, videoPath);
-            int count = Math.Max(8, Math.Min(12, maxFrames));
+            int count = Math.Max(4, Math.Min(12, maxFrames));
             long durationUs = durationMs > 0 ? durationMs * 1000 : 15_000_000;
             // Phân bổ đều các frame trên toàn bộ thời lượng video để khi xem và tua, các frame trải đều toàn bộ video
             long stepUs = durationUs > 0 ? (long)(durationUs * 0.95 / Math.Max(1, count)) : 1_000_000;
