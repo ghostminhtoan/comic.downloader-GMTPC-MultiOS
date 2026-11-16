@@ -31,6 +31,13 @@ public static class VideoThumbnailService
     public static Func<string, int, int, int, List<byte[]>>? ExternalNativeFramesProvider { get; set; }
     public static Func<string, long, int, int, byte[]?>? ExternalNativeFrameAtTimeProvider { get; set; }
 
+    public static bool IsValidVideoPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        if (path.StartsWith("content://", StringComparison.OrdinalIgnoreCase)) return true;
+        return File.Exists(path);
+    }
+
     public static long GetVideoDurationMs(string videoPath)
     {
         return VideoMetadataParser.GetVideoDurationMs(videoPath);
@@ -38,7 +45,7 @@ public static class VideoThumbnailService
 
     public static Bitmap? GetFrameAtTime(string videoPath, long timeMs, int maxWidth, int maxHeight)
     {
-        if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath)) return null;
+        if (!IsValidVideoPath(videoPath)) return null;
 
         // 1. Android Native MediaMetadataRetriever
         if (ExternalNativeFrameAtTimeProvider != null)
@@ -143,7 +150,7 @@ public static class VideoThumbnailService
     {
         width = 0;
         height = 0;
-        if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath)) return null;
+        if (!IsValidVideoPath(videoPath)) return null;
 
         string cacheFile = GetCacheFilePath(videoPath, maxWidth, maxHeight);
         if (File.Exists(cacheFile) && new FileInfo(cacheFile).Length > 0)
@@ -255,7 +262,7 @@ public static class VideoThumbnailService
     public static async Task<List<Bitmap>> GetOrExtractVideoFramesAsync(string videoPath, int maxFrames = 14, int maxWidth = 480, int maxHeight = 480, System.Threading.CancellationToken ct = default)
     {
         var result = new List<Bitmap>();
-        if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath)) return result;
+        if (!IsValidVideoPath(videoPath)) return result;
 
         long len = 0;
         long time = 0;

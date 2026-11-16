@@ -2436,9 +2436,6 @@ public partial class MainViewModel
         _dualSortAnimationCts = null;
 
         DualSortPreviewItem = item;
-        DualSortPreviewBitmap = null;
-        DualSortControlsOpacity = 1.0;
-        IsScrubbingDragging = false;
         IsDualSortPreviewVisible = true;
         IsDualSortPreviewAnimated = false;
         DualSortPreviewAnimatedBadge = string.Empty;
@@ -2455,7 +2452,7 @@ public partial class MainViewModel
         {
             try
             {
-                if (!File.Exists(item.FilePath)) return;
+                if (!VideoThumbnailService.IsValidVideoPath(item.FilePath)) return;
 
                 // 0. Xử lý xem trước Video (.webm, .mp4, .mkv, .ts) - Tự động phát (Autoplay Loop) không cần bấm Play
                 if (VideoThumbnailService.IsVideoFile(item.FilePath))
@@ -2463,6 +2460,23 @@ public partial class MainViewModel
                     string vExt = Path.GetExtension(item.FilePath).TrimStart('.').ToUpperInvariant();
                     long durMs = VideoThumbnailService.GetVideoDurationMs(item.FilePath);
                     string durText = VideoMetadataParser.FormatDuration(durMs);
+
+                    // 0a. Nạp ngay hình ảnh poster / thumbnail ban đầu (0ms latency) để cả Windows & Android thấy ngay hình ảnh tức thì
+                    Bitmap? initialPoster = item.Thumbnail;
+                    if (initialPoster == null)
+                    {
+                        try { initialPoster = VideoThumbnailService.GetVideoThumbnail(item.FilePath, 640, 640, out _, out _); } catch { }
+                    }
+                    if (initialPoster != null)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
+                            {
+                                DualSortPreviewBitmap = initialPoster;
+                            }
+                        });
+                    }
 
                     // Khởi động audio native đa nền tảng ngay lập tức (Windows WMP / Android MediaPlayer / Linux ffplay)
                     try
@@ -2508,9 +2522,8 @@ public partial class MainViewModel
                             });
 
                             // Khởi tạo WriteableBitmap khớp chính xác với độ phân giải gốc của video để đạt Zero-Copy Buffer.MemoryCopy (0.1ms, 60+ FPS)
-                            // Sử dụng AlphaFormat.Opaque để Avalonia hiển thị 100% màu sắc frame video chuẩn xác, loại trừ triệt để lỗi màn hình đen
-                            _dualSortWbA = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Opaque);
-                            _dualSortWbB = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Opaque);
+                            _dualSortWbA = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+                            _dualSortWbB = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
 
                             // Render frame đầu tiên ngay lập tức
                             bool firstFrameOk = player.ReadNextFrameDirect(_dualSortWbA, out _);
@@ -2644,14 +2657,23 @@ public partial class MainViewModel
                     }
 
                     // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát cùng nhịp Audio 1:1 theo thời gian thực
-                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 24, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
-                    if (frames != null && frames.Count >= 2)
+                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 12, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
+                    if (frames != null && frames.Count >= 1)
                     {
                         _dualSortVideoCachedFrames = frames;
                         _dualSortVideoCurrentPlaybackMs = 0;
 
+                        // Render ngay frame đầu tiên lên màn hình
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                            {
+                                DualSortPreviewBitmap = frames[0];
+                            }
+                        });
+
                         int totalF = frames.Count;
-                        int lastRenderedFrameIdx = -1;
+                        int lastRenderedFrameIdx = 0;
                         string lastReportedTimeStr = string.Empty;
                         var playbackSw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -2919,8 +2941,6 @@ public partial class MainViewModel
 
         IsDualSortPreviewVisible = false;
         IsDualSortPreviewMaximized = false;
-        DualSortControlsOpacity = 1.0;
-        IsScrubbingDragging = false;
         DualSortLooperPointAMs = null;
         DualSortLooperPointBMs = null;
         IsDualSortScrubbingVisible = false;

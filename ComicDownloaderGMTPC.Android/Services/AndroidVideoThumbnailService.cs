@@ -257,7 +257,7 @@ public static class AndroidVideoThumbnailService
             streamHandle = SetDataSourceSafe(retriever, videoPath);
 
             long durationMs = TryGetDurationMs(retriever, videoPath);
-            int count = Math.Max(12, Math.Min(24, maxFrames));
+            int count = Math.Max(8, Math.Min(12, maxFrames));
             long durationUs = durationMs > 0 ? durationMs * 1000 : 15_000_000;
             // Phân bổ đều các frame trên toàn bộ thời lượng video để khi xem và tua, các frame trải đều toàn bộ video
             long stepUs = durationUs > 0 ? (long)(durationUs * 0.95 / Math.Max(1, count)) : 1_000_000;
@@ -309,6 +309,29 @@ public static class AndroidVideoThumbnailService
                         }
                     }
                 }
+            }
+
+            // Fallback an toàn tuyệt đối: nếu chưa có frame nào, lấy bất kỳ frame nào có thể
+            if (list.Count == 0)
+            {
+                var fallbackBmp = TryGetAnyFrame(retriever, durationUs, maxWidth, maxHeight);
+                if (fallbackBmp != null)
+                {
+                    fallbackBmp = ScaleBitmapIfNeeded(fallbackBmp, maxWidth, maxHeight);
+                    using (fallbackBmp)
+                    using (var ms = new MemoryStream())
+                    {
+                        fallbackBmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Jpeg!, 80, ms);
+                        byte[] b = ms.ToArray();
+                        if (b.Length > 0) list.Add(b);
+                    }
+                }
+            }
+
+            // Nếu chỉ có 1 frame: nhân bản ra để đảm bảo Count >= 2 cho vòng lặp phát video
+            if (list.Count == 1)
+            {
+                list.Add(list[0]);
             }
         }
         catch (Exception ex)
