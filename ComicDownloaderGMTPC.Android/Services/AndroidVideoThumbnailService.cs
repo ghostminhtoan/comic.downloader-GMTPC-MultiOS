@@ -218,14 +218,16 @@ public static class AndroidVideoThumbnailService
             long durationMs = TryGetDurationMs(retriever, videoPath);
             long durationUs = durationMs > 0 ? durationMs * 1000 : 0;
 
-            global::Android.Graphics.Bitmap? bmp = TryGetAnyFrame(retriever, durationUs, maxWidth, maxHeight);
+            int targetW = maxWidth > 0 ? maxWidth : 480;
+            int targetH = maxHeight > 0 ? maxHeight : 270;
+            global::Android.Graphics.Bitmap? bmp = TryGetAnyFrame(retriever, durationUs, targetW, targetH);
 
             if (bmp != null)
             {
                 using (bmp)
                 using (var ms = new MemoryStream())
                 {
-                    bmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Jpeg!, 85, ms);
+                    bmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Jpeg!, 75, ms);
                     return ms.ToArray();
                 }
             }
@@ -263,45 +265,29 @@ public static class AndroidVideoThumbnailService
             long stepUs = durationUs > 0 ? (long)(durationUs * 0.95 / Math.Max(1, count)) : 1_000_000;
             if (stepUs < 40_000) stepUs = 40_000;
 
+            int targetW = maxWidth > 0 ? maxWidth : 480;
+            int targetH = maxHeight > 0 ? maxHeight : 270;
+
             for (int i = 0; i < count; i++)
             {
                 long timeUs = i * stepUs;
-                global::Android.Graphics.Bitmap? bmp = null;
-
-                // 1. Thử với Option.ClosestSync (Giải mã Keyframe siêu tốc ~10ms trên GPU)
-                try
-                {
-                    bmp = retriever.GetFrameAtTime(timeUs, Option.ClosestSync);
-                }
-                catch { }
-
-                // 2. Thử với Option.Closest nếu ClosestSync không ra
+                global::Android.Graphics.Bitmap? bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.ClosestSync);
                 if (bmp == null)
                 {
-                    try
-                    {
-                        bmp = retriever.GetFrameAtTime(timeUs, Option.Closest);
-                    }
-                    catch { }
+                    bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.Closest);
                 }
-
-                // 3. Fallback GetFrameAtTime không tham số
                 if (bmp == null && i == 0)
                 {
-                    try
-                    {
-                        bmp = retriever.FrameAtTime;
-                    }
-                    catch { }
+                    try { bmp = retriever.FrameAtTime; } catch { }
+                    if (bmp != null) bmp = ScaleBitmapIfNeeded(bmp, targetW, targetH);
                 }
 
                 if (bmp != null)
                 {
-                    bmp = ScaleBitmapIfNeeded(bmp, maxWidth, maxHeight);
                     using (bmp)
                     using (var ms = new MemoryStream())
                     {
-                        bmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Jpeg!, 80, ms);
+                        bmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Jpeg!, 75, ms);
                         byte[] bytes = ms.ToArray();
                         if (bytes.Length > 0)
                         {
@@ -314,14 +300,13 @@ public static class AndroidVideoThumbnailService
             // Fallback an toàn tuyệt đối: nếu chưa có frame nào, lấy bất kỳ frame nào có thể
             if (list.Count == 0)
             {
-                var fallbackBmp = TryGetAnyFrame(retriever, durationUs, maxWidth, maxHeight);
+                var fallbackBmp = TryGetAnyFrame(retriever, durationUs, targetW, targetH);
                 if (fallbackBmp != null)
                 {
-                    fallbackBmp = ScaleBitmapIfNeeded(fallbackBmp, maxWidth, maxHeight);
                     using (fallbackBmp)
                     using (var ms = new MemoryStream())
                     {
-                        fallbackBmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Jpeg!, 80, ms);
+                        fallbackBmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Jpeg!, 75, ms);
                         byte[] b = ms.ToArray();
                         if (b.Length > 0) list.Add(b);
                     }
@@ -360,30 +345,21 @@ public static class AndroidVideoThumbnailService
             streamHandle = SetDataSourceSafe(retriever, videoPath);
 
             long timeUs = Math.Max(0, timeMs * 1000);
-            global::Android.Graphics.Bitmap? bmp = null;
+            int targetW = maxWidth > 0 ? maxWidth : 480;
+            int targetH = maxHeight > 0 ? maxHeight : 270;
 
-            try
-            {
-                bmp = retriever.GetFrameAtTime(timeUs, Option.ClosestSync);
-            }
-            catch { }
-
+            global::Android.Graphics.Bitmap? bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.ClosestSync);
             if (bmp == null)
             {
-                try
-                {
-                    bmp = retriever.GetFrameAtTime(timeUs, Option.Closest);
-                }
-                catch { }
+                bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.Closest);
             }
 
             if (bmp != null)
             {
-                bmp = ScaleBitmapIfNeeded(bmp, maxWidth, maxHeight);
                 using (bmp)
                 using (var ms = new MemoryStream())
                 {
-                    bmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Jpeg!, 80, ms);
+                    bmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Jpeg!, 75, ms);
                     return ms.ToArray();
                 }
             }
@@ -402,28 +378,60 @@ public static class AndroidVideoThumbnailService
         return null;
     }
 
-    private static global::Android.Graphics.Bitmap? TryGetAnyFrame(MediaMetadataRetriever retriever, long durationUs, int maxWidth, int maxHeight)
+    private static global::Android.Graphics.Bitmap? GetOptimizedFrame(MediaMetadataRetriever retriever, long timeUs, int targetW, int targetH, Option option)
     {
         global::Android.Graphics.Bitmap? bmp = null;
-
-        try { bmp = retriever.FrameAtTime; } catch { }
-        if (bmp == null) { try { bmp = retriever.GetFrameAtTime(0, Option.Closest); } catch { } }
-        if (bmp == null) { try { bmp = retriever.GetFrameAtTime(500_000, Option.ClosestSync); } catch { } }
-        if (bmp == null) { try { bmp = retriever.GetFrameAtTime(1_000_000, Option.ClosestSync); } catch { } }
-        if (bmp == null) { try { bmp = retriever.GetFrameAtTime(100_000, Option.Closest); } catch { } }
-
-        if (bmp == null && durationUs > 0)
+        // Android 8.1+ (API 27): Hardware-accelerated scaled decode trực tiếp từ GPU decoder, không decode full 1080p
+        if (OperatingSystem.IsAndroidVersionAtLeast(27) && targetW > 0 && targetH > 0)
         {
-            try { bmp = retriever.GetFrameAtTime(durationUs / 10, Option.Closest); } catch { }
+            try
+            {
+                bmp = retriever.GetScaledFrameAtTime(timeUs, option, targetW, targetH);
+            }
+            catch { }
         }
-        if (bmp == null && durationUs > 0)
+
+        if (bmp == null)
         {
-            try { bmp = retriever.GetFrameAtTime(durationUs / 4, Option.Closest); } catch { }
+            try
+            {
+                bmp = retriever.GetFrameAtTime(timeUs, option);
+            }
+            catch { }
         }
 
         if (bmp != null)
         {
-            bmp = ScaleBitmapIfNeeded(bmp, maxWidth, maxHeight);
+            bmp = ScaleBitmapIfNeeded(bmp, targetW, targetH);
+        }
+
+        return bmp;
+    }
+
+    private static global::Android.Graphics.Bitmap? TryGetAnyFrame(MediaMetadataRetriever retriever, long durationUs, int maxWidth, int maxHeight)
+    {
+        global::Android.Graphics.Bitmap? bmp = null;
+        int targetW = maxWidth > 0 ? maxWidth : 480;
+        int targetH = maxHeight > 0 ? maxHeight : 270;
+
+        bmp = GetOptimizedFrame(retriever, 0, targetW, targetH, Option.Closest);
+        if (bmp == null) bmp = GetOptimizedFrame(retriever, 500_000, targetW, targetH, Option.ClosestSync);
+        if (bmp == null) bmp = GetOptimizedFrame(retriever, 1_000_000, targetW, targetH, Option.ClosestSync);
+        if (bmp == null) bmp = GetOptimizedFrame(retriever, 100_000, targetW, targetH, Option.Closest);
+
+        if (bmp == null && durationUs > 0)
+        {
+            bmp = GetOptimizedFrame(retriever, durationUs / 10, targetW, targetH, Option.Closest);
+        }
+        if (bmp == null && durationUs > 0)
+        {
+            bmp = GetOptimizedFrame(retriever, durationUs / 4, targetW, targetH, Option.Closest);
+        }
+
+        if (bmp == null)
+        {
+            try { bmp = retriever.FrameAtTime; } catch { }
+            if (bmp != null) bmp = ScaleBitmapIfNeeded(bmp, targetW, targetH);
         }
 
         return bmp;

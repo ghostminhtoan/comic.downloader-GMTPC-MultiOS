@@ -2465,7 +2465,7 @@ public partial class MainViewModel
                     Bitmap? initialPoster = item.Thumbnail;
                     if (initialPoster == null)
                     {
-                        try { initialPoster = VideoThumbnailService.GetVideoThumbnail(item.FilePath, 640, 640, out _, out _); } catch { }
+                        try { initialPoster = VideoThumbnailService.GetVideoThumbnail(item.FilePath, 480, 480, out _, out _); } catch { }
                     }
                     if (initialPoster != null)
                     {
@@ -2515,10 +2515,12 @@ public partial class MainViewModel
                             int vW = player.VideoWidth > 0 ? player.VideoWidth : 640;
                             int vH = player.VideoHeight > 0 ? player.VideoHeight : 360;
 
-                            // Cập nhật ngay kích thước gốc chuẩn vào PictureSortItem để footer hiển thị đúng kích thước thật (720x1280)
+                            // Cập nhật ngay kích thước gốc chuẩn vào PictureSortItem để footer hiển thị đúng kích thước thật (1920x1080)
+                            int nativeW = player.OriginalWidth > 0 ? player.OriginalWidth : vW;
+                            int nativeH = player.OriginalHeight > 0 ? player.OriginalHeight : vH;
                             Dispatcher.UIThread.Post(() =>
                             {
-                                item.UpdateDimensions(vW, vH);
+                                item.UpdateDimensions(nativeW, nativeH);
                             });
 
                             // Khởi tạo WriteableBitmap khớp chính xác với độ phân giải gốc của video để đạt Zero-Copy Buffer.MemoryCopy (0.1ms, 60+ FPS)
@@ -2628,8 +2630,13 @@ public partial class MainViewModel
                                                 long diff = frameMs - targetAudioMs;
                                                 if (diff > 2)
                                                 {
-                                                    int delayMs = (int)Math.Max(1, Math.Min(diff / speed, 33 / speed));
+                                                    int delayMs = (int)Math.Max(1, Math.Min(diff / speed, 40 / speed));
                                                     await Task.Delay(delayMs, cts.Token);
+                                                }
+                                                else
+                                                {
+                                                    // Giữ nhịp CPU/GPU ổn định khi video theo sát audio (tương đương 60 FPS)
+                                                    await Task.Delay((int)Math.Max(1, 8 / speed), cts.Token);
                                                 }
                                                 continue;
                                             }
@@ -2657,7 +2664,7 @@ public partial class MainViewModel
                     }
 
                     // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát cùng nhịp Audio 1:1 theo thời gian thực
-                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 12, maxWidth: 640, maxHeight: 640, ct: cts.Token).ConfigureAwait(false);
+                    var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: 12, maxWidth: 480, maxHeight: 480, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 1)
                     {
                         _dualSortVideoCachedFrames = frames;
@@ -2726,10 +2733,8 @@ public partial class MainViewModel
                                     try { _dualSortAudioPlayer?.Seek(restartMs / 1000.0); } catch { }
                                 }
 
-                                // Tính toán chỉ số frame tương ứng với thời gian thực của Audio (tránh fastforward tua nhanh)
-                                int targetFrameIdx = durMs > 0 
-                                    ? (int)Math.Clamp(Math.Round((double)curMs / durMs * (totalF - 1)), 0, totalF - 1)
-                                    : (int)((playbackSw.ElapsedMilliseconds / 40) % totalF);
+                                // Đổi frame nhịp nhàng liên tục theo thời gian thực (Smooth Motion Sequence ~11 FPS)
+                                int targetFrameIdx = (int)((curMs / 90) % totalF);
 
                                 if (targetFrameIdx != lastRenderedFrameIdx)
                                 {
