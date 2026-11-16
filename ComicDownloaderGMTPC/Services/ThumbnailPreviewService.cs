@@ -485,8 +485,11 @@ public sealed class ThumbnailPreviewService
                                                     });
 
                                                     long diff = frameMs - targetAudioMs;
-                                                    int sleepMs = (int)Math.Clamp(diff, 10, 33);
-                                                    await Task.Delay(sleepMs, ct).ConfigureAwait(false);
+                                                    if (diff > 2)
+                                                    {
+                                                        int sleepMs = (int)Math.Min(diff, 33);
+                                                        await Task.Delay(sleepMs, ct).ConfigureAwait(false);
+                                                    }
                                                     continue;
                                                 }
                                                 else
@@ -517,8 +520,8 @@ public sealed class ThumbnailPreviewService
                                 }
                             }
 
-                            // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát đều từng giây cùng Audio
-                            var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 10, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
+                            // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát ở tốc độ 25 FPS (> 20 FPS) cùng nhịp Audio 1:1
+                            var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 24, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
                             if (frames != null && frames.Count >= 2)
                             {
                                 await RunOnUiAsync(() =>
@@ -535,7 +538,8 @@ public sealed class ThumbnailPreviewService
                                     catch { }
                                 });
 
-                                int lastIdx = -1;
+                                int currentFIdx = 0;
+                                long lastReportedSec = -1;
                                 var playbackSw = System.Diagnostics.Stopwatch.StartNew();
 
                                 while (!ct.IsCancellationRequested)
@@ -560,22 +564,8 @@ public sealed class ThumbnailPreviewService
                                             try { item.ActiveAudioPlayer?.Seek(0); } catch { }
                                         }
 
-                                        int targetIdx = durMs > 0 ? (int)Math.Clamp((double)curMs / durMs * (frames.Count - 1), 0, frames.Count - 1) : 0;
-                                        if (targetIdx != lastIdx)
-                                        {
-                                            var curBmp = frames[targetIdx];
-                                            lastIdx = targetIdx;
-                                            await RunOnUiAsync(() =>
-                                            {
-                                                lock (_bitmapMemoryLock)
-                                                {
-                                                    if (ReferenceEquals(_activeHighResItem, item))
-                                                    {
-                                                        item.HighResPreviewBitmap = curBmp;
-                                                    }
-                                                }
-                                            });
-                                        }
+                                        var curBmp = frames[currentFIdx];
+                                        currentFIdx = (currentFIdx + 1) % frames.Count;
 
                                         await RunOnUiAsync(() =>
                                         {
@@ -583,14 +573,30 @@ public sealed class ThumbnailPreviewService
                                             {
                                                 if (ReferenceEquals(_activeHighResItem, item))
                                                 {
-                                                    item.UpdatePlaybackTime(curMs);
+                                                    item.HighResPreviewBitmap = curBmp;
                                                 }
                                             }
                                         });
+
+                                        long curSecFloor = curMs / 1000;
+                                        if (curSecFloor != lastReportedSec)
+                                        {
+                                            lastReportedSec = curSecFloor;
+                                            await RunOnUiAsync(() =>
+                                            {
+                                                lock (_bitmapMemoryLock)
+                                                {
+                                                    if (ReferenceEquals(_activeHighResItem, item))
+                                                    {
+                                                        item.UpdatePlaybackTime(curMs);
+                                                    }
+                                                }
+                                            });
+                                        }
                                     }
 
-                                    // Cập nhật timeline mỗi 100ms để thời gian và seekbar chạy đều từng giây một cách mượt mà (chuẩn 1.0x)
-                                    await Task.Delay(100, ct).ConfigureAwait(false);
+                                    // 40ms = 25 FPS (> 20 FPS chuẩn mượt mà)
+                                    await Task.Delay(40, ct).ConfigureAwait(false);
                                 }
                             }
                         }

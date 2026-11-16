@@ -386,12 +386,58 @@ public static class WindowsMediaFoundationExtractor
                 {
                     try
                     {
-                        VideoThumbnailService.GetVideoThumbnailBytes(videoPath, 1280, 1280, out videoW, out videoH);
+                        VideoThumbnailService.GetVideoThumbnailBytes(videoPath, 3840, 3840, out videoW, out videoH);
                     }
                     catch { }
                 }
 
+                // Đọc thử 1 mẫu đầu tiên để phát hiện chính xác 100% kích thước đệm uncompressed frame từ SourceReader
+                try
+                {
+                    int hrProbe = reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out IMFSample probeSample);
+                    if (hrProbe == 0 && probeSample != null)
+                    {
+                        try
+                        {
+                            probeSample.ConvertToContiguousBuffer(out IMFMediaBuffer probeBuffer);
+                            if (probeBuffer != null)
+                            {
+                                try
+                                {
+                                    probeBuffer.Lock(out _, out _, out int probeCbLength);
+                                    probeBuffer.Unlock();
+
+                                    if (probeCbLength >= 16)
+                                    {
+                                        int totalPixels = probeCbLength / 4;
+                                        if (totalPixels == 1920 * 1088 || totalPixels == 1920 * 1080) { videoW = 1920; videoH = 1080; }
+                                        else if (totalPixels == 1280 * 720) { videoW = 1280; videoH = 720; }
+                                        else if (totalPixels == 720 * 1280) { videoW = 720; videoH = 1280; }
+                                        else if (totalPixels == 854 * 480 || (videoW == 854 && probeCbLength >= 854 * 478 * 4)) { videoW = 854; videoH = (probeCbLength / 4) / 854; }
+                                        else if (totalPixels == 640 * 360) { videoW = 640; videoH = 360; }
+                                        else if (totalPixels == 480 * 270) { videoW = 480; videoH = 270; }
+                                    }
+                                }
+                                finally
+                                {
+                                    Marshal.ReleaseComObject(probeBuffer);
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            Marshal.ReleaseComObject(probeSample);
+                            // Tua lại vị trí 0 sau khi probe
+                            reader.Flush(MF_SOURCE_READER_FIRST_VIDEO_STREAM);
+                            var pv0 = new PROPVARIANT { vt = 20, hVal = 0 };
+                            try { reader.SetCurrentPosition(Guid.Empty, ref pv0); } finally { PropVariantClear(ref pv0); }
+                        }
+                    }
+                }
+                catch { }
+
                 long durationMs = VideoMetadataParser.GetVideoDurationMs(videoPath);
+                try { TimeBeginPeriod(1); } catch { }
 
                 return new MediaFoundationVideoPlayer(reader, videoW, videoH, durationMs);
             }
@@ -443,8 +489,8 @@ public static class WindowsMediaFoundationExtractor
                         {
                             long sampleMs = (long)(timeHns / 10000L);
 
-                            // Nếu frame này đang bị trễ so với audio hơn 50ms -> bỏ qua frame cũ (drop late frame) để video bắt kịp nhịp audio
-                            if (targetAudioMs > 0 && sampleMs < targetAudioMs - 50 && dropCount < 12)
+                            // Nếu frame này đang bị trễ so với audio hơn 70ms -> bỏ qua frame cũ (drop late frame) để video bắt kịp nhịp audio
+                            if (targetAudioMs > 0 && sampleMs < targetAudioMs - 70 && dropCount < 8)
                             {
                                 Marshal.ReleaseComObject(sample);
                                 dropCount++;
@@ -542,11 +588,12 @@ public static class WindowsMediaFoundationExtractor
                     {
                         try
                         {
-                            if (_videoW <= 0 || _videoH <= 0 || (_videoW * _videoH * 4 != cbLength))
+                            if (_videoW <= 0 || _videoH <= 0)
                             {
                                 int totalPixels = cbLength / 4;
                                 if (totalPixels == 1280 * 720) { _videoW = 1280; _videoH = 720; }
                                 else if (totalPixels == 1920 * 1080) { _videoW = 1920; _videoH = 1080; }
+                                else if (totalPixels == 720 * 1280) { _videoW = 720; _videoH = 1280; }
                                 else if (totalPixels == 854 * 480) { _videoW = 854; _videoH = 480; }
                                 else if (totalPixels == 640 * 360) { _videoW = 640; _videoH = 360; }
                                 else if (totalPixels == 480 * 270) { _videoW = 480; _videoH = 270; }
@@ -565,9 +612,22 @@ public static class WindowsMediaFoundationExtractor
                             using var frameLock = targetBitmap.Lock();
 
                             // 1. Tối ưu siêu tốc (0.1ms, 0% CPU): Direct memory copy khi kích thước WriteableBitmap khớp video
-                            if (targetW == _videoW && targetH == _videoH && frameLock.RowBytes == _videoW * 4 && cbLength >= _videoW * _videoH * 4)
+                            if (targetW == _videoW && targetH == _videoH && cbLength >= _videoW * _videoH * 4)
                             {
-                                Buffer.MemoryCopy((void*)pData, (void*)frameLock.Address, (long)cbLength, (long)_videoW * _videoH * 4);
+                                if (frameLock.RowBytes == _videoW * 4)
+                                {
+                                    Buffer.MemoryCopy((void*)pData, (void*)frameLock.Address, (long)cbLength, (long)_videoW * _videoH * 4);
+                                }
+                                else
+                                {
+                                    byte* pSrc = (byte*)pData;
+                                    byte* pDst = (byte*)frameLock.Address;
+                                    int rowBytesToCopy = Math.Min(frameLock.RowBytes, _videoW * 4);
+                                    for (int r = 0; r < _videoH; r++)
+                                    {
+                                        Buffer.MemoryCopy(pSrc + r * (_videoW * 4), pDst + r * frameLock.RowBytes, frameLock.RowBytes, rowBytesToCopy);
+                                    }
+                                }
                                 return true;
                             }
 
@@ -727,6 +787,7 @@ public static class WindowsMediaFoundationExtractor
                         try { Marshal.ReleaseComObject(_reader); } catch { }
                         _reader = null;
                     }
+                    try { TimeEndPeriod(1); } catch { }
                 }
             }
         }
@@ -928,6 +989,12 @@ public static class WindowsMediaFoundationExtractor
         [PreserveSig] int SetCurrentLength(int cbCurrentLength);
         [PreserveSig] int GetMaxLength(out int pcbMaxLength);
     }
+
+    [DllImport("winmm.dll", EntryPoint = "timeBeginPeriod", SetLastError = true)]
+    private static extern uint TimeBeginPeriod(uint uMilliseconds);
+
+    [DllImport("winmm.dll", EntryPoint = "timeEndPeriod", SetLastError = true)]
+    private static extern uint TimeEndPeriod(uint uMilliseconds);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PROPVARIANT

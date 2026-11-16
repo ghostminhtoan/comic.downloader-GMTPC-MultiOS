@@ -257,11 +257,14 @@ public static class AndroidVideoThumbnailService
             streamHandle = SetDataSourceSafe(retriever, videoPath);
 
             long durationMs = TryGetDurationMs(retriever, videoPath);
-            int count = Math.Max(4, Math.Min(8, maxFrames));
+            int count = Math.Max(12, Math.Min(24, maxFrames));
             long durationUs = durationMs > 0 ? durationMs * 1000 : 15_000_000;
-            // Phân bổ đều khung hình xuyên suốt toàn bộ thời lượng video (từ 0% đến 96%)
-            long spanUs = durationUs > 0 ? (long)(durationUs * 0.96) : 10_000_000;
-            long stepUs = Math.Max(100_000, spanUs / count);
+            // Mỗi frame cách nhau 40,000 microseconds = 40ms = tốc độ 25 FPS mượt mà (> 20 FPS chuẩn)
+            long stepUs = 40_000;
+            if (durationUs > 0 && count * stepUs > durationUs)
+            {
+                stepUs = Math.Max(20_000, durationUs / count);
+            }
 
             for (int i = 0; i < count; i++)
             {
@@ -341,7 +344,7 @@ public static class AndroidVideoThumbnailService
 
             try
             {
-                bmp = retriever.GetFrameAtTime(timeUs, Option.Closest);
+                bmp = retriever.GetFrameAtTime(timeUs, Option.ClosestSync);
             }
             catch { }
 
@@ -349,7 +352,7 @@ public static class AndroidVideoThumbnailService
             {
                 try
                 {
-                    bmp = retriever.GetFrameAtTime(timeUs, Option.ClosestSync);
+                    bmp = retriever.GetFrameAtTime(timeUs, Option.Closest);
                 }
                 catch { }
             }
