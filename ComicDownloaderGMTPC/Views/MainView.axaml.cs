@@ -3891,6 +3891,35 @@ public partial class MainView : UserControl
 
 
 
+    private System.Threading.CancellationTokenSource? _dualSortControlsHideCts;
+
+    private void OnDualSortPreviewPopupPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && vm.IsDualSortVideoSeekable)
+        {
+            vm.DualSortControlsOpacity = 1.0;
+            _dualSortControlsHideCts?.Cancel();
+            _dualSortControlsHideCts = new System.Threading.CancellationTokenSource();
+            var ct = _dualSortControlsHideCts.Token;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(2500, ct);
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!ct.IsCancellationRequested && vm.IsDualSortPreviewVisible && !vm.IsDualSortVideoPaused && !vm.IsScrubbingDragging)
+                        {
+                            vm.DualSortControlsOpacity = 0.0;
+                        }
+                    });
+                }
+                catch { }
+            });
+        }
+    }
+
     private void OnDualSortPreviewPopupPointerExited(object? sender, PointerEventArgs e)
     {
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
@@ -3899,6 +3928,26 @@ public partial class MainView : UserControl
         {
             if (vm.IsDualSortPreviewMaximized) return;
             vm.CloseDualSortPreview();
+        }
+    }
+
+    private void OnDualSortVideoTapped(object? sender, TappedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && vm.IsDualSortVideoSeekable)
+        {
+            vm.ToggleDualSortVideoPlayPauseCommand.Execute(null);
+            vm.DualSortControlsOpacity = 1.0;
+            e.Handled = true;
+        }
+    }
+
+    private void OnDualSortVideoDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && vm.IsDualSortVideoSeekable)
+        {
+            vm.ToggleDualSortPreviewMaximizeCommand.Execute(null);
+            vm.DualSortControlsOpacity = 1.0;
+            e.Handled = true;
         }
     }
 
@@ -3912,11 +3961,51 @@ public partial class MainView : UserControl
         }
     }
 
+    private void OnDualSortSeekbarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Slider slider && DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && vm.IsDualSortVideoSeekable)
+        {
+            e.Pointer.Capture(slider);
+            var pos = e.GetPosition(slider);
+            double val = Math.Clamp(pos.X / Math.Max(1, slider.Bounds.Width) * 100.0, 0.0, 100.0);
+            vm.IsScrubbingDragging = true;
+            vm.DualSortVideoSeekPosition = val;
+            vm.UpdateDualSortScrubbing(pos.X, slider.Bounds.Width);
+            e.Handled = true;
+        }
+    }
+
+    private void OnDualSortSeekbarPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is Slider slider && DataContext is MainViewModel vm)
+        {
+            e.Pointer.Capture(null);
+            if (vm.IsScrubbingDragging)
+            {
+                vm.EndScrubbingDrag();
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void OnDualSortSeekbarPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && vm.IsScrubbingDragging)
+        {
+            vm.EndScrubbingDrag();
+        }
+    }
+
     private void OnDualSortSeekbarPointerMoved(object? sender, PointerEventArgs e)
     {
         if (sender is Slider slider && DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && vm.IsDualSortVideoSeekable)
         {
             var pos = e.GetPosition(slider);
+            if (vm.IsScrubbingDragging)
+            {
+                double val = Math.Clamp(pos.X / Math.Max(1, slider.Bounds.Width) * 100.0, 0.0, 100.0);
+                vm.DualSortVideoSeekPosition = val;
+            }
             vm.UpdateDualSortScrubbing(pos.X, slider.Bounds.Width);
         }
     }

@@ -497,6 +497,18 @@ public partial class MainViewModel
     [ObservableProperty]
     private bool _isDualSortVolumeHudVisible = false;
 
+    [ObservableProperty]
+    private bool _isScrubbingDragging = false;
+
+    [ObservableProperty]
+    private bool _isDualSortControlsVisible = true;
+
+    [ObservableProperty]
+    private double _dualSortControlsOpacity = 1.0;
+
+    [ObservableProperty]
+    private bool _showRemainingTime = false;
+
     private System.Threading.CancellationTokenSource? _dualSortVolumeHudCts;
 
     private List<Bitmap>? _dualSortVideoCachedFrames;
@@ -648,6 +660,58 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
+    public void ToggleTimeDisplayMode()
+    {
+        ShowRemainingTime = !ShowRemainingTime;
+        UpdateDualSortVideoTimeText(_dualSortVideoCurrentPlaybackMs);
+    }
+
+    public void UpdateDualSortVideoTimeText(long curMs)
+    {
+        string curTimeStr = VideoMetadataParser.FormatDuration(curMs);
+        DualSortVideoCurrentTimeText = curTimeStr;
+        if (DualSortVideoDurationMs > 0)
+        {
+            if (ShowRemainingTime)
+            {
+                long remain = Math.Max(0, DualSortVideoDurationMs - curMs);
+                DualSortVideoSeekTimeText = $"{curTimeStr} / -{VideoMetadataParser.FormatDuration(remain)}";
+            }
+            else
+            {
+                DualSortVideoSeekTimeText = $"{curTimeStr} / {DualSortVideoDurationText}";
+            }
+        }
+        else
+        {
+            DualSortVideoSeekTimeText = curTimeStr;
+        }
+    }
+
+    public void EndScrubbingDrag()
+    {
+        IsScrubbingDragging = false;
+        long targetMs = _dualSortVideoCurrentPlaybackMs;
+        try { _dualSortAudioPlayer?.Seek(targetMs / 1000.0); } catch { }
+        if (!IsDualSortVideoPaused)
+        {
+            try { _dualSortAudioPlayer?.Resume(); } catch { }
+        }
+    }
+
+    [RelayCommand]
+    public void SeekDualSortVideoBackward5s()
+    {
+        SeekDualSortVideoRelative(-5.0);
+    }
+
+    [RelayCommand]
+    public void SeekDualSortVideoForward5s()
+    {
+        SeekDualSortVideoRelative(5.0);
+    }
+
+    [RelayCommand]
     public void ToggleDualSortVideoPlayPause()
     {
         IsDualSortVideoPaused = !IsDualSortVideoPaused;
@@ -670,11 +734,13 @@ public partial class MainViewModel
         _dualSortLastSeekMs = targetMs;
         _dualSortLastSeekTicks = System.Diagnostics.Stopwatch.GetTimestamp();
 
-        DualSortVideoCurrentTimeText = VideoMetadataParser.FormatDuration(targetMs);
-        DualSortVideoSeekTimeText = DualSortVideoDurationMs > 0 ? $"{DualSortVideoCurrentTimeText} / {DualSortVideoDurationText}" : $"{Math.Round(value)}%";
+        UpdateDualSortVideoTimeText(targetMs);
 
-        // 0. Tua âm thanh native đồng bộ ngay lập tức (Windows WMP / Android MediaPlayer)
-        try { _dualSortAudioPlayer?.Seek(targetMs / 1000.0); } catch { }
+        // 0. Tua âm thanh native đồng bộ ngay lập tức (không tua âm thanh dồn dập khi đang kéo chuột)
+        if (!IsScrubbingDragging)
+        {
+            try { _dualSortAudioPlayer?.Seek(targetMs / 1000.0); } catch { }
+        }
 
         // 1. Tua tức thì trên Media Foundation Player phần cứng (Windows)
         if (OperatingSystem.IsWindows() && _dualSortActivePlayer != null)
@@ -2529,8 +2595,7 @@ public partial class MainViewModel
                                                             try
                                                             {
                                                                 DualSortVideoSeekPosition = pct;
-                                                                DualSortVideoCurrentTimeText = curTimeStr;
-                                                                DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : curTimeStr;
+                                                                UpdateDualSortVideoTimeText(frameMs);
                                                             }
                                                             finally
                                                             {
@@ -2667,10 +2732,9 @@ public partial class MainViewModel
                                         {
                                             _isInternalDualSortSeekUpdating = true;
                                             try
-                                             {
+                                            {
                                                 DualSortVideoSeekPosition = pct;
-                                                DualSortVideoCurrentTimeText = curTimeStr;
-                                                DualSortVideoSeekTimeText = durMs > 0 ? $"{curTimeStr} / {durText}" : $"{targetFrameIdx + 1}/{totalF}";
+                                                UpdateDualSortVideoTimeText(curMs);
                                             }
                                             finally
                                             {
