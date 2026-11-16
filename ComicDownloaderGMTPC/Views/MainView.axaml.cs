@@ -357,47 +357,52 @@ public partial class MainView : UserControl
 
 
     private void RegisterVmEvents(MainViewModel vm)
-
     {
-
         vm.AutoScrollRequested -= OnVmAutoScrollRequested;
-
         vm.AutoScrollRequested += OnVmAutoScrollRequested;
 
-
-
         vm.ScrollToTopRequested -= OnVmScrollToTopRequested;
-
         vm.ScrollToTopRequested += OnVmScrollToTopRequested;
 
-
-
         vm.ScrollToBottomRequested -= OnVmScrollToBottomRequested;
-
         vm.ScrollToBottomRequested += OnVmScrollToBottomRequested;
 
-
-
         vm.VisibleThumbnailScanRequested -= OnVmVisibleThumbnailScanRequested;
-
         vm.VisibleThumbnailScanRequested += OnVmVisibleThumbnailScanRequested;
 
+        vm.PropertyChanged -= OnVmPropertyChanged;
+        vm.PropertyChanged += OnVmPropertyChanged;
     }
 
-
-
     private void UnregisterVmEvents(MainViewModel vm)
-
     {
-
         vm.AutoScrollRequested -= OnVmAutoScrollRequested;
-
         vm.ScrollToTopRequested -= OnVmScrollToTopRequested;
-
         vm.ScrollToBottomRequested -= OnVmScrollToBottomRequested;
-
         vm.VisibleThumbnailScanRequested -= OnVmVisibleThumbnailScanRequested;
+        vm.PropertyChanged -= OnVmPropertyChanged;
+    }
 
+    private void OnVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsDualSortPreviewMaximized))
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                var popup = this.FindControl<Border>("DualSortPreviewPopupBorder");
+                if (popup == null) return;
+                if (DataContext is MainViewModel vm && vm.IsDualSortPreviewMaximized)
+                {
+                    popup.Width = double.NaN;
+                    popup.Height = double.NaN;
+                    popup.Margin = new Thickness(0);
+                }
+                else
+                {
+                    UpdateDualSortPopupPosition(new Point(this.Bounds.Width / 2.0, this.Bounds.Height / 2.0));
+                }
+            });
+        }
     }
 
 
@@ -3816,77 +3821,101 @@ public partial class MainView : UserControl
 
 
     private void UpdateDualSortPopupPosition(Point pos)
-
     {
-
         var popup = this.FindControl<Border>("DualSortPreviewPopupBorder");
-
         if (popup == null) return;
 
-
+        if (DataContext is MainViewModel vmMax && vmMax.IsDualSortPreviewMaximized)
+        {
+            popup.Width = double.NaN;
+            popup.Height = double.NaN;
+            popup.Margin = new Thickness(0);
+            return;
+        }
 
         double viewW = this.Bounds.Width > 0 ? this.Bounds.Width : 1200;
-
         double viewH = this.Bounds.Height > 0 ? this.Bounds.Height : 850;
 
-        double popupW = Math.Min(380, Math.Max(280, viewW - 24));
+        bool isPortrait = false;
+        if (DataContext is MainViewModel vmItem)
+        {
+            if (vmItem.DualSortPreviewItem != null && vmItem.DualSortPreviewItem.Width > 0 && vmItem.DualSortPreviewItem.Height > 0)
+            {
+                isPortrait = vmItem.DualSortPreviewItem.Height > vmItem.DualSortPreviewItem.Width;
+            }
+            else if (vmItem.DualSortPreviewBitmap != null)
+            {
+                isPortrait = vmItem.DualSortPreviewBitmap.PixelSize.Height > vmItem.DualSortPreviewBitmap.PixelSize.Width;
+            }
+        }
 
-        popup.Width = popupW;
-
-        double popupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 480;
-
-
+        var container = this.FindControl<Border>("DualSortImageContainer");
+        var img = this.FindControl<Image>("DualSortPreviewImage");
 
         if (OperatingSystem.IsAndroid())
-
         {
+            bool isLandscapeScreen = viewW > viewH;
+            double popupW;
+            if (isLandscapeScreen)
+            {
+                // Màn hình xoay ngang trên Android (viewH thấp khoảng 360-450)
+                popupW = isPortrait ? Math.Min(340, viewW - 24) : Math.Min(480, viewW - 24);
+                double maxImgH = Math.Max(140, viewH - 125);
+                if (container != null) container.MaxHeight = maxImgH;
+                if (img != null) img.MaxHeight = Math.Max(130, maxImgH - 10);
+            }
+            else
+            {
+                // Màn hình đứng trên Android (viewW khoảng 360-420, viewH khoảng 800-900)
+                popupW = Math.Min(400, Math.Max(280, viewW - 24));
+                if (container != null) container.MaxHeight = 450;
+                if (img != null) img.MaxHeight = 440;
+            }
 
+            popup.Width = popupW;
+            double popupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : (isLandscapeScreen ? viewH - 20 : 480);
             double touchLeft = Math.Max(12, (viewW - popupW) / 2.0);
-
-            double touchTop = Math.Clamp(pos.Y - 120, 16, Math.Max(16, viewH - popupH - 24));
+            double touchTop = isLandscapeScreen 
+                ? Math.Max(6, (viewH - popupH) / 2.0)
+                : Math.Clamp(pos.Y - 120, 16, Math.Max(16, viewH - popupH - 24));
 
             popup.Margin = new Thickness(touchLeft, touchTop, 0, 0);
-
             return;
-
         }
 
+        // Desktop (Windows & Linux)
+        double deskPopupW;
+        if (isPortrait)
+        {
+            deskPopupW = 340;
+            double maxImgH = Math.Min(560, Math.Max(300, viewH - 160));
+            if (container != null) container.MaxHeight = maxImgH;
+            if (img != null) img.MaxHeight = maxImgH - 10;
+        }
+        else
+        {
+            deskPopupW = Math.Min(480, Math.Max(380, viewW - 100));
+            if (container != null) container.MaxHeight = 360;
+            if (img != null) img.MaxHeight = 350;
+        }
 
+        popup.Width = deskPopupW;
+        double deskPopupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 480;
 
         double left = pos.X + 24;
-
-        if (left + popupW + 16 > viewW)
-
+        if (left + deskPopupW + 16 > viewW)
         {
-
-            left = Math.Max(12, pos.X - popupW - 24);
-
+            left = Math.Max(12, pos.X - deskPopupW - 24);
         }
-
-
 
         double top = pos.Y - 40;
-
-        if (top + popupH + 16 > viewH)
-
+        if (top + deskPopupH + 16 > viewH)
         {
-
-            top = Math.Max(12, viewH - popupH - 16);
-
+            top = Math.Max(12, viewH - deskPopupH - 16);
         }
-
-        if (top < 12)
-
-        {
-
-            top = 12;
-
-        }
-
-
+        if (top < 12) top = 12;
 
         popup.Margin = new Thickness(left, top, 0, 0);
-
     }
 
 

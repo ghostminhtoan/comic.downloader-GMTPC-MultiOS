@@ -218,9 +218,8 @@ public static class AndroidVideoThumbnailService
             long durationMs = TryGetDurationMs(retriever, videoPath);
             long durationUs = durationMs > 0 ? durationMs * 1000 : 0;
 
-            int targetW = maxWidth > 0 ? maxWidth : 480;
-            int targetH = maxHeight > 0 ? maxHeight : 270;
-            global::Android.Graphics.Bitmap? bmp = TryGetAnyFrame(retriever, durationUs, targetW, targetH);
+            CalculateOptimalFrameDimensions(retriever, videoPath, maxWidth, maxHeight, out int targetW, out int targetH, out int rotation);
+            global::Android.Graphics.Bitmap? bmp = TryGetAnyFrame(retriever, durationUs, targetW, targetH, rotation);
 
             if (bmp != null)
             {
@@ -265,21 +264,20 @@ public static class AndroidVideoThumbnailService
             long stepUs = durationUs > 0 ? (long)(durationUs * 0.95 / Math.Max(1, count)) : 1_000_000;
             if (stepUs < 40_000) stepUs = 40_000;
 
-            int targetW = maxWidth > 0 ? maxWidth : 480;
-            int targetH = maxHeight > 0 ? maxHeight : 270;
+            CalculateOptimalFrameDimensions(retriever, videoPath, maxWidth, maxHeight, out int targetW, out int targetH, out int rotation);
 
             for (int i = 0; i < count; i++)
             {
                 long timeUs = i * stepUs;
-                global::Android.Graphics.Bitmap? bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.ClosestSync);
+                global::Android.Graphics.Bitmap? bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.ClosestSync, rotation);
                 if (bmp == null)
                 {
-                    bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.Closest);
+                    bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.Closest, rotation);
                 }
                 if (bmp == null && i == 0)
                 {
                     try { bmp = retriever.FrameAtTime; } catch { }
-                    if (bmp != null) bmp = ScaleBitmapIfNeeded(bmp, targetW, targetH);
+                    if (bmp != null) bmp = ScaleBitmapIfNeeded(bmp, targetW, targetH, rotation);
                 }
 
                 if (bmp != null)
@@ -300,7 +298,7 @@ public static class AndroidVideoThumbnailService
             // Fallback an toàn tuyệt đối: nếu chưa có frame nào, lấy bất kỳ frame nào có thể
             if (list.Count == 0)
             {
-                var fallbackBmp = TryGetAnyFrame(retriever, durationUs, targetW, targetH);
+                var fallbackBmp = TryGetAnyFrame(retriever, durationUs, targetW, targetH, rotation);
                 if (fallbackBmp != null)
                 {
                     using (fallbackBmp)
@@ -345,13 +343,12 @@ public static class AndroidVideoThumbnailService
             streamHandle = SetDataSourceSafe(retriever, videoPath);
 
             long timeUs = Math.Max(0, timeMs * 1000);
-            int targetW = maxWidth > 0 ? maxWidth : 480;
-            int targetH = maxHeight > 0 ? maxHeight : 270;
+            CalculateOptimalFrameDimensions(retriever, videoPath, maxWidth, maxHeight, out int targetW, out int targetH, out int rotation);
 
-            global::Android.Graphics.Bitmap? bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.ClosestSync);
+            global::Android.Graphics.Bitmap? bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.ClosestSync, rotation);
             if (bmp == null)
             {
-                bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.Closest);
+                bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.Closest, rotation);
             }
 
             if (bmp != null)
@@ -378,15 +375,96 @@ public static class AndroidVideoThumbnailService
         return null;
     }
 
-    private static global::Android.Graphics.Bitmap? GetOptimizedFrame(MediaMetadataRetriever retriever, long timeUs, int targetW, int targetH, Option option)
+    private static void CalculateOptimalFrameDimensions(MediaMetadataRetriever retriever, string videoPath, int maxWidth, int maxHeight, out int targetW, out int targetH, out int rotation)
+    {
+        rotation = TryGetRotation(retriever);
+        int vw = 0, vh = 0;
+        try
+        {
+            if (VideoMetadataParser.GetVideoDimensions(videoPath, out int parsedW, out int parsedH) && parsedW > 0 && parsedH > 0)
+            {
+                vw = parsedW;
+                vh = parsedH;
+            }
+        }
+        catch { }
+
+        if (vw <= 0 || vh <= 0)
+        {
+            try
+            {
+                string? wStr = retriever.ExtractMetadata(MetadataKey.VideoWidth);
+                string? hStr = retriever.ExtractMetadata(MetadataKey.VideoHeight);
+                if (int.TryParse(wStr, out int rw) && int.TryParse(hStr, out int rh) && rw > 0 && rh > 0)
+                {
+                    if (rotation == 90 || rotation == 270)
+                    {
+                        vw = rh;
+                        vh = rw;
+                    }
+                    else
+                    {
+                        vw = rw;
+                        vh = rh;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        int limitW = maxWidth > 0 ? maxWidth : 480;
+        int limitH = maxHeight > 0 ? maxHeight : 480;
+
+        if (vw > 0 && vh > 0)
+        {
+            if (vh > vw) // Video dọc (Portrait 9:16)
+            {
+                targetH = Math.Min(limitH, 480);
+                targetW = Math.Max(16, (int)Math.Round((double)vw / vh * targetH));
+            }
+            else // Video ngang (Landscape 16:9) hoặc vuông
+            {
+                targetW = Math.Min(limitW, 480);
+                targetH = Math.Max(16, (int)Math.Round((double)vh / vw * targetW));
+            }
+        }
+        else
+        {
+            targetW = 480;
+            targetH = 270;
+        }
+
+        if ((targetW & 1) != 0) targetW--;
+        if ((targetH & 1) != 0) targetH--;
+        targetW = Math.Max(16, targetW);
+        targetH = Math.Max(16, targetH);
+    }
+
+    private static int TryGetRotation(MediaMetadataRetriever retriever)
+    {
+        try
+        {
+            string? rotStr = retriever.ExtractMetadata(MetadataKey.VideoRotation);
+            if (!string.IsNullOrEmpty(rotStr) && int.TryParse(rotStr, out int r))
+            {
+                return r;
+            }
+        }
+        catch { }
+        return 0;
+    }
+
+    private static global::Android.Graphics.Bitmap? GetOptimizedFrame(MediaMetadataRetriever retriever, long timeUs, int targetW, int targetH, Option option, int rotation = 0)
     {
         global::Android.Graphics.Bitmap? bmp = null;
-        // Android 8.1+ (API 27): Hardware-accelerated scaled decode trực tiếp từ GPU decoder, không decode full 1080p
+        // Android 8.1+ (API 27): Hardware-accelerated scaled decode trực tiếp từ GPU decoder
         if (OperatingSystem.IsAndroidVersionAtLeast(27) && targetW > 0 && targetH > 0)
         {
             try
             {
-                bmp = retriever.GetScaledFrameAtTime(timeUs, option, targetW, targetH);
+                int decodeW = (rotation == 90 || rotation == 270) ? targetH : targetW;
+                int decodeH = (rotation == 90 || rotation == 270) ? targetW : targetH;
+                bmp = retriever.GetScaledFrameAtTime(timeUs, option, decodeW, decodeH);
             }
             catch { }
         }
@@ -402,43 +480,63 @@ public static class AndroidVideoThumbnailService
 
         if (bmp != null)
         {
-            bmp = ScaleBitmapIfNeeded(bmp, targetW, targetH);
+            bmp = ScaleBitmapIfNeeded(bmp, targetW, targetH, rotation);
         }
 
         return bmp;
     }
 
-    private static global::Android.Graphics.Bitmap? TryGetAnyFrame(MediaMetadataRetriever retriever, long durationUs, int maxWidth, int maxHeight)
+    private static global::Android.Graphics.Bitmap? TryGetAnyFrame(MediaMetadataRetriever retriever, long durationUs, int maxWidth, int maxHeight, int rotation = 0)
     {
         global::Android.Graphics.Bitmap? bmp = null;
         int targetW = maxWidth > 0 ? maxWidth : 480;
         int targetH = maxHeight > 0 ? maxHeight : 270;
 
-        bmp = GetOptimizedFrame(retriever, 0, targetW, targetH, Option.Closest);
-        if (bmp == null) bmp = GetOptimizedFrame(retriever, 500_000, targetW, targetH, Option.ClosestSync);
-        if (bmp == null) bmp = GetOptimizedFrame(retriever, 1_000_000, targetW, targetH, Option.ClosestSync);
-        if (bmp == null) bmp = GetOptimizedFrame(retriever, 100_000, targetW, targetH, Option.Closest);
+        bmp = GetOptimizedFrame(retriever, 0, targetW, targetH, Option.Closest, rotation);
+        if (bmp == null) bmp = GetOptimizedFrame(retriever, 500_000, targetW, targetH, Option.ClosestSync, rotation);
+        if (bmp == null) bmp = GetOptimizedFrame(retriever, 1_000_000, targetW, targetH, Option.ClosestSync, rotation);
+        if (bmp == null) bmp = GetOptimizedFrame(retriever, 100_000, targetW, targetH, Option.Closest, rotation);
 
         if (bmp == null && durationUs > 0)
         {
-            bmp = GetOptimizedFrame(retriever, durationUs / 10, targetW, targetH, Option.Closest);
+            bmp = GetOptimizedFrame(retriever, durationUs / 10, targetW, targetH, Option.Closest, rotation);
         }
         if (bmp == null && durationUs > 0)
         {
-            bmp = GetOptimizedFrame(retriever, durationUs / 4, targetW, targetH, Option.Closest);
+            bmp = GetOptimizedFrame(retriever, durationUs / 4, targetW, targetH, Option.Closest, rotation);
         }
 
         if (bmp == null)
         {
             try { bmp = retriever.FrameAtTime; } catch { }
-            if (bmp != null) bmp = ScaleBitmapIfNeeded(bmp, targetW, targetH);
+            if (bmp != null) bmp = ScaleBitmapIfNeeded(bmp, targetW, targetH, rotation);
         }
 
         return bmp;
     }
 
-    private static global::Android.Graphics.Bitmap ScaleBitmapIfNeeded(global::Android.Graphics.Bitmap orig, int maxWidth, int maxHeight)
+    private static global::Android.Graphics.Bitmap ScaleBitmapIfNeeded(global::Android.Graphics.Bitmap orig, int maxWidth, int maxHeight, int rotation = 0)
     {
+        if (orig == null) return orig!;
+
+        // 1. Tự động xoay thẳng đứng nếu video là Portrait nhưng bitmap bị quay ngang
+        if ((rotation == 90 || rotation == 270 || rotation == 180) && (rotation == 180 || orig.Width > orig.Height))
+        {
+            try
+            {
+                var matrix = new global::Android.Graphics.Matrix();
+                matrix.PostRotate(rotation);
+                var rotated = global::Android.Graphics.Bitmap.CreateBitmap(orig, 0, 0, orig.Width, orig.Height, matrix, true);
+                if (rotated != null && rotated != orig)
+                {
+                    orig.Recycle();
+                    orig.Dispose();
+                    orig = rotated;
+                }
+            }
+            catch { }
+        }
+
         if (maxWidth <= 0 || maxHeight <= 0) return orig;
         if (orig.Width <= maxWidth && orig.Height <= maxHeight) return orig;
 

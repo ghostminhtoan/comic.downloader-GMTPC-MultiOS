@@ -207,12 +207,27 @@ public static class VideoMetadataParser
                                         br.ReadBytes(20); // creation(4) + mod(4) + track_id(4) + res(4) + duration(4)
                                     }
 
-                                    br.ReadBytes(8 + 2 + 2 + 2 + 2 + 36); // res(8) + layer(2) + alt(2) + vol(2) + res(2) + matrix(36)
+                                    br.ReadBytes(8 + 2 + 2 + 2 + 2); // res(8) + layer(2) + alt(2) + vol(2) + res(2) = 16 bytes
+                                    int a = ReadBigEndianInt32(br);
+                                    int b = ReadBigEndianInt32(br);
+                                    br.ReadBytes(4); // u
+                                    int c = ReadBigEndianInt32(br);
+                                    int d = ReadBigEndianInt32(br);
+                                    br.ReadBytes(16); // v(4) + x(4) + y(4) + w(4) = 16 bytes
+
                                     uint wFixed = ReadBigEndianUInt32(br);
                                     uint hFixed = ReadBigEndianUInt32(br);
 
                                     int trackW = (int)(wFixed >> 16);
                                     int trackH = (int)(hFixed >> 16);
+
+                                    // Nếu video xoay 90 độ hoặc 270 độ (chuẩn matrix transformation của MP4 video dọc quay trên điện thoại)
+                                    if (a == 0 && b != 0 && c != 0 && d == 0)
+                                    {
+                                        int temp = trackW;
+                                        trackW = trackH;
+                                        trackH = temp;
+                                    }
 
                                     if (trackW > 0 && trackH > 0)
                                     {
@@ -413,6 +428,11 @@ public static class VideoMetadataParser
         byte[] bytes = br.ReadBytes(4);
         if (bytes.Length < 4) return 0;
         return ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
+    }
+
+    private static int ReadBigEndianInt32(BinaryReader br)
+    {
+        return (int)ReadBigEndianUInt32(br);
     }
 
     private static ulong ReadBigEndianUInt64(BinaryReader br)

@@ -533,11 +533,17 @@ public static class WindowsMediaFoundationExtractor
                                         if (videoW <= 0 || videoH <= 0)
                                         {
                                             if (totalPixels == 1920 * 1088 || totalPixels == 1920 * 1080) { videoW = 1920; videoH = 1080; }
+                                            else if (totalPixels == 1080 * 1920) { videoW = 1080; videoH = 1920; }
                                             else if (totalPixels == 1280 * 720) { videoW = 1280; videoH = 720; }
+                                            else if (totalPixels == 720 * 1280) { videoW = 720; videoH = 1280; }
                                             else if (totalPixels == 960 * 540) { videoW = 960; videoH = 540; }
+                                            else if (totalPixels == 540 * 960) { videoW = 540; videoH = 960; }
                                             else if (totalPixels == 854 * 480) { videoW = 854; videoH = 480; }
+                                            else if (totalPixels == 480 * 854) { videoW = 480; videoH = 854; }
                                             else if (totalPixels == 640 * 360) { videoW = 640; videoH = 360; }
+                                            else if (totalPixels == 360 * 640) { videoW = 360; videoH = 640; }
                                             else if (totalPixels == 480 * 270) { videoW = 480; videoH = 270; }
+                                            else if (totalPixels == 270 * 480) { videoW = 270; videoH = 480; }
                                             else
                                             {
                                                 videoW = (int)Math.Round(Math.Sqrt(totalPixels * 16.0 / 9.0));
@@ -546,7 +552,14 @@ public static class WindowsMediaFoundationExtractor
                                         }
                                         else
                                         {
-                                            if (videoW > 0 && probeCbLength % videoW == 0)
+                                            int totalPx = probeCbLength / 4;
+                                            if (totalPx != videoW * videoH && totalPx == videoH * videoW)
+                                            {
+                                                int temp = videoW;
+                                                videoW = videoH;
+                                                videoH = temp;
+                                            }
+                                            else if (videoW > 0 && probeCbLength % videoW == 0)
                                             {
                                                 int derivedH = (probeCbLength / 4) / videoW;
                                                 if (derivedH > 0 && Math.Abs(derivedH - videoH) <= 16)
@@ -853,10 +866,12 @@ public static class WindowsMediaFoundationExtractor
 
                             var dstInfo = new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Opaque);
                             using var dstSurface = SKSurface.Create(dstInfo, frameLock.Address, frameLock.RowBytes);
-                            var canvas = dstSurface.Canvas;
-
-                            using var paint = new SKPaint { IsAntialias = false };
-                            canvas.DrawBitmap(srcBmp, new SKRect(0, 0, _videoW, _videoH), new SKRect(0, 0, targetW, targetH), paint);
+                            if (dstSurface != null)
+                            {
+                                var canvas = dstSurface.Canvas;
+                                using var paint = new SKPaint { IsAntialias = false };
+                                canvas.DrawBitmap(srcBmp, new SKRect(0, 0, _videoW, _videoH), new SKRect(0, 0, targetW, targetH), paint);
+                            }
 
                             return true;
                         }
