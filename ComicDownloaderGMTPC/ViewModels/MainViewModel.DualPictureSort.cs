@@ -442,6 +442,63 @@ public partial class MainViewModel
 
     public string DualSortVideoPlayPauseIcon => IsDualSortVideoPaused ? "▶" : "⏸";
 
+    [ObservableProperty]
+    private bool _isDualSortVideoMuted = false;
+
+    [ObservableProperty]
+    private double _dualSortVideoVolume = 100;
+
+    public string DualSortVideoVolumeIcon => IsDualSortVideoMuted || DualSortVideoVolume <= 0 ? "🔇" : (DualSortVideoVolume > 50 ? "🔊" : "🔉");
+
+    [ObservableProperty]
+    private bool _isDualSortPreviewMaximized = false;
+
+    public string DualSortPreviewMaximizeIcon => IsDualSortPreviewMaximized ? "🗗" : "⛶";
+    public string DualSortPreviewMaximizeTooltip => IsDualSortPreviewMaximized ? "Thu nhỏ cửa sổ xem trước (Phím F hoặc Esc)" : "Phóng to toàn vùng xem trước (Phím F)";
+
+    [ObservableProperty]
+    private double _dualSortPlaybackSpeed = 1.0;
+
+    public string DualSortPlaybackSpeedText => $"{DualSortPlaybackSpeed:0.0#}x";
+
+    [ObservableProperty]
+    private long? _dualSortLooperPointAMs = null;
+
+    [ObservableProperty]
+    private long? _dualSortLooperPointBMs = null;
+
+    public bool IsDualSortLooperActive => DualSortLooperPointAMs.HasValue && DualSortLooperPointBMs.HasValue;
+
+    public string DualSortLooperText
+    {
+        get
+        {
+            if (!DualSortLooperPointAMs.HasValue) return "[A-B]";
+            if (!DualSortLooperPointBMs.HasValue) return $"[A: {VideoMetadataParser.FormatDuration(DualSortLooperPointAMs.Value)} ➔ B?]";
+            return $"[⟲ {VideoMetadataParser.FormatDuration(DualSortLooperPointAMs.Value)} - {VideoMetadataParser.FormatDuration(DualSortLooperPointBMs.Value)}]";
+        }
+    }
+
+    [ObservableProperty]
+    private bool _isDualSortScrubbingVisible = false;
+
+    [ObservableProperty]
+    private double _dualSortScrubbingLeft = 0;
+
+    [ObservableProperty]
+    private string _dualSortScrubbingTimeText = "00:00";
+
+    [ObservableProperty]
+    private Bitmap? _dualSortScrubbingBitmap = null;
+
+    [ObservableProperty]
+    private string _dualSortVolumeHudText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isDualSortVolumeHudVisible = false;
+
+    private System.Threading.CancellationTokenSource? _dualSortVolumeHudCts;
+
     private List<Bitmap>? _dualSortVideoCachedFrames;
     private bool _isInternalDualSortSeekUpdating = false;
     private long _dualSortVideoCurrentPlaybackMs = 0;
@@ -451,6 +508,144 @@ public partial class MainViewModel
     private NativeAudioPlaybackService? _dualSortAudioPlayer;
     private WriteableBitmap? _dualSortWbA;
     private WriteableBitmap? _dualSortWbB;
+
+    public void ShowVideoVolumeHud(string text)
+    {
+        _dualSortVolumeHudCts?.Cancel();
+        _dualSortVolumeHudCts = new System.Threading.CancellationTokenSource();
+        var ct = _dualSortVolumeHudCts.Token;
+        DualSortVolumeHudText = text;
+        IsDualSortVolumeHudVisible = true;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(1300, ct);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!ct.IsCancellationRequested)
+                    {
+                        IsDualSortVolumeHudVisible = false;
+                    }
+                });
+            }
+            catch { }
+        });
+    }
+
+    [RelayCommand]
+    public void ToggleDualSortVideoMute()
+    {
+        IsDualSortVideoMuted = !IsDualSortVideoMuted;
+        _dualSortAudioPlayer?.SetMute(IsDualSortVideoMuted);
+        OnPropertyChanged(nameof(DualSortVideoVolumeIcon));
+        ShowVideoVolumeHud(IsDualSortVideoMuted ? "ĐÃ TẮT TIẾNG 🔇" : $"ÂM LƯỢNG: {Math.Round(DualSortVideoVolume)}% 🔊");
+    }
+
+    public void AdjustDualSortVideoVolume(double delta)
+    {
+        double newVol = Math.Clamp(DualSortVideoVolume + delta, 0, 100);
+        if (newVol > 0 && IsDualSortVideoMuted)
+        {
+            IsDualSortVideoMuted = false;
+            _dualSortAudioPlayer?.SetMute(false);
+        }
+        DualSortVideoVolume = newVol;
+        _dualSortAudioPlayer?.SetVolume((int)newVol);
+        OnPropertyChanged(nameof(DualSortVideoVolumeIcon));
+        ShowVideoVolumeHud($"ÂM LƯỢNG: {Math.Round(newVol)}% {(newVol <= 0 ? "🔇" : "🔊")}");
+    }
+
+    partial void OnDualSortVideoVolumeChanged(double value)
+    {
+        if (value > 0 && IsDualSortVideoMuted)
+        {
+            IsDualSortVideoMuted = false;
+            _dualSortAudioPlayer?.SetMute(false);
+        }
+        _dualSortAudioPlayer?.SetVolume((int)value);
+        OnPropertyChanged(nameof(DualSortVideoVolumeIcon));
+    }
+
+    [RelayCommand]
+    public void ToggleDualSortPreviewMaximize()
+    {
+        IsDualSortPreviewMaximized = !IsDualSortPreviewMaximized;
+        OnPropertyChanged(nameof(DualSortPreviewMaximizeIcon));
+        OnPropertyChanged(nameof(DualSortPreviewMaximizeTooltip));
+    }
+
+    [RelayCommand]
+    public void CycleDualSortPlaybackSpeed()
+    {
+        double current = DualSortPlaybackSpeed;
+        double next = current switch
+        {
+            <= 0.55 => 1.0,
+            <= 1.05 => 1.25,
+            <= 1.30 => 1.5,
+            <= 1.60 => 2.0,
+            _ => 0.5
+        };
+        DualSortPlaybackSpeed = next;
+        _dualSortAudioPlayer?.SetPlaybackRate(next);
+        OnPropertyChanged(nameof(DualSortPlaybackSpeedText));
+        ShowVideoVolumeHud($"TỐC ĐỘ PHÁT: {DualSortPlaybackSpeedText} ⚡");
+    }
+
+    [RelayCommand]
+    public void ToggleDualSortLooper()
+    {
+        if (!DualSortLooperPointAMs.HasValue)
+        {
+            DualSortLooperPointAMs = Math.Max(0, _dualSortVideoCurrentPlaybackMs);
+            ShowVideoVolumeHud($"ĐÃ ĐẶT ĐIỂM [A]: {VideoMetadataParser.FormatDuration(DualSortLooperPointAMs.Value)}");
+        }
+        else if (!DualSortLooperPointBMs.HasValue)
+        {
+            long cur = Math.Max(0, _dualSortVideoCurrentPlaybackMs);
+            if (cur > DualSortLooperPointAMs.Value)
+            {
+                DualSortLooperPointBMs = cur;
+            }
+            else
+            {
+                DualSortLooperPointBMs = DualSortLooperPointAMs.Value;
+                DualSortLooperPointAMs = cur;
+            }
+            ShowVideoVolumeHud($"LẶP [A-B]: {VideoMetadataParser.FormatDuration(DualSortLooperPointAMs.Value)} - {VideoMetadataParser.FormatDuration(DualSortLooperPointBMs.Value)} 🔁");
+        }
+        else
+        {
+            DualSortLooperPointAMs = null;
+            DualSortLooperPointBMs = null;
+            ShowVideoVolumeHud("ĐÃ TẮT LẶP ĐOẠN [A-B]");
+        }
+        OnPropertyChanged(nameof(DualSortLooperText));
+        OnPropertyChanged(nameof(IsDualSortLooperActive));
+    }
+
+    public void UpdateDualSortScrubbing(double relativeX, double totalWidth)
+    {
+        if (totalWidth <= 0 || DualSortVideoDurationMs <= 0) return;
+        double pct = Math.Clamp(relativeX / totalWidth, 0.0, 1.0);
+        long targetMs = (long)(pct * DualSortVideoDurationMs);
+        DualSortScrubbingTimeText = VideoMetadataParser.FormatDuration(targetMs);
+        DualSortScrubbingLeft = Math.Clamp(relativeX - 50, 0, Math.Max(0, totalWidth - 100));
+
+        if (_dualSortVideoCachedFrames != null && _dualSortVideoCachedFrames.Count > 0)
+        {
+            int idx = (int)Math.Clamp(Math.Round(pct * (_dualSortVideoCachedFrames.Count - 1)), 0, _dualSortVideoCachedFrames.Count - 1);
+            DualSortScrubbingBitmap = _dualSortVideoCachedFrames[idx];
+        }
+
+        IsDualSortScrubbingVisible = true;
+    }
+
+    public void HideDualSortScrubbing()
+    {
+        IsDualSortScrubbingVisible = false;
+    }
 
     [RelayCommand]
     public void ToggleDualSortVideoPlayPause()
@@ -2206,6 +2401,9 @@ public partial class MainViewModel
                         _dualSortAudioPlayer?.Stop();
                         _dualSortAudioPlayer?.Dispose();
                         _dualSortAudioPlayer = NativeAudioPlaybackService.CreateAndPlay(item.FilePath, 0);
+                        _dualSortAudioPlayer?.SetVolume((int)DualSortVideoVolume);
+                        _dualSortAudioPlayer?.SetMute(IsDualSortVideoMuted);
+                        _dualSortAudioPlayer?.SetPlaybackRate(DualSortPlaybackSpeed);
                     }
                     catch { }
 
@@ -2269,12 +2467,13 @@ public partial class MainViewModel
                                             double curSec = _dualSortAudioPlayer?.CurrentPositionSeconds ?? -1;
                                             long curAudioMs = (long)(curSec * 1000.0);
 
+                                            double speed = DualSortPlaybackSpeed > 0 ? DualSortPlaybackSpeed : 1.0;
                                             if (_dualSortLastSeekMs >= 0)
                                             {
                                                 double elapsedMs = (System.Diagnostics.Stopwatch.GetTimestamp() - _dualSortLastSeekTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                                                 if (elapsedMs < 300 && (curAudioMs < 0 || Math.Abs(curAudioMs - _dualSortLastSeekMs) > 400))
                                                 {
-                                                    targetAudioMs = _dualSortLastSeekMs + (long)elapsedMs;
+                                                    targetAudioMs = _dualSortLastSeekMs + (long)(elapsedMs * speed);
                                                 }
                                                 else
                                                 {
@@ -2287,9 +2486,24 @@ public partial class MainViewModel
                                                 targetAudioMs = curAudioMs >= 0 ? curAudioMs : _dualSortVideoCurrentPlaybackMs;
                                             }
 
+                                            // Kiểm tra chế độ lặp đoạn A-B (A-B Looper Preview)
+                                            if (DualSortLooperPointAMs.HasValue && DualSortLooperPointBMs.HasValue)
+                                            {
+                                                long loopStart = DualSortLooperPointAMs.Value;
+                                                long loopEnd = DualSortLooperPointBMs.Value;
+                                                if (targetAudioMs >= loopEnd || targetAudioMs < loopStart - 500)
+                                                {
+                                                    targetAudioMs = loopStart;
+                                                    _dualSortLastSeekMs = loopStart;
+                                                    _dualSortLastSeekTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+                                                    try { _dualSortAudioPlayer?.Seek(loopStart / 1000.0); } catch { }
+                                                }
+                                            }
+
                                             bool frameRead = player.ReadNextFrameSynced(targetAudioMs, targetWb, out long frameMs);
                                             if (frameRead)
                                             {
+                                                _dualSortVideoCurrentPlaybackMs = frameMs;
                                                 string curTimeStr = VideoMetadataParser.FormatDuration(frameMs);
                                                 double pct = durMs > 0 ? (double)frameMs / durMs * 100.0 : 0;
                                                 var curRenderedWb = targetWb;
@@ -2328,24 +2542,27 @@ public partial class MainViewModel
 
                                                 useA = !useA;
 
-                                                // Đồng bộ thời gian thực: Chỉ delay khi frame chạy trước audio
+                                                // Đồng bộ thời gian thực: Chỉ delay khi frame chạy trước audio (tính theo tốc độ phát)
                                                 long diff = frameMs - targetAudioMs;
                                                 if (diff > 2)
                                                 {
-                                                    int delayMs = (int)Math.Min(diff, 33);
+                                                    int delayMs = (int)Math.Max(1, Math.Min(diff / speed, 33 / speed));
                                                     await Task.Delay(delayMs, cts.Token);
                                                 }
                                                 continue;
                                             }
                                             else
                                             {
-                                                // Hết video -> lặp lại audio
-                                                try { _dualSortAudioPlayer?.Seek(0); } catch { }
+                                                // Hết video -> lặp lại audio hoặc tua về mốc A nếu đang bật A-B
+                                                long restartMs = DualSortLooperPointAMs.HasValue ? DualSortLooperPointAMs.Value : 0;
+                                                try { _dualSortAudioPlayer?.Seek(restartMs / 1000.0); } catch { }
+                                                _dualSortLastSeekMs = restartMs;
+                                                _dualSortLastSeekTicks = System.Diagnostics.Stopwatch.GetTimestamp();
                                             }
                                         }
                                     }
 
-                                    await Task.Delay(33, cts.Token); // 30 FPS mượt mà
+                                    await Task.Delay((int)Math.Max(10, 33 / (DualSortPlaybackSpeed > 0 ? DualSortPlaybackSpeed : 1.0)), cts.Token);
                                 }
                             }
                             finally
@@ -2395,12 +2612,27 @@ public partial class MainViewModel
                                     curMs = curAudioMs >= 0 ? curAudioMs : (long)playbackSw.Elapsed.TotalMilliseconds;
                                 }
 
+                                if (DualSortLooperPointAMs.HasValue && DualSortLooperPointBMs.HasValue)
+                                {
+                                    long loopStart = DualSortLooperPointAMs.Value;
+                                    long loopEnd = DualSortLooperPointBMs.Value;
+                                    if (curMs >= loopEnd || curMs < loopStart - 500)
+                                    {
+                                        curMs = loopStart;
+                                        playbackSw.Restart();
+                                        _dualSortLastSeekMs = loopStart;
+                                        _dualSortLastSeekTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+                                        try { _dualSortAudioPlayer?.Seek(loopStart / 1000.0); } catch { }
+                                    }
+                                }
+
                                 if (durMs > 0 && curMs >= durMs)
                                 {
-                                    // Hết video -> lặp lại audio và timeline từ 0
+                                    // Hết video -> lặp lại audio và timeline từ 0 (hoặc từ điểm A)
+                                    long restartMs = DualSortLooperPointAMs.HasValue ? DualSortLooperPointAMs.Value : 0;
                                     playbackSw.Restart();
-                                    curMs = 0;
-                                    try { _dualSortAudioPlayer?.Seek(0); } catch { }
+                                    curMs = restartMs;
+                                    try { _dualSortAudioPlayer?.Seek(restartMs / 1000.0); } catch { }
                                 }
 
                                 // Tính toán chỉ số frame tương ứng với thời gian thực của Audio (tránh fastforward tua nhanh)
@@ -2618,6 +2850,11 @@ public partial class MainViewModel
         _dualSortWbB = null;
 
         IsDualSortPreviewVisible = false;
+        IsDualSortPreviewMaximized = false;
+        DualSortLooperPointAMs = null;
+        DualSortLooperPointBMs = null;
+        IsDualSortScrubbingVisible = false;
+        IsDualSortVolumeHudVisible = false;
         DualSortPreviewItem = null;
         IsDualSortPreviewAnimated = false;
         DualSortPreviewAnimatedBadge = string.Empty;

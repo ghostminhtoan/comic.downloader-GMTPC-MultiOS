@@ -11618,116 +11618,150 @@
         <!-- 7. POPUP PREVIEW CHO DUAL PICTURE SORT (HOVER 0.5S TRÊN DESKTOP HOẶC SINGLE TAP TRÊN ANDROID) -->
 
         <Border x:Name="DualSortPreviewPopupBorder"
-
+                Classes.maximized="{Binding IsDualSortPreviewMaximized}"
                 IsVisible="{Binding IsDualSortPreviewVisible}"
-
                 IsHitTestVisible="True"
-
                 ZIndex="2700"
-
                 HorizontalAlignment="Left" VerticalAlignment="Top"
-
                 Margin="400,160,0,0" Width="380"
-
                 Background="#F8091018" BorderBrush="#38BDF8" BorderThickness="1.5"
-
                 CornerRadius="8" Padding="10" BoxShadow="0 16 40 8 #D0000000"
-
                 PointerExited="OnDualSortPreviewPopupPointerExited">
+            <Border.Styles>
+                <Style Selector="Border.maximized">
+                    <Setter Property="Width" Value="840" />
+                    <Setter Property="HorizontalAlignment" Value="Center" />
+                    <Setter Property="VerticalAlignment" Value="Center" />
+                    <Setter Property="Margin" Value="0" />
+                </Style>
+                <Style Selector="Border.maximized Image#DualSortPreviewImage">
+                    <Setter Property="MaxHeight" Value="580" />
+                </Style>
+            </Border.Styles>
 
             <StackPanel Spacing="6">
-
-                <!-- Thanh tiêu đề Popup Preview kèm Nút Tắt (✕ ĐÓNG) -->
-
+                <!-- Thanh tiêu đề Popup Preview kèm Nút Phóng to & Nút Tắt -->
                 <Grid ColumnDefinitions="*, Auto" Margin="2,0,0,2">
-
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-
                         <TextBlock Text="🔍 XEM ẢNH" FontSize="11" FontWeight="ExtraBold" Foreground="#38BDF8" VerticalAlignment="Center" />
-
                         <Border Background="#7C3AED" CornerRadius="4" Padding="5,1" VerticalAlignment="Center"
-
                                 IsVisible="{Binding IsDualSortPreviewAnimated}">
-
                             <TextBlock Text="{Binding DualSortPreviewAnimatedBadge}" FontSize="9" FontWeight="ExtraBold" Foreground="#FFFFFF" />
-
                         </Border>
-
                         <TextBlock Text="{Binding DualSortPreviewItem.FileName}" FontSize="11" FontWeight="Bold" Foreground="#F59E0B" MaxWidth="200" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding DualSortPreviewItem.FileName}" />
-
                     </StackPanel>
 
-                    <Button Grid.Column="1"
-
-                            Command="{Binding CloseDualSortPreviewCommand}"
-
-                            Background="#DC2626" BorderBrush="#F87171" BorderThickness="1"
-
-                            Foreground="#FFFFFF" FontWeight="ExtraBold"
-
-                            Padding="10,3" Height="26" CornerRadius="4"
-
-                            ToolTip.Tip="Đóng cửa sổ xem trước">
-
-                        <TextBlock Text="✕ ĐÓNG" FontSize="10" FontWeight="ExtraBold" VerticalAlignment="Center" />
-
-                    </Button>
-
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                        <Button Command="{Binding ToggleDualSortPreviewMaximizeCommand}"
+                                Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                Foreground="#38BDF8" FontWeight="ExtraBold"
+                                Padding="8,3" Height="26" CornerRadius="4"
+                                ToolTip.Tip="{Binding DualSortPreviewMaximizeTooltip}">
+                            <TextBlock Text="{Binding DualSortPreviewMaximizeIcon}" FontSize="11" FontWeight="ExtraBold" VerticalAlignment="Center" />
+                        </Button>
+                        <Button Command="{Binding CloseDualSortPreviewCommand}"
+                                Background="#DC2626" BorderBrush="#F87171" BorderThickness="1"
+                                Foreground="#FFFFFF" FontWeight="ExtraBold"
+                                Padding="10,3" Height="26" CornerRadius="4"
+                                ToolTip.Tip="Đóng cửa sổ xem trước">
+                            <TextBlock Text="✕ ĐÓNG" FontSize="10" FontWeight="ExtraBold" VerticalAlignment="Center" />
+                        </Button>
+                    </StackPanel>
                 </Grid>
 
-
-
                 <!-- Khung Ảnh Lớn Độ Phân Giải Cao -->
-
-                <Border Background="#05080D" CornerRadius="4" MinHeight="260" MaxHeight="450" ClipToBounds="True">
-
+                <Border Background="#05080D" CornerRadius="4" MinHeight="260" MaxHeight="450" ClipToBounds="True"
+                        PointerWheelChanged="OnDualSortVideoPointerWheelChanged">
                     <Grid>
-
                         <TextBlock Text="Đang tải ảnh..." FontSize="12" Foreground="#64748B"
-
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
-
                                    IsVisible="{Binding DualSortPreviewBitmap, Converter={x:Static ObjectConverters.IsNull}}" />
 
-                        <Image Source="{Binding DualSortPreviewBitmap}"
-
+                        <Image x:Name="DualSortPreviewImage"
+                               Source="{Binding DualSortPreviewBitmap}"
                                Stretch="Uniform" MaxHeight="440"
-
                                HorizontalAlignment="Center" VerticalAlignment="Center"
-
                                RenderOptions.BitmapInterpolationMode="HighQuality" />
 
-                    </Grid>
-
-                </Border>
-
-                <!-- Thanh Seekbar tua Video chuyên nghiệp (Cho cả PC Hover & Android Tap trong Lọc ảnh song song) -->
-                <Border IsVisible="{Binding IsDualSortVideoSeekable}"
-                        Background="#0B132B" BorderBrush="#3B82F6" BorderThickness="1"
-                        CornerRadius="5" Padding="8,4" Margin="0,4,0,2">
-                    <Grid ColumnDefinitions="Auto, *, Auto">
-                        <!-- Nút Tạm Dừng / Tiếp Tục Tự Phát -->
-                        <Button Grid.Column="0" Command="{Binding ToggleDualSortVideoPlayPauseCommand}"
-                                Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
-                                Padding="6,2" Height="24" CornerRadius="4" Margin="0,0,6,0"
-                                ToolTip.Tip="Tạm dừng / Tiếp tục tự phát video">
-                            <TextBlock Text="{Binding DualSortVideoPlayPauseIcon}" FontSize="11" Foreground="#38BDF8" FontWeight="Bold" VerticalAlignment="Center" />
-                        </Button>
-
-                        <!-- Thanh Trượt Seekbar Tua Frame -->
-                        <Slider Grid.Column="1"
-                                Minimum="0" Maximum="100"
-                                Value="{Binding DualSortVideoSeekPosition, Mode=TwoWay}"
-                                VerticalAlignment="Center" Height="26"
-                                ToolTip.Tip="Chạm hoặc kéo để tua video qua đoạn intro giống nhau" />
-
-                        <!-- Chỉ số Frame / Vị trí Tua -->
-                        <Border Grid.Column="2" Background="#1E293B" CornerRadius="3" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding DualSortVideoSeekTimeText}"
-                                       FontSize="10" FontWeight="Bold" Foreground="#FDE047"
-                                       MinWidth="72" TextAlignment="Center" />
+                        <!-- Volume & Action HUD Overlay -->
+                        <Border Background="#D00F172A" BorderBrush="#38BDF8" BorderThickness="1"
+                                CornerRadius="6" Padding="12,6" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                IsVisible="{Binding IsDualSortVolumeHudVisible}">
+                            <TextBlock Text="{Binding DualSortVolumeHudText}" FontSize="12" FontWeight="ExtraBold" Foreground="#38BDF8" />
                         </Border>
                     </Grid>
+                </Border>
+
+                <!-- Thanh Seekbar tua Video chuyên nghiệp kèm Scrubbing và Bộ điều khiển hoàn chỉnh -->
+                <Border IsVisible="{Binding IsDualSortVideoSeekable}"
+                        Background="#0B132B" BorderBrush="#3B82F6" BorderThickness="1"
+                        CornerRadius="5" Padding="6,4" Margin="0,4,0,2">
+                    <StackPanel Spacing="4">
+                        <!-- Hàng 1: Slider Tua Video kèm Bong bóng Scrubbing Hover Preview -->
+                        <Grid>
+                            <Slider x:Name="DualSortVideoSlider"
+                                    Minimum="0" Maximum="100"
+                                    Value="{Binding DualSortVideoSeekPosition, Mode=TwoWay}"
+                                    VerticalAlignment="Center" Height="24"
+                                    PointerMoved="OnDualSortSeekbarPointerMoved"
+                                    PointerExited="OnDualSortSeekbarPointerExited"
+                                    ToolTip.Tip="Chạm hoặc kéo để tua video. Rê chuột để xem trước phân cảnh" />
+
+                            <!-- Bong bóng Scrubbing Preview nhỏ gọn -->
+                            <Border IsVisible="{Binding IsDualSortScrubbingVisible}"
+                                    Background="#EE05080D" BorderBrush="#38BDF8" BorderThickness="1"
+                                    CornerRadius="4" Padding="4,2" HorizontalAlignment="Center" VerticalAlignment="Top"
+                                    Margin="0,-48,0,0">
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Image Source="{Binding DualSortScrubbingBitmap}" Width="64" Height="36" Stretch="UniformToFill"
+                                           IsVisible="{Binding DualSortScrubbingBitmap, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                    <TextBlock Text="{Binding DualSortScrubbingTimeText}" FontSize="10" FontWeight="Bold" Foreground="#FDE047" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Hàng 2: Bộ phím điều khiển Player chuẩn -->
+                        <Grid ColumnDefinitions="Auto, Auto, Auto, Auto, *, Auto">
+                            <!-- Play / Pause -->
+                            <Button Grid.Column="0" Command="{Binding ToggleDualSortVideoPlayPauseCommand}"
+                                    Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
+                                    Padding="6,2" Height="24" CornerRadius="4" Margin="0,0,4,0"
+                                    ToolTip.Tip="Tạm dừng / Tiếp tục phát video (Phím Space)">
+                                <TextBlock Text="{Binding DualSortVideoPlayPauseIcon}" FontSize="11" Foreground="#38BDF8" FontWeight="Bold" VerticalAlignment="Center" />
+                            </Button>
+
+                            <!-- Bật / Tắt tiếng (Mute / Volume) -->
+                            <Button Grid.Column="1" Command="{Binding ToggleDualSortVideoMuteCommand}"
+                                    Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
+                                    Padding="6,2" Height="24" CornerRadius="4" Margin="0,0,4,0"
+                                    ToolTip.Tip="Bật / Tắt tiếng (Phím M hoặc lăn chuột trên video)">
+                                <TextBlock Text="{Binding DualSortVideoVolumeIcon}" FontSize="11" Foreground="#F59E0B" FontWeight="Bold" VerticalAlignment="Center" />
+                            </Button>
+
+                            <!-- Tốc độ phát lại (Speed) -->
+                            <Button Grid.Column="2" Command="{Binding CycleDualSortPlaybackSpeedCommand}"
+                                    Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
+                                    Padding="6,2" Height="24" CornerRadius="4" Margin="0,0,4,0"
+                                    ToolTip.Tip="Tốc độ phát lại: 0.5x, 1.0x, 1.25x, 1.5x, 2.0x">
+                                <TextBlock Text="{Binding DualSortPlaybackSpeedText}" FontSize="10" Foreground="#10B981" FontWeight="Bold" VerticalAlignment="Center" />
+                            </Button>
+
+                            <!-- Lặp đoạn A-B (Looper) -->
+                            <Button Grid.Column="3" Command="{Binding ToggleDualSortLooperCommand}"
+                                    Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
+                                    Padding="6,2" Height="24" CornerRadius="4" Margin="0,0,4,0"
+                                    ToolTip.Tip="Chế độ lặp đoạn A-B: Click 1 đặt A, Click 2 đặt B, Click 3 xóa">
+                                <TextBlock Text="{Binding DualSortLooperText}" FontSize="10" Foreground="#A78BFA" FontWeight="Bold" VerticalAlignment="Center" />
+                            </Button>
+
+                            <!-- Chỉ số Frame / Vị trí Tua -->
+                            <Border Grid.Column="5" Background="#1E293B" CornerRadius="3" Padding="6,2" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding DualSortVideoSeekTimeText}"
+                                           FontSize="10" FontWeight="Bold" Foreground="#FDE047"
+                                           MinWidth="72" TextAlignment="Center" />
+                            </Border>
+                        </Grid>
+                    </StackPanel>
                 </Border>
 
                 <!-- Footer: Thông tin độ phân giải, dung lượng, ngày sửa -->

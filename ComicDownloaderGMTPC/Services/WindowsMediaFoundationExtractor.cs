@@ -128,7 +128,7 @@ public static class WindowsMediaFoundationExtractor
                     }
 
                     // Đọc mẫu khung hình (sample)
-                    hr = reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out IMFSample sample);
+                    hr = reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out IMFSample? sample);
                     if (hr == 0 && sample != null)
                     {
                         try
@@ -226,7 +226,7 @@ public static class WindowsMediaFoundationExtractor
                     PropVariantClear(ref pv);
                 }
 
-                hr = reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out IMFSample sample);
+                hr = reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out IMFSample? sample);
                 if (hr == 0 && sample != null)
                 {
                     try
@@ -456,7 +456,7 @@ public static class WindowsMediaFoundationExtractor
                 // 3. Đọc thử 1 mẫu đầu tiên để phát hiện chính xác kích thước đệm uncompressed frame từ SourceReader
                 try
                 {
-                    int hrProbe = reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out IMFSample probeSample);
+                    int hrProbe = reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out _, out _, out IMFSample? probeSample);
                     if (hrProbe == 0 && probeSample != null)
                     {
                         try
@@ -587,7 +587,7 @@ public static class WindowsMediaFoundationExtractor
                             ulong targetHns = 0;
                             for (int attempt = 0; attempt < 60; attempt++)
                             {
-                                int hrSeek = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint sFlags, out ulong sHns, out IMFSample s);
+                                int hrSeek = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint sFlags, out ulong sHns, out IMFSample? s);
                                 if ((sFlags & MF_SOURCE_READERF_ENDOFSTREAM) != 0 || hrSeek != 0 || s == null) break;
 
                                 long sMs = (long)(sHns / 10000L);
@@ -678,7 +678,7 @@ public static class WindowsMediaFoundationExtractor
                     ulong bestTimeHns = 0;
                     for (int attempt = 0; attempt < 60; attempt++)
                     {
-                        int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint flags, out ulong timeHns, out IMFSample s);
+                        int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint flags, out ulong timeHns, out IMFSample? s);
                         if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0 || hr != 0 || s == null) break;
 
                         long sMs = (long)(timeHns / 10000L);
@@ -853,7 +853,7 @@ public static class WindowsMediaFoundationExtractor
                             ulong targetHns = 0;
                             for (int attempt = 0; attempt < 60; attempt++)
                             {
-                                int hrSeek = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint sFlags, out ulong sHns, out IMFSample s);
+                                int hrSeek = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint sFlags, out ulong sHns, out IMFSample? s);
                                 if ((sFlags & MF_SOURCE_READERF_ENDOFSTREAM) != 0 || hrSeek != 0 || s == null) break;
 
                                 long sMs = (long)(sHns / 10000L);
@@ -948,7 +948,7 @@ public static class WindowsMediaFoundationExtractor
                     ulong bestTimeHns = 0;
                     for (int attempt = 0; attempt < 60; attempt++)
                     {
-                        int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint flags, out ulong timeHns, out IMFSample s);
+                        int hr = _reader.ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out uint flags, out ulong timeHns, out IMFSample? s);
                         if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0 || hr != 0 || s == null) break;
 
                         long sMs = (long)(timeHns / 10000L);

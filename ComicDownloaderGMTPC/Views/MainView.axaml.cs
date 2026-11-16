@@ -122,6 +122,53 @@ public partial class MainView : UserControl
 
                 if (isDualSortVideo || isHoverVideo)
                 {
+                    if (e.Key == Key.Space && !isTyping)
+                    {
+                        if (isDualSortVideo)
+                        {
+                            vm.ToggleDualSortVideoPlayPauseCommand.Execute(null);
+                            e.Handled = true;
+                            return;
+                        }
+                    }
+
+                    if (e.Key == Key.M && !isTyping)
+                    {
+                        if (isDualSortVideo)
+                        {
+                            vm.ToggleDualSortVideoMuteCommand.Execute(null);
+                            e.Handled = true;
+                            return;
+                        }
+                    }
+
+                    if (e.Key == Key.F && !isTyping)
+                    {
+                        if (isDualSortVideo)
+                        {
+                            vm.ToggleDualSortPreviewMaximizeCommand.Execute(null);
+                            e.Handled = true;
+                            return;
+                        }
+                    }
+
+                    if (e.Key == Key.Escape && !isTyping)
+                    {
+                        if (isDualSortVideo)
+                        {
+                            if (vm.IsDualSortPreviewMaximized)
+                            {
+                                vm.ToggleDualSortPreviewMaximizeCommand.Execute(null);
+                            }
+                            else
+                            {
+                                vm.CloseDualSortPreview();
+                            }
+                            e.Handled = true;
+                            return;
+                        }
+                    }
+
                     if (e.Key == Key.Left)
                     {
                         bool isCtrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
@@ -3845,19 +3892,41 @@ public partial class MainView : UserControl
 
 
     private void OnDualSortPreviewPopupPointerExited(object? sender, PointerEventArgs e)
-
     {
-
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
 
         if (DataContext is MainViewModel vm)
-
         {
-
+            if (vm.IsDualSortPreviewMaximized) return;
             vm.CloseDualSortPreview();
-
         }
+    }
 
+    private void OnDualSortVideoPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && vm.IsDualSortVideoSeekable)
+        {
+            double delta = e.Delta.Y > 0 ? 5.0 : -5.0;
+            vm.AdjustDualSortVideoVolume(delta);
+            e.Handled = true;
+        }
+    }
+
+    private void OnDualSortSeekbarPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (sender is Slider slider && DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && vm.IsDualSortVideoSeekable)
+        {
+            var pos = e.GetPosition(slider);
+            vm.UpdateDualSortScrubbing(pos.X, slider.Bounds.Width);
+        }
+    }
+
+    private void OnDualSortSeekbarPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+        {
+            vm.HideDualSortScrubbing();
+        }
     }
 
 

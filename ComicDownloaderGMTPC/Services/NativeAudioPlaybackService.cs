@@ -34,10 +34,16 @@ public sealed class NativeAudioPlaybackService : IDisposable
     private Process? _linuxProcess;
     private bool _isDisposed;
     private bool _isPaused;
+    private int _volume = 100;
+    private bool _isMuted = false;
+    private double _playbackRate = 1.0;
     private readonly Stopwatch _clock = new();
     private double _clockOffsetSec;
 
     public bool IsPlaying { get; private set; }
+    public int Volume => _volume;
+    public bool IsMuted => _isMuted;
+    public double PlaybackRate => _playbackRate;
 
     public static NativeAudioPlaybackService CreateAndPlay(string filePath, double startSeconds = 0)
     {
@@ -70,7 +76,9 @@ public sealed class NativeAudioPlaybackService : IDisposable
                             _wmpRaw = inst;
                             dynamic wmp = inst;
                             try { wmp.settings.autoStart = true; } catch { }
-                            try { wmp.settings.volume = 100; } catch { }
+                            try { wmp.settings.volume = _isMuted ? 0 : _volume; } catch { }
+                            try { wmp.settings.mute = _isMuted; } catch { }
+                            try { wmp.settings.rate = _playbackRate; } catch { }
                             wmp.URL = filePath;
                             if (startSeconds > 0)
                             {
@@ -227,6 +235,61 @@ public sealed class NativeAudioPlaybackService : IDisposable
 
             _clockOffsetSec = safeSec;
             _clock.Restart();
+        }
+    }
+
+    public void SetVolume(int volumePercent)
+    {
+        lock (_lock)
+        {
+            _volume = Math.Clamp(volumePercent, 0, 100);
+            if (OperatingSystem.IsWindows() && _wmpRaw != null)
+            {
+                try
+                {
+                    dynamic wmp = _wmpRaw;
+                    wmp.settings.volume = _isMuted ? 0 : _volume;
+                }
+                catch { }
+            }
+        }
+    }
+
+    public void SetMute(bool isMuted)
+    {
+        lock (_lock)
+        {
+            _isMuted = isMuted;
+            if (OperatingSystem.IsWindows() && _wmpRaw != null)
+            {
+                try
+                {
+                    dynamic wmp = _wmpRaw;
+                    wmp.settings.mute = isMuted;
+                    if (!isMuted)
+                    {
+                        wmp.settings.volume = _volume;
+                    }
+                }
+                catch { }
+            }
+        }
+    }
+
+    public void SetPlaybackRate(double rate)
+    {
+        lock (_lock)
+        {
+            _playbackRate = Math.Clamp(rate, 0.5, 2.0);
+            if (OperatingSystem.IsWindows() && _wmpRaw != null)
+            {
+                try
+                {
+                    dynamic wmp = _wmpRaw;
+                    wmp.settings.rate = _playbackRate;
+                }
+                catch { }
+            }
         }
     }
 
