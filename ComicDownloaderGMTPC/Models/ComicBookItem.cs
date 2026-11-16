@@ -295,6 +295,8 @@ public partial class ComicBookItem : ObservableObject
     private bool _isInternalSeekUpdating = false;
 
     public ComicDownloaderGMTPC.Services.NativeAudioPlaybackService? ActiveAudioPlayer { get; set; }
+    public long LastSeekTargetMs { get; set; } = -1;
+    public long LastSeekTicks { get; set; } = 0;
 
     [RelayCommand]
     public void ToggleVideoPlayPause()
@@ -363,6 +365,8 @@ public partial class ComicBookItem : ObservableObject
         if (_isInternalSeekUpdating) return;
         long targetMs = VideoDurationMs > 0 ? (long)Math.Round(value / 100.0 * VideoDurationMs) : 0;
         CurrentPlaybackPositionMs = targetMs;
+        LastSeekTargetMs = targetMs;
+        LastSeekTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         VideoCurrentTimeText = VideoMetadataParser.FormatDuration(targetMs);
 
         try { ActiveAudioPlayer?.Seek(targetMs / 1000.0); } catch { }

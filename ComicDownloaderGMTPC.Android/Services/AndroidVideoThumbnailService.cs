@@ -259,12 +259,9 @@ public static class AndroidVideoThumbnailService
             long durationMs = TryGetDurationMs(retriever, videoPath);
             int count = Math.Max(12, Math.Min(24, maxFrames));
             long durationUs = durationMs > 0 ? durationMs * 1000 : 15_000_000;
-            // Mỗi frame cách nhau 40,000 microseconds = 40ms = tốc độ 25 FPS mượt mà (> 20 FPS chuẩn)
-            long stepUs = 40_000;
-            if (durationUs > 0 && count * stepUs > durationUs)
-            {
-                stepUs = Math.Max(20_000, durationUs / count);
-            }
+            // Phân bổ đều các frame trên toàn bộ thời lượng video để khi xem và tua, các frame trải đều toàn bộ video
+            long stepUs = durationUs > 0 ? (long)(durationUs * 0.95 / Math.Max(1, count)) : 1_000_000;
+            if (stepUs < 40_000) stepUs = 40_000;
 
             for (int i = 0; i < count; i++)
             {

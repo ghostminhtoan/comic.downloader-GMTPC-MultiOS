@@ -462,7 +462,28 @@ public sealed class ThumbnailPreviewService
 
                                             if (!item.IsVideoPaused)
                                             {
-                                                long targetAudioMs = (long)((item.ActiveAudioPlayer?.CurrentPositionSeconds ?? 0) * 1000.0);
+                                                long targetAudioMs;
+                                                double curSec = item.ActiveAudioPlayer?.CurrentPositionSeconds ?? -1;
+                                                long curAudioMs = (long)(curSec * 1000.0);
+
+                                                if (item.LastSeekTargetMs >= 0)
+                                                {
+                                                    double elapsedMs = (System.Diagnostics.Stopwatch.GetTimestamp() - item.LastSeekTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                                                    if (elapsedMs < 300 && (curAudioMs < 0 || Math.Abs(curAudioMs - item.LastSeekTargetMs) > 400))
+                                                    {
+                                                        targetAudioMs = item.LastSeekTargetMs + (long)elapsedMs;
+                                                    }
+                                                    else
+                                                    {
+                                                        item.LastSeekTargetMs = -1;
+                                                        targetAudioMs = curAudioMs >= 0 ? curAudioMs : item.CurrentPlaybackPositionMs;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    targetAudioMs = curAudioMs >= 0 ? curAudioMs : item.CurrentPlaybackPositionMs;
+                                                }
+
                                                 var nextBmp = player.ReadNextFrame(480, 480, out long frameMs, targetAudioMs);
                                                 if (nextBmp != null)
                                                 {
@@ -538,7 +559,7 @@ public sealed class ThumbnailPreviewService
                                     catch { }
                                 });
 
-                                int currentFIdx = 0;
+                                int lastRenderedFIdx = -1;
                                 long lastReportedSec = -1;
                                 var playbackSw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -553,8 +574,27 @@ public sealed class ThumbnailPreviewService
 
                                     if (!item.IsVideoPaused)
                                     {
-                                        double curSec = item.ActiveAudioPlayer?.CurrentPositionSeconds ?? playbackSw.Elapsed.TotalSeconds;
-                                        long curMs = (long)(curSec * 1000.0);
+                                        long curMs;
+                                        double curSec = item.ActiveAudioPlayer?.CurrentPositionSeconds ?? -1;
+                                        long curAudioMs = (long)(curSec * 1000.0);
+
+                                        if (item.LastSeekTargetMs >= 0)
+                                        {
+                                            double elapsedMs = (System.Diagnostics.Stopwatch.GetTimestamp() - item.LastSeekTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                                            if (elapsedMs < 300 && (curAudioMs < 0 || Math.Abs(curAudioMs - item.LastSeekTargetMs) > 400))
+                                            {
+                                                curMs = item.LastSeekTargetMs + (long)elapsedMs;
+                                            }
+                                            else
+                                            {
+                                                item.LastSeekTargetMs = -1;
+                                                curMs = curAudioMs >= 0 ? curAudioMs : (long)playbackSw.Elapsed.TotalMilliseconds;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            curMs = curAudioMs >= 0 ? curAudioMs : (long)playbackSw.Elapsed.TotalMilliseconds;
+                                        }
 
                                         if (durMs > 0 && curMs >= durMs)
                                         {
@@ -564,19 +604,27 @@ public sealed class ThumbnailPreviewService
                                             try { item.ActiveAudioPlayer?.Seek(0); } catch { }
                                         }
 
-                                        var curBmp = frames[currentFIdx];
-                                        currentFIdx = (currentFIdx + 1) % frames.Count;
+                                        // Tính toán frame tương ứng với thời gian thực của Audio (tránh fastforward tua nhanh)
+                                        int targetFIdx = durMs > 0 
+                                            ? (int)Math.Clamp(Math.Round((double)curMs / durMs * (frames.Count - 1)), 0, frames.Count - 1)
+                                            : 0;
 
-                                        await RunOnUiAsync(() =>
+                                        if (targetFIdx != lastRenderedFIdx)
                                         {
-                                            lock (_bitmapMemoryLock)
+                                            lastRenderedFIdx = targetFIdx;
+                                            var curBmp = frames[targetFIdx];
+
+                                            await RunOnUiAsync(() =>
                                             {
-                                                if (ReferenceEquals(_activeHighResItem, item))
+                                                lock (_bitmapMemoryLock)
                                                 {
-                                                    item.HighResPreviewBitmap = curBmp;
+                                                    if (ReferenceEquals(_activeHighResItem, item))
+                                                    {
+                                                        item.HighResPreviewBitmap = curBmp;
+                                                    }
                                                 }
-                                            }
-                                        });
+                                            });
+                                        }
 
                                         long curSecFloor = curMs / 1000;
                                         if (curSecFloor != lastReportedSec)
@@ -595,8 +643,7 @@ public sealed class ThumbnailPreviewService
                                         }
                                     }
 
-                                    // 40ms = 25 FPS (> 20 FPS chuẩn mượt mà)
-                                    await Task.Delay(40, ct).ConfigureAwait(false);
+                                    await Task.Delay(25, ct).ConfigureAwait(false);
                                 }
                             }
                         }
