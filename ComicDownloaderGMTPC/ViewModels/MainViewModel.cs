@@ -1869,6 +1869,7 @@ public partial class MainViewModel : ViewModelBase
     public void HideHoverPreview()
     {
         IsHoverPreviewVisible = false;
+        ThumbnailPreviewService.Instance.StopActiveHighResPreview();
         if (ActiveHoverItem != null)
         {
             ActiveHoverItem.HighResPreviewBitmap = null;

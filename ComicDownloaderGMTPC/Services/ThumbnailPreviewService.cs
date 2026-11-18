@@ -11,7 +11,9 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using ComicDownloaderGMTPC.Models;
 using SkiaSharp;
@@ -122,6 +124,7 @@ public sealed class ThumbnailPreviewService
     private static readonly Random _jitter = new();
     private static readonly object _bitmapMemoryLock = new();
     private static ComicBookItem? _activeHighResItem;
+    private static CancellationTokenSource? _hoverAnimationCts;
 
     public int MaxCpuThreads { get; set; } = OperatingSystem.IsAndroid()
         ? 3
@@ -337,6 +340,13 @@ public sealed class ThumbnailPreviewService
                                         _activeHighResItem.HighResPreviewBitmap = null;
                                         try
                                         {
+                                            _hoverAnimationCts?.Cancel();
+                                            _hoverAnimationCts?.Dispose();
+                                            _hoverAnimationCts = null;
+                                        }
+                                        catch { }
+                                        try
+                                        {
                                             _activeHighResItem.ActiveAudioPlayer?.Stop();
                                             _activeHighResItem.ActiveAudioPlayer?.Dispose();
                                             _activeHighResItem.ActiveAudioPlayer = null;
@@ -365,6 +375,13 @@ public sealed class ThumbnailPreviewService
                                             _activeHighResItem.HighResPreviewBitmap = null;
                                             try
                                             {
+                                                _hoverAnimationCts?.Cancel();
+                                                _hoverAnimationCts?.Dispose();
+                                                _hoverAnimationCts = null;
+                                            }
+                                            catch { }
+                                            try
+                                            {
                                                 _activeHighResItem.ActiveAudioPlayer?.Stop();
                                                 _activeHighResItem.ActiveAudioPlayer?.Dispose();
                                                 _activeHighResItem.ActiveAudioPlayer = null;
@@ -388,6 +405,12 @@ public sealed class ThumbnailPreviewService
                             }
                             catch { }
                         });
+
+                        // Nếu là Animated GIF/WebP (nhiều hơn 1 frame): tự động kích hoạt vòng lặp phát hoạt ảnh siêu mượt
+                        if (AnimatedPagePlayer.IsAnimatedImage(bytes, out int frameCount, out _, out _) && frameCount > 1)
+                        {
+                            StartHoverAnimationLoop(item, bytes, ct);
+                        }
                     }
                 }
             }
@@ -558,31 +581,52 @@ public sealed class ThumbnailPreviewService
             await RunOnUiAsync(() => TryLoadItemMetadataCache(cacheDir, item));
         }
 
-        // Nếu đã có Bitmap nạp vào UI thì bỏ qua
-        if (item.ThumbnailBitmap != null && item.HasThumbnailFile) return;
-
         bool isRule34 = (item.Domain != null && item.Domain.Contains("rule34", StringComparison.OrdinalIgnoreCase))
                      || (!string.IsNullOrWhiteSpace(item.Url) && item.Url.Contains("rule34", StringComparison.OrdinalIgnoreCase));
 
-        // Dọn dẹp cache hỏng: nếu file cache trên đĩa là video thô (WebM) do các phiên bản trước tải nhầm,
-        // hoặc file không thể giải mã thành Bitmap, tự động xóa để tải lại thumbnail ảnh tĩnh/gif chuẩn từ CDN
+        // Dọn dẹp cache hỏng: nếu file cache trên đĩa là video thô (.webm/.mp4) do các phiên bản trước tải nhầm,
+        // hoặc là poster card giả lập JPEG < 25KB do WMF fallback sinh ra thay vì thumbnail GIF từ CDN,
+        // tự động xóa để tải lại thumbnail ảnh tĩnh/gif chuẩn từ CDN
         if (File.Exists(originalFile))
         {
             try
             {
-                byte[] checkBytes = new byte[Math.Min(1024, (int)new FileInfo(originalFile).Length)];
-                using (var fs = File.OpenRead(originalFile))
+                var fi = new FileInfo(originalFile);
+                if (fi.Length > 0)
                 {
-                    fs.ReadExactly(checkBytes);
-                }
-                if (isRule34 && (VideoThumbnailService.IsVideoData(checkBytes) || VideoThumbnailService.IsVideoFile(originalFile)))
-                {
-                    File.Delete(originalFile);
-                    if (File.Exists(thumbFile)) File.Delete(thumbFile);
+                    byte[] checkBytes = new byte[Math.Min(1024, (int)fi.Length)];
+                    using (var fs = File.OpenRead(originalFile))
+                    {
+                        fs.ReadExactly(checkBytes);
+                    }
+
+                    bool isLegacyPosterCard = false;
+                    // Poster card giả lập do CreatePosterCardFromInfo sinh ra có kích thước JPEG nhỏ (8KB - 20KB)
+                    if (isRule34 && fi.Length < 25000 && checkBytes.Length >= 2 && checkBytes[0] == 0xFF && checkBytes[1] == 0xD8)
+                    {
+                        isLegacyPosterCard = true;
+                    }
+
+                    if (isRule34 && (isLegacyPosterCard || VideoThumbnailService.IsVideoData(checkBytes) || VideoThumbnailService.IsVideoFile(originalFile)))
+                    {
+                        try { File.Delete(originalFile); } catch { }
+                        if (File.Exists(thumbFile)) { try { File.Delete(thumbFile); } catch { } }
+                        await RunOnUiAsync(() =>
+                        {
+                            if (isLegacyPosterCard)
+                            {
+                                item.ThumbnailBitmap = null;
+                                item.HighResPreviewBitmap = null;
+                            }
+                        });
+                    }
                 }
             }
             catch { }
         }
+
+        // Nếu đã có Bitmap hợp lệ nạp vào UI thì bỏ qua
+        if (item.ThumbnailBitmap != null && item.HasThumbnailFile) return;
 
         // Kiểm tra xem đã có sẵn file cache trên ổ đĩa chưa (nạp tức thì không cần chờ Semaphore mạng)
         if (File.Exists(thumbFile) && new FileInfo(thumbFile).Length > 0)
@@ -987,6 +1031,13 @@ public sealed class ThumbnailPreviewService
             bool isVideo = VideoThumbnailService.IsVideoData(bytes) || VideoThumbnailService.IsVideoFile(imageUrl);
             if (isVideo)
             {
+                // Với Rule34: Tuyệt đối không dùng video làm thumbnail (chỉ dùng ảnh tĩnh hoặc thumb.gif từ web)
+                if (imageUrl.Contains("rule34", StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrWhiteSpace(refererUrl) && refererUrl.Contains("rule34", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return false;
+                }
+
                 string ext = Path.GetExtension(imageUrl);
                 if (string.IsNullOrEmpty(ext)) ext = ".webm";
 
@@ -1047,12 +1098,15 @@ public sealed class ThumbnailPreviewService
         if (!forceFreshResolve && !string.IsNullOrWhiteSpace(item.CoverUrl) && !IsPlaceholderImageUrl(item.CoverUrl) && !_failedUrlCache.ContainsKey(item.CoverUrl))
         {
             string cover = item.CoverUrl;
-            if (isRule34 && (cover.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) || cover.Contains(".webm?")))
+            if (isRule34 && (cover.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) || cover.Contains(".webm?") || cover.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) || cover.Contains(".mp4?")))
             {
-                string gifCover = Regex.Replace(cover, @"\.webm(?=\?|$)", ".gif", RegexOptions.IgnoreCase);
+                string gifCover = Regex.Replace(cover, @"\.(webm|mp4)(?=\?|$)", ".gif", RegexOptions.IgnoreCase);
                 AddCandidate(gifCover, link);
             }
-            AddCandidate(cover, link);
+            else
+            {
+                AddCandidate(cover, link);
+            }
         }
 
         if (string.IsNullOrWhiteSpace(link)) return urls;
@@ -1332,24 +1386,46 @@ public sealed class ThumbnailPreviewService
                             using var doc = JsonDocument.Parse(json);
                             if (doc.RootElement.TryGetProperty("image", out var imgObj))
                             {
+                                bool isVideoPost = false;
+                                if (imgObj.TryGetProperty("format", out var fmtProp))
+                                {
+                                    string fmt = fmtProp.GetString() ?? string.Empty;
+                                    if (fmt.Equals("webm", StringComparison.OrdinalIgnoreCase) || fmt.Equals("mp4", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        isVideoPost = true;
+                                    }
+                                }
+
                                 if (imgObj.TryGetProperty("representations", out var reps))
                                 {
-                                    void AddRule34Rep(string? repUrl)
+                                    if (isVideoPost || item.IsVideoItem)
                                     {
-                                        if (string.IsNullOrWhiteSpace(repUrl)) return;
-                                        // Philomena CDN luôn cung cấp thumb.gif cho video
-                                        if (repUrl.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) || repUrl.Contains(".webm?"))
+                                        // Philomena CDN luôn cung cấp thumb.gif, thumb_small.gif, thumb_tiny.gif cho video
+                                        // TUYỆT ĐỐI CHỈ THÊM CANDIDATE LÀ ẢNH GIF, KHÔNG ĐƯỢC THÊM URL VIDEO (.webm / .mp4)!
+                                        void AddRule34VideoGif(string? repUrl)
                                         {
-                                            string gifUrl = Regex.Replace(repUrl, @"\.webm(?=\?|$)", ".gif", RegexOptions.IgnoreCase);
+                                            if (string.IsNullOrWhiteSpace(repUrl)) return;
+                                            string gifUrl = Regex.Replace(repUrl, @"\.(webm|mp4)(?=\?|$)", ".gif", RegexOptions.IgnoreCase);
                                             AddCandidate(gifUrl, link);
                                         }
-                                        AddCandidate(repUrl, link);
-                                    }
 
-                                    if (reps.TryGetProperty("thumb", out var tProp)) AddRule34Rep(tProp.GetString());
-                                    if (reps.TryGetProperty("thumb_small", out var tsProp)) AddRule34Rep(tsProp.GetString());
-                                    if (reps.TryGetProperty("small", out var sProp)) AddRule34Rep(sProp.GetString());
-                                    if (reps.TryGetProperty("medium", out var mProp)) AddRule34Rep(mProp.GetString());
+                                        if (reps.TryGetProperty("thumb", out var tProp)) AddRule34VideoGif(tProp.GetString());
+                                        if (reps.TryGetProperty("thumb_small", out var tsProp)) AddRule34VideoGif(tsProp.GetString());
+                                        if (reps.TryGetProperty("thumb_tiny", out var ttProp)) AddRule34VideoGif(ttProp.GetString());
+                                    }
+                                    else
+                                    {
+                                        void AddRule34ImgRep(string? repUrl)
+                                        {
+                                            if (string.IsNullOrWhiteSpace(repUrl)) return;
+                                            AddCandidate(repUrl, link);
+                                        }
+
+                                        if (reps.TryGetProperty("medium", out var mProp)) AddRule34ImgRep(mProp.GetString());
+                                        if (reps.TryGetProperty("small", out var sProp)) AddRule34ImgRep(sProp.GetString());
+                                        if (reps.TryGetProperty("thumb", out var tProp)) AddRule34ImgRep(tProp.GetString());
+                                        if (reps.TryGetProperty("full", out var fProp)) AddRule34ImgRep(fProp.GetString());
+                                    }
                                 }
                                 if (imgObj.TryGetProperty("tags", out var tagsElem) && tagsElem.ValueKind == JsonValueKind.Array)
                                 {
@@ -1537,6 +1613,136 @@ public sealed class ThumbnailPreviewService
             if (_activeHighResItem != null && _activeHighResItem.IsVideoItem)
             {
                 _activeHighResItem.SeekRelative(deltaSeconds);
+            }
+        }
+    }
+
+    private void StartHoverAnimationLoop(ComicBookItem item, byte[] rawBytes, CancellationToken externalCt)
+    {
+        lock (_bitmapMemoryLock)
+        {
+            try
+            {
+                _hoverAnimationCts?.Cancel();
+                _hoverAnimationCts?.Dispose();
+            }
+            catch { }
+            _hoverAnimationCts = null;
+
+            if (!AnimatedPagePlayer.IsAnimatedImage(rawBytes, out int frameCount, out int origW, out int origH) || frameCount <= 1)
+            {
+                return;
+            }
+
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
+            _hoverAnimationCts = cts;
+            var token = cts.Token;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var data = SKData.CreateCopy(rawBytes);
+                    using var codec = SKCodec.Create(data);
+                    if (codec == null || codec.FrameCount <= 1) return;
+
+                    int count = codec.FrameCount;
+                    var frameInfos = codec.FrameInfo;
+                    int targetW = origW;
+                    int targetH = origH;
+                    if (targetW > 480 || targetH > 480)
+                    {
+                        float scale = Math.Min(480f / targetW, 480f / targetH);
+                        targetW = Math.Max(1, (int)(targetW * scale));
+                        targetH = Math.Max(1, (int)(targetH * scale));
+                    }
+
+                    var targetInfo = new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                    var origInfo = new SKImageInfo(origW, origH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                    using var baseBitmap = new SKBitmap(origInfo);
+                    IntPtr pixelsPtr = baseBitmap.GetPixels();
+
+                    var wbA = new WriteableBitmap(new PixelSize(targetW, targetH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+                    var wbB = new WriteableBitmap(new PixelSize(targetW, targetH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+                    bool useA = true;
+
+                    int currentFrame = 0;
+                    while (!token.IsCancellationRequested)
+                    {
+                        lock (_bitmapMemoryLock)
+                        {
+                            if (!ReferenceEquals(_activeHighResItem, item)) break;
+                        }
+
+                        int req = (frameInfos != null && currentFrame < frameInfos.Length) ? frameInfos[currentFrame].RequiredFrame : -1;
+                        var opts = (req == -1) ? new SKCodecOptions(currentFrame) : new SKCodecOptions(currentFrame, req);
+                        var res = codec.GetPixels(origInfo, pixelsPtr, opts);
+
+                        if (res == SKCodecResult.Success || res == SKCodecResult.IncompleteInput)
+                        {
+                            var curWb = useA ? wbA : wbB;
+                            using (var locked = curWb.Lock())
+                            {
+                                using var surface = SKSurface.Create(targetInfo, locked.Address, locked.RowBytes);
+                                var canvas = surface.Canvas;
+                                canvas.Clear(SKColors.Transparent);
+                                canvas.DrawBitmap(baseBitmap, new SKRect(0, 0, targetW, targetH));
+                            }
+
+                            await RunOnUiAsync(() =>
+                            {
+                                lock (_bitmapMemoryLock)
+                                {
+                                    if (!token.IsCancellationRequested && ReferenceEquals(_activeHighResItem, item))
+                                    {
+                                        item.HighResPreviewBitmap = curWb;
+                                    }
+                                }
+                            }).ConfigureAwait(false);
+
+                            useA = !useA;
+                        }
+
+                        int delay = 100;
+                        if (frameInfos != null && currentFrame < frameInfos.Length && frameInfos[currentFrame].Duration > 15)
+                        {
+                            delay = frameInfos[currentFrame].Duration;
+                        }
+                        await Task.Delay(Math.Max(33, delay), token).ConfigureAwait(false);
+                        currentFrame = (currentFrame + 1) % count;
+                    }
+                }
+                catch { }
+            }, token);
+        }
+    }
+
+    /// <summary>
+    /// Dừng hoàn toàn preview độ phân giải cao và vòng lặp animation động khi đóng popup preview
+    /// </summary>
+    public void StopActiveHighResPreview()
+    {
+        lock (_bitmapMemoryLock)
+        {
+            try
+            {
+                _hoverAnimationCts?.Cancel();
+                _hoverAnimationCts?.Dispose();
+            }
+            catch { }
+            _hoverAnimationCts = null;
+
+            if (_activeHighResItem != null)
+            {
+                _activeHighResItem.HighResPreviewBitmap = null;
+                try
+                {
+                    _activeHighResItem.ActiveAudioPlayer?.Stop();
+                    _activeHighResItem.ActiveAudioPlayer?.Dispose();
+                    _activeHighResItem.ActiveAudioPlayer = null;
+                }
+                catch { }
+                _activeHighResItem = null;
             }
         }
     }

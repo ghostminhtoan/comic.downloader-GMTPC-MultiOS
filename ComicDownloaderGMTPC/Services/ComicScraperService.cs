@@ -7243,10 +7243,10 @@ public class ComicScraperService
 
                         if (!string.IsNullOrWhiteSpace(rawCover))
                         {
-                            // Nếu là video WebM, Philomena/Rule34 CDN cung cấp thumbnail ảnh tĩnh/động dưới đuôi .gif
-                            if (rawCover.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) || rawCover.Contains(".webm?"))
+                            // Nếu là video WebM/MP4, Philomena/Rule34 CDN cung cấp thumbnail ảnh động dưới đuôi .gif
+                            if (isVideo || rawCover.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) || rawCover.Contains(".webm?") || rawCover.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) || rawCover.Contains(".mp4?"))
                             {
-                                book.CoverUrl = Regex.Replace(rawCover, @"\.webm(?=\?|$)", ".gif", RegexOptions.IgnoreCase);
+                                book.CoverUrl = Regex.Replace(rawCover, @"\.(webm|mp4)(?=\?|$)", ".gif", RegexOptions.IgnoreCase);
                             }
                             else
                             {
