@@ -114,13 +114,12 @@ public partial class MainView : UserControl
                 var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
                 bool isTyping = focused is TextBox || focused is AutoCompleteBox;
 
-                // Phím tắt tua video khi hover preview hoặc mở preview video (Windows & Linux):
+                // Phím tắt tua video cho tính năng Lọc ảnh song song (Dual Picture Sort) trên Windows, Linux & Android:
                 // Mũi tên Trái / Phải: tua lùi / tới 5s
                 // Ctrl + Trái / Phải: tua lùi / tới 10s
                 bool isDualSortVideo = vm.IsDualSortPreviewVisible && vm.IsDualSortPreviewAnimated;
-                bool isHoverVideo = vm.IsHoverPreviewVisible && (ThumbnailPreviewService.Instance.HasActiveVideo || vm.ActiveHoverItem?.IsVideoItem == true);
 
-                if (isDualSortVideo || isHoverVideo)
+                if (isDualSortVideo)
                 {
                     if (e.Key == Key.Space && !isTyping)
                     {
@@ -177,10 +176,6 @@ public partial class MainView : UserControl
                         {
                             vm.SeekDualSortVideoRelative(delta);
                         }
-                        if (isHoverVideo)
-                        {
-                            ThumbnailPreviewService.Instance.SeekActiveVideoRelative(delta);
-                        }
                         e.Handled = true;
                         return;
                     }
@@ -193,10 +188,6 @@ public partial class MainView : UserControl
                         {
                             vm.SeekDualSortVideoRelative(delta);
                         }
-                        if (isHoverVideo)
-                        {
-                            ThumbnailPreviewService.Instance.SeekActiveVideoRelative(delta);
-                        }
                         e.Handled = true;
                         return;
                     }
@@ -204,7 +195,7 @@ public partial class MainView : UserControl
 
                 // Ngay khi nhấn phím Shift trên Windows & Linux: lập tức ẩn Popup Preview nếu đang hiện để người dùng nhìn rõ dải truyện cần chọn
                 if ((e.Key == Key.LeftShift || e.Key == Key.RightShift || e.KeyModifiers.HasFlag(KeyModifiers.Shift)) &&
-                    vm.IsHoverPreviewVisible && !isHoverVideo)
+                    vm.IsHoverPreviewVisible)
                 {
                     vm.HideHoverPreview();
                 }

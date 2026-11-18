@@ -277,24 +277,17 @@ public sealed class ThumbnailPreviewService
             _failedUrlCache.TryRemove(cachedUrl, out _);
         }
 
-        // Với item Video: nếu chưa có thumbnail, hiển thị ngay Poster Card ban đầu với icon Play để người dùng không nhìn thấy khoảng trống hoặc NO IMG
-        if (item.IsVideoItem && item.HighResPreviewBitmap == null && item.ThumbnailBitmap == null)
+        // Với item Video: nếu chưa có thumbnail, chỉ hiển thị card ban đầu nếu không phải rule34 (rule34 có thumbnail trực tiếp từ web)
+        bool isRule34 = item.Domain != null && item.Domain.Contains("rule34", StringComparison.OrdinalIgnoreCase);
+        if (!isRule34 && item.IsVideoItem && item.HighResPreviewBitmap == null && item.ThumbnailBitmap == null)
         {
             try
             {
-                var initialPoster = VideoThumbnailService.GetVideoThumbnail(item.Title, 480, 480, out _, out _);
-                if (initialPoster == null)
+                byte[]? posterCardBytes = VideoThumbnailService.CreatePosterCardFromInfo(item.Title, 0, item.VideoBadge, 480, 360, out _, out _);
+                if (posterCardBytes != null && posterCardBytes.Length > 0)
                 {
-                    byte[]? posterCardBytes = VideoThumbnailService.CreatePosterCardFromInfo(item.Title, 0, item.VideoBadge, 480, 360, out _, out _);
-                    if (posterCardBytes != null && posterCardBytes.Length > 0)
-                    {
-                        using var ms = new MemoryStream(posterCardBytes);
-                        initialPoster = new Bitmap(ms);
-                    }
-                }
-
-                if (initialPoster != null)
-                {
+                    using var ms = new MemoryStream(posterCardBytes);
+                    var initialPoster = new Bitmap(ms);
                     await RunOnUiAsync(() =>
                     {
                         if (item.ThumbnailBitmap == null && item.HighResPreviewBitmap == null)
@@ -324,7 +317,8 @@ public sealed class ThumbnailPreviewService
                 byte[] bytes = await File.ReadAllBytesAsync(originalFile, ct).ConfigureAwait(false);
                 if (bytes.Length > 0)
                 {
-                    if (VideoThumbnailService.IsVideoFile(originalFile) || VideoThumbnailService.IsVideoData(bytes))
+                    // Với rule34: tuyệt đối không load/trích xuất video, chỉ load thumbnail tĩnh có sẵn từ web
+                    if (!isRule34 && (VideoThumbnailService.IsVideoFile(originalFile) || VideoThumbnailService.IsVideoData(bytes)))
                     {
                         var videoHighResBmp = VideoThumbnailService.GetVideoThumbnail(originalFile, 640, 640, out _, out _);
                         if (videoHighResBmp != null)
@@ -396,283 +390,8 @@ public sealed class ThumbnailPreviewService
             catch { }
         }
 
-        // Tự động phát (Autoplay Loop) video trong Popup Preview khi hover vào item video
-        if (item.IsVideoItem)
-        {
-            try
-            {
-                string? videoTarget = null;
-                if (!string.IsNullOrWhiteSpace(item.LocalDirectory) && Directory.Exists(item.LocalDirectory))
-                {
-                    videoTarget = Directory.GetFiles(item.LocalDirectory, "*.*").FirstOrDefault(f => VideoThumbnailService.IsVideoFile(f));
-                }
-                if (string.IsNullOrWhiteSpace(videoTarget) && !string.IsNullOrWhiteSpace(item.OriginalCoverLocalPath) && File.Exists(item.OriginalCoverLocalPath))
-                {
-                    videoTarget = item.OriginalCoverLocalPath;
-                }
-                if (string.IsNullOrWhiteSpace(videoTarget) && File.Exists(originalFile))
-                {
-                    videoTarget = originalFile;
-                }
-
-                if (!string.IsNullOrWhiteSpace(videoTarget))
-                {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            long durMs = VideoThumbnailService.GetVideoDurationMs(videoTarget);
-                            await RunOnUiAsync(() =>
-                            {
-                                item.VideoDurationMs = durMs;
-                                item.VideoDurationText = VideoMetadataParser.FormatDuration(durMs);
-                                item.VideoCurrentTimeText = "00:00";
-                                item.VideoSeekTimeText = durMs > 0 ? $"00:00 / {item.VideoDurationText}" : "00:00";
-                            });
-
-                            // 1. Trên Windows: Sử dụng Media Foundation Player phần cứng giải mã tuần tự siêu tốc (25-30 FPS, 0 giây chờ đợi)
-                            if (OperatingSystem.IsWindows())
-                            {
-                                var player = WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer.Create(videoTarget);
-                                if (player != null)
-                                {
-                                    await RunOnUiAsync(() =>
-                                    {
-                                        item.ActiveVideoPlayer = player;
-                                        item.IsVideoAutoPlaying = true;
-                                        try
-                                        {
-                                            item.ActiveAudioPlayer?.Stop();
-                                            item.ActiveAudioPlayer?.Dispose();
-                                            item.ActiveAudioPlayer = NativeAudioPlaybackService.CreateAndPlay(videoTarget, 0);
-                                        }
-                                        catch { }
-                                    });
-
-                                    try
-                                    {
-                                        while (!ct.IsCancellationRequested)
-                                        {
-                                            bool isActive;
-                                            lock (_bitmapMemoryLock)
-                                            {
-                                                isActive = ReferenceEquals(_activeHighResItem, item);
-                                            }
-                                            if (!isActive) break;
-
-                                            if (!item.IsVideoPaused)
-                                            {
-                                                long targetAudioMs;
-                                                double curSec = item.ActiveAudioPlayer?.CurrentPositionSeconds ?? -1;
-                                                long curAudioMs = (long)(curSec * 1000.0);
-
-                                                if (item.LastSeekTargetMs >= 0)
-                                                {
-                                                    double elapsedMs = (System.Diagnostics.Stopwatch.GetTimestamp() - item.LastSeekTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-                                                    if (elapsedMs < 300 && (curAudioMs < 0 || Math.Abs(curAudioMs - item.LastSeekTargetMs) > 400))
-                                                    {
-                                                        targetAudioMs = item.LastSeekTargetMs + (long)elapsedMs;
-                                                    }
-                                                    else
-                                                    {
-                                                        item.LastSeekTargetMs = -1;
-                                                        targetAudioMs = curAudioMs >= 0 ? curAudioMs : item.CurrentPlaybackPositionMs;
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    targetAudioMs = curAudioMs >= 0 ? curAudioMs : item.CurrentPlaybackPositionMs;
-                                                }
-
-                                                var nextBmp = player.ReadNextFrame(480, 480, out long frameMs, targetAudioMs);
-                                                if (nextBmp != null)
-                                                {
-                                                    await RunOnUiAsync(() =>
-                                                    {
-                                                        lock (_bitmapMemoryLock)
-                                                        {
-                                                            if (ReferenceEquals(_activeHighResItem, item))
-                                                            {
-                                                                var old = item.HighResPreviewBitmap;
-                                                                item.HighResPreviewBitmap = nextBmp;
-                                                                old?.Dispose();
-                                                                item.UpdatePlaybackTime(frameMs);
-                                                            }
-                                                            else
-                                                            {
-                                                                nextBmp.Dispose();
-                                                            }
-                                                        }
-                                                    });
-
-                                                    long diff = frameMs - targetAudioMs;
-                                                    if (diff > 2)
-                                                    {
-                                                        int sleepMs = (int)Math.Min(diff, 33);
-                                                        await Task.Delay(sleepMs, ct).ConfigureAwait(false);
-                                                    }
-                                                    continue;
-                                                }
-                                                else
-                                                {
-                                                    try { item.ActiveAudioPlayer?.Seek(0); } catch { }
-                                                }
-                                            }
-
-                                            await Task.Delay(33, ct).ConfigureAwait(false); // 30 FPS mượt mà
-                                        }
-                                    }
-                                    finally
-                                    {
-                                        player.Dispose();
-                                        await RunOnUiAsync(() =>
-                                        {
-                                            if (item.ActiveVideoPlayer == player) item.ActiveVideoPlayer = null;
-                                            try
-                                            {
-                                                item.ActiveAudioPlayer?.Stop();
-                                                item.ActiveAudioPlayer?.Dispose();
-                                                item.ActiveAudioPlayer = null;
-                                            }
-                                            catch { }
-                                        });
-                                    }
-                                    return;
-                                }
-                            }
-
-                            // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát ở tốc độ 25 FPS (> 20 FPS) cùng nhịp Audio 1:1
-                            var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(videoTarget, maxFrames: 24, maxWidth: 480, maxHeight: 480, ct: ct).ConfigureAwait(false);
-                            if (frames != null && frames.Count >= 2)
-                            {
-                                await RunOnUiAsync(() =>
-                                {
-                                    item.VideoCachedFrames = frames;
-                                    item.IsVideoAutoPlaying = true;
-                                    item.CurrentPlaybackPositionMs = 0;
-                                    try
-                                    {
-                                        item.ActiveAudioPlayer?.Stop();
-                                        item.ActiveAudioPlayer?.Dispose();
-                                        item.ActiveAudioPlayer = NativeAudioPlaybackService.CreateAndPlay(videoTarget, 0);
-                                    }
-                                    catch { }
-                                });
-
-                                int lastRenderedFIdx = -1;
-                                long lastReportedSec = -1;
-                                var playbackSw = System.Diagnostics.Stopwatch.StartNew();
-
-                                while (!ct.IsCancellationRequested)
-                                {
-                                    bool isActive;
-                                    lock (_bitmapMemoryLock)
-                                    {
-                                        isActive = ReferenceEquals(_activeHighResItem, item);
-                                    }
-                                    if (!isActive) break;
-
-                                    if (!item.IsVideoPaused)
-                                    {
-                                        long curMs;
-                                        double curSec = item.ActiveAudioPlayer?.CurrentPositionSeconds ?? -1;
-                                        long curAudioMs = (long)(curSec * 1000.0);
-
-                                        if (item.LastSeekTargetMs >= 0)
-                                        {
-                                            double elapsedMs = (System.Diagnostics.Stopwatch.GetTimestamp() - item.LastSeekTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-                                            if (elapsedMs < 300 && (curAudioMs < 0 || Math.Abs(curAudioMs - item.LastSeekTargetMs) > 400))
-                                            {
-                                                curMs = item.LastSeekTargetMs + (long)elapsedMs;
-                                            }
-                                            else
-                                            {
-                                                item.LastSeekTargetMs = -1;
-                                                curMs = curAudioMs >= 0 ? curAudioMs : (long)playbackSw.Elapsed.TotalMilliseconds;
-                                            }
-                                        }
-                                        else
-                                        {
-                                            curMs = curAudioMs >= 0 ? curAudioMs : (long)playbackSw.Elapsed.TotalMilliseconds;
-                                        }
-
-                                        if (durMs > 0 && curMs >= durMs)
-                                        {
-                                            // Hết video -> lặp lại
-                                            playbackSw.Restart();
-                                            curMs = 0;
-                                            try { item.ActiveAudioPlayer?.Seek(0); } catch { }
-                                        }
-
-                                        // Tính toán frame tương ứng với thời gian thực của Audio (tránh fastforward tua nhanh)
-                                        int targetFIdx = durMs > 0 
-                                            ? (int)Math.Clamp(Math.Round((double)curMs / durMs * (frames.Count - 1)), 0, frames.Count - 1)
-                                            : 0;
-
-                                        if (targetFIdx != lastRenderedFIdx)
-                                        {
-                                            lastRenderedFIdx = targetFIdx;
-                                            var curBmp = frames[targetFIdx];
-
-                                            await RunOnUiAsync(() =>
-                                            {
-                                                lock (_bitmapMemoryLock)
-                                                {
-                                                    if (ReferenceEquals(_activeHighResItem, item))
-                                                    {
-                                                        item.HighResPreviewBitmap = curBmp;
-                                                    }
-                                                }
-                                            });
-                                        }
-
-                                        long curSecFloor = curMs / 1000;
-                                        if (curSecFloor != lastReportedSec)
-                                        {
-                                            lastReportedSec = curSecFloor;
-                                            await RunOnUiAsync(() =>
-                                            {
-                                                lock (_bitmapMemoryLock)
-                                                {
-                                                    if (ReferenceEquals(_activeHighResItem, item))
-                                                    {
-                                                        item.UpdatePlaybackTime(curMs);
-                                                    }
-                                                }
-                                            });
-                                        }
-                                    }
-
-                                    await Task.Delay(25, ct).ConfigureAwait(false);
-                                }
-                            }
-                        }
-                        catch { }
-                        finally
-                        {
-                            await RunOnUiAsync(() =>
-                            {
-                                lock (_bitmapMemoryLock)
-                                {
-                                    if (ReferenceEquals(_activeHighResItem, item))
-                                    {
-                                        item.IsVideoAutoPlaying = false;
-                                        try
-                                        {
-                                            item.ActiveAudioPlayer?.Stop();
-                                            item.ActiveAudioPlayer?.Dispose();
-                                            item.ActiveAudioPlayer = null;
-                                        }
-                                        catch { }
-                                    }
-                                }
-                            });
-                        }
-                    }, ct);
-                }
-            }
-            catch { }
-        }
+        // [QUY TẮC BẮT BUỘC]: Preview video CHỈ ĐƯỢC PHÉP hoạt động trong tính năng Lọc ảnh song song (Dual Picture Sort).
+        // Trong hàng đợi tải (Hover Preview), tuyệt đối không load video hay chạy video player để tránh popup WMP và crash 0xc0000005.
 
         if (string.IsNullOrWhiteSpace(item.PreviewTagsText) || string.IsNullOrWhiteSpace(item.PreviewType) || string.IsNullOrWhiteSpace(item.PreviewLanguage))
         {
