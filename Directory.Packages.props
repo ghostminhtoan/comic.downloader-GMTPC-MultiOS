@@ -19,5 +19,7 @@
     <PackageVersion Include="SharpCompress" Version="0.38.0" />
     <PackageVersion Include="WebAssembly" Version="2.1.0" />
     <PackageVersion Include="Xamarin.AndroidX.Core.SplashScreen" Version="1.0.1.15" />
+    <PackageVersion Include="HanumanInstitute.LibMpv" Version="0.10.1" />
+    <PackageVersion Include="Endpne.LibMPV.Windows" Version="0.41.0" />
   </ItemGroup>
 </Project>

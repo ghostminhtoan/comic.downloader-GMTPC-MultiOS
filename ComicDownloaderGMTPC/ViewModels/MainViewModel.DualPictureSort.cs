@@ -517,6 +517,7 @@ public partial class MainViewModel
     private long _dualSortLastSeekMs = -1;
     private long _dualSortLastSeekTicks = 0;
     private WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer? _dualSortActivePlayer;
+    private MpvVideoPlayerService? _dualSortMpvPlayer;
     private NativeAudioPlaybackService? _dualSortAudioPlayer;
     private WriteableBitmap? _dualSortWbA;
     private WriteableBitmap? _dualSortWbB;
@@ -550,6 +551,7 @@ public partial class MainViewModel
     {
         IsDualSortVideoMuted = !IsDualSortVideoMuted;
         _dualSortAudioPlayer?.SetMute(IsDualSortVideoMuted);
+        _dualSortMpvPlayer?.SetMute(IsDualSortVideoMuted);
         OnPropertyChanged(nameof(DualSortVideoVolumeIcon));
         ShowVideoVolumeHud(IsDualSortVideoMuted ? "ĐÃ TẮT TIẾNG 🔇" : $"ÂM LƯỢNG: {Math.Round(DualSortVideoVolume)}% 🔊");
     }
@@ -561,9 +563,11 @@ public partial class MainViewModel
         {
             IsDualSortVideoMuted = false;
             _dualSortAudioPlayer?.SetMute(false);
+            _dualSortMpvPlayer?.SetMute(false);
         }
         DualSortVideoVolume = newVol;
         _dualSortAudioPlayer?.SetVolume((int)newVol);
+        _dualSortMpvPlayer?.SetVolume((int)newVol);
         OnPropertyChanged(nameof(DualSortVideoVolumeIcon));
         ShowVideoVolumeHud($"ÂM LƯỢNG: {Math.Round(newVol)}% {(newVol <= 0 ? "🔇" : "🔊")}");
     }
@@ -574,8 +578,10 @@ public partial class MainViewModel
         {
             IsDualSortVideoMuted = false;
             _dualSortAudioPlayer?.SetMute(false);
+            _dualSortMpvPlayer?.SetMute(false);
         }
         _dualSortAudioPlayer?.SetVolume((int)value);
+        _dualSortMpvPlayer?.SetVolume((int)value);
         OnPropertyChanged(nameof(DualSortVideoVolumeIcon));
     }
 
@@ -601,6 +607,7 @@ public partial class MainViewModel
         };
         DualSortPlaybackSpeed = next;
         _dualSortAudioPlayer?.SetPlaybackRate(next);
+        _dualSortMpvPlayer?.SetSpeed(next);
         OnPropertyChanged(nameof(DualSortPlaybackSpeedText));
         ShowVideoVolumeHud($"TỐC ĐỘ PHÁT: {DualSortPlaybackSpeedText} ⚡");
     }
@@ -718,10 +725,12 @@ public partial class MainViewModel
         if (IsDualSortVideoPaused)
         {
             try { _dualSortAudioPlayer?.Pause(); } catch { }
+            try { _dualSortMpvPlayer?.Pause(); } catch { }
         }
         else
         {
             try { _dualSortAudioPlayer?.Resume(); } catch { }
+            try { _dualSortMpvPlayer?.Play(); } catch { }
         }
         OnPropertyChanged(nameof(DualSortVideoPlayPauseIcon));
     }
@@ -740,6 +749,18 @@ public partial class MainViewModel
         if (!IsScrubbingDragging)
         {
             try { _dualSortAudioPlayer?.Seek(targetMs / 1000.0); } catch { }
+        }
+
+        // 0.1. Tua tức thì trên Mpv Video Player Engine (libmpv)
+        if (_dualSortMpvPlayer != null)
+        {
+            try { _dualSortMpvPlayer.Seek(targetMs); } catch { }
+            var targetWb = (DualSortPreviewBitmap == _dualSortWbA) ? (_dualSortWbB ?? _dualSortWbA) : (_dualSortWbA ?? _dualSortWbB);
+            if (targetWb != null && _dualSortMpvPlayer.RenderFrameDirect(targetWb))
+            {
+                DualSortPreviewBitmap = targetWb;
+                return;
+            }
         }
 
         // 1. Tua tức thì trên Media Foundation Player phần cứng (Windows)
@@ -2501,6 +2522,115 @@ public partial class MainViewModel
                         }
                     }
 
+                    // 1. ƯU TIÊN HÀNG ĐẦU: Sử dụng MPV Video Engine (libmpv đa nền tảng, âm thanh + hình ảnh tự động đồng bộ 100%, hỗ trợ mọi codec .webm, .mp4, .mkv, .ts...)
+                    if (MpvVideoPlayerService.IsSupported)
+                    {
+                        var mpvPlayer = MpvVideoPlayerService.Create(item.FilePath);
+                        if (mpvPlayer != null)
+                        {
+                            _dualSortMpvPlayer = mpvPlayer;
+                            int vW = mpvPlayer.VideoWidth > 0 ? mpvPlayer.VideoWidth : 640;
+                            int vH = mpvPlayer.VideoHeight > 0 ? mpvPlayer.VideoHeight : 360;
+
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                item.UpdateDimensions(vW, vH);
+                            });
+
+                            _dualSortWbA = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+                            _dualSortWbB = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+
+                            mpvPlayer.SetVolume((int)DualSortVideoVolume);
+                            mpvPlayer.SetMute(IsDualSortVideoMuted);
+                            mpvPlayer.SetSpeed(DualSortPlaybackSpeed);
+
+                            if (mpvPlayer.RenderFrameDirect(_dualSortWbA))
+                            {
+                                Dispatcher.UIThread.Post(() =>
+                                {
+                                    if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
+                                    {
+                                        DualSortPreviewBitmap = _dualSortWbA;
+                                    }
+                                });
+                            }
+
+                            try
+                            {
+                                bool useA = false;
+                                string lastReportedTimeStr = string.Empty;
+                                while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                {
+                                    if (!IsDualSortVideoPaused)
+                                    {
+                                        var targetWb = useA ? _dualSortWbA : _dualSortWbB;
+                                        if (targetWb != null)
+                                        {
+                                            long curMs = mpvPlayer.CurrentPositionMs;
+                                            if (curMs > 0) _dualSortVideoCurrentPlaybackMs = curMs;
+
+                                            if (DualSortLooperPointAMs.HasValue && DualSortLooperPointBMs.HasValue)
+                                            {
+                                                long loopStart = DualSortLooperPointAMs.Value;
+                                                long loopEnd = DualSortLooperPointBMs.Value;
+                                                if (curMs >= loopEnd || curMs < loopStart - 500)
+                                                {
+                                                    mpvPlayer.Seek(loopStart);
+                                                }
+                                            }
+
+                                            if (mpvPlayer.RenderFrameDirect(targetWb))
+                                            {
+                                                var curRenderedWb = targetWb;
+                                                Dispatcher.UIThread.Post(() =>
+                                                {
+                                                    if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                    {
+                                                        DualSortPreviewBitmap = curRenderedWb;
+                                                    }
+                                                }, DispatcherPriority.Render);
+
+                                                string curTimeStr = VideoMetadataParser.FormatDuration(curMs);
+                                                if (curTimeStr != lastReportedTimeStr)
+                                                {
+                                                    lastReportedTimeStr = curTimeStr;
+                                                    double pct = durMs > 0 ? (double)curMs / durMs * 100.0 : 0;
+                                                    Dispatcher.UIThread.Post(() =>
+                                                    {
+                                                        if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                        {
+                                                            _isInternalDualSortSeekUpdating = true;
+                                                            try
+                                                            {
+                                                                DualSortVideoSeekPosition = pct;
+                                                                UpdateDualSortVideoTimeText(curMs);
+                                                            }
+                                                            finally
+                                                            {
+                                                                _isInternalDualSortSeekUpdating = false;
+                                                            }
+                                                        }
+                                                    }, DispatcherPriority.Background);
+                                                }
+
+                                                useA = !useA;
+                                            }
+                                        }
+                                    }
+
+                                    double spd = DualSortPlaybackSpeed > 0 ? DualSortPlaybackSpeed : 1.0;
+                                    await Task.Delay((int)Math.Max(10, 25 / spd), cts.Token);
+                                }
+                            }
+                            finally
+                            {
+                                mpvPlayer.Dispose();
+                                if (_dualSortMpvPlayer == mpvPlayer) _dualSortMpvPlayer = null;
+                            }
+                            return;
+                        }
+                    }
+
                     // Khởi động audio native đa nền tảng ngay lập tức (Windows WMP windowless / Android MediaPlayer / Linux ffplay)
                     try
                     {
@@ -2513,7 +2643,7 @@ public partial class MainViewModel
                     }
                     catch { }
 
-                    // 1. Trên Windows: Sử dụng Media Foundation Player phần cứng GPU (30 FPS, 0 giây chờ đợi, Double Buffering Zero-Lag)
+                    // 2. Dự phòng trên Windows: Sử dụng Media Foundation Player phần cứng GPU (30 FPS, 0 giây chờ đợi, Double Buffering Zero-Lag)
                     if (OperatingSystem.IsWindows())
                     {
                         var player = WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer.Create(item.FilePath);
@@ -2935,6 +3065,9 @@ public partial class MainViewModel
         }
         catch { }
         _dualSortAudioPlayer = null;
+
+        try { _dualSortMpvPlayer?.Dispose(); } catch { }
+        _dualSortMpvPlayer = null;
 
         if (OperatingSystem.IsWindows())
         {

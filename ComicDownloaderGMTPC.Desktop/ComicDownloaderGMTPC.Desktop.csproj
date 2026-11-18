@@ -23,7 +23,19 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Endpne.LibMPV.Windows" />
   </ItemGroup>
+
+  <Target Name="CopyLibMpvDll" AfterTargets="Build;Publish">
+    <Copy SourceFiles="$(NuGetPackageRoot)\endpne.libmpv.windows\0.41.0\build\x64\libmpv-2.dll"
+          DestinationFolder="$(OutputPath)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(NuGetPackageRoot)\endpne.libmpv.windows\0.41.0\build\x64\libmpv-2.dll')" />
+    <Copy SourceFiles="$(NuGetPackageRoot)\endpne.libmpv.windows\0.41.0\build\x64\libmpv-2.dll"
+          DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true"
+          Condition="'$(PublishDir)' != '' And Exists('$(NuGetPackageRoot)\endpne.libmpv.windows\0.41.0\build\x64\libmpv-2.dll')" />
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\ComicDownloaderGMTPC\ComicDownloaderGMTPC.csproj" />

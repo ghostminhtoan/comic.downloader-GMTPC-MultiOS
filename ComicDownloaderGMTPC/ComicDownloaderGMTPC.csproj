@@ -26,5 +26,6 @@
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SharpCompress" />
     <PackageReference Include="WebAssembly" />
+    <PackageReference Include="HanumanInstitute.LibMpv" />
   </ItemGroup>
 </Project>

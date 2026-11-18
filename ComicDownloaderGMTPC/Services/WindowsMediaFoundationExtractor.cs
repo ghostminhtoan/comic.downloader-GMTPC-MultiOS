@@ -533,6 +533,15 @@ public static class WindowsMediaFoundationExtractor
                                                 videoH = totalPixels / Math.Max(1, videoW);
                                             }
                                         }
+
+                                        if (videoH > 0 && defaultStride == 0)
+                                        {
+                                            int calcStride = probeCbLength / videoH;
+                                            if (calcStride >= videoW * 4)
+                                            {
+                                                defaultStride = calcStride;
+                                            }
+                                        }
                                     }
                                 }
                                 finally
@@ -774,6 +783,11 @@ public static class WindowsMediaFoundationExtractor
 
                             int srcStride = _stride;
                             if (srcStride < _videoW * 4) srcStride = _videoW * 4;
+                            if (_videoH > 0 && cbLength >= _videoH * 4)
+                            {
+                                int calc = cbLength / _videoH;
+                                if (calc >= _videoW * 4) srcStride = Math.Max(srcStride, calc);
+                            }
 
                             // 1. Tối ưu siêu tốc GPU (0.1ms, 0% CPU): 64-bit vector copy từng hàng kèm ép Alpha = 0xFF (255 Opaque)
                             // Hỗ trợ cả Bottom-Up lẫn Top-Down DIB bitmap một cách hoàn hảo
