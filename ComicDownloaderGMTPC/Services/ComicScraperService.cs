@@ -4470,6 +4470,23 @@ public class ComicScraperService
                             var pageBatch = new List<ComicBookItem>();
                             string latestTitle = string.Empty;
 
+                            // Thu thập trước tất cả tag_ids của các ảnh trong trang để prefetch 1 lần duy nhất
+                            var allPageTagIds = new List<long>();
+                            foreach (var img in imagesElem.EnumerateArray())
+                            {
+                                if (img.TryGetProperty("tag_ids", out var tidsElem) && tidsElem.ValueKind == JsonValueKind.Array)
+                                {
+                                    foreach (var tid in tidsElem.EnumerateArray())
+                                    {
+                                        if (tid.TryGetInt64(out long lId)) allPageTagIds.Add(lId);
+                                    }
+                                }
+                            }
+                            if (allPageTagIds.Count > 0)
+                            {
+                                await PrefetchRule34TagsAsync(allPageTagIds, ct).ConfigureAwait(false);
+                            }
+
                             foreach (var img in imagesElem.EnumerateArray())
                             {
                                 long imgId = 0;
@@ -4479,23 +4496,7 @@ public class ComicScraperService
                                 string itemUrl = $"https://www.rule34.lol/images/{imgId}";
                                 if (!seenUrls.Add(itemUrl)) continue;
 
-                                string itemName = string.Empty;
-                                if (img.TryGetProperty("name", out var nameProp)) itemName = nameProp.GetString() ?? string.Empty;
-
-                                string format = img.TryGetProperty("format", out var fmtProp) ? fmtProp.GetString() ?? "media" : "media";
-
-                                // Xác định Title đẹp: Nếu có tên gốc thì lấy tên gốc (loại bỏ query params), nếu không thì đặt theo ID và format
-                                string itemTitle;
-                                if (!string.IsNullOrWhiteSpace(itemName) && !itemName.StartsWith("large.", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    int qIdx = itemName.IndexOf('?');
-                                    string cleanName = qIdx > 0 ? itemName.Substring(0, qIdx) : itemName;
-                                    itemTitle = cleanName;
-                                }
-                                else
-                                {
-                                    itemTitle = $"rule34 Post {imgId} ({format.ToUpperInvariant()})";
-                                }
+                                string itemTitle = await GenerateRule34ImageTitleAsync(imgId, img, ct).ConfigureAwait(false);
 
                                 string coverUrl = string.Empty;
                                 string directMediaUrl = string.Empty;
@@ -7124,23 +7125,10 @@ public class ComicScraperService
                 using var doc = JsonDocument.Parse(rawJson);
                 if (doc.RootElement.TryGetProperty("image", out var imgObj))
                 {
-                    string fmt = imgObj.TryGetProperty("format", out var fmtProp) ? fmtProp.GetString() ?? "media" : "media";
-                    string rawName = imgObj.TryGetProperty("name", out var nProp) ? nProp.GetString() ?? string.Empty : string.Empty;
-                    string cleanTitle = string.Empty;
-                    if (!string.IsNullOrWhiteSpace(rawName) && !rawName.StartsWith("large.", StringComparison.OrdinalIgnoreCase))
-                    {
-                        int qIdx = rawName.IndexOf('?');
-                        cleanTitle = qIdx > 0 ? rawName.Substring(0, qIdx) : rawName;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(cleanTitle))
-                    {
-                        book.Title = cleanTitle;
-                    }
-                    else
-                    {
-                        book.Title = $"rule34 Post {id} ({fmt.ToUpperInvariant()})";
-                    }
+                    long numericId = 0;
+                    long.TryParse(id, out numericId);
+                    string cleanTitle = await GenerateRule34ImageTitleAsync(numericId, imgObj, ct).ConfigureAwait(false);
+                    book.Title = cleanTitle;
 
                     if (imgObj.TryGetProperty("tags", out var tagsElem) && tagsElem.ValueKind == JsonValueKind.Array)
                     {
@@ -7430,6 +7418,206 @@ public class ComicScraperService
     // Bộ nhớ đệm URL ảnh/video gốc đã bóc tách từ API search của rule34 (Key: URL bài viết /images/{id}, Value: URL media trực tiếp)
     // Giúp khi tải hàng trăm ảnh không phải gọi lại API /images/{id} làm trigger 429 Rate Limit
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _rule34MediaUrlCache = new(StringComparer.OrdinalIgnoreCase);
+
+    // Bộ nhớ đệm tag ID của rule34 -> (TagName, Category)
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, (string Name, string Category)> _rule34TagDetailsCache = new();
+
+    private async Task PrefetchRule34TagsAsync(IEnumerable<long> tagIds, CancellationToken ct)
+    {
+        var missingIds = tagIds.Where(tid => tid > 0 && !_rule34TagDetailsCache.ContainsKey(tid)).Distinct().Take(60).ToList();
+        if (missingIds.Count == 0) return;
+
+        try
+        {
+            string idFilter = string.Join(" || ", missingIds.Select(id => $"id:{id}"));
+            string query = $"(category:character || category:content-official || category:origin || category:oc) && ({idFilter})";
+            string searchUrl = $"https://www.rule34.lol/api/v1/json/search/tags?q={Uri.EscapeDataString(query)}&per_page=100";
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, searchUrl);
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+            req.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+
+            if (res.IsSuccessStatusCode)
+            {
+                string json = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                var foundIds = new HashSet<long>();
+                if (doc.RootElement.TryGetProperty("tags", out var tagsElem) && tagsElem.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var t in tagsElem.EnumerateArray())
+                    {
+                        if (t.TryGetProperty("id", out var idProp) && t.TryGetProperty("name", out var nProp))
+                        {
+                            long tId = idProp.GetInt64();
+                            string tName = nProp.GetString() ?? string.Empty;
+                            string tCat = t.TryGetProperty("category", out var cProp) ? cProp.GetString() ?? string.Empty : string.Empty;
+                            if (!string.IsNullOrWhiteSpace(tName))
+                            {
+                                _rule34TagDetailsCache[tId] = (tName, tCat);
+                                foundIds.Add(tId);
+                            }
+                        }
+                    }
+                }
+
+                foreach (var mId in missingIds)
+                {
+                    if (!foundIds.Contains(mId))
+                    {
+                        _rule34TagDetailsCache[mId] = (string.Empty, "general");
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task<string> GenerateRule34ImageTitleAsync(long id, JsonElement imgObj, CancellationToken ct)
+    {
+        try
+        {
+            var rawTags = new List<string>();
+            if (imgObj.TryGetProperty("tags", out var tagsElem) && tagsElem.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var t in tagsElem.EnumerateArray())
+                {
+                    string? s = t.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) rawTags.Add(s);
+                }
+            }
+
+            var tagIds = new List<long>();
+            if (imgObj.TryGetProperty("tag_ids", out var tagIdsElem) && tagIdsElem.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var tid in tagIdsElem.EnumerateArray())
+                {
+                    if (tid.TryGetInt64(out long lId)) tagIds.Add(lId);
+                }
+            }
+
+            if (tagIds.Count > 0)
+            {
+                await PrefetchRule34TagsAsync(tagIds, ct).ConfigureAwait(false);
+            }
+
+            var characters = new List<string>();
+            var contentOfficials = new List<string>();
+            var ocs = new List<string>();
+            var origins = new List<string>();
+
+            foreach (var tid in tagIds)
+            {
+                if (_rule34TagDetailsCache.TryGetValue(tid, out var tagInfo) && !string.IsNullOrWhiteSpace(tagInfo.Name))
+                {
+                    if (string.Equals(tagInfo.Category, "character", StringComparison.OrdinalIgnoreCase))
+                    {
+                        characters.Add(tagInfo.Name);
+                    }
+                    else if (string.Equals(tagInfo.Category, "content-official", StringComparison.OrdinalIgnoreCase))
+                    {
+                        contentOfficials.Add(tagInfo.Name);
+                    }
+                    else if (string.Equals(tagInfo.Category, "oc", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ocs.Add(tagInfo.Name);
+                    }
+                    else if (string.Equals(tagInfo.Category, "origin", StringComparison.OrdinalIgnoreCase))
+                    {
+                        origins.Add(tagInfo.Name);
+                    }
+                }
+            }
+
+            // 1. Nhân vật (Character): Title Case, lấy tối đa 2 nhân vật
+            string characterPart = string.Empty;
+            if (characters.Count > 0)
+            {
+                var textInfo = System.Globalization.CultureInfo.InvariantCulture.TextInfo;
+                characterPart = string.Join(", ", characters.Take(2).Select(c => textInfo.ToTitleCase(c.ToLowerInvariant())));
+            }
+            else if (ocs.Count > 0)
+            {
+                var textInfo = System.Globalization.CultureInfo.InvariantCulture.TextInfo;
+                characterPart = string.Join(", ", ocs.Take(2).Select(c => textInfo.ToTitleCase(c.ToLowerInvariant())));
+            }
+
+            // 2. Tác phẩm / Bản quyền (Content-Official): Ưu tiên tag ngắn gọn (ví dụ "bleach" trước "bleach: sennen kessen-hen")
+            string seriesPart = string.Empty;
+            if (contentOfficials.Count > 0)
+            {
+                seriesPart = contentOfficials.OrderBy(s => s.Length).First();
+            }
+
+            // 3. Nghệ sĩ (Artist): Tìm trong artist:... hoặc origins
+            string artistPart = string.Empty;
+            var artistTag = rawTags.FirstOrDefault(t => t.StartsWith("artist:", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(artistTag))
+            {
+                string rawArtist = artistTag.Substring("artist:".Length).Trim();
+                int parenIdx = rawArtist.IndexOf('(');
+                if (parenIdx > 0) rawArtist = rawArtist.Substring(0, parenIdx).Trim();
+                if (!string.IsNullOrWhiteSpace(rawArtist))
+                {
+                    artistPart = System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(rawArtist.ToLowerInvariant());
+                }
+            }
+            else if (origins.Count > 0)
+            {
+                string rawOrigin = origins[0];
+                if (rawOrigin.StartsWith("artist:", StringComparison.OrdinalIgnoreCase)) rawOrigin = rawOrigin.Substring("artist:".Length).Trim();
+                int parenIdx = rawOrigin.IndexOf('(');
+                if (parenIdx > 0) rawOrigin = rawOrigin.Substring(0, parenIdx).Trim();
+                if (!string.IsNullOrWhiteSpace(rawOrigin))
+                {
+                    artistPart = System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(rawOrigin.ToLowerInvariant());
+                }
+            }
+
+            // 4. Ghép các thành phần theo thứ tự mong muốn: Character - Series - ID
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(characterPart)) parts.Add(characterPart);
+            if (!string.IsNullOrWhiteSpace(seriesPart)) parts.Add(seriesPart);
+
+            // Nếu không có cả Character lẫn Series thì dùng Artist
+            if (parts.Count == 0 && !string.IsNullOrWhiteSpace(artistPart))
+            {
+                parts.Add(artistPart);
+            }
+
+            // Nếu vẫn trống, tìm tag mô tả cụ thể trong rawTags (loại trừ các tag chung chung)
+            if (parts.Count == 0)
+            {
+                var generalBlacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "questionable", "explicit", "safe", "female", "male", "solo", "breasts", "1girl", "2girls",
+                    "video", "animated", "highres", "simple background", "white background", "ass", "nude",
+                    "completely nude", "looking back", "dark skin", "light skin", "smile", "hair", "eyes"
+                };
+                var specificTag = rawTags.FirstOrDefault(t => !generalBlacklist.Contains(t) && !t.Contains(':'));
+                if (!string.IsNullOrWhiteSpace(specificTag))
+                {
+                    parts.Add(System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(specificTag.ToLowerInvariant()));
+                }
+            }
+
+            // Luôn thêm ID vào cuối
+            if (id > 0)
+            {
+                parts.Add(id.ToString());
+            }
+
+            string combined = parts.Count > 0 ? string.Join(" - ", parts) : (id > 0 ? $"rule34 - {id}" : "rule34 Post");
+
+            // Sanitize các ký tự đặc biệt cho filesystem
+            combined = combined.Replace(':', '-').Replace('/', '-').Replace('\\', '-');
+            return DownloadEngineService.MakeSafeFilename(combined, 100);
+        }
+        catch
+        {
+            return id > 0 ? $"rule34 - {id}" : "rule34 Post";
+        }
+    }
 
     public static string ExtractRule34MediaFromHtml(string html, string pageUrl)
     {

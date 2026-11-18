@@ -2002,7 +2002,8 @@ public class DownloadEngineService
                             {
                                 string fileName = kvp.Key;
                                 if (fileName.StartsWith($"{imgIdMatch}_", StringComparison.OrdinalIgnoreCase) ||
-                                    fileName.StartsWith($"{imgIdMatch}.", StringComparison.OrdinalIgnoreCase))
+                                    fileName.StartsWith($"{imgIdMatch}.", StringComparison.OrdinalIgnoreCase) ||
+                                    fileName.Contains(imgIdMatch, StringComparison.OrdinalIgnoreCase))
                                 {
                                     string checkPath = Path.Combine(chapterDir, fileName);
                                     if (File.Exists(checkPath) && new FileInfo(checkPath).Length > 512)
@@ -2019,8 +2020,7 @@ public class DownloadEngineService
                         {
                             try
                             {
-                                var matchedFiles = Directory.GetFiles(chapterDir, $"{imgIdMatch}_*")
-                                    .Concat(Directory.GetFiles(chapterDir, $"{imgIdMatch}.*"));
+                                var matchedFiles = Directory.GetFiles(chapterDir, $"*{imgIdMatch}*");
                                 foreach (var f in matchedFiles)
                                 {
                                     if (new FileInfo(f).Length > 512)
