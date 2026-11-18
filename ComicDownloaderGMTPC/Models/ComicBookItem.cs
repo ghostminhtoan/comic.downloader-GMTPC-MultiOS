@@ -244,7 +244,7 @@ public partial class ComicBookItem : ObservableObject
         }
     }
 
-    public string VideoBadge => IsVideoItem ? (GetVideoExt() ?? "VIDEO") : string.Empty;
+    public string VideoBadge => IsVideoItem ? (GetVideoExt() ?? "MP4") : string.Empty;
 
     private string? GetVideoExt()
     {
@@ -255,10 +255,75 @@ public partial class ComicBookItem : ObservableObject
                 int q = candidate.IndexOf('?');
                 string clean = q >= 0 ? candidate.Substring(0, q) : candidate;
                 string ext = System.IO.Path.GetExtension(clean).TrimStart('.').ToUpperInvariant();
-                if (!string.IsNullOrEmpty(ext)) return ext;
+                if (!string.IsNullOrEmpty(ext))
+                {
+                    if (ext == "WEBM") return "MP4"; // Đổi cơ chế hiển thị / download webm thành mp4
+                    return ext;
+                }
             }
         }
         return null;
+    }
+
+    [ObservableProperty]
+    private string _selectedResolution = "1080p (Gốc)";
+
+    [ObservableProperty]
+    private List<string> _availableResolutions = new() { "1080p (Gốc)", "720p (Large)", "480p (Medium)", "360p (Small)" };
+
+    public Dictionary<string, string> ResolutionUrls { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool IsRule34Item =>
+        (Domain != null && Domain.Contains("rule34", StringComparison.OrdinalIgnoreCase)) ||
+        (!string.IsNullOrWhiteSpace(Url) && Url.Contains("rule34", StringComparison.OrdinalIgnoreCase));
+
+    partial void OnSelectedResolutionChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        UpdateResolutionMediaUrl(value);
+    }
+
+    public void ApplySelectedResolution(string res)
+    {
+        if (SelectedResolution != res)
+        {
+            SelectedResolution = res;
+        }
+        else
+        {
+            UpdateResolutionMediaUrl(res);
+        }
+    }
+
+    private void UpdateResolutionMediaUrl(string res)
+    {
+        string targetKey = res.Contains("1080") ? "1080p" :
+                           res.Contains("720") ? "720p" :
+                           res.Contains("480") ? "480p" :
+                           res.Contains("360") ? "360p" : res;
+
+        string? matchedUrl = null;
+        foreach (var kvp in ResolutionUrls)
+        {
+            if (kvp.Key.Contains(targetKey, StringComparison.OrdinalIgnoreCase))
+            {
+                matchedUrl = kvp.Value;
+                break;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(matchedUrl))
+        {
+            if (Chapters != null && Chapters.Count > 0)
+            {
+                var ch = Chapters[0];
+                if (ch.ImageUrls == null) ch.ImageUrls = new List<string>();
+                if (ch.ImageUrls.Count > 0) ch.ImageUrls[0] = matchedUrl;
+                else ch.ImageUrls.Add(matchedUrl);
+            }
+            ComicDownloaderGMTPC.Services.ComicScraperService.UpdateRule34MediaCache(Url, matchedUrl);
+            StatusMessage = $"Độ phân giải: {res}";
+        }
     }
 
     [ObservableProperty]

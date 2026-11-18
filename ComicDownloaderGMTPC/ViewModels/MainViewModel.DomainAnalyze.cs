@@ -98,6 +98,35 @@ public partial class MainViewModel
     private string _domainRule34TagUrl = "https://www.rule34.lol/tags/yorha%2B2b";
 
     [ObservableProperty]
+    private string _defaultRule34Resolution = "1080p (Gốc)";
+
+    public List<string> Rule34ResolutionOptions { get; } = new() { "1080p (Gốc)", "720p (Large)", "480p (Medium)", "360p (Small)" };
+
+    partial void OnDefaultRule34ResolutionChanged(string value)
+    {
+        ComicDownloaderGMTPC.Services.ComicScraperService.Rule34DefaultResolution = value;
+    }
+
+    [RelayCommand]
+    public void ApplyRule34ResolutionToAll(ComicBookItem? sourceItem)
+    {
+        string targetRes = sourceItem?.SelectedResolution ?? DefaultRule34Resolution;
+        if (string.IsNullOrWhiteSpace(targetRes)) targetRes = "1080p (Gốc)";
+
+        int count = 0;
+        foreach (var item in ComicBooks)
+        {
+            if (item.IsRule34Item)
+            {
+                item.ApplySelectedResolution(targetRes);
+                count++;
+            }
+        }
+
+        StatusSummary = $"Đã áp dụng độ phân giải {targetRes} cho {count} mục Rule34";
+    }
+
+    [ObservableProperty]
     private string _domainEhentaiTagUrl = "https://e-hentai.org/?f_search=female%3A%22dark+skin%24%22+other%3A%22uncensored%24%22+-female%3Afutanari+female%3A%22big+breasts%22";
 
     [ObservableProperty]

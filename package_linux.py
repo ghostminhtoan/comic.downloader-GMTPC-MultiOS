@@ -332,6 +332,14 @@ Comic Downloader GMTPC - Linux Portable Distribution
 
     # 4. Xuất file launcher ComicDownloaderGMTPC trực tiếp vào publish/
     publish_launcher = os.path.join(publish_dir, "ComicDownloaderGMTPC")
+    if os.path.isfile(publish_launcher):
+        try:
+            os.remove(publish_launcher)
+        except Exception:
+            try:
+                os.rename(publish_launcher, publish_launcher + f".old_{int(time.time())}")
+            except Exception:
+                pass
     with open(publish_launcher, 'wb') as f:
         f.write(launcher_sh_content)
     print(f"    [OK] Generated standalone launcher: {publish_launcher}")

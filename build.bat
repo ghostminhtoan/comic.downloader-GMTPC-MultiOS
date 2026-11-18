@@ -31,12 +31,12 @@ cd /d "%~dp0"
 if not exist "publish" mkdir "publish"
 if not exist "publish\.portable\bin\net avalonia" mkdir "publish\.portable\bin\net avalonia"
 
-:: Terminate running instance if any to prevent write-lock on executable
-taskkill /F /IM ComicDownloaderGMTPC.Desktop.exe >nul 2>&1
+:: Ho tro build ngay ca khi app dang chay (Hot-Build & Safe Swap, khong can taskkill)
+if exist "publish\.portable\bin\net avalonia_staging" rd /s /q "publish\.portable\bin\net avalonia_staging" >nul 2>&1
 
 echo.
 echo [1/4] Publishing Windows (win-x64, net avalonia runtimes.dll in .portable\bin\net avalonia + Native Host)...
-dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false -o "publish\.portable\bin\net avalonia"
+dotnet publish ComicDownloaderGMTPC.Desktop\ComicDownloaderGMTPC.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false -o "publish\.portable\bin\net avalonia_staging"
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Windows build failed!
     echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
@@ -44,15 +44,18 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b %ERRORLEVEL%
 )
 
-:: Chuan hoa file thanh net avalonia runtimes.dll theo yeu cau cua nguoi dung
-copy /y "publish\.portable\bin\net avalonia\ComicDownloaderGMTPC.Desktop.dll" "publish\.portable\bin\net avalonia\net avalonia runtimes.dll" >nul 2>&1
-copy /y "publish\.portable\bin\net avalonia\ComicDownloaderGMTPC.Desktop.runtimeconfig.json" "publish\.portable\bin\net avalonia\net avalonia runtimes.runtimeconfig.json" >nul 2>&1
-copy /y "publish\.portable\bin\net avalonia\ComicDownloaderGMTPC.Desktop.deps.json" "publish\.portable\bin\net avalonia\net avalonia runtimes.deps.json" >nul 2>&1
+:: Chuan hoa file thanh net avalonia runtimes.dll theo yeu cau cua nguoi dung trong thu muc staging
+copy /y "publish\.portable\bin\net avalonia_staging\ComicDownloaderGMTPC.Desktop.dll" "publish\.portable\bin\net avalonia_staging\net avalonia runtimes.dll" >nul 2>&1
+copy /y "publish\.portable\bin\net avalonia_staging\ComicDownloaderGMTPC.Desktop.runtimeconfig.json" "publish\.portable\bin\net avalonia_staging\net avalonia runtimes.runtimeconfig.json" >nul 2>&1
+copy /y "publish\.portable\bin\net avalonia_staging\ComicDownloaderGMTPC.Desktop.deps.json" "publish\.portable\bin\net avalonia_staging\net avalonia runtimes.deps.json" >nul 2>&1
 
-:: Xoa sach toan bo file .exe ben trong .portable\bin\net avalonia\ (chi giu lai DLLs va runtime)
-del /f /q "publish\.portable\bin\net avalonia\*.exe" >nul 2>&1
-del /f /q "publish\.portable\bin\net avalonia\*.pdb" >nul 2>&1
-del /f /q "publish\.portable\bin\net avalonia\*.xml" >nul 2>&1
+:: Xoa sach toan bo file .exe ben trong staging (chi giu lai DLLs va runtime)
+del /f /q "publish\.portable\bin\net avalonia_staging\*.exe" >nul 2>&1
+del /f /q "publish\.portable\bin\net avalonia_staging\*.pdb" >nul 2>&1
+del /f /q "publish\.portable\bin\net avalonia_staging\*.xml" >nul 2>&1
+
+:: Safe-Sync sang thu muc chinh, ho tro ghi de an toan ke ca khi app dang chay bang cach doi ten cac DLL dang bi lock sang .old
+python safe_sync_runtime.py "publish\.portable\bin\net avalonia_staging" "publish\.portable\bin\net avalonia"
 
 :: Create runtime-net10-win-x64.zip for on-demand downloading
 echo  -^> Creating Windows Runtime zip: publish\runtime-net10-win-x64.zip...
@@ -65,6 +68,13 @@ if %ERRORLEVEL% NEQ 0 (
 echo  -^> Compiling Windows Native Host Launcher (ComicDownloaderGMTPC.Desktop.exe)...
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
 rc.exe /fo "Launcher\Windows\NativeHost.res" "Launcher\Windows\NativeHost.rc" >nul 2>&1
+
+:: Neu file Launcher cu dang chay, doi ten sang .old de khong bi loi LNK1104
+if exist "publish\ComicDownloaderGMTPC.Desktop.exe" (
+    del /f /q "publish\ComicDownloaderGMTPC.Desktop.exe.old" >nul 2>&1
+    move /y "publish\ComicDownloaderGMTPC.Desktop.exe" "publish\ComicDownloaderGMTPC.Desktop.exe.old" >nul 2>&1
+)
+
 cl.exe /nologo /O2 /EHsc /W3 /utf-8 "Launcher\Windows\NativeHost.cpp" "Launcher\Windows\NativeHost.res" /Fe:"publish\ComicDownloaderGMTPC.Desktop.exe" /link /SUBSYSTEM:WINDOWS user32.lib shell32.lib >nul 2>&1
 del /f /q "Launcher\Windows\NativeHost.obj" >nul 2>&1
 del /f /q "Launcher\Windows\NativeHost.res" >nul 2>&1
@@ -73,6 +83,7 @@ if %ERRORLEVEL% NEQ 0 (
     echo Cua so se giu nguyen 20 giay de ban kiem tra log loi...
     python -c "import time; time.sleep(20)"
     exit /b %ERRORLEVEL%
+)
 )
 
 :: Clean root publish intermediate files

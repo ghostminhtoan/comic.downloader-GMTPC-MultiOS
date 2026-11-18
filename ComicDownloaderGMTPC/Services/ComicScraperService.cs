@@ -7160,9 +7160,28 @@ public class ComicScraperService
 
                     if (imgObj.TryGetProperty("representations", out var reps))
                     {
-                        if (string.IsNullOrWhiteSpace(singleMediaUrl) && reps.TryGetProperty("full", out var fullProp)) singleMediaUrl = fullProp.GetString() ?? string.Empty;
-                        if (string.IsNullOrWhiteSpace(singleMediaUrl) && reps.TryGetProperty("large", out var largeProp)) singleMediaUrl = largeProp.GetString() ?? string.Empty;
-                        if (string.IsNullOrWhiteSpace(singleMediaUrl) && reps.TryGetProperty("medium", out var medProp)) singleMediaUrl = medProp.GetString() ?? string.Empty;
+                        string fullUrl = string.Empty;
+                        string largeUrl = string.Empty;
+                        string mediumUrl = string.Empty;
+                        string smallUrl = string.Empty;
+
+                        if (reps.TryGetProperty("full", out var fullProp)) fullUrl = fullProp.GetString() ?? string.Empty;
+                        if (reps.TryGetProperty("large", out var largeProp)) largeUrl = largeProp.GetString() ?? string.Empty;
+                        if (reps.TryGetProperty("medium", out var medProp)) mediumUrl = medProp.GetString() ?? string.Empty;
+                        if (reps.TryGetProperty("small", out var smProp)) smallUrl = smProp.GetString() ?? string.Empty;
+
+                        if (string.IsNullOrWhiteSpace(fullUrl)) fullUrl = singleMediaUrl;
+                        if (string.IsNullOrWhiteSpace(largeUrl)) largeUrl = fullUrl;
+                        if (string.IsNullOrWhiteSpace(mediumUrl)) mediumUrl = largeUrl;
+                        if (string.IsNullOrWhiteSpace(smallUrl)) smallUrl = mediumUrl;
+
+                        book.ResolutionUrls["1080p (Gốc)"] = fullUrl;
+                        book.ResolutionUrls["720p (Large)"] = largeUrl;
+                        book.ResolutionUrls["480p (Medium)"] = mediumUrl;
+                        book.ResolutionUrls["360p (Small)"] = smallUrl;
+                        book.AvailableResolutions = new List<string> { "1080p (Gốc)", "720p (Large)", "480p (Medium)", "360p (Small)" };
+
+                        if (string.IsNullOrWhiteSpace(singleMediaUrl)) singleMediaUrl = fullUrl;
 
                         string rawCover = string.Empty;
                         if (reps.TryGetProperty("thumb", out var tProp)) rawCover = tProp.GetString() ?? string.Empty;
@@ -7206,6 +7225,11 @@ public class ComicScraperService
                     book.TotalChapters = 1;
                     book.Status = "Ready";
                     book.StatusMessage = "Đã tải thông tin (1 file)";
+
+                    // Áp dụng độ phân giải mặc định đã cấu hình (mặc định 1080p hoặc do người dùng chọn)
+                    string defaultRes = Rule34DefaultResolution;
+                    if (string.IsNullOrWhiteSpace(defaultRes)) defaultRes = "1080p (Gốc)";
+                    book.ApplySelectedResolution(defaultRes);
                     return book;
                 }
             }
@@ -7446,6 +7470,16 @@ public class ComicScraperService
     // Bộ nhớ đệm URL ảnh/video gốc đã bóc tách từ API search của rule34 (Key: URL bài viết /images/{id}, Value: URL media trực tiếp)
     // Giúp khi tải hàng trăm ảnh không phải gọi lại API /images/{id} làm trigger 429 Rate Limit
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _rule34MediaUrlCache = new(StringComparer.OrdinalIgnoreCase);
+
+    public static string Rule34DefaultResolution { get; set; } = "1080p (Gốc)";
+
+    public static void UpdateRule34MediaCache(string? url, string mediaUrl)
+    {
+        if (!string.IsNullOrWhiteSpace(url) && !string.IsNullOrWhiteSpace(mediaUrl))
+        {
+            _rule34MediaUrlCache[url] = mediaUrl;
+        }
+    }
 
     // Bộ nhớ đệm tag ID của rule34 -> (TagName, Category)
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, (string Name, string Category)> _rule34TagDetailsCache = new();

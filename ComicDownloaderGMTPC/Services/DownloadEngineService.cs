@@ -2416,6 +2416,10 @@ public class DownloadEngineService
                                     string existingExt = Path.GetExtension(cleanTitle);
                                     if (!string.IsNullOrWhiteSpace(existingExt) && existingExt.Length <= 5 && existingExt.Length >= 3)
                                     {
+                                        if (existingExt.Equals(".webm", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            cleanTitle = Path.ChangeExtension(cleanTitle, ".mp4");
+                                        }
                                         pageFileName = cleanTitle;
                                     }
                                     else
@@ -4351,6 +4355,8 @@ public class DownloadEngineService
             case ".avif":
 
             case ".webm":
+
+                return ".mp4"; // Đổi cơ chế download webm thành mp4 theo yêu cầu
 
             case ".mp4":
 
