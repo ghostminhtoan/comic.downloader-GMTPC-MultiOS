@@ -38,11 +38,23 @@ public sealed class MpvVideoPlayerService : IDisposable
             {
                 if (_isSupportedCached.HasValue) return _isSupportedCached.Value;
 
-                // Android chưa tích hợp libmpv.so -> fallback native
+                // Android: Tích hợp trọn vẹn libmpv.so đa kiến trúc (arm64-v8a, armeabi-v7a, x86, x86_64)
                 if (OperatingSystem.IsAndroid())
                 {
-                    _isSupportedCached = false;
-                    return false;
+                    try
+                    {
+                        RegisterDllResolverIfNeeded();
+                        using var dummy = new MpvContext();
+                        dummy.Initialize();
+                        _isSupportedCached = true;
+                        return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[MPV Android Init Error]: {ex.Message}");
+                        _isSupportedCached = false;
+                        return false;
+                    }
                 }
 
                 if (OperatingSystem.IsWindows())
@@ -113,6 +125,33 @@ public sealed class MpvVideoPlayerService : IDisposable
         return null;
     }
 
+    private static bool _dllResolverRegistered;
+    private static void RegisterDllResolverIfNeeded()
+    {
+        if (_dllResolverRegistered) return;
+        _dllResolverRegistered = true;
+        try
+        {
+            NativeLibrary.SetDllImportResolver(typeof(HanumanInstitute.LibMpv.MpvContext).Assembly, (libraryName, assembly, searchPath) =>
+            {
+                if (libraryName.Equals("mpv", StringComparison.OrdinalIgnoreCase) ||
+                    libraryName.Equals("libmpv", StringComparison.OrdinalIgnoreCase) ||
+                    libraryName.Equals("libmpv-2", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (OperatingSystem.IsAndroid() || OperatingSystem.IsLinux())
+                    {
+                        if (NativeLibrary.TryLoad("libmpv.so", assembly, searchPath, out IntPtr handle))
+                            return handle;
+                        if (NativeLibrary.TryLoad("mpv", assembly, searchPath, out handle))
+                            return handle;
+                    }
+                }
+                return IntPtr.Zero;
+            });
+        }
+        catch { }
+    }
+
     public int VideoWidth => _videoWidth;
     public int VideoHeight => _videoHeight;
     public long DurationMs => _durationMs;
@@ -147,11 +186,12 @@ public sealed class MpvVideoPlayerService : IDisposable
     /// </summary>
     public static MpvVideoPlayerService? Create(string videoPath, Action? onFrameReady = null)
     {
-        if (!IsSupported || string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath))
+        if (!IsSupported || string.IsNullOrWhiteSpace(videoPath) || !VideoThumbnailService.IsValidVideoPath(videoPath))
             return null;
 
         try
         {
+            RegisterDllResolverIfNeeded();
             string? dir = ResolveNativeLibraryDirectory();
             if (!string.IsNullOrEmpty(dir))
             {
@@ -161,7 +201,14 @@ public sealed class MpvVideoPlayerService : IDisposable
             var mpv = new MpvContext();
             mpv.SetOptionString("vo", "libmpv");
             mpv.SetOptionString("hwdec", "auto-safe");
-            mpv.SetOptionString("audio-device", "auto");
+            if (OperatingSystem.IsAndroid())
+            {
+                mpv.SetOptionString("ao", "audiotrack,opensles,auto");
+            }
+            else
+            {
+                mpv.SetOptionString("audio-device", "auto");
+            }
             mpv.SetOptionString("keep-open", "yes");
             mpv.SetOptionString("loop-file", "inf");
 

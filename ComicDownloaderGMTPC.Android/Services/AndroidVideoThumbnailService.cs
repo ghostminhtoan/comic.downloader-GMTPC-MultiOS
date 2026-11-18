@@ -21,11 +21,36 @@ public static class AndroidVideoThumbnailService
 {
     public static void Register()
     {
+        PreloadMpvLibraries();
         VideoThumbnailService.ExternalNativeThumbnailProvider = ExtractThumbnail;
         VideoThumbnailService.ExternalNativeFramesProvider = ExtractFrames;
         VideoThumbnailService.ExternalNativeFrameAtTimeProvider = ExtractFrameAtTime;
         VideoThumbnailService.ExternalAndroidVideoPlayerProvider = CreateVideoPlayer;
         NativeAudioPlaybackService.ExternalAndroidAudioPlayerProvider = PlayAndroidAudio;
+    }
+
+    public static void PreloadMpvLibraries()
+    {
+        try
+        {
+            string[] libs = ["c++_shared", "avutil", "swresample", "swscale", "avcodec", "avformat", "avfilter", "avdevice", "mpv"];
+            foreach (var lib in libs)
+            {
+                try
+                {
+                    Java.Lang.JavaSystem.LoadLibrary(lib);
+                }
+                catch (Exception ex)
+                {
+                    global::Android.Util.Log.Warn("ComicGMTPC_MPV", $"Could not load {lib}: {ex.Message}");
+                }
+            }
+            global::Android.Util.Log.Info("ComicGMTPC_MPV", "libmpv and ffmpeg libraries preloaded successfully!");
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC_MPV", $"PreloadMpvLibraries error: {ex.Message}");
+        }
     }
 
     public static IAndroidVideoPlayerInstance? CreateVideoPlayer(string videoPath)
@@ -182,6 +207,13 @@ public static class AndroidVideoThumbnailService
                             using (var fb = targetBitmap.Lock())
                             {
                                 int copyLen = Math.Min((int)(targetBitmap.PixelSize.Width * targetBitmap.PixelSize.Height * 4), reqBytes);
+                                // Chuyển đổi màu RGBA sang BGRA của Avalonia WriteableBitmap (0 bị đổi màu sắc video)
+                                for (int i = 0; i <= copyLen - 4; i += 4)
+                                {
+                                    byte r = _managedBuffer![i];
+                                    _managedBuffer![i] = _managedBuffer![i + 2];
+                                    _managedBuffer![i + 2] = r;
+                                }
                                 Marshal.Copy(_managedBuffer!, 0, fb.Address, copyLen);
                             }
 

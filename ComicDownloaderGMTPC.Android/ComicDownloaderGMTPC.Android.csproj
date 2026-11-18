@@ -28,4 +28,19 @@
   <ItemGroup>
     <ProjectReference Include="..\ComicDownloaderGMTPC\ComicDownloaderGMTPC.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <AndroidNativeLibrary Include="libmpv\lib\arm64-v8a\*.so">
+      <Abi>arm64-v8a</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="libmpv\lib\armeabi-v7a\*.so">
+      <Abi>armeabi-v7a</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="libmpv\lib\x86\*.so">
+      <Abi>x86</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="libmpv\lib\x86_64\*.so">
+      <Abi>x86_64</Abi>
+    </AndroidNativeLibrary>
+  </ItemGroup>
 </Project>
