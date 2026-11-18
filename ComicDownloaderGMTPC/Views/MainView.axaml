@@ -11612,8 +11612,8 @@
                 PointerExited="OnDualSortPreviewPopupPointerExited">
             <Border.Styles>
                 <Style Selector="Border#DualSortPreviewPopupBorder:not(.maximized)">
-                    <Setter Property="HorizontalAlignment" Value="Left" />
-                    <Setter Property="VerticalAlignment" Value="Top" />
+                    <Setter Property="HorizontalAlignment" Value="Center" />
+                    <Setter Property="VerticalAlignment" Value="Center" />
                     <Setter Property="CornerRadius" Value="8" />
                     <Setter Property="Padding" Value="10" />
                 </Style>

@@ -2955,7 +2955,8 @@ public partial class MainViewModel : ViewModelBase
         }
         else
         {
-            using var semaphore = new SemaphoreSlim(cpuThreads, cpuThreads);
+            int effectiveConcurrency = OperatingSystem.IsAndroid() ? Math.Clamp(cpuThreads, 1, 4) : cpuThreads;
+            using var semaphore = new SemaphoreSlim(effectiveConcurrency, effectiveConcurrency);
             var tasks = new List<Task>(selected.Count);
             for (int i = 0; i < selected.Count; i++)
             {
@@ -2969,6 +2970,11 @@ public partial class MainViewModel : ViewModelBase
                     {
                         var book = await _scraperService.ScrapeBookAsync(sr.Url, bookIdx, mangadexLang, mangadexFallback).ConfigureAwait(false);
                         scrapedBooks[localIdx] = book;
+                    }
+                    catch (Exception ex)
+                    {
+                        AddLog("ERROR", $"Lỗi nạp truyện '{sr.Url}': {ex.Message}");
+                        scrapedBooks[localIdx] = null;
                     }
                     finally
                     {
@@ -4892,8 +4898,10 @@ public partial class MainViewModel : ViewModelBase
         }
         else
         {
-            using var semaphore = new SemaphoreSlim(cpuThreads, cpuThreads);
+            int effectiveConcurrency = OperatingSystem.IsAndroid() ? Math.Clamp(cpuThreads, 1, 4) : cpuThreads;
+            using var semaphore = new SemaphoreSlim(effectiveConcurrency, effectiveConcurrency);
             var tasks = new List<Task>(targetUrls.Count);
+            int doneCount = 0;
             for (int i = 0; i < targetUrls.Count; i++)
             {
                 int localIdx = i;
@@ -4906,6 +4914,20 @@ public partial class MainViewModel : ViewModelBase
                     {
                         var book = await _scraperService.ScrapeBookAsync(url, currentIndex, mangadexLang, mangadexFallback).ConfigureAwait(false);
                         scrapedBooks[localIdx] = book;
+                        int done = Interlocked.Increment(ref doneCount);
+                        double pct = (double)done / targetUrls.Count * 100.0;
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            SourceCrawlProgressAngle = Math.Clamp(pct * 3.6, 0, 360);
+                            SourceCrawlProgressPercentText = $"{(int)pct}%";
+                            SourceCrawlCountText = $"{done} / {targetUrls.Count} truyện đang load";
+                            if (book != null) SourceCrawlStatusText = book.Title;
+                        }, Avalonia.Threading.DispatcherPriority.Background);
+                    }
+                    catch (Exception ex)
+                    {
+                        AddLog("ERROR", $"Lỗi nạp truyện '{url}': {ex.Message}");
+                        scrapedBooks[localIdx] = null;
                     }
                     finally
                     {

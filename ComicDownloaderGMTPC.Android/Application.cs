@@ -76,6 +76,18 @@ namespace ComicDownloaderGMTPC.Android
         {
         }
 
+        public override void OnCreate()
+        {
+            try
+            {
+                // Khởi tạo trước ThreadPool để chống starvation và chống crash pthread_create khi chạy CPU đa luồng trên Android
+                int minThreads = Math.Max(16, Environment.ProcessorCount * 2);
+                System.Threading.ThreadPool.SetMinThreads(minThreads, minThreads);
+            }
+            catch { }
+            base.OnCreate();
+        }
+
         protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
         {
             return base.CustomizeAppBuilder(builder)

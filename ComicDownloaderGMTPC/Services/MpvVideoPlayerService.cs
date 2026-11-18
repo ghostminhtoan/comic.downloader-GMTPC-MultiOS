@@ -200,15 +200,27 @@ public sealed class MpvVideoPlayerService : IDisposable
 
             var mpv = new MpvContext();
             mpv.SetOptionString("vo", "libmpv");
-            mpv.SetOptionString("hwdec", "auto-safe");
+
+            // Software Rendering vào Avalonia WriteableBitmap: Bắt buộc dùng chế độ copy surface sang RAM
+            // (auto-copy hoặc mediacodec-copy), tuyệt đối không dùng auto/auto-safe để tránh crash GPU Access Violation
+            // và SIGSEGV khi phát video Full HD (1080p) hoặc 4K trở lên.
             if (OperatingSystem.IsAndroid())
             {
+                mpv.SetOptionString("hwdec", "mediacodec-copy");
                 mpv.SetOptionString("ao", "audiotrack,opensles,auto");
             }
             else
             {
+                mpv.SetOptionString("hwdec", "auto-copy");
                 mpv.SetOptionString("audio-device", "auto");
             }
+
+            // Tắt direct rendering nguy hiểm tránh xung đột pointer SW buffer
+            mpv.SetOptionString("vd-lavc-dr", "no");
+            // Kiểm soát bộ đệm demuxer để ngăn ngừa Out-Of-Memory trên thiết bị Android
+            mpv.SetOptionString("demuxer-max-bytes", "32MiB");
+            mpv.SetOptionString("demuxer-max-back-bytes", "16MiB");
+
             mpv.SetOptionString("keep-open", "yes");
             mpv.SetOptionString("loop-file", "inf");
 
@@ -393,6 +405,7 @@ public sealed class MpvVideoPlayerService : IDisposable
                 using var frameLock = wb.Lock();
                 int w = wb.PixelSize.Width;
                 int h = wb.PixelSize.Height;
+                if (w <= 0 || h <= 0 || frameLock.Address == IntPtr.Zero) return false;
                 nuint stride = (nuint)frameLock.RowBytes;
 
                 int[] sizeArray = [w, h];

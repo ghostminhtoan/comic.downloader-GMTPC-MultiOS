@@ -376,7 +376,10 @@ public partial class MainView : UserControl
 
     private void OnVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.IsDualSortPreviewMaximized))
+        if (e.PropertyName == nameof(MainViewModel.IsDualSortPreviewMaximized) ||
+            e.PropertyName == nameof(MainViewModel.DualSortPreviewBitmap) ||
+            e.PropertyName == nameof(MainViewModel.DualSortPreviewItem) ||
+            e.PropertyName == nameof(MainViewModel.IsDualSortVideoSeekable))
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
@@ -3845,30 +3848,22 @@ public partial class MainView : UserControl
             {
                 // Màn hình xoay ngang trên Android (viewH thấp khoảng 360-450)
                 popupW = isPortrait ? Math.Min(340, viewW - 20) : Math.Min(480, viewW - 20);
-                double maxImgH = Math.Max(120, viewH - 130);
+                double maxImgH = Math.Max(120, viewH - 140);
                 if (container != null) container.MaxHeight = maxImgH;
                 if (img != null) img.MaxHeight = Math.Max(110, maxImgH - 6);
-                double estH = Math.Min(viewH - 16, maxImgH + 120);
-                double top = Math.Max(6, (viewH - estH) / 2.0);
-                double left = Math.Max(8, (viewW - popupW) / 2.0);
-
-                popup.Width = popupW;
-                popup.Margin = new Thickness(left, top, 0, 0);
             }
             else
             {
                 // Màn hình đứng trên Android (viewW khoảng 360-420, viewH khoảng 800-900)
                 popupW = Math.Min(400, Math.Max(280, viewW - 20));
-                double maxImgH = isPortrait ? Math.Min(440, Math.Max(220, viewH - 220)) : Math.Min(340, Math.Max(180, viewH - 220));
+                double maxImgH = isPortrait ? Math.Min(420, Math.Max(200, viewH - 230)) : Math.Min(320, Math.Max(180, viewH - 230));
                 if (container != null) container.MaxHeight = maxImgH;
                 if (img != null) img.MaxHeight = Math.Max(180, maxImgH - 6);
-                double estH = Math.Min(viewH - 24, maxImgH + 135);
-                double top = Math.Max(10, (viewH - estH) / 2.0);
-                double left = Math.Max(8, (viewW - popupW) / 2.0);
-
-                popup.Width = popupW;
-                popup.Margin = new Thickness(left, top, 0, 0);
             }
+            popup.Width = popupW;
+            popup.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center;
+            popup.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+            popup.Margin = new Thickness(0);
             return;
         }
 
@@ -3877,28 +3872,24 @@ public partial class MainView : UserControl
         double maxImgHDesktop;
         if (isPortrait)
         {
-            deskPopupW = Math.Min(400, Math.Max(320, viewW - 40));
-            maxImgHDesktop = Math.Min(480, Math.Max(240, viewH - 190));
+            deskPopupW = Math.Min(420, Math.Max(320, viewW - 40));
+            // Trừ hao đủ chỗ cho Header (~36px) + Seekbar & Controls (~70px) + Footer (~26px) + Padding (~30px) = ~162px
+            maxImgHDesktop = Math.Min(520, Math.Max(200, viewH - 180));
             if (container != null) container.MaxHeight = maxImgHDesktop;
-            if (img != null) img.MaxHeight = Math.Max(200, maxImgHDesktop - 6);
+            if (img != null) img.MaxHeight = Math.Max(190, maxImgHDesktop - 6);
         }
         else
         {
             deskPopupW = Math.Min(640, Math.Max(480, viewW - 80));
-            maxImgHDesktop = Math.Min(480, Math.Max(260, viewH - 220));
+            maxImgHDesktop = Math.Min(460, Math.Max(240, viewH - 210));
             if (container != null) container.MaxHeight = maxImgHDesktop;
             if (img != null) img.MaxHeight = Math.Max(200, maxImgHDesktop - 6);
         }
 
         popup.Width = deskPopupW;
-        double estPopupH = Math.Min(viewH - 24, maxImgHDesktop + 135);
-        double deskPopupH = popup.Bounds.Height > 0 ? Math.Min(viewH - 24, popup.Bounds.Height) : estPopupH;
-
-        // Căn giữa màn hình hoàn hảo (Absolute Center) trên Windows và Linux
-        double leftDesk = Math.Max(10, (viewW - deskPopupW) / 2.0);
-        double topDesk = Math.Max(10, (viewH - deskPopupH) / 2.0);
-
-        popup.Margin = new Thickness(leftDesk, topDesk, 0, 0);
+        popup.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center;
+        popup.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+        popup.Margin = new Thickness(0);
     }
 
 
@@ -4100,6 +4091,12 @@ public partial class MainView : UserControl
         if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible)
 
         {
+
+            // Nếu video đang phát hoặc đang có bộ điều khiển Seekbar, giữ nguyên preview để người dùng thoải mái thao tác tua/click
+            if (vm.IsDualSortVideoSeekable || vm.DualSortPreviewItem?.IsVideo == true || vm.IsScrubbingDragging)
+            {
+                return;
+            }
 
             var popup = this.FindControl<Border>("DualSortPreviewPopupBorder");
 
@@ -4432,6 +4429,12 @@ public partial class MainView : UserControl
         if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible)
 
         {
+
+            // Nếu video đang phát hoặc đang có bộ điều khiển Seekbar, giữ nguyên preview để người dùng thoải mái thao tác tua/click
+            if (vm.IsDualSortVideoSeekable || vm.DualSortPreviewItem?.IsVideo == true || vm.IsScrubbingDragging)
+            {
+                return;
+            }
 
             var popup = this.FindControl<Border>("DualSortPreviewPopupBorder");
 

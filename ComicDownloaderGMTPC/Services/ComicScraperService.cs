@@ -4816,7 +4816,7 @@ public class ComicScraperService
         }
 
         int totalPagesToFetch = pageTo - pageFrom + 1;
-        int pageConcurrency = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
+        int pageConcurrency = OperatingSystem.IsAndroid() ? Math.Clamp(MaxCpuThreads, 1, 3) : Math.Clamp(MaxCpuThreads, 1, 16);
         var pageResults = new List<(string Url, string Title, string Cover)>?[totalPagesToFetch];
         using var pageSem = new SemaphoreSlim(pageConcurrency, pageConcurrency);
         int completedPagesCount = 0;
@@ -6012,7 +6012,7 @@ public class ComicScraperService
             // 3. Fallback Slow Path / Chế độ Nhúng (Embedded): Fetch reader pages in parallel để lấy ảnh gốc độ phân giải cao
             string cleanGalleryUrl = galleryUrl.TrimEnd('/');
             var pageImageDict = new System.Collections.Concurrent.ConcurrentDictionary<int, string>();
-            int readerConcurrency = Math.Clamp(MaxCpuThreads, 1, OperatingSystem.IsAndroid() ? 6 : 16);
+            int readerConcurrency = OperatingSystem.IsAndroid() ? Math.Clamp(MaxCpuThreads, 1, 3) : Math.Clamp(MaxCpuThreads, 1, 16);
             using var sem = new SemaphoreSlim(readerConcurrency, readerConcurrency);
 
             var tasks = Enumerable.Range(1, totalPages).Select(async pageNum =>
@@ -7355,7 +7355,7 @@ public class ComicScraperService
                 var results = new string[pageList.Count];
                 var parallelOptions = new ParallelOptions
                 {
-                    MaxDegreeOfParallelism = 8,
+                    MaxDegreeOfParallelism = OperatingSystem.IsAndroid() ? (MaxCpuThreads >= 4 ? 2 : 3) : Math.Clamp(MaxCpuThreads, 2, 8),
                     CancellationToken = ct
                 };
 

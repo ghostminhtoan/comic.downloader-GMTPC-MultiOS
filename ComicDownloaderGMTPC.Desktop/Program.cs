@@ -59,6 +59,33 @@ sealed class Program
     public static void Main(string[] args)
     {
         EnsureApplicationRootDirectory();
+
+        // Global Crash Guard: Bảo vệ ứng dụng khỏi sập đột ngột khi xảy ra ngoại lệ không bắt được
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            try
+            {
+                var ex = e.ExceptionObject as Exception;
+                string msg = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [Desktop AppDomain Unhandled] {ex?.Message}\n{ex?.StackTrace}\n\n";
+                string tmpDir = Path.Combine(AppContext.BaseDirectory, ".tmp");
+                if (!Directory.Exists(tmpDir)) Directory.CreateDirectory(tmpDir);
+                File.AppendAllText(Path.Combine(tmpDir, "crash_log.txt"), msg);
+            }
+            catch { }
+        };
+
+        TaskScheduler.UnobservedTaskException += (s, e) =>
+        {
+            try
+            {
+                string msg = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [Desktop UnobservedTaskException] {e.Exception?.Message}\n{e.Exception?.StackTrace}\n\n";
+                string tmpDir = Path.Combine(AppContext.BaseDirectory, ".tmp");
+                if (!Directory.Exists(tmpDir)) Directory.CreateDirectory(tmpDir);
+                File.AppendAllText(Path.Combine(tmpDir, "crash_log.txt"), msg);
+                e.SetObserved();
+            }
+            catch { }
+        };
         if (args.Any(a => string.Equals(a, "--test-scroll-drag", StringComparison.OrdinalIgnoreCase)))
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;

@@ -1202,6 +1202,10 @@ public class DownloadEngineService
                             ThermalAndPowerOptimizationService.Instance.NotifyUserActivity();
 
                             int currentImageThreads = Math.Max(1, ImageDownloadThreads);
+                            if (OperatingSystem.IsAndroid())
+                            {
+                                currentImageThreads = Math.Min(4, currentImageThreads);
+                            }
 
                             if (ThermalAndPowerOptimizationService.Instance.IsThermalThrottled)
 
