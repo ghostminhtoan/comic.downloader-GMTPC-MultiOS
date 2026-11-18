@@ -4510,9 +4510,23 @@ public class ComicScraperService
                                     if (string.IsNullOrWhiteSpace(directMediaUrl) && reps.TryGetProperty("large", out var lProp)) directMediaUrl = lProp.GetString() ?? string.Empty;
                                     if (string.IsNullOrWhiteSpace(directMediaUrl) && reps.TryGetProperty("medium", out var medProp)) directMediaUrl = medProp.GetString() ?? string.Empty;
 
-                                    if (reps.TryGetProperty("medium", out var mProp)) coverUrl = mProp.GetString() ?? string.Empty;
-                                    else if (reps.TryGetProperty("thumb", out var tProp)) coverUrl = tProp.GetString() ?? string.Empty;
-                                    else if (reps.TryGetProperty("full", out var fullProp)) coverUrl = fullProp.GetString() ?? string.Empty;
+                                    string rawCover = string.Empty;
+                                    if (reps.TryGetProperty("thumb", out var tProp)) rawCover = tProp.GetString() ?? string.Empty;
+                                    else if (reps.TryGetProperty("medium", out var mProp)) rawCover = mProp.GetString() ?? string.Empty;
+                                    else if (reps.TryGetProperty("full", out var fullProp)) rawCover = fullProp.GetString() ?? string.Empty;
+
+                                    if (!string.IsNullOrWhiteSpace(rawCover))
+                                    {
+                                        // Nếu là video WebM, Philomena/Rule34 CDN cung cấp thumbnail ảnh tĩnh/động dưới đuôi .gif
+                                        if (rawCover.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) || rawCover.Contains(".webm?"))
+                                        {
+                                            coverUrl = Regex.Replace(rawCover, @"\.webm(?=\?|$)", ".gif", RegexOptions.IgnoreCase);
+                                        }
+                                        else
+                                        {
+                                            coverUrl = rawCover;
+                                        }
+                                    }
                                 }
 
                                 if (!string.IsNullOrWhiteSpace(directMediaUrl))
@@ -7150,12 +7164,26 @@ public class ComicScraperService
                         if (string.IsNullOrWhiteSpace(singleMediaUrl) && reps.TryGetProperty("large", out var largeProp)) singleMediaUrl = largeProp.GetString() ?? string.Empty;
                         if (string.IsNullOrWhiteSpace(singleMediaUrl) && reps.TryGetProperty("medium", out var medProp)) singleMediaUrl = medProp.GetString() ?? string.Empty;
 
-                        if (reps.TryGetProperty("thumb_small", out var tsProp)) book.CoverUrl = tsProp.GetString() ?? string.Empty;
-                        else if (reps.TryGetProperty("thumb", out var tProp)) book.CoverUrl = tProp.GetString() ?? string.Empty;
-                        else if (reps.TryGetProperty("small", out var sProp)) book.CoverUrl = sProp.GetString() ?? string.Empty;
-                        else if (reps.TryGetProperty("medium", out var mProp)) book.CoverUrl = mProp.GetString() ?? string.Empty;
-                        else if (reps.TryGetProperty("large", out var lProp)) book.CoverUrl = lProp.GetString() ?? string.Empty;
-                        else if (reps.TryGetProperty("full", out var fProp)) book.CoverUrl = fProp.GetString() ?? string.Empty;
+                        string rawCover = string.Empty;
+                        if (reps.TryGetProperty("thumb", out var tProp)) rawCover = tProp.GetString() ?? string.Empty;
+                        else if (reps.TryGetProperty("thumb_small", out var tsProp)) rawCover = tsProp.GetString() ?? string.Empty;
+                        else if (reps.TryGetProperty("small", out var sProp)) rawCover = sProp.GetString() ?? string.Empty;
+                        else if (reps.TryGetProperty("medium", out var mProp)) rawCover = mProp.GetString() ?? string.Empty;
+                        else if (reps.TryGetProperty("large", out var lProp)) rawCover = lProp.GetString() ?? string.Empty;
+                        else if (reps.TryGetProperty("full", out var fProp)) rawCover = fProp.GetString() ?? string.Empty;
+
+                        if (!string.IsNullOrWhiteSpace(rawCover))
+                        {
+                            // Nếu là video WebM, Philomena/Rule34 CDN cung cấp thumbnail ảnh tĩnh/động dưới đuôi .gif
+                            if (rawCover.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) || rawCover.Contains(".webm?"))
+                            {
+                                book.CoverUrl = Regex.Replace(rawCover, @"\.webm(?=\?|$)", ".gif", RegexOptions.IgnoreCase);
+                            }
+                            else
+                            {
+                                book.CoverUrl = rawCover;
+                            }
+                        }
                     }
 
                     if (!string.IsNullOrWhiteSpace(singleMediaUrl))

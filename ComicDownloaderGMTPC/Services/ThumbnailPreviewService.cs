@@ -390,6 +390,19 @@ public sealed class ThumbnailPreviewService
             catch { }
         }
 
+        // Fallback: Nếu HighResPreviewBitmap chưa nạp được nhưng đã có ThumbnailBitmap hợp lệ,
+        // sử dụng ThumbnailBitmap hiển thị trước để tránh màn hình đen chớp nhoáng
+        if (item.HighResPreviewBitmap == null && item.ThumbnailBitmap != null)
+        {
+            await RunOnUiAsync(() =>
+            {
+                if (item.HighResPreviewBitmap == null && item.ThumbnailBitmap != null)
+                {
+                    item.HighResPreviewBitmap = item.ThumbnailBitmap;
+                }
+            });
+        }
+
         // [QUY TẮC BẮT BUỘC]: Preview video CHỈ ĐƯỢC PHÉP hoạt động trong tính năng Lọc ảnh song song (Dual Picture Sort).
         // Trong hàng đợi tải (Hover Preview), tuyệt đối không load video hay chạy video player để tránh popup WMP và crash 0xc0000005.
 
@@ -542,6 +555,29 @@ public sealed class ThumbnailPreviewService
         // Nếu đã có Bitmap nạp vào UI thì bỏ qua
         if (item.ThumbnailBitmap != null && item.HasThumbnailFile) return;
 
+        bool isRule34 = (item.Domain != null && item.Domain.Contains("rule34", StringComparison.OrdinalIgnoreCase))
+                     || (!string.IsNullOrWhiteSpace(item.Url) && item.Url.Contains("rule34", StringComparison.OrdinalIgnoreCase));
+
+        // Dọn dẹp cache hỏng: nếu file cache trên đĩa là video thô (WebM) do các phiên bản trước tải nhầm,
+        // hoặc file không thể giải mã thành Bitmap, tự động xóa để tải lại thumbnail ảnh tĩnh/gif chuẩn từ CDN
+        if (File.Exists(originalFile))
+        {
+            try
+            {
+                byte[] checkBytes = new byte[Math.Min(1024, (int)new FileInfo(originalFile).Length)];
+                using (var fs = File.OpenRead(originalFile))
+                {
+                    fs.ReadExactly(checkBytes);
+                }
+                if (isRule34 && (VideoThumbnailService.IsVideoData(checkBytes) || VideoThumbnailService.IsVideoFile(originalFile)))
+                {
+                    File.Delete(originalFile);
+                    if (File.Exists(thumbFile)) File.Delete(thumbFile);
+                }
+            }
+            catch { }
+        }
+
         // Kiểm tra xem đã có sẵn file cache trên ổ đĩa chưa (nạp tức thì không cần chờ Semaphore mạng)
         if (File.Exists(thumbFile) && new FileInfo(thumbFile).Length > 0)
         {
@@ -555,6 +591,14 @@ public sealed class ThumbnailPreviewService
             string fileToLoad = File.Exists(thumbFile) ? thumbFile : originalFile;
             await LoadThumbnailBitmapToItemAsync(item, fileToLoad, originalFile).ConfigureAwait(false);
             if (item.ThumbnailBitmap != null) return;
+
+            // Nếu file tồn tại nhưng không thể nạp thành Bitmap (bị corrupt hoặc format không hỗ trợ), xóa đi để tải lại từ candidate khác
+            try
+            {
+                File.Delete(originalFile);
+                if (File.Exists(thumbFile)) File.Delete(thumbFile);
+            }
+            catch { }
         }
 
         string itemKey = !string.IsNullOrWhiteSpace(item.Url) ? item.Url.Trim() : $"{item.Index}_{item.Title}";
@@ -951,8 +995,10 @@ public sealed class ThumbnailPreviewService
                 }
                 else
                 {
-                    await File.WriteAllBytesAsync(destinationPath, bytes, ct).ConfigureAwait(false);
-                    return true;
+                    // Nếu không trích xuất được frame ảnh từ video (ví dụ WebM codec không hỗ trợ WMF hoặc trên Linux/Android),
+                    // KHÔNG ĐƯỢC ghi video thô vào cover.jpg rồi báo thành công, vì SkiaSharp không thể render video thành Bitmap!
+                    // Trả về false để hệ thống thử candidate URL khác (ví dụ .gif thumbnail trên CDN).
+                    return false;
                 }
             }
 
@@ -988,11 +1034,19 @@ public sealed class ThumbnailPreviewService
         }
 
         string link = item.Url?.Trim() ?? string.Empty;
+        bool isRule34 = (item.Domain != null && item.Domain.Contains("rule34", StringComparison.OrdinalIgnoreCase))
+                     || link.Contains("rule34", StringComparison.OrdinalIgnoreCase);
 
         // 1. Nếu item đã có CoverUrl sẵn từ scraper (và chưa từng lỗi)
         if (!forceFreshResolve && !string.IsNullOrWhiteSpace(item.CoverUrl) && !IsPlaceholderImageUrl(item.CoverUrl) && !_failedUrlCache.ContainsKey(item.CoverUrl))
         {
-            AddCandidate(item.CoverUrl, link);
+            string cover = item.CoverUrl;
+            if (isRule34 && (cover.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) || cover.Contains(".webm?")))
+            {
+                string gifCover = Regex.Replace(cover, @"\.webm(?=\?|$)", ".gif", RegexOptions.IgnoreCase);
+                AddCandidate(gifCover, link);
+            }
+            AddCandidate(cover, link);
         }
 
         if (string.IsNullOrWhiteSpace(link)) return urls;
@@ -1274,10 +1328,22 @@ public sealed class ThumbnailPreviewService
                             {
                                 if (imgObj.TryGetProperty("representations", out var reps))
                                 {
-                                    if (reps.TryGetProperty("thumb_small", out var tsProp)) AddCandidate(tsProp.GetString(), link);
-                                    if (reps.TryGetProperty("thumb", out var tProp)) AddCandidate(tProp.GetString(), link);
-                                    if (reps.TryGetProperty("small", out var sProp)) AddCandidate(sProp.GetString(), link);
-                                    if (reps.TryGetProperty("medium", out var mProp)) AddCandidate(mProp.GetString(), link);
+                                    void AddRule34Rep(string? repUrl)
+                                    {
+                                        if (string.IsNullOrWhiteSpace(repUrl)) return;
+                                        // Philomena CDN luôn cung cấp thumb.gif cho video
+                                        if (repUrl.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) || repUrl.Contains(".webm?"))
+                                        {
+                                            string gifUrl = Regex.Replace(repUrl, @"\.webm(?=\?|$)", ".gif", RegexOptions.IgnoreCase);
+                                            AddCandidate(gifUrl, link);
+                                        }
+                                        AddCandidate(repUrl, link);
+                                    }
+
+                                    if (reps.TryGetProperty("thumb", out var tProp)) AddRule34Rep(tProp.GetString());
+                                    if (reps.TryGetProperty("thumb_small", out var tsProp)) AddRule34Rep(tsProp.GetString());
+                                    if (reps.TryGetProperty("small", out var sProp)) AddRule34Rep(sProp.GetString());
+                                    if (reps.TryGetProperty("medium", out var mProp)) AddRule34Rep(mProp.GetString());
                                 }
                                 if (imgObj.TryGetProperty("tags", out var tagsElem) && tagsElem.ValueKind == JsonValueKind.Array)
                                 {
