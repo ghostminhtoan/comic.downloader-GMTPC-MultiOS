@@ -2529,8 +2529,8 @@ public partial class MainViewModel
                         if (mpvPlayer != null)
                         {
                             _dualSortMpvPlayer = mpvPlayer;
-                            int vW = mpvPlayer.VideoWidth > 0 ? mpvPlayer.VideoWidth : 640;
-                            int vH = mpvPlayer.VideoHeight > 0 ? mpvPlayer.VideoHeight : 360;
+                            int vW = mpvPlayer.VideoWidth > 0 ? mpvPlayer.VideoWidth : (item.Width > 0 ? item.Width : 720);
+                            int vH = mpvPlayer.VideoHeight > 0 ? mpvPlayer.VideoHeight : (item.Height > 0 ? item.Height : 1280);
 
                             Dispatcher.UIThread.Post(() =>
                             {
@@ -2543,17 +2543,6 @@ public partial class MainViewModel
                             mpvPlayer.SetVolume((int)DualSortVideoVolume);
                             mpvPlayer.SetMute(IsDualSortVideoMuted);
                             mpvPlayer.SetSpeed(DualSortPlaybackSpeed);
-
-                            if (mpvPlayer.RenderFrameDirect(_dualSortWbA))
-                            {
-                                Dispatcher.UIThread.Post(() =>
-                                {
-                                    if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
-                                    {
-                                        DualSortPreviewBitmap = _dualSortWbA;
-                                    }
-                                });
-                            }
 
                             try
                             {
@@ -2916,6 +2905,48 @@ public partial class MainViewModel
                             }
 
                             await Task.Delay(25, cts.Token);
+                        }
+                    }
+                    else
+                    {
+                        // Giữ nguyên Poster/Thumbnail chất lượng cao và phát âm thanh đồng bộ (Zero-Blank trên Android / Linux)
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item && DualSortPreviewBitmap == null)
+                            {
+                                DualSortPreviewBitmap = item.Thumbnail;
+                            }
+                        });
+
+                        while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                        {
+                            if (!IsDualSortVideoPaused && _dualSortAudioPlayer != null)
+                            {
+                                double curSec = _dualSortAudioPlayer.CurrentPositionSeconds;
+                                if (curSec >= 0)
+                                {
+                                    long curAudioMs = (long)(curSec * 1000.0);
+                                    _dualSortVideoCurrentPlaybackMs = curAudioMs;
+                                    double pct = durMs > 0 ? (double)curAudioMs / durMs * 100.0 : 0;
+                                    Dispatcher.UIThread.Post(() =>
+                                    {
+                                        if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                        {
+                                            _isInternalDualSortSeekUpdating = true;
+                                            try
+                                            {
+                                                DualSortVideoSeekPosition = pct;
+                                                UpdateDualSortVideoTimeText(curAudioMs);
+                                            }
+                                            finally
+                                            {
+                                                _isInternalDualSortSeekUpdating = false;
+                                            }
+                                        }
+                                    }, DispatcherPriority.Background);
+                                }
+                            }
+                            await Task.Delay(100, cts.Token);
                         }
                     }
                     return;

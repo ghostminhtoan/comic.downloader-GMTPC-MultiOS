@@ -165,10 +165,8 @@ public sealed class MpvVideoPlayerService : IDisposable
             mpv.SetOptionString("keep-open", "yes");
             mpv.SetOptionString("loop-file", "inf");
 
-            if (onFrameReady != null)
-            {
-                mpv.StartSoftwareRendering(() => onFrameReady());
-            }
+            // BẮT BUỘC luôn luôn gọi StartSoftwareRendering để libmpv tạo mpv_render_context
+            mpv.StartSoftwareRendering(() => onFrameReady?.Invoke());
 
             mpv.Initialize();
             mpv.RunCommand(null, new object[] { "loadfile", videoPath });
@@ -181,13 +179,24 @@ public sealed class MpvVideoPlayerService : IDisposable
                 Thread.Sleep(50);
                 try
                 {
-                    width = mpv.GetProperty<int>("dwidth");
-                    height = mpv.GetProperty<int>("dheight");
-                    if (width <= 0) width = mpv.GetProperty<int>("width");
-                    if (height <= 0) height = mpv.GetProperty<int>("height");
+                    var wStr = mpv.GetPropertyString("width");
+                    var hStr = mpv.GetPropertyString("height");
+                    if (int.TryParse(wStr, out int pw) && pw > 0) width = pw;
+                    if (int.TryParse(hStr, out int ph) && ph > 0) height = ph;
 
-                    double durSec = mpv.GetProperty<double>("duration");
-                    if (durSec > 0) durationMs = (long)(durSec * 1000.0);
+                    if (width <= 0 || height <= 0)
+                    {
+                        var dwStr = mpv.GetPropertyString("dwidth");
+                        var dhStr = mpv.GetPropertyString("dheight");
+                        if (int.TryParse(dwStr, out int pdw) && pdw > 0) width = pdw;
+                        if (int.TryParse(dhStr, out int pdh) && pdh > 0) height = pdh;
+                    }
+
+                    var durStr = mpv.GetPropertyString("duration");
+                    if (double.TryParse(durStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double durSec) && durSec > 0)
+                    {
+                        durationMs = (long)(durSec * 1000.0);
+                    }
 
                     if (width > 0 && height > 0)
                         break;
@@ -195,8 +204,26 @@ public sealed class MpvVideoPlayerService : IDisposable
                 catch { }
             }
 
-            if (width <= 0) width = 640;
-            if (height <= 0) height = 360;
+            // Nếu MPV chưa đọc kịp thì lấy kích thước thật từ container parser
+            if (width <= 0 || height <= 0)
+            {
+                try
+                {
+                    if (VideoMetadataParser.GetVideoDimensions(videoPath, out int dimW, out int dimH) && dimW > 0 && dimH > 0)
+                    {
+                        width = dimW;
+                        height = dimH;
+                    }
+                    if (durationMs <= 0)
+                    {
+                        durationMs = VideoMetadataParser.GetVideoDurationMs(videoPath);
+                    }
+                }
+                catch { }
+            }
+
+            if (width <= 0) width = 720;
+            if (height <= 0) height = 1280;
 
             return new MpvVideoPlayerService(mpv, width, height, durationMs);
         }
