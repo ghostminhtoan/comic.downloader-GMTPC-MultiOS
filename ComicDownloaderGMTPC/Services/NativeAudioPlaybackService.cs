@@ -30,6 +30,7 @@ public sealed class NativeAudioPlaybackService : IDisposable
     public static Func<string, double, INativeAudioPlayerInstance?>? ExternalAndroidAudioPlayerProvider { get; set; }
 
     private object? _wmpRaw;
+    private MpvVideoPlayerService? _mpvAudioPlayer;
     private INativeAudioPlayerInstance? _androidPlayer;
     private Process? _linuxProcess;
     private bool _isDisposed;
@@ -62,8 +63,38 @@ public sealed class NativeAudioPlaybackService : IDisposable
             _isDisposed = false;
             _isPaused = false;
 
-            // 1. Windows: Sử dụng WMPlayer.OCX COM ở chế độ Headless / Windowless (0% visual window, 0% popup ngoài preview)
-            if (OperatingSystem.IsWindows())
+            // 0. ƯU TIÊN: Nếu hệ thống hỗ trợ LibMpv (Windows / Linux), dùng MPV để phát âm thanh cho mọi định dạng (.webm, .mp4, .mkv, .ts...)
+            // Đặc biệt là .webm (loại bỏ hoàn toàn modal popup WMP và crash 0xC0000005)
+            string ext = Path.GetExtension(filePath).ToLowerInvariant();
+            bool isWebm = ext == ".webm";
+
+            if (MpvVideoPlayerService.IsSupported)
+            {
+                try
+                {
+                    var mpv = MpvVideoPlayerService.Create(filePath);
+                    if (mpv != null)
+                    {
+                        _mpvAudioPlayer = mpv;
+                        mpv.SetVolume(_isMuted ? 0 : _volume);
+                        mpv.SetMute(_isMuted);
+                        mpv.SetSpeed(_playbackRate);
+                        if (startSeconds > 0)
+                        {
+                            mpv.Seek((long)(startSeconds * 1000));
+                        }
+                        mpv.Play();
+                        IsPlaying = true;
+                        _clockOffsetSec = Math.Max(0, startSeconds);
+                        _clock.Restart();
+                        return;
+                    }
+                }
+                catch { }
+            }
+
+            // 1. Windows: Sử dụng WMPlayer.OCX COM ở chế độ Headless / Windowless (CHỈ DÀNH CHO CÁC ĐỊNH DẠNG WMP HỖ TRỢ, TUYỆT ĐỐI KHÔNG GỌI VỚI .WEBM)
+            if (OperatingSystem.IsWindows() && !isWebm)
             {
                 try
                 {
@@ -152,6 +183,12 @@ public sealed class NativeAudioPlaybackService : IDisposable
         {
             if (!IsPlaying || _isPaused) return;
 
+            if (_mpvAudioPlayer != null)
+            {
+                try { _mpvAudioPlayer.Pause(); } catch { }
+                _isPaused = true;
+            }
+
             if (OperatingSystem.IsWindows() && _wmpRaw != null)
             {
                 try
@@ -184,6 +221,12 @@ public sealed class NativeAudioPlaybackService : IDisposable
         {
             if (_isPaused)
             {
+                if (_mpvAudioPlayer != null)
+                {
+                    try { _mpvAudioPlayer.Play(); } catch { }
+                    _isPaused = false;
+                }
+
                 if (OperatingSystem.IsWindows() && _wmpRaw != null)
                 {
                     try
@@ -216,6 +259,11 @@ public sealed class NativeAudioPlaybackService : IDisposable
         lock (_lock)
         {
             double safeSec = Math.Max(0, seconds);
+            if (_mpvAudioPlayer != null)
+            {
+                try { _mpvAudioPlayer.Seek((long)(safeSec * 1000)); } catch { }
+            }
+
             if (OperatingSystem.IsWindows() && _wmpRaw != null)
             {
                 try
@@ -245,6 +293,11 @@ public sealed class NativeAudioPlaybackService : IDisposable
         lock (_lock)
         {
             _volume = Math.Clamp(volumePercent, 0, 100);
+            if (_mpvAudioPlayer != null)
+            {
+                try { _mpvAudioPlayer.SetVolume(_isMuted ? 0 : _volume); } catch { }
+            }
+
             if (OperatingSystem.IsWindows() && _wmpRaw != null)
             {
                 try
@@ -262,6 +315,11 @@ public sealed class NativeAudioPlaybackService : IDisposable
         lock (_lock)
         {
             _isMuted = isMuted;
+            if (_mpvAudioPlayer != null)
+            {
+                try { _mpvAudioPlayer.SetMute(isMuted); } catch { }
+            }
+
             if (OperatingSystem.IsWindows() && _wmpRaw != null)
             {
                 try
@@ -283,6 +341,11 @@ public sealed class NativeAudioPlaybackService : IDisposable
         lock (_lock)
         {
             _playbackRate = Math.Clamp(rate, 0.5, 2.0);
+            if (_mpvAudioPlayer != null)
+            {
+                try { _mpvAudioPlayer.SetSpeed(_playbackRate); } catch { }
+            }
+
             if (OperatingSystem.IsWindows() && _wmpRaw != null)
             {
                 try
@@ -301,6 +364,16 @@ public sealed class NativeAudioPlaybackService : IDisposable
         {
             lock (_lock)
             {
+                if (_mpvAudioPlayer != null)
+                {
+                    try
+                    {
+                        long ms = _mpvAudioPlayer.CurrentPositionMs;
+                        if (ms > 0) return ms / 1000.0;
+                    }
+                    catch { }
+                }
+
                 if (OperatingSystem.IsWindows() && _wmpRaw != null)
                 {
                     try
@@ -341,6 +414,12 @@ public sealed class NativeAudioPlaybackService : IDisposable
             _isPaused = false;
             _clock.Reset();
             _clockOffsetSec = 0;
+
+            if (_mpvAudioPlayer != null)
+            {
+                try { _mpvAudioPlayer.Dispose(); } catch { }
+                _mpvAudioPlayer = null;
+            }
 
             if (OperatingSystem.IsWindows() && _wmpRaw != null)
             {

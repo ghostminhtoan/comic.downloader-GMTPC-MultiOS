@@ -278,6 +278,8 @@ public sealed class MpvVideoPlayerService : IDisposable
         catch { }
     }
 
+    private static readonly object _renderLock = new();
+
     public void SetMute(bool isMuted)
     {
         if (_disposed) return;
@@ -285,37 +287,97 @@ public sealed class MpvVideoPlayerService : IDisposable
     }
 
     /// <summary>
-    /// Render frame trực tiếp vào surface pointer (BGR0 / BGRA).
+    /// Render frame trực tiếp vào surface pointer (BGR0 / BGRA) với Stride 64-bit size_t chuẩn xác,
+    /// loại bỏ 100% bug lệch stride 32-bit trong thư viện gây xé hình và Exception 0xC0000005.
     /// </summary>
-    public bool RenderFrame(int width, int height, IntPtr surfaceAddress, string format = "bgr0")
+    public unsafe bool RenderFrame(int width, int height, IntPtr surfaceAddress, nuint stride = 0, string format = "bgr0")
     {
         if (_disposed || surfaceAddress == IntPtr.Zero || width <= 0 || height <= 0) return false;
-        try
+        lock (_renderLock)
         {
-            _mpv.SoftwareRender(width, height, surfaceAddress, format);
-            return true;
-        }
-        catch
-        {
-            return false;
+            if (_disposed) return false;
+            try
+            {
+                nuint actualStride = stride > 0 ? stride : (nuint)(width * 4);
+                int[] sizeArray = [width, height];
+                nuint[] strideArray = [actualStride]; // BẮT BUỘC size_t 64-bit trên Win64/Linux64!
+                byte[] formatBytes = System.Text.Encoding.UTF8.GetBytes(format + "\0");
+
+                try { _mpv.RenderContextUpdate(); } catch { }
+
+                fixed (int* pSize = sizeArray)
+                fixed (nuint* pStride = strideArray)
+                fixed (byte* pFormat = formatBytes)
+                {
+                    MpvRenderParam[] paramList =
+                    [
+                        new() { Type = MpvRenderParamType.SwSize, Data = pSize },
+                        new() { Type = MpvRenderParamType.SwFormat, Data = pFormat },
+                        new() { Type = MpvRenderParamType.SwStride, Data = pStride },
+                        new() { Type = MpvRenderParamType.SwPointer, Data = (void*)surfaceAddress },
+                        new() { Type = MpvRenderParamType.Invalid, Data = null }
+                    ];
+
+                    fixed (MpvRenderParam* pParams = paramList)
+                    {
+                        _mpv.RenderContextRender(pParams);
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 
     /// <summary>
-    /// Render frame trực tiếp vào WriteableBitmap của Avalonia (Zero-Copy).
+    /// Render frame trực tiếp vào WriteableBitmap của Avalonia (Zero-Copy) với Stride 64-bit size_t an toàn tuyệt đối.
     /// </summary>
-    public bool RenderFrameDirect(WriteableBitmap wb)
+    public unsafe bool RenderFrameDirect(WriteableBitmap wb)
     {
         if (_disposed || wb == null) return false;
-        try
+        lock (_renderLock)
         {
-            using var frameLock = wb.Lock();
-            _mpv.SoftwareRender(wb.PixelSize.Width, wb.PixelSize.Height, frameLock.Address, "bgr0");
-            return true;
-        }
-        catch
-        {
-            return false;
+            if (_disposed) return false;
+            try
+            {
+                using var frameLock = wb.Lock();
+                int w = wb.PixelSize.Width;
+                int h = wb.PixelSize.Height;
+                nuint stride = (nuint)frameLock.RowBytes;
+
+                int[] sizeArray = [w, h];
+                nuint[] strideArray = [stride]; // BẮT BUỘC 64-bit size_t!
+                byte[] formatBytes = System.Text.Encoding.UTF8.GetBytes("bgr0\0");
+
+                try { _mpv.RenderContextUpdate(); } catch { }
+
+                fixed (int* pSize = sizeArray)
+                fixed (nuint* pStride = strideArray)
+                fixed (byte* pFormat = formatBytes)
+                {
+                    MpvRenderParam[] paramList =
+                    [
+                        new() { Type = MpvRenderParamType.SwSize, Data = pSize },
+                        new() { Type = MpvRenderParamType.SwFormat, Data = pFormat },
+                        new() { Type = MpvRenderParamType.SwStride, Data = pStride },
+                        new() { Type = MpvRenderParamType.SwPointer, Data = (void*)frameLock.Address },
+                        new() { Type = MpvRenderParamType.Invalid, Data = null }
+                    ];
+
+                    fixed (MpvRenderParam* pParams = paramList)
+                    {
+                        _mpv.RenderContextRender(pParams);
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 

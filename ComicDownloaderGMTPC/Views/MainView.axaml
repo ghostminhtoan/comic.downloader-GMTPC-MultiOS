@@ -11605,7 +11605,7 @@
                 IsVisible="{Binding IsDualSortPreviewVisible}"
                 IsHitTestVisible="True"
                 ClipToBounds="True"
-                ZIndex="2700"
+                ZIndex="9999"
                 Background="#F8091018" BorderBrush="#38BDF8" BorderThickness="1.5"
                 BoxShadow="0 16 40 8 #D0000000"
                 PointerMoved="OnDualSortPreviewPopupPointerMoved"

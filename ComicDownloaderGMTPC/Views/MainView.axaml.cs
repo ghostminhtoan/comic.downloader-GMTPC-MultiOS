@@ -3720,24 +3720,15 @@ public partial class MainView : UserControl
 
 
     private void TriggerDelayedDualSortHoverPreview(PictureSortItem item, PointerEventArgs e)
-
     {
-
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
-
         if (DataContext is not MainViewModel vm) return;
 
-
-
-        if (vm.IsDualSortPreviewVisible && vm.DualSortPreviewItem == item)
-
+        // Nếu popup preview đang mở, TUYỆT ĐỐI BỎ QUA hover từ các item bên dưới để không làm mất preview video / ảnh đang xem
+        if (vm.IsDualSortPreviewVisible)
         {
-
             return;
-
         }
-
-
 
         var pos = e.GetCurrentPoint(this).Position;
 
@@ -3874,37 +3865,29 @@ public partial class MainView : UserControl
             return;
         }
 
-        // Desktop (Windows & Linux)
+        // Desktop (Windows & Linux): Luôn căn giữa màn hình tuyệt đối (Center) để không bao giờ bị che khuất bất kể Portrait hay Landscape
         double deskPopupW;
         if (isPortrait)
         {
-            deskPopupW = 340;
-            double maxImgH = Math.Min(560, Math.Max(300, viewH - 160));
+            deskPopupW = 380;
+            double maxImgH = Math.Min(640, Math.Max(320, viewH - 180));
             if (container != null) container.MaxHeight = maxImgH;
-            if (img != null) img.MaxHeight = maxImgH - 10;
+            if (img != null) img.MaxHeight = Math.Max(200, maxImgH - 10);
         }
         else
         {
-            deskPopupW = Math.Min(480, Math.Max(380, viewW - 100));
-            if (container != null) container.MaxHeight = 360;
-            if (img != null) img.MaxHeight = 350;
+            deskPopupW = Math.Min(640, Math.Max(480, viewW - 120));
+            double maxImgH = Math.Min(480, Math.Max(280, viewH - 240));
+            if (container != null) container.MaxHeight = maxImgH;
+            if (img != null) img.MaxHeight = Math.Max(200, maxImgH - 10);
         }
 
         popup.Width = deskPopupW;
-        double deskPopupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 480;
+        double deskPopupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 520;
 
-        double left = pos.X + 24;
-        if (left + deskPopupW + 16 > viewW)
-        {
-            left = Math.Max(12, pos.X - deskPopupW - 24);
-        }
-
-        double top = pos.Y - 40;
-        if (top + deskPopupH + 16 > viewH)
-        {
-            top = Math.Max(12, viewH - deskPopupH - 16);
-        }
-        if (top < 12) top = 12;
+        // Căn giữa màn hình hoàn hảo (Absolute Center) trên Windows và Linux
+        double left = Math.Max(12, (viewW - deskPopupW) / 2.0);
+        double top = Math.Max(12, (viewH - deskPopupH) / 2.0);
 
         popup.Margin = new Thickness(left, top, 0, 0);
     }
@@ -3947,6 +3930,10 @@ public partial class MainView : UserControl
         if (DataContext is MainViewModel vm)
         {
             if (vm.IsDualSortPreviewMaximized) return;
+            // Nếu đang kéo seekbar hoặc đang xem video, không tự ý đóng popup khi chuột rời khỏi để người dùng thoải mái thao tác
+            if (vm.IsScrubbingDragging) return;
+            if (vm.IsDualSortVideoSeekable) return;
+
             vm.CloseDualSortPreview();
         }
     }

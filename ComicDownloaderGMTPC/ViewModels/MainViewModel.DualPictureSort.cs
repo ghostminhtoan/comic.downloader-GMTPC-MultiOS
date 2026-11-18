@@ -2639,12 +2639,12 @@ public partial class MainViewModel
                         if (player != null)
                         {
                             _dualSortActivePlayer = player;
-                            int vW = player.VideoWidth > 0 ? player.VideoWidth : 640;
-                            int vH = player.VideoHeight > 0 ? player.VideoHeight : 360;
+                            int vW = player.VideoWidth > 0 ? player.VideoWidth : (item.Width > 0 ? item.Width : 640);
+                            int vH = player.VideoHeight > 0 ? player.VideoHeight : (item.Height > 0 ? item.Height : 360);
 
-                            // Cập nhật ngay kích thước gốc chuẩn vào PictureSortItem để footer hiển thị đúng kích thước thật (1920x1080)
-                            int nativeW = player.OriginalWidth > 0 ? player.OriginalWidth : vW;
-                            int nativeH = player.OriginalHeight > 0 ? player.OriginalHeight : vH;
+                            // Cập nhật ngay kích thước gốc chuẩn vào PictureSortItem để footer hiển thị đúng kích thước thật
+                            int nativeW = player.OriginalWidth > 0 ? player.OriginalWidth : (item.Width > 0 ? item.Width : vW);
+                            int nativeH = player.OriginalHeight > 0 ? player.OriginalHeight : (item.Height > 0 ? item.Height : vH);
                             Dispatcher.UIThread.Post(() =>
                             {
                                 item.UpdateDimensions(nativeW, nativeH);
@@ -2790,8 +2790,11 @@ public partial class MainViewModel
                         }
                     }
 
-                    // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát cùng nhịp Audio 1:1 theo thời gian thực (6 frames siêu tốc, 0ms nghẽn)
-                    int requestedFrames = OperatingSystem.IsAndroid() ? 6 : 10;
+                    // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát cùng nhịp Audio 1:1 theo thời gian thực
+                    // Trên Android: Phân bổ đều frames theo toàn bộ thời lượng video để phát bình thường theo thời gian thực 1:1, không bị tua nhanh nửa giây rồi loop vô hạn
+                    int requestedFrames = OperatingSystem.IsAndroid() 
+                        ? Math.Clamp((int)(durMs > 0 ? durMs / 1200 : 16), 12, 32) 
+                        : 16;
                     var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: requestedFrames, maxWidth: 480, maxHeight: 480, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 1)
                     {
@@ -2861,8 +2864,9 @@ public partial class MainViewModel
                                     try { _dualSortAudioPlayer?.Seek(restartMs / 1000.0); } catch { }
                                 }
 
-                                // Đổi frame nhịp nhàng liên tục theo thời gian thực (Smooth Motion Sequence ~11 FPS)
-                                int targetFrameIdx = (int)((curMs / 90) % totalF);
+                                // Ánh xạ frame chính xác theo tiến trình thời gian thực 1:1 của video (Real-Time Playback Synchronization)
+                                int targetFrameIdx = durMs > 0 ? (int)((double)curMs / durMs * totalF) : 0;
+                                targetFrameIdx = Math.Clamp(targetFrameIdx, 0, totalF - 1);
 
                                 if (targetFrameIdx != lastRenderedFrameIdx)
                                 {
