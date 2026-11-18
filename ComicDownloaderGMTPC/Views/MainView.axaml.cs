@@ -3811,6 +3811,7 @@ public partial class MainView : UserControl
         {
             popup.Width = double.NaN;
             popup.Height = double.NaN;
+            popup.MaxHeight = double.PositiveInfinity;
             popup.Margin = new Thickness(0);
             return;
         }
@@ -3834,6 +3835,8 @@ public partial class MainView : UserControl
         var container = this.FindControl<Border>("DualSortImageContainer");
         var img = this.FindControl<Image>("DualSortPreviewImage");
 
+        popup.MaxHeight = Math.Max(280, viewH - 24);
+
         if (OperatingSystem.IsAndroid())
         {
             bool isLandscapeScreen = viewW > viewH;
@@ -3841,85 +3844,70 @@ public partial class MainView : UserControl
             if (isLandscapeScreen)
             {
                 // Màn hình xoay ngang trên Android (viewH thấp khoảng 360-450)
-                popupW = isPortrait ? Math.Min(340, viewW - 24) : Math.Min(480, viewW - 24);
-                double maxImgH = Math.Max(140, viewH - 125);
+                popupW = isPortrait ? Math.Min(340, viewW - 20) : Math.Min(480, viewW - 20);
+                double maxImgH = Math.Max(120, viewH - 130);
                 if (container != null) container.MaxHeight = maxImgH;
-                if (img != null) img.MaxHeight = Math.Max(130, maxImgH - 10);
+                if (img != null) img.MaxHeight = Math.Max(110, maxImgH - 6);
+                double estH = Math.Min(viewH - 16, maxImgH + 120);
+                double top = Math.Max(6, (viewH - estH) / 2.0);
+                double left = Math.Max(8, (viewW - popupW) / 2.0);
+
+                popup.Width = popupW;
+                popup.Margin = new Thickness(left, top, 0, 0);
             }
             else
             {
                 // Màn hình đứng trên Android (viewW khoảng 360-420, viewH khoảng 800-900)
-                popupW = Math.Min(400, Math.Max(280, viewW - 24));
-                if (container != null) container.MaxHeight = 450;
-                if (img != null) img.MaxHeight = 440;
+                popupW = Math.Min(400, Math.Max(280, viewW - 20));
+                double maxImgH = isPortrait ? Math.Min(440, Math.Max(220, viewH - 220)) : Math.Min(340, Math.Max(180, viewH - 220));
+                if (container != null) container.MaxHeight = maxImgH;
+                if (img != null) img.MaxHeight = Math.Max(180, maxImgH - 6);
+                double estH = Math.Min(viewH - 24, maxImgH + 135);
+                double top = Math.Max(10, (viewH - estH) / 2.0);
+                double left = Math.Max(8, (viewW - popupW) / 2.0);
+
+                popup.Width = popupW;
+                popup.Margin = new Thickness(left, top, 0, 0);
             }
-
-            popup.Width = popupW;
-            double popupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : (isLandscapeScreen ? viewH - 20 : 480);
-            double touchLeft = Math.Max(12, (viewW - popupW) / 2.0);
-            double touchTop = isLandscapeScreen 
-                ? Math.Max(6, (viewH - popupH) / 2.0)
-                : Math.Clamp(pos.Y - 120, 16, Math.Max(16, viewH - popupH - 24));
-
-            popup.Margin = new Thickness(touchLeft, touchTop, 0, 0);
             return;
         }
 
         // Desktop (Windows & Linux): Luôn căn giữa màn hình tuyệt đối (Center) để không bao giờ bị che khuất bất kể Portrait hay Landscape
         double deskPopupW;
+        double maxImgHDesktop;
         if (isPortrait)
         {
-            deskPopupW = 380;
-            double maxImgH = Math.Min(640, Math.Max(320, viewH - 180));
-            if (container != null) container.MaxHeight = maxImgH;
-            if (img != null) img.MaxHeight = Math.Max(200, maxImgH - 10);
+            deskPopupW = Math.Min(400, Math.Max(320, viewW - 40));
+            maxImgHDesktop = Math.Min(480, Math.Max(240, viewH - 190));
+            if (container != null) container.MaxHeight = maxImgHDesktop;
+            if (img != null) img.MaxHeight = Math.Max(200, maxImgHDesktop - 6);
         }
         else
         {
-            deskPopupW = Math.Min(640, Math.Max(480, viewW - 120));
-            double maxImgH = Math.Min(480, Math.Max(280, viewH - 240));
-            if (container != null) container.MaxHeight = maxImgH;
-            if (img != null) img.MaxHeight = Math.Max(200, maxImgH - 10);
+            deskPopupW = Math.Min(640, Math.Max(480, viewW - 80));
+            maxImgHDesktop = Math.Min(480, Math.Max(260, viewH - 220));
+            if (container != null) container.MaxHeight = maxImgHDesktop;
+            if (img != null) img.MaxHeight = Math.Max(200, maxImgHDesktop - 6);
         }
 
         popup.Width = deskPopupW;
-        double deskPopupH = popup.Bounds.Height > 0 ? popup.Bounds.Height : 520;
+        double estPopupH = Math.Min(viewH - 24, maxImgHDesktop + 135);
+        double deskPopupH = popup.Bounds.Height > 0 ? Math.Min(viewH - 24, popup.Bounds.Height) : estPopupH;
 
         // Căn giữa màn hình hoàn hảo (Absolute Center) trên Windows và Linux
-        double left = Math.Max(12, (viewW - deskPopupW) / 2.0);
-        double top = Math.Max(12, (viewH - deskPopupH) / 2.0);
+        double leftDesk = Math.Max(10, (viewW - deskPopupW) / 2.0);
+        double topDesk = Math.Max(10, (viewH - deskPopupH) / 2.0);
 
-        popup.Margin = new Thickness(left, top, 0, 0);
+        popup.Margin = new Thickness(leftDesk, topDesk, 0, 0);
     }
 
 
-
-    private System.Threading.CancellationTokenSource? _dualSortControlsHideCts;
 
     private void OnDualSortPreviewPopupPointerMoved(object? sender, PointerEventArgs e)
     {
         if (DataContext is MainViewModel vm && vm.IsDualSortPreviewVisible && vm.IsDualSortVideoSeekable)
         {
             vm.DualSortControlsOpacity = 1.0;
-            _dualSortControlsHideCts?.Cancel();
-            _dualSortControlsHideCts = new System.Threading.CancellationTokenSource();
-            var ct = _dualSortControlsHideCts.Token;
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(2500, ct);
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    {
-                        if (!ct.IsCancellationRequested && vm.IsDualSortPreviewVisible && !vm.IsDualSortVideoPaused && !vm.IsScrubbingDragging)
-                        {
-                            vm.DualSortControlsOpacity = 0.0;
-                        }
-                    });
-                }
-                catch { }
-            });
         }
     }
 

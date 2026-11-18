@@ -517,6 +517,7 @@ public partial class MainViewModel
     private long _dualSortLastSeekMs = -1;
     private long _dualSortLastSeekTicks = 0;
     private WindowsMediaFoundationExtractor.MediaFoundationVideoPlayer? _dualSortActivePlayer;
+    private IAndroidVideoPlayerInstance? _dualSortAndroidPlayer;
     private MpvVideoPlayerService? _dualSortMpvPlayer;
     private NativeAudioPlaybackService? _dualSortAudioPlayer;
     private WriteableBitmap? _dualSortWbA;
@@ -2790,11 +2791,132 @@ public partial class MainViewModel
                         }
                     }
 
-                    // 2. Dự phòng trên Android / Linux: Nạp frames chuyển động và phát cùng nhịp Audio 1:1 theo thời gian thực
-                    // Trên Android: Phân bổ đều frames theo toàn bộ thời lượng video để phát bình thường theo thời gian thực 1:1, không bị tua nhanh nửa giây rồi loop vô hạn
+                    // 2. Ưu tiên trên Android: Sử dụng Android Hardware Video Player chuyên dụng (Real FPS 25-30 FPS, Double Buffering Zero-Lag)
+                    if (OperatingSystem.IsAndroid() && VideoThumbnailService.ExternalAndroidVideoPlayerProvider != null)
+                    {
+                        var androidPlayer = VideoThumbnailService.ExternalAndroidVideoPlayerProvider(item.FilePath);
+                        if (androidPlayer != null)
+                        {
+                            _dualSortAndroidPlayer = androidPlayer;
+                            int vW = androidPlayer.VideoWidth > 0 ? androidPlayer.VideoWidth : (item.Width > 0 ? item.Width : 480);
+                            int vH = androidPlayer.VideoHeight > 0 ? androidPlayer.VideoHeight : (item.Height > 0 ? item.Height : 270);
+
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                item.UpdateDimensions(androidPlayer.OriginalWidth > 0 ? androidPlayer.OriginalWidth : vW,
+                                                     androidPlayer.OriginalHeight > 0 ? androidPlayer.OriginalHeight : vH);
+                            });
+
+                            _dualSortWbA = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+                            _dualSortWbB = new WriteableBitmap(new PixelSize(vW, vH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+
+                            // Render frame đầu tiên
+                            if (androidPlayer.ReadNextFrameSynced(0, _dualSortWbA, out _))
+                            {
+                                Dispatcher.UIThread.Post(() =>
+                                {
+                                    if (DualSortPreviewItem == item && IsDualSortPreviewVisible && !cts.IsCancellationRequested)
+                                    {
+                                        DualSortPreviewBitmap = _dualSortWbA;
+                                    }
+                                });
+                            }
+
+                            try
+                            {
+                                bool useA = false;
+                                string lastReportedTimeStr = string.Empty;
+                                var playbackSw = System.Diagnostics.Stopwatch.StartNew();
+
+                                while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                {
+                                    if (!IsDualSortVideoPaused)
+                                    {
+                                        var targetWb = useA ? _dualSortWbA : _dualSortWbB;
+                                        if (targetWb != null)
+                                        {
+                                            double curSec = _dualSortAudioPlayer?.CurrentPositionSeconds ?? -1;
+                                            long curAudioMs = curSec >= 0 ? (long)(curSec * 1000.0) : (long)playbackSw.Elapsed.TotalMilliseconds;
+
+                                            // Xử lý A-B Looper
+                                            if (DualSortLooperPointAMs.HasValue && DualSortLooperPointBMs.HasValue)
+                                            {
+                                                long loopStart = DualSortLooperPointAMs.Value;
+                                                long loopEnd = DualSortLooperPointBMs.Value;
+                                                if (curAudioMs >= loopEnd || curAudioMs < loopStart - 500)
+                                                {
+                                                    curAudioMs = loopStart;
+                                                    playbackSw.Restart();
+                                                    try { _dualSortAudioPlayer?.Seek(loopStart / 1000.0); } catch { }
+                                                }
+                                            }
+
+                                            if (durMs > 0 && curAudioMs >= durMs)
+                                            {
+                                                long restartMs = DualSortLooperPointAMs.HasValue ? DualSortLooperPointAMs.Value : 0;
+                                                playbackSw.Restart();
+                                                curAudioMs = restartMs;
+                                                try { _dualSortAudioPlayer?.Seek(restartMs / 1000.0); } catch { }
+                                            }
+
+                                            bool frameRead = androidPlayer.ReadNextFrameSynced(curAudioMs, targetWb, out long frameMs);
+                                            if (frameRead)
+                                            {
+                                                _dualSortVideoCurrentPlaybackMs = frameMs;
+                                                var curRenderedWb = targetWb;
+                                                Dispatcher.UIThread.Post(() =>
+                                                {
+                                                    if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                    {
+                                                        DualSortPreviewBitmap = curRenderedWb;
+                                                    }
+                                                }, DispatcherPriority.Render);
+
+                                                string curTimeStr = VideoMetadataParser.FormatDuration(frameMs);
+                                                if (curTimeStr != lastReportedTimeStr)
+                                                {
+                                                    lastReportedTimeStr = curTimeStr;
+                                                    double pct = durMs > 0 ? (double)frameMs / durMs * 100.0 : 0;
+                                                    Dispatcher.UIThread.Post(() =>
+                                                    {
+                                                        if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                        {
+                                                            _isInternalDualSortSeekUpdating = true;
+                                                            try
+                                                            {
+                                                                DualSortVideoSeekPosition = pct;
+                                                                UpdateDualSortVideoTimeText(frameMs);
+                                                            }
+                                                            finally
+                                                            {
+                                                                _isInternalDualSortSeekUpdating = false;
+                                                            }
+                                                        }
+                                                    }, DispatcherPriority.Background);
+                                                }
+
+                                                useA = !useA;
+                                            }
+                                        }
+                                    }
+
+                                    double spd = DualSortPlaybackSpeed > 0 ? DualSortPlaybackSpeed : 1.0;
+                                    await Task.Delay((int)Math.Max(15, 33 / spd), cts.Token);
+                                }
+                            }
+                            finally
+                            {
+                                androidPlayer.Dispose();
+                                if (_dualSortAndroidPlayer == androidPlayer) _dualSortAndroidPlayer = null;
+                            }
+                            return;
+                        }
+                    }
+
+                    // 3. Dự phòng chung: Nạp frames chuyển động và phát cùng nhịp Audio 1:1 theo thời gian thực (Real FPS)
                     int requestedFrames = OperatingSystem.IsAndroid() 
-                        ? Math.Clamp((int)(durMs > 0 ? durMs / 1200 : 16), 12, 32) 
-                        : 16;
+                        ? Math.Clamp((int)(durMs > 0 ? durMs / 60 : 30), 20, 100) 
+                        : 24;
                     var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: requestedFrames, maxWidth: 480, maxHeight: 480, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 1)
                     {
@@ -3109,6 +3231,9 @@ public partial class MainViewModel
             try { _dualSortActivePlayer?.Dispose(); } catch { }
         }
         _dualSortActivePlayer = null;
+
+        try { _dualSortAndroidPlayer?.Dispose(); } catch { }
+        _dualSortAndroidPlayer = null;
 
         var curBmp = DualSortPreviewBitmap;
         DualSortPreviewBitmap = null;

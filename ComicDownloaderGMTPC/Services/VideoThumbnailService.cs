@@ -13,6 +13,17 @@ using SkiaSharp;
 
 namespace ComicDownloaderGMTPC.Services;
 
+public interface IAndroidVideoPlayerInstance : IDisposable
+{
+    int VideoWidth { get; }
+    int VideoHeight { get; }
+    int OriginalWidth { get; }
+    int OriginalHeight { get; }
+    long DurationMs { get; }
+    bool ReadNextFrameSynced(long targetAudioMs, WriteableBitmap targetBitmap, out long frameMs);
+    void Seek(long targetMs);
+}
+
 /// <summary>
 /// Dịch vụ trích xuất frame thumbnail và tạo ảnh xem trước (Preview) cho các định dạng video (.webm, .mp4, .mkv, .ts)
 /// Tối ưu hiệu năng cao đa nền tảng:
@@ -30,6 +41,7 @@ public static class VideoThumbnailService
     public static Func<string, int, int, byte[]?>? ExternalNativeThumbnailProvider { get; set; }
     public static Func<string, int, int, int, List<byte[]>>? ExternalNativeFramesProvider { get; set; }
     public static Func<string, long, int, int, byte[]?>? ExternalNativeFrameAtTimeProvider { get; set; }
+    public static Func<string, IAndroidVideoPlayerInstance?>? ExternalAndroidVideoPlayerProvider { get; set; }
 
     public static bool IsValidVideoPath(string? path)
     {

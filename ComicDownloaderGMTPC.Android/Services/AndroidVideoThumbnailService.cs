@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using Android.Content;
 using Android.Graphics;
 using Android.Media;
 using Android.OS;
+using Avalonia.Media.Imaging;
 using ComicDownloaderGMTPC.Services;
 
 namespace ComicDownloaderGMTPC.Android;
@@ -22,7 +24,204 @@ public static class AndroidVideoThumbnailService
         VideoThumbnailService.ExternalNativeThumbnailProvider = ExtractThumbnail;
         VideoThumbnailService.ExternalNativeFramesProvider = ExtractFrames;
         VideoThumbnailService.ExternalNativeFrameAtTimeProvider = ExtractFrameAtTime;
+        VideoThumbnailService.ExternalAndroidVideoPlayerProvider = CreateVideoPlayer;
         NativeAudioPlaybackService.ExternalAndroidAudioPlayerProvider = PlayAndroidAudio;
+    }
+
+    public static IAndroidVideoPlayerInstance? CreateVideoPlayer(string videoPath)
+    {
+        if (string.IsNullOrWhiteSpace(videoPath)) return null;
+
+        MediaMetadataRetriever? retriever = null;
+        IDisposable? streamHandle = null;
+        try
+        {
+            retriever = new MediaMetadataRetriever();
+            streamHandle = SetDataSourceSafe(retriever, videoPath);
+
+            long durationMs = TryGetDurationMs(retriever, videoPath);
+            int origW = 0, origH = 0;
+            try
+            {
+                if (VideoMetadataParser.GetVideoDimensions(videoPath, out int parsedW, out int parsedH) && parsedW > 0 && parsedH > 0)
+                {
+                    origW = parsedW;
+                    origH = parsedH;
+                }
+            }
+            catch { }
+
+            int rotation = TryGetRotation(retriever);
+            if (origW <= 0 || origH <= 0)
+            {
+                try
+                {
+                    string? wStr = retriever.ExtractMetadata(MetadataKey.VideoWidth);
+                    string? hStr = retriever.ExtractMetadata(MetadataKey.VideoHeight);
+                    if (int.TryParse(wStr, out int rw) && int.TryParse(hStr, out int rh) && rw > 0 && rh > 0)
+                    {
+                        if (rotation == 90 || rotation == 270)
+                        {
+                            origW = rh;
+                            origH = rw;
+                        }
+                        else
+                        {
+                            origW = rw;
+                            origH = rh;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            int targetW = origW > 0 ? origW : 480;
+            int targetH = origH > 0 ? origH : 270;
+
+            if (targetH > targetW) // Portrait
+            {
+                targetH = Math.Min(640, targetH);
+                targetW = Math.Max(16, (int)Math.Round((double)origW / origH * targetH));
+            }
+            else // Landscape
+            {
+                targetW = Math.Min(480, targetW);
+                targetH = Math.Max(16, (int)Math.Round((double)origH / origW * targetW));
+            }
+
+            if ((targetW & 1) != 0) targetW--;
+            if ((targetH & 1) != 0) targetH--;
+            targetW = Math.Max(16, targetW);
+            targetH = Math.Max(16, targetH);
+
+            return new AndroidNativeVideoPlayerInstance(retriever, streamHandle, targetW, targetH, origW > 0 ? origW : targetW, origH > 0 ? origH : targetH, rotation, durationMs);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC_Video", $"[AndroidVideoPlayer] Create error for '{videoPath}': {ex.Message}");
+            try { streamHandle?.Dispose(); } catch { }
+            try { retriever?.Release(); } catch { }
+            try { retriever?.Dispose(); } catch { }
+            return null;
+        }
+    }
+
+    private sealed class AndroidNativeVideoPlayerInstance : IAndroidVideoPlayerInstance
+    {
+        private MediaMetadataRetriever? _retriever;
+        private IDisposable? _streamHandle;
+        private readonly int _videoW;
+        private readonly int _videoH;
+        private readonly int _origW;
+        private readonly int _origH;
+        private readonly int _rotation;
+        private readonly long _durationMs;
+        private Java.Nio.ByteBuffer? _byteBuffer;
+        private byte[]? _managedBuffer;
+        private bool _isDisposed;
+        private readonly object _lock = new();
+
+        public int VideoWidth => _videoW;
+        public int VideoHeight => _videoH;
+        public int OriginalWidth => _origW;
+        public int OriginalHeight => _origH;
+        public long DurationMs => _durationMs;
+
+        public AndroidNativeVideoPlayerInstance(MediaMetadataRetriever retriever, IDisposable? streamHandle, int videoW, int videoH, int origW, int origH, int rotation, long durationMs)
+        {
+            _retriever = retriever;
+            _streamHandle = streamHandle;
+            _videoW = videoW;
+            _videoH = videoH;
+            _origW = origW;
+            _origH = origH;
+            _rotation = rotation;
+            _durationMs = durationMs;
+            int bufferSize = _videoW * _videoH * 4;
+            _byteBuffer = Java.Nio.ByteBuffer.Allocate(bufferSize);
+            _managedBuffer = new byte[bufferSize];
+        }
+
+        public bool ReadNextFrameSynced(long targetAudioMs, WriteableBitmap targetBitmap, out long frameMs)
+        {
+            frameMs = targetAudioMs;
+            if (_isDisposed || _retriever == null || targetBitmap == null) return false;
+
+            lock (_lock)
+            {
+                if (_isDisposed || _retriever == null) return false;
+
+                try
+                {
+                    long timeUs = Math.Max(0, targetAudioMs * 1000);
+                    global::Android.Graphics.Bitmap? bmp = GetOptimizedFrame(_retriever, timeUs, _videoW, _videoH, Option.Closest, _rotation);
+                    if (bmp == null)
+                    {
+                        bmp = GetOptimizedFrame(_retriever, timeUs, _videoW, _videoH, Option.ClosestSync, _rotation);
+                    }
+
+                    if (bmp != null)
+                    {
+                        try
+                        {
+                            int bmpW = bmp.Width;
+                            int bmpH = bmp.Height;
+                            int reqBytes = bmpW * bmpH * 4;
+
+                            if (_byteBuffer == null || _byteBuffer.Capacity() < reqBytes)
+                            {
+                                _byteBuffer = Java.Nio.ByteBuffer.Allocate(reqBytes);
+                                _managedBuffer = new byte[reqBytes];
+                            }
+
+                            _byteBuffer.Rewind();
+                            bmp.CopyPixelsToBuffer(_byteBuffer);
+                            _byteBuffer.Rewind();
+                            _byteBuffer.Get(_managedBuffer!, 0, reqBytes);
+
+                            using (var fb = targetBitmap.Lock())
+                            {
+                                int copyLen = Math.Min((int)(targetBitmap.PixelSize.Width * targetBitmap.PixelSize.Height * 4), reqBytes);
+                                Marshal.Copy(_managedBuffer!, 0, fb.Address, copyLen);
+                            }
+
+                            return true;
+                        }
+                        finally
+                        {
+                            bmp.Recycle();
+                            bmp.Dispose();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    global::Android.Util.Log.Warn("ComicGMTPC_Video", $"[AndroidVideoPlayer] ReadNextFrameSynced error: {ex.Message}");
+                }
+            }
+
+            return false;
+        }
+
+        public void Seek(long targetMs)
+        {
+        }
+
+        public void Dispose()
+        {
+            if (_isDisposed) return;
+            _isDisposed = true;
+            lock (_lock)
+            {
+                try { _streamHandle?.Dispose(); } catch { }
+                _streamHandle = null;
+                try { _retriever?.Release(); } catch { }
+                try { _retriever?.Dispose(); } catch { }
+                _retriever = null;
+                _byteBuffer = null;
+                _managedBuffer = null;
+            }
+        }
     }
 
     private static INativeAudioPlayerInstance? PlayAndroidAudio(string filePath, double startSeconds)
@@ -258,11 +457,11 @@ public static class AndroidVideoThumbnailService
             streamHandle = SetDataSourceSafe(retriever, videoPath);
 
             long durationMs = TryGetDurationMs(retriever, videoPath);
-            int count = Math.Max(4, Math.Min(12, maxFrames));
+            int count = Math.Max(4, Math.Min(120, maxFrames));
             long durationUs = durationMs > 0 ? durationMs * 1000 : 15_000_000;
-            // Phân bổ đều các frame trên toàn bộ thời lượng video để khi xem và tua, các frame trải đều toàn bộ video
-            long stepUs = durationUs > 0 ? (long)(durationUs * 0.95 / Math.Max(1, count)) : 1_000_000;
-            if (stepUs < 40_000) stepUs = 40_000;
+            // Phân bổ đều các frame trên toàn bộ thời lượng video để khi xem và tua, các frame trải đều toàn bộ video theo Real FPS
+            long stepUs = durationUs > 0 ? (long)(durationUs * 0.98 / Math.Max(1, count)) : 33_333;
+            if (stepUs < 33_333) stepUs = 33_333;
 
             CalculateOptimalFrameDimensions(retriever, videoPath, maxWidth, maxHeight, out int targetW, out int targetH, out int rotation);
 
