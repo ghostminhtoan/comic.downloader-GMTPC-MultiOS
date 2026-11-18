@@ -1998,6 +1998,7 @@ public class DownloadEngineService
                         // 1. Kiểm tra trong manifest xem có file nào chứa imgIdMatch và tồn tại hợp lệ trên đĩa không
                         lock (manifest)
                         {
+                            var keysToRemove = new List<string>();
                             foreach (var kvp in manifest)
                             {
                                 string fileName = kvp.Key;
@@ -2006,6 +2007,15 @@ public class DownloadEngineService
                                     fileName.Contains(imgIdMatch, StringComparison.OrdinalIgnoreCase))
                                 {
                                     string checkPath = Path.Combine(chapterDir, fileName);
+                                    string ext = Path.GetExtension(fileName);
+                                    if (ext.Equals(".webm", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        // Dọn dẹp webm cũ trong manifest và trên đĩa để tải MP4 chuẩn
+                                        keysToRemove.Add(fileName);
+                                        try { if (File.Exists(checkPath)) File.Delete(checkPath); } catch { }
+                                        continue;
+                                    }
+
                                     if (File.Exists(checkPath) && new FileInfo(checkPath).Length > 512)
                                     {
                                         isAlreadyDownloaded = true;
@@ -2013,6 +2023,7 @@ public class DownloadEngineService
                                     }
                                 }
                             }
+                            foreach (var k in keysToRemove) manifest.Remove(k);
                         }
 
                         // 2. Kiểm tra trực tiếp trên đĩa nếu manifest chưa kịp cập nhật
@@ -2023,6 +2034,14 @@ public class DownloadEngineService
                                 var matchedFiles = Directory.GetFiles(chapterDir, $"*{imgIdMatch}*");
                                 foreach (var f in matchedFiles)
                                 {
+                                    string ext = Path.GetExtension(f);
+                                    if (ext.Equals(".webm", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        // Xóa file .webm cũ không hợp lệ để nhường chỗ cho .mp4
+                                        try { File.Delete(f); } catch { }
+                                        continue;
+                                    }
+
                                     if (new FileInfo(f).Length > 512)
                                     {
                                         isAlreadyDownloaded = true;
@@ -2426,6 +2445,11 @@ public class DownloadEngineService
                                     {
                                         pageFileName = $"{cleanTitle}{pageExt}";
                                     }
+
+                                    if (pageFileName.EndsWith(".webm", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        pageFileName = Path.ChangeExtension(pageFileName, ".mp4");
+                                    }
                                 }
                                 else
                                 {
@@ -2466,7 +2490,11 @@ public class DownloadEngineService
                                 if (foundValidFile == null)
                                 {
                                     string matchBase = isRule34SingleImage ? Path.GetFileNameWithoutExtension(pageFileName) : pageBaseName;
-                                    foreach (var altExt in new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif", ".webm", ".mp4" })
+                                    var allowedExts = pageFileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
+                                        ? new[] { ".mp4" }
+                                        : new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif" };
+
+                                    foreach (var altExt in allowedExts)
                                     {
                                         string altPath = Path.Combine(chapterDir, $"{matchBase}{altExt}");
                                         if (File.Exists(altPath))
@@ -2478,6 +2506,17 @@ public class DownloadEngineService
                                                 break;
                                             }
                                         }
+                                    }
+
+                                    // Nếu là video mp4 mà còn file webm cũ trên đĩa, tự động xoá file webm rác
+                                    if (pageFileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        try
+                                        {
+                                            string oldWebm = Path.Combine(chapterDir, $"{matchBase}.webm");
+                                            if (File.Exists(oldWebm)) File.Delete(oldWebm);
+                                        }
+                                        catch { }
                                     }
                                 }
 

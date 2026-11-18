@@ -4501,7 +4501,7 @@ public class ComicScraperService
                                 string coverUrl = string.Empty;
                                 string directMediaUrl = string.Empty;
 
-                                // Ưu tiên view_url nếu có (chứa link gốc chính xác của ảnh hoặc video webm)
+                                // Ưu tiên view_url nếu có (chứa link gốc chính xác của ảnh hoặc video webm/mp4)
                                 if (img.TryGetProperty("view_url", out var viewUrlProp)) directMediaUrl = viewUrlProp.GetString() ?? string.Empty;
 
                                 if (img.TryGetProperty("representations", out var reps))
@@ -4509,6 +4509,18 @@ public class ComicScraperService
                                     if (string.IsNullOrWhiteSpace(directMediaUrl) && reps.TryGetProperty("full", out var fProp)) directMediaUrl = fProp.GetString() ?? string.Empty;
                                     if (string.IsNullOrWhiteSpace(directMediaUrl) && reps.TryGetProperty("large", out var lProp)) directMediaUrl = lProp.GetString() ?? string.Empty;
                                     if (string.IsNullOrWhiteSpace(directMediaUrl) && reps.TryGetProperty("medium", out var medProp)) directMediaUrl = medProp.GetString() ?? string.Empty;
+
+                                    if (directMediaUrl.Contains("cdn.rule34.lol", StringComparison.OrdinalIgnoreCase) && directMediaUrl.Contains(".webm", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        if (reps.TryGetProperty("large", out var lP) && !string.IsNullOrWhiteSpace(lP.GetString()))
+                                        {
+                                            directMediaUrl = Regex.Replace(lP.GetString()!, @"large\.webm(?=\?|$)", "full.mp4", RegexOptions.IgnoreCase);
+                                        }
+                                        else
+                                        {
+                                            directMediaUrl = Regex.Replace(directMediaUrl, @"\.webm(?=\?|$)", ".mp4", RegexOptions.IgnoreCase);
+                                        }
+                                    }
 
                                     string rawCover = string.Empty;
                                     if (reps.TryGetProperty("thumb", out var tProp)) rawCover = tProp.GetString() ?? string.Empty;
@@ -7077,6 +7089,11 @@ public class ComicScraperService
                 // Kiểm tra trước trong cache đã lưu từ lúc crawl tag để không gọi API tránh 429 Rate Limit
                 if (_rule34MediaUrlCache.TryGetValue(url, out string? cachedMediaUrl) && !string.IsNullOrWhiteSpace(cachedMediaUrl))
                 {
+                    if (cachedMediaUrl.Contains("cdn.rule34.lol", StringComparison.OrdinalIgnoreCase) && cachedMediaUrl.Contains(".webm", StringComparison.OrdinalIgnoreCase))
+                    {
+                        cachedMediaUrl = Regex.Replace(cachedMediaUrl, @"\.webm(?=\?|$)", ".mp4", RegexOptions.IgnoreCase);
+                        _rule34MediaUrlCache[url] = cachedMediaUrl;
+                    }
                     book.Chapters = new List<ChapterItem>
                     {
                         new ChapterItem
@@ -7155,6 +7172,16 @@ public class ComicScraperService
                         book.PreviewTagsText = string.Join(", ", tagList);
                     }
 
+                    bool isVideo = false;
+                    if (imgObj.TryGetProperty("format", out var fmtProp))
+                    {
+                        string fmt = fmtProp.GetString() ?? string.Empty;
+                        if (fmt.Equals("webm", StringComparison.OrdinalIgnoreCase) || fmt.Equals("mp4", StringComparison.OrdinalIgnoreCase))
+                        {
+                            isVideo = true;
+                        }
+                    }
+
                     string singleMediaUrl = string.Empty;
                     if (imgObj.TryGetProperty("view_url", out var vUrlProp)) singleMediaUrl = vUrlProp.GetString() ?? string.Empty;
 
@@ -7175,13 +7202,36 @@ public class ComicScraperService
                         if (string.IsNullOrWhiteSpace(mediumUrl)) mediumUrl = largeUrl;
                         if (string.IsNullOrWhiteSpace(smallUrl)) smallUrl = mediumUrl;
 
-                        book.ResolutionUrls["1080p (Gốc)"] = fullUrl;
-                        book.ResolutionUrls["720p (Large)"] = largeUrl;
-                        book.ResolutionUrls["480p (Medium)"] = mediumUrl;
-                        book.ResolutionUrls["360p (Small)"] = smallUrl;
-                        book.AvailableResolutions = new List<string> { "1080p (Gốc)", "720p (Large)", "480p (Medium)", "360p (Small)" };
+                        if (isVideo || fullUrl.Contains(".webm", StringComparison.OrdinalIgnoreCase) || largeUrl.Contains(".webm", StringComparison.OrdinalIgnoreCase))
+                        {
+                            isVideo = true;
+                            book.PreviewType = "MP4";
 
-                        if (string.IsNullOrWhiteSpace(singleMediaUrl)) singleMediaUrl = fullUrl;
+                            string largeMp4 = !string.IsNullOrWhiteSpace(largeUrl) ? Regex.Replace(largeUrl, @"\.webm(?=\?|$)", ".mp4", RegexOptions.IgnoreCase) : string.Empty;
+                            string fullMp4 = !string.IsNullOrWhiteSpace(largeUrl)
+                                ? Regex.Replace(largeUrl, @"large\.webm(?=\?|$)", "full.mp4", RegexOptions.IgnoreCase)
+                                : (!string.IsNullOrWhiteSpace(fullUrl) ? Regex.Replace(fullUrl, @"\.webm(?=\?|$)", ".mp4", RegexOptions.IgnoreCase) : largeMp4);
+                            string mediumMp4 = !string.IsNullOrWhiteSpace(mediumUrl) ? Regex.Replace(mediumUrl, @"\.webm(?=\?|$)", ".mp4", RegexOptions.IgnoreCase) : largeMp4;
+                            string smallMp4 = !string.IsNullOrWhiteSpace(smallUrl) ? Regex.Replace(smallUrl, @"\.webm(?=\?|$)", ".mp4", RegexOptions.IgnoreCase) : mediumMp4;
+
+                            book.ResolutionUrls["1080p (Gốc)"] = fullMp4;
+                            book.ResolutionUrls["720p (Large)"] = largeMp4;
+                            book.ResolutionUrls["480p (Medium)"] = mediumMp4;
+                            book.ResolutionUrls["360p (Small)"] = smallMp4;
+                            book.AvailableResolutions = new List<string> { "1080p (Gốc)", "720p (Large)", "480p (Medium)", "360p (Small)" };
+
+                            singleMediaUrl = !string.IsNullOrWhiteSpace(fullMp4) ? fullMp4 : largeMp4;
+                        }
+                        else
+                        {
+                            book.ResolutionUrls["1080p (Gốc)"] = fullUrl;
+                            book.ResolutionUrls["720p (Large)"] = largeUrl;
+                            book.ResolutionUrls["480p (Medium)"] = mediumUrl;
+                            book.ResolutionUrls["360p (Small)"] = smallUrl;
+                            book.AvailableResolutions = new List<string> { "1080p (Gốc)", "720p (Large)", "480p (Medium)", "360p (Small)" };
+
+                            if (string.IsNullOrWhiteSpace(singleMediaUrl)) singleMediaUrl = fullUrl;
+                        }
 
                         string rawCover = string.Empty;
                         if (reps.TryGetProperty("thumb", out var tProp)) rawCover = tProp.GetString() ?? string.Empty;
@@ -7203,6 +7253,11 @@ public class ComicScraperService
                                 book.CoverUrl = rawCover;
                             }
                         }
+                    }
+
+                    if (isVideo)
+                    {
+                        book.PreviewType = "MP4";
                     }
 
                     if (!string.IsNullOrWhiteSpace(singleMediaUrl))
@@ -7345,6 +7400,11 @@ public class ComicScraperService
                 // Kiểm tra cache trước để lấy ngay không cần tốn request tới rule34 API
                 if (_rule34MediaUrlCache.TryGetValue(chapterUrl, out string? cachedMediaUrl) && !string.IsNullOrWhiteSpace(cachedMediaUrl))
                 {
+                    if (cachedMediaUrl.Contains("cdn.rule34.lol", StringComparison.OrdinalIgnoreCase) && cachedMediaUrl.Contains(".webm", StringComparison.OrdinalIgnoreCase))
+                    {
+                        cachedMediaUrl = Regex.Replace(cachedMediaUrl, @"\.webm(?=\?|$)", ".mp4", RegexOptions.IgnoreCase);
+                        _rule34MediaUrlCache[chapterUrl] = cachedMediaUrl;
+                    }
                     images.Add(cachedMediaUrl);
                     return images;
                 }
@@ -7391,6 +7451,17 @@ public class ComicScraperService
 
                         if (!string.IsNullOrWhiteSpace(mediaUrl))
                         {
+                            if (mediaUrl.Contains("cdn.rule34.lol", StringComparison.OrdinalIgnoreCase) && mediaUrl.Contains(".webm", StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (imgObj.TryGetProperty("representations", out var repsC) && repsC.TryGetProperty("large", out var lPropC) && !string.IsNullOrWhiteSpace(lPropC.GetString()))
+                                {
+                                    mediaUrl = Regex.Replace(lPropC.GetString()!, @"large\.webm(?=\?|$)", "full.mp4", RegexOptions.IgnoreCase);
+                                }
+                                else
+                                {
+                                    mediaUrl = Regex.Replace(mediaUrl, @"\.webm(?=\?|$)", ".mp4", RegexOptions.IgnoreCase);
+                                }
+                            }
                             _rule34MediaUrlCache[chapterUrl] = mediaUrl;
                             images.Add(mediaUrl);
                         }
@@ -7418,6 +7489,10 @@ public class ComicScraperService
                             string htmlMediaUrl = ExtractRule34MediaFromHtml(pageHtml, chapterUrl);
                             if (!string.IsNullOrWhiteSpace(htmlMediaUrl))
                             {
+                                if (htmlMediaUrl.Contains("cdn.rule34.lol", StringComparison.OrdinalIgnoreCase) && htmlMediaUrl.Contains(".webm", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    htmlMediaUrl = Regex.Replace(htmlMediaUrl, @"\.webm(?=\?|$)", ".mp4", RegexOptions.IgnoreCase);
+                                }
                                 _rule34MediaUrlCache[chapterUrl] = htmlMediaUrl;
                                 images.Add(htmlMediaUrl);
                             }
@@ -7690,7 +7765,12 @@ public class ComicScraperService
         var videoSourceMatch = Regex.Match(html, @"<(?:video|source)\s+[^>]*?(?:src|data-src)=['""](?<src>https?://[^'""]+?\.(?:webm|mp4)[^'""]*)['""]", RegexOptions.IgnoreCase);
         if (videoSourceMatch.Success)
         {
-            return videoSourceMatch.Groups["src"].Value;
+            string vSrc = videoSourceMatch.Groups["src"].Value;
+            if (vSrc.Contains("cdn.rule34.lol", StringComparison.OrdinalIgnoreCase) && vSrc.Contains(".webm", StringComparison.OrdinalIgnoreCase))
+            {
+                vSrc = Regex.Replace(vSrc, @"\.webm(?=\?|$)", ".mp4", RegexOptions.IgnoreCase);
+            }
+            return vSrc;
         }
 
         // 2. Tìm thẻ img có id="image-display" hoặc class="image-scaled"

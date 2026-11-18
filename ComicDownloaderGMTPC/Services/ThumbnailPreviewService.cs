@@ -35,7 +35,7 @@ public sealed class ThumbnailPreviewService
             {
                 var dict = new Dictionary<string, string>
                 {
-                    ["type"] = item.PreviewType ?? string.Empty,
+                    ["type"] = string.Equals(item.PreviewType, "WEBM", StringComparison.OrdinalIgnoreCase) ? "MP4" : (item.PreviewType ?? string.Empty),
                     ["language"] = item.PreviewLanguage ?? string.Empty,
                     ["artist"] = item.PreviewArtist ?? string.Empty,
                     ["parody"] = item.PreviewParody ?? string.Empty,
@@ -62,7 +62,11 @@ public sealed class ThumbnailPreviewService
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
                 if (root.TryGetProperty("type", out var tProp) && string.IsNullOrWhiteSpace(item.PreviewType))
-                    item.PreviewType = tProp.GetString() ?? string.Empty;
+                {
+                    string t = tProp.GetString() ?? string.Empty;
+                    if (string.Equals(t, "WEBM", StringComparison.OrdinalIgnoreCase)) t = "MP4";
+                    item.PreviewType = t;
+                }
                 if (root.TryGetProperty("language", out var lProp) && string.IsNullOrWhiteSpace(item.PreviewLanguage))
                     item.PreviewLanguage = lProp.GetString() ?? string.Empty;
                 if (root.TryGetProperty("artist", out var aProp) && string.IsNullOrWhiteSpace(item.PreviewArtist))
@@ -482,11 +486,13 @@ public sealed class ThumbnailPreviewService
                                         }
                                     }
 
-                                    string typeStr = item.IsVideoItem ? "Video (WebM/MP4)" : "Image";
+                                    string typeStr = item.IsVideoItem ? "MP4" : "Image";
                                     if (imgObj.TryGetProperty("format", out var fmtProp) && !string.IsNullOrWhiteSpace(fmtProp.GetString()))
                                     {
                                         typeStr = fmtProp.GetString()!.ToUpperInvariant();
+                                        if (typeStr == "WEBM") typeStr = "MP4";
                                     }
+                                    if (item.IsVideoItem && typeStr == "WEBM") typeStr = "MP4";
 
                                     string? artistStr = null;
                                     var artistTags = tagList.Where(t => t.StartsWith("artist:", StringComparison.OrdinalIgnoreCase)).ToList();

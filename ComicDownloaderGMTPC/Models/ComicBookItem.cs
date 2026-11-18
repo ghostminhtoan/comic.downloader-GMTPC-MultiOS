@@ -232,6 +232,7 @@ public partial class ComicBookItem : ObservableObject
     {
         get
         {
+            if (string.Equals(PreviewType, "MP4", StringComparison.OrdinalIgnoreCase)) return true;
             if (VideoThumbnailService.IsVideoFile(Title)) return true;
             if (VideoThumbnailService.IsVideoFile(CoverUrl)) return true;
             if (VideoThumbnailService.IsVideoFile(Url)) return true;
@@ -314,6 +315,11 @@ public partial class ComicBookItem : ObservableObject
 
         if (!string.IsNullOrWhiteSpace(matchedUrl))
         {
+            if (matchedUrl.Contains("cdn.rule34.lol", StringComparison.OrdinalIgnoreCase) && matchedUrl.Contains(".webm", StringComparison.OrdinalIgnoreCase))
+            {
+                matchedUrl = System.Text.RegularExpressions.Regex.Replace(matchedUrl, @"\.webm(?=\?|$)", ".mp4", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            }
+
             if (Chapters != null && Chapters.Count > 0)
             {
                 var ch = Chapters[0];
@@ -853,7 +859,14 @@ public partial class ComicBookItem : ObservableObject
     partial void OnUrlChanged(string value) => InvalidateSearchIndex();
     partial void OnPreviewTagsTextChanged(string value) => InvalidateSearchIndex();
     partial void OnPreviewLanguageChanged(string value) => InvalidateSearchIndex();
-    partial void OnPreviewTypeChanged(string value) => InvalidateSearchIndex();
+    partial void OnPreviewTypeChanged(string value)
+    {
+        if (string.Equals(value, "WEBM", StringComparison.OrdinalIgnoreCase))
+        {
+            _previewType = "MP4";
+        }
+        InvalidateSearchIndex();
+    }
     partial void OnPreviewArtistChanged(string value) => InvalidateSearchIndex();
     partial void OnPreviewParodyChanged(string value) => InvalidateSearchIndex();
     partial void OnMissingChaptersChanged(string value) => InvalidateSearchIndex();
