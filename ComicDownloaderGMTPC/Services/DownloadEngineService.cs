@@ -2418,7 +2418,7 @@ public class DownloadEngineService
                             try
                             {
                                 string pageUrl = item.Url;
-                                string pageExt = GetSafeImageExtensionFromUrl(pageUrl);
+                                string pageExt = GetSafeImageExtensionFromUrl(pageUrl, book.Domain);
                                 string pageBaseName = $"{(pIdx + 1):D3}";
                                 string pageFileName;
 
@@ -2496,7 +2496,9 @@ public class DownloadEngineService
                                     string matchBase = isRule34SingleImage ? Path.GetFileNameWithoutExtension(pageFileName) : pageBaseName;
                                     var allowedExts = pageFileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
                                         ? new[] { ".mp4" }
-                                        : new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif" };
+                                        : (pageFileName.EndsWith(".webm", StringComparison.OrdinalIgnoreCase)
+                                            ? new[] { ".webm" }
+                                            : new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif" });
 
                                     foreach (var altExt in allowedExts)
                                     {
@@ -2512,8 +2514,8 @@ public class DownloadEngineService
                                         }
                                     }
 
-                                    // Nếu là video mp4 mà còn file webm cũ trên đĩa, tự động xoá file webm rác
-                                    if (pageFileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+                                    // Chỉ với Rule34: nếu là video mp4 mà còn file webm cũ trên đĩa, tự động xoá file webm rác
+                                    if (isRule34SingleImage && pageFileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
                                     {
                                         try
                                         {
@@ -4349,68 +4351,51 @@ public class DownloadEngineService
 
 
 
-    public static string GetSafeImageExtensionFromUrl(string url)
-
+    public static string GetSafeImageExtensionFromUrl(string url, string? domain = null)
     {
-
         if (string.IsNullOrWhiteSpace(url)) return ".jpg";
 
         string path = url;
-
         if (Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) && uri != null)
-
         {
-
             path = uri.AbsolutePath;
-
+            if (string.IsNullOrEmpty(domain))
+            {
+                domain = uri.Host;
+            }
         }
-
         else
-
         {
-
             int queryIndex = url.IndexOf('?');
-
             if (queryIndex >= 0) path = url.Substring(0, queryIndex);
-
         }
-
-
 
         string ext = (Path.GetExtension(path) ?? string.Empty).ToLowerInvariant();
+        bool isRule34 = (!string.IsNullOrEmpty(domain) && domain.Contains("rule34", StringComparison.OrdinalIgnoreCase)) ||
+                        url.Contains("rule34.lol", StringComparison.OrdinalIgnoreCase) ||
+                        url.Contains("rule34", StringComparison.OrdinalIgnoreCase);
 
         switch (ext)
-
         {
-
             case ".jpg":
-
             case ".jpeg":
-
             case ".png":
-
             case ".gif":
-
             case ".bmp":
-
             case ".webp":
-
             case ".avif":
+                return ext;
 
             case ".webm":
-
-                return ".mp4"; // Đổi cơ chế download webm thành mp4 theo yêu cầu
+                // QUY TẮC CỐT LÕI: Ngoài Rule34 thì các web khác TUYỆT ĐỐI không được đổi format file là mp4 (giữ nguyên .webm)
+                return isRule34 ? ".mp4" : ".webm";
 
             case ".mp4":
-
                 return ext;
 
             default:
-
                 return ".jpg";
-
         }
-
     }
 
 }
