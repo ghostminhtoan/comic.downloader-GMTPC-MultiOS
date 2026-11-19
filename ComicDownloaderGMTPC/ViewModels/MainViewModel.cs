@@ -4278,34 +4278,20 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
-            {
-                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
-                {
-                    Title = "Chọn thư mục lưu truyện tải về",
-                    AllowMultiple = false
-                };
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục lưu truyện tải về" : "Select Download Folder";
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                _downloadEngine.DownloadRoot,
+                title,
+                _langService.CurrentLanguage);
 
-                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
-                if (folders != null && folders.Count > 0)
-                {
-                    var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
-                    if (!string.IsNullOrWhiteSpace(normalized))
-                    {
-                        string writable = _downloadEngine.EnsureWritableDownloadRoot(normalized);
-                        _downloadEngine.SetDownloadRoot(writable);
-                        DownloadPathText = _downloadEngine.DownloadRoot;
-                        LibraryVm.LibraryRootPath = _downloadEngine.DownloadRoot;
-                        AddLog("SUCCESS", $"Đã chọn thư mục tải mới: {_downloadEngine.DownloadRoot}");
-                        return;
-                    }
-                }
-            }
-            else
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                AddLog("WARN", "Không thể mở bộ chọn thư mục hệ thống (StorageProvider).");
+                string writable = _downloadEngine.EnsureWritableDownloadRoot(chosen);
+                _downloadEngine.SetDownloadRoot(writable);
+                DownloadPathText = _downloadEngine.DownloadRoot;
+                LibraryVm.LibraryRootPath = _downloadEngine.DownloadRoot;
+                AddLog("SUCCESS", $"Đã chọn thư mục tải mới: {_downloadEngine.DownloadRoot}");
             }
         }
         catch (Exception ex)
@@ -5725,27 +5711,18 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
-            {
-                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
-                {
-                    Title = _langService.CurrentLanguage == "VI"
-                        ? "Chọn thư mục chứa ảnh dài để cắt"
-                        : "Select folder containing long images to split",
-                    AllowMultiple = false
-                };
+            string title = _langService.CurrentLanguage == "VI"
+                ? "Chọn thư mục chứa ảnh dài để cắt"
+                : "Select folder containing long images to split";
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                ManualSplitFolderPath,
+                title,
+                _langService.CurrentLanguage);
 
-                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
-                if (folders != null && folders.Count > 0)
-                {
-                    var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
-                    if (!string.IsNullOrWhiteSpace(normalized))
-                    {
-                        ManualSplitFolderPath = normalized;
-                    }
-                }
+            if (!string.IsNullOrWhiteSpace(chosen))
+            {
+                ManualSplitFolderPath = chosen;
             }
         }
         catch (Exception ex)
@@ -6041,37 +6018,29 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
+            string title = _langService.CurrentLanguage == "VI"
+                ? "Chọn thư mục nguồn chứa ảnh để xử lý nâng cao"
+                : "Select input folder containing images to enhance";
+
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                EnhanceFolderPath,
+                title,
+                _langService.CurrentLanguage);
+
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
+                EnhanceFolderPath = chosen;
+
+                // Tự động gợi ý Output folder ở cùng cấp với thư mục nguồn
+                if (string.IsNullOrWhiteSpace(EnhanceOutputFolderPath))
                 {
-                    Title = _langService.CurrentLanguage == "VI"
-                        ? "Chọn thư mục nguồn chứa ảnh để xử lý nâng cao"
-                        : "Select input folder containing images to enhance",
-                    AllowMultiple = false
-                };
+                    EnhanceOutputFolderPath = GetSiblingFolder(chosen, "enhanced");
+                }
 
-                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
-                if (folders != null && folders.Count > 0)
+                if (Directory.Exists(chosen))
                 {
-                    var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
-                    if (!string.IsNullOrWhiteSpace(normalized))
-                    {
-                        EnhanceFolderPath = normalized;
-
-                        // Tự động gợi ý Output folder ở cùng cấp với thư mục nguồn
-                        if (string.IsNullOrWhiteSpace(EnhanceOutputFolderPath))
-                        {
-                            EnhanceOutputFolderPath = GetSiblingFolder(normalized, "enhanced");
-                        }
-
-                        if (Directory.Exists(normalized))
-                        {
-                            LoadFolderImages(normalized);
-                        }
-                    }
+                    LoadFolderImages(chosen);
                 }
             }
         }
@@ -6087,27 +6056,19 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
-            {
-                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
-                {
-                    Title = _langService.CurrentLanguage == "VI"
-                        ? "Chọn thư mục đích để lưu ảnh sau khi xử lý"
-                        : "Select output folder to save enhanced images",
-                    AllowMultiple = false
-                };
+            string title = _langService.CurrentLanguage == "VI"
+                ? "Chọn thư mục đích để lưu ảnh sau khi xử lý"
+                : "Select output folder to save enhanced images";
 
-                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
-                if (folders != null && folders.Count > 0)
-                {
-                    var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
-                    if (!string.IsNullOrWhiteSpace(normalized))
-                    {
-                        EnhanceOutputFolderPath = normalized;
-                    }
-                }
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                EnhanceOutputFolderPath,
+                title,
+                _langService.CurrentLanguage);
+
+            if (!string.IsNullOrWhiteSpace(chosen))
+            {
+                EnhanceOutputFolderPath = chosen;
             }
         }
         catch (Exception ex)
@@ -6122,39 +6083,32 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
-            {
-                var options = new Avalonia.Platform.Storage.FilePickerOpenOptions
-                {
-                    Title = _langService.CurrentLanguage == "VI"
-                        ? "Chọn ảnh làm mẫu xem trước Before / After"
-                        : "Pick sample image for Before / After preview",
-                    AllowMultiple = false,
-                    FileTypeFilter = new[]
-                    {
-                        new Avalonia.Platform.Storage.FilePickerFileType("Images")
-                        {
-                            Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp" }
-                        }
-                    }
-                };
+            string title = _langService.CurrentLanguage == "VI"
+                ? "Chọn ảnh làm mẫu xem trước Before / After"
+                : "Pick sample image for Before / After preview";
 
-                var files = await topLevel.StorageProvider.OpenFilePickerAsync(options);
-                if (files != null && files.Count > 0)
+            string? chosen = await FolderOrFilePickerService.PickFileAsync(
+                topLevel,
+                EnhanceFolderPath,
+                title,
+                new[]
                 {
-                    var file = files[0];
-                    string? rawPath = file.TryGetLocalPath() ?? file.Path?.LocalPath ?? file.Path?.ToString();
-                    string normalized = DownloadEngineService.NormalizeStoragePath(rawPath, file.Name);
-                    if (!string.IsNullOrEmpty(normalized) && File.Exists(normalized))
+                    new Avalonia.Platform.Storage.FilePickerFileType("Images")
                     {
-                        string dir = Path.GetDirectoryName(normalized) ?? string.Empty;
-                        if (string.IsNullOrEmpty(EnhanceFolderPath))
-                        {
-                            EnhanceFolderPath = dir;
-                        }
-                        LoadFolderImages(dir, normalized);
+                        Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp" }
                     }
+                },
+                new[] { ".jpg", ".jpeg", ".png", ".webp", ".bmp" },
+                _langService.CurrentLanguage);
+
+            if (!string.IsNullOrEmpty(chosen) && File.Exists(chosen))
+            {
+                string dir = Path.GetDirectoryName(chosen) ?? string.Empty;
+                if (string.IsNullOrEmpty(EnhanceFolderPath))
+                {
+                    EnhanceFolderPath = dir;
                 }
+                LoadFolderImages(dir, chosen);
             }
         }
         catch (Exception ex)
@@ -6697,30 +6651,22 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
-            {
-                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
-                {
-                    Title = _langService.CurrentLanguage == "VI"
-                        ? "Chọn thư mục nguồn chứa ảnh hoặc các thư mục chapter cần đóng gói"
-                        : "Select input folder containing images or chapters to pack",
-                    AllowMultiple = false
-                };
+            string title = _langService.CurrentLanguage == "VI"
+                ? "Chọn thư mục nguồn chứa ảnh hoặc các thư mục chapter cần đóng gói"
+                : "Select input folder containing images or chapters to pack";
 
-                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
-                if (folders != null && folders.Count > 0)
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                PackerInputFolderPath,
+                title,
+                _langService.CurrentLanguage);
+
+            if (!string.IsNullOrWhiteSpace(chosen))
+            {
+                PackerInputFolderPath = chosen;
+                if (string.IsNullOrWhiteSpace(PackerOutputFolderPath))
                 {
-                    var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
-                    if (!string.IsNullOrWhiteSpace(normalized))
-                    {
-                        PackerInputFolderPath = normalized;
-                        if (string.IsNullOrWhiteSpace(PackerOutputFolderPath))
-                        {
-                            PackerOutputFolderPath = GetSiblingFolder(normalized, "packed");
-                        }
-                    }
+                    PackerOutputFolderPath = GetSiblingFolder(chosen, "packed");
                 }
             }
         }
@@ -6736,57 +6682,50 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
+            string title = _langService.CurrentLanguage == "VI"
+                ? "Chọn file cần chuyển đổi (PDF, ZIP, CBZ, RAR, CBR)"
+                : "Select file to convert (PDF, ZIP, CBZ, RAR, CBR)";
+
+            string? chosen = await FolderOrFilePickerService.PickFileAsync(
+                topLevel,
+                PackerInputFolderPath,
+                title,
+                new[]
+                {
+                    new Avalonia.Platform.Storage.FilePickerFileType("Tất cả định dạng hỗ trợ (*.pdf, *.zip, *.cbz, *.rar, *.cbr)")
+                    {
+                        Patterns = new[] { "*.pdf", "*.zip", "*.cbz", "*.rar", "*.cbr" }
+                    },
+                    new Avalonia.Platform.Storage.FilePickerFileType("PDF Document (*.pdf)")
+                    {
+                        Patterns = new[] { "*.pdf" }
+                    },
+                    new Avalonia.Platform.Storage.FilePickerFileType("Comic Archives (*.zip, *.cbz, *.rar, *.cbr)")
+                    {
+                        Patterns = new[] { "*.zip", "*.cbz", "*.rar", "*.cbr" }
+                    }
+                },
+                new[] { ".pdf", ".zip", ".cbz", ".rar", ".cbr" },
+                _langService.CurrentLanguage);
+
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                var options = new Avalonia.Platform.Storage.FilePickerOpenOptions
+                PackerInputFolderPath = chosen;
+                if (string.IsNullOrWhiteSpace(PackerOutputFolderPath))
                 {
-                    Title = _langService.CurrentLanguage == "VI"
-                        ? "Chọn file cần chuyển đổi (PDF, ZIP, CBZ, RAR, CBR)"
-                        : "Select file to convert (PDF, ZIP, CBZ, RAR, CBR)",
-                    AllowMultiple = false,
-                    FileTypeFilter = new[]
-                    {
-                        new Avalonia.Platform.Storage.FilePickerFileType("Tất cả định dạng hỗ trợ (*.pdf, *.zip, *.cbz, *.rar, *.cbr)")
-                        {
-                            Patterns = new[] { "*.pdf", "*.zip", "*.cbz", "*.rar", "*.cbr" }
-                        },
-                        new Avalonia.Platform.Storage.FilePickerFileType("PDF Document (*.pdf)")
-                        {
-                            Patterns = new[] { "*.pdf" }
-                        },
-                        new Avalonia.Platform.Storage.FilePickerFileType("Comic Archives (*.zip, *.cbz, *.rar, *.cbr)")
-                        {
-                            Patterns = new[] { "*.zip", "*.cbz", "*.rar", "*.cbr" }
-                        }
-                    }
-                };
+                    PackerOutputFolderPath = GetSiblingFolder(chosen, "packed");
+                }
 
-                var files = await topLevel.StorageProvider.OpenFilePickerAsync(options);
-                if (files != null && files.Count > 0)
+                if (LibraryScannerService.IsPdfFile(chosen))
                 {
-                    var selected = files[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
-                    if (!string.IsNullOrWhiteSpace(normalized))
-                    {
-                        PackerInputFolderPath = normalized;
-                        if (string.IsNullOrWhiteSpace(PackerOutputFolderPath))
-                        {
-                            PackerOutputFolderPath = GetSiblingFolder(normalized, "packed");
-                        }
-
-                        if (LibraryScannerService.IsPdfFile(normalized))
-                        {
-                            IsPackerCbz = true;
-                            IsPackerPdf = false;
-                        }
-                        else if (LibraryScannerService.IsArchiveFile(normalized))
-                        {
-                            IsPackerPdf = true;
-                            IsPackerCbz = false;
-                            IsPackerZip = false;
-                        }
-                    }
+                    IsPackerCbz = true;
+                    IsPackerPdf = false;
+                }
+                else if (LibraryScannerService.IsArchiveFile(chosen))
+                {
+                    IsPackerPdf = true;
+                    IsPackerCbz = false;
+                    IsPackerZip = false;
                 }
             }
         }
@@ -6802,27 +6741,19 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
-            {
-                var options = new Avalonia.Platform.Storage.FolderPickerOpenOptions
-                {
-                    Title = _langService.CurrentLanguage == "VI"
-                        ? "Chọn thư mục đích lưu file đóng gói (Zip, Cbz, Pdf)"
-                        : "Select output folder to save packed files (Zip, Cbz, Pdf)",
-                    AllowMultiple = false
-                };
+            string title = _langService.CurrentLanguage == "VI"
+                ? "Chọn thư mục đích lưu file đóng gói (Zip, Cbz, Pdf)"
+                : "Select output folder to save packed files (Zip, Cbz, Pdf)";
 
-                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
-                if (folders != null && folders.Count > 0)
-                {
-                    var selected = folders[0];
-                    string? path = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                    string normalized = DownloadEngineService.NormalizeStoragePath(path, selected.Name);
-                    if (!string.IsNullOrWhiteSpace(normalized))
-                    {
-                        PackerOutputFolderPath = normalized;
-                    }
-                }
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                PackerOutputFolderPath,
+                title,
+                _langService.CurrentLanguage);
+
+            if (!string.IsNullOrWhiteSpace(chosen))
+            {
+                PackerOutputFolderPath = chosen;
             }
         }
         catch (Exception ex)

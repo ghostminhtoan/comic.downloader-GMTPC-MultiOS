@@ -395,20 +395,35 @@ public class MainActivity : AvaloniaMainActivity
             ComicDownloaderGMTPC.Services.NativeWebViewService.Instance = new AndroidNativeWebViewService();
             AndroidVideoThumbnailService.Register();
 
-            // Đăng ký kiểm tra Intent SAF để tránh lỗi "No apps can perform this action" trên giả lập LDPlayer / ROM thiếu DocumentsUI
+            // Đăng ký kiểm tra Intent SAF: Trên máy thật ngoài đời luôn trả về true để hiện nút "Sử dụng thư mục này",
+            // chỉ trên giả lập LDPlayer / ROM thiếu DocumentsUI mới chuyển sang In-App Picker.
             ComicDownloaderGMTPC.Services.FolderOrFilePickerService.AndroidCanOpenDocumentTree = () =>
             {
                 try
                 {
-                    var intent = new Intent(Intent.ActionOpenDocumentTree);
+                    string buildProduct = (global::Android.OS.Build.Product ?? "").ToLowerInvariant();
+                    string buildHardware = (global::Android.OS.Build.Hardware ?? "").ToLowerInvariant();
+                    string buildFingerprint = (global::Android.OS.Build.Fingerprint ?? "").ToLowerInvariant();
+                    bool isEmulator = buildProduct.Contains("vbox") || buildProduct.Contains("nox") ||
+                                      buildHardware.Contains("goldfish") || buildHardware.Contains("ranchu") ||
+                                      buildFingerprint.Contains("generic") || buildProduct.Contains("ldplayer");
+
                     var pm = CurrentInstance?.ApplicationContext?.PackageManager ?? CurrentInstance?.PackageManager;
-                    if (pm == null) return false;
+                    if (pm == null) return !isEmulator;
+
+                    // Trên máy thật ngoài đời (không phải giả lập): 100% hỗ trợ SAF OpenDocumentTree
+                    if (!isEmulator) return true;
+
+                    var intent = new Intent(Intent.ActionOpenDocumentTree);
+                    var resolve = pm.ResolveActivity(intent, 0);
+                    if (resolve != null) return true;
+
                     var list = pm.QueryIntentActivities(intent, 0);
                     return list != null && list.Count > 0;
                 }
                 catch
                 {
-                    return false;
+                    return true;
                 }
             };
 

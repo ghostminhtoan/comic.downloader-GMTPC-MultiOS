@@ -41,6 +41,11 @@ public static class FolderOrFilePickerService
     /// </summary>
     public static Func<string?, string?, string, Task<string?>>? InAppFolderPickerHandler { get; set; }
 
+    /// <summary>
+    /// Trình duyệt tập tin tích hợp In-App File Picker (hoạt động độc lập 100%, hỗ trợ chọn file ảnh, video, zip, pdf, txt, excel...).
+    /// </summary>
+    public static Func<string?, string?, string[]?, string, Task<string?>>? InAppFilePickerHandler { get; set; }
+
     public static async Task<string?> PickFolderWithFileViewAsync(TopLevel? topLevel, string? initialPath, string language = "VI")
     {
         // 1. Trên Windows: Sử dụng COM IFileOpenDialog tối ưu hiển thị danh sách file ảnh kèm nút 'Select Folder'
@@ -301,6 +306,163 @@ public static class FolderOrFilePickerService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Chọn 1 tập tin tổng quát thích ứng đa nền tảng (hỗ trợ ảnh, video, zip/cbz, pdf, txt, json...).
+    /// Nếu trên giả lập hoặc môi trường không có File Picker của hệ thống, tự động fallback sang In-App Picker an toàn.
+    /// </summary>
+    public static async Task<string?> PickFileAsync(
+        TopLevel? topLevel,
+        string? initialPath,
+        string? title = null,
+        IReadOnlyList<FilePickerFileType>? fileTypes = null,
+        string[]? filterExtensions = null,
+        string language = "VI")
+    {
+        string defaultTitle = language == "VI" ? "Chọn tệp tin..." : "Select File...";
+        string actualTitle = !string.IsNullOrWhiteSpace(title) ? title : defaultTitle;
+
+        // 1. Thử gọi StorageProvider của hệ thống nếu khả dụng
+        bool canOpenFile = true;
+        if (OperatingSystem.IsAndroid())
+        {
+            canOpenFile = AndroidCanOpenFile?.Invoke() ?? true;
+        }
+
+        if (canOpenFile && topLevel?.StorageProvider != null)
+        {
+            try
+            {
+                IStorageFolder? startFolder = null;
+                if (!string.IsNullOrWhiteSpace(initialPath) && (Directory.Exists(initialPath) || File.Exists(initialPath)))
+                {
+                    try
+                    {
+                        string dir = Directory.Exists(initialPath) ? initialPath : (Path.GetDirectoryName(initialPath) ?? initialPath);
+                        startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(dir);
+                    }
+                    catch { }
+                }
+
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = actualTitle,
+                    AllowMultiple = false,
+                    SuggestedStartLocation = startFolder,
+                    FileTypeFilter = fileTypes
+                });
+
+                if (files != null && files.Count > 0)
+                {
+                    var selected = files[0];
+                    string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                    string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                    {
+                        return normalized;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 2. Fallback cứu hộ: In-App File Selector
+        if (InAppFilePickerHandler != null)
+        {
+            try
+            {
+                string? inAppResult = await InAppFilePickerHandler(initialPath, actualTitle, filterExtensions, language);
+                if (!string.IsNullOrWhiteSpace(inAppResult))
+                {
+                    return inAppResult;
+                }
+            }
+            catch { }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Chọn nhiều tập tin (cho tính năng Gộp file Archive Merger, Rename...).
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> PickMultipleFilesAsync(
+        TopLevel? topLevel,
+        string? initialPath,
+        string? title = null,
+        IReadOnlyList<FilePickerFileType>? fileTypes = null,
+        string[]? filterExtensions = null,
+        string language = "VI")
+    {
+        string defaultTitle = language == "VI" ? "Chọn các tệp tin..." : "Select Files...";
+        string actualTitle = !string.IsNullOrWhiteSpace(title) ? title : defaultTitle;
+
+        bool canOpenFile = true;
+        if (OperatingSystem.IsAndroid())
+        {
+            canOpenFile = AndroidCanOpenFile?.Invoke() ?? true;
+        }
+
+        if (canOpenFile && topLevel?.StorageProvider != null)
+        {
+            try
+            {
+                IStorageFolder? startFolder = null;
+                if (!string.IsNullOrWhiteSpace(initialPath) && (Directory.Exists(initialPath) || File.Exists(initialPath)))
+                {
+                    try
+                    {
+                        string dir = Directory.Exists(initialPath) ? initialPath : (Path.GetDirectoryName(initialPath) ?? initialPath);
+                        startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(dir);
+                    }
+                    catch { }
+                }
+
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = actualTitle,
+                    AllowMultiple = true,
+                    SuggestedStartLocation = startFolder,
+                    FileTypeFilter = fileTypes
+                });
+
+                if (files != null && files.Count > 0)
+                {
+                    var results = new List<string>();
+                    foreach (var f in files)
+                    {
+                        string? raw = f.TryGetLocalPath() ?? f.Path?.LocalPath ?? f.Path?.ToString();
+                        string normalized = DownloadEngineService.NormalizeStoragePath(raw, f.Name);
+                        if (!string.IsNullOrWhiteSpace(normalized))
+                        {
+                            results.Add(normalized);
+                        }
+                    }
+                    if (results.Count > 0)
+                    {
+                        return results;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // Fallback: Nếu không chọn được nhiều file qua hệ thống, thử chọn đơn file qua In-App Picker
+        if (InAppFilePickerHandler != null)
+        {
+            try
+            {
+                string? single = await InAppFilePickerHandler(initialPath, actualTitle, filterExtensions, language);
+                if (!string.IsNullOrWhiteSpace(single))
+                {
+                    return new[] { single };
+                }
+            }
+            catch { }
+        }
+
+        return Array.Empty<string>();
     }
 
     private static bool CheckAndroidDocumentTreeAvailable()

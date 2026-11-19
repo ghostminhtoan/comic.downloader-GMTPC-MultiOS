@@ -174,37 +174,33 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
-            {
-                var options = new FilePickerOpenOptions
-                {
-                    Title = "Chọn Các File Cần Đổi Tên",
-                    AllowMultiple = true
-                };
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn Các File Cần Đổi Tên" : "Select Files To Rename";
+            var files = await FolderOrFilePickerService.PickMultipleFilesAsync(
+                topLevel,
+                ManualRenameFolderPath,
+                title,
+                language: _langService.CurrentLanguage);
 
-                var files = await topLevel.StorageProvider.OpenFilePickerAsync(options);
-                if (files != null && files.Count > 0)
+            if (files != null && files.Count > 0)
+            {
+                int added = 0;
+                foreach (var path in files)
                 {
-                    int added = 0;
-                    foreach (var f in files)
+                    if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
                     {
-                        string path = ResolveStorageItemPath(f);
-                        if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                        if (!RenameItems.Any(it => it.OriginalPath.Equals(path, StringComparison.OrdinalIgnoreCase)))
                         {
-                            if (!RenameItems.Any(it => it.OriginalPath.Equals(path, StringComparison.OrdinalIgnoreCase)))
+                            RenameItems.Add(new RenameItem
                             {
-                                RenameItems.Add(new RenameItem
-                                {
-                                    OriginalPath = path,
-                                    IsDirectory = false
-                                });
-                                added++;
-                            }
+                                OriginalPath = path,
+                                IsDirectory = false
+                            });
+                            added++;
                         }
                     }
-                    RefreshRenamePreview();
-                    RenameStatusMessage = $"Đã thêm {added} file vào danh sách.";
                 }
+                RefreshRenamePreview();
+                RenameStatusMessage = $"Đã thêm {added} file vào danh sách.";
             }
         }
         catch (Exception ex)
@@ -257,23 +253,17 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
-            {
-                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-                {
-                    Title = "Chọn Thư Mục Quét Đổi Tên",
-                    AllowMultiple = false
-                });
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn Thư Mục Quét Đổi Tên" : "Select Folder To Rename";
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                ManualRenameFolderPath,
+                title,
+                _langService.CurrentLanguage);
 
-                if (folders != null && folders.Count > 0)
-                {
-                    string path = ResolveStorageItemPath(folders[0]);
-                    if (!string.IsNullOrWhiteSpace(path))
-                    {
-                        ManualRenameFolderPath = path;
-                        ScanManualRenameFolder();
-                    }
-                }
+            if (!string.IsNullOrWhiteSpace(chosen))
+            {
+                ManualRenameFolderPath = chosen;
+                ScanManualRenameFolder();
             }
         }
         catch (Exception ex)

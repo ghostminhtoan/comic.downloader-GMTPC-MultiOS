@@ -17,6 +17,8 @@ public class FolderItemDisplay
     public string FullPath { get; set; } = "";
     public string Icon { get; set; } = "📁";
     public string SubInfo { get; set; } = "";
+    public bool IsDirectory { get; set; } = true;
+    public bool IsFile => !IsDirectory;
 }
 
 public class FolderQuickPathItem
@@ -29,9 +31,16 @@ public class FolderQuickPathItem
 public partial class MainViewModel
 {
     private TaskCompletionSource<string?>? _folderPickerTcs;
+    private TaskCompletionSource<string?>? _filePickerTcs;
 
     [ObservableProperty]
     private bool _isFolderPickerModalOpen;
+
+    [ObservableProperty]
+    private bool _isFolderPickerFileMode;
+
+    [ObservableProperty]
+    private string[]? _folderPickerFileFilters;
 
     [ObservableProperty]
     private string _folderPickerModalTitle = "Chọn thư mục";
@@ -60,12 +69,21 @@ public partial class MainViewModel
         {
             return Dispatcher.UIThread.InvokeAsync(() => ShowInAppFolderPickerAsync(initialPath, title, language));
         };
+
+        FolderOrFilePickerService.InAppFilePickerHandler = (initialPath, title, filters, language) =>
+        {
+            return Dispatcher.UIThread.InvokeAsync(() => ShowInAppFilePickerAsync(initialPath, title, filters, language));
+        };
     }
 
     public Task<string?> ShowInAppFolderPickerAsync(string? initialPath, string? title = null, string language = "VI")
     {
         _folderPickerTcs?.TrySetResult(null);
+        _filePickerTcs?.TrySetResult(null);
         _folderPickerTcs = new TaskCompletionSource<string?>();
+
+        IsFolderPickerFileMode = false;
+        FolderPickerFileFilters = null;
 
         FolderPickerModalTitle = !string.IsNullOrWhiteSpace(title)
             ? title
@@ -87,6 +105,37 @@ public partial class MainViewModel
 
         IsFolderPickerModalOpen = true;
         return _folderPickerTcs.Task;
+    }
+
+    public Task<string?> ShowInAppFilePickerAsync(string? initialPath, string? title = null, string[]? filters = null, string language = "VI")
+    {
+        _folderPickerTcs?.TrySetResult(null);
+        _filePickerTcs?.TrySetResult(null);
+        _filePickerTcs = new TaskCompletionSource<string?>();
+
+        IsFolderPickerFileMode = true;
+        FolderPickerFileFilters = filters;
+
+        FolderPickerModalTitle = !string.IsNullOrWhiteSpace(title)
+            ? title
+            : (language == "VI" ? "📄 Chọn Tệp Tin" : "📄 Select File");
+
+        FolderPickerStatusMessage = "";
+        IsFolderPickerCreatingNew = false;
+        FolderPickerNewFolderName = "";
+
+        // Tải danh sách Quick Paths
+        BuildQuickPaths();
+
+        // Xác định thư mục khởi đầu
+        string target = !string.IsNullOrWhiteSpace(initialPath) && (Directory.Exists(initialPath) || File.Exists(initialPath))
+            ? (Directory.Exists(initialPath) ? initialPath : (Path.GetDirectoryName(initialPath) ?? initialPath))
+            : GetDefaultStartingFolder();
+
+        NavigateFolderPicker(target);
+
+        IsFolderPickerModalOpen = true;
+        return _filePickerTcs.Task;
     }
 
     private void BuildQuickPaths()
@@ -229,13 +278,72 @@ public partial class MainViewModel
                     Name = d.Name,
                     FullPath = d.FullName,
                     Icon = "📁",
-                    SubInfo = countText
+                    SubInfo = countText,
+                    IsDirectory = true
                 });
+            }
+
+            if (IsFolderPickerFileMode)
+            {
+                try
+                {
+                    var files = dirInfo.GetFiles();
+                    var validFiles = files
+                        .Where(f => !f.Attributes.HasFlag(FileAttributes.Hidden))
+                        .Where(f =>
+                        {
+                            if (FolderPickerFileFilters == null || FolderPickerFileFilters.Length == 0) return true;
+                            string ext = f.Extension.ToLowerInvariant();
+                            return FolderPickerFileFilters.Any(filter =>
+                            {
+                                string cleanF = filter.Trim().TrimStart('*').ToLowerInvariant();
+                                if (string.IsNullOrWhiteSpace(cleanF)) return true;
+                                if (!cleanF.StartsWith(".")) cleanF = "." + cleanF;
+                                return ext == cleanF || ext.Equals(cleanF, StringComparison.OrdinalIgnoreCase);
+                            });
+                        })
+                        .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    foreach (var f in validFiles)
+                    {
+                        string ext = f.Extension.ToLowerInvariant();
+                        string icon = "📄";
+                        if (ext is ".jpg" or ".jpeg" or ".png" or ".webp" or ".bmp" or ".gif" or ".avif" or ".jxl")
+                            icon = "🖼️";
+                        else if (ext is ".mp4" or ".mkv" or ".webm" or ".avi" or ".mov" or ".ts" or ".flv")
+                            icon = "🎬";
+                        else if (ext is ".zip" or ".cbz" or ".rar" or ".cbr" or ".7z" or ".tar" or ".gz")
+                            icon = "📦";
+                        else if (ext is ".pdf" or ".epub" or ".mobi")
+                            icon = "📑";
+                        else if (ext is ".txt" or ".json" or ".csv" or ".xlsx" or ".xls")
+                            icon = "📊";
+
+                        long bytes = f.Length;
+                        string sizeText = bytes < 1024 ? $"{bytes} B"
+                            : bytes < 1024 * 1024 ? $"{(bytes / 1024.0):F1} KB"
+                            : bytes < 1024 * 1024 * 1024 ? $"{(bytes / (1024.0 * 1024.0)):F1} MB"
+                            : $"{(bytes / (1024.0 * 1024.0 * 1024.0)):F2} GB";
+
+                        FolderPickerSubFolders.Add(new FolderItemDisplay
+                        {
+                            Name = f.Name,
+                            FullPath = f.FullName,
+                            Icon = icon,
+                            SubInfo = sizeText,
+                            IsDirectory = false
+                        });
+                    }
+                }
+                catch { }
             }
 
             if (FolderPickerSubFolders.Count == 0)
             {
-                FolderPickerStatusMessage = "(Thư mục trống hoặc không có thư mục con)";
+                FolderPickerStatusMessage = IsFolderPickerFileMode
+                    ? "(Thư mục trống hoặc không có tệp/thư mục phù hợp)"
+                    : "(Thư mục trống hoặc không có thư mục con)";
             }
         }
         catch (UnauthorizedAccessException)
@@ -260,9 +368,18 @@ public partial class MainViewModel
     [RelayCommand]
     public void OpenFolderPickerSubItem(FolderItemDisplay item)
     {
-        if (item != null && !string.IsNullOrWhiteSpace(item.FullPath))
+        if (item == null || string.IsNullOrWhiteSpace(item.FullPath)) return;
+
+        if (item.IsDirectory)
         {
             NavigateFolderPicker(item.FullPath);
+        }
+        else
+        {
+            // Người dùng chọn file này
+            IsFolderPickerModalOpen = false;
+            _filePickerTcs?.TrySetResult(item.FullPath);
+            _folderPickerTcs?.TrySetResult(item.FullPath);
         }
     }
 
@@ -328,12 +445,13 @@ public partial class MainViewModel
     [RelayCommand]
     public void ConfirmFolderPicker()
     {
-        string chosen = !string.IsNullOrWhiteSpace(FolderPickerManualInput) && Directory.Exists(FolderPickerManualInput)
+        string chosen = !string.IsNullOrWhiteSpace(FolderPickerManualInput) && (Directory.Exists(FolderPickerManualInput) || File.Exists(FolderPickerManualInput))
             ? FolderPickerManualInput.Trim()
             : FolderPickerCurrentPath.Trim();
 
         IsFolderPickerModalOpen = false;
         _folderPickerTcs?.TrySetResult(chosen);
+        _filePickerTcs?.TrySetResult(chosen);
     }
 
     [RelayCommand]
@@ -341,5 +459,6 @@ public partial class MainViewModel
     {
         IsFolderPickerModalOpen = false;
         _folderPickerTcs?.TrySetResult(null);
+        _filePickerTcs?.TrySetResult(null);
     }
 }

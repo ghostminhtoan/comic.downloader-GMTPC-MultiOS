@@ -208,24 +208,17 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục truyện gốc" : "Select Comic Root Folder";
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                FolderSplitRootPath,
+                title,
+                _langService.CurrentLanguage);
 
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục truyện gốc" : "Select Comic Root Folder",
-                AllowMultiple = false
-            });
-
-            if (folders != null && folders.Count > 0)
-            {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    FolderSplitRootPath = normalized;
-                    AddLog("INFO", $"[Tách/Gộp] Đã chọn thư mục: {FolderSplitRootPath}");
-                }
+                FolderSplitRootPath = chosen;
+                AddLog("INFO", $"[Tách/Gộp] Đã chọn thư mục: {FolderSplitRootPath}");
             }
         }
         catch (Exception ex)
@@ -348,24 +341,17 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục gốc cần phân loại chữ cái" : "Select Alphabet Root Folder";
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                FolderAlphabetRootPath,
+                title,
+                _langService.CurrentLanguage);
 
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục gốc cần phân loại chữ cái" : "Select Alphabet Root Folder",
-                AllowMultiple = false
-            });
-
-            if (folders != null && folders.Count > 0)
-            {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    FolderAlphabetRootPath = normalized;
-                    AddLog("INFO", $"[Alphabet] Đã chọn thư mục: {FolderAlphabetRootPath}");
-                }
+                FolderAlphabetRootPath = chosen;
+                AddLog("INFO", $"[Alphabet] Đã chọn thư mục: {FolderAlphabetRootPath}");
             }
         }
         catch (Exception ex)
@@ -517,24 +503,17 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục chứa truyện cần đổi tên" : "Select Root Folder To Rename";
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                FolderRenameRootPath,
+                title,
+                _langService.CurrentLanguage);
 
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục chứa truyện cần đổi tên" : "Select Root Folder To Rename",
-                AllowMultiple = false
-            });
-
-            if (folders != null && folders.Count > 0)
-            {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    FolderRenameRootPath = normalized;
-                    AddLog("INFO", $"[Đổi Tên] Đã chọn thư mục: {FolderRenameRootPath}");
-                }
+                FolderRenameRootPath = chosen;
+                AddLog("INFO", $"[Đổi Tên] Đã chọn thư mục: {FolderRenameRootPath}");
             }
         }
         catch (Exception ex)

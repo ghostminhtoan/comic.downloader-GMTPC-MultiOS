@@ -339,6 +339,9 @@ public static class AndroidVideoThumbnailService
                 }
             }
 
+            mp.SetOnErrorListener(new SafeMediaPlayerErrorListener());
+            mp.SetOnCompletionListener(new SafeMediaPlayerCompletionListener());
+
             mp.Prepare();
             if (startSeconds > 0)
             {
@@ -353,6 +356,30 @@ public static class AndroidVideoThumbnailService
             global::Android.Util.Log.Warn("ComicGMTPC_Audio", $"[AndroidAudio] Play error for '{filePath}': {ex.Message}");
             try { streamHandle?.Dispose(); } catch { }
             return null;
+        }
+    }
+
+    private sealed class SafeMediaPlayerErrorListener : Java.Lang.Object, MediaPlayer.IOnErrorListener
+    {
+        public bool OnError(MediaPlayer? mp, MediaError what, int extra)
+        {
+            return true;
+        }
+    }
+
+    private sealed class SafeMediaPlayerCompletionListener : Java.Lang.Object, MediaPlayer.IOnCompletionListener
+    {
+        public void OnCompletion(MediaPlayer? mp)
+        {
+            try
+            {
+                if (mp != null)
+                {
+                    mp.SeekTo(0);
+                    mp.Start();
+                }
+            }
+            catch { }
         }
     }
 

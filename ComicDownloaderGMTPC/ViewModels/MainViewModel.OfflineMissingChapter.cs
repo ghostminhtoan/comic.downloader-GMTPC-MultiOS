@@ -130,26 +130,17 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
-            {
-                var options = new FolderPickerOpenOptions
-                {
-                    Title = "Chọn Thư Mục Truyện / Root Để Quét Chap Thiếu Offline",
-                    AllowMultiple = false
-                };
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn Thư Mục Truyện / Root Để Quét Chap Thiếu Offline" : "Select Comic Root Folder For Offline Missing Chapter Scan";
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                OfflineScanRootPath,
+                title,
+                _langService.CurrentLanguage);
 
-                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
-                if (folders != null && folders.Count > 0)
-                {
-                    var selected = folders[0];
-                    string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                    string path = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                    if (!string.IsNullOrWhiteSpace(path))
-                    {
-                        OfflineScanRootPath = path;
-                        await ScanOfflineFolderAsync();
-                    }
-                }
+            if (!string.IsNullOrWhiteSpace(chosen))
+            {
+                OfflineScanRootPath = chosen;
+                await ScanOfflineFolderAsync();
             }
         }
         catch (Exception ex)

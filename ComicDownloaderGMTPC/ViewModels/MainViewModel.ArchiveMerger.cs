@@ -242,26 +242,19 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục chứa các file chương lẻ cần gộp" : "Select Comic Folder Containing Chapter Files";
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                MergeInputFolderPath,
+                title,
+                _langService.CurrentLanguage);
 
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục chứa các file chương lẻ cần gộp" : "Select Comic Folder Containing Chapter Files",
-                AllowMultiple = false
-            });
-
-            if (folders != null && folders.Count > 0)
-            {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    MergeInputFolderPath = normalized;
-                    MergeOutputFolderPath = ComputeDefaultMergeOutputFolder(normalized);
-                    AddLog("INFO", $"[Gộp File Lẻ] Đã chọn thư mục nguồn: {MergeInputFolderPath}");
-                    AddLog("INFO", $"[Gộp File Lẻ] Đã tự động điền thư mục lưu file gộp: {MergeOutputFolderPath}");
-                }
+                MergeInputFolderPath = chosen;
+                MergeOutputFolderPath = ComputeDefaultMergeOutputFolder(chosen);
+                AddLog("INFO", $"[Gộp File Lẻ] Đã chọn thư mục nguồn: {MergeInputFolderPath}");
+                AddLog("INFO", $"[Gộp File Lẻ] Đã tự động điền thư mục lưu file gộp: {MergeOutputFolderPath}");
             }
         }
         catch (Exception ex)
@@ -283,24 +276,17 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục lưu file sau khi gộp" : "Select Output Folder For Merged Files";
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                MergeOutputFolderPath,
+                title,
+                _langService.CurrentLanguage);
 
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục lưu file sau khi gộp" : "Select Output Folder For Merged Files",
-                AllowMultiple = false
-            });
-
-            if (folders != null && folders.Count > 0)
-            {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    MergeOutputFolderPath = normalized;
-                    AddLog("INFO", $"[Gộp File Lẻ] Đã chọn thư mục lưu: {MergeOutputFolderPath}");
-                }
+                MergeOutputFolderPath = chosen;
+                AddLog("INFO", $"[Gộp File Lẻ] Đã chọn thư mục lưu: {MergeOutputFolderPath}");
             }
         }
         catch (Exception ex)
@@ -575,34 +561,29 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
+            string title = _langService.CurrentLanguage == "VI"
+                ? "Chọn file gốc cần nối chapter (.pdf, .cbz, .zip, .mobi)"
+                : "Select Base Comic File To Append Chapters (.pdf, .cbz, .zip, .mobi)";
 
-            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                Title = _langService.CurrentLanguage == "VI"
-                    ? "Chọn file gốc cần nối chapter (.pdf, .cbz, .zip, .mobi)"
-                    : "Select Base Comic File To Append Chapters (.pdf, .cbz, .zip, .mobi)",
-                AllowMultiple = false,
-                FileTypeFilter = new List<FilePickerFileType>
+            string? chosen = await FolderOrFilePickerService.PickFileAsync(
+                topLevel,
+                MergeAppendBaseFilePath,
+                title,
+                new List<FilePickerFileType>
                 {
                     new FilePickerFileType("Tệp truyện đóng gói (*.pdf, *.cbz, *.zip, *.mobi)")
                     {
                         Patterns = new[] { "*.pdf", "*.cbz", "*.zip", "*.mobi" }
                     },
                     FilePickerFileTypes.All
-                }
-            });
+                },
+                new[] { ".pdf", ".cbz", ".zip", ".mobi" },
+                _langService.CurrentLanguage);
 
-            if (files != null && files.Count > 0)
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                var selected = files[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    MergeAppendBaseFilePath = normalized;
-                    AddLog("INFO", $"[Nối Chap] Đã chọn tệp gốc: {MergeAppendBaseFilePath}");
-                }
+                MergeAppendBaseFilePath = chosen;
+                AddLog("INFO", $"[Nối Chap] Đã chọn tệp gốc: {MergeAppendBaseFilePath}");
             }
         }
         catch (Exception ex)
@@ -633,26 +614,20 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
+            string title = _langService.CurrentLanguage == "VI"
+                ? "Chọn thư mục chứa các chapter mới cần nối vào file"
+                : "Select Folder Containing New Chapters To Append";
 
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-            {
-                Title = _langService.CurrentLanguage == "VI"
-                    ? "Chọn thư mục chứa các chapter mới cần nối vào file"
-                    : "Select Folder Containing New Chapters To Append",
-                AllowMultiple = false
-            });
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                MergeAppendNewFolderPath,
+                title,
+                _langService.CurrentLanguage);
 
-            if (folders != null && folders.Count > 0)
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    MergeAppendNewFolderPath = normalized;
-                    AddLog("INFO", $"[Nối Chap] Đã chọn thư mục chapter mới: {MergeAppendNewFolderPath}");
-                }
+                MergeAppendNewFolderPath = chosen;
+                AddLog("INFO", $"[Nối Chap] Đã chọn thư mục chapter mới: {MergeAppendNewFolderPath}");
             }
         }
         catch (Exception ex)

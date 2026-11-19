@@ -13474,7 +13474,7 @@
                         </Border>
 
                         <!-- CREATE NEW FOLDER PANEL -->
-                        <StackPanel Grid.Row="4" Spacing="6">
+                        <StackPanel Grid.Row="4" Spacing="6" IsVisible="{Binding !IsFolderPickerFileMode}">
                             <Button Command="{Binding FolderPickerToggleCreateNewCommand}"
                                     Content="📁 + Tạo thư mục con mới tại đây"
                                     Background="Transparent" Foreground="#38BDF8"
@@ -13499,7 +13499,13 @@
                             <Button Grid.Column="2" Command="{Binding ConfirmFolderPickerCommand}"
                                     Content="✅ Chọn Thư Mục Này" Background="#059669" Foreground="#FFFFFF"
                                     BorderBrush="#10B981" BorderThickness="1"
-                                    FontSize="12" FontWeight="Bold" Padding="16,6" CornerRadius="6" />
+                                    FontSize="12" FontWeight="Bold" Padding="16,6" CornerRadius="6"
+                                    IsVisible="{Binding !IsFolderPickerFileMode}" />
+                            <Button Grid.Column="2" Command="{Binding ConfirmFolderPickerCommand}"
+                                    Content="✅ Chọn Mục Này" Background="#0284C7" Foreground="#FFFFFF"
+                                    BorderBrush="#38BDF8" BorderThickness="1"
+                                    FontSize="12" FontWeight="Bold" Padding="16,6" CornerRadius="6"
+                                    IsVisible="{Binding IsFolderPickerFileMode}" />
                         </Grid>
                     </Grid>
                 </Border>

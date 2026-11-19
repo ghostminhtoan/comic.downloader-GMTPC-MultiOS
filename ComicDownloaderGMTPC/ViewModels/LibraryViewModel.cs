@@ -421,24 +421,16 @@ public partial class LibraryViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
+            string title = "Chọn Thư Mục Thư Viện Truyện Đã Tải";
+            string? chosen = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                LibraryRootPath,
+                title);
 
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            if (!string.IsNullOrWhiteSpace(chosen))
             {
-                Title = "Chọn Thư Mục Thư Viện Truyện Đã Tải",
-                AllowMultiple = false
-            });
-
-            if (folders != null && folders.Count > 0)
-            {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    LibraryRootPath = normalized;
-                    await ScanLibraryAsync();
-                }
+                LibraryRootPath = chosen;
+                await ScanLibraryAsync();
             }
         }
         catch (Exception ex)
