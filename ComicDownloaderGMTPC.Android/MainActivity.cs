@@ -394,6 +394,40 @@ public class MainActivity : AvaloniaMainActivity
         {
             ComicDownloaderGMTPC.Services.NativeWebViewService.Instance = new AndroidNativeWebViewService();
             AndroidVideoThumbnailService.Register();
+
+            // Đăng ký kiểm tra Intent SAF để tránh lỗi "No apps can perform this action" trên giả lập LDPlayer / ROM thiếu DocumentsUI
+            ComicDownloaderGMTPC.Services.FolderOrFilePickerService.AndroidCanOpenDocumentTree = () =>
+            {
+                try
+                {
+                    var intent = new Intent(Intent.ActionOpenDocumentTree);
+                    var pm = CurrentInstance?.ApplicationContext?.PackageManager ?? CurrentInstance?.PackageManager;
+                    if (pm == null) return false;
+                    var list = pm.QueryIntentActivities(intent, 0);
+                    return list != null && list.Count > 0;
+                }
+                catch
+                {
+                    return false;
+                }
+            };
+
+            ComicDownloaderGMTPC.Services.FolderOrFilePickerService.AndroidCanOpenFile = () =>
+            {
+                try
+                {
+                    var intent = new Intent(Intent.ActionGetContent);
+                    intent.SetType("image/*");
+                    var pm = CurrentInstance?.ApplicationContext?.PackageManager ?? CurrentInstance?.PackageManager;
+                    if (pm == null) return false;
+                    var list = pm.QueryIntentActivities(intent, 0);
+                    return list != null && list.Count > 0;
+                }
+                catch
+                {
+                    return false;
+                }
+            };
         }
         catch { }
 

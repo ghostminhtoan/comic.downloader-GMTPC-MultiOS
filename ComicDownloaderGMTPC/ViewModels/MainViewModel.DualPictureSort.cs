@@ -1006,37 +1006,19 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục hoàn thành (Finish folder)" : "Select Finish Picture Folder";
+            string? chosenFolder = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                DualSortFinishPath,
+                title,
+                _langService.CurrentLanguage);
 
-            Avalonia.Platform.Storage.IStorageFolder? startFolder = null;
-            if (!string.IsNullOrWhiteSpace(DualSortFinishPath) && Directory.Exists(DualSortFinishPath))
+            if (!string.IsNullOrWhiteSpace(chosenFolder) && Directory.Exists(chosenFolder))
             {
-                try
-                {
-                    startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(DualSortFinishPath);
-                }
-                catch { }
-            }
-
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions
-            {
-                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục hoàn thành (Finish folder)" : "Select Finish Picture Folder",
-                AllowMultiple = false,
-                SuggestedStartLocation = startFolder
-            });
-
-            if (folders != null && folders.Count > 0)
-            {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    DualSortFinishPath = normalized;
-                    DualSortStatusText = _langService.CurrentLanguage == "VI"
-                        ? $"Đã chọn Finish folder: {Path.GetFileName(normalized)}"
-                        : $"Selected Finish folder: {Path.GetFileName(normalized)}";
-                }
+                DualSortFinishPath = chosenFolder;
+                DualSortStatusText = _langService.CurrentLanguage == "VI"
+                    ? $"Đã chọn Finish folder: {Path.GetFileName(chosenFolder)}"
+                    : $"Selected Finish folder: {Path.GetFileName(chosenFolder)}";
             }
         }
         catch (Exception ex)
@@ -1285,24 +1267,17 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
+            string title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục lưu ảnh đã lọc" : "Select Sorted Picture Folder";
+            string? chosenFolder = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                DualSortSortedPath,
+                title,
+                _langService.CurrentLanguage);
 
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            if (!string.IsNullOrWhiteSpace(chosenFolder) && Directory.Exists(chosenFolder))
             {
-                Title = _langService.CurrentLanguage == "VI" ? "Chọn thư mục lưu ảnh đã lọc" : "Select Sorted Picture Folder",
-                AllowMultiple = false
-            });
-
-            if (folders != null && folders.Count > 0)
-            {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized))
-                {
-                    DualSortSortedPath = normalized;
-                    await LoadSortedFolderOnlyAsync();
-                }
+                DualSortSortedPath = chosenFolder;
+                await LoadSortedFolderOnlyAsync();
             }
         }
         catch (Exception ex)

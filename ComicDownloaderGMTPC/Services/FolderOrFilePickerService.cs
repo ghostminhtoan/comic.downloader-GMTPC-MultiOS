@@ -25,6 +25,22 @@ public static class FolderOrFilePickerService
         "*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif", "*.avif", "*.jxl", "*.webm", "*.mkv", "*.ts", "*.mp4"
     };
 
+    /// <summary>
+    /// Kiểm tra xem thiết bị Android có ứng dụng nào hỗ trợ Intent ACTION_OPEN_DOCUMENT_TREE không (ví dụ: com.android.documentsui).
+    /// Trên các giả lập như LDPlayer 4.0 không có DocumentsUI, trả về false để tránh lỗi "No apps can perform this action".
+    /// </summary>
+    public static Func<bool>? AndroidCanOpenDocumentTree { get; set; }
+
+    /// <summary>
+    /// Kiểm tra xem thiết bị Android có ứng dụng nào hỗ trợ chọn file ảnh (ACTION_GET_CONTENT) không.
+    /// </summary>
+    public static Func<bool>? AndroidCanOpenFile { get; set; }
+
+    /// <summary>
+    /// Trình duyệt thư mục tích hợp In-App Folder Picker (hoạt động độc lập 100%, không phụ thuộc app ngoài hay DocumentsUI).
+    /// </summary>
+    public static Func<string?, string?, string, Task<string?>>? InAppFolderPickerHandler { get; set; }
+
     public static async Task<string?> PickFolderWithFileViewAsync(TopLevel? topLevel, string? initialPath, string language = "VI")
     {
         // 1. Trên Windows: Sử dụng COM IFileOpenDialog tối ưu hiển thị danh sách file ảnh kèm nút 'Select Folder'
@@ -61,48 +77,57 @@ public static class FolderOrFilePickerService
             }
         }
 
-        // 3. Trên Android: Sử dụng OpenFolderPickerAsync để Android SAF (ACTION_OPEN_DOCUMENT_TREE)
-        // hiển thị rõ nút "Sử dụng thư mục này" / "Use this folder" ở dưới đáy màn hình
-        if (OperatingSystem.IsAndroid() && topLevel?.StorageProvider != null)
+        // 3. Trên Android: Kiểm tra xem hệ thống có app hỗ trợ ACTION_OPEN_DOCUMENT_TREE không
+        // Nếu không có (như trên LDPlayer), TUYỆT ĐỐI KHÔNG GỌI để không hiện popup 'No apps can perform this action.'
+        if (OperatingSystem.IsAndroid())
         {
-            try
+            bool canOpenTree = AndroidCanOpenDocumentTree?.Invoke() ?? CheckAndroidDocumentTreeAvailable();
+            if (canOpenTree && topLevel?.StorageProvider != null)
             {
-                IStorageFolder? startFolder = null;
-                if (!string.IsNullOrWhiteSpace(initialPath) && Directory.Exists(initialPath))
+                try
                 {
-                    try
+                    IStorageFolder? startFolder = null;
+                    if (!string.IsNullOrWhiteSpace(initialPath) && Directory.Exists(initialPath))
                     {
-                        startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(initialPath);
+                        try
+                        {
+                            startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(initialPath);
+                        }
+                        catch { }
                     }
-                    catch { }
-                }
 
-                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-                {
-                    Title = language == "VI"
-                        ? "Chọn thư mục ảnh nguồn cần lọc (Bấm 'Sử dụng thư mục này')"
-                        : "Select Source Picture Folder (Tap 'Use this folder')",
-                    AllowMultiple = false,
-                    SuggestedStartLocation = startFolder
-                });
-
-                if (folders != null && folders.Count > 0)
-                {
-                    var selected = folders[0];
-                    string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                    string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                    if (!string.IsNullOrWhiteSpace(normalized))
+                    var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
                     {
-                        return normalized;
+                        Title = language == "VI"
+                            ? "Chọn thư mục ảnh nguồn cần lọc (Bấm 'Sử dụng thư mục này')"
+                            : "Select Source Picture Folder (Tap 'Use this folder')",
+                        AllowMultiple = false,
+                        SuggestedStartLocation = startFolder
+                    });
+
+                    if (folders != null && folders.Count > 0)
+                    {
+                        var selected = folders[0];
+                        string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                        string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                        if (!string.IsNullOrWhiteSpace(normalized))
+                        {
+                            return normalized;
+                        }
                     }
                 }
-                return null;
+                catch { }
             }
-            catch { }
         }
 
-        // 4. Fallback tiêu chuẩn: Sử dụng Avalonia OpenFilePickerAsync hiển thị danh sách file ảnh
-        if (topLevel?.StorageProvider != null)
+        // 4. Fallback 1: Sử dụng Avalonia OpenFilePickerAsync hiển thị danh sách file ảnh để người dùng click 1 file lấy folder cha
+        bool canOpenFile = true;
+        if (OperatingSystem.IsAndroid())
+        {
+            canOpenFile = AndroidCanOpenFile?.Invoke() ?? true;
+        }
+
+        if (canOpenFile && topLevel?.StorageProvider != null)
         {
             try
             {
@@ -119,19 +144,21 @@ public static class FolderOrFilePickerService
                 var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
                 {
                     Title = language == "VI"
-                        ? "Chọn thư mục ảnh nguồn (Chọn thư mục hoặc click ảnh bất kỳ để lấy thư mục)"
-                        : "Select Source Picture Folder (Pick folder or click any image to select)",
+                        ? "Chọn 1 ảnh trong thư mục cần lọc (Ứng dụng sẽ lấy thư mục cha)"
+                        : "Pick any image inside folder (Parent directory will be selected)",
                     AllowMultiple = false,
                     SuggestedStartLocation = startFolder,
                     FileTypeFilter = new List<FilePickerFileType>
                     {
-                        new(language == "VI" ? "Tất cả định dạng ảnh (*.jpg, *.png, *.webp, *.bmp, *.gif, *.avif, *.jxl)" : "All Image Formats (*.jpg, *.png, *.webp, *.bmp, *.gif, *.avif, *.jxl)")
+                        new(language == "VI" ? "Tất cả ảnh & video" : "All Images & Videos")
                         {
-                            Patterns = ValidImageExtensions
+                            Patterns = ValidImageExtensions,
+                            MimeTypes = new[] { "image/*", "video/*" }
                         },
                         new(language == "VI" ? "Tất cả tệp (*.*)" : "All Files (*.*)")
                         {
-                            Patterns = new[] { "*" }
+                            Patterns = new[] { "*" },
+                            MimeTypes = new[] { "*/*" }
                         }
                     }
                 });
@@ -158,7 +185,151 @@ public static class FolderOrFilePickerService
             catch { }
         }
 
+        // 5. Fallback 2 Cứu Hộ Tối Thượng: In-App Folder Selector Dialog (Hoạt động độc lập 100%, an toàn cho LDPlayer & mọi máy Android)
+        if (InAppFolderPickerHandler != null)
+        {
+            try
+            {
+                string? inAppResult = await InAppFolderPickerHandler(initialPath, language == "VI" ? "📁 Chọn thư mục ảnh nguồn" : "📁 Select Source Picture Folder", language);
+                if (!string.IsNullOrWhiteSpace(inAppResult))
+                {
+                    return inAppResult;
+                }
+            }
+            catch { }
+        }
+
         return null;
+    }
+
+    /// <summary>
+    /// Chọn thư mục tổng quát (cho Thư mục đã lọc, Thư mục hoàn thành, Thư mục gộp, Cắt ảnh...).
+    /// Tự động thích ứng đa nền tảng và tích hợp Fallback cứu hộ In-App Folder Picker.
+    /// </summary>
+    public static async Task<string?> PickFolderAsync(TopLevel? topLevel, string? initialPath, string? title = null, string language = "VI")
+    {
+        string defaultTitle = language == "VI" ? "Chọn thư mục..." : "Select Folder...";
+        string actualTitle = !string.IsNullOrWhiteSpace(title) ? title : defaultTitle;
+
+        // 1. Android: Kiểm tra Intent trước khi gọi
+        if (OperatingSystem.IsAndroid())
+        {
+            bool canOpenTree = AndroidCanOpenDocumentTree?.Invoke() ?? CheckAndroidDocumentTreeAvailable();
+            if (canOpenTree && topLevel?.StorageProvider != null)
+            {
+                try
+                {
+                    IStorageFolder? startFolder = null;
+                    if (!string.IsNullOrWhiteSpace(initialPath) && Directory.Exists(initialPath))
+                    {
+                        try
+                        {
+                            startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(initialPath);
+                        }
+                        catch { }
+                    }
+
+                    var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+                    {
+                        Title = actualTitle,
+                        AllowMultiple = false,
+                        SuggestedStartLocation = startFolder
+                    });
+
+                    if (folders != null && folders.Count > 0)
+                    {
+                        var selected = folders[0];
+                        string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                        string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                        if (!string.IsNullOrWhiteSpace(normalized))
+                        {
+                            return normalized;
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+        else if (topLevel?.StorageProvider != null)
+        {
+            // Windows / Linux: Thử OpenFolderPickerAsync thông thường
+            try
+            {
+                IStorageFolder? startFolder = null;
+                if (!string.IsNullOrWhiteSpace(initialPath) && Directory.Exists(initialPath))
+                {
+                    try
+                    {
+                        startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(initialPath);
+                    }
+                    catch { }
+                }
+
+                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+                {
+                    Title = actualTitle,
+                    AllowMultiple = false,
+                    SuggestedStartLocation = startFolder
+                });
+
+                if (folders != null && folders.Count > 0)
+                {
+                    var selected = folders[0];
+                    string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
+                    string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                    {
+                        return normalized;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 2. Fallback: In-App Folder Selector
+        if (InAppFolderPickerHandler != null)
+        {
+            try
+            {
+                string? inAppResult = await InAppFolderPickerHandler(initialPath, actualTitle, language);
+                if (!string.IsNullOrWhiteSpace(inAppResult))
+                {
+                    return inAppResult;
+                }
+            }
+            catch { }
+        }
+
+        return null;
+    }
+
+    private static bool CheckAndroidDocumentTreeAvailable()
+    {
+        if (!OperatingSystem.IsAndroid()) return false;
+        try
+        {
+            var appType = Type.GetType("Android.App.Application, Mono.Android");
+            if (appType != null)
+            {
+                var ctxProp = appType.GetProperty("Context", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                var ctx = ctxProp?.GetValue(null);
+                if (ctx != null)
+                {
+                    var pmProp = ctx.GetType().GetProperty("PackageManager");
+                    var pm = pmProp?.GetValue(ctx);
+                    var intentType = Type.GetType("Android.Content.Intent, Mono.Android");
+                    if (pm != null && intentType != null)
+                    {
+                        var intent = Activator.CreateInstance(intentType, "android.intent.action.OPEN_DOCUMENT_TREE");
+                        var queryMethod = pm.GetType().GetMethod("QueryIntentActivities", new[] { intentType, typeof(int) });
+                        var list = queryMethod?.Invoke(pm, new object[] { intent!, 0 }) as System.Collections.IList;
+                        return list != null && list.Count > 0;
+                    }
+                }
+            }
+        }
+        catch { }
+        return false;
     }
 
     #region Windows Win32 Shell COM Implementation

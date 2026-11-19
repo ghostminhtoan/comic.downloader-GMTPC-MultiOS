@@ -2165,6 +2165,7 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel()
     {
         SplashViewModel.ReportGlobalProgress(52, "Khởi tạo cấu hình & kết nối hàng chờ...");
+        InitInAppFolderPicker();
         _downloadPathText = _downloadEngine.DownloadRoot;
         _downloadEngine.BindLiveQueueSource(ComicBooks);
         ComicBooks.CollectionChanged += (s, e) =>
