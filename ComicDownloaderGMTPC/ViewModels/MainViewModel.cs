@@ -4485,46 +4485,10 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
-    public async Task CheckAutoUpdateOnStartupAsync()
+    public Task CheckAutoUpdateOnStartupAsync()
     {
-        try
-        {
-            string[] betaUrls = OperatingSystem.IsAndroid()
-                ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/com.CompanyName.ComicDownloaderGMTPC-Signed.apk" }
-                : (OperatingSystem.IsLinux()
-                    ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC-linux-x64.tar.gz" }
-                    : new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC.Desktop.exe" });
-
-            var checkBeta = await AppUpdateService.Instance.CheckUpdateAsync(betaUrls, "beta");
-            if (checkBeta.Success && checkBeta.HasUpdate)
-            {
-                HasAvailableBetaUpdate = true;
-                HasAvailableUpdateInToast = true;
-                ToastUpdateButtonText = "⚡ CẬP NHẬT BETA NGAY";
-                ToastUpdateTarget = "beta";
-                AddLog("INFO", $"🔔 [Tự động kiểm tra] Phát hiện bản cập nhật Beta mới: {checkBeta.Message}");
-                ShowCenterToast("BẢN CẬP NHẬT BETA MỚI", checkBeta.Message, "🧪", "UPDATE BETA", 0);
-                return;
-            }
-
-            string[] releaseUrls = OperatingSystem.IsAndroid()
-                ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/com.CompanyName.ComicDownloaderGMTPC-Signed.apk" }
-                : (OperatingSystem.IsLinux()
-                    ? new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/ComicDownloaderGMTPC-linux-x64.tar.gz" }
-                    : new[] { "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/releases/ComicDownloaderGMTPC.Desktop.exe" });
-
-            var checkRelease = await AppUpdateService.Instance.CheckUpdateAsync(releaseUrls, "release");
-            if (checkRelease.Success && checkRelease.HasUpdate)
-            {
-                HasAvailableReleaseUpdate = true;
-                HasAvailableUpdateInToast = true;
-                ToastUpdateButtonText = "🚀 CẬP NHẬT RELEASE NGAY";
-                ToastUpdateTarget = "release";
-                AddLog("INFO", $"🔔 [Tự động kiểm tra] Phát hiện bản cập nhật Release mới: {checkRelease.Message}");
-                ShowCenterToast("BẢN CẬP NHẬT RELEASE MỚI", checkRelease.Message, "🚀", "UPDATE RELEASE", 0);
-            }
-        }
-        catch { }
+        // Đã tắt hoàn toàn tính năng tự động thông báo cập nhật beta và release theo yêu cầu người dùng
+        return Task.CompletedTask;
     }
 
     [RelayCommand]

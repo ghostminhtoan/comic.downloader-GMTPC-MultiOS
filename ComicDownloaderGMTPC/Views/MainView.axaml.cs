@@ -374,6 +374,8 @@ public partial class MainView : UserControl
         vm.PropertyChanged -= OnVmPropertyChanged;
     }
 
+    private WindowState? _savedDesktopWindowState;
+
     private void OnVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainViewModel.IsDualSortPreviewMaximized) ||
@@ -385,15 +387,50 @@ public partial class MainView : UserControl
             {
                 var popup = this.FindControl<Border>("DualSortPreviewPopupBorder");
                 if (popup == null) return;
-                if (DataContext is MainViewModel vm && vm.IsDualSortPreviewMaximized)
+                UpdateDualSortPopupPosition(new Point(this.Bounds.Width / 2.0, this.Bounds.Height / 2.0));
+            });
+        }
+
+        if (e.PropertyName == nameof(MainViewModel.IsDualSortPreviewMaximized))
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!OperatingSystem.IsAndroid() && DataContext is MainViewModel vm)
                 {
-                    popup.Width = double.NaN;
-                    popup.Height = double.NaN;
-                    popup.Margin = new Thickness(0);
+                    var topLevel = TopLevel.GetTopLevel(this);
+                    if (topLevel is Window win)
+                    {
+                        if (vm.IsDualSortPreviewMaximized)
+                        {
+                            if (win.WindowState != WindowState.FullScreen)
+                            {
+                                _savedDesktopWindowState = win.WindowState;
+                                win.WindowState = WindowState.FullScreen;
+                            }
+                        }
+                        else
+                        {
+                            if (win.WindowState == WindowState.FullScreen)
+                            {
+                                win.WindowState = _savedDesktopWindowState ?? WindowState.Normal;
+                            }
+                        }
+                    }
                 }
-                else
+            });
+        }
+
+        if (e.PropertyName == nameof(MainViewModel.IsDualSortPreviewVisible))
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!OperatingSystem.IsAndroid() && DataContext is MainViewModel vm && !vm.IsDualSortPreviewVisible)
                 {
-                    UpdateDualSortPopupPosition(new Point(this.Bounds.Width / 2.0, this.Bounds.Height / 2.0));
+                    var topLevel = TopLevel.GetTopLevel(this);
+                    if (topLevel is Window win && win.WindowState == WindowState.FullScreen)
+                    {
+                        win.WindowState = _savedDesktopWindowState ?? WindowState.Normal;
+                    }
                 }
             });
         }
@@ -585,16 +622,8 @@ public partial class MainView : UserControl
 
         }
 
-        // Tự động kiểm tra bản cập nhật Beta / Release mới nhất sau khi mở app 2.8s
-        var vmOnUi = DataContext as MainViewModel;
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(2800);
-            if (vmOnUi != null)
-            {
-                await vmOnUi.CheckAutoUpdateOnStartupAsync();
-            }
-        });
+        // Đã tắt tính năng tự động thông báo cập nhật beta và release theo yêu cầu người dùng
+        // var vmOnUi = DataContext as MainViewModel;
 
 
 
@@ -2579,10 +2608,18 @@ public partial class MainView : UserControl
 
         var point = e.GetCurrentPoint(ctrl);
 
-        // 1. Thao tác CHUỘT GIỮA (Middle Click): Đảo trạng thái Check/Uncheck
+        // 1. Thao tác CHUỘT GIỮA (Middle Click): Mở / Đóng Preview theo yêu cầu người dùng
         if (point.Properties.IsMiddleButtonPressed)
         {
-            item.IsChecked = !item.IsChecked;
+            if (vm.IsHoverPreviewVisible && vm.ActiveHoverItem == item)
+            {
+                vm.HideHoverPreview();
+            }
+            else
+            {
+                vm.ShowHoverPreview(item);
+                UpdateHoverPreviewPosition(e);
+            }
             e.Handled = true;
             return;
         }
@@ -2635,10 +2672,21 @@ public partial class MainView : UserControl
 
         var point = e.GetCurrentPoint(ctrl);
 
-        // Thao tác CHUỘT GIỮA trên thẻ truyện: Đảo trạng thái Check/Uncheck
+        // Thao tác CHUỘT GIỮA trên thẻ truyện: Mở / Đóng Preview theo yêu cầu người dùng
         if (point.Properties.IsMiddleButtonPressed)
         {
-            item.IsChecked = !item.IsChecked;
+            if (DataContext is MainViewModel mvm)
+            {
+                if (mvm.IsHoverPreviewVisible && mvm.ActiveHoverItem == item)
+                {
+                    mvm.HideHoverPreview();
+                }
+                else
+                {
+                    mvm.ShowHoverPreview(item);
+                    UpdateHoverPreviewPosition(e);
+                }
+            }
             e.Handled = true;
             return;
         }
@@ -2793,83 +2841,23 @@ public partial class MainView : UserControl
 
     private ComicBookItem? _pendingQueueHoverItem;
 
+#pragma warning disable CS0649
     private Point _lastQueueHoverPoint;
+#pragma warning restore CS0649
 
 
 
     private void TriggerDelayedQueueHoverPreview(ComicBookItem item, PointerEventArgs e)
-
     {
-
         if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
-
         if (DataContext is not MainViewModel vm || !vm.IsPopupPreview) return;
 
-        // Nếu đang đè phím Shift hoặc Ctrl để chọn truyện: hủy hover preview
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) || e.KeyModifiers.HasFlag(KeyModifiers.Control))
-        {
-            CancelQueueHoverPreview();
-            return;
-        }
-
-
-
+        // Tính năng rê chuột (hover) để preview trên Windows/Linux đã chuyển sang Middle Mouse Click theo yêu cầu người dùng
         if (vm.IsHoverPreviewVisible && vm.ActiveHoverItem == item)
-
         {
-
             UpdateHoverPreviewPosition(e);
-
-            return;
-
         }
-
-
-
-        var pos = e.GetCurrentPoint(this).Position;
-
-        _lastQueueHoverPoint = pos;
-
-        _pendingQueueHoverItem = item;
-
-
-
-        _queueHoverDelayCts?.Cancel();
-
-        _queueHoverDelayCts?.Dispose();
-
-        var cts = new CancellationTokenSource();
-
-        _queueHoverDelayCts = cts;
-
-
-
-        Task.Delay(500, cts.Token).ContinueWith(t =>
-
-        {
-
-            if (t.IsCanceled) return;
-
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-
-            {
-
-                if (cts.IsCancellationRequested) return;
-
-                if (DataContext is MainViewModel currentVm && currentVm.IsPopupPreview && _pendingQueueHoverItem == item)
-
-                {
-
-                    currentVm.ShowHoverPreview(item);
-
-                    UpdateHoverPreviewPositionManual(pos);
-
-                }
-
-            });
-
-        }, TaskContinuationOptions.OnlyOnRanToCompletion);
-
+        return;
     }
 
 
@@ -3707,7 +3695,9 @@ public partial class MainView : UserControl
 
     private PictureSortItem? _pendingDualSortHoverItem;
 
+#pragma warning disable CS0649
     private Point _lastDualSortHoverPoint;
+#pragma warning restore CS0649
 
     private Point _dualSortTouchStartPos;
 
@@ -3725,59 +3715,8 @@ public partial class MainView : UserControl
 
     private void TriggerDelayedDualSortHoverPreview(PictureSortItem item, PointerEventArgs e)
     {
-        if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) return;
-        if (DataContext is not MainViewModel vm) return;
-
-        // Nếu popup preview đang mở, TUYỆT ĐỐI BỎ QUA hover từ các item bên dưới để không làm mất preview video / ảnh đang xem
-        if (vm.IsDualSortPreviewVisible)
-        {
-            return;
-        }
-
-        var pos = e.GetCurrentPoint(this).Position;
-
-        _lastDualSortHoverPoint = pos;
-
-        _pendingDualSortHoverItem = item;
-
-
-
-        _dualSortHoverDelayCts?.Cancel();
-
-        _dualSortHoverDelayCts?.Dispose();
-
-        var cts = new CancellationTokenSource();
-
-        _dualSortHoverDelayCts = cts;
-
-
-
-        Task.Delay(500, cts.Token).ContinueWith(t =>
-
-        {
-
-            if (t.IsCanceled) return;
-
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-
-            {
-
-                if (cts.IsCancellationRequested) return;
-
-                if (DataContext is MainViewModel currentVm && _pendingDualSortHoverItem == item)
-
-                {
-
-                    currentVm.ShowDualSortPreview(item);
-
-                    UpdateDualSortPopupPosition(pos);
-
-                }
-
-            });
-
-        }, TaskContinuationOptions.OnlyOnRanToCompletion);
-
+        // Tính năng rê chuột (hover) để preview trên Windows/Linux đã chuyển sang Middle Mouse Click theo yêu cầu người dùng
+        return;
     }
 
 
@@ -3815,15 +3754,33 @@ public partial class MainView : UserControl
         {
             var containerMax = this.FindControl<Border>("DualSortImageContainer");
             var imgMax = this.FindControl<Image>("DualSortPreviewImage");
-            if (containerMax != null) containerMax.MaxHeight = double.PositiveInfinity;
-            if (imgMax != null) imgMax.MaxHeight = double.PositiveInfinity;
+            if (containerMax != null)
+            {
+                containerMax.MaxHeight = double.PositiveInfinity;
+                containerMax.CornerRadius = new CornerRadius(0);
+                containerMax.Margin = new Thickness(0);
+            }
+            if (imgMax != null)
+            {
+                imgMax.MaxHeight = double.PositiveInfinity;
+            }
 
             popup.Width = double.NaN;
             popup.Height = double.NaN;
+            popup.MaxWidth = double.PositiveInfinity;
             popup.MaxHeight = double.PositiveInfinity;
             popup.Margin = new Thickness(0);
+            popup.Padding = new Thickness(0);
+            popup.BorderThickness = new Thickness(0);
+            popup.CornerRadius = new CornerRadius(0);
+            popup.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
+            popup.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch;
             return;
         }
+
+        popup.Padding = new Thickness(10);
+        popup.BorderThickness = new Thickness(1.5);
+        popup.CornerRadius = new CornerRadius(8);
 
         double viewW = this.Bounds.Width > 0 ? this.Bounds.Width : 1200;
         double viewH = this.Bounds.Height > 0 ? this.Bounds.Height : 850;
@@ -4161,25 +4118,32 @@ public partial class MainView : UserControl
                 }
 
                 else
-
                 {
+                    var pt = e.GetCurrentPoint(control);
+                    if (pt.Properties.IsMiddleButtonPressed)
+                    {
+                        if (vm.IsDualSortPreviewVisible && vm.DualSortPreviewItem == item)
+                        {
+                            vm.CloseDualSortPreview();
+                        }
+                        else
+                        {
+                            vm.ShowDualSortPreview(item);
+                            var pos = e.GetCurrentPoint(this).Position;
+                            UpdateDualSortPopupPosition(pos);
+                        }
+                        e.Handled = true;
+                        return;
+                    }
 
                     if (e.ClickCount == 2)
-
                     {
-
                         vm.SortItemForward(item);
-
                     }
-
                     else
-
                     {
-
                         vm.OnSourceItemClicked(item);
-
                     }
-
                 }
 
             }
@@ -4499,25 +4463,32 @@ public partial class MainView : UserControl
                 }
 
                 else
-
                 {
+                    var pt = e.GetCurrentPoint(control);
+                    if (pt.Properties.IsMiddleButtonPressed)
+                    {
+                        if (vm.IsDualSortPreviewVisible && vm.DualSortPreviewItem == item)
+                        {
+                            vm.CloseDualSortPreview();
+                        }
+                        else
+                        {
+                            vm.ShowDualSortPreview(item);
+                            var pos = e.GetCurrentPoint(this).Position;
+                            UpdateDualSortPopupPosition(pos);
+                        }
+                        e.Handled = true;
+                        return;
+                    }
 
                     if (e.ClickCount == 2)
-
                     {
-
                         vm.SortItemBackward(item);
-
                     }
-
                     else
-
                     {
-
                         vm.OnSortedItemClicked(item);
-
                     }
-
                 }
 
             }

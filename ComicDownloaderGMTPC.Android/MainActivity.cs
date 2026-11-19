@@ -431,9 +431,19 @@ public class MainActivity : AvaloniaMainActivity
 #pragma warning disable CA1416, CS0618
                         if (fullScreen)
                         {
+                            Window?.AddFlags(global::Android.Views.WindowManagerFlags.Fullscreen | global::Android.Views.WindowManagerFlags.LayoutInScreen);
+
+                            if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.P)
+                            {
+                                if (Window?.Attributes != null)
+                                {
+                                    Window.Attributes.LayoutInDisplayCutoutMode = global::Android.Views.LayoutInDisplayCutoutMode.ShortEdges;
+                                }
+                            }
+
                             if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.R)
                             {
-                                Window?.InsetsController?.Hide(global::Android.Views.WindowInsets.Type.StatusBars() | global::Android.Views.WindowInsets.Type.NavigationBars());
+                                Window?.InsetsController?.Hide(global::Android.Views.WindowInsets.Type.StatusBars() | global::Android.Views.WindowInsets.Type.NavigationBars() | global::Android.Views.WindowInsets.Type.SystemBars());
                                 if (Window?.InsetsController != null)
                                 {
                                     Window.InsetsController.SystemBarsBehavior = (int)global::Android.Views.WindowInsetsControllerBehavior.ShowTransientBarsBySwipe;
@@ -455,9 +465,19 @@ public class MainActivity : AvaloniaMainActivity
                         }
                         else
                         {
+                            Window?.ClearFlags(global::Android.Views.WindowManagerFlags.Fullscreen | global::Android.Views.WindowManagerFlags.LayoutInScreen);
+
+                            if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.P)
+                            {
+                                if (Window?.Attributes != null)
+                                {
+                                    Window.Attributes.LayoutInDisplayCutoutMode = global::Android.Views.LayoutInDisplayCutoutMode.Default;
+                                }
+                            }
+
                             if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.R)
                             {
-                                Window?.InsetsController?.Show(global::Android.Views.WindowInsets.Type.StatusBars() | global::Android.Views.WindowInsets.Type.NavigationBars());
+                                Window?.InsetsController?.Show(global::Android.Views.WindowInsets.Type.StatusBars() | global::Android.Views.WindowInsets.Type.NavigationBars() | global::Android.Views.WindowInsets.Type.SystemBars());
                             }
                             else
                             {
