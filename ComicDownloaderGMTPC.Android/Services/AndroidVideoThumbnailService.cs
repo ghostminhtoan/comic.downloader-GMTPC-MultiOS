@@ -457,6 +457,29 @@ public static class AndroidVideoThumbnailService
             mp.SetOnErrorListener(new SafeMediaPlayerErrorListener());
             mp.SetOnCompletionListener(new SafeMediaPlayerCompletionListener());
 
+            try
+            {
+#pragma warning disable CA1422, CS8602, CA1416
+                if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.Lollipop)
+                {
+                    var builder = new global::Android.Media.AudioAttributes.Builder();
+                    builder?.SetUsage(global::Android.Media.AudioUsageKind.Media);
+                    builder?.SetContentType(global::Android.Media.AudioContentType.Music);
+                    var attrs = builder?.Build();
+                    if (attrs != null)
+                    {
+                        mp.SetAudioAttributes(attrs);
+                    }
+                }
+                else
+                {
+                    mp.SetAudioStreamType(global::Android.Media.Stream.Music);
+                }
+                mp.SetVolume(1.0f, 1.0f);
+#pragma warning restore CA1422, CS8602, CA1416
+            }
+            catch { }
+
             mp.Prepare();
             if (startSeconds > 0)
             {
@@ -502,11 +525,62 @@ public static class AndroidVideoThumbnailService
     {
         private MediaPlayer? _mp;
         private IDisposable? _streamHandle;
+        private int _volume = 100;
+        private bool _isMuted = false;
 
         public AndroidMediaPlayerHandle(MediaPlayer mp, IDisposable? streamHandle)
         {
             _mp = mp;
             _streamHandle = streamHandle;
+        }
+
+        public void SetVolume(int volumePercent)
+        {
+            _volume = Math.Clamp(volumePercent, 0, 100);
+            ApplyVolume();
+        }
+
+        public void SetMute(bool isMuted)
+        {
+            _isMuted = isMuted;
+            ApplyVolume();
+        }
+
+        private void ApplyVolume()
+        {
+            try
+            {
+                if (_mp != null)
+                {
+                    float vol = _isMuted ? 0f : (_volume / 100f);
+                    _mp.SetVolume(vol, vol);
+                }
+            }
+            catch { }
+        }
+
+        public void SetPlaybackRate(double rate)
+        {
+            try
+            {
+                if (_mp != null && global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.M)
+                {
+                    float speed = (float)Math.Clamp(rate, 0.25, 4.0);
+                    var playbackParams = _mp.PlaybackParams;
+                    if (playbackParams != null)
+                    {
+                        playbackParams.SetSpeed(speed);
+                        _mp.PlaybackParams = playbackParams;
+                    }
+                    else
+                    {
+                        var pp = new global::Android.Media.PlaybackParams();
+                        pp.SetSpeed(speed);
+                        _mp.PlaybackParams = pp;
+                    }
+                }
+            }
+            catch { }
         }
 
         public double CurrentPositionSeconds

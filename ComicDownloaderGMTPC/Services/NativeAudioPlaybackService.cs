@@ -14,6 +14,9 @@ public interface INativeAudioPlayerInstance : IDisposable
     void Seek(double seconds);
     void Stop();
     double CurrentPositionSeconds { get; }
+    void SetVolume(int volumePercent);
+    void SetMute(bool isMuted);
+    void SetPlaybackRate(double rate);
 }
 
 /// <summary>
@@ -63,12 +66,33 @@ public sealed class NativeAudioPlaybackService : IDisposable
             _isDisposed = false;
             _isPaused = false;
 
-            // 0. ƯU TIÊN: Nếu hệ thống hỗ trợ LibMpv (Windows / Linux), dùng MPV để phát âm thanh cho mọi định dạng (.webm, .mp4, .mkv, .ts...)
+            // 0. Android: Luôn luôn ưu tiên sử dụng Android Native MediaPlayer chuyên dụng
+            // vì trên Android, MPV tắt ao ("ao=null") để tránh lỗi SIGSEGV AudioTrack JNI.
+            if (OperatingSystem.IsAndroid() && ExternalAndroidAudioPlayerProvider != null)
+            {
+                try
+                {
+                    _androidPlayer = ExternalAndroidAudioPlayerProvider(filePath, startSeconds);
+                    IsPlaying = _androidPlayer != null;
+                    if (IsPlaying)
+                    {
+                        _androidPlayer?.SetVolume(_isMuted ? 0 : _volume);
+                        _androidPlayer?.SetMute(_isMuted);
+                        _androidPlayer?.SetPlaybackRate(_playbackRate);
+                        _clockOffsetSec = Math.Max(0, startSeconds);
+                        _clock.Restart();
+                        return;
+                    }
+                }
+                catch { }
+            }
+
+            // 1. Nếu hệ thống hỗ trợ LibMpv (Windows / Linux), dùng MPV để phát âm thanh cho mọi định dạng (.webm, .mp4, .mkv, .ts...)
             // Đặc biệt là .webm (loại bỏ hoàn toàn modal popup WMP và crash 0xC0000005)
             string ext = Path.GetExtension(filePath).ToLowerInvariant();
             bool isWebm = ext == ".webm";
 
-            if (MpvVideoPlayerService.IsSupported)
+            if (!OperatingSystem.IsAndroid() && MpvVideoPlayerService.IsSupported)
             {
                 try
                 {
@@ -298,6 +322,11 @@ public sealed class NativeAudioPlaybackService : IDisposable
                 try { _mpvAudioPlayer.SetVolume(_isMuted ? 0 : _volume); } catch { }
             }
 
+            if (_androidPlayer != null)
+            {
+                try { _androidPlayer.SetVolume(_isMuted ? 0 : _volume); } catch { }
+            }
+
             if (OperatingSystem.IsWindows() && _wmpRaw != null)
             {
                 try
@@ -318,6 +347,11 @@ public sealed class NativeAudioPlaybackService : IDisposable
             if (_mpvAudioPlayer != null)
             {
                 try { _mpvAudioPlayer.SetMute(isMuted); } catch { }
+            }
+
+            if (_androidPlayer != null)
+            {
+                try { _androidPlayer.SetMute(isMuted); } catch { }
             }
 
             if (OperatingSystem.IsWindows() && _wmpRaw != null)
@@ -344,6 +378,11 @@ public sealed class NativeAudioPlaybackService : IDisposable
             if (_mpvAudioPlayer != null)
             {
                 try { _mpvAudioPlayer.SetSpeed(_playbackRate); } catch { }
+            }
+
+            if (_androidPlayer != null)
+            {
+                try { _androidPlayer.SetPlaybackRate(_playbackRate); } catch { }
             }
 
             if (OperatingSystem.IsWindows() && _wmpRaw != null)

@@ -586,12 +586,64 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(DualSortVideoVolumeIcon));
     }
 
+    private int _dualSortAndroidOrientationToggleState = 0;
+
     [RelayCommand]
     public void ToggleDualSortPreviewMaximize()
     {
         IsDualSortPreviewMaximized = !IsDualSortPreviewMaximized;
         OnPropertyChanged(nameof(DualSortPreviewMaximizeIcon));
         OnPropertyChanged(nameof(DualSortPreviewMaximizeTooltip));
+
+        if (OperatingSystem.IsAndroid())
+        {
+            AndroidScreenControlService.SetImmersiveFullScreen?.Invoke(IsDualSortPreviewMaximized);
+            if (IsDualSortPreviewMaximized)
+            {
+                bool isLandscape = true;
+                if (DualSortPreviewItem != null && DualSortPreviewItem.Width > 0 && DualSortPreviewItem.Height > 0)
+                {
+                    isLandscape = DualSortPreviewItem.Width >= DualSortPreviewItem.Height;
+                }
+                else if (DualSortPreviewBitmap != null)
+                {
+                    isLandscape = DualSortPreviewBitmap.PixelSize.Width >= DualSortPreviewBitmap.PixelSize.Height;
+                }
+                AndroidScreenControlService.SetOrientationMode?.Invoke(isLandscape ? 1 : 2);
+            }
+            else
+            {
+                AndroidScreenControlService.SetOrientationMode?.Invoke(0);
+            }
+        }
+    }
+
+    [RelayCommand]
+    public void SetDualSortPreviewOrientationLandscape()
+    {
+        if (OperatingSystem.IsAndroid())
+        {
+            AndroidScreenControlService.SetOrientationMode?.Invoke(1);
+        }
+    }
+
+    [RelayCommand]
+    public void SetDualSortPreviewOrientationPortrait()
+    {
+        if (OperatingSystem.IsAndroid())
+        {
+            AndroidScreenControlService.SetOrientationMode?.Invoke(2);
+        }
+    }
+
+    [RelayCommand]
+    public void ToggleDualSortPreviewOrientation()
+    {
+        if (OperatingSystem.IsAndroid())
+        {
+            _dualSortAndroidOrientationToggleState = (_dualSortAndroidOrientationToggleState + 1) % 3;
+            AndroidScreenControlService.SetOrientationMode?.Invoke(_dualSortAndroidOrientationToggleState);
+        }
     }
 
     [RelayCommand]
@@ -3373,6 +3425,16 @@ public partial class MainViewModel
         DualSortVideoDurationText = "00:00";
         DualSortVideoCurrentTimeText = "00:00";
         DualSortVideoSeekTimeText = "00:00 / 00:00";
+
+        if (OperatingSystem.IsAndroid())
+        {
+            try
+            {
+                AndroidScreenControlService.SetImmersiveFullScreen?.Invoke(false);
+                AndroidScreenControlService.SetOrientationMode?.Invoke(0);
+            }
+            catch { }
+        }
     }
 
     // ==========================================

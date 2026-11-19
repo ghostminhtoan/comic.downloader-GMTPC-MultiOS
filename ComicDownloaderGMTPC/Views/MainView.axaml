@@ -11648,6 +11648,20 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                        <Button Command="{Binding SetDualSortPreviewOrientationLandscapeCommand}"
+                                Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                Foreground="#38BDF8" FontWeight="ExtraBold"
+                                Padding="6,3" Height="26" CornerRadius="4"
+                                ToolTip.Tip="Xoay ngang màn hình (Landscape)">
+                            <TextBlock Text="📲 Ngang" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+                        </Button>
+                        <Button Command="{Binding SetDualSortPreviewOrientationPortraitCommand}"
+                                Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                                Foreground="#38BDF8" FontWeight="ExtraBold"
+                                Padding="6,3" Height="26" CornerRadius="4"
+                                ToolTip.Tip="Xoay dọc màn hình (Portrait)">
+                            <TextBlock Text="📱 Dọc" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+                        </Button>
                         <Button Command="{Binding ToggleDualSortPreviewMaximizeCommand}"
                                 Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
                                 Foreground="#38BDF8" FontWeight="ExtraBold"

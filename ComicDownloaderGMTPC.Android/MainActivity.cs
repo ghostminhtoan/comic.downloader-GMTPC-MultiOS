@@ -395,6 +395,87 @@ public class MainActivity : AvaloniaMainActivity
             ComicDownloaderGMTPC.Services.NativeWebViewService.Instance = new AndroidNativeWebViewService();
             AndroidVideoThumbnailService.Register();
 
+            // Đăng ký dịch vụ điều khiển xoay màn hình và toàn màn hình Immersive
+            ComicDownloaderGMTPC.Services.AndroidScreenControlService.SetOrientationMode = (mode) =>
+            {
+                RunOnUiThread(() =>
+                {
+                    try
+                    {
+                        switch (mode)
+                        {
+                            case 1:
+                                RequestedOrientation = global::Android.Content.PM.ScreenOrientation.SensorLandscape;
+                                break;
+                            case 2:
+                                RequestedOrientation = global::Android.Content.PM.ScreenOrientation.SensorPortrait;
+                                break;
+                            default:
+                                RequestedOrientation = global::Android.Content.PM.ScreenOrientation.Unspecified;
+                                break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        global::Android.Util.Log.Warn("ComicGMTPC_Screen", $"SetOrientationMode error: {ex.Message}");
+                    }
+                });
+            };
+
+            ComicDownloaderGMTPC.Services.AndroidScreenControlService.SetImmersiveFullScreen = (fullScreen) =>
+            {
+                RunOnUiThread(() =>
+                {
+                    try
+                    {
+#pragma warning disable CA1416, CS0618
+                        if (fullScreen)
+                        {
+                            if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.R)
+                            {
+                                Window?.InsetsController?.Hide(global::Android.Views.WindowInsets.Type.StatusBars() | global::Android.Views.WindowInsets.Type.NavigationBars());
+                                if (Window?.InsetsController != null)
+                                {
+                                    Window.InsetsController.SystemBarsBehavior = (int)global::Android.Views.WindowInsetsControllerBehavior.ShowTransientBarsBySwipe;
+                                }
+                            }
+                            else
+                            {
+                                if (Window?.DecorView != null)
+                                {
+                                    Window.DecorView.SystemUiVisibility = (global::Android.Views.StatusBarVisibility)(
+                                        global::Android.Views.SystemUiFlags.ImmersiveSticky |
+                                        global::Android.Views.SystemUiFlags.LayoutStable |
+                                        global::Android.Views.SystemUiFlags.LayoutHideNavigation |
+                                        global::Android.Views.SystemUiFlags.LayoutFullscreen |
+                                        global::Android.Views.SystemUiFlags.HideNavigation |
+                                        global::Android.Views.SystemUiFlags.Fullscreen);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.R)
+                            {
+                                Window?.InsetsController?.Show(global::Android.Views.WindowInsets.Type.StatusBars() | global::Android.Views.WindowInsets.Type.NavigationBars());
+                            }
+                            else
+                            {
+                                if (Window?.DecorView != null)
+                                {
+                                    Window.DecorView.SystemUiVisibility = (global::Android.Views.StatusBarVisibility)global::Android.Views.SystemUiFlags.Visible;
+                                }
+                            }
+                        }
+#pragma warning restore CA1416, CS0618
+                    }
+                    catch (Exception ex)
+                    {
+                        global::Android.Util.Log.Warn("ComicGMTPC_Screen", $"SetImmersiveFullScreen error: {ex.Message}");
+                    }
+                });
+            };
+
             // Đăng ký kiểm tra Intent SAF: Trên máy thật ngoài đời có DocumentsUI sẽ trả về true để hiện nút "Sử dụng thư mục này",
             // trên giả lập LDPlayer / ROM thiếu DocumentsUI không có Activity xử lý sẽ trả về false và chuyển sang In-App Picker.
             ComicDownloaderGMTPC.Services.FolderOrFilePickerService.AndroidCanOpenDocumentTree = () =>

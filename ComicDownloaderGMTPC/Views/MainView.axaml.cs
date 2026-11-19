@@ -3813,6 +3813,11 @@ public partial class MainView : UserControl
 
         if (DataContext is MainViewModel vmMax && vmMax.IsDualSortPreviewMaximized)
         {
+            var containerMax = this.FindControl<Border>("DualSortImageContainer");
+            var imgMax = this.FindControl<Image>("DualSortPreviewImage");
+            if (containerMax != null) containerMax.MaxHeight = double.PositiveInfinity;
+            if (imgMax != null) imgMax.MaxHeight = double.PositiveInfinity;
+
             popup.Width = double.NaN;
             popup.Height = double.NaN;
             popup.MaxHeight = double.PositiveInfinity;
