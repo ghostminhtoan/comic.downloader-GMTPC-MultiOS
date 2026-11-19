@@ -2524,115 +2524,137 @@ public partial class MainViewModel
                     }
 
                     // 1. ƯU TIÊN HÀNG ĐẦU: Sử dụng MPV Video Engine (libmpv đa nền tảng, âm thanh + hình ảnh tự động đồng bộ 100%, hỗ trợ mọi codec .webm, .mp4, .mkv, .ts...)
+                    bool mpvHandled = false;
                     if (MpvVideoPlayerService.IsSupported)
                     {
-                        var mpvPlayer = MpvVideoPlayerService.Create(item.FilePath);
-                        if (mpvPlayer != null)
+                        try
                         {
-                            _dualSortMpvPlayer = mpvPlayer;
-                            int vW = mpvPlayer.VideoWidth > 0 ? mpvPlayer.VideoWidth : (item.Width > 0 ? item.Width : 720);
-                            int vH = mpvPlayer.VideoHeight > 0 ? mpvPlayer.VideoHeight : (item.Height > 0 ? item.Height : 1280);
-
-                            Dispatcher.UIThread.Post(() =>
+                            var mpvPlayer = MpvVideoPlayerService.Create(item.FilePath);
+                            if (mpvPlayer != null)
                             {
-                                item.UpdateDimensions(vW, vH);
-                            });
+                                _dualSortMpvPlayer = mpvPlayer;
+                                int vW = mpvPlayer.VideoWidth > 0 ? mpvPlayer.VideoWidth : (item.Width > 0 ? item.Width : 720);
+                                int vH = mpvPlayer.VideoHeight > 0 ? mpvPlayer.VideoHeight : (item.Height > 0 ? item.Height : 1280);
 
-                            // Tối ưu kích thước Buffer Preview: Khi video Full HD (1080p) hoặc 4K, scale buffer WriteableBitmap
-                            // về tối đa 1280px (Desktop) hoặc 960px (Android) theo đúng tỉ lệ khung hình (Aspect Ratio).
-                            // MPV tự động scale siêu tốc bằng libswscale, giảm 90% RAM/VRAM, loại bỏ 100% crash OOM và GPU timeout.
-                            int maxDim = OperatingSystem.IsAndroid() ? 960 : 1280;
-                            int bufW = vW;
-                            int bufH = vH;
-                            if (bufW > maxDim || bufH > maxDim)
-                            {
-                                double scale = (double)maxDim / Math.Max(bufW, bufH);
-                                bufW = Math.Max(2, (int)Math.Round(bufW * scale));
-                                bufH = Math.Max(2, (int)Math.Round(bufH * scale));
-                                bufW = (bufW + 1) & ~1;
-                                bufH = (bufH + 1) & ~1;
-                            }
-
-                            _dualSortWbA = new WriteableBitmap(new PixelSize(bufW, bufH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
-                            _dualSortWbB = new WriteableBitmap(new PixelSize(bufW, bufH), new Vector(96, 96), Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
-
-                            mpvPlayer.SetVolume((int)DualSortVideoVolume);
-                            mpvPlayer.SetMute(IsDualSortVideoMuted);
-                            mpvPlayer.SetSpeed(DualSortPlaybackSpeed);
-
-                            try
-                            {
-                                bool useA = false;
-                                string lastReportedTimeStr = string.Empty;
-                                while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                Dispatcher.UIThread.Post(() =>
                                 {
-                                    if (!IsDualSortVideoPaused)
+                                    item.UpdateDimensions(vW, vH);
+                                });
+
+                                // Tối ưu kích thước Buffer Preview: Khi video Full HD (1080p) hoặc 4K, scale buffer WriteableBitmap
+                                // về tối đa 1280px (Desktop) hoặc 960px (Android) theo đúng tỉ lệ khung hình (Aspect Ratio).
+                                // MPV tự động scale siêu tốc bằng libswscale, giảm 90% RAM/VRAM, loại bỏ 100% crash OOM và GPU timeout.
+                                int maxDim = OperatingSystem.IsAndroid() ? 960 : 1280;
+                                int bufW = vW;
+                                int bufH = vH;
+                                if (bufW > maxDim || bufH > maxDim)
+                                {
+                                    double scale = (double)maxDim / Math.Max(bufW, bufH);
+                                    bufW = Math.Max(2, (int)Math.Round(bufW * scale));
+                                    bufH = Math.Max(2, (int)Math.Round(bufH * scale));
+                                    bufW = (bufW + 1) & ~1;
+                                    bufH = (bufH + 1) & ~1;
+                                }
+
+                                var pixelFormat = OperatingSystem.IsAndroid() ? Avalonia.Platform.PixelFormat.Rgba8888 : Avalonia.Platform.PixelFormat.Bgra8888;
+                                _dualSortWbA = new WriteableBitmap(new PixelSize(bufW, bufH), new Vector(96, 96), pixelFormat, Avalonia.Platform.AlphaFormat.Premul);
+                                _dualSortWbB = new WriteableBitmap(new PixelSize(bufW, bufH), new Vector(96, 96), pixelFormat, Avalonia.Platform.AlphaFormat.Premul);
+
+                                mpvPlayer.SetVolume((int)DualSortVideoVolume);
+                                mpvPlayer.SetMute(IsDualSortVideoMuted);
+                                mpvPlayer.SetSpeed(DualSortPlaybackSpeed);
+
+                                try
+                                {
+                                    bool useA = false;
+                                    string lastReportedTimeStr = string.Empty;
+                                    while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                                     {
-                                        var targetWb = useA ? _dualSortWbA : _dualSortWbB;
-                                        if (targetWb != null)
+                                        if (!IsDualSortVideoPaused)
                                         {
-                                            long curMs = mpvPlayer.CurrentPositionMs;
-                                            if (curMs > 0) _dualSortVideoCurrentPlaybackMs = curMs;
-
-                                            if (DualSortLooperPointAMs.HasValue && DualSortLooperPointBMs.HasValue)
+                                            var targetWb = useA ? _dualSortWbA : _dualSortWbB;
+                                            if (targetWb != null)
                                             {
-                                                long loopStart = DualSortLooperPointAMs.Value;
-                                                long loopEnd = DualSortLooperPointBMs.Value;
-                                                if (curMs >= loopEnd || curMs < loopStart - 500)
-                                                {
-                                                    mpvPlayer.Seek(loopStart);
-                                                }
-                                            }
+                                                long curMs = mpvPlayer.CurrentPositionMs;
+                                                if (curMs > 0) _dualSortVideoCurrentPlaybackMs = curMs;
 
-                                            if (mpvPlayer.RenderFrameDirect(targetWb))
-                                            {
-                                                var curRenderedWb = targetWb;
-                                                Dispatcher.UIThread.Post(() =>
+                                                if (DualSortLooperPointAMs.HasValue && DualSortLooperPointBMs.HasValue)
                                                 {
-                                                    if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                    long loopStart = DualSortLooperPointAMs.Value;
+                                                    long loopEnd = DualSortLooperPointBMs.Value;
+                                                    if (curMs >= loopEnd || curMs < loopStart - 500)
                                                     {
-                                                        DualSortPreviewBitmap = curRenderedWb;
+                                                        mpvPlayer.Seek(loopStart);
                                                     }
-                                                }, DispatcherPriority.Render);
+                                                }
 
-                                                string curTimeStr = VideoMetadataParser.FormatDuration(curMs);
-                                                if (curTimeStr != lastReportedTimeStr)
+                                                if (mpvPlayer.RenderFrameDirect(targetWb))
                                                 {
-                                                    lastReportedTimeStr = curTimeStr;
-                                                    double pct = durMs > 0 ? (double)curMs / durMs * 100.0 : 0;
+                                                    mpvHandled = true;
+                                                    var curRenderedWb = targetWb;
                                                     Dispatcher.UIThread.Post(() =>
                                                     {
                                                         if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                                                         {
-                                                            _isInternalDualSortSeekUpdating = true;
-                                                            try
-                                                            {
-                                                                DualSortVideoSeekPosition = pct;
-                                                                UpdateDualSortVideoTimeText(curMs);
-                                                            }
-                                                            finally
-                                                            {
-                                                                _isInternalDualSortSeekUpdating = false;
-                                                            }
+                                                            DualSortPreviewBitmap = curRenderedWb;
                                                         }
-                                                    }, DispatcherPriority.Background);
-                                                }
+                                                    }, DispatcherPriority.Render);
 
-                                                useA = !useA;
+                                                    string curTimeStr = VideoMetadataParser.FormatDuration(curMs);
+                                                    if (curTimeStr != lastReportedTimeStr)
+                                                    {
+                                                        lastReportedTimeStr = curTimeStr;
+                                                        double pct = durMs > 0 ? (double)curMs / durMs * 100.0 : 0;
+                                                        Dispatcher.UIThread.Post(() =>
+                                                        {
+                                                            if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                            {
+                                                                _isInternalDualSortSeekUpdating = true;
+                                                                try
+                                                                {
+                                                                    DualSortVideoSeekPosition = pct;
+                                                                    UpdateDualSortVideoTimeText(curMs);
+                                                                }
+                                                                finally
+                                                                {
+                                                                    _isInternalDualSortSeekUpdating = false;
+                                                                }
+                                                            }
+                                                        }, DispatcherPriority.Background);
+                                                    }
+
+                                                    useA = !useA;
+                                                }
                                             }
                                         }
-                                    }
 
-                                    double spd = DualSortPlaybackSpeed > 0 ? DualSortPlaybackSpeed : 1.0;
-                                    await Task.Delay((int)Math.Max(10, 25 / spd), cts.Token);
+                                        double spd = DualSortPlaybackSpeed > 0 ? DualSortPlaybackSpeed : 1.0;
+                                        await Task.Delay((int)Math.Max(10, 25 / spd), cts.Token);
+                                    }
+                                }
+                                catch (OperationCanceledException)
+                                {
+                                    mpvHandled = true;
+                                }
+                                catch (Exception ex)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[DualSort MPV Loop Error]: {ex.Message}");
+                                }
+                                finally
+                                {
+                                    try { mpvPlayer.Dispose(); } catch { }
+                                    if (_dualSortMpvPlayer == mpvPlayer) _dualSortMpvPlayer = null;
+                                }
+
+                                if (mpvHandled && (cts.IsCancellationRequested || !IsDualSortPreviewVisible || DualSortPreviewItem != item))
+                                {
+                                    return;
                                 }
                             }
-                            finally
-                            {
-                                mpvPlayer.Dispose();
-                                if (_dualSortMpvPlayer == mpvPlayer) _dualSortMpvPlayer = null;
-                            }
-                            return;
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[DualSort MPV Init Error]: {ex.Message}");
                         }
                     }
 

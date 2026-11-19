@@ -201,13 +201,15 @@ public sealed class MpvVideoPlayerService : IDisposable
             var mpv = new MpvContext();
             mpv.SetOptionString("vo", "libmpv");
 
-            // Software Rendering vào Avalonia WriteableBitmap: Bắt buộc dùng chế độ copy surface sang RAM
-            // (auto-copy hoặc mediacodec-copy), tuyệt đối không dùng auto/auto-safe để tránh crash GPU Access Violation
-            // và SIGSEGV khi phát video Full HD (1080p) hoặc 4K trở lên.
+            // Software Rendering vào Avalonia WriteableBitmap:
+            // Trên Android: BẮT BUỘC dùng hwdec="no" (FFmpeg NEON CPU Software Decode) và ao="opensles,null".
+            // Tuyệt đối không dùng mediacodec-copy hoặc audiotrack vì chúng gọi JNI JavaVM gây crash SIGSEGV (SEGV_MAPERR),
+            // đồng thời giới hạn 2 decode threads để chống cạn kiệt pthread quota trên nhân Linux/Android.
             if (OperatingSystem.IsAndroid())
             {
-                mpv.SetOptionString("hwdec", "mediacodec-copy");
-                mpv.SetOptionString("ao", "audiotrack,opensles,auto");
+                mpv.SetOptionString("hwdec", "no");
+                mpv.SetOptionString("ao", "opensles,null");
+                mpv.SetOptionString("vd-lavc-threads", "2");
             }
             else
             {
@@ -349,7 +351,7 @@ public sealed class MpvVideoPlayerService : IDisposable
     /// Render frame trực tiếp vào surface pointer (BGR0 / BGRA) với Stride 64-bit size_t chuẩn xác,
     /// loại bỏ 100% bug lệch stride 32-bit trong thư viện gây xé hình và Exception 0xC0000005.
     /// </summary>
-    public unsafe bool RenderFrame(int width, int height, IntPtr surfaceAddress, nuint stride = 0, string format = "bgr0")
+    public unsafe bool RenderFrame(int width, int height, IntPtr surfaceAddress, nuint stride = 0, string? format = null)
     {
         if (_disposed || surfaceAddress == IntPtr.Zero || width <= 0 || height <= 0) return false;
         lock (_renderLock)
@@ -357,10 +359,13 @@ public sealed class MpvVideoPlayerService : IDisposable
             if (_disposed) return false;
             try
             {
+                string resolvedFormat = !string.IsNullOrEmpty(format)
+                    ? format
+                    : (OperatingSystem.IsAndroid() ? "rgba" : "bgr0");
                 nuint actualStride = stride > 0 ? stride : (nuint)(width * 4);
                 int[] sizeArray = [width, height];
                 nuint[] strideArray = [actualStride]; // BẮT BUỘC size_t 64-bit trên Win64/Linux64!
-                byte[] formatBytes = System.Text.Encoding.UTF8.GetBytes(format + "\0");
+                byte[] formatBytes = System.Text.Encoding.UTF8.GetBytes(resolvedFormat + "\0");
 
                 try { _mpv.RenderContextUpdate(); } catch { }
 
@@ -410,7 +415,10 @@ public sealed class MpvVideoPlayerService : IDisposable
 
                 int[] sizeArray = [w, h];
                 nuint[] strideArray = [stride]; // BẮT BUỘC 64-bit size_t!
-                byte[] formatBytes = System.Text.Encoding.UTF8.GetBytes("bgr0\0");
+                string fmt = (wb.Format == Avalonia.Platform.PixelFormat.Rgba8888 ||
+                             (OperatingSystem.IsAndroid() && wb.Format != Avalonia.Platform.PixelFormat.Bgra8888))
+                             ? "rgba\0" : "bgr0\0";
+                byte[] formatBytes = System.Text.Encoding.UTF8.GetBytes(fmt);
 
                 try { _mpv.RenderContextUpdate(); } catch { }
 

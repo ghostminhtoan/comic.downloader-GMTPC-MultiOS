@@ -13,6 +13,7 @@
     <RunAOTCompilation>false</RunAOTCompilation>
     <AndroidEnableMarshalMethods>false</AndroidEnableMarshalMethods>
     <RuntimeIdentifiers>android-arm;android-arm64;android-x86;android-x64</RuntimeIdentifiers>
+    <NoWarn>$(NoWarn);XA4301</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

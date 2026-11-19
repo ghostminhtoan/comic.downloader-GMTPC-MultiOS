@@ -19,6 +19,9 @@ namespace ComicDownloaderGMTPC.Android;
 /// </summary>
 public static class AndroidVideoThumbnailService
 {
+    [DllImport("avcodec", EntryPoint = "av_jni_set_java_vm")]
+    private static extern int av_jni_set_java_vm(IntPtr vm, IntPtr logCtx);
+
     public static void Register()
     {
         PreloadMpvLibraries();
@@ -46,6 +49,21 @@ public static class AndroidVideoThumbnailService
                 }
             }
             global::Android.Util.Log.Info("ComicGMTPC_MPV", "libmpv and ffmpeg libraries preloaded successfully!");
+
+            // Đăng ký JavaVM cho FFmpeg / libavcodec để phòng ngừa triệt để lỗi con trỏ NULL trong JNI
+            try
+            {
+                IntPtr jvm = Java.Interop.JniEnvironment.Runtime.InvocationPointer;
+                if (jvm != IntPtr.Zero)
+                {
+                    av_jni_set_java_vm(jvm, IntPtr.Zero);
+                    global::Android.Util.Log.Info("ComicGMTPC_MPV", "av_jni_set_java_vm registered successfully with JavaVM!");
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Warn("ComicGMTPC_MPV", $"av_jni_set_java_vm registration note: {ex.Message}");
+            }
         }
         catch (Exception ex)
         {
