@@ -9,3 +9,9 @@
 3. **KỂ CẢ KHI NGƯỜI DÙNG KHÔNG NHẮC ĐẾN 'upload beta', AGENT CŨNG BẮT BUỘC PHẢI TỰ ĐỘNG THỰC HIỆN! TUYỆT ĐỐI KHÔNG ĐƯỢC BỎ QUA HOẶC CHỜ USER NHẮC!**
 4. Luôn tuân thủ đầy đủ tài liệu chi tiết tại [workflow-avalonia.md](workflow-avalonia.md) và danh mục giải pháp [bug-fixes-and-solutions.md](bug-fixes-and-solutions.md).
 5. Phân bổ tác vụ và vận hành theo bản đồ 9 Subagent chuyên biệt tại [subagent.md](subagent.md).
+6. **CẤU HÌNH CỐ ĐỊNH GIẢ LẬP ANDROID & ADB (TUYỆT ĐỐI KHÔNG TÌM TRONG Ổ C)**:
+   - **Thư mục cài đặt**: `T:\Program files\LDPlayer4.0`
+   - **Quản lý đa giả lập**: `T:\Program files\LDPlayer4.0\dnmultiplayer.exe`
+   - **Giả lập chính**: `T:\Program files\LDPlayer4.0\dnplayer.exe`
+   - **Công cụ ADB bắt buộc**: `"T:\Program files\LDPlayer4.0\adb.exe"`
+   - Tuyệt đối không tìm trong ổ C. Khi cần install APK hoặc xem logcat Android, gọi trực tiếp `"T:\Program files\LDPlayer4.0\adb.exe"`.
