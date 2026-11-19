@@ -819,6 +819,14 @@ public class ComicScraperService
             {
                 var lpImages = ExtractLoppyChapterImages(html, chapterUrl);
                 if (lpImages.Count > 0) return lpImages;
+
+                // Ngoại lệ Loppytoon: Tải chữ / tiểu thuyết nếu chương không có ảnh
+                string novelText = ExtractLoppyChapterText(html);
+                if (!string.IsNullOrWhiteSpace(novelText))
+                {
+                    string b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(novelText));
+                    return new List<string> { $"data:text/plain;charset=utf-8;base64,{b64}" };
+                }
             }
 
             if (domain.Contains("vi-hentai"))
@@ -2472,6 +2480,49 @@ public class ComicScraperService
         return imageUrls;
     }
 
+    public static string ExtractLoppyChapterText(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return string.Empty;
+        var m = Regex.Match(html, @"<div[^>]*class=[""'][^""']*\bchapter-content\b[^""']*[""'][^>]*>(?<content>[\s\S]*?)</div>\s*<(?:div|footer|script)", RegexOptions.IgnoreCase);
+        if (!m.Success)
+        {
+            m = Regex.Match(html, @"<div[^>]*class=[""'][^""']*\bchapter-content\b[^""']*[""'][^>]*>(?<content>[\s\S]*?)</div>", RegexOptions.IgnoreCase);
+        }
+        if (!m.Success)
+        {
+            m = Regex.Match(html, @"<(?:div|article|section)[^>]*class=[""'][^""']*(?:reading-content|content-reading|novel-content)[^""']*[""'][^>]*>(?<content>[\s\S]*?)</(?:div|article|section)>", RegexOptions.IgnoreCase);
+        }
+        if (!m.Success) return string.Empty;
+
+        string raw = m.Groups["content"].Value;
+        string text = Regex.Replace(raw, @"<br\s*/?>", "\n", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"</p>", "\n\n", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"<p[^>]*>", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"<[^>]+>", "", RegexOptions.IgnoreCase);
+        text = WebUtility.HtmlDecode(text);
+        text = Regex.Replace(text, @"[ \t]+", " ");
+        text = Regex.Replace(text, @"\n\s*\n\s*\n+", "\n\n");
+        return text.Trim();
+    }
+
+    public async Task<string?> ExtractLoppyChapterTextFromUrlAsync(string chapterUrl, CancellationToken ct = default)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, chapterUrl);
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+            req.Headers.TryAddWithoutValidation("Referer", "https://loppytoonn.com/");
+            using var res = await _httpClient.SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode) return null;
+            string html = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            return ExtractLoppyChapterText(html);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string StripCommentElements(string html)
     {
         if (string.IsNullOrWhiteSpace(html)) return string.Empty;
@@ -2568,6 +2619,29 @@ public class ComicScraperService
     {
         if (string.IsNullOrWhiteSpace(url)) return true;
         url = url.Trim();
+
+        // 1. Chống tải video cho toàn bộ web Manga & Hentai (ngoại trừ duy nhất rule34)
+        bool isRule34 = url.Contains("rule34.lol", StringComparison.OrdinalIgnoreCase) ||
+                        url.Contains("rule34", StringComparison.OrdinalIgnoreCase);
+        if (!isRule34)
+        {
+            if (url.Contains(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                url.Contains(".webm", StringComparison.OrdinalIgnoreCase) ||
+                url.Contains(".mkv", StringComparison.OrdinalIgnoreCase) ||
+                url.Contains(".avi", StringComparison.OrdinalIgnoreCase) ||
+                url.Contains(".mov", StringComparison.OrdinalIgnoreCase) ||
+                url.Contains(".flv", StringComparison.OrdinalIgnoreCase) ||
+                url.Contains(".m3u8", StringComparison.OrdinalIgnoreCase) ||
+                url.Contains(".ts", StringComparison.OrdinalIgnoreCase) ||
+                url.Contains(".mpd", StringComparison.OrdinalIgnoreCase))
+            {
+                return true; // Bỏ qua toàn bộ link video đối với các web manga / hentai khác
+            }
+        }
+
+        // Với loppytoon cho phép data:text để lưu tiểu thuyết / chữ
+        if (url.StartsWith("data:text", StringComparison.OrdinalIgnoreCase)) return false;
+
         return url.StartsWith("data:") ||
                url.Contains("logo") ||
                url.Contains("banner") ||

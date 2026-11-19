@@ -2457,7 +2457,14 @@ public class DownloadEngineService
                                 }
                                 else
                                 {
-                                    pageFileName = $"{pageBaseName}{pageExt}";
+                                    if (pageUrl.StartsWith("data:text", StringComparison.OrdinalIgnoreCase) || pageExt.Equals(".txt", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        pageFileName = $"{pageBaseName}.txt";
+                                    }
+                                    else
+                                    {
+                                        pageFileName = $"{pageBaseName}{pageExt}";
+                                    }
                                 }
 
                                 string pageFilePath = Path.Combine(chapterDir, pageFileName);
@@ -2494,11 +2501,11 @@ public class DownloadEngineService
                                 if (foundValidFile == null)
                                 {
                                     string matchBase = isRule34SingleImage ? Path.GetFileNameWithoutExtension(pageFileName) : pageBaseName;
-                                    var allowedExts = pageFileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
+                                    var allowedExts = (isRule34SingleImage && pageFileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
                                         ? new[] { ".mp4" }
-                                        : (pageFileName.EndsWith(".webm", StringComparison.OrdinalIgnoreCase)
-                                            ? new[] { ".webm" }
-                                            : new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif" });
+                                        : (pageFileName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+                                            ? new[] { ".txt" }
+                                            : new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif", ".avif" });
 
                                     foreach (var altExt in allowedExts)
                                     {
@@ -2585,7 +2592,12 @@ public class DownloadEngineService
                                         manifest[pageFileName] = pageUrl;
                                         // Ghi nhận cả định dạng thực tế nếu In-flight Image Enhancer đã chuyển đổi sang (.jpg, .webp, v.v.)
                                         string matchBase = isRule34SingleImage ? Path.GetFileNameWithoutExtension(pageFileName) : pageBaseName;
-                                        foreach (var altExt in new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif", ".webm", ".mp4" })
+                                        var candidateExts = isRule34SingleImage
+                                            ? new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif", ".webm", ".mp4" }
+                                            : (pageFileName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+                                                ? new[] { ".txt" }
+                                                : new[] { ".jpg", ".jpeg", ".webp", ".png", ".gif", ".avif" });
+                                        foreach (var altExt in candidateExts)
                                         {
                                             string altName = $"{matchBase}{altExt}";
                                             if (File.Exists(Path.Combine(chapterDir, altName)))
@@ -2707,48 +2719,51 @@ public class DownloadEngineService
                 }
 
                 else
-
                 {
-
                     if (ct.IsCancellationRequested)
-
                     {
-
                         book.Status = "Stopped";
-
                         book.StatusMessage = "Đã dừng bởi người dùng";
-
                         if (book.ProgressPercentage <= 0 && book.DownloadedChapters <= 0 && book.DownloadedPages <= 0)
-
                         {
-
                             book.DetailProgressText = "Đã dừng";
-
                         }
-
                         ProgressUpdated?.Invoke();
-
                         return;
-
                     }
 
-
+                    // Ngoại lệ 2: Loppytoon hỗ trợ tải tiểu thuyết / truyện chữ nếu không có ảnh
+                    bool isLoppyNovel = book.Domain != null && book.Domain.Contains("loppy");
+                    if (isLoppyNovel)
+                    {
+                        try
+                        {
+                            string? novelText = await _scraperService.ExtractLoppyChapterTextFromUrlAsync(chapter.Url, ct).ConfigureAwait(false);
+                            if (!string.IsNullOrWhiteSpace(novelText))
+                            {
+                                string textFilePath = Path.Combine(chapterDir, "001.txt");
+                                await File.WriteAllTextAsync(textFilePath, novelText, System.Text.Encoding.UTF8, ct).ConfigureAwait(false);
+                                completedChapters++;
+                                chapter.Status = "Completed";
+                                chapter.DownloadedPages = 1;
+                                chapter.TotalPages = 1;
+                                book.UpdateProgress(completedChapters, totalChapters, 1, 1);
+                                ReportOverallProgress(book, $"{book.Title} • Đã xong chữ {chapter.Title}", force: false);
+                                consecutiveExtractErrors = 0;
+                                ProgressUpdated?.Invoke();
+                                continue;
+                            }
+                        }
+                        catch { }
+                    }
 
                     string txtPath = Path.Combine(chapterDir, "chapter_info.txt");
-
                     if (!File.Exists(txtPath))
-
                     {
-
                         await File.WriteAllTextAsync(txtPath, $"Title: {chapter.Title}\nURL: {chapter.Url}\nDate: {DateTime.Now}", ct).ConfigureAwait(false);
-
                     }
-
                     chapter.Status = "Error";
-
                     LogEmitted?.Invoke("WARN", $"[{book.Title}] Không thể bóc tách ảnh cho '{chapter.Title}'.");
-
-
 
                     consecutiveExtractErrors++;
 
@@ -2876,98 +2891,89 @@ public class DownloadEngineService
 
 
 
-    public static bool IsValidImageData(byte[]? data)
-
+    public static bool IsValidImageData(byte[]? data, bool allowVideo = false)
     {
-
         if (data == null || data.Length < 512) return false;
 
-
-
         // 1. JPEG: FF D8 FF
-
         if (data.Length >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
-
             return true;
-
-
 
         // 2. PNG: 89 50 4E 47 0D 0A 1A 0A
-
         if (data.Length >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 &&
-
             data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A)
-
             return true;
-
-
 
         // 3. WebP: RIFF (bytes 0-3) + WEBP (bytes 8-11)
-
         if (data.Length >= 12 &&
-
             data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
-
             data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50)
-
             return true;
-
-
 
         // 4. GIF: GIF87a / GIF89a
-
         if (data.Length >= 6 && data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38)
-
             return true;
-
-
 
         // 5. BMP: BM (42 4D)
-
         if (data.Length >= 2 && data[0] == 0x42 && data[1] == 0x4D)
-
             return true;
-
-
 
         // 6. AVIF / HEIC: ftyp at offset 4
-
         if (data.Length >= 12 && data[4] == 0x66 && data[5] == 0x74 && data[6] == 0x79 && data[7] == 0x70)
-
             return true;
-
-
 
         // 7. TIFF
-
         if (data.Length >= 4 && ((data[0] == 0x49 && data[1] == 0x49 && data[2] == 0x2A && data[3] == 0x00) ||
-
                                 (data[0] == 0x4D && data[1] == 0x4D && data[2] == 0x00 && data[3] == 0x2A)))
-
             return true;
 
+        // 8. Định dạng video: CHỈ DUY NHẤT RULE34 ĐƯỢC PHÉP!
+        // Toàn bộ các web khác trong tab manga và hentai đều bắt buộc chỉ tải ảnh.
+        if (allowVideo)
+        {
+            // WebM / Matroska Video: 1A 45 DF A3
+            if (data.Length >= 4 && data[0] == 0x1A && data[1] == 0x45 && data[2] == 0xDF && data[3] == 0xA3)
+                return true;
 
-
-        // 8. WebM / Matroska Video: 1A 45 DF A3
-        if (data.Length >= 4 && data[0] == 0x1A && data[1] == 0x45 && data[2] == 0xDF && data[3] == 0xA3)
-            return true;
-
-        // 9. ISO Base Media File Format / MP4 / QuickTime: 'ftyp', 'moov', 'mdat'
-        if (data.Length >= 8 &&
-            ((data[4] == 0x66 && data[5] == 0x74 && data[6] == 0x79 && data[7] == 0x70) ||
-             (data[4] == 0x6D && data[5] == 0x6F && data[6] == 0x6F && data[7] == 0x76) ||
-             (data[4] == 0x6D && data[5] == 0x64 && data[6] == 0x61 && data[7] == 0x74)))
-            return true;
+            // ISO Base Media File Format / MP4 / QuickTime: 'ftyp', 'moov', 'mdat'
+            if (data.Length >= 8 &&
+                ((data[4] == 0x66 && data[5] == 0x74 && data[6] == 0x79 && data[7] == 0x70) ||
+                 (data[4] == 0x6D && data[5] == 0x6F && data[6] == 0x6F && data[7] == 0x76) ||
+                 (data[4] == 0x6D && data[5] == 0x64 && data[6] == 0x61 && data[7] == 0x74)))
+                return true;
+        }
 
         return false;
-
     }
 
 
 
     private async Task<bool> DownloadImageWithRetryAsync(string imageUrl, string destinationPath, string refererUrl, string? readerUrl, CancellationToken ct)
-
     {
+        // Ngoại lệ 2: Loppytoon hỗ trợ tải tiểu thuyết / truyện chữ (data:text)
+        if (imageUrl.StartsWith("data:text", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                int commaIdx = imageUrl.IndexOf(',');
+                if (commaIdx >= 0)
+                {
+                    string b64 = imageUrl.Substring(commaIdx + 1);
+                    byte[] textBytes = Convert.FromBase64String(b64);
+                    string txtDest = destinationPath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+                        ? destinationPath
+                        : Path.ChangeExtension(destinationPath, ".txt");
+                    await File.WriteAllBytesAsync(txtDest, textBytes, ct).ConfigureAwait(false);
+                    return true;
+                }
+            }
+            catch { }
+        }
+
+        // Ngoại lệ 1: CHỈ DUY NHẤT rule34 mới được phép tải video (.mp4/webm).
+        // Toàn bộ các web khác trong tab Manga và Hentai BẮT BUỘC CHỈ TẢI ẢNH!
+        bool allowVideo = (refererUrl != null && refererUrl.Contains("rule34", StringComparison.OrdinalIgnoreCase)) ||
+                          imageUrl.Contains("rule34", StringComparison.OrdinalIgnoreCase);
 
         bool isMangaDex = imageUrl.Contains("mangadex.network", StringComparison.OrdinalIgnoreCase) ||
 
@@ -3453,8 +3459,7 @@ public class DownloadEngineService
                         
 
                         // Kiểm tra tính hợp lệ dữ liệu ảnh (Chống hoàn toàn lỗi placeholder 15 bytes hoặc HTML lỗi)
-
-                        if (IsValidImageData(rawBytes))
+                        if (IsValidImageData(rawBytes, allowVideo))
 
                         {
 
@@ -3573,73 +3578,40 @@ public class DownloadEngineService
 
 
             // Tầng 4 dự phòng cho MangaDex qua DoH + SniFragmentStream + Proxy
-
-            if ((data == null || !IsValidImageData(data)) && isMangaDex)
-
+            if ((data == null || !IsValidImageData(data, allowVideo)) && isMangaDex)
             {
-
                 foreach (string targetUrl in candidateUrls)
-
                 {
-
                     if (ct.IsCancellationRequested) return false;
-
                     try
-
                     {
-
                         byte[]? mdData = await MangaDexNetworkService.Instance.DownloadBytesAsync(targetUrl, "https://mangadex.org/", ct).ConfigureAwait(false);
-
-                        if (IsValidImageData(mdData))
-
+                        if (IsValidImageData(mdData, allowVideo))
                         {
-
                             data = mdData;
-
                             break;
-
                         }
-
                     }
-
                     catch { }
-
                 }
-
             }
-
-
 
             // Tầng 5 dự phòng cho E-Hentai: Nếu tất cả candidate cũ đều hỏng, reload fresh reader HTML lấy node mới tinh
-
-            if ((data == null || !IsValidImageData(data)) && isEHentai && !string.IsNullOrEmpty(readerUrl))
-
+            if ((data == null || !IsValidImageData(data, allowVideo)) && isEHentai && !string.IsNullOrEmpty(readerUrl))
             {
-
                 try
-
                 {
-
                     string? freshUrl = await _scraperService.ResolveFreshEHentaiImageUrlAsync(readerUrl, null, ct).ConfigureAwait(false);
-
                     if (!string.IsNullOrWhiteSpace(freshUrl) && !candidateUrls.Contains(freshUrl, StringComparer.OrdinalIgnoreCase))
-
                     {
-
                         candidateUrls.Add(freshUrl);
-
                     }
-
                 }
-
                 catch {}
-
             }
 
-
-
-            // Chỉ lưu khi dữ liệu là ảnh THỰC SỰ hợp lệ (Dung lượng >= 512b và đúng Magic Bytes)
-            if (IsValidImageData(data))
+            // Chỉ lưu khi dữ liệu là ảnh THỰC SỰ hợp lệ (Dung lượng >= 512b và đúng Magic Bytes, trừ duy nhất rule34 cho phép video)
+            if (IsValidImageData(data, allowVideo))
             {
                 // Dọn sạch tệp rỗng hoặc hỏng (<= 512b) hoặc thư mục rỗng cùng tên từ phiên tải lỗi trước đó nếu có
                 try
@@ -4375,6 +4347,15 @@ public class DownloadEngineService
                         url.Contains("rule34.lol", StringComparison.OrdinalIgnoreCase) ||
                         url.Contains("rule34", StringComparison.OrdinalIgnoreCase);
 
+        bool isLoppy = (!string.IsNullOrEmpty(domain) && domain.Contains("loppy", StringComparison.OrdinalIgnoreCase)) ||
+                       url.Contains("loppy", StringComparison.OrdinalIgnoreCase);
+
+        // Ngoại lệ 2: Loppytoon hỗ trợ tải chữ (tiểu thuyết / text)
+        if (isLoppy && (ext == ".txt" || url.StartsWith("data:text", StringComparison.OrdinalIgnoreCase) || url.StartsWith("text:", StringComparison.OrdinalIgnoreCase)))
+        {
+            return ".txt";
+        }
+
         switch (ext)
         {
             case ".jpg":
@@ -4387,11 +4368,10 @@ public class DownloadEngineService
                 return ext;
 
             case ".webm":
-                // QUY TẮC CỐT LÕI: Ngoài Rule34 thì các web khác TUYỆT ĐỐI không được đổi format file là mp4 (giữ nguyên .webm)
-                return isRule34 ? ".mp4" : ".webm";
-
             case ".mp4":
-                return ext;
+                // QUY TẮC CỐT LÕI: Ngoài Rule34 thì TOÀN BỘ web khác (tab manga và hentai) BẮT BUỘC CHỈ TẢI ẢNH!
+                // Tuyệt đối không đổi format hoặc lưu file là mp4/webm cho các web khác.
+                return isRule34 ? ".mp4" : ".jpg";
 
             default:
                 return ".jpg";
