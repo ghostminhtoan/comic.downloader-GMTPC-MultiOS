@@ -38,13 +38,25 @@ public sealed class MpvVideoPlayerService : IDisposable
             {
                 if (_isSupportedCached.HasValue) return _isSupportedCached.Value;
 
-                // Android: Thư viện libmpv.so trên Android chạy qua SurfaceView/EGL, không hỗ trợ Render Context "sw" vào CPU buffer Avalonia.
-                // Trả về false trên Android để ứng dụng sử dụng bộ phát Frame Motion Sequence và Audio MediaPlayer native
-                // siêu mượt mà 30-60 Real FPS, loại bỏ triệt để 100% crash SIGSEGV và cạn kiệt pthread quota.
+                // Android: Tích hợp trọn vẹn libmpv.so đa kiến trúc (arm64-v8a, armeabi-v7a, x86, x86_64)
                 if (OperatingSystem.IsAndroid())
                 {
-                    _isSupportedCached = false;
-                    return false;
+                    try
+                    {
+                        RegisterDllResolverIfNeeded();
+                        using var dummy = new MpvContext();
+                        dummy.SetOptionString("vo", "null");
+                        dummy.SetOptionString("ao", "null");
+                        dummy.Initialize();
+                        _isSupportedCached = true;
+                        return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[MPV Android Init Note]: {ex.Message}");
+                        _isSupportedCached = false;
+                        return false;
+                    }
                 }
 
                 if (OperatingSystem.IsWindows())
@@ -221,15 +233,22 @@ public sealed class MpvVideoPlayerService : IDisposable
             mpv.Initialize();
 
             // Khởi tạo Render Context "sw" an toàn:
+            bool renderContextOk = false;
             if (OperatingSystem.IsAndroid())
             {
                 // Trên Android: Tự tạo RenderContext "sw" trực tiếp mà KHÔNG gọi RenderContextSetUpdateCallback
                 // để ngăn chặn 100% rủi ro pthread native của libmpv gọi ngược vào delegate C# Mono (loại bỏ triệt để SIGSEGV)
-                InitAndroidSoftwareRenderingSafe(mpv);
+                renderContextOk = InitAndroidSoftwareRenderingSafe(mpv);
+                if (!renderContextOk)
+                {
+                    try { mpv.Dispose(); } catch { }
+                    return null;
+                }
             }
             else
             {
                 mpv.StartSoftwareRendering(() => onFrameReady?.Invoke());
+                renderContextOk = true;
             }
 
             mpv.RunCommand(null, new object[] { "loadfile", videoPath });
@@ -296,7 +315,7 @@ public sealed class MpvVideoPlayerService : IDisposable
         }
     }
 
-    private static unsafe void InitAndroidSoftwareRenderingSafe(MpvContext mpv)
+    private static unsafe bool InitAndroidSoftwareRenderingSafe(MpvContext mpv)
     {
         try
         {
@@ -316,11 +335,12 @@ public sealed class MpvVideoPlayerService : IDisposable
                     mpv.RenderContextCreate(pParams);
                 }
             }
+            return true;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[InitAndroidSoftwareRenderingSafe Error]: {ex.Message}");
-            try { mpv.StartSoftwareRendering(() => { }); } catch { }
+            System.Diagnostics.Debug.WriteLine($"[InitAndroidSoftwareRenderingSafe Note]: {ex.Message}");
+            return false;
         }
     }
 

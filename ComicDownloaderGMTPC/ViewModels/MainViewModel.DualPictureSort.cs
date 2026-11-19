@@ -2993,10 +2993,8 @@ public partial class MainViewModel
                         }
                     }
 
-                    // 3. Dự phòng chung: Nạp frames chuyển động và phát cùng nhịp Audio 1:1 theo thời gian thực (Real FPS)
-                    int requestedFrames = OperatingSystem.IsAndroid() 
-                        ? Math.Clamp((int)(durMs > 0 ? durMs / 60 : 30), 20, 100) 
-                        : 24;
+                    // 3. Dự phòng chung: Nạp chuỗi frames chuyển động liên tiếp và phát cùng nhịp Audio 1:1 theo thời gian thực (Real FPS)
+                    int requestedFrames = OperatingSystem.IsAndroid() ? 90 : 30;
                     var frames = await VideoThumbnailService.GetOrExtractVideoFramesAsync(item.FilePath, maxFrames: requestedFrames, maxWidth: 480, maxHeight: 480, ct: cts.Token).ConfigureAwait(false);
                     if (frames != null && frames.Count >= 1)
                     {
@@ -3066,9 +3064,10 @@ public partial class MainViewModel
                                     try { _dualSortAudioPlayer?.Seek(restartMs / 1000.0); } catch { }
                                 }
 
-                                // Ánh xạ frame chính xác theo tiến trình thời gian thực 1:1 của video (Real-Time Playback Synchronization)
-                                int targetFrameIdx = durMs > 0 ? (int)((double)curMs / durMs * totalF) : 0;
-                                targetFrameIdx = Math.Clamp(targetFrameIdx, 0, totalF - 1);
+                                // Ánh xạ frame chính xác theo tốc độ thời gian thực Real FPS chuẩn 30.0 FPS (33.33ms / frame)
+                                // Loại bỏ triệt để hiện tượng trượt 1 FPS, đảm bảo video chuyển động mượt mà liên tục từng khung hình
+                                double frameIntervalMs = 33.333;
+                                int targetFrameIdx = (int)(curMs / frameIntervalMs) % totalF;
 
                                 if (targetFrameIdx != lastRenderedFrameIdx)
                                 {

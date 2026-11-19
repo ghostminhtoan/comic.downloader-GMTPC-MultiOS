@@ -289,7 +289,7 @@ public static class VideoThumbnailService
         }
         catch { }
 
-        string rawKey = $"{videoPath}_{len}_{time}_v2";
+        string rawKey = $"{videoPath}_{len}_{time}_realfps";
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(rawKey));
         string hashStr = Convert.ToHexString(hash).Substring(0, 24).ToLowerInvariant();
 
@@ -584,7 +584,7 @@ public static class VideoThumbnailService
         }
         catch { }
 
-        string rawKey = $"{videoPath}_{len}_{time}_v2";
+        string rawKey = $"{videoPath}_{len}_{time}_realfps";
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(rawKey));
         string hashStr = Convert.ToHexString(hash).Substring(0, 24).ToLowerInvariant();
 

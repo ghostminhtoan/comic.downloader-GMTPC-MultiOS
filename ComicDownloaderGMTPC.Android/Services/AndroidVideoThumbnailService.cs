@@ -509,11 +509,15 @@ public static class AndroidVideoThumbnailService
             streamHandle = SetDataSourceSafe(retriever, videoPath);
 
             long durationMs = TryGetDurationMs(retriever, videoPath);
-            int count = Math.Max(4, Math.Min(120, maxFrames));
+            int count = Math.Max(24, Math.Min(120, maxFrames));
             long durationUs = durationMs > 0 ? durationMs * 1000 : 15_000_000;
-            // Phân bổ đều các frame trên toàn bộ thời lượng video để khi xem và tua, các frame trải đều toàn bộ video theo Real FPS
-            long stepUs = durationUs > 0 ? (long)(durationUs * 0.98 / Math.Max(1, count)) : 33_333;
-            if (stepUs < 33_333) stepUs = 33_333;
+            // Chuẩn hóa bước thời gian giữa các frame liên tiếp ở tốc độ chuẩn 30.0 Real FPS (33,333 us = 33.3ms / frame).
+            // Giúp video phát liên tục mượt mà, loại bỏ triệt để hiện tượng giật cục 1 FPS.
+            long stepUs = 33_333;
+            if (durationUs > 0 && durationUs < count * stepUs)
+            {
+                stepUs = Math.Max(16_666, durationUs / Math.Max(1, count));
+            }
 
             CalculateOptimalFrameDimensions(retriever, videoPath, maxWidth, maxHeight, out int targetW, out int targetH, out int rotation);
 
