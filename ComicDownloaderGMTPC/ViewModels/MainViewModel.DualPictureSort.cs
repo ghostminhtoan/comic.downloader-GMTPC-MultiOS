@@ -2558,6 +2558,7 @@ public partial class MainViewModel
                                 try
                                 {
                                     bool useA = false;
+                                    bool isMpvFrameRendering = false;
                                     string lastReportedTimeStr = string.Empty;
                                     while (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                                     {
@@ -2580,48 +2581,60 @@ public partial class MainViewModel
                                                     }
                                                 }
 
-                                                if (mpvPlayer.RenderFrameDirect(targetWb))
+                                                if (!isMpvFrameRendering)
                                                 {
-                                                    mpvHandled = true;
-                                                    var curRenderedWb = targetWb;
-                                                    Dispatcher.UIThread.Post(() =>
+                                                    if (mpvPlayer.RenderFrameDirect(targetWb))
                                                     {
-                                                        if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
-                                                        {
-                                                            DualSortPreviewBitmap = curRenderedWb;
-                                                        }
-                                                    }, DispatcherPriority.Render);
-
-                                                    string curTimeStr = VideoMetadataParser.FormatDuration(curMs);
-                                                    if (curTimeStr != lastReportedTimeStr)
-                                                    {
-                                                        lastReportedTimeStr = curTimeStr;
-                                                        double pct = durMs > 0 ? (double)curMs / durMs * 100.0 : 0;
+                                                        mpvHandled = true;
+                                                        isMpvFrameRendering = true;
+                                                        var curRenderedWb = targetWb;
                                                         Dispatcher.UIThread.Post(() =>
                                                         {
-                                                            if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                            try
                                                             {
-                                                                _isInternalDualSortSeekUpdating = true;
-                                                                try
+                                                                if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
                                                                 {
-                                                                    DualSortVideoSeekPosition = pct;
-                                                                    UpdateDualSortVideoTimeText(curMs);
-                                                                }
-                                                                finally
-                                                                {
-                                                                    _isInternalDualSortSeekUpdating = false;
+                                                                    DualSortPreviewBitmap = curRenderedWb;
                                                                 }
                                                             }
-                                                        }, DispatcherPriority.Background);
-                                                    }
+                                                            catch { }
+                                                            finally
+                                                            {
+                                                                isMpvFrameRendering = false;
+                                                            }
+                                                        }, DispatcherPriority.Render);
 
-                                                    useA = !useA;
+                                                        string curTimeStr = VideoMetadataParser.FormatDuration(curMs);
+                                                        if (curTimeStr != lastReportedTimeStr)
+                                                        {
+                                                            lastReportedTimeStr = curTimeStr;
+                                                            double pct = durMs > 0 ? (double)curMs / durMs * 100.0 : 0;
+                                                            Dispatcher.UIThread.Post(() =>
+                                                            {
+                                                                if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                                {
+                                                                    _isInternalDualSortSeekUpdating = true;
+                                                                    try
+                                                                    {
+                                                                        DualSortVideoSeekPosition = pct;
+                                                                        UpdateDualSortVideoTimeText(curMs);
+                                                                    }
+                                                                    finally
+                                                                    {
+                                                                        _isInternalDualSortSeekUpdating = false;
+                                                                    }
+                                                                }
+                                                            }, DispatcherPriority.Background);
+                                                        }
+
+                                                        useA = !useA;
+                                                    }
                                                 }
                                             }
                                         }
 
                                         double spd = DualSortPlaybackSpeed > 0 ? DualSortPlaybackSpeed : 1.0;
-                                        await Task.Delay((int)Math.Max(10, 25 / spd), cts.Token);
+                                        await Task.Delay((int)Math.Max(12, 33 / spd), cts.Token);
                                     }
                                 }
                                 catch (OperationCanceledException)
@@ -2880,6 +2893,7 @@ public partial class MainViewModel
                             try
                             {
                                 bool useA = false;
+                                bool isAndroidFrameRendering = false;
                                 string lastReportedTimeStr = string.Empty;
                                 var playbackSw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -2888,7 +2902,7 @@ public partial class MainViewModel
                                     if (!IsDualSortVideoPaused)
                                     {
                                         var targetWb = useA ? _dualSortWbA : _dualSortWbB;
-                                        if (targetWb != null)
+                                        if (targetWb != null && !isAndroidFrameRendering)
                                         {
                                             double curSec = _dualSortAudioPlayer?.CurrentPositionSeconds ?? -1;
                                             long curAudioMs = curSec >= 0 ? (long)(curSec * 1000.0) : (long)playbackSw.Elapsed.TotalMilliseconds;
@@ -2917,13 +2931,22 @@ public partial class MainViewModel
                                             bool frameRead = androidPlayer.ReadNextFrameSynced(curAudioMs, targetWb, out long frameMs);
                                             if (frameRead)
                                             {
+                                                isAndroidFrameRendering = true;
                                                 _dualSortVideoCurrentPlaybackMs = frameMs;
                                                 var curRenderedWb = targetWb;
                                                 Dispatcher.UIThread.Post(() =>
                                                 {
-                                                    if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                    try
                                                     {
-                                                        DualSortPreviewBitmap = curRenderedWb;
+                                                        if (!cts.IsCancellationRequested && IsDualSortPreviewVisible && DualSortPreviewItem == item)
+                                                        {
+                                                            DualSortPreviewBitmap = curRenderedWb;
+                                                        }
+                                                    }
+                                                    catch { }
+                                                    finally
+                                                    {
+                                                        isAndroidFrameRendering = false;
                                                     }
                                                 }, DispatcherPriority.Render);
 

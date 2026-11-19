@@ -120,77 +120,18 @@ public static class FolderOrFilePickerService
                             return normalized;
                         }
                     }
+
+                    // Người dùng đã bấm Hủy trên giao diện hệ thống -> Trả về null, tuyệt đối không tự ý mở bộ chọn file gây mất nút
+                    return null;
                 }
-                catch { }
-            }
-        }
-
-        // 4. Fallback 1: Sử dụng Avalonia OpenFilePickerAsync hiển thị danh sách file ảnh để người dùng click 1 file lấy folder cha
-        bool canOpenFile = true;
-        if (OperatingSystem.IsAndroid())
-        {
-            canOpenFile = AndroidCanOpenFile?.Invoke() ?? true;
-        }
-
-        if (canOpenFile && topLevel?.StorageProvider != null)
-        {
-            try
-            {
-                IStorageFolder? startFolder = null;
-                if (!string.IsNullOrWhiteSpace(initialPath) && Directory.Exists(initialPath))
+                catch
                 {
-                    try
-                    {
-                        startFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(initialPath);
-                    }
-                    catch { }
-                }
-
-                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-                {
-                    Title = language == "VI"
-                        ? "Chọn 1 ảnh trong thư mục cần lọc (Ứng dụng sẽ lấy thư mục cha)"
-                        : "Pick any image inside folder (Parent directory will be selected)",
-                    AllowMultiple = false,
-                    SuggestedStartLocation = startFolder,
-                    FileTypeFilter = new List<FilePickerFileType>
-                    {
-                        new(language == "VI" ? "Tất cả ảnh & video" : "All Images & Videos")
-                        {
-                            Patterns = ValidImageExtensions,
-                            MimeTypes = new[] { "image/*", "video/*" }
-                        },
-                        new(language == "VI" ? "Tất cả tệp (*.*)" : "All Files (*.*)")
-                        {
-                            Patterns = new[] { "*" },
-                            MimeTypes = new[] { "*/*" }
-                        }
-                    }
-                });
-
-                if (files != null && files.Count > 0)
-                {
-                    var selected = files[0];
-                    string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                    string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                    if (!string.IsNullOrWhiteSpace(normalized))
-                    {
-                        if (File.Exists(normalized))
-                        {
-                            return Path.GetDirectoryName(normalized) ?? normalized;
-                        }
-                        if (Directory.Exists(normalized))
-                        {
-                            return normalized;
-                        }
-                        return Path.GetDirectoryName(normalized) ?? normalized;
-                    }
+                    // Khi SAF bị từ chối hoặc lỗi ActivityNotFound -> Tự động chuyển xuống In-App Folder Picker bên dưới
                 }
             }
-            catch { }
         }
 
-        // 5. Fallback 2 Cứu Hộ Tối Thượng: In-App Folder Selector Dialog (Hoạt động độc lập 100%, an toàn cho LDPlayer & mọi máy Android)
+        // 4. In-App Folder Selector Dialog (Hoạt động độc lập 100%, an toàn cho LDPlayer & mọi máy Android)
         if (InAppFolderPickerHandler != null)
         {
             try
@@ -251,6 +192,9 @@ public static class FolderOrFilePickerService
                             return normalized;
                         }
                     }
+
+                    // Người dùng đã bấm Hủy trên giao diện SAF hệ thống -> Trả về null
+                    return null;
                 }
                 catch { }
             }
@@ -327,7 +271,7 @@ public static class FolderOrFilePickerService
         bool canOpenFile = true;
         if (OperatingSystem.IsAndroid())
         {
-            canOpenFile = AndroidCanOpenFile?.Invoke() ?? true;
+            canOpenFile = AndroidCanOpenFile?.Invoke() ?? CheckAndroidOpenFileAvailable();
         }
 
         if (canOpenFile && topLevel?.StorageProvider != null)
@@ -363,8 +307,17 @@ public static class FolderOrFilePickerService
                         return normalized;
                     }
                 }
+
+                // Trên điện thoại thật ngoài đời (có SAF system file picker): Người dùng bấm Cancel -> Trả về null
+                if (OperatingSystem.IsAndroid())
+                {
+                    return null;
+                }
             }
-            catch { }
+            catch
+            {
+                // Khi SAF bị lỗi ActivityNotFoundException hoặc SecurityException -> Fallback sang In-App Picker
+            }
         }
 
         // 2. Fallback cứu hộ: In-App File Selector
@@ -384,9 +337,30 @@ public static class FolderOrFilePickerService
         return null;
     }
 
+    public static Task<string?> PickFileAsync(
+        TopLevel? topLevel,
+        string? initialPath,
+        string? title,
+        string[]? filterExtensions,
+        IReadOnlyList<FilePickerFileType>? fileTypes = null,
+        string language = "VI")
+    {
+        return PickFileAsync(topLevel, initialPath, title, fileTypes, filterExtensions, language);
+    }
+
     /// <summary>
     /// Chọn nhiều tập tin (cho tính năng Gộp file Archive Merger, Rename...).
     /// </summary>
+    public static Task<IReadOnlyList<string>> PickMultipleFilesAsync(
+        TopLevel? topLevel,
+        string? initialPath,
+        string? title,
+        string[]? filterExtensions,
+        IReadOnlyList<FilePickerFileType>? fileTypes = null,
+        string language = "VI")
+    {
+        return PickMultipleFilesAsync(topLevel, initialPath, title, fileTypes, filterExtensions, language);
+    }
     public static async Task<IReadOnlyList<string>> PickMultipleFilesAsync(
         TopLevel? topLevel,
         string? initialPath,
@@ -401,7 +375,7 @@ public static class FolderOrFilePickerService
         bool canOpenFile = true;
         if (OperatingSystem.IsAndroid())
         {
-            canOpenFile = AndroidCanOpenFile?.Invoke() ?? true;
+            canOpenFile = AndroidCanOpenFile?.Invoke() ?? CheckAndroidOpenFileAvailable();
         }
 
         if (canOpenFile && topLevel?.StorageProvider != null)
@@ -444,8 +418,17 @@ public static class FolderOrFilePickerService
                         return results;
                     }
                 }
+
+                // Trên điện thoại thật ngoài đời (có SAF system file picker): Người dùng bấm Cancel -> Trả về rỗng
+                if (OperatingSystem.IsAndroid())
+                {
+                    return Array.Empty<string>();
+                }
             }
-            catch { }
+            catch
+            {
+                // Khi SAF bị lỗi ActivityNotFoundException hoặc SecurityException -> Fallback sang In-App Picker
+            }
         }
 
         // Fallback: Nếu không chọn được nhiều file qua hệ thống, thử chọn đơn file qua In-App Picker
@@ -485,7 +468,70 @@ public static class FolderOrFilePickerService
                         var intent = Activator.CreateInstance(intentType, "android.intent.action.OPEN_DOCUMENT_TREE");
                         var queryMethod = pm.GetType().GetMethod("QueryIntentActivities", new[] { intentType, typeof(int) });
                         var list = queryMethod?.Invoke(pm, new object[] { intent!, 0 }) as System.Collections.IList;
-                        return list != null && list.Count > 0;
+                        if (list != null && list.Count > 0)
+                        {
+                            foreach (var item in list)
+                            {
+                                var actInfoProp = item?.GetType().GetProperty("ActivityInfo");
+                                var actInfo = actInfoProp?.GetValue(item);
+                                var pkgProp = actInfo?.GetType().GetProperty("PackageName");
+                                string? pkg = pkgProp?.GetValue(actInfo) as string;
+                                var clsProp = actInfo?.GetType().GetProperty("Name");
+                                string? cls = clsProp?.GetValue(actInfo) as string;
+                                if (!string.IsNullOrEmpty(pkg) &&
+                                    pkg != "android" &&
+                                    !(cls?.Contains("ResolverActivity", StringComparison.OrdinalIgnoreCase) == true))
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    private static bool CheckAndroidOpenFileAvailable()
+    {
+        if (!OperatingSystem.IsAndroid()) return false;
+        try
+        {
+            var appType = Type.GetType("Android.App.Application, Mono.Android");
+            if (appType != null)
+            {
+                var ctxProp = appType.GetProperty("Context", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                var ctx = ctxProp?.GetValue(null);
+                if (ctx != null)
+                {
+                    var pmProp = ctx.GetType().GetProperty("PackageManager");
+                    var pm = pmProp?.GetValue(ctx);
+                    var intentType = Type.GetType("Android.Content.Intent, Mono.Android");
+                    if (pm != null && intentType != null)
+                    {
+                        var intent = Activator.CreateInstance(intentType, "android.intent.action.OPEN_DOCUMENT");
+                        var queryMethod = pm.GetType().GetMethod("QueryIntentActivities", new[] { intentType, typeof(int) });
+                        var list = queryMethod?.Invoke(pm, new object[] { intent!, 0 }) as System.Collections.IList;
+                        if (list != null && list.Count > 0)
+                        {
+                            foreach (var item in list)
+                            {
+                                var actInfoProp = item?.GetType().GetProperty("ActivityInfo");
+                                var actInfo = actInfoProp?.GetValue(item);
+                                var pkgProp = actInfo?.GetType().GetProperty("PackageName");
+                                string? pkg = pkgProp?.GetValue(actInfo) as string;
+                                var clsProp = actInfo?.GetType().GetProperty("Name");
+                                string? cls = clsProp?.GetValue(actInfo) as string;
+                                if (!string.IsNullOrEmpty(pkg) &&
+                                    pkg != "android" &&
+                                    !(cls?.Contains("ResolverActivity", StringComparison.OrdinalIgnoreCase) == true))
+                                {
+                                    return true;
+                                }
+                            }
+                        }
                     }
                 }
             }

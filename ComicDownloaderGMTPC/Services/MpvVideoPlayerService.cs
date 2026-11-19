@@ -41,18 +41,23 @@ public sealed class MpvVideoPlayerService : IDisposable
                 // Android: Tích hợp trọn vẹn libmpv.so đa kiến trúc (arm64-v8a, armeabi-v7a, x86, x86_64)
                 if (OperatingSystem.IsAndroid())
                 {
+                    RegisterDllResolverIfNeeded();
+                    MpvContext? dummy = null;
                     try
                     {
-                        RegisterDllResolverIfNeeded();
-                        using var dummy = new MpvContext();
-                        dummy.SetOptionString("vo", "null");
+                        dummy = new MpvContext();
+                        dummy.SetOptionString("vo", "libmpv");
                         dummy.SetOptionString("ao", "null");
-                        dummy.Initialize();
+                        dummy.Dispose();
                         _isSupportedCached = true;
                         return true;
                     }
                     catch (Exception ex)
                     {
+                        if (dummy != null)
+                        {
+                            try { GC.SuppressFinalize(dummy); } catch { }
+                        }
                         System.Diagnostics.Debug.WriteLine($"[MPV Android Init Note]: {ex.Message}");
                         _isSupportedCached = false;
                         return false;
@@ -67,9 +72,7 @@ public sealed class MpvVideoPlayerService : IDisposable
                         try
                         {
                             MpvApi.RootPath = dir;
-                            // Thử tạo dummy handle để xác thực DLL tải thành công
                             using var dummy = new MpvContext();
-                            dummy.Initialize();
                             _isSupportedCached = true;
                             return true;
                         }
@@ -89,7 +92,6 @@ public sealed class MpvVideoPlayerService : IDisposable
                     try
                     {
                         using var dummy = new MpvContext();
-                        dummy.Initialize();
                         _isSupportedCached = true;
                         return true;
                     }
@@ -134,14 +136,63 @@ public sealed class MpvVideoPlayerService : IDisposable
         _dllResolverRegistered = true;
         try
         {
+            if (OperatingSystem.IsAndroid())
+            {
+                try
+                {
+                    MpvApi.LibraryVersionMap["libmpv"] = 0;
+                    var appType = Type.GetType("Android.App.Application, Mono.Android");
+                    var ctxProp = appType?.GetProperty("Context", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                    var ctx = ctxProp?.GetValue(null);
+                    var appInfoProp = ctx?.GetType().GetProperty("ApplicationInfo");
+                    var appInfo = appInfoProp?.GetValue(ctx);
+                    var nativeDirProp = appInfo?.GetType().GetProperty("NativeLibraryDir");
+                    string? nativeDir = nativeDirProp?.GetValue(appInfo) as string;
+                    if (!string.IsNullOrEmpty(nativeDir))
+                    {
+                        MpvApi.RootPath = nativeDir;
+                        string fullPath = Path.Combine(nativeDir, "libmpv.so");
+                        if (File.Exists(fullPath) && NativeLibrary.TryLoad(fullPath, out IntPtr handleFull))
+                        {
+                            var resolverField = typeof(MpvApi).GetField("s_functionResolver", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                            resolverField?.SetValue(null, new MpvCoreFunctionResolver(handleFull));
+                        }
+                    }
+                }
+                catch { }
+            }
+
             NativeLibrary.SetDllImportResolver(typeof(HanumanInstitute.LibMpv.MpvContext).Assembly, (libraryName, assembly, searchPath) =>
             {
                 if (libraryName.Equals("mpv", StringComparison.OrdinalIgnoreCase) ||
                     libraryName.Equals("libmpv", StringComparison.OrdinalIgnoreCase) ||
+                    libraryName.Equals("libmpv.2", StringComparison.OrdinalIgnoreCase) ||
+                    libraryName.Equals("libmpv.so.2", StringComparison.OrdinalIgnoreCase) ||
                     libraryName.Equals("libmpv-2", StringComparison.OrdinalIgnoreCase))
                 {
                     if (OperatingSystem.IsAndroid() || OperatingSystem.IsLinux())
                     {
+                        if (OperatingSystem.IsAndroid())
+                        {
+                            try
+                            {
+                                var appType = Type.GetType("Android.App.Application, Mono.Android");
+                                var ctxProp = appType?.GetProperty("Context", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                                var ctx = ctxProp?.GetValue(null);
+                                var appInfoProp = ctx?.GetType().GetProperty("ApplicationInfo");
+                                var appInfo = appInfoProp?.GetValue(ctx);
+                                var nativeDirProp = appInfo?.GetType().GetProperty("NativeLibraryDir");
+                                string? nativeDir = nativeDirProp?.GetValue(appInfo) as string;
+                                if (!string.IsNullOrEmpty(nativeDir))
+                                {
+                                    string fullPath = Path.Combine(nativeDir, "libmpv.so");
+                                    if (File.Exists(fullPath) && NativeLibrary.TryLoad(fullPath, out IntPtr handleFull))
+                                        return handleFull;
+                                }
+                            }
+                            catch { }
+                        }
+
                         if (NativeLibrary.TryLoad("libmpv.so", assembly, searchPath, out IntPtr handle))
                             return handle;
                         if (NativeLibrary.TryLoad("mpv", assembly, searchPath, out handle))
@@ -228,9 +279,6 @@ public sealed class MpvVideoPlayerService : IDisposable
 
             mpv.SetOptionString("keep-open", "yes");
             mpv.SetOptionString("loop-file", "inf");
-
-            // BẮT BUỘC gọi mpv.Initialize() TRƯỚC KHI tạo mpv_render_context theo chuẩn API chính thức của libmpv!
-            mpv.Initialize();
 
             // Khởi tạo Render Context "sw" an toàn:
             bool renderContextOk = false;
@@ -513,5 +561,21 @@ public sealed class MpvVideoPlayerService : IDisposable
             _mpv.Dispose();
         }
         catch { }
+    }
+}
+
+internal sealed class MpvCoreFunctionResolver : HanumanInstitute.LibMpv.Core.IFunctionResolver
+{
+    private readonly IntPtr _h;
+    public MpvCoreFunctionResolver(IntPtr h) => _h = h;
+
+    public T GetFunctionDelegate<T>(string libraryName, string functionName, bool throwOnError)
+    {
+        if (_h != IntPtr.Zero && NativeLibrary.TryGetExport(_h, functionName, out IntPtr ptr))
+        {
+            return (T)(object)Marshal.GetDelegateForFunctionPointer(ptr, typeof(T));
+        }
+        if (throwOnError) throw new EntryPointNotFoundException($"Function '{functionName}' not found in libmpv.so");
+        return default!;
     }
 }

@@ -270,7 +270,7 @@ public class MainActivity : AvaloniaMainActivity
 
 
 
-                global::Android.Util.Log.Warn("ComicGMTPC_Task", $"[UnobservedTask] {args.Exception?.Message}");
+                global::Android.Util.Log.Warn("ComicGMTPC_Task", $"[UnobservedTask] {args.Exception}");
 
 
 
@@ -395,35 +395,51 @@ public class MainActivity : AvaloniaMainActivity
             ComicDownloaderGMTPC.Services.NativeWebViewService.Instance = new AndroidNativeWebViewService();
             AndroidVideoThumbnailService.Register();
 
-            // Đăng ký kiểm tra Intent SAF: Trên máy thật ngoài đời luôn trả về true để hiện nút "Sử dụng thư mục này",
-            // chỉ trên giả lập LDPlayer / ROM thiếu DocumentsUI mới chuyển sang In-App Picker.
+            // Đăng ký kiểm tra Intent SAF: Trên máy thật ngoài đời có DocumentsUI sẽ trả về true để hiện nút "Sử dụng thư mục này",
+            // trên giả lập LDPlayer / ROM thiếu DocumentsUI không có Activity xử lý sẽ trả về false và chuyển sang In-App Picker.
             ComicDownloaderGMTPC.Services.FolderOrFilePickerService.AndroidCanOpenDocumentTree = () =>
             {
                 try
                 {
-                    string buildProduct = (global::Android.OS.Build.Product ?? "").ToLowerInvariant();
-                    string buildHardware = (global::Android.OS.Build.Hardware ?? "").ToLowerInvariant();
-                    string buildFingerprint = (global::Android.OS.Build.Fingerprint ?? "").ToLowerInvariant();
-                    bool isEmulator = buildProduct.Contains("vbox") || buildProduct.Contains("nox") ||
-                                      buildHardware.Contains("goldfish") || buildHardware.Contains("ranchu") ||
-                                      buildFingerprint.Contains("generic") || buildProduct.Contains("ldplayer");
+                    // 1. Kiểm tra nhanh giả lập không có DocumentsUI: LDPlayer 4.0, Nox, x86 VM
+                    string hardware = (global::Android.OS.Build.Hardware ?? "").ToLowerInvariant();
+                    string fingerprint = (global::Android.OS.Build.Fingerprint ?? "").ToLowerInvariant();
+                    string product = (global::Android.OS.Build.Product ?? "").ToLowerInvariant();
+                    if (hardware.Contains("x86") || hardware.Contains("goldfish") || hardware.Contains("ranchu") ||
+                        product.Contains("vbox") || product.Contains("nox") || product.Contains("ldplayer") ||
+                        fingerprint.Contains("generic"))
+                    {
+                        global::Android.Util.Log.Info("ComicGMTPC_SAF", "Emulator detected (x86/no DocumentsUI) -> Fallback to In-App Folder Picker");
+                        return false;
+                    }
 
                     var pm = CurrentInstance?.ApplicationContext?.PackageManager ?? CurrentInstance?.PackageManager;
-                    if (pm == null) return !isEmulator;
+                    if (pm == null) return false;
 
-                    // Trên máy thật ngoài đời (không phải giả lập): 100% hỗ trợ SAF OpenDocumentTree
-                    if (!isEmulator) return true;
-
+                    // 2. Kiểm tra xem có app nào thực sự (không phải com.android.internal.app.ResolverActivity) xử lý ACTION_OPEN_DOCUMENT_TREE không
                     var intent = new Intent(Intent.ActionOpenDocumentTree);
-                    var resolve = pm.ResolveActivity(intent, 0);
-                    if (resolve != null) return true;
-
                     var list = pm.QueryIntentActivities(intent, 0);
-                    return list != null && list.Count > 0;
+                    if (list != null && list.Count > 0)
+                    {
+                        foreach (var res in list)
+                        {
+                            string pkg = res.ActivityInfo?.PackageName ?? "";
+                            string cls = res.ActivityInfo?.Name ?? "";
+                            if (!string.IsNullOrEmpty(pkg) &&
+                                pkg != "android" &&
+                                !cls.Contains("ResolverActivity", StringComparison.OrdinalIgnoreCase))
+                            {
+                                global::Android.Util.Log.Info("ComicGMTPC_SAF", $"Real SAF DocumentTree handler found: {pkg}/{cls}");
+                                return true;
+                            }
+                        }
+                    }
+
+                    return false;
                 }
                 catch
                 {
-                    return true;
+                    return false;
                 }
             };
 
@@ -431,12 +447,39 @@ public class MainActivity : AvaloniaMainActivity
             {
                 try
                 {
-                    var intent = new Intent(Intent.ActionGetContent);
-                    intent.SetType("image/*");
+                    string hardware = (global::Android.OS.Build.Hardware ?? "").ToLowerInvariant();
+                    string fingerprint = (global::Android.OS.Build.Fingerprint ?? "").ToLowerInvariant();
+                    string product = (global::Android.OS.Build.Product ?? "").ToLowerInvariant();
+                    if (hardware.Contains("x86") || hardware.Contains("goldfish") || hardware.Contains("ranchu") ||
+                        product.Contains("vbox") || product.Contains("nox") || product.Contains("ldplayer") ||
+                        fingerprint.Contains("generic"))
+                    {
+                        return false;
+                    }
+
                     var pm = CurrentInstance?.ApplicationContext?.PackageManager ?? CurrentInstance?.PackageManager;
                     if (pm == null) return false;
+
+                    var intent = new Intent(Intent.ActionOpenDocument);
+                    intent.AddCategory(Intent.CategoryOpenable);
+                    intent.SetType("*/*");
                     var list = pm.QueryIntentActivities(intent, 0);
-                    return list != null && list.Count > 0;
+                    if (list != null && list.Count > 0)
+                    {
+                        foreach (var res in list)
+                        {
+                            string pkg = res.ActivityInfo?.PackageName ?? "";
+                            string cls = res.ActivityInfo?.Name ?? "";
+                            if (!string.IsNullOrEmpty(pkg) &&
+                                pkg != "android" &&
+                                !cls.Contains("ResolverActivity", StringComparison.OrdinalIgnoreCase))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+
+                    return false;
                 }
                 catch
                 {

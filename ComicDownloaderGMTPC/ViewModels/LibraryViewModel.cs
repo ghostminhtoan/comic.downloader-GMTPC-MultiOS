@@ -445,13 +445,12 @@ public partial class LibraryViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider == null) return;
-
-            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                Title = "Chọn File Truyện CBZ / ZIP / CBR / RAR / PDF / MOBI Để Đọc Ngay",
-                AllowMultiple = false,
-                FileTypeFilter = new[]
+            string? normalized = await FolderOrFilePickerService.PickFileAsync(
+                topLevel,
+                null,
+                "Chọn File Truyện CBZ / ZIP / CBR / RAR / PDF / MOBI Để Đọc Ngay",
+                new[] { ".cbz", ".zip", ".cbr", ".rar", ".pdf", ".mobi", ".prc", ".azw", ".azw3" },
+                new[]
                 {
                     new FilePickerFileType("Tất cả định dạng truyện (*.cbz, *.zip, *.cbr, *.rar, *.pdf, *.mobi)")
                     {
@@ -473,16 +472,11 @@ public partial class LibraryViewModel : ViewModelBase
                         Patterns = new[] { "*.mobi", "*.prc", "*.azw", "*.azw3" },
                         MimeTypes = new[] { "application/x-mobipocket-ebook", "application/octet-stream", "*/*" }
                     }
-                }
-            });
+                },
+                "VI");
 
-            if (files != null && files.Count > 0)
+            if (!string.IsNullOrWhiteSpace(normalized) && File.Exists(normalized))
             {
-                var selected = files[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized) && File.Exists(normalized))
-                {
                     var quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(normalized));
                     if (quickComic != null && quickComic.Chapters.Count > 0)
                     {
@@ -510,7 +504,6 @@ public partial class LibraryViewModel : ViewModelBase
                         await OpenChapterInternalAsync(quickComic, targetChap);
                     }
                 }
-            }
         }
         catch (Exception ex)
         {
@@ -969,23 +962,17 @@ public partial class LibraryViewModel : ViewModelBase
             var topLevel = GetTopLevel();
             if (topLevel?.StorageProvider == null) return;
 
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-            {
-                Title = "Chọn Thư Mục Để Ghim Vào Storage",
-                AllowMultiple = false
-            });
+            string? normalized = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                null,
+                "Chọn Thư Mục Để Ghim Vào Storage",
+                "VI");
 
-            if (folders != null && folders.Count > 0)
+            if (!string.IsNullOrWhiteSpace(normalized) && Directory.Exists(normalized))
             {
-                var selected = folders[0];
-                string? raw = selected.TryGetLocalPath() ?? selected.Path?.LocalPath ?? selected.Path?.ToString();
-                string normalized = DownloadEngineService.NormalizeStoragePath(raw, selected.Name);
-                if (!string.IsNullOrWhiteSpace(normalized) && Directory.Exists(normalized))
-                {
-                    ReadProgressStore.Instance.AddPinnedFolder(normalized);
-                    LoadStorageItems();
-                    StatusMessage = $"📌 Đã ghim thư mục: {normalized}";
-                }
+                ReadProgressStore.Instance.AddPinnedFolder(normalized);
+                LoadStorageItems();
+                StatusMessage = $"📌 Đã ghim thư mục: {normalized}";
             }
         }
         catch (Exception ex)
@@ -2040,77 +2027,40 @@ public partial class LibraryViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanOpen)
+            string autoDir = QueueBackupService.GetAutoSaveDirectory();
+            string? localPath = await FolderOrFilePickerService.PickFileAsync(
+                topLevel,
+                autoDir,
+                "Chọn file Markdown (.md) để phục hồi Dấu trang & Lịch sử đọc",
+                new[] { ".md", ".txt" },
+                new List<FilePickerFileType>
+                {
+                    new("Markdown Reader Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
+                    new("All Files (*.*)") { Patterns = new[] { "*" } }
+                },
+                "VI");
+
+            if (string.IsNullOrWhiteSpace(localPath) || !File.Exists(localPath))
             {
-                IStorageFolder? suggestedFolder = null;
-                try
-                {
-                    string autoDir = QueueBackupService.GetAutoSaveDirectory();
-                    if (Directory.Exists(autoDir))
-                    {
-                        suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(autoDir);
-                    }
-                }
-                catch { }
-
-                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-                {
-                    Title = "Chọn file Markdown (.md) để phục hồi Dấu trang & Lịch sử đọc",
-                    AllowMultiple = false,
-                    SuggestedStartLocation = suggestedFolder,
-                    FileTypeFilter = new List<FilePickerFileType>
-                    {
-                        new("Markdown Reader Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
-                        new("All Files (*.*)") { Patterns = new[] { "*" } }
-                    }
-                });
-
-                if (files == null || files.Count == 0)
-                {
-                    StatusMessage = "Đã hủy chọn file phục hồi Markdown (.md).";
-                    return;
-                }
-
-                var selectedFile = files[0];
-                string? localPath = selectedFile.TryGetLocalPath();
-                ReaderRestoreResult res;
-
-                if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
-                {
-                    res = await ReadProgressStore.Instance.LoadReaderFromMarkdownAsync(localPath, mergeWithExisting: true);
-                }
-                else
-                {
-                    await using var stream = await selectedFile.OpenReadAsync();
-                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
-                    string content = await reader.ReadToEndAsync();
-                    res = ReadProgressStore.Instance.ParseReaderMarkdownContent(content, mergeWithExisting: true, selectedFile.Name);
-                }
-
-                if (res.HasValidStructure)
-                {
-                    _ = LoadHistoryItemsAsync();
-                    LoadBookmarkGroups();
-                    LoadStorageItems();
-                    RefreshAllReadStatuses();
-                    StatusMessage = $"✅ Đã phục hồi thành công {res.RestoredBookmarks} dấu trang và {res.RestoredHistory} mục lịch sử từ file Markdown!";
-                }
-                else
-                {
-                    StatusMessage = "⚠️ File Markdown không đúng định dạng sao lưu của Comic Downloader GMTPC.";
-                }
+                StatusMessage = "Đã hủy chọn file phục hồi Markdown (.md).";
                 return;
             }
 
-            var fallbackRes = await ReadProgressStore.Instance.LoadReaderFromMarkdownAsync(null, mergeWithExisting: true);
-            if (fallbackRes.HasValidStructure)
+            ReaderRestoreResult res = await ReadProgressStore.Instance.LoadReaderFromMarkdownAsync(localPath, mergeWithExisting: true);
+
+            if (res.HasValidStructure)
             {
                 _ = LoadHistoryItemsAsync();
                 LoadBookmarkGroups();
                 LoadStorageItems();
                 RefreshAllReadStatuses();
-                StatusMessage = $"✅ Đã phục hồi thành công {fallbackRes.RestoredBookmarks} dấu trang và {fallbackRes.RestoredHistory} mục lịch sử!";
+                StatusMessage = $"✅ Đã phục hồi thành công {res.RestoredBookmarks} dấu trang và {res.RestoredHistory} mục lịch sử từ file Markdown!";
             }
+            else
+            {
+                StatusMessage = "⚠️ File Markdown không đúng định dạng sao lưu của Comic Downloader GMTPC.";
+            }
+            return;
         }
         catch (Exception ex)
         {
@@ -2260,74 +2210,40 @@ public partial class LibraryViewModel : ViewModelBase
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanOpen)
+            string autoDir = QueueBackupService.GetAutoSaveDirectory();
+            string? localPath = await FolderOrFilePickerService.PickFileAsync(
+                topLevel,
+                autoDir,
+                "Chọn file Markdown (resume.md) để phục hồi tiến độ đọc dùng chung",
+                new[] { ".md", ".txt" },
+                new List<FilePickerFileType>
+                {
+                    new("Markdown Resume Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
+                    new("All Files (*.*)") { Patterns = new[] { "*" } }
+                },
+                "VI");
+
+            if (string.IsNullOrWhiteSpace(localPath) || !File.Exists(localPath))
             {
-                IStorageFolder? suggestedFolder = null;
-                try
-                {
-                    string autoDir = QueueBackupService.GetAutoSaveDirectory();
-                    if (Directory.Exists(autoDir))
-                    {
-                        suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(autoDir);
-                    }
-                }
-                catch { }
-
-                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-                {
-                    Title = "Chọn file Markdown (resume.md) để phục hồi tiến độ đọc dùng chung",
-                    AllowMultiple = false,
-                    SuggestedStartLocation = suggestedFolder,
-                    FileTypeFilter = new List<FilePickerFileType>
-                    {
-                        new("Markdown Resume Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
-                        new("All Files (*.*)") { Patterns = new[] { "*" } }
-                    }
-                });
-
-                if (files == null || files.Count == 0)
-                {
-                    StatusMessage = "Đã hủy chọn file phục hồi resume.md.";
-                    return;
-                }
-
-                var selectedFile = files[0];
-                string? localPath = selectedFile.TryGetLocalPath();
-                ResumeRestoreResult res;
-
-                if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
-                {
-                    res = await ReadProgressStore.Instance.LoadResumeFromMarkdownAsync(localPath, mergeWithExisting: true);
-                }
-                else
-                {
-                    await using var stream = await selectedFile.OpenReadAsync();
-                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
-                    string content = await reader.ReadToEndAsync();
-                    res = ReadProgressStore.Instance.ParseResumeMarkdownContent(content, mergeWithExisting: true);
-                }
-
-                if (res.HasValidStructure)
-                {
-                    await ReloadAllLibraryStateAsync();
-                    string detail = res.RestoredCrossDeviceComics > 0
-                        ? $"{res.RestoredCrossDeviceComics} bộ truyện và {res.RestoredProgressEntries} tiến trình"
-                        : $"{res.RestoredProgressEntries} tiến trình";
-                    StatusMessage = $"✅ Đã phục hồi thành công {detail} từ tệp resume.md!";
-                }
-                else
-                {
-                    StatusMessage = "⚠️ File Markdown không đúng định dạng của resume.md.";
-                }
+                StatusMessage = "Đã hủy chọn file phục hồi resume.md.";
                 return;
             }
 
-            var fallbackRes = await ReadProgressStore.Instance.LoadResumeFromMarkdownAsync(null, mergeWithExisting: true);
-            if (fallbackRes.HasValidStructure)
+            ResumeRestoreResult res = await ReadProgressStore.Instance.LoadResumeFromMarkdownAsync(localPath, mergeWithExisting: true);
+
+            if (res.HasValidStructure)
             {
                 await ReloadAllLibraryStateAsync();
-                StatusMessage = $"✅ Đã phục hồi thành công tiến độ đọc dùng chung từ resume.md!";
+                string detail = res.RestoredCrossDeviceComics > 0
+                    ? $"{res.RestoredCrossDeviceComics} bộ truyện và {res.RestoredProgressEntries} tiến trình"
+                    : $"{res.RestoredProgressEntries} tiến trình";
+                StatusMessage = $"✅ Đã phục hồi thành công {detail} từ tệp resume.md!";
             }
+            else
+            {
+                StatusMessage = "⚠️ File Markdown không đúng định dạng của resume.md.";
+            }
+            return;
         }
         catch (Exception ex)
         {

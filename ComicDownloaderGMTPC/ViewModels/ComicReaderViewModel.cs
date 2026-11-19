@@ -4529,107 +4529,33 @@ public partial class ComicReaderViewModel : ViewModelBase
         {
 
             var topLevel = GetTopLevel();
+            string? localPath = await FolderOrFilePickerService.PickFileAsync(
+                topLevel,
+                null,
+                "Chọn file Markdown (.md) để phục hồi Dấu trang",
+                new[] { ".md", ".txt" },
+                new List<FilePickerFileType>
+                {
+                    new("Markdown Reader Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
+                    new("All Files (*.*)") { Patterns = new[] { "*" } }
+                },
+                "VI");
 
-            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanOpen)
+            if (string.IsNullOrWhiteSpace(localPath) || !File.Exists(localPath)) return;
 
+            ReaderRestoreResult res = await _progressStore.LoadReaderFromMarkdownAsync(localPath, mergeWithExisting: true);
+
+            if (res.HasValidStructure)
             {
-
-                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-
-                {
-
-                    Title = "Chọn file Markdown (.md) để phục hồi Dấu trang",
-
-                    AllowMultiple = false,
-
-                    FileTypeFilter = new List<FilePickerFileType>
-
-                    {
-
-                        new("Markdown Reader Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
-
-                        new("All Files (*.*)") { Patterns = new[] { "*" } }
-
-                    }
-
-                });
-
-
-
-                if (files == null || files.Count == 0) return;
-
-
-
-                var selectedFile = files[0];
-
-                string? localPath = selectedFile.TryGetLocalPath();
-
-                ReaderRestoreResult res;
-
-
-
-                if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
-
-                {
-
-                    res = await _progressStore.LoadReaderFromMarkdownAsync(localPath, mergeWithExisting: true);
-
-                }
-
-                else
-
-                {
-
-                    await using var stream = await selectedFile.OpenReadAsync();
-
-                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
-
-                    string content = await reader.ReadToEndAsync();
-
-                    res = _progressStore.ParseReaderMarkdownContent(content, mergeWithExisting: true, selectedFile.Name);
-
-                }
-
-
-
-                if (res.HasValidStructure)
-
-                {
-
-                    RefreshBookmarksList();
-
-                    ShowTransientToast($"✅ Đã phục hồi {res.RestoredBookmarks} dấu trang từ file Markdown!");
-
-                }
-
-                else
-
-                {
-
-                    ShowTransientToast("⚠️ File Markdown không đúng định dạng sao lưu.");
-
-                }
-
-                return;
-
-            }
-
-
-
-            var fallbackRes = await _progressStore.LoadReaderFromMarkdownAsync(null, mergeWithExisting: true);
-
-            if (fallbackRes.HasValidStructure)
-
-            {
-
                 RefreshBookmarksList();
-
-                ShowTransientToast($"✅ Đã phục hồi {fallbackRes.RestoredBookmarks} dấu trang!");
-
+                ShowTransientToast($"✅ Đã phục hồi {res.RestoredBookmarks} dấu trang từ file Markdown!");
             }
-
+            else
+            {
+                ShowTransientToast("⚠️ File Markdown không đúng định dạng sao lưu.");
+            }
+            return;
         }
-
         catch (Exception ex)
 
         {

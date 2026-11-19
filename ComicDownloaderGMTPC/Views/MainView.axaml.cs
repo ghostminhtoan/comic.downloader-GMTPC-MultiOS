@@ -586,12 +586,13 @@ public partial class MainView : UserControl
         }
 
         // Tự động kiểm tra bản cập nhật Beta / Release mới nhất sau khi mở app 2.8s
+        var vmOnUi = DataContext as MainViewModel;
         _ = Task.Run(async () =>
         {
             await Task.Delay(2800);
-            if (DataContext is MainViewModel vm)
+            if (vmOnUi != null)
             {
-                await vm.CheckAutoUpdateOnStartupAsync();
+                await vmOnUi.CheckAutoUpdateOnStartupAsync();
             }
         });
 

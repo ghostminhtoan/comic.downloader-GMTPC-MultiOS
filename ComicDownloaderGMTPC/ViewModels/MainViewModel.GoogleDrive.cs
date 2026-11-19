@@ -582,25 +582,22 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanOpen)
-            {
-                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+            string? localPath = await FolderOrFilePickerService.PickFileAsync(
+                topLevel,
+                null,
+                "Chọn tệp credentials.json tải từ Google Cloud Console",
+                new[] { ".json" },
+                new List<Avalonia.Platform.Storage.FilePickerFileType>
                 {
-                    Title = "Chọn tệp credentials.json tải từ Google Cloud Console",
-                    AllowMultiple = false,
-                    FileTypeFilter = new List<Avalonia.Platform.Storage.FilePickerFileType>
-                    {
-                        new("Google OAuth Client JSON (*.json)") { Patterns = new[] { "*.json" } },
-                        new("All Files (*.*)") { Patterns = new[] { "*" } }
-                    }
-                });
+                    new("Google OAuth Client JSON (*.json)") { Patterns = new[] { "*.json" } },
+                    new("All Files (*.*)") { Patterns = new[] { "*" } }
+                },
+                CurrentLanguage);
 
-                if (files != null && files.Count > 0)
-                {
-                    await using var stream = await files[0].OpenReadAsync();
-                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
-                    string json = await reader.ReadToEndAsync();
-                    var (ok, cid, sec, msg) = _gdriveService.ImportCredentialsFromJson(json);
+            if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
+            {
+                string json = await File.ReadAllTextAsync(localPath);
+                var (ok, cid, sec, msg) = _gdriveService.ImportCredentialsFromJson(json);
                     if (ok)
                     {
                         GoogleDriveCustomClientId = cid;
@@ -612,7 +609,6 @@ public partial class MainViewModel
                     {
                         GoogleDriveStatusText = "❌ " + msg;
                     }
-                }
             }
         }
         catch (Exception ex)

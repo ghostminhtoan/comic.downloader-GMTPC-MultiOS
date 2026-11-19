@@ -3418,58 +3418,27 @@ public partial class MainViewModel : ViewModelBase
             string sourceName = QueueBackupService.AutoSaveFileName;
 
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null && topLevel.StorageProvider.CanOpen)
+            string autoDir = QueueBackupService.GetAutoSaveDirectory();
+            string? localPath = await FolderOrFilePickerService.PickFileAsync(
+                topLevel,
+                autoDir,
+                "Chọn file Markdown (.md) để phục hồi hàng đợi & tiến độ",
+                new[] { ".md", ".txt" },
+                new List<FilePickerFileType>
+                {
+                    new("Markdown Queue Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
+                    new("All Files (*.*)") { Patterns = new[] { "*" } }
+                },
+                CurrentLanguage);
+
+            if (string.IsNullOrWhiteSpace(localPath) || !File.Exists(localPath))
             {
-                IStorageFolder? suggestedFolder = null;
-                try
-                {
-                    string autoDir = QueueBackupService.GetAutoSaveDirectory();
-                    if (Directory.Exists(autoDir))
-                    {
-                        suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(autoDir);
-                    }
-                }
-                catch { }
-
-                var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-                {
-                    Title = "Chọn file Markdown (.md) để phục hồi hàng đợi & tiến độ",
-                    AllowMultiple = false,
-                    SuggestedStartLocation = suggestedFolder,
-                    FileTypeFilter = new List<FilePickerFileType>
-                    {
-                        new("Markdown Queue Backup (*.md)") { Patterns = new[] { "*.md", "*.txt" } },
-                        new("All Files (*.*)") { Patterns = new[] { "*" } }
-                    }
-                });
-
-                if (files == null || files.Count == 0)
-                {
-                    AddLog("INFO", "Đã hủy chọn file phục hồi Markdown (.md).");
-                    return;
-                }
-
-                var selectedFile = files[0];
-                string? localPath = selectedFile.TryGetLocalPath();
-                if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
-                {
-                    restoreResult = await QueueBackupService.Instance.LoadQueueResultFromMarkdownAsync(localPath);
-                    sourceName = localPath;
-                }
-                else
-                {
-                    await using var stream = await selectedFile.OpenReadAsync();
-                    using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
-                    string content = await reader.ReadToEndAsync();
-                    restoreResult = QueueBackupService.Instance.ParseQueueWithMetadataFromMarkdownContent(content, selectedFile.Name);
-                    sourceName = selectedFile.Name;
-                }
+                AddLog("INFO", "Đã hủy chọn file phục hồi Markdown (.md).");
+                return;
             }
-            else
-            {
-                restoreResult = await QueueBackupService.Instance.LoadAutoSaveQueueResultAsync();
-                if (!string.IsNullOrWhiteSpace(restoreResult.LoadedFromPath)) sourceName = restoreResult.LoadedFromPath;
-            }
+
+            restoreResult = await QueueBackupService.Instance.LoadQueueResultFromMarkdownAsync(localPath);
+            sourceName = localPath;
 
             bool hasRestoredSettings = restoreResult.ConcurrentComicDownloads.HasValue
                 || restoreResult.ImageDownloadThreads.HasValue
@@ -4725,6 +4694,18 @@ public partial class MainViewModel : ViewModelBase
 
     private Avalonia.Controls.TopLevel? GetTopLevel()
     {
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            try
+            {
+                return Avalonia.Threading.Dispatcher.UIThread.Invoke(GetTopLevel);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         if (ComicDownloaderGMTPC.Views.MainView.Instance != null)
         {
             var tl = Avalonia.Controls.TopLevel.GetTopLevel(ComicDownloaderGMTPC.Views.MainView.Instance);

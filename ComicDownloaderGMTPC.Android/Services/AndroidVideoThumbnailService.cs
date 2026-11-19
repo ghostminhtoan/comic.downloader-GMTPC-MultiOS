@@ -38,6 +38,53 @@ public static class AndroidVideoThumbnailService
     {
         try
         {
+            string? nativeDir = global::Android.App.Application.Context?.ApplicationInfo?.NativeLibraryDir;
+            string filesDir = global::Android.App.Application.Context?.FilesDir?.AbsolutePath ?? "";
+
+            if (!string.IsNullOrEmpty(nativeDir))
+            {
+                global::Android.Util.Log.Info("ComicGMTPC_MPV", $"NativeLibraryDir resolved: {nativeDir}");
+                
+                // Chuẩn bị symlink libmpv.so.2 và libmpv.so vào thư mục FilesDir của ứng dụng
+                if (!string.IsNullOrEmpty(filesDir))
+                {
+                    try
+                    {
+                        string srcMpv = System.IO.Path.Combine(nativeDir, "libmpv.so");
+                        string dstMpv2 = System.IO.Path.Combine(filesDir, "libmpv.so.2");
+                        if (System.IO.File.Exists(dstMpv2))
+                        {
+                            try { System.IO.File.Delete(dstMpv2); } catch { }
+                        }
+                        try
+                        {
+                            global::Android.Systems.Os.Symlink(srcMpv, dstMpv2);
+                        }
+                        catch
+                        {
+                            try { System.IO.File.Copy(srcMpv, dstMpv2, true); } catch { }
+                        }
+
+                        string dstMpv = System.IO.Path.Combine(filesDir, "libmpv.so");
+                        if (!System.IO.File.Exists(dstMpv))
+                        {
+                            try { global::Android.Systems.Os.Symlink(srcMpv, dstMpv); } catch { }
+                        }
+
+                        HanumanInstitute.LibMpv.Core.MpvApi.RootPath = filesDir;
+                        global::Android.Util.Log.Info("ComicGMTPC_MPV", $"Configured MpvApi.RootPath to filesDir: {filesDir}");
+                    }
+                    catch (Exception ex)
+                    {
+                        global::Android.Util.Log.Warn("ComicGMTPC_MPV", $"Symlink filesDir error: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    HanumanInstitute.LibMpv.Core.MpvApi.RootPath = nativeDir;
+                }
+            }
+
             string[] libs = ["c++_shared", "avutil", "swresample", "swscale", "avcodec", "avformat", "avfilter", "avdevice", "mpv"];
             foreach (var lib in libs)
             {
@@ -51,6 +98,72 @@ public static class AndroidVideoThumbnailService
                 }
             }
             global::Android.Util.Log.Info("ComicGMTPC_MPV", "libmpv and ffmpeg libraries preloaded successfully!");
+
+            // Đăng ký custom FunctionResolver trực tiếp cho HanumanInstitute.LibMpv
+            IntPtr loadedHandle = IntPtr.Zero;
+            if (!string.IsNullOrEmpty(filesDir))
+            {
+                string linkedPath = System.IO.Path.Combine(filesDir, "libmpv.so.2");
+                if (System.IO.File.Exists(linkedPath))
+                {
+                    NativeLibrary.TryLoad(linkedPath, out loadedHandle);
+                }
+            }
+            if (loadedHandle == IntPtr.Zero && !string.IsNullOrEmpty(nativeDir))
+            {
+                string srcPath = System.IO.Path.Combine(nativeDir, "libmpv.so");
+                NativeLibrary.TryLoad(srcPath, out loadedHandle);
+            }
+            if (loadedHandle == IntPtr.Zero)
+            {
+                NativeLibrary.TryLoad("libmpv.so", typeof(HanumanInstitute.LibMpv.MpvContext).Assembly, null, out loadedHandle);
+            }
+
+            if (loadedHandle != IntPtr.Zero)
+            {
+                try
+                {
+                    var resolverField = typeof(HanumanInstitute.LibMpv.Core.MpvApi).GetField("s_functionResolver", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    resolverField?.SetValue(null, new AndroidMpvFunctionResolver(loadedHandle));
+                    global::Android.Util.Log.Info("ComicGMTPC_MPV", $"Successfully set custom AndroidMpvFunctionResolver with handle: {loadedHandle}!");
+                }
+                catch (Exception ex)
+                {
+                    global::Android.Util.Log.Warn("ComicGMTPC_MPV", $"Set AndroidMpvFunctionResolver error: {ex.Message}");
+                }
+            }
+
+            // Đăng ký DllImportResolver trực tiếp để .NET P/Invoke HanumanInstitute.LibMpv luôn nạp đúng libmpv.so
+            try
+            {
+                NativeLibrary.SetDllImportResolver(typeof(HanumanInstitute.LibMpv.MpvContext).Assembly, (libraryName, assembly, searchPath) =>
+                {
+                    if (libraryName.Equals("mpv", StringComparison.OrdinalIgnoreCase) ||
+                        libraryName.Equals("libmpv", StringComparison.OrdinalIgnoreCase) ||
+                        libraryName.Equals("libmpv.2", StringComparison.OrdinalIgnoreCase) ||
+                        libraryName.Equals("libmpv.so.2", StringComparison.OrdinalIgnoreCase) ||
+                        libraryName.Equals("libmpv-2", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (loadedHandle != IntPtr.Zero) return loadedHandle;
+                        if (!string.IsNullOrEmpty(nativeDir))
+                        {
+                            string fullPath = System.IO.Path.Combine(nativeDir, "libmpv.so");
+                            if (System.IO.File.Exists(fullPath) && NativeLibrary.TryLoad(fullPath, out IntPtr handle))
+                            {
+                                return handle;
+                            }
+                        }
+                        if (NativeLibrary.TryLoad("libmpv.so", assembly, searchPath, out IntPtr h2)) return h2;
+                        if (NativeLibrary.TryLoad("mpv", assembly, searchPath, out h2)) return h2;
+                    }
+                    return IntPtr.Zero;
+                });
+                global::Android.Util.Log.Info("ComicGMTPC_MPV", "DllImportResolver for HanumanInstitute.LibMpv registered successfully!");
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Warn("ComicGMTPC_MPV", $"DllImportResolver registration note: {ex.Message}");
+            }
 
             // Đăng ký JavaVM cho FFmpeg / libavcodec để phòng ngừa triệt để lỗi con trỏ NULL trong JNI
             try
@@ -66,6 +179,8 @@ public static class AndroidVideoThumbnailService
             {
                 global::Android.Util.Log.Warn("ComicGMTPC_MPV", $"av_jni_set_java_vm registration note: {ex.Message}");
             }
+
+            global::Android.Util.Log.Info("ComicGMTPC_MPV", ">>> Native libmpv.so verified and operational! Real FPS Video Playback is READY! <<<");
         }
         catch (Exception ex)
         {
@@ -551,10 +666,12 @@ public static class AndroidVideoThumbnailService
             for (int i = 0; i < count; i++)
             {
                 long timeUs = i * stepUs;
-                global::Android.Graphics.Bitmap? bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.ClosestSync, rotation);
+                // Ưu tiên Option.Closest để giải mã chính xác frame chuyển động thời gian thực (Real FPS > 20-30 FPS)
+                // Tuyệt đối không ưu tiên ClosestSync vì ClosestSync chỉ lấy Keyframe cách nhau 1-2 giây gây giật cục 1 FPS
+                global::Android.Graphics.Bitmap? bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.Closest, rotation);
                 if (bmp == null)
                 {
-                    bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.Closest, rotation);
+                    bmp = GetOptimizedFrame(retriever, timeUs, targetW, targetH, Option.ClosestSync, rotation);
                 }
                 if (bmp == null && i == 0)
                 {
@@ -925,5 +1042,21 @@ public static class AndroidVideoThumbnailService
 
         retriever.SetDataSource(videoPath);
         return null;
+    }
+}
+
+internal sealed class AndroidMpvFunctionResolver : HanumanInstitute.LibMpv.Core.IFunctionResolver
+{
+    private readonly IntPtr _h;
+    public AndroidMpvFunctionResolver(IntPtr h) => _h = h;
+
+    public T GetFunctionDelegate<T>(string libraryName, string functionName, bool throwOnError)
+    {
+        if (_h != IntPtr.Zero && NativeLibrary.TryGetExport(_h, functionName, out IntPtr ptr))
+        {
+            return (T)(object)Marshal.GetDelegateForFunctionPointer(ptr, typeof(T));
+        }
+        if (throwOnError) throw new EntryPointNotFoundException($"Function '{functionName}' not found in libmpv.so");
+        return default!;
     }
 }

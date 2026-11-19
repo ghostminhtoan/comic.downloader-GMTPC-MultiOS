@@ -215,30 +215,18 @@ public partial class MainViewModel
         try
         {
             var topLevel = GetTopLevel();
-            if (topLevel?.StorageProvider != null)
-            {
-                var options = new FolderPickerOpenOptions
-                {
-                    Title = "Chọn Thư Mục Để Nạp Đổi Tên (Hỗ Trợ Quét Đa Tầng)",
-                    AllowMultiple = true
-                };
+            string? pickedPath = await FolderOrFilePickerService.PickFolderAsync(
+                topLevel,
+                ManualRenameFolderPath,
+                "Chọn Thư Mục Để Nạp Đổi Tên (Hỗ Trợ Quét Đa Tầng)",
+                CurrentLanguage);
 
-                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
-                if (folders != null && folders.Count > 0)
-                {
-                    int addedCount = 0;
-                    foreach (var f in folders)
-                    {
-                        string path = ResolveStorageItemPath(f);
-                        if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
-                        {
-                            ManualRenameFolderPath = path;
-                            addedCount += ScanFolderInternal(path, IsRecursiveScan, RenameTargetMode);
-                        }
-                    }
-                    RefreshRenamePreview();
-                    RenameStatusMessage = $"Đã nạp {addedCount} mục vào danh sách đổi tên (Đa tầng: {(IsRecursiveScan ? "BẬT" : "TẮT")}).";
-                }
+            if (!string.IsNullOrWhiteSpace(pickedPath) && Directory.Exists(pickedPath))
+            {
+                ManualRenameFolderPath = pickedPath;
+                int addedCount = ScanFolderInternal(pickedPath, IsRecursiveScan, RenameTargetMode);
+                RefreshRenamePreview();
+                RenameStatusMessage = $"Đã nạp {addedCount} mục vào danh sách đổi tên (Đa tầng: {(IsRecursiveScan ? "BẬT" : "TẮT")}).";
             }
         }
         catch (Exception ex)
