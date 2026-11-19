@@ -2564,6 +2564,22 @@ public partial class MainViewModel
                                 mpvPlayer.SetMute(IsDualSortVideoMuted);
                                 mpvPlayer.SetSpeed(DualSortPlaybackSpeed);
 
+                                // Trên Android: MPV tắt ao ("ao=null") để chống crash JNI SIGSEGV,
+                                // phát âm thanh native mượt mà qua Android MediaPlayer độc lập
+                                if (OperatingSystem.IsAndroid())
+                                {
+                                    try
+                                    {
+                                        _dualSortAudioPlayer?.Stop();
+                                        _dualSortAudioPlayer?.Dispose();
+                                        _dualSortAudioPlayer = NativeAudioPlaybackService.CreateAndPlay(item.FilePath, 0);
+                                        _dualSortAudioPlayer?.SetVolume((int)DualSortVideoVolume);
+                                        _dualSortAudioPlayer?.SetMute(IsDualSortVideoMuted);
+                                        _dualSortAudioPlayer?.SetPlaybackRate(DualSortPlaybackSpeed);
+                                    }
+                                    catch { }
+                                }
+
                                 try
                                 {
                                     bool useA = false;
@@ -2585,6 +2601,7 @@ public partial class MainViewModel
                                                     if (curMs >= loopEnd || curMs < loopStart - 500)
                                                     {
                                                         mpvPlayer.Seek(loopStart);
+                                                        try { _dualSortAudioPlayer?.Seek(loopStart / 1000.0); } catch { }
                                                     }
                                                 }
 
@@ -2644,9 +2661,14 @@ public partial class MainViewModel
                                 {
                                     try { mpvPlayer.Dispose(); } catch { }
                                     if (_dualSortMpvPlayer == mpvPlayer) _dualSortMpvPlayer = null;
+                                    if (OperatingSystem.IsAndroid())
+                                    {
+                                        try { _dualSortAudioPlayer?.Stop(); _dualSortAudioPlayer?.Dispose(); } catch { }
+                                        _dualSortAudioPlayer = null;
+                                    }
                                 }
 
-                                if (mpvHandled && (cts.IsCancellationRequested || !IsDualSortPreviewVisible || DualSortPreviewItem != item))
+                                if (mpvHandled)
                                 {
                                     return;
                                 }

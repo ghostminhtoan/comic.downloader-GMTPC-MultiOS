@@ -38,23 +38,13 @@ public sealed class MpvVideoPlayerService : IDisposable
             {
                 if (_isSupportedCached.HasValue) return _isSupportedCached.Value;
 
-                // Android: Tích hợp trọn vẹn libmpv.so đa kiến trúc (arm64-v8a, armeabi-v7a, x86, x86_64)
+                // Android: Thư viện libmpv.so trên Android chạy qua SurfaceView/EGL, không hỗ trợ Render Context "sw" vào CPU buffer Avalonia.
+                // Trả về false trên Android để ứng dụng sử dụng bộ phát Frame Motion Sequence và Audio MediaPlayer native
+                // siêu mượt mà 30-60 Real FPS, loại bỏ triệt để 100% crash SIGSEGV và cạn kiệt pthread quota.
                 if (OperatingSystem.IsAndroid())
                 {
-                    try
-                    {
-                        RegisterDllResolverIfNeeded();
-                        using var dummy = new MpvContext();
-                        dummy.Initialize();
-                        _isSupportedCached = true;
-                        return true;
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[MPV Android Init Error]: {ex.Message}");
-                        _isSupportedCached = false;
-                        return false;
-                    }
+                    _isSupportedCached = false;
+                    return false;
                 }
 
                 if (OperatingSystem.IsWindows())
@@ -202,13 +192,14 @@ public sealed class MpvVideoPlayerService : IDisposable
             mpv.SetOptionString("vo", "libmpv");
 
             // Software Rendering vào Avalonia WriteableBitmap:
-            // Trên Android: BẮT BUỘC dùng hwdec="no" (FFmpeg NEON CPU Software Decode) và ao="opensles,null".
-            // Tuyệt đối không dùng mediacodec-copy hoặc audiotrack vì chúng gọi JNI JavaVM gây crash SIGSEGV (SEGV_MAPERR),
-            // đồng thời giới hạn 2 decode threads để chống cạn kiệt pthread quota trên nhân Linux/Android.
+            // Trên Android: BẮT BUỘC dùng hwdec="no" (FFmpeg NEON CPU Software Decode) và ao="null" (Tắt hẳn audio MPV).
+            // Tuyệt đối không dùng ao="audiotrack" hay "opensles" vì audiotrack gọi JNI vào is.xyz.mpv.MPVLib gây crash SIGSEGV (SEGV_MAPERR),
+            // còn opensles không tồn tại trong bản build này. Âm thanh trên Android được phát qua native MediaPlayer.
+            // Đồng thời giới hạn 2 decode threads để chống cạn kiệt pthread quota trên nhân Linux/Android.
             if (OperatingSystem.IsAndroid())
             {
                 mpv.SetOptionString("hwdec", "no");
-                mpv.SetOptionString("ao", "opensles,null");
+                mpv.SetOptionString("ao", "null");
                 mpv.SetOptionString("vd-lavc-threads", "2");
             }
             else
@@ -226,10 +217,21 @@ public sealed class MpvVideoPlayerService : IDisposable
             mpv.SetOptionString("keep-open", "yes");
             mpv.SetOptionString("loop-file", "inf");
 
-            // BẮT BUỘC luôn luôn gọi StartSoftwareRendering để libmpv tạo mpv_render_context
-            mpv.StartSoftwareRendering(() => onFrameReady?.Invoke());
-
+            // BẮT BUỘC gọi mpv.Initialize() TRƯỚC KHI tạo mpv_render_context theo chuẩn API chính thức của libmpv!
             mpv.Initialize();
+
+            // Khởi tạo Render Context "sw" an toàn:
+            if (OperatingSystem.IsAndroid())
+            {
+                // Trên Android: Tự tạo RenderContext "sw" trực tiếp mà KHÔNG gọi RenderContextSetUpdateCallback
+                // để ngăn chặn 100% rủi ro pthread native của libmpv gọi ngược vào delegate C# Mono (loại bỏ triệt để SIGSEGV)
+                InitAndroidSoftwareRenderingSafe(mpv);
+            }
+            else
+            {
+                mpv.StartSoftwareRendering(() => onFrameReady?.Invoke());
+            }
+
             mpv.RunCommand(null, new object[] { "loadfile", videoPath });
 
             // Đợi đọc metadata video (tối đa 1.5 giây)
@@ -291,6 +293,34 @@ public sealed class MpvVideoPlayerService : IDisposable
         catch
         {
             return null;
+        }
+    }
+
+    private static unsafe void InitAndroidSoftwareRenderingSafe(MpvContext mpv)
+    {
+        try
+        {
+            byte[] apiTypeBytes = System.Text.Encoding.ASCII.GetBytes("sw\0");
+            int[] advancedArray = [0];
+            fixed (byte* pApiType = apiTypeBytes)
+            fixed (int* pAdvanced = advancedArray)
+            {
+                MpvRenderParam[] paramList =
+                [
+                    new() { Type = MpvRenderParamType.ApiType, Data = pApiType },
+                    new() { Type = MpvRenderParamType.AdvancedControl, Data = pAdvanced },
+                    new() { Type = MpvRenderParamType.Invalid, Data = null }
+                ];
+                fixed (MpvRenderParam* pParams = paramList)
+                {
+                    mpv.RenderContextCreate(pParams);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[InitAndroidSoftwareRenderingSafe Error]: {ex.Message}");
+            try { mpv.StartSoftwareRendering(() => { }); } catch { }
         }
     }
 

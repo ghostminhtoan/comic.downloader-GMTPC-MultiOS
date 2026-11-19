@@ -11635,10 +11635,10 @@
                 </Style>
             </Border.Styles>
 
-            <Grid RowDefinitions="Auto, *, Auto, Auto" ClipToBounds="True">
+            <Grid RowDefinitions="Auto, *, Auto, Auto">
                 <!-- Thanh tiêu đề Popup Preview kèm Nút Phóng to & Nút Tắt -->
-                <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="2,0,0,4" ClipToBounds="True">
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" ClipToBounds="True">
+                <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="2,0,0,4">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
                         <TextBlock Text="🔍 XEM ẢNH" FontSize="11" FontWeight="ExtraBold" Foreground="#38BDF8" VerticalAlignment="Center" />
                         <Border Background="#7C3AED" CornerRadius="4" Padding="5,1" VerticalAlignment="Center"
                                 IsVisible="{Binding IsDualSortPreviewAnimated}">
@@ -11665,8 +11665,8 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Khung Ảnh / Video Lớn Độ Phân Giải Cao (Tự động co giãn thích ứng) -->
-                <Border Grid.Row="1" x:Name="DualSortImageContainer" Background="#05080D" CornerRadius="4" MinHeight="140" MaxHeight="450" ClipToBounds="True"
+                <!-- Khung Ảnh / Video Lớn Độ Phân Giải Cao (Tự động co giãn thích ứng theo kích thước khả dụng) -->
+                <Border Grid.Row="1" x:Name="DualSortImageContainer" Background="#05080D" CornerRadius="4" ClipToBounds="True"
                         HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="0,0,0,4"
                         PointerWheelChanged="OnDualSortVideoPointerWheelChanged"
                         Tapped="OnDualSortVideoTapped"
@@ -11678,7 +11678,7 @@
 
                         <Image x:Name="DualSortPreviewImage"
                                Source="{Binding DualSortPreviewBitmap}"
-                               Stretch="Uniform" MaxHeight="440"
+                               Stretch="Uniform"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                RenderOptions.BitmapInterpolationMode="HighQuality" />
 
@@ -11722,12 +11722,12 @@
                             </Border>
                         </Grid>
 
-                        <!-- Hàng 2: Bộ phím điều khiển Player chuẩn -->
+                        <!-- Hàng 2: Bộ phím điều khiển Player chuẩn (Responsive linh hoạt mọi độ phân giải) -->
                         <Grid ColumnDefinitions="Auto, Auto, Auto, Auto, Auto, Auto, *, Auto">
                             <!-- Tua lùi 5s -->
                             <Button Grid.Column="0" Command="{Binding SeekDualSortVideoBackward5sCommand}"
                                     Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
-                                    Padding="5,2" Height="24" CornerRadius="4" Margin="0,0,4,0"
+                                    Padding="4,2" Height="24" CornerRadius="4" Margin="0,0,3,0"
                                     ToolTip.Tip="Tua lùi 5 giây (Phím ←)">
                                 <TextBlock Text="⏪" FontSize="11" Foreground="#38BDF8" FontWeight="Bold" VerticalAlignment="Center" />
                             </Button>
@@ -11735,7 +11735,7 @@
                             <!-- Play / Pause -->
                             <Button Grid.Column="1" Command="{Binding ToggleDualSortVideoPlayPauseCommand}"
                                     Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
-                                    Padding="6,2" Height="24" CornerRadius="4" Margin="0,0,4,0"
+                                    Padding="5,2" Height="24" CornerRadius="4" Margin="0,0,3,0"
                                     ToolTip.Tip="Tạm dừng / Tiếp tục phát video (Phím Space hoặc Click vào video)">
                                 <TextBlock Text="{Binding DualSortVideoPlayPauseIcon}" FontSize="11" Foreground="#38BDF8" FontWeight="Bold" VerticalAlignment="Center" />
                             </Button>
@@ -11743,7 +11743,7 @@
                             <!-- Tua tới 5s -->
                             <Button Grid.Column="2" Command="{Binding SeekDualSortVideoForward5sCommand}"
                                     Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
-                                    Padding="5,2" Height="24" CornerRadius="4" Margin="0,0,4,0"
+                                    Padding="4,2" Height="24" CornerRadius="4" Margin="0,0,3,0"
                                     ToolTip.Tip="Tua tới 5 giây (Phím →)">
                                 <TextBlock Text="⏩" FontSize="11" Foreground="#38BDF8" FontWeight="Bold" VerticalAlignment="Center" />
                             </Button>
@@ -11751,7 +11751,7 @@
                             <!-- Bật / Tắt tiếng (Mute / Volume) -->
                             <Button Grid.Column="3" Command="{Binding ToggleDualSortVideoMuteCommand}"
                                     Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
-                                    Padding="6,2" Height="24" CornerRadius="4" Margin="0,0,4,0"
+                                    Padding="5,2" Height="24" CornerRadius="4" Margin="0,0,3,0"
                                     ToolTip.Tip="Bật / Tắt tiếng (Phím M hoặc lăn chuột trên video)">
                                 <TextBlock Text="{Binding DualSortVideoVolumeIcon}" FontSize="11" Foreground="#F59E0B" FontWeight="Bold" VerticalAlignment="Center" />
                             </Button>
@@ -11759,7 +11759,7 @@
                             <!-- Tốc độ phát lại (Speed) -->
                             <Button Grid.Column="4" Command="{Binding CycleDualSortPlaybackSpeedCommand}"
                                     Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
-                                    Padding="6,2" Height="24" CornerRadius="4" Margin="0,0,4,0"
+                                    Padding="5,2" Height="24" CornerRadius="4" Margin="0,0,3,0"
                                     ToolTip.Tip="Tốc độ phát lại: 0.5x, 1.0x, 1.25x, 1.5x, 2.0x">
                                 <TextBlock Text="{Binding DualSortPlaybackSpeedText}" FontSize="10" Foreground="#10B981" FontWeight="Bold" VerticalAlignment="Center" />
                             </Button>
@@ -11767,7 +11767,7 @@
                             <!-- Lặp đoạn A-B (Looper) -->
                             <Button Grid.Column="5" Command="{Binding ToggleDualSortLooperCommand}"
                                     Background="#1E293B" BorderBrush="#475569" BorderThickness="1"
-                                    Padding="6,2" Height="24" CornerRadius="4" Margin="0,0,4,0"
+                                    Padding="5,2" Height="24" CornerRadius="4" Margin="0,0,3,0"
                                     ToolTip.Tip="Chế độ lặp đoạn A-B: Click 1 đặt A, Click 2 đặt B, Click 3 xóa">
                                 <TextBlock Text="{Binding DualSortLooperText}" FontSize="10" Foreground="#A78BFA" FontWeight="Bold" VerticalAlignment="Center" />
                             </Button>
@@ -11775,11 +11775,11 @@
                             <!-- Chỉ số Frame / Vị trí Tua & Click đổi Remaining Time -->
                             <Button Grid.Column="7" Command="{Binding ToggleTimeDisplayModeCommand}"
                                     Background="#1E293B" BorderBrush="#3B82F6" BorderThickness="1"
-                                    CornerRadius="3" Padding="6,2" Height="24"
+                                    CornerRadius="3" Padding="5,2" Height="24"
                                     ToolTip.Tip="Click để đổi hiển thị: Tổng thời lượng / Thời gian còn lại">
                                 <TextBlock Text="{Binding DualSortVideoSeekTimeText}"
                                            FontSize="10" FontWeight="Bold" Foreground="#FDE047"
-                                           MinWidth="72" TextAlignment="Center" VerticalAlignment="Center" />
+                                           MinWidth="64" TextAlignment="Center" VerticalAlignment="Center" />
                             </Button>
                         </Grid>
                     </StackPanel>

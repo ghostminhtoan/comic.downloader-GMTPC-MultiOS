@@ -3838,28 +3838,30 @@ public partial class MainView : UserControl
         var container = this.FindControl<Border>("DualSortImageContainer");
         var img = this.FindControl<Image>("DualSortPreviewImage");
 
-        popup.MaxHeight = Math.Max(280, viewH - 24);
+        popup.MaxHeight = Math.Max(280, viewH - 16);
 
         if (OperatingSystem.IsAndroid())
         {
             bool isLandscapeScreen = viewW > viewH;
             double popupW;
+            // Dự trù chiều cao tối thiểu cho Header (~36px) + Seekbar & Controls (~74px) + Footer (~26px) + Padding (~24px) = ~160px
+            double androidReservedH = isLandscapeScreen ? 140 : 170;
+            double maxImgH = Math.Max(120, viewH - androidReservedH);
+
             if (isLandscapeScreen)
             {
                 // Màn hình xoay ngang trên Android (viewH thấp khoảng 360-450)
-                popupW = isPortrait ? Math.Min(340, viewW - 20) : Math.Min(480, viewW - 20);
-                double maxImgH = Math.Max(120, viewH - 140);
-                if (container != null) container.MaxHeight = maxImgH;
-                if (img != null) img.MaxHeight = Math.Max(110, maxImgH - 6);
+                popupW = isPortrait ? Math.Min(380, viewW - 16) : Math.Min(520, viewW - 16);
             }
             else
             {
-                // Màn hình đứng trên Android (viewW khoảng 360-420, viewH khoảng 800-900)
-                popupW = Math.Min(400, Math.Max(280, viewW - 20));
-                double maxImgH = isPortrait ? Math.Min(420, Math.Max(200, viewH - 230)) : Math.Min(320, Math.Max(180, viewH - 230));
-                if (container != null) container.MaxHeight = maxImgH;
-                if (img != null) img.MaxHeight = Math.Max(180, maxImgH - 6);
+                // Màn hình đứng trên Android (viewW khoảng 360-420, viewH khoảng 700-900)
+                popupW = Math.Min(460, Math.Max(300, viewW - 16));
             }
+
+            if (container != null) container.MaxHeight = maxImgH;
+            if (img != null) img.MaxHeight = maxImgH;
+
             popup.Width = popupW;
             popup.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center;
             popup.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
@@ -3867,23 +3869,25 @@ public partial class MainView : UserControl
             return;
         }
 
-        // Desktop (Windows & Linux): Luôn căn giữa màn hình tuyệt đối (Center) để không bao giờ bị che khuất bất kể Portrait hay Landscape
+        // Desktop (Windows & Linux): Luôn căn giữa màn hình tuyệt đối (Center) để không bao giờ bị che khuất bất kể Portrait hay Landscape.
+        // Dự trù không gian chuẩn cho Header (~36px) + Seekbar & Controls (~74px) + Footer (~26px) + Popup Padding (~24px) = ~160px
+        double reservedHDesktop = 175;
+        double maxImgHDesktop = Math.Max(120, viewH - reservedHDesktop);
         double deskPopupW;
-        double maxImgHDesktop;
+
         if (isPortrait)
         {
-            deskPopupW = Math.Min(420, Math.Max(320, viewW - 40));
-            // Trừ hao đủ chỗ cho Header (~36px) + Seekbar & Controls (~70px) + Footer (~26px) + Padding (~30px) = ~162px
-            maxImgHDesktop = Math.Min(520, Math.Max(200, viewH - 180));
+            deskPopupW = Math.Min(480, Math.Max(360, viewW - 40));
+            // Khóa chặn chiều cao ảnh để Header, Controls Seekbar và Footer không bao giờ bị đẩy ra ngoài mép
             if (container != null) container.MaxHeight = maxImgHDesktop;
-            if (img != null) img.MaxHeight = Math.Max(190, maxImgHDesktop - 6);
+            if (img != null) img.MaxHeight = maxImgHDesktop;
         }
         else
         {
             deskPopupW = Math.Min(640, Math.Max(480, viewW - 80));
-            maxImgHDesktop = Math.Min(460, Math.Max(240, viewH - 210));
-            if (container != null) container.MaxHeight = maxImgHDesktop;
-            if (img != null) img.MaxHeight = Math.Max(200, maxImgHDesktop - 6);
+            double landscapeImgH = Math.Min(maxImgHDesktop, 520);
+            if (container != null) container.MaxHeight = landscapeImgH;
+            if (img != null) img.MaxHeight = landscapeImgH;
         }
 
         popup.Width = deskPopupW;

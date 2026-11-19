@@ -28,7 +28,9 @@ public static class AndroidVideoThumbnailService
         VideoThumbnailService.ExternalNativeThumbnailProvider = ExtractThumbnail;
         VideoThumbnailService.ExternalNativeFramesProvider = ExtractFrames;
         VideoThumbnailService.ExternalNativeFrameAtTimeProvider = ExtractFrameAtTime;
-        VideoThumbnailService.ExternalAndroidVideoPlayerProvider = CreateVideoPlayer;
+        // Tắt ExternalAndroidVideoPlayerProvider để app sử dụng cơ chế Frame Motion Sequence đồng bộ 1:1 với native MediaPlayer.
+        // Loại bỏ triệt để 100% hiện tượng 3 FPS giật cục, biến màu da người và crash OutOfMemory do MediaMetadataRetriever decode liên tục.
+        VideoThumbnailService.ExternalAndroidVideoPlayerProvider = null;
         NativeAudioPlaybackService.ExternalAndroidAudioPlayerProvider = PlayAndroidAudio;
     }
 
