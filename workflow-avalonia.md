@@ -1082,3 +1082,14 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
     * Nếu đang tải hoặc có truyện đang chờ ➔ Bật cờ `IsExitAfterDownloadCompleted = true`, tự động kích hoạt tải ngầm nếu chưa chạy, và thu ứng dụng xuống nền (`MinimizeOrHideApp`).
   + **Tự Động Thoát Hoàn Toàn Khi Tải Xong 100%**: Lắng nghe `DownloadingStateChanged` từ `DownloadEngineService`. Khi toàn bộ các truyện được tích chọn hoàn tất 100%, hệ thống tự động ghi nhật ký `SUCCESS`, lưu autosave và gọi `ForceExitApp()` để giải phóng hoàn toàn tiến trình ngầm, tắt Foreground Service và tắt Bubble sạch sẽ.
   + **Bảo Vệ Người Dùng & Hủy Chế Độ**: Hiển thị Banner trạng thái đang bật kèm nút `"HỦY CHẾ ĐỘ"` ngay trong dialog để người dùng có thể dễ dàng hủy bất kỳ lúc nào nếu đổi ý.
+
+---
+
+### 64. Tinh Gọn & Tái Cấu Trúc Bố Cục Toolbar Tab Download (Windows, Linux, Android)
+- **Xóa bỏ các nút không cần thiết / trùng lặp**:
+  + Xóa CheckBox `📏 Nén dòng` (`IsCompactRow`) và CheckBox `📜 Auto Scroll (10s)` (`IsAutoScrollToActive`) theo yêu cầu người dùng để không gian hàng đợi và toolbar thoáng đãng.
+  + Loại bỏ nút `🔃 Đảo ngược danh sách` thừa ở thanh tùy chọn tải (vì đã có nút to chuyên dụng ở thanh Hàng Chờ và thanh điều khiển tải).
+- **Tái cấu trúc bố cục thành 2 tầng khoa học**:
+  + **Tầng 1 (Cấu hình tải chính / Engine Settings)**: Nhóm các thông số kết nối tải gồm `⚡ Số truyện cùng lúc` (thu gọn NumericUpDown Width=72), `🌐 Connection tải ảnh` (thu gọn Width=72), `⚡ TỰ ĐỘNG TÁCH CHƯƠNG` (ComboBox Width=75, Nút ÁP), `🛠️ Tải thủ công` (CheckBox + ComboBox Width=110), `⚡ Tự động tải`, `🔁 Tự thử lại`.
+  + **Tầng 2 (Tính năng mở rộng & xử lý sau tải / Queue & Post-Processing)**: Nhóm `🔢 Đánh STT tên truyện` (CheckBox + ô từ: Width=60 + Nút Xóa STT), `🫧 Bong bóng`, `🧹 Tự xóa đã xong`, `✨ Xử lý ảnh khi tải` (kèm popup/panel tùy chọn định dạng JPG/WebP/Gốc, CL nén, Nút Bộ lọc), `✂️ Tự cắt ảnh dài` (kèm ô Cao px).
+  + Thu nhỏ các control NumericUpDown, ComboBox cho kích thước nhỏ gọn, hiển thị vừa vặn trên 1 dòng ở Desktop và tự động xuống dòng mượt mà trên Android mà không bị tràn viền.
