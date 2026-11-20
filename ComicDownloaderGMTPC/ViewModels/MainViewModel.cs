@@ -3033,9 +3033,37 @@ public partial class MainViewModel : ViewModelBase
     // GET LINK / EXTRACTION PIPELINE
     // ==========================================
 
+    private async Task TryAutoPasteFromClipboardAsync()
+    {
+        try
+        {
+            var clipboard = GetClipboard();
+            if (clipboard != null)
+            {
+                string? text = await clipboard.TryGetTextAsync();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    string trimmed = text.Trim();
+                    if (trimmed.Contains("http://", StringComparison.OrdinalIgnoreCase) ||
+                        trimmed.Contains("https://", StringComparison.OrdinalIgnoreCase) ||
+                        string.IsNullOrWhiteSpace(UrlInput))
+                    {
+                        UrlInput = trimmed;
+                        AddLog("INFO", "📋 Tự động dán liên kết từ Clipboard...");
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog("WARN", $"Không thể đọc Clipboard: {ex.Message}");
+        }
+    }
+
     [RelayCommand]
     public async Task GetLinkAsync()
     {
+        await TryAutoPasteFromClipboardAsync();
         await ExtractUrlsFromTextAsync(UrlInput, clearExisting: true);
         if (ComicBooks.Count > 0)
         {
@@ -3046,6 +3074,7 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task GetMoreAsync()
     {
+        await TryAutoPasteFromClipboardAsync();
         await ExtractUrlsFromTextAsync(UrlInput, clearExisting: false);
         if (ComicBooks.Count > 0)
         {

@@ -1049,3 +1049,25 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - **Cơ chế cưỡng chế bật bàn phím ảo ngay ở lần chạm đầu tiên**:
   - Lắng nghe `PointerPressedEvent` và `TappedEvent` toàn hệ thống: Ngay khi ngón tay chạm vào ô nhập ký tự, hệ thống kích hoạt hiển thị bàn phím ảo ngay lập tức mà không phụ thuộc vào việc ô đó đã có focus từ trước hay chưa.
   - Sử dụng `WindowInsetsController.Show(WindowInsets.Type.Ime())` trên Android 11+ và `imm.ShowSoftInput(ShowFlags.Forced)` trên toàn bộ thiết bị Android, kết hợp cơ chế retry 3 lớp (Immediate, Input Priority, Background Priority) đảm bảo bàn phím luôn luôn xuất hiện mượt mà ngay lần chạm đầu tiên.
+
+---
+
+### 62. Đồng Bộ Toàn Diện Cử Chỉ Bong Bóng Nổi (MiniHUD, Menu Tùy Chọn) Đa Hệ Điều Hành & Cải Tiến Nút Nhập Link (Xóa Queue & Lấy Link, Tự Dán & Thêm)
+- **Đồng Bộ Cử Chỉ Bong Bóng Nổi (Windows, Linux, Android)**:
+  + **Nhấn giữ ngắn 500ms**: Hiển thị thẻ Mini HUD Glassmorphism trong suốt bo góc xem tên truyện, chap đang tải, tốc độ, % tiến trình và cụm 3 nút thao tác nhanh:
+    * `▶️ Tải` / `⏹️ Dừng` (`NativeNotificationToggleDownloadRequested`)
+    * `⏸️ Tạm dừng` / `▶️ Tiếp tục` (`NativeNotificationTogglePauseRequested`)
+    * `⏭️ Bỏ qua` (`NativeNotificationContextualAction1Requested`)
+  + **Nhấn giữ dài 3000ms (hoặc Click chuột phải trên Desktop)**: Hiển thị đầy đủ Menu Tùy chọn Bong bóng GMTPC chuẩn Android:
+    * `📊 Xem Mini HUD (Tiến trình & Tốc độ)`
+    * `📏 Đổi kích cỡ` (Submenu: Nhỏ 48px, Vừa 60px, Lớn 72px)
+    * `👁️ Đổi độ mờ nhàn rỗi` (Submenu: 30%, 45%, 60%, 75%)
+    * `⚡ Hiện/Ẩn nút (+) thêm link`
+    * `🛑 Hiện/Ẩn nút (✕) tắt cạnh bong bóng`
+    * `🚫 Tắt bong bóng`
+    * `🛑 Tắt app hoàn toàn`
+  + **Single Click ngắn (< 500ms)**: Khôi phục và mở lại cửa sổ ứng dụng chính (`RestoreMainWindow`).
+- **Nâng Cấp Cụm Nút Nhập Link Tab Download (`MainView.axaml`, `MainViewModel.cs`)**:
+  + Nút "Lấy link" đổi thành `"🔍 Xóa queue và lấy link"`: Tự động trích xuất link từ Clipboard dán vào ô nhập, xóa hàng chờ cũ và bắt đầu cào link truyện mới.
+  + Nút "Thêm" đổi thành `"➕ Tự dán và thêm"`: Tự động trích xuất link từ Clipboard dán vào ô nhập và nạp thêm truyện vào hàng chờ hiện tại.
+  + Tối ưu bố cục `WrapPanel` và `MinHeight="30"`: Nút co giãn linh hoạt theo độ dài chữ, tự động xuống dòng trên màn hình hẹp di động Android, triệt tiêu hoàn toàn lỗi tràn viền.

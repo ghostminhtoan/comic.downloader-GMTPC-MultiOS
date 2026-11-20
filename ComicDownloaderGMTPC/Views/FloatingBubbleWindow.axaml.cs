@@ -95,11 +95,15 @@ public partial class FloatingBubbleWindow : Window
     private readonly CircularProgressRingControl _ringControl = new();
 
     private readonly DispatcherTimer _idleTimer = new();
+    private readonly DispatcherTimer _shortPressTimer = new();
     private readonly DispatcherTimer _longPressTimer = new();
     private readonly Stopwatch _pressStopwatch = new();
+    private MiniHudWindow? _miniHudWindow;
 
     private bool _isPointerDown = false;
     private bool _isDragging = false;
+    private bool _isShortPressTriggered = false;
+    private bool _isLongPressTriggered = false;
     private PixelPoint _pointerStartScreenPoint;
     private PixelPoint _windowStartPosition;
 
@@ -126,14 +130,28 @@ public partial class FloatingBubbleWindow : Window
             PerformAutoDockAndFade();
         };
 
-        // Cấu hình bộ đếm nhấn giữ 3 giây
+        // Cấu hình bộ đếm nhấn giữ ngắn 500ms để hiện Mini HUD
+        _shortPressTimer.Interval = TimeSpan.FromMilliseconds(500);
+        _shortPressTimer.Tick += (_, _) =>
+        {
+            _shortPressTimer.Stop();
+            if (_isPointerDown && !_isDragging)
+            {
+                _isShortPressTriggered = true;
+                ShowMiniHud();
+            }
+        };
+
+        // Cấu hình bộ đếm nhấn giữ 3 giây để hiện Menu Tùy chọn đầy đủ
         _longPressTimer.Interval = TimeSpan.FromMilliseconds(3000);
         _longPressTimer.Tick += (_, _) =>
         {
             _longPressTimer.Stop();
             if (_isPointerDown && !_isDragging)
             {
+                _isLongPressTriggered = true;
                 _isPointerDown = false;
+                HideMiniHud();
                 ShowBubbleContextMenu();
             }
         };
@@ -175,6 +193,9 @@ public partial class FloatingBubbleWindow : Window
         SyncCurrentTaskState();
         InstanceConfigService.Instance.BubbleQuickAddButtonEnabledChanged -= OnBubbleQuickAddButtonEnabledChanged;
         InstanceConfigService.Instance.BubbleQuickAddButtonEnabledChanged += OnBubbleQuickAddButtonEnabledChanged;
+        InstanceConfigService.Instance.BubbleStyleChanged -= OnBubbleStyleChanged;
+        InstanceConfigService.Instance.BubbleStyleChanged += OnBubbleStyleChanged;
+        ApplyBubbleStyle();
         UpdateQuickAddVisualState();
         StartIdleTimer();
     }
@@ -182,10 +203,14 @@ public partial class FloatingBubbleWindow : Window
     private void OnWindowClosed(object? sender, EventArgs e)
     {
         _idleTimer.Stop();
+        _shortPressTimer.Stop();
         _longPressTimer.Stop();
         InstanceConfigService.Instance.BubbleQuickAddButtonEnabledChanged -= OnBubbleQuickAddButtonEnabledChanged;
+        InstanceConfigService.Instance.BubbleStyleChanged -= OnBubbleStyleChanged;
         BackgroundExecutionService.Instance.TaskProgressChanged -= OnTaskProgressChanged;
         BackgroundExecutionService.Instance.AnyTaskRunningChanged -= OnAnyTaskRunningChanged;
+        _miniHudWindow?.Close();
+        _miniHudWindow = null;
     }
 
     #region Mouse Dragging & Gesture Interactions
@@ -225,10 +250,13 @@ public partial class FloatingBubbleWindow : Window
         {
             _isPointerDown = true;
             _isDragging = false;
+            _isShortPressTriggered = false;
+            _isLongPressTriggered = false;
             _pointerStartScreenPoint = this.PointToScreen(e.GetPosition(this));
             _windowStartPosition = Position;
 
             _pressStopwatch.Restart();
+            _shortPressTimer.Start();
             _longPressTimer.Start();
 
             CancelIdleTimer();
@@ -251,7 +279,9 @@ public partial class FloatingBubbleWindow : Window
         if (!_isDragging && (Math.Abs(dx) > 5 || Math.Abs(dy) > 5))
         {
             _isDragging = true;
-            _longPressTimer.Stop(); // Hủy đếm nhấn giữ 3 giây
+            _shortPressTimer.Stop();
+            _longPressTimer.Stop();
+            HideMiniHud();
         }
 
         if (_isDragging)
@@ -264,6 +294,7 @@ public partial class FloatingBubbleWindow : Window
     private void OnBubblePointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         e.Pointer.Capture(null);
+        _shortPressTimer.Stop();
         _longPressTimer.Stop();
 
         if (_isPointerDown)
@@ -275,9 +306,17 @@ public partial class FloatingBubbleWindow : Window
                 _isDragging = false;
                 HandleDragCompleted();
             }
+            else if (_isLongPressTriggered)
+            {
+                // Đã kích hoạt menu tùy chọn 3s
+            }
+            else if (_isShortPressTriggered)
+            {
+                // Đã kích hoạt Mini HUD ở mốc 500ms -> Thả tay ra giữ nguyên Mini HUD để xem
+            }
             else
             {
-                // Nhấn chuột đơn thuần (Single Click) -> Mở lại cửa sổ chính
+                // Nhấn chuột đơn thuần (Single Click ngắn < 500ms) -> Mở lại cửa sổ chính
                 RestoreMainWindow();
             }
             e.Handled = true;
@@ -288,6 +327,7 @@ public partial class FloatingBubbleWindow : Window
     {
         _isPointerDown = false;
         _isDragging = false;
+        _shortPressTimer.Stop();
         _longPressTimer.Stop();
         StartIdleTimer();
     }
@@ -360,7 +400,7 @@ public partial class FloatingBubbleWindow : Window
     {
         Dispatcher.UIThread.Post(() =>
         {
-            Opacity = 0.45;
+            Opacity = InstanceConfigService.Instance.BubbleIdleAlpha;
 
             // Nếu đang ở sát mép màn hình: Tự động thụt 55% thân bóng vào mép
             if (_isAtEdge && !_isDocked)
@@ -412,6 +452,7 @@ public partial class FloatingBubbleWindow : Window
     public void RestoreMainWindow()
     {
         WakeUpAndRestore();
+        HideMiniHud();
         if (_mainWindow != null)
         {
             _mainWindow.Show();
@@ -420,34 +461,189 @@ public partial class FloatingBubbleWindow : Window
         }
     }
 
+    public void ShowMiniHud()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                if (_miniHudWindow == null)
+                {
+                    _miniHudWindow = new MiniHudWindow(() => RestoreMainWindow());
+                }
+
+                var screen = Screens.ScreenFromVisual(this) ?? Screens.Primary;
+                int screenW = screen?.WorkingArea.Width ?? 1920;
+                int screenH = screen?.WorkingArea.Height ?? 1080;
+                int screenX = screen?.WorkingArea.X ?? 0;
+                int screenY = screen?.WorkingArea.Y ?? 0;
+
+                int hudW = (int)_miniHudWindow.Width;
+                int hudH = (int)_miniHudWindow.Height;
+                int gap = 10;
+
+                int hudX = _isRightSide
+                    ? (Position.X - hudW - gap)
+                    : (Position.X + (int)Width + gap);
+
+                int minY = screenY + 20;
+                int maxY = Math.Max(minY, screenY + screenH - hudH - 20);
+                int hudY = Math.Clamp(Position.Y, minY, maxY);
+
+                _miniHudWindow.Position = new PixelPoint(hudX, hudY);
+                _miniHudWindow.Show();
+                _miniHudWindow.UpdateContent();
+                _miniHudWindow.RestartAutoHideTimer();
+            }
+            catch { }
+        });
+    }
+
+    public void HideMiniHud()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                _miniHudWindow?.Hide();
+            }
+            catch { }
+        });
+    }
+
+    private void OnBubbleStyleChanged()
+    {
+        Dispatcher.UIThread.Post(ApplyBubbleStyle);
+    }
+
+    private void ApplyBubbleStyle()
+    {
+        try
+        {
+            int dp = InstanceConfigService.Instance.BubbleSizeDp;
+            int bodySize = dp switch
+            {
+                48 => 46,
+                72 => 68,
+                _ => 56
+            };
+            int ringSize = dp switch
+            {
+                48 => 64,
+                72 => 88,
+                _ => 76
+            };
+
+            BubbleBody.Width = bodySize;
+            BubbleBody.Height = bodySize;
+            BubbleBody.CornerRadius = new CornerRadius(bodySize / 2.0);
+            RingHost.Width = ringSize;
+            RingHost.Height = ringSize;
+
+            if (_isDocked)
+            {
+                PerformAutoDockAndFade();
+            }
+        }
+        catch { }
+    }
+
     private void ShowBubbleContextMenu()
     {
         WakeUpAndRestore();
 
         var menu = new ContextMenu();
 
-        var itemCloseBubble = new MenuItem
+        // 1. Xem Mini HUD
+        var itemMiniHud = new MenuItem
         {
-            Header = "🚫 Tắt bong bóng",
+            Header = "📊 Xem Mini HUD (Tiến trình & Tốc độ)",
             FontWeight = FontWeight.Bold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x00, 0xE5, 0xFF))
+        };
+        itemMiniHud.Click += (_, _) => ShowMiniHud();
+        menu.Items.Add(itemMiniHud);
+
+        // 2. Đổi kích cỡ (Submenu)
+        string curSizeLabel = InstanceConfigService.Instance.BubbleSize switch
+        {
+            "Small" => "Nhỏ (48px)",
+            "Large" => "Lớn (72px)",
+            _ => "Vừa (60px)"
+        };
+        var itemSize = new MenuItem
+        {
+            Header = $"📏 Đổi kích cỡ [{curSizeLabel}]",
+            FontWeight = FontWeight.SemiBold,
             Foreground = new SolidColorBrush(Color.FromRgb(0x38, 0xBD, 0xF8))
         };
-        itemCloseBubble.Click += (_, _) =>
+        var itemSizeSmall = new MenuItem
         {
-            BackgroundExecutionService.Instance.SetBubbleMode(false);
+            Header = (InstanceConfigService.Instance.BubbleSize == "Small" ? "✓ " : "   ") + "Nhỏ (48px)"
         };
+        itemSizeSmall.Click += (_, _) =>
+        {
+            InstanceConfigService.Instance.BubbleSize = "Small";
+            ApplyBubbleStyle();
+        };
+        var itemSizeMed = new MenuItem
+        {
+            Header = (InstanceConfigService.Instance.BubbleSize == "Medium" ? "✓ " : "   ") + "Vừa (60px - Mặc định)"
+        };
+        itemSizeMed.Click += (_, _) =>
+        {
+            InstanceConfigService.Instance.BubbleSize = "Medium";
+            ApplyBubbleStyle();
+        };
+        var itemSizeLarge = new MenuItem
+        {
+            Header = (InstanceConfigService.Instance.BubbleSize == "Large" ? "✓ " : "   ") + "Lớn (72px)"
+        };
+        itemSizeLarge.Click += (_, _) =>
+        {
+            InstanceConfigService.Instance.BubbleSize = "Large";
+            ApplyBubbleStyle();
+        };
+        itemSize.Items.Add(itemSizeSmall);
+        itemSize.Items.Add(itemSizeMed);
+        itemSize.Items.Add(itemSizeLarge);
+        menu.Items.Add(itemSize);
 
-        var itemExitApp = new MenuItem
+        // 3. Đổi độ mờ nhàn rỗi (Submenu)
+        int curAlphaPct = (int)Math.Round(InstanceConfigService.Instance.BubbleIdleAlpha * 100);
+        var itemAlpha = new MenuItem
         {
-            Header = "🛑 Tắt app hoàn toàn",
-            FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xF4, 0x3F, 0x5E))
+            Header = $"👁️ Đổi độ mờ nhàn rỗi [{curAlphaPct}%]",
+            FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0x84, 0xFC))
         };
-        itemExitApp.Click += (_, _) =>
+        var itemAlpha30 = new MenuItem
         {
-            BackgroundExecutionService.Instance.ForceExit();
+            Header = (Math.Abs(InstanceConfigService.Instance.BubbleIdleAlpha - 0.30f) < 0.05f ? "✓ " : "   ") + "Mờ nhiều (30%)"
         };
+        itemAlpha30.Click += (_, _) => InstanceConfigService.Instance.BubbleIdleAlpha = 0.30f;
+        var itemAlpha45 = new MenuItem
+        {
+            Header = (Math.Abs(InstanceConfigService.Instance.BubbleIdleAlpha - 0.45f) < 0.05f ? "✓ " : "   ") + "Chuẩn (45% - Mặc định)"
+        };
+        itemAlpha45.Click += (_, _) => InstanceConfigService.Instance.BubbleIdleAlpha = 0.45f;
+        var itemAlpha60 = new MenuItem
+        {
+            Header = (Math.Abs(InstanceConfigService.Instance.BubbleIdleAlpha - 0.60f) < 0.05f ? "✓ " : "   ") + "Rõ nét (60%)"
+        };
+        itemAlpha60.Click += (_, _) => InstanceConfigService.Instance.BubbleIdleAlpha = 0.60f;
+        var itemAlpha75 = new MenuItem
+        {
+            Header = (Math.Abs(InstanceConfigService.Instance.BubbleIdleAlpha - 0.75f) < 0.05f ? "✓ " : "   ") + "Rất rõ (75%)"
+        };
+        itemAlpha75.Click += (_, _) => InstanceConfigService.Instance.BubbleIdleAlpha = 0.75f;
+        itemAlpha.Items.Add(itemAlpha30);
+        itemAlpha.Items.Add(itemAlpha45);
+        itemAlpha.Items.Add(itemAlpha60);
+        itemAlpha.Items.Add(itemAlpha75);
+        menu.Items.Add(itemAlpha);
 
+        // 4. Bật/Tắt nút (+) thêm link
         bool isQuickAddEnabled = InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
         var itemToggleQuickAdd = new MenuItem
         {
@@ -460,11 +656,13 @@ public partial class FloatingBubbleWindow : Window
             InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled = !InstanceConfigService.Instance.IsBubbleQuickAddButtonEnabled;
             UpdateQuickAddVisualState();
         };
+        menu.Items.Add(itemToggleQuickAdd);
 
+        // 5. Bật/Tắt nút (✕) tắt cạnh bong bóng
         bool isCloseEnabled = InstanceConfigService.Instance.IsBubbleCloseButtonEnabled;
         var itemToggleClose = new MenuItem
         {
-            Header = isCloseEnabled ? "⚪ Ẩn nút (✕) tắt app" : "🛑 Hiện nút (✕) tắt app",
+            Header = isCloseEnabled ? "⚪ Ẩn nút (✕) tắt cạnh bong bóng" : "🛑 Hiện nút (✕) tắt cạnh bong bóng",
             FontWeight = FontWeight.SemiBold,
             Foreground = new SolidColorBrush(Color.FromRgb(0xF4, 0x3F, 0x5E))
         };
@@ -472,12 +670,36 @@ public partial class FloatingBubbleWindow : Window
         {
             InstanceConfigService.Instance.IsBubbleCloseButtonEnabled = !InstanceConfigService.Instance.IsBubbleCloseButtonEnabled;
         };
-
-        menu.Items.Add(itemToggleQuickAdd);
         menu.Items.Add(itemToggleClose);
+
         menu.Items.Add(new Separator());
+
+        // 6. Tắt bong bóng
+        var itemCloseBubble = new MenuItem
+        {
+            Header = "🚫 Tắt bong bóng",
+            FontWeight = FontWeight.Bold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x38, 0xBD, 0xF8))
+        };
+        itemCloseBubble.Click += (_, _) =>
+        {
+            BackgroundExecutionService.Instance.SetBubbleMode(false);
+        };
         menu.Items.Add(itemCloseBubble);
+
         menu.Items.Add(new Separator());
+
+        // 7. Tắt app hoàn toàn
+        var itemExitApp = new MenuItem
+        {
+            Header = "🛑 Tắt app hoàn toàn",
+            FontWeight = FontWeight.Bold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xF4, 0x3F, 0x5E))
+        };
+        itemExitApp.Click += (_, _) =>
+        {
+            BackgroundExecutionService.Instance.ForceExit();
+        };
         menu.Items.Add(itemExitApp);
 
         menu.Open(this);

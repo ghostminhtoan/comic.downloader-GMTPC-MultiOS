@@ -1,0 +1,92 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ComicDownloaderGMTPC.Views.MiniHudWindow"
+        Title="Comic GMTPC Mini HUD"
+        Width="260" Height="100"
+        CanResize="False"
+        WindowDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual">
+
+    <Border Width="260" Height="100"
+            CornerRadius="10"
+            BorderBrush="#00E5FF"
+            BorderThickness="1.5"
+            ClipToBounds="True"
+            PointerPressed="OnCardPointerPressed"
+            PointerEntered="OnCardPointerEntered"
+            PointerExited="OnCardPointerExited"
+            Cursor="Hand"
+            BoxShadow="0 4 16 0 #B0000000">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="#E60F172A" Offset="0.0" />
+                <GradientStop Color="#F21E293B" Offset="1.0" />
+            </LinearGradientBrush>
+        </Border.Background>
+
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="10,8,10,8">
+            <!-- Row 0: Header (Title & Speed) -->
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" x:Name="TitleText"
+                           Text="Comic Downloader GMTPC"
+                           FontWeight="Bold" FontSize="11"
+                           Foreground="#FFFFFF"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" x:Name="SpeedText"
+                           Text="⚡ 0.0 KB/s"
+                           FontWeight="Bold" FontSize="10.5"
+                           Foreground="#00E5FF"
+                           Margin="6,0,0,0"
+                           VerticalAlignment="Center" />
+            </Grid>
+
+            <!-- Row 1: Status / Detail -->
+            <TextBlock Grid.Row="1" x:Name="StatusText"
+                       Text="Đang ở chế độ chờ"
+                       FontSize="10"
+                       Foreground="#94A3B8"
+                       TextTrimming="CharacterEllipsis"
+                       Margin="0,3,0,0" />
+
+            <!-- Row 2: ProgressBar -->
+            <ProgressBar Grid.Row="2" x:Name="ProgressBarCtrl"
+                         Height="4" CornerRadius="2"
+                         Minimum="0" Maximum="100" Value="0"
+                         Background="#334155" Foreground="#00E5FF"
+                         Margin="0,5,0,5" />
+
+            <!-- Row 3: 3 nút mini thao tác nhanh: Tải/Dừng, Tạm dừng, Bỏ qua -->
+            <Grid Grid.Row="3" ColumnDefinitions="*,*,*">
+                <Button Grid.Column="0" x:Name="BtnStartStop"
+                        Click="OnStartStopClicked"
+                        Background="#334155" Foreground="#38BDF8"
+                        FontWeight="Bold" FontSize="9"
+                        Padding="4,2" CornerRadius="4"
+                        Margin="0,0,3,0"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Content="▶️ Tải" />
+                <Button Grid.Column="1" x:Name="BtnPlayPause"
+                        Click="OnPlayPauseClicked"
+                        Background="#334155" Foreground="#FFFFFF"
+                        FontWeight="Bold" FontSize="9"
+                        Padding="4,2" CornerRadius="4"
+                        Margin="3,0,3,0"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Content="⏸️ Tạm dừng" />
+                <Button Grid.Column="2" x:Name="BtnSkip"
+                        Click="OnSkipClicked"
+                        Background="#334155" Foreground="#CBD5E1"
+                        FontWeight="Bold" FontSize="9"
+                        Padding="4,2" CornerRadius="4"
+                        Margin="3,0,0,0"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Content="⏭️ Bỏ qua" />
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

@@ -1107,9 +1107,11 @@
 
                                 Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
 
-                                CornerRadius="5" Padding="12,4" Height="30" Margin="0,0,6,4">
+                                CornerRadius="5" Padding="10,4" MinHeight="30" Margin="0,0,6,4"
 
-                            <TextBlock Text="🔍 LẤY LINK" FontSize="11" />
+                                ToolTip.Tip="Tự động dán liên kết từ Clipboard, xóa sạch hàng chờ cũ và bắt đầu lấy link truyện mới">
+
+                            <TextBlock Text="🔍 Xóa queue và lấy link" FontSize="11" VerticalAlignment="Center" />
 
                         </Button>
 
@@ -1117,9 +1119,11 @@
 
                                 Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold"
 
-                                CornerRadius="5" Padding="10,4" Height="30" Margin="0,0,6,4">
+                                CornerRadius="5" Padding="10,4" MinHeight="30" Margin="0,0,6,4"
 
-                            <TextBlock Text="➕ THÊM" FontSize="11" />
+                                ToolTip.Tip="Tự động dán liên kết từ Clipboard và nạp thêm truyện vào hàng chờ hiện tại">
+
+                            <TextBlock Text="➕ Tự dán và thêm" FontSize="11" VerticalAlignment="Center" />
 
                         </Button>
 
@@ -1127,9 +1131,11 @@
 
                                 Background="#1E293B" Foreground="#94A3B8"
 
-                                CornerRadius="5" Padding="8,4" Height="30" Margin="0,0,6,4">
+                                CornerRadius="5" Padding="8,4" MinHeight="30" Margin="0,0,6,4"
 
-                            <TextBlock Text="🗑️ XÓA" FontSize="11" />
+                                ToolTip.Tip="Xóa sạch nội dung trong ô nhập liên kết">
+
+                            <TextBlock Text="🗑️ XÓA" FontSize="11" VerticalAlignment="Center" />
 
                         </Button>
 
@@ -1137,7 +1143,7 @@
 
                                 Background="#334155" Foreground="#38BDF8" FontWeight="SemiBold"
 
-                                CornerRadius="5" Padding="10,4" Height="30" Margin="0,0,8,4"
+                                CornerRadius="5" Padding="10,4" MinHeight="30" Margin="0,0,8,4"
 
                                 ToolTip.Tip="Dán trực tiếp liên kết từ bộ nhớ tạm (Clipboard) và nạp vào danh sách">
 

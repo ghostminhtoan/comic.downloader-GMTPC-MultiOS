@@ -60,6 +60,7 @@ public static class FloatingBubbleManager
     private static TextView? _miniHudStatusText;
     private static TextView? _miniHudSpeedText;
     private static ProgressBar? _miniHudProgressBar;
+    private static TextView? _miniHudStartStopBtn;
     private static TextView? _miniHudPlayPauseBtn;
     private static TextView? _miniHudSkipBtn;
     private static Java.Lang.Runnable? _autoHideHudRunnable;
@@ -390,7 +391,7 @@ public static class FloatingBubbleManager
             _windowManager.AddView(_trashTargetView, _trashLayoutParams);
 
             // 2. Thẻ Mini HUD Tốc độ & Tiến trình (Glassmorphism)
-            int hudWidth = DpToPx(context, 230);
+            int hudWidth = DpToPx(context, 255);
             _miniHudView = CreateMiniHudView(context);
             _miniHudLayoutParams = new WindowManagerLayoutParams(
                 hudWidth,
@@ -515,7 +516,7 @@ public static class FloatingBubbleManager
             _trashTargetView.BringToFront();
 
             // 2. Thẻ Mini HUD
-            int hudWidth = DpToPx(activity, 230);
+            int hudWidth = DpToPx(activity, 255);
             _miniHudView = CreateMiniHudView(activity);
             _inAppMiniHudLp = new FrameLayout.LayoutParams(hudWidth, FrameLayout.LayoutParams.WrapContent)
             {
@@ -1166,7 +1167,7 @@ public static class FloatingBubbleManager
         pbLp.BottomMargin = DpToPx(context, 6);
         card.AddView(_miniHudProgressBar, pbLp);
 
-        // 4. Các nút mini thao tác nhanh: Tạm dừng / Bỏ qua chap
+        // 4. Các nút mini thao tác nhanh: Tải/Dừng, Tạm dừng, Bỏ qua chap
         var btnRow = new LinearLayout(context)
         {
             Orientation = Orientation.Horizontal
@@ -1174,10 +1175,39 @@ public static class FloatingBubbleManager
         var btnRowLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MatchParent, LinearLayout.LayoutParams.WrapContent);
         btnRow.LayoutParameters = btnRowLp;
 
+        // Nút 1: Tải / Dừng
+        _miniHudStartStopBtn = new TextView(context)
+        {
+            Text = "▶️ Tải",
+            TextSize = 9.0f,
+            Gravity = GravityFlags.Center
+        };
+        _miniHudStartStopBtn.SetTextColor(Color.Rgb(56, 189, 248)); // Sky 400
+        _miniHudStartStopBtn.SetTypeface(null, TypefaceStyle.Bold);
+        var btnBg0 = new GradientDrawable();
+        btnBg0.SetShape(ShapeType.Rectangle);
+        btnBg0.SetCornerRadius(DpToPx(context, 6));
+        btnBg0.SetColor(Color.Rgb(51, 65, 85)); // Slate 700
+        _miniHudStartStopBtn.Background = btnBg0;
+        _miniHudStartStopBtn.SetPadding(DpToPx(context, 6), DpToPx(context, 4), DpToPx(context, 6), DpToPx(context, 4));
+        var btn0Lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WrapContent, 1f);
+        btn0Lp.RightMargin = DpToPx(context, 4);
+        _miniHudStartStopBtn.SetOnClickListener(new QuickAddClickListener(() =>
+        {
+            try
+            {
+                BackgroundExecutionService.NativeNotificationToggleDownloadRequested?.Invoke();
+                UpdateMiniHudContent();
+            }
+            catch { }
+        }));
+        btnRow.AddView(_miniHudStartStopBtn, btn0Lp);
+
+        // Nút 2: Tạm dừng / Tiếp tục
         _miniHudPlayPauseBtn = new TextView(context)
         {
             Text = "⏸️ Tạm dừng",
-            TextSize = 9.5f,
+            TextSize = 9.0f,
             Gravity = GravityFlags.Center
         };
         _miniHudPlayPauseBtn.SetTextColor(Color.White);
@@ -1187,9 +1217,9 @@ public static class FloatingBubbleManager
         btnBg1.SetCornerRadius(DpToPx(context, 6));
         btnBg1.SetColor(Color.Rgb(51, 65, 85)); // Slate 700
         _miniHudPlayPauseBtn.Background = btnBg1;
-        _miniHudPlayPauseBtn.SetPadding(DpToPx(context, 8), DpToPx(context, 4), DpToPx(context, 8), DpToPx(context, 4));
+        _miniHudPlayPauseBtn.SetPadding(DpToPx(context, 6), DpToPx(context, 4), DpToPx(context, 6), DpToPx(context, 4));
         var btn1Lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WrapContent, 1f);
-        btn1Lp.RightMargin = DpToPx(context, 6);
+        btn1Lp.RightMargin = DpToPx(context, 4);
         _miniHudPlayPauseBtn.SetOnClickListener(new QuickAddClickListener(() =>
         {
             try
@@ -1201,10 +1231,11 @@ public static class FloatingBubbleManager
         }));
         btnRow.AddView(_miniHudPlayPauseBtn, btn1Lp);
 
+        // Nút 3: Bỏ qua
         _miniHudSkipBtn = new TextView(context)
         {
             Text = "⏭️ Bỏ qua",
-            TextSize = 9.5f,
+            TextSize = 9.0f,
             Gravity = GravityFlags.Center
         };
         _miniHudSkipBtn.SetTextColor(Color.White);
@@ -1214,7 +1245,7 @@ public static class FloatingBubbleManager
         btnBg2.SetCornerRadius(DpToPx(context, 6));
         btnBg2.SetColor(Color.Rgb(51, 65, 85)); // Slate 700
         _miniHudSkipBtn.Background = btnBg2;
-        _miniHudSkipBtn.SetPadding(DpToPx(context, 8), DpToPx(context, 4), DpToPx(context, 8), DpToPx(context, 4));
+        _miniHudSkipBtn.SetPadding(DpToPx(context, 6), DpToPx(context, 4), DpToPx(context, 6), DpToPx(context, 4));
         var btn2Lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WrapContent, 1f);
         _miniHudSkipBtn.SetOnClickListener(new QuickAddClickListener(() =>
         {
@@ -1252,7 +1283,7 @@ public static class FloatingBubbleManager
 
                 int screenWidth = GetScreenWidth(context);
                 int screenHeight = GetScreenHeight(context);
-                int hudWidth = DpToPx(context, 230);
+                int hudWidth = DpToPx(context, 255);
                 int gap = DpToPx(context, 10);
 
                 if (_isSystemOverlay && _systemLayoutParams != null && _windowManager != null && _miniHudLayoutParams != null)
@@ -1383,9 +1414,17 @@ public static class FloatingBubbleManager
                     }
                 }
 
+                if (_miniHudStartStopBtn != null)
+                {
+                    _miniHudStartStopBtn.Text = isDownloading ? "⏹️ Dừng" : "▶️ Tải";
+                    _miniHudStartStopBtn.SetTextColor(isDownloading ? Color.Rgb(248, 113, 113) : Color.Rgb(56, 189, 248));
+                }
+
                 if (_miniHudPlayPauseBtn != null)
                 {
                     _miniHudPlayPauseBtn.Text = isPaused ? "▶️ Tiếp tục" : "⏸️ Tạm dừng";
+                    _miniHudPlayPauseBtn.SetTextColor(isPaused ? Color.Rgb(250, 204, 21) : Color.White);
+                    _miniHudPlayPauseBtn.Alpha = isDownloading ? 1.0f : 0.5f;
                 }
             }
             catch { }
@@ -1884,6 +1923,7 @@ public static class FloatingBubbleManager
                     _miniHudStatusText = null;
                     _miniHudSpeedText = null;
                     _miniHudProgressBar = null;
+                    _miniHudStartStopBtn = null;
                     _miniHudPlayPauseBtn = null;
                     _miniHudSkipBtn = null;
                 }
