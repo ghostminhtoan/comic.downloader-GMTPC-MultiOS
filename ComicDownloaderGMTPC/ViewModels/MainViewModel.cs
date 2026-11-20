@@ -1252,6 +1252,22 @@ public partial class MainViewModel : ViewModelBase
     public string EnhanceLogToggleText => IsEnhanceLogExpanded ? "📋 Ẩn Log ▼" : "📋 Xem Log Chi Tiết ▲";
 
     [ObservableProperty]
+    private bool _isDownloadSettingsExpanded = false;
+
+    public string DownloadSettingsToggleText => IsDownloadSettingsExpanded ? "▾ Thu gọn cài đặt tải" : "▸ ⚙️ Tùy chọn nâng cao (Luồng, Tách chương, Xử lý ảnh...)";
+
+    partial void OnIsDownloadSettingsExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(DownloadSettingsToggleText));
+    }
+
+    [RelayCommand]
+    private void ToggleDownloadSettings()
+    {
+        IsDownloadSettingsExpanded = !IsDownloadSettingsExpanded;
+    }
+
+    [ObservableProperty]
     private bool _isLoupeEnabled = false;
 
     [ObservableProperty]

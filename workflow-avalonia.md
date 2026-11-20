@@ -1093,3 +1093,20 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + **Tầng 1 (Cấu hình tải chính / Engine Settings)**: Nhóm các thông số kết nối tải gồm `⚡ Số truyện cùng lúc` (thu gọn NumericUpDown Width=72), `🌐 Connection tải ảnh` (thu gọn Width=72), `⚡ TỰ ĐỘNG TÁCH CHƯƠNG` (ComboBox Width=75, Nút ÁP), `🛠️ Tải thủ công` (CheckBox + ComboBox Width=110), `⚡ Tự động tải`, `🔁 Tự thử lại`.
   + **Tầng 2 (Tính năng mở rộng & xử lý sau tải / Queue & Post-Processing)**: Nhóm `🔢 Đánh STT tên truyện` (CheckBox + ô từ: Width=60 + Nút Xóa STT), `🫧 Bong bóng`, `🧹 Tự xóa đã xong`, `✨ Xử lý ảnh khi tải` (kèm popup/panel tùy chọn định dạng JPG/WebP/Gốc, CL nén, Nút Bộ lọc), `✂️ Tự cắt ảnh dài` (kèm ô Cao px).
   + Thu nhỏ các control NumericUpDown, ComboBox cho kích thước nhỏ gọn, hiển thị vừa vặn trên 1 dòng ở Desktop và tự động xuống dòng mượt mà trên Android mà không bị tràn viền.
+
+---
+
+### 65. Đại Trùng Tu Toàn Diện Giao Diện (Layout Modernization & Polish - 20 Tiêu Chuẩn Nâng Cấp)
+- **1. Omnibar Thông Minh All-In-One (Gợi ý 1)**: Tích hợp ô dán link, icon link, nút xóa nhanh, cụm nút hành động (`🔍 Xóa queue và lấy link`, `➕ Tự dán và thêm`, `📋 Dán link`), bộ điều khiển luồng CPU dạng Pill gọn nhẹ và Checkbox `⚡ Tự dán` vào một thanh Command Bar bo góc cao cấp liền khối.
+- **2. Slim Header Bar Hiện Đại (Gợi ý 2)**: Căn chỉnh thanh Navigation đỉnh app mảnh mai, thanh lịch (Logo neon tím, cụm Mode Selection, đổi ngôn ngữ, Drive, Cập nhật Release & Beta, Nút Thoát) với padding đồng đều và kích thước tiêu chuẩn.
+- **3. Breadcrumb Thư Mục & Subfolder Card (Gợi ý 3 & 4)**: Gộp đường dẫn tải và cụm Subfolder thành Card 2 tầng tinh tế; đưa 2 nút `📂 Mở thư mục` và `📁 Đổi thư mục` về đúng vị trí ngữ cảnh cạnh đường dẫn tải; thanh tiến trình di chuyển Subfolder hiển thị mượt mà.
+- **4. Accordion / Expander Gập Mở Cài Đặt Tải (Gợi ý 6)**: Thu gọn 2 hàng thiết lập mạng/luồng/xử lý ảnh thành thanh tóm tắt mỏng 26px kèm nút gập mở thông minh (`IsDownloadSettingsExpanded`); khi cần thì mở ra, bình thường thì ẩn đi giúp giao diện thoáng đãng.
+- **5. Action Toolbar Phân Cấp (Primary / Secondary / Tiện Ích Flyout - Gợi ý 8)**: Tách rõ nhóm nút tải chính (`TẢI`, `TẢI TIẾP`, `TẠM DỪNG`) nổi bật; nhóm nút hàng chờ (`THỬ LẠI`, `XÓA QUEUE`, `ĐẢO NGƯỢC`); gom toàn bộ các tính năng Sao lưu/Phục hồi MD, Đồng bộ Google Drive và Quản lý Cache vào Menu Dropdown `🛠️ TIỆN ÍCH ▾`.
+- **6. Filter Chips Bo Tròn & Menu Chọn Hàng (Gợi ý 9 & 11)**:
+  + Chuyển đổi các nút lọc `Tên trùng`, `Trùng ảnh`, `Uncen`, `Color Rules` thành các thẻ Chip bo tròn `CornerRadius="12"` hiện đại.
+  + Ô tìm kiếm tinh gọn kèm nút xóa nhanh `✕`.
+  + Gom 7 nút chọn hàng (`Tất cả`, `Bỏ chọn`, `Đảo chọn`, `Tích dòng`, `Lỗi`, `Trùng tên`, `Trùng ảnh`) vào một Menu thả xuống `☑️ Chọn hàng ▾` chuyên nghiệp.
+- **7. Thẻ Truyện Glass Card & Slim Progress Line (Gợi ý 13, 14 & 17)**:
+  + Bo góc thẻ truyện `CornerRadius="7"`, tạo khoảng cách 3px giữa các card để nhìn tách bạch, không dính cục.
+  + Thanh tiến trình ProgressBar được tinh chỉnh thành dải mỏng 10px bo tròn viền đáy card (`CornerRadius="0,0,6,6"`), số % vàng sáng overlap nổi bật.
+  + Floating Quick Control Dock được nâng cấp hiệu ứng mờ ảo Glassmorphism và đổ bóng có chiều sâu.
