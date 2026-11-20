@@ -1071,3 +1071,14 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Nút "Lấy link" đổi thành `"🔍 Xóa queue và lấy link"`: Tự động trích xuất link từ Clipboard dán vào ô nhập, xóa hàng chờ cũ và bắt đầu cào link truyện mới.
   + Nút "Thêm" đổi thành `"➕ Tự dán và thêm"`: Tự động trích xuất link từ Clipboard dán vào ô nhập và nạp thêm truyện vào hàng chờ hiện tại.
   + Tối ưu bố cục `WrapPanel` và `MinHeight="30"`: Nút co giãn linh hoạt theo độ dài chữ, tự động xuống dòng trên màn hình hẹp di động Android, triệt tiêu hoàn toàn lỗi tràn viền.
+
+---
+
+### 63. Tích Hợp Chế Độ Tắt Hẳn App Sau Khi Tải Xong Vào Modal Xác Nhận Thoát (OnBackPressed & Exit Confirmation)
+- **Cơ Chế Điều Phối Vòng Đời Tự Tắt (Auto-Shutdown Lifecycle)**:
+  + Trong Modal Popup Xác nhận Thoát (khi bấm phím Back trên Android hoặc nút đóng app): Bổ sung Lựa chọn `"⏳ Tắt Hẳn App Sau Khi Tải Xong"`.
+  + **Tự động kích hoạt thông minh**:
+    * Nếu hàng chờ không có truyện nào cần tải (`!IsDownloading` và không có item chưa xong) ➔ Tắt app ngay lập tức (`ForceExitApp`).
+    * Nếu đang tải hoặc có truyện đang chờ ➔ Bật cờ `IsExitAfterDownloadCompleted = true`, tự động kích hoạt tải ngầm nếu chưa chạy, và thu ứng dụng xuống nền (`MinimizeOrHideApp`).
+  + **Tự Động Thoát Hoàn Toàn Khi Tải Xong 100%**: Lắng nghe `DownloadingStateChanged` từ `DownloadEngineService`. Khi toàn bộ các truyện được tích chọn hoàn tất 100%, hệ thống tự động ghi nhật ký `SUCCESS`, lưu autosave và gọi `ForceExitApp()` để giải phóng hoàn toàn tiến trình ngầm, tắt Foreground Service và tắt Bubble sạch sẽ.
+  + **Bảo Vệ Người Dùng & Hủy Chế Độ**: Hiển thị Banner trạng thái đang bật kèm nút `"HỦY CHẾ ĐỘ"` ngay trong dialog để người dùng có thể dễ dàng hủy bất kỳ lúc nào nếu đổi ý.

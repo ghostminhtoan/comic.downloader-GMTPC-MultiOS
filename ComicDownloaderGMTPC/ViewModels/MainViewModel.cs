@@ -203,6 +203,9 @@ public partial class MainViewModel : ViewModelBase
     private bool _isExitConfirmOpen = false;
 
     [ObservableProperty]
+    private bool _isExitAfterDownloadCompleted = false;
+
+    [ObservableProperty]
     private string _bubbleStatusTitle = "Sẵn sàng";
 
     [ObservableProperty]
@@ -2199,6 +2202,7 @@ public partial class MainViewModel : ViewModelBase
                 if (!downloading)
                 {
                     RequestQueueAutoSave(200);
+                    CheckAutoExitAfterDownloadCompleted();
                 }
             });
         };
@@ -2451,6 +2455,63 @@ public partial class MainViewModel : ViewModelBase
     {
         IsExitConfirmOpen = false;
         BackgroundExecutionService.Instance.MinimizeOrHide();
+    }
+
+    [RelayCommand]
+    public void ExitAfterDownloadCompleted()
+    {
+        IsExitConfirmOpen = false;
+
+        bool hasPending = ComicBooks.Any(b => b.IsChecked &&
+            !string.Equals(b.Status, "Completed", StringComparison.OrdinalIgnoreCase));
+
+        if (!IsDownloading && !hasPending)
+        {
+            AddLog("INFO", "Không có truyện nào đang tải hoặc cần tải. Đang thoát ứng dụng...");
+            ForceExitApp();
+            return;
+        }
+
+        IsExitAfterDownloadCompleted = true;
+        AddLog("INFO", "⏳ Đã kích hoạt chế độ: Tự động tắt hẳn app sau khi tải xong toàn bộ truyện.");
+
+        // Nếu hiện tại chưa chạy tải nhưng trong queue có truyện đang chờ -> Tự động kích hoạt tải luôn
+        if (!IsDownloading && hasPending)
+        {
+            _ = DownloadAllAsync();
+        }
+
+        BackgroundExecutionService.Instance.MinimizeOrHide();
+    }
+
+    [RelayCommand]
+    public void CancelExitAfterDownloadCompleted()
+    {
+        IsExitAfterDownloadCompleted = false;
+        AddLog("INFO", "Đã hủy chế độ tự động tắt app sau khi tải xong.");
+    }
+
+    private void CheckAutoExitAfterDownloadCompleted()
+    {
+        if (!IsExitAfterDownloadCompleted) return;
+
+        bool stillHasPending = ComicBooks.Any(b => b.IsChecked &&
+            !string.Equals(b.Status, "Completed", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(b.Status, "Error", StringComparison.OrdinalIgnoreCase));
+
+        if (!stillHasPending)
+        {
+            AddLog("SUCCESS", "⏳ Toàn bộ danh sách truyện đã tải xong 100%! Đang tự động tắt hoàn toàn ứng dụng...");
+            IsExitAfterDownloadCompleted = false;
+
+            Task.Delay(1500).ContinueWith(_ =>
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    ForceExitApp();
+                });
+            });
+        }
     }
 
     private void InitializeQueueAutoBackupAndRestore()

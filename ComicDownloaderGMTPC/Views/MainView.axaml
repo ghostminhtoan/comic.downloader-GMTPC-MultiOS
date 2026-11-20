@@ -10680,7 +10680,22 @@
 
 
 
-                    <!-- Danh sách 2 Lựa chọn chính -->
+                    <!-- Trạng thái đang bật chế độ Tự tắt sau khi tải xong (nếu có) -->
+                    <Border IsVisible="{Binding IsExitAfterDownloadCompleted}"
+                            Background="#312E81" BorderBrush="#818CF8" BorderThickness="1"
+                            CornerRadius="10" Padding="12,8" Margin="0,0,0,4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="⏳ Chế độ tự tắt app khi tải xong đang BẬT" Foreground="#E0E7FF" FontSize="11.5" FontWeight="Bold" />
+                                <TextBlock Text="Ứng dụng sẽ tự động tắt hoàn toàn khi hàng chờ tải xong 100%" Foreground="#C7D2FE" FontSize="9.5" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Command="{Binding CancelExitAfterDownloadCompletedCommand}"
+                                    Content="HỦY CHẾ ĐỘ" FontSize="10" FontWeight="Bold" Padding="8,4"
+                                    Background="#4C1D95" Foreground="#FCA5A5" CornerRadius="6" VerticalAlignment="Center" Margin="8,0,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Danh sách các Lựa chọn chính -->
 
                     <StackPanel Spacing="10">
 
@@ -10708,9 +10723,31 @@
 
                         </Button>
 
+                        <!-- Option 2: Tắt hẳn app sau khi tải xong -->
 
+                        <Button Command="{Binding ExitAfterDownloadCompletedCommand}"
 
-                        <!-- Option 2: Thoát hoàn toàn (Force Stop) -->
+                                Background="#1E1B4B" BorderBrush="#818CF8" BorderThickness="1"
+
+                                CornerRadius="10" Padding="14,10" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+
+                            <Grid ColumnDefinitions="Auto, *">
+
+                                <TextBlock Grid.Column="0" Text="⏳" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0" />
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+
+                                    <TextBlock Text="Tắt Hẳn App Sau Khi Tải Xong" FontWeight="Bold" Foreground="#A5B4FC" FontSize="13" />
+
+                                    <TextBlock Text="Tiếp tục tải ngầm, sau khi tải xong 100% toàn bộ truyện sẽ tự động tắt app hoàn toàn" FontSize="10" Foreground="#C7D2FE" TextWrapping="Wrap" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                        </Button>
+
+                        <!-- Option 3: Thoát hoàn toàn (Force Stop) -->
 
                         <Button Command="{Binding ForceExitAppCommand}"
 
@@ -10726,7 +10763,7 @@
 
                                     <TextBlock Text="Thoát Hoàn Toàn (Force Stop)" FontWeight="Bold" Foreground="#F87171" FontSize="13" />
 
-                                    <TextBlock Text="Dừng mọi tác vụ, tắt sạch tiến trình và giải phóng bộ nhớ" FontSize="10" Foreground="#FDA4AF" TextWrapping="Wrap" />
+                                    <TextBlock Text="Dừng mọi tác vụ, tắt sạch tiến trình và giải phóng bộ nhớ ngay lập tức" FontSize="10" Foreground="#FDA4AF" TextWrapping="Wrap" />
 
                                 </StackPanel>
 
