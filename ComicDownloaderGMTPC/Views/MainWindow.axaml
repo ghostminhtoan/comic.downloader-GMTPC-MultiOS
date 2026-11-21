@@ -34,7 +34,7 @@
                 </Border>
                 <StackPanel VerticalAlignment="Center" Spacing="2">
                     <TextBlock Text="{Binding DisplayScaleLabel}" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" LetterSpacing="0.8"/>
-                    <TextBlock Text="{Binding UiZoomPercent, StringFormat='{}{0}%'}" Foreground="#FFE600" FontSize="26" FontWeight="Black"/>
+                    <TextBlock Text="{Binding UiZoomPercentText}" Foreground="#FFE600" FontSize="26" FontWeight="Black"/>
                 </StackPanel>
             </StackPanel>
         </Border>

@@ -12,20 +12,28 @@ public sealed class QueueGridRow
     public ComicBookItem? Col1 { get; }
     public ComicBookItem? Col2 { get; }
     public ComicBookItem? Col3 { get; }
+    public ComicBookItem? Col4 { get; }
 
     public bool HasCol1 => Col1 != null;
     public bool HasCol2 => Col2 != null;
     public bool HasCol3 => Col3 != null;
+    public bool HasCol4 => Col4 != null;
 
     public int ColumnsCount { get; }
 
-    public string GridColumnsDefinition => ColumnsCount == 2 ? "*, *" : "*, *, *";
+    public string GridColumnsDefinition => ColumnsCount switch
+    {
+        2 => "*, *",
+        4 => "*, *, *, *",
+        _ => "*, *, *"
+    };
 
-    public QueueGridRow(ComicBookItem col1, ComicBookItem? col2 = null, ComicBookItem? col3 = null, int columns = 3)
+    public QueueGridRow(ComicBookItem col1, ComicBookItem? col2 = null, ComicBookItem? col3 = null, ComicBookItem? col4 = null, int columns = 2)
     {
         Col1 = col1;
         Col2 = col2;
         Col3 = col3;
+        Col4 = col4;
         ColumnsCount = columns;
     }
 }

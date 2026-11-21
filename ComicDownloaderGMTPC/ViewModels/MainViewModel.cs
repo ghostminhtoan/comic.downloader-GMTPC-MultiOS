@@ -1847,6 +1847,22 @@ public partial class MainViewModel : ViewModelBase
             : "📄 Đã tắt chế độ Lưới, quay về hiển thị 1 cột.");
     }
 
+    [ObservableProperty]
+    private int _gridColumnsCount = 2; // Mặc định mở app luôn là 2 trên Windows, Linux, Android
+
+    public IReadOnlyList<int> AvailableGridColumns { get; } = new int[] { 2, 3, 4 };
+
+    partial void OnGridColumnsCountChanged(int value)
+    {
+        RebuildGridQueueRows();
+    }
+
+    [RelayCommand]
+    public void SetGridColumns(int cols)
+    {
+        GridColumnsCount = Math.Clamp(cols, 2, 4);
+    }
+
     [RelayCommand]
     public void ToggleQueueGridMode()
     {
@@ -1867,15 +1883,16 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        int cols = OperatingSystem.IsAndroid() ? 2 : 3;
+        int cols = OperatingSystem.IsAndroid() ? 2 : Math.Clamp(GridColumnsCount, 2, 4);
         var rows = new List<QueueGridRow>((source.Count + cols - 1) / cols);
 
         for (int i = 0; i < source.Count; i += cols)
         {
             var item1 = source[i];
             var item2 = (i + 1 < source.Count) ? source[i + 1] : null;
-            var item3 = (cols == 3 && i + 2 < source.Count) ? source[i + 2] : null;
-            rows.Add(new QueueGridRow(item1, item2, item3, cols));
+            var item3 = (cols >= 3 && i + 2 < source.Count) ? source[i + 2] : null;
+            var item4 = (cols >= 4 && i + 3 < source.Count) ? source[i + 3] : null;
+            rows.Add(new QueueGridRow(item1, item2, item3, item4, cols));
         }
 
         GridQueueRows = new ObservableCollection<QueueGridRow>(rows);
@@ -2018,7 +2035,7 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [ObservableProperty]
-    private string _selectedQueueViewMode = "List view";
+    private string _selectedQueueViewMode = "List + thumbnail column";
 
     public bool IsListViewMode => !IsThumbnailMode;
 

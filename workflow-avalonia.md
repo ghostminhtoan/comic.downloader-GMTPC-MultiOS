@@ -1232,3 +1232,28 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 
 
 
+
+---
+
+### 72. Khắc Phục Triệt Để Chữ Vàng Realtime Zoom, Chống Tràn Viền Popup Preview & Tab Xử Lý Ảnh, Bổ Sung Tùy Chọn Cột Lưới 2/3/4 & Mobile Name Card Android, Hoàn Thiện Detached Queue Window
+- **1. Sửa Lỗi Chữ Vàng Sidebar Không Nhảy Realtime Theo Zoom (Windows & Linux)**:
+  + Chuyển TextBlock màu vàng hiển thị tỷ lệ zoom tại Desktop Sidebar (`MainView.axaml`), HUD Toast (`MainWindow.axaml` và `DetachedQueueWindow.axaml`) từ `Binding StringFormat` sang binding trực tiếp chuỗi Observable `Text="{Binding UiZoomPercentText}"`.
+  + Đảm bảo khi zoom bằng `Ctrl + Wheel`, phím tắt `Ctrl +/-` hoặc chọn ComboBox, cả HUD trung tâm và chữ vàng ở Sidebar bên trái luôn đồng bộ thời gian thực 100%, không bị tình trạng đứng yên hay lệch số.
+- **2. Chống Tràn Viền Popup Preview Khi Zoom To (Windows & Linux)**:
+  + Bổ sung `MaxHeight="460"` cho Border chứa Popup Preview (`IsHoverPreviewVisible`) trong `MainView.axaml`.
+  + Giới hạn kích thước ảnh xem trước tối đa `MaxHeight="220"`, giúp toàn bộ card xem trước truyện (Header + Ảnh bìa + Tiêu đề + latest chapter + tags + trạng thái) luôn nằm gọn trọn vẹn trong khung nhìn cửa sổ khi zoom lên 160% - 175%, thanh cuộn ScrollViewer tự động cuộn an toàn không bị cắt cụt đáy.
+- **3. Chống Tràn Viền Tab Xử Lý Ảnh Trên Android**:
+  + Thiết kế lại Dòng 1 (Thư mục nguồn) và Dòng 2 (Lưu trữ) theo cấu trúc 2 tầng: Hàng trên dành trọn cho Label và TextBox co giãn, Hàng dưới dùng `WrapPanel` chứa các nút thao tác `[📁 Chọn]`, `[📂 Mở]` và `[CheckBox: Chỉ đè file gốc]`.
+  + Thiết kế lại Khối 4 cụm nút Studio (`▶ BẮT ĐẦU XỬ LÝ ẢNH`, `⏹ DỪNG`, `👁️ Chọn ảnh mẫu`...): Chuyển container từ 2 cột cứng sang 2 hàng dọc (`RowDefinitions="Auto, Auto"`), WrapPanel co giãn 100% bề ngang tự động xuống dòng linh hoạt, thanh tiến trình chiếm trọn hàng dưới, loại bỏ hoàn toàn hiện tượng tràn mép phải màn hình Android.
+- **4. Tối Ưu Hóa Chế Độ Lưới (Grid) & Mobile Name Card Trên Android**:
+  + Trong `ComicQueueCardTemplate`: Khi bật chế độ Lưới (`IsQueueGridMode`), tự động ẩn các ô TextBox cồng kềnh `Chọn chap` và `Subfolder` cùng lề thụt lề 38px không cần thiết.
+  + Biến mỗi card truyện thành **Mobile Name Card** tinh gọn, sắc nét: Thumbnail ảnh bìa, Tiêu đề 2 dòng đậm rõ, STT, Checkbox, Trạng thái & Tốc độ tải, cùng thanh tiến trình % bo tròn đáy card. Không bao giờ bị tràn viền hay đè chữ trên màn hình hẹp 180px của Android.
+- **5. Bổ Sung Tùy Chọn Cột Lưới (2, 3, 4 Cột) Trên Windows & Mặc Định Mở App**:
+  + Mở rộng `QueueGridRow.cs` hỗ trợ `Col1, Col2, Col3, Col4`.
+  + Thêm thuộc tính `GridColumnsCount` (mặc định mở app luôn là `2` trên cả Windows, Linux và Android).
+  + Trên Windows/Linux, bổ sung cụm nút chọn `[2] [3] [4]` cột trực quan ngay cạnh nút Toggle Lưới.
+  + Đặt giá trị khởi tạo `_selectedQueueViewMode = "List + thumbnail column";` trên cả 3 hệ điều hành, đảm bảo mở app luôn bật kèm cột ảnh bìa thumbnail.
+- **6. Hoàn Thiện Cửa Sổ Mới Phụ (Detached Queue Window)**:
+  + Tích hợp đầy đủ cả 3 chế độ hiển thị chuẩn: Chế độ 1 cột (kèm thumbnail column khi chọn "List + thumbnail column"), Chế độ Lưới đa cột (hỗ trợ nút Lưới và chọn 2, 3, 4 cột), và Chế độ Thumbnail view (lưới ảnh lớn).
+  + Đổi nút "Xóa đã xong" thành CheckBox "Tự xóa đã xong" (`IsAutoDeleteCompleted`).
+  + Các item truyện trong Detached Queue Window hiển thị chuẩn phong cách card truyện (name card) có thumbnail, tiến trình %, badge, domain, STT, checkbox, nút mở thư mục.
