@@ -1110,3 +1110,23 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Bo góc thẻ truyện `CornerRadius="7"`, tạo khoảng cách 3px giữa các card để nhìn tách bạch, không dính cục.
   + Thanh tiến trình ProgressBar được tinh chỉnh thành dải mỏng 10px bo tròn viền đáy card (`CornerRadius="0,0,6,6"`), số % vàng sáng overlap nổi bật.
   + Floating Quick Control Dock được nâng cấp hiệu ứng mờ ảo Glassmorphism và đổ bóng có chiều sâu.
+
+---
+
+### 66. Tái Thiết Kế Toàn Diện Tab Xử Lý Ảnh (Batch Image Enhancement Studio Layout)
+- **1. Card Đường Dẫn I/O Nguồn & Đích Tinh Gọn (Glassmorphism Dark)**:
+  + Gộp 2 cụm thư mục cồng kềnh trước đây thành Card 2 dòng bo góc `7px` chuẩn Studio.
+  + Dòng 1: `📥 Nguồn:` [TextBox nền tối bo góc 5px cao 28] [📁 Chọn] [📂 Mở].
+  + Dòng 2: `📤 Lưu trữ:` [TextBox bo góc 5px cao 28] [📁 Chọn] [📂 Mở] [☑ Chỉ đè file gốc].
+- **2. Thanh Định Dạng Xuất Ảnh & Accordion Thông Số (Segmented Pill & Progressive Disclosure)**:
+  + 4 định dạng xuất (`Original (Gốc)`, `JPG`, `GIF Tĩnh/Động`, `WebP Tĩnh/Động`) được gom thành cụm Chip thanh lịch.
+  + **Nút Gập / Mở Bảng Thông Số (`ToggleEnhanceFiltersCommand`)**:
+    * Cho phép gập gọn toàn bộ 8 ô thanh trượt chỉ bằng 1 cú nhấp chuột (`IsEnhanceFiltersExpanded`), giải phóng tới 85-90% diện tích màn hình cho không gian đối chiếu Before / After.
+    * Hiển thị tóm tắt thông số live (`EnhanceFilterSummaryText`) ngay trên thanh tiêu đề kể cả khi bảng đã được gập lại.
+- **3. Hàng Nút Hành Động Studio Phân Cấp (Primary / Secondary) & Tiến Trình Slim**:
+  + Nút chính: `▶ BẮT ĐẦU XỬ LÝ ẢNH` (xanh ngọc Emerald cao 30px, bo góc 5px), `⏹ DỪNG` (đỏ tươi).
+  + Nút tiện ích: `👁️ Chọn ảnh mẫu`, `⛶ Toàn màn hình`, `🗖 Cửa sổ riêng` (Desktop), `🧹 Xóa log` đồng bộ chiều cao 30px, bo góc 5px.
+  + Dải tiến trình ProgressBar siêu mỏng 4px kết hợp các Badge Pill trạng thái (Đã xong, Lỗi, %) trực quan.
+- **4. Nâng Cấp Toolbar Preview & Presets**:
+  + Các nút Preset (`Gốc`, `Khử ố`, `Webtoon`, `Đọc đêm`) được bo tròn mềm mại dạng Pill `CornerRadius="10"`.
+  + Cụm lưu Custom Preset 1, 2, 3 và FastStone Info Bar được căn chỉnh tinh gọn, sắc sảo.

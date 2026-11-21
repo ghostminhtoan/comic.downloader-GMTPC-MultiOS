@@ -5968,61 +5968,75 @@
 
                                 <Grid RowDefinitions="Auto, *">
 
-                                    <!-- Panel cấu hình bộ lọc & tác vụ -->
+                                    <!-- Panel cấu hình bộ lọc & tác vụ (Studio Image Enhancement) -->
 
-                                    <Border Grid.Row="0" Background="#161F30" Padding="12,10" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                                    <Border Grid.Row="0" Background="#111827" Padding="10,8" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
 
-                                        <StackPanel Spacing="10">
+                                        <StackPanel Spacing="8">
 
-                                            <!-- Hàng 1: Thư mục nguồn (Bố cục 2 tầng xem Full Path trên Android) -->
+                                            <!-- Khối 1: Card Thư mục Nguồn & Xuất (2 tầng gọn gàng phong cách Studio Dark) -->
 
-                                            <StackPanel Spacing="3">
+                                            <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="7" Padding="8,6">
+
+                                                <StackPanel Spacing="6">
+
+                                                    <!-- Dòng 1: Thư mục nguồn -->
+
+                                                    <Grid ColumnDefinitions="Auto, *, Auto, Auto">
+
+                                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Width="76">
+
+                                                            <TextBlock Text="📥" FontSize="11" VerticalAlignment="Center" />
+
+                                                            <TextBlock Text="Nguồn:" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" />
+
+                                                        </StackPanel>
+
+                                                        <TextBox Grid.Column="1" Text="{Binding EnhanceFolderPath}" PlaceholderText="Chọn thư mục chứa ảnh (quét đệ quy đa tầng)..." Height="28" CornerRadius="5" Background="#070A12" Foreground="#F8FAFC" FontSize="11" VerticalContentAlignment="Center" Padding="8,0" IsReadOnly="True" Margin="0,0,6,0" BorderBrush="#1E293B" BorderThickness="1" />
+
+                                                        <Button Grid.Column="2" Command="{Binding BrowseEnhanceFolderCommand}" Content="📁 Chọn" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Height="28" Padding="10,0" CornerRadius="5" Margin="0,0,4,0" ToolTip.Tip="Chọn thư mục nguồn chứa ảnh" />
+
+                                                        <Button Grid.Column="3" Command="{Binding OpenEnhanceFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Height="28" Padding="8,0" CornerRadius="5" BorderBrush="#334155" BorderThickness="1" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
+
+                                                    </Grid>
+
+
+
+                                                    <!-- Dòng 2: Thư mục lưu & Chế độ đè file gốc -->
+
+                                                    <Grid ColumnDefinitions="Auto, *, Auto, Auto, Auto">
+
+                                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Width="76">
+
+                                                            <TextBlock Text="📤" FontSize="11" VerticalAlignment="Center" />
+
+                                                            <TextBlock Text="Lưu trữ:" Foreground="#10B981" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" />
+
+                                                        </StackPanel>
+
+                                                        <TextBox Grid.Column="1" Text="{Binding EnhanceOutputFolderPath}" IsEnabled="{Binding !EnhanceOverwriteOriginal}" PlaceholderText="Mặc định: thư mục 'enhanced' cùng cấp nguồn..." Height="28" CornerRadius="5" Background="#070A12" Foreground="#F8FAFC" FontSize="11" VerticalContentAlignment="Center" Padding="8,0" Margin="0,0,6,0" BorderBrush="#10B981" BorderThickness="1" />
+
+                                                        <Button Grid.Column="2" Command="{Binding BrowseEnhanceOutputFolderCommand}" Content="📁 Chọn" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Height="28" Padding="10,0" CornerRadius="5" Margin="0,0,4,0" ToolTip.Tip="Chọn thư mục lưu ảnh đã xử lý" />
+
+                                                        <Button Grid.Column="3" Command="{Binding OpenEnhanceOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Height="28" Padding="8,0" CornerRadius="5" BorderBrush="#334155" BorderThickness="1" Margin="0,0,8,0" ToolTip.Tip="Mở thư mục lưu ảnh trên thiết bị" />
+
+                                                        <CheckBox Grid.Column="4" IsChecked="{Binding EnhanceOverwriteOriginal}" Content="Chỉ đè file gốc" Foreground="#F59E0B" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" ToolTip.Tip="Nếu chọn, ảnh sau xử lý sẽ lưu đè trực tiếp lên file gốc thay vì tạo thư mục mới" />
+
+                                                    </Grid>
+
+                                                </StackPanel>
+
+                                            </Border>
+
+
+
+                                            <!-- Khối 2: Định dạng xuất ảnh & Header gập mở Bảng thông số (Segmented Pill & Accordion) -->
+
+                                            <Border Background="#090D16" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="7" Padding="8,5">
 
                                                 <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                                                    <TextBlock Text="📥 Thư mục nguồn chứa ảnh (hỗ trợ quét đệ quy đa tầng):" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
-
-                                                    <Button Command="{Binding BrowseEnhanceFolderCommand}" Content="📁 Chọn Thư Mục" Background="#0284C7" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
-
-                                                    <Button Command="{Binding OpenEnhanceFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục nguồn trên thiết bị" />
-
-                                                </WrapPanel>
-
-                                                <TextBox Text="{Binding EnhanceFolderPath}" PlaceholderText="Chọn thư mục nguồn chứa ảnh..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" FontSize="11" VerticalContentAlignment="Center" Padding="8,0" IsReadOnly="True" />
-
-                                            </StackPanel>
-
-
-
-                                            <!-- Hàng 2: Thư mục lưu ảnh đã xử lý (Bố cục 2 tầng xem Full Path trên Android) -->
-
-                                            <StackPanel Spacing="3">
-
-                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-
-                                                    <TextBlock Text="📤 Thư mục lưu ảnh đã xử lý (Mặc định: thư mục 'enhanced' cùng cấp với nguồn):" Foreground="#10B981" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
-
-                                                    <Button Command="{Binding BrowseEnhanceOutputFolderCommand}" Content="📁 Chọn Thư Mục" Background="#059669" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" Margin="0,0,6,0" />
-
-                                                    <Button Command="{Binding OpenEnhanceOutputFolderCommand}" Content="📂 Mở" Background="#1E293B" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Padding="8,3" CornerRadius="4" ToolTip.Tip="Mở thư mục lưu ảnh đã xử lý trên thiết bị" />
-
-                                                    <CheckBox IsChecked="{Binding EnhanceOverwriteOriginal}" Content="Chỉ đè trực tiếp lên file gốc" Foreground="#F59E0B" FontWeight="SemiBold" FontSize="10" Margin="10,0,0,0" VerticalAlignment="Center" ToolTip.Tip="Nếu chọn, ảnh sau xử lý sẽ lưu đè trực tiếp lên file ảnh gốc thay vì tạo thư mục mới" />
-
-                                                </WrapPanel>
-
-                                                <TextBox Text="{Binding EnhanceOutputFolderPath}" IsEnabled="{Binding !EnhanceOverwriteOriginal}" PlaceholderText="Chọn thư mục lưu ảnh đã xử lý..." Height="30" CornerRadius="4" Background="#0F172A" Foreground="#F8FAFC" BorderBrush="#10B981" BorderThickness="1" FontSize="10" VerticalContentAlignment="Center" Padding="8,2" />
-
-                                            </StackPanel>
-
-
-
-                                            <!-- Hàng 2.5: Định dạng xuất ảnh (Output Format WrapPanel: Original, JPG, GIF Tĩnh/Động, WebP Tĩnh/Động) -->
-
-                                            <Border Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,0,5">
-
-                                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-
-                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,12,2">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,2">
 
                                                         <TextBlock Text="📁" FontSize="11" VerticalAlignment="Center" />
 
@@ -6102,15 +6116,27 @@
 
                                                     </RadioButton>
 
+                                                    <!-- Nút Gập / Mở Bảng Thông Số Kèm Tóm Tắt Live -->
+                                                    <Button Command="{Binding ToggleEnhanceFiltersCommand}" Background="#1E293B" Foreground="#38BDF8" BorderBrush="#334155" BorderThickness="1" CornerRadius="5" Padding="8,2" Height="26" VerticalAlignment="Center" Margin="0,0,0,2">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <TextBlock Text="{Binding EnhanceFiltersToggleText}" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" />
+                                                            <Border Background="#0F172A" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding EnhanceFilterSummaryText}" Foreground="#F59E0B" FontSize="10" VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Button>
+
                                                 </WrapPanel>
 
                                             </Border>
 
 
 
-                                            <!-- Hàng 3: Bộ thông số tinh chỉnh (Chuẩn bố cục XnConvert: Slider ngang mỏng, NumericUpDown 3-digit nhỏ gọn, Nút Reset riêng ↺) -->
-                                            <!-- Căn lề phải Margin="0,0,32,0" cách ly thanh cuộn ScrollBar chống chạm nhầm khi bấm mũi tên tăng giảm -->
-                                            <UniformGrid Columns="{Binding EnhanceDualColumns}" HorizontalAlignment="Stretch" Margin="0,0,48,0">
+                                            <!-- Khối 3: Bảng Bộ Lọc Thông Số (Collapsible - Có thể thu gọn để giải phóng 90% diện tích cho Live Preview) -->
+
+                                            <Border IsVisible="{Binding IsEnhanceFiltersExpanded}" Background="#0B0F19" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="7" Padding="6,4">
+
+                                                <UniformGrid Columns="{Binding EnhanceDualColumns}" HorizontalAlignment="Stretch" Margin="0,0,32,0">
 
                                                 <UniformGrid.Resources>
 
@@ -6548,97 +6574,115 @@
 
                                                 </Border>
 
-                                            </UniformGrid>
+                                                </UniformGrid>
+
+                                            </Border>
 
 
 
-                                            <!-- Hàng 4: Các nút hành động chính -->
+                                            <!-- Khối 4: Hàng Nút Hành Động Phân Cấp & Tiến Trình Slim Studio -->
 
-                                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Grid ColumnDefinitions="Auto, *">
 
-                                                <Button Command="{Binding StartEnhanceCommand}" IsEnabled="{Binding !IsEnhancing}"
+                                                <!-- Cụm Nút Hành Động Studio -->
 
-                                                        Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,6" Height="34" CornerRadius="4" Margin="0,0,8,6">
+                                                <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
 
-                                                    <TextBlock Text="▶ BẮT ĐẦU XỬ LÝ ẢNH" />
+                                                    <Button Command="{Binding StartEnhanceCommand}" IsEnabled="{Binding !IsEnhancing}"
 
-                                                </Button>
+                                                            Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="14,0" Height="30" CornerRadius="5" Margin="0,0,6,4">
 
+                                                        <TextBlock Text="▶ BẮT ĐẦU XỬ LÝ ẢNH" VerticalAlignment="Center" />
 
-
-                                                <Button Command="{Binding StopEnhanceCommand}" IsEnabled="{Binding IsEnhancing}"
-
-                                                        Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,6" Height="34" CornerRadius="4" Margin="0,0,8,6">
-
-                                                    <TextBlock Text="⏹ DỪNG" />
-
-                                                </Button>
+                                                    </Button>
 
 
 
-                                                <Button Command="{Binding PickSampleImageCommand}"
+                                                    <Button Command="{Binding StopEnhanceCommand}" IsEnabled="{Binding IsEnhancing}"
 
-                                                        Background="#4F46E5" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="12,6" Height="34" CornerRadius="4" Margin="0,0,8,6" ToolTip.Tip="Chọn một ảnh cụ thể để xem trước Before / After">
+                                                            Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,0" Height="30" CornerRadius="5" Margin="0,0,6,4">
 
-                                                    <TextBlock Text="👁️ Chọn ảnh mẫu xem trước" />
+                                                        <TextBlock Text="⏹ DỪNG" VerticalAlignment="Center" />
 
-                                                </Button>
-
-
-
-                                                <Button Command="{Binding ToggleFullscreenPreviewCommand}"
-
-                                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="12,6" Height="34" CornerRadius="4" Margin="0,0,8,6" ToolTip.Tip="Mở chế độ đối chiếu toàn màn hình trực tiếp trong ứng dụng">
-
-                                                    <TextBlock Text="⛶ TOÀN MÀN HÌNH ĐỐI CHIẾU" />
-
-                                                </Button>
+                                                    </Button>
 
 
 
-                                                <!-- Nút Mở Cửa Sổ Riêng Tím Nổi Bật -->
+                                                    <Button Command="{Binding PickSampleImageCommand}"
 
-                                                <Button Command="{Binding OpenComparisonWindowCommand}" IsVisible="{Binding IsDesktopLifetime}"
+                                                            Background="#312E81" BorderBrush="#4338CA" BorderThickness="1" Foreground="#C7D2FE" FontWeight="SemiBold" FontSize="11" Padding="10,0" Height="30" CornerRadius="5" Margin="0,0,6,4" ToolTip.Tip="Chọn một ảnh cụ thể để xem trước Before / After">
 
-                                                        Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11" Padding="12,6" Height="34" CornerRadius="4" Margin="0,0,8,6" ToolTip.Tip="Mở cửa sổ đối chiếu độc lập phong cách FastStone trên Desktop (hỗ trợ kéo sang màn hình thứ 2)">
+                                                        <TextBlock Text="👁️ Chọn ảnh mẫu" VerticalAlignment="Center" />
 
-                                                    <TextBlock Text="🗖 MỞ TRONG CỬA SỔ MỚI" />
-
-                                                </Button>
+                                                    </Button>
 
 
 
-                                                <Button Command="{Binding ClearEnhanceLogsCommand}"
+                                                    <Button Command="{Binding ToggleFullscreenPreviewCommand}"
 
-                                                        Background="#1E293B" Foreground="#94A3B8" FontSize="11" Padding="10,6" Height="34" CornerRadius="4" Margin="0,0,0,6">
+                                                            Background="#075985" BorderBrush="#0284C7" BorderThickness="1" Foreground="#BAE6FD" FontWeight="Bold" FontSize="11" Padding="10,0" Height="30" CornerRadius="5" Margin="0,0,6,4" ToolTip.Tip="Mở chế độ đối chiếu toàn màn hình trực tiếp">
 
-                                                    <TextBlock Text="🧹 Xóa log" />
+                                                        <TextBlock Text="⛶ Toàn màn hình" VerticalAlignment="Center" />
 
-                                                </Button>
-
-                                            </WrapPanel>
+                                                    </Button>
 
 
 
-                                            <!-- Thanh tiến trình & Trạng thái -->
+                                                    <Button Command="{Binding OpenComparisonWindowCommand}" IsVisible="{Binding IsDesktopLifetime}"
 
-                                            <StackPanel Spacing="4">
+                                                            Background="#581C87" BorderBrush="#7C3AED" BorderThickness="1" Foreground="#E9D5FF" FontWeight="Bold" FontSize="11" Padding="10,0" Height="30" CornerRadius="5" Margin="0,0,6,4" ToolTip.Tip="Mở cửa sổ đối chiếu độc lập phong cách FastStone trên Desktop">
 
-                                                <ProgressBar Value="{Binding EnhanceProgress}" Maximum="100" Height="6" CornerRadius="3" Foreground="#38BDF8" Background="#0F172A" />
+                                                        <TextBlock Text="🗖 Cửa sổ riêng" VerticalAlignment="Center" />
 
-                                                <WrapPanel Orientation="Horizontal">
+                                                    </Button>
 
-                                                    <TextBlock Text="{Binding EnhanceCurrentFileText}" Foreground="#64748B" FontSize="10" TextTrimming="CharacterEllipsis" MaxWidth="400" Margin="0,0,12,0" />
 
-                                                    <TextBlock Text="{Binding EnhanceProgressText}" Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10" Margin="0,0,10,0" />
 
-                                                    <TextBlock Text="{Binding EnhanceCountText, StringFormat='{}Đã xong: {0}'}" Foreground="#10B981" FontWeight="SemiBold" FontSize="10" Margin="0,0,10,0" />
+                                                    <Button Command="{Binding ClearEnhanceLogsCommand}"
 
-                                                    <TextBlock Text="{Binding EnhanceErrorCountText, StringFormat='{}Lỗi: {0}'}" Foreground="#F43F5E" FontWeight="SemiBold" FontSize="10" />
+                                                            Background="#1E293B" BorderBrush="#334155" BorderThickness="1" Foreground="#94A3B8" FontSize="11" Padding="8,0" Height="30" CornerRadius="5" Margin="0,0,6,4">
+
+                                                        <TextBlock Text="🧹 Xóa log" VerticalAlignment="Center" />
+
+                                                    </Button>
 
                                                 </WrapPanel>
 
-                                            </StackPanel>
+
+
+                                                <!-- Thanh Tiến Trình & Trạng Thái Mỏng Gọn -->
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3" Margin="8,0,0,4">
+
+                                                    <ProgressBar Value="{Binding EnhanceProgress}" Maximum="100" Height="4" CornerRadius="2" Foreground="#38BDF8" Background="#0A0E17" />
+
+                                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+                                                        <TextBlock Text="{Binding EnhanceCurrentFileText}" Foreground="#64748B" FontSize="10" TextTrimming="CharacterEllipsis" MaxWidth="280" Margin="0,0,8,0" VerticalAlignment="Center" />
+
+                                                        <Border Background="#0C4A6E" CornerRadius="3" Padding="5,1" Margin="0,0,6,0" VerticalAlignment="Center">
+
+                                                            <TextBlock Text="{Binding EnhanceProgressText}" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" />
+
+                                                        </Border>
+
+                                                        <Border Background="#064E3B" CornerRadius="3" Padding="5,1" Margin="0,0,6,0" VerticalAlignment="Center">
+
+                                                            <TextBlock Text="{Binding EnhanceCountText, StringFormat='{}Đã xong: {0}'}" Foreground="#34D399" FontWeight="SemiBold" FontSize="10" />
+
+                                                        </Border>
+
+                                                        <Border Background="#4C0519" CornerRadius="3" Padding="5,1" VerticalAlignment="Center">
+
+                                                            <TextBlock Text="{Binding EnhanceErrorCountText, StringFormat='{}Lỗi: {0}'}" Foreground="#FB7185" FontWeight="SemiBold" FontSize="10" />
+
+                                                        </Border>
+
+                                                    </WrapPanel>
+
+                                                </StackPanel>
+
+                                            </Grid>
 
                                         </StackPanel>
 
@@ -6720,15 +6764,15 @@
 
                                                     <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,6">
 
-                                                        <TextBlock Text="⚡ Presets:" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                                        <TextBlock Text="⚡ Presets:" Foreground="#94A3B8" FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,2" />
 
-                                                        <Button Command="{Binding ApplyPresetDefaultCommand}" Content="🔘 Gốc" Background="#1E293B" Foreground="#E2E8F0" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Thông số gốc" Margin="0,0,3,2" />
+                                                        <Button Command="{Binding ApplyPresetDefaultCommand}" Content="🔘 Gốc" Background="#1E293B" Foreground="#E2E8F0" FontSize="9" Padding="8,2" CornerRadius="10" ToolTip.Tip="Thông số gốc" Margin="0,0,3,2" />
 
-                                                        <Button Command="{Binding ApplyPresetOldScanCommand}" Content="📜 Khử ố" Background="#854D0E" Foreground="#FEF08A" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Làm trắng nền giấy scan cũ" Margin="0,0,3,2" />
+                                                        <Button Command="{Binding ApplyPresetOldScanCommand}" Content="📜 Khử ố" Background="#854D0E" Foreground="#FEF08A" FontWeight="Bold" FontSize="9" Padding="8,2" CornerRadius="10" ToolTip.Tip="Làm trắng nền giấy scan cũ" Margin="0,0,3,2" />
 
-                                                        <Button Command="{Binding ApplyPresetWebtoonCommand}" Content="🎨 Webtoon" Background="#831843" Foreground="#FBCFE8" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Rực rỡ màu sắc webtoon" Margin="0,0,3,2" />
+                                                        <Button Command="{Binding ApplyPresetWebtoonCommand}" Content="🎨 Webtoon" Background="#831843" Foreground="#FBCFE8" FontWeight="Bold" FontSize="9" Padding="8,2" CornerRadius="10" ToolTip.Tip="Rực rỡ màu sắc webtoon" Margin="0,0,3,2" />
 
-                                                        <Button Command="{Binding ApplyPresetNightCommand}" Content="🌙 Đọc đêm" Background="#1E1B4B" Foreground="#C7D2FE" FontWeight="Bold" FontSize="9" Padding="6,2" CornerRadius="3" ToolTip.Tip="Hạ sáng dịu mắt" Margin="0,0,4,2" />
+                                                        <Button Command="{Binding ApplyPresetNightCommand}" Content="🌙 Đọc đêm" Background="#1E1B4B" Foreground="#C7D2FE" FontWeight="Bold" FontSize="9" Padding="8,2" CornerRadius="10" ToolTip.Tip="Hạ sáng dịu mắt" Margin="0,0,6,2" />
 
 
 

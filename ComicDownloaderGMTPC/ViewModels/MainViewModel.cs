@@ -1252,6 +1252,22 @@ public partial class MainViewModel : ViewModelBase
     public string EnhanceLogToggleText => IsEnhanceLogExpanded ? "📋 Ẩn Log ▼" : "📋 Xem Log Chi Tiết ▲";
 
     [ObservableProperty]
+    private bool _isEnhanceFiltersExpanded = true;
+
+    public string EnhanceFiltersToggleText => IsEnhanceFiltersExpanded ? "▾ Thu gọn bảng thông số" : "▸ ⚙️ Mở rộng bảng thông số";
+
+    partial void OnIsEnhanceFiltersExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(EnhanceFiltersToggleText));
+    }
+
+    [RelayCommand]
+    private void ToggleEnhanceFilters()
+    {
+        IsEnhanceFiltersExpanded = !IsEnhanceFiltersExpanded;
+    }
+
+    [ObservableProperty]
     private bool _isDownloadSettingsExpanded = false;
 
     public string DownloadSettingsToggleText => IsDownloadSettingsExpanded ? "▾ Thu gọn cài đặt tải" : "▸ ⚙️ Tùy chọn nâng cao (Luồng, Tách chương, Xử lý ảnh...)";
