@@ -1254,32 +1254,23 @@ public partial class App : Application
     {
         try
         {
-            // Bước 0: Hiển thị ngay frame đầu tiên (5%) của Splash Screen lên màn hình
-            splashVm.ReportProgress(5, "Đang khởi động hệ thống...");
-            await Task.Delay(120).ConfigureAwait(false);
+            // Bước 0-1: Bật ngay Splash Screen và khởi tạo song song các service nền (Language, Scraper, Engine)
+            splashVm.ReportProgress(15, "Đang khởi động hệ thống & ngôn ngữ...");
+            await Task.Run(() =>
+            {
+                _ = LanguageService.Instance;
+                _ = ComicScraperService.Instance;
+                _ = DownloadEngineService.Instance;
+            }).ConfigureAwait(false);
 
-            // Bước 1: Nạp cấu hình hệ thống & ngôn ngữ (18%)
-            splashVm.ReportProgress(18, "Đang nạp cấu hình hệ thống & ngôn ngữ...");
-            var lang = LanguageService.Instance;
-            await Task.Delay(60).ConfigureAwait(false);
-
-            // Bước 2: Khởi tạo công cụ cào truyện & bộ giải mã (32%)
-            splashVm.ReportProgress(32, "Khởi tạo công cụ cào truyện & bộ giải mã...");
-            var scraper = ComicScraperService.Instance;
-            await Task.Delay(60).ConfigureAwait(false);
-
-            // Bước 3: Khởi tạo tiến trình tải & bộ nhớ đệm (45%)
-            splashVm.ReportProgress(45, "Khởi tạo tiến trình tải & bộ nhớ đệm...");
-            var engine = DownloadEngineService.Instance;
-            await Task.Delay(60).ConfigureAwait(false);
-
-            // Bước 4-5: Nạp MainViewModel - MainViewModel sẽ tự động phát các mốc thật từ 52% -> 97%!
+            // Bước 2: Nạp SharedMainViewModel (tự động khôi phục hàng chờ và cấu hình)
+            splashVm.ReportProgress(50, "Khởi tạo giao diện và nạp dữ liệu...");
             var vm = SharedMainViewModel;
-            await Task.Delay(80).ConfigureAwait(false);
+            await Task.Yield();
 
-            // Bước 6: Hoàn tất 100% và mở giao diện chính
+            // Bước 3: Sẵn sàng 100% và mở ngay lập tức giao diện chính
             splashVm.ReportProgress(100, "Sẵn sàng! Đang mở ứng dụng...");
-            await Task.Delay(100).ConfigureAwait(false);
+            await Task.Yield();
 
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {

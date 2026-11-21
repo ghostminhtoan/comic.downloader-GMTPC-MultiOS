@@ -1330,9 +1330,13 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(UiZoomScale))]
-    [NotifyPropertyChangedFor(nameof(UiZoomPercentText))]
-    [NotifyPropertyChangedFor(nameof(SelectedZoomPresetString))]
     private int _uiZoomPercent = OperatingSystem.IsAndroid() ? 100 : InstanceConfigService.Instance.DesktopUiZoomPercent;
+
+    [ObservableProperty]
+    private string _uiZoomPercentText = OperatingSystem.IsAndroid() ? "100%" : $"{InstanceConfigService.Instance.DesktopUiZoomPercent}%";
+
+    [ObservableProperty]
+    private string _selectedZoomPresetString = OperatingSystem.IsAndroid() ? "100%" : $"{InstanceConfigService.Instance.DesktopUiZoomPercent}%";
 
     [ObservableProperty]
     private bool _isZoomHudVisible = false;
@@ -1341,7 +1345,6 @@ public partial class MainViewModel : ViewModelBase
     private bool _isAppFullyLoaded = false;
 
     public double UiZoomScale => IsDesktopLifetime ? (UiZoomPercent / 100.0) : 1.0;
-    public string UiZoomPercentText => $"{UiZoomPercent}%";
     public string DisplayScaleLabel => LanguageService.Instance.IsVietnamese ? "TỶ LỆ HIỂN THỊ" : "DISPLAY SCALE";
 
     public IReadOnlyList<string> AvailableZoomPresets { get; } = new string[]
@@ -1349,14 +1352,13 @@ public partial class MainViewModel : ViewModelBase
         "80%", "90%", "100%", "110%", "120%", "130%", "140%", "150%", "160%", "175%"
     };
 
-    public string SelectedZoomPresetString
+    partial void OnSelectedZoomPresetStringChanged(string value)
     {
-        get => $"{UiZoomPercent}%";
-        set
+        if (string.IsNullOrWhiteSpace(value)) return;
+        string raw = value.Replace("%", "").Trim();
+        if (int.TryParse(raw, out int parsed))
         {
-            if (string.IsNullOrWhiteSpace(value)) return;
-            string raw = value.Replace("%", "").Trim();
-            if (int.TryParse(raw, out int parsed))
+            if (UiZoomPercent != parsed)
             {
                 SetZoomPercent(parsed);
             }
@@ -1369,9 +1371,13 @@ public partial class MainViewModel : ViewModelBase
         {
             InstanceConfigService.Instance.DesktopUiZoomPercent = value;
         }
+        string text = $"{value}%";
+        UiZoomPercentText = text;
+        if (SelectedZoomPresetString != text)
+        {
+            SelectedZoomPresetString = text;
+        }
         OnPropertyChanged(nameof(UiZoomScale));
-        OnPropertyChanged(nameof(UiZoomPercentText));
-        OnPropertyChanged(nameof(SelectedZoomPresetString));
         TriggerZoomHud();
     }
 
@@ -2689,6 +2695,17 @@ public partial class MainViewModel : ViewModelBase
                 if (IsBubbleCloseButtonEnabled != enabled)
                 {
                     IsBubbleCloseButtonEnabled = enabled;
+                }
+            });
+        };
+
+        InstanceConfigService.Instance.DesktopUiZoomPercentChanged += pct =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (UiZoomPercent != pct)
+                {
+                    SetZoomPercent(pct);
                 }
             });
         };

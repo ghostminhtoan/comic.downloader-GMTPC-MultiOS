@@ -1279,3 +1279,23 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
     + ContextMenu chuột phải đầy đủ.
   - Đồng bộ giao diện chế độ Thumbnail View trong Detached Window theo chuẩn card ảnh bìa lớn 195x280 của WPF.
 
+
+### 74. Tối Ưu Tốc Độ Khởi Động (Boot Speed) Siêu Tốc Trên Windows, Linux & Android; Khắc Phục Triệt Để Chữ Vàng Sidebar Realtime Zoom; Khắc Phục Lỗi Scan Missing Chapter Đối Chiếu Thực Tế TruyenQQ
+- **1. Tối ưu tốc độ khởi động (Boot Speed) toàn diện**:
+  - Loại bỏ hoàn toàn 480ms trễ nhân tạo từ 6 lần `Task.Delay` giả lập trong `RunStartupFlowAsync` tại `App.axaml.cs`.
+  - Khởi tạo song song bất đồng bộ các Singleton service nền (`LanguageService`, `ComicScraperService`, `DownloadEngineService`) trên ThreadPool bằng `Task.Run`.
+  - Dùng `await Task.Yield();` nhường luồng UI nhẹ nhàng để vẽ Splash Screen mượt mà rồi mở ngay ứng dụng, tăng tốc độ boot vượt trội trên cả Windows, Linux và đặc biệt là Android.
+- **2. Khắc phục triệt để chữ vàng Sidebar cập nhật Realtime theo Zoom**:
+  - Chuyển `UiZoomPercentText` và `SelectedZoomPresetString` thành các `[ObservableProperty]` có backing field rõ ràng trong `MainViewModel.cs`.
+  - Trong `OnUiZoomPercentChanged`, gán trực tiếp `UiZoomPercentText = $"{value}%"` và đồng bộ `SelectedZoomPresetString = $"{value}%"`.
+  - Đăng ký lắng nghe sự kiện `DesktopUiZoomPercentChanged` từ `InstanceConfigService` trên `Dispatcher.UIThread`.
+  - Thêm `Mode=OneWay` cho TextBlock `UiZoomPercentText` và `Mode=TwoWay` cho ComboBox trong `MainView.axaml`, `MainWindow.axaml` và `DetachedQueueWindow.axaml`.
+  - Đảm bảo khi zoom qua bất kỳ phương thức nào (phím tắt Ctrl +/-, Ctrl + Lăn chuột, bấm nút +/-, hoặc chọn ComboBox), chữ vàng Sidebar ở bên trái và HUD Toast ở giữa màn hình luôn nhảy số đồng bộ tức thì trong cùng frame, không bao giờ phải khởi động lại app.
+- **3. Khắc phục triệt để lỗi Scan Missing Chapter (Đối chiếu dữ liệu thực tế TruyenQQ)**:
+  - Viết lại toàn diện `MissingChapterScannerService.cs`:
+    + Ưu tiên hàng đầu sử dụng `ch.ChapterNumber` từ `ChapterItem` thay vì bóc tách regex số đầu tiên từ string Title, triệt tiêu lỗi nhầm lẫn số trong tên truyện (như `Batman Của 2 Thế Giới`, `4-Koma Kỉ Niệm Jump Multi World`).
+    + Tự động nhận diện truyện Oneshot (chỉ có 1 chap duy nhất là Oneshot/One-shot) luôn đạt trạng thái hoàn tất (`Complete` / `Đủ chap`).
+    + Tự động nhận diện `Chương 0` / Prologue đơn lẻ là hợp lệ (`Complete` / `Đủ chap`).
+    + Khắc phục triệt để lỗi thuật toán `int start = min <= 3 ? 1 : min` (từng khiến các truyện chỉ có chap ở phân đoạn cao như 1113 và 1114 bị kết luận sai là "Đủ chap"): Dải quét chuẩn luôn bắt đầu từ 0 (nếu có chap 0) hoặc 1 đến `max`. Bất kỳ chapter số nguyên nào bị thiếu giữa dải (kể cả thiếu từ chap 1 đến min-1) đều được phát hiện chính xác 100%.
+    + Rút gọn danh sách chap thiếu thành định dạng dải thông minh `1-821, 823-828, 831-1112` cực kỳ chuyên nghiệp và gọn gàng, tránh tràn văn bản.
+    + Bổ sung `[NotifyPropertyChangedFor(nameof(LocalizedMissingChapter))]` và `[NotifyPropertyChangedFor(nameof(LocalizedLatestChapter))]` vào `ComicBookItem.cs`, giúp card truyện trong hàng chờ cập nhật trạng thái "thiếu chap" / "đủ chap" ngay tức thì sau khi quét.

@@ -23,7 +23,7 @@ public class MissingChapterScannerService
             Status = "Scanning..."
         };
 
-        if (book.Chapters.Count == 0)
+        if (book.Chapters == null || book.Chapters.Count == 0)
         {
             item.MissingIntegerChapters = "N/A";
             item.DecimalChapters = "N/A";
@@ -31,12 +31,26 @@ public class MissingChapterScannerService
             return item;
         }
 
+        // 1. Kiểm tra truyện Oneshot (Chỉ có 1 chương và là Oneshot hoặc truyện 1 tập)
+        if (book.Chapters.Count == 1)
+        {
+            var firstChap = book.Chapters[0];
+            string t = firstChap.Title?.ToLowerInvariant() ?? string.Empty;
+            if (t.Contains("oneshot") || t.Contains("one-shot") || t.Contains("one shot") || t.Contains("chương 0") || t.Contains("chap 0") || t.Contains("chương 1") || t.Contains("chap 1"))
+            {
+                item.MissingIntegerChapters = "Complete";
+                item.DecimalChapters = "None";
+                item.Status = "Complete";
+                return item;
+            }
+        }
+
         var integerChapters = new HashSet<int>();
         var decimalChapters = new List<double>();
 
         foreach (var ch in book.Chapters)
         {
-            ParseChapterLabel(ch.Title, integerChapters, decimalChapters);
+            ParseChapter(ch, integerChapters, decimalChapters);
         }
 
         var coveredChapters = new HashSet<int>(integerChapters);
@@ -53,12 +67,20 @@ public class MissingChapterScannerService
             return item;
         }
 
-        int min = coveredChapters.Min();
+        // Nếu chỉ có đúng 1 chương 0 duy nhất (truyện mới bắt đầu ra mắt chap 0)
+        if (coveredChapters.Count == 1 && coveredChapters.Contains(0))
+        {
+            item.MissingIntegerChapters = "Complete";
+            item.DecimalChapters = "None";
+            item.Status = "Complete";
+            return item;
+        }
+
         int max = coveredChapters.Max();
+        // Dải chuẩn của truyện: bắt đầu từ 0 nếu có chap 0, ngược lại bắt đầu từ 1
+        int start = coveredChapters.Contains(0) ? 0 : 1;
 
         var missing = new List<int>();
-        // Scan missing from 1 to max (or min to max if min > 1)
-        int start = min <= 3 ? 1 : min;
         for (int i = start; i <= max; i++)
         {
             if (!coveredChapters.Contains(i))
@@ -82,36 +104,56 @@ public class MissingChapterScannerService
         return item;
     }
 
-    private void ParseChapterLabel(string title, HashSet<int> integers, List<double> decimals)
+    private void ParseChapter(ChapterItem ch, HashSet<int> integers, List<double> decimals)
     {
-        // Check range patterns: e.g. "Chapter 58: 59" or "58-59" or "58 - 59"
-        var rangeMatch = Regex.Match(title, @"(?:chap(?:ter)?|chương|tập)?\s*([0-9]+)\s*[:\-–]\s*([0-9]+)", RegexOptions.IgnoreCase);
-        if (rangeMatch.Success &&
-            int.TryParse(rangeMatch.Groups[1].Value, out int rStart) &&
-            int.TryParse(rangeMatch.Groups[2].Value, out int rEnd))
+        // 1. Kiểm tra range pattern trong Title: ví dụ "Chapter 58-59", "Chương 1-2"
+        if (!string.IsNullOrWhiteSpace(ch.Title))
         {
-            if (rStart <= rEnd && (rEnd - rStart) <= 10)
+            var rangeMatch = Regex.Match(ch.Title, @"(?:chap(?:ter)?|chương|tập)?\s*([0-9]+)\s*[:\-–]\s*([0-9]+)", RegexOptions.IgnoreCase);
+            if (rangeMatch.Success &&
+                int.TryParse(rangeMatch.Groups[1].Value, out int rStart) &&
+                int.TryParse(rangeMatch.Groups[2].Value, out int rEnd))
             {
-                for (int i = rStart; i <= rEnd; i++) integers.Add(i);
-                return;
+                if (rStart <= rEnd && (rEnd - rStart) <= 15)
+                {
+                    for (int i = rStart; i <= rEnd; i++) integers.Add(i);
+                    return;
+                }
             }
         }
 
-        // Standard number extraction
-        var matches = Regex.Matches(title, @"([0-9]+(?:\.[0-9]+)?)");
-        foreach (Match m in matches)
+        // 2. ƯU TIÊN SỐ 1: Sử dụng ChapterNumber đã được scraper bóc tách chuẩn xác từ URL & Title
+        // Tránh bị nhầm lẫn số trong tên truyện (như "Batman Của 2 Thế Giới" hoặc "4-Koma")
+        if (ch.ChapterNumber > 0 || (ch.ChapterNumber == 0 && (ch.Title?.Contains("0") == true || ch.Url?.Contains("-0") == true)))
         {
-            if (double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+            double val = ch.ChapterNumber;
+            if (Math.Abs(val % 1) < 0.001)
             {
-                if (Math.Abs(val % 1) < 0.001)
-                {
-                    integers.Add((int)val);
-                }
-                else
-                {
-                    decimals.Add(val);
-                }
-                break; // Take the first meaningful chapter number
+                integers.Add((int)Math.Round(val));
+            }
+            else
+            {
+                decimals.Add(val);
+            }
+            return;
+        }
+
+        // 3. Fallback: Phân tích số từ Title (ưu tiên từ khóa chương / chap trước số đầu tiên)
+        if (!string.IsNullOrWhiteSpace(ch.Title))
+        {
+            var chapMatch = Regex.Match(ch.Title, @"(?:chap(?:ter)?|chương|tập|c\.)\s*([0-9]+(?:\.[0-9]+)?)", RegexOptions.IgnoreCase);
+            if (chapMatch.Success && double.TryParse(chapMatch.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double cVal))
+            {
+                if (Math.Abs(cVal % 1) < 0.001) integers.Add((int)Math.Round(cVal));
+                else decimals.Add(cVal);
+                return;
+            }
+
+            var numMatch = Regex.Match(ch.Title, @"([0-9]+(?:\.[0-9]+)?)");
+            if (numMatch.Success && double.TryParse(numMatch.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double nVal))
+            {
+                if (Math.Abs(nVal % 1) < 0.001) integers.Add((int)Math.Round(nVal));
+                else decimals.Add(nVal);
             }
         }
     }
@@ -119,10 +161,30 @@ public class MissingChapterScannerService
     private string FormatMissingRange(List<int> numbers)
     {
         if (numbers.Count == 0) return "Complete";
-        if (numbers.Count > 15)
+
+        var ranges = new List<string>();
+        int start = numbers[0];
+        int prev = start;
+
+        for (int i = 1; i < numbers.Count; i++)
         {
-            return $"{string.Join(", ", numbers.Take(12))} ... (+{numbers.Count - 12} more)";
+            if (numbers[i] == prev + 1)
+            {
+                prev = numbers[i];
+            }
+            else
+            {
+                ranges.Add(start == prev ? $"{start}" : $"{start}-{prev}");
+                start = numbers[i];
+                prev = start;
+            }
         }
-        return string.Join(", ", numbers);
+        ranges.Add(start == prev ? $"{start}" : $"{start}-{prev}");
+
+        if (ranges.Count > 10)
+        {
+            return $"{string.Join(", ", ranges.Take(8))} ... (+{ranges.Count - 8} dải)";
+        }
+        return string.Join(", ", ranges);
     }
 }

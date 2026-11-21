@@ -553,6 +553,7 @@ public partial class ComicBookItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(MissingChapterDisplay))]
     [NotifyPropertyChangedFor(nameof(HasMissingChapterIssue))]
     [NotifyPropertyChangedFor(nameof(MissingChapterBrush))]
+    [NotifyPropertyChangedFor(nameof(LocalizedMissingChapter))]
     private string _missingChapters = string.Empty;
 
     public bool HasMissingChapterIssue =>
@@ -569,6 +570,7 @@ public partial class ComicBookItem : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LatestChapterDisplay))]
+    [NotifyPropertyChangedFor(nameof(LocalizedLatestChapter))]
     private string _latestChapter = string.Empty;
 
     public string LatestChapterDisplay
