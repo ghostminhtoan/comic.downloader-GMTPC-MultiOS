@@ -5133,6 +5133,7 @@ public partial class MainViewModel : ViewModelBase
 
         string[] updateUrls;
         string platformName;
+        string[]? runtimeUrls = null;
 
         if (OperatingSystem.IsAndroid())
         {
@@ -5147,8 +5148,12 @@ public partial class MainViewModel : ViewModelBase
             platformName = "Linux Portable .tar.gz (Beta)";
             updateUrls = new[]
             {
-                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC.tar.gz",
-                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC-linux-x64.tar.gz"
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC-linux-x64.tar.gz",
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC.tar.gz"
+            };
+            runtimeUrls = new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/runtime-net10-linux-x64.tar.gz"
             };
         }
         else
@@ -5158,6 +5163,10 @@ public partial class MainViewModel : ViewModelBase
             {
                 "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/ComicDownloaderGMTPC.Desktop.exe"
             };
+            runtimeUrls = new[]
+            {
+                "https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/runtime-net10-win-x64.zip"
+            };
         }
 
         IsUpdating = true;
@@ -5165,7 +5174,7 @@ public partial class MainViewModel : ViewModelBase
 
         try
         {
-            AddLog("INFO", $"🧪 Bắt đầu tự động tải bản cập nhật BETA cho {platformName}...");
+            AddLog("INFO", $"🧪 Bắt đầu tự động tải bản cập nhật BETA cho {platformName} (bao gồm cả bộ Runtime .portable\\bin\\net avalonia)...");
 
             bool success = await AppUpdateService.Instance.DownloadAndInstallUpdateAsync(
                 updateUrls,
@@ -5177,14 +5186,15 @@ public partial class MainViewModel : ViewModelBase
                         UpdateBetaButtonLabel = $"⏳ {percent:F0}%";
                     });
                 },
-                channel: "beta");
+                channel: "beta",
+                runtimeCandidateUrls: runtimeUrls);
 
             if (!success)
             {
                 AddLog("WARN", "[Cập nhật Beta] Không thể tải bản cập nhật Beta. Vui lòng kiểm tra lại kết nối mạng và thử lại sau.");
                 UpdateBetaButtonLabel = GetDefaultUpdateBetaButtonLabel();
             }
-            else if (OperatingSystem.IsWindows())
+            else if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux())
             {
                 UpdateBetaButtonLabel = "🔄 Đang khởi động lại...";
             }

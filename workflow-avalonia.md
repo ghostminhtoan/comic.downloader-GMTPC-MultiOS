@@ -1355,3 +1355,26 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   - Tại `OnThumbnailItemPointerReleased`: Chỉ khi người dùng thực hiện Single Tap thực sự (`!_thumbTouchMoved && dist <= 12px` không cuộn), Popup Preview mới được kích hoạt, mang lại trải nghiệm vuốt cuộn mượt mà 100% giống hệt chế độ List và List + Thumbnail column.
 
 
+### 78. Hoàn Thiện Tự Động Tải & Giải Nén Runtime .NET Avalonia 10 Vào `.portable\bin\net avalonia\` Khi Cập Nhật Beta Trên Windows & Linux
+- **1. Cơ chế Tải trọn gói 2 giai đoạn (Launcher & Runtime)**:
+  - Tách bạch và chuẩn hóa `DownloadSinglePackageAsync`: Hỗ trợ tải tuần tự với tỷ lệ phân bổ tiến trình mượt mà (Launcher 15%, Runtime 85%).
+  - Tích hợp công nghệ tải đa luồng 16 Connections IDM-style cho các gói tệp lớn > 5MB, giúp tải trọn bộ runtime ~60-70MB trong vài giây với tốc độ tối đa đường truyền.
+  - URL Runtime chính thức cho kênh Beta:
+    + Windows: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/runtime-net10-win-x64.zip`
+    + Linux: `https://github.com/ghostminhtoan/comic.downloader-GMTPC-MultiOS/releases/download/beta/runtime-net10-linux-x64.tar.gz`
+- **2. Bộ nạp & Ghi đè Runtime tự động khi khởi động lại trên Windows (`ApplyWindowsUpdateAndRestart`)**:
+  - Sinh script batch tự động `%TEMP%\gmtpc_updater_*.cmd`:
+    + Chờ tiến trình chính (PID) thoát hoàn toàn để giải phóng handle các tệp DLL runtime đang nạp in-process.
+    + Tự động giải nén `runtime-net10-win-x64.zip` đè trực tiếp vào thư mục `.portable\bin\net avalonia\` bằng `tar.exe -xf` (chuẩn Windows 10/11) hoặc PowerShell `Expand-Archive -Force`.
+    + Ghi đè launcher `ComicDownloaderGMTPC.Desktop.exe` mới ra thư mục gốc.
+    + Tự động khởi động lại ứng dụng và dọn dẹp các tệp updater tạm thời.
+- **3. Trình cập nhật và khởi động lại tự động trên Linux (`ApplyLinuxUpdateAndRestart`)**:
+  - Sinh script bash tự động `/tmp/gmtpc_updater_*.sh`:
+    + Chờ PID cũ thoát, giải nén `runtime-net10-linux-x64.tar.gz` vào `.portable/bin/net avalonia/`, phân quyền thực thi `chmod +x .host` và `net avalonia runtimes.dll`.
+    + Giải nén hoặc ghi đè launcher `ComicDownloaderGMTPC` ra thư mục gốc với `chmod +x`.
+    + Khởi động lại ứng dụng chạy ngầm qua `nohup` và dọn dẹp script.
+- **4. Đồng bộ ViewModel & Giao diện**:
+  - Khai báo tường minh URL runtime và nhãn nút `UpdateBetaButtonLabel = "🔄 Đang khởi động lại..."` trên cả Windows và Linux.
+
+
+
