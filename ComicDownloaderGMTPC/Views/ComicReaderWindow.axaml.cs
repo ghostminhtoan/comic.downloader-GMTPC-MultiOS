@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using ComicDownloaderGMTPC.Services;
 using ComicDownloaderGMTPC.ViewModels;
 
 namespace ComicDownloaderGMTPC.Views;
@@ -73,10 +74,9 @@ public partial class ComicReaderWindow : Window
 
         if (DataContext is ComicReaderViewModel vm)
         {
-            if (!vm.IsExternalLaunch)
-            {
-                vm.SaveCurrentReadingSession();
-            }
+            vm.SaveCurrentReadingSession();
+            ReadProgressStore.Instance.FlushImmediately();
+            ReadProgressStore.Instance.SaveHistoryToDisk();
             vm.Cleanup();
         }
         base.OnClosed(e);

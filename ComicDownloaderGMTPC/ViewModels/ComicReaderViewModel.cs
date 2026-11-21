@@ -124,12 +124,7 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public static bool IsVolumeKeyTurnEnabled { get; set; } = true;
 
-    /// <summary>
-    /// Đánh dấu phiên đọc được mở trực tiếp từ bên ngoài hệ điều hành (File Explorer, Context Menu, Command line args).
-    /// Khi cờ này được bật, tuyệt đối không lưu tệp vào Lịch Sử Đọc (History / history.md) của Reader để tránh làm rác danh sách lịch sử.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isExternalLaunch;
+
 
 
 
@@ -5951,8 +5946,6 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     {
 
-        if (IsExternalLaunch) return;
-
         if (CurrentChapter == null) return;
 
         SaveChapterReadingSession(CurrentChapter);
@@ -5970,8 +5963,6 @@ public partial class ComicReaderViewModel : ViewModelBase
     public void SaveChapterReadingSession(LibraryChapterItem chapter)
 
     {
-
-        if (IsExternalLaunch) return;
 
         if (chapter == null) return;
 

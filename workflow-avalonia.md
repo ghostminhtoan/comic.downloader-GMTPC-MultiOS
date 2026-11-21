@@ -1377,22 +1377,23 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   - Khai báo tường minh URL runtime và nhãn nút `UpdateBetaButtonLabel = "🔄 Đang khởi động lại..."` trên cả Windows và Linux.
 
 
-### 79. Ngăn Chặn Lưu Vào History Của Reader Khi Mở Ảnh, File Zip, PDF, CBZ Từ Bên Ngoài Hệ Điều Hành (Standalone External Launch)
+### 80. Khắc Phục Triệt Để Lưu Lịch Sử Đọc (history.md & resume.md) Khi Đọc Truyện Lúc Chưa Mở App (Standalone Reader Mode)
 - **1. Nguyên nhân & Vấn đề**:
-  - Khi người dùng mở nhanh một tệp ảnh (`.jpg`, `.png`, `.webp`, `.bmp`), tệp nén (`.zip`, `.rar`, `.cbz`, `.cbr`) hoặc tài liệu (`.pdf`, `.mobi`) từ File Explorer / liên kết tệp của Windows/Linux:
-  - Trước đây, `App.axaml.cs` và `ComicReaderWindow.axaml.cs` tự động gọi `ReadProgressStore.Instance.RegisterReadComic(...)`, `SaveHistoryToDisk()` và `SaveCurrentReadingSession()`, khiến các tệp đơn lẻ mở xem lướt ở bên ngoài bị lưu thẳng vào Lịch Sử Đọc (`history.md` và tab History trong Thư viện / Reader), gây rác danh sách lịch sử đọc truyện của người dùng.
+  - Khi người dùng mở truyện trực tiếp từ File Explorer / liên kết tệp của Windows/Linux/Android (double click tệp ảnh, zip, pdf, cbz, cbr...) lúc ứng dụng chưa mở trước đó:
+  - Ứng dụng khởi động ở chế độ Trình đọc truyện độc lập siêu nhẹ (Standalone Reader Mode).
+  - Trước đây, do tồn tại cờ `IsExternalLaunch` và thiếu đồng bộ ghi đĩa ngay khi mở/đóng Reader Window, các lần đọc truyện mở từ bên ngoài không được lưu vào Lịch sử Đọc (`history.md` và `resume.md`), khiến người dùng vào Thư viện không thấy xuất hiện trong danh sách History.
 - **2. Cơ chế khắc phục triệt để**:
-  - Thêm thuộc tính `IsExternalLaunch` vào `ComicReaderViewModel.cs` để nhận diện các phiên đọc được khởi động từ bên ngoài hệ điều hành (`desktop.Args`).
-  - Trong `App.axaml.cs`:
-    + Xóa bỏ hoàn toàn việc gọi `RegisterReadComic` và `SaveHistoryToDisk()` trước khi nạp cửa sổ đọc độc lập.
-    + Khởi tạo `ComicReaderViewModel` với `IsExternalLaunch = true`.
-    + Khi cửa sổ `ComicReaderWindow` đóng, nếu `IsExternalLaunch == true` thì chỉ gọi `Cleanup()`, tuyệt đối không ghi nhận session hay lưu history ra đĩa.
-  - Trong `ComicReaderViewModel.cs`:
-    + Đặt chốt chặn bảo vệ tại `SaveCurrentReadingSession()` và `SaveChapterReadingSession()`: `if (IsExternalLaunch) return;`.
-    + Ngăn chặn hoàn toàn việc gọi `_progressStore.RecordSessionResume(...)` và `RegisterReadComic(...)` đối với các tệp mở từ bên ngoài.
-  - Trong `ComicReaderWindow.axaml.cs`:
-    + Đặt chốt chặn trong `OnClosed`: `if (!vm.IsExternalLaunch) vm.SaveCurrentReadingSession();`.
-  - Kết quả: Khi đọc truyện bên trong App (qua Thư viện, Hàng chờ), lịch sử đọc vẫn được lưu chính xác 100%. Khi mở xem lướt bất kỳ ảnh, file zip, pdf, cbz... từ bên ngoài hệ điều hành, History của Reader hoàn toàn sạch sẽ, không bị lưu tệp rác.
+  - Gỡ bỏ hoàn toàn cờ `IsExternalLaunch` và các chốt chặn `if (IsExternalLaunch) return;` trong `ComicReaderViewModel.cs` (`SaveCurrentReadingSession`, `SaveChapterReadingSession`) và `ComicReaderWindow.axaml.cs`.
+  - Trong `App.axaml.cs` (Nhánh Standalone Reader Mode `desktop.Args`):
+    + Ngay khi nạp xong `quickComic`, gọi ngay `ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);`.
+    + Đăng ký tiếp tệp cụ thể nếu khác RootFolderPath: `ReadProgressStore.Instance.RegisterReadComic(cleanPath, touchTimestamp: true);`.
+    + Đăng ký ánh xạ cục bộ: `RegisterLocalComicPath(quickComic.Title, quickComic.RootFolderPath);`.
+    + Ghi ngay xuống đĩa đồng bộ: `ReadProgressStore.Instance.FlushImmediately();` và `ReadProgressStore.Instance.SaveHistoryToDisk();`.
+    + Khi cửa sổ `readerWin.Closed` và `ComicReaderWindow.OnClosed`: Thực hiện lưu phiên đọc `vm.SaveCurrentReadingSession()`, ghi đĩa `FlushImmediately()`, `SaveHistoryToDisk()` trước khi giải phóng bộ nhớ `vm.Cleanup()`.
+  - Trên Android (`ComicReaderActivity.cs`):
+    + Khi mở từ Intent bên ngoài, đồng bộ ghi nhận `RegisterReadComic`, `RegisterLocalComicPath`, `FlushImmediately` và `SaveHistoryToDisk()` lập tức.
+  - Củng cố `ReadProgressStore.SaveHistoryToDisk()`: Tự động đảm bảo thư mục lưu trữ luôn tồn tại trước khi ghi tệp tạm `.tmp` và đổi tên, triệt tiêu nguy cơ lỗi I/O.
+  - Kết quả: Khi mở đọc bất kỳ tệp truyện nào từ bên ngoài lúc chưa mở app, bộ truyện và tệp mở đều được ghi nhận chuẩn xác 100% vào Lịch sử Đọc (History) và Tiến trình đọc dở (Resume) trên toàn bộ các nền tảng (Windows, Linux, Android).
 
 
 

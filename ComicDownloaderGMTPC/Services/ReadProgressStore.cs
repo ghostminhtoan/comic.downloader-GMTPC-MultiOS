@@ -2209,6 +2209,11 @@ public sealed class ReadProgressStore
         try
         {
             string filePath = GetHistoryFilePath();
+            string? dir = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
             string tmpPath = filePath + ".tmp";
             string mdContent = BuildHistoryMarkdownContent();
             File.WriteAllText(tmpPath, mdContent, Encoding.UTF8);

@@ -396,6 +396,18 @@ public class ComicReaderActivity : AvaloniaActivity
                 if (comic != null && comic.Chapters.Count > 0)
                 {
                     ReadProgressStore.Instance.RegisterReadComic(comic.RootFolderPath, touchTimestamp: true);
+                    if (!string.Equals(resolvedFilePath, comic.RootFolderPath, StringComparison.OrdinalIgnoreCase) && (File.Exists(resolvedFilePath) || Directory.Exists(resolvedFilePath)))
+                    {
+                        ReadProgressStore.Instance.RegisterReadComic(resolvedFilePath, touchTimestamp: true);
+                    }
+                    ReadProgressStore.Instance.RegisterLocalComicPath(comic.Title, comic.RootFolderPath);
+                    if (!string.IsNullOrWhiteSpace(resolvedFilePath) && File.Exists(resolvedFilePath))
+                    {
+                        ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileNameWithoutExtension(resolvedFilePath), resolvedFilePath);
+                    }
+                    ReadProgressStore.Instance.FlushImmediately();
+                    ReadProgressStore.Instance.SaveHistoryToDisk();
+
                     var targetChap = comic.GetBestResumeChapter() ?? comic.Chapters[0];
 
                     await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
