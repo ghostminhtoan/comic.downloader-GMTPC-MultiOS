@@ -843,9 +843,391 @@
 
         <Panel>
 
-            <!-- KHUNG CUỘN CHÍNH HỖ TRỢ ĐA NỀN TẢNG (DESKTOP & MOBILE/ANDROID) -->
+            <Grid ColumnDefinitions="Auto, *">
 
-            <ScrollViewer x:Name="MainRootScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" BringIntoViewOnFocusChange="False">
+                <!-- 0. DESKTOP SIDEBAR DOCK: THANH ĐIỀU HƯỚNG DỌC DÀNH CHO WINDOWS & LINUX -->
+
+                <Border Grid.Column="0" IsVisible="{Binding IsDesktopSidebarVisible}"
+
+                        Width="215" Background="#0A0E17" BorderBrush="#1E293B" BorderThickness="0,0,1,0">
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+
+                        <StackPanel Spacing="5" Margin="8,10">
+
+                            <!-- Header của Sidebar Desktop -->
+
+                            <Grid ColumnDefinitions="*, Auto" Margin="2,0,2,6">
+
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+
+                                    <Border Background="#4F46E5" CornerRadius="4" Width="18" Height="18">
+
+                                        <TextBlock Text="⚡" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                    </Border>
+
+                                    <TextBlock Text="MENU GMTPC" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                                <Button Grid.Column="1" Command="{Binding CloseSidebarCommand}"
+
+                                        Background="#1E293B" BorderThickness="0" CornerRadius="4" Padding="5,1"
+
+                                        Foreground="#94A3B8" ToolTip.Tip="Thu gọn Sidebar (Ctrl+B)">
+
+                                    <TextBlock Text="✕" FontSize="10" FontWeight="Bold" />
+
+                                </Button>
+
+                            </Grid>
+
+
+
+                            <Separator Background="#1E293B" Margin="0,0,0,2" />
+
+
+
+                            <!-- PHẦN 1: ĐIỀU HƯỚNG TAB CHÍNH -->
+
+                            <TextBlock Text="🧭 ĐIỀU HƯỚNG CHÍNH" Foreground="#64748B" FontSize="9" FontWeight="Bold" Margin="4,0,0,1" />
+
+
+
+                            <!-- Tab 0: Tải về -->
+
+                            <Button Command="{Binding NavigateToTabCommand}" CommandParameter="0"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,5" Margin="0,0,0,2"
+
+                                    ToolTip.Tip="Chuyển đến Tab Tải Về (Ctrl+Shift+D)">
+
+                                <Grid ColumnDefinitions="Auto, *, Auto">
+
+                                    <TextBlock Grid.Column="0" Text="📥" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+
+                                    <TextBlock Grid.Column="1" Text="Tải Về" FontWeight="SemiBold" Foreground="#F8FAFC" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <Border Grid.Column="2" Background="#0F172A" CornerRadius="3" Padding="4,1">
+
+                                        <TextBlock Text="Ctrl+Shift+D" Foreground="#38BDF8" FontSize="8" FontFamily="Consolas, Monospace" />
+
+                                    </Border>
+
+                                </Grid>
+
+                            </Button>
+
+
+
+                            <!-- Tab 1: Nguồn -->
+
+                            <Button Command="{Binding NavigateToTabCommand}" CommandParameter="1"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,5" Margin="0,0,0,2"
+
+                                    ToolTip.Tip="Chuyển đến Tab Nguồn Truyện (Ctrl+Shift+S)">
+
+                                <Grid ColumnDefinitions="Auto, *, Auto">
+
+                                    <TextBlock Grid.Column="0" Text="🌐" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+
+                                    <TextBlock Grid.Column="1" Text="Nguồn Manga" FontWeight="SemiBold" Foreground="#F8FAFC" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <Border Grid.Column="2" Background="#0F172A" CornerRadius="3" Padding="4,1">
+
+                                        <TextBlock Text="Ctrl+Shift+S" Foreground="#38BDF8" FontSize="8" FontFamily="Consolas, Monospace" />
+
+                                    </Border>
+
+                                </Grid>
+
+                            </Button>
+
+
+
+                            <!-- Tab 2: Công cụ -->
+
+                            <Button Command="{Binding NavigateToTabCommand}" CommandParameter="2"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,5" Margin="0,0,0,2"
+
+                                    ToolTip.Tip="Chuyển đến Tab Công Cụ (Ctrl+Shift+T)">
+
+                                <Grid ColumnDefinitions="Auto, *, Auto">
+
+                                    <TextBlock Grid.Column="0" Text="🛠️" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+
+                                    <TextBlock Grid.Column="1" Text="Công Cụ" FontWeight="SemiBold" Foreground="#F8FAFC" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <Border Grid.Column="2" Background="#0F172A" CornerRadius="3" Padding="4,1">
+
+                                        <TextBlock Text="Ctrl+Shift+T" Foreground="#38BDF8" FontSize="8" FontFamily="Consolas, Monospace" />
+
+                                    </Border>
+
+                                </Grid>
+
+                            </Button>
+
+
+
+                            <!-- Tab 3: Thư viện -->
+
+                            <Button Command="{Binding NavigateToTabCommand}" CommandParameter="3"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,5" Margin="0,0,0,2"
+
+                                    ToolTip.Tip="Chuyển đến Tab Thư Viện / Đọc Truyện (Ctrl+Shift+W)">
+
+                                <Grid ColumnDefinitions="Auto, *, Auto">
+
+                                    <TextBlock Grid.Column="0" Text="📚" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+
+                                    <TextBlock Grid.Column="1" Text="Thư Viện" FontWeight="SemiBold" Foreground="#F8FAFC" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <Border Grid.Column="2" Background="#0F172A" CornerRadius="3" Padding="4,1">
+
+                                        <TextBlock Text="Ctrl+Shift+W" Foreground="#38BDF8" FontSize="8" FontFamily="Consolas, Monospace" />
+
+                                    </Border>
+
+                                </Grid>
+
+                            </Button>
+
+
+
+                            <!-- Tab 4: Tìm truyện -->
+
+                            <Button Command="{Binding NavigateToTabCommand}" CommandParameter="4"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,5" Margin="0,0,0,4"
+
+                                    ToolTip.Tip="Chuyển đến Tab Tìm Truyện Hàng Loạt (Ctrl+Shift+F)">
+
+                                <Grid ColumnDefinitions="Auto, *, Auto">
+
+                                    <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+
+                                    <TextBlock Grid.Column="1" Text="Tìm Truyện" FontWeight="SemiBold" Foreground="#F8FAFC" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <Border Grid.Column="2" Background="#0F172A" CornerRadius="3" Padding="4,1">
+
+                                        <TextBlock Text="Ctrl+Shift+F" Foreground="#38BDF8" FontSize="8" FontFamily="Consolas, Monospace" />
+
+                                    </Border>
+
+                                </Grid>
+
+                            </Button>
+
+
+
+                            <Separator Background="#1E293B" Margin="0,0,0,2" />
+
+
+
+                            <!-- PHẦN 2: TIỆN ÍCH DỮ LIỆU & HÀNG CHỜ -->
+
+                            <TextBlock Text="⚡ TIỆN ÍCH NHANH" Foreground="#64748B" FontSize="9" FontWeight="Bold" Margin="4,0,0,1" />
+
+
+
+                            <Button Command="{Binding OpenGoogleDriveModalCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,4" Margin="0,0,0,2"
+
+                                    ToolTip.Tip="Đồng bộ Cloud đa thiết bị qua Google Drive">
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                    <TextBlock Text="☁️" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Google Drive Cloud" FontSize="10" Foreground="#C7D2FE" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Button Command="{Binding BackupQueueCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,4" Margin="0,0,0,2"
+
+                                    ToolTip.Tip="Sao lưu toàn bộ danh sách hàng chờ ra file save gallery.md">
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                    <TextBlock Text="💾" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Sao lưu hàng chờ (.MD)" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Button Command="{Binding RestoreQueueCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,4" Margin="0,0,0,2"
+
+                                    ToolTip.Tip="Phục hồi danh sách hàng chờ từ file sao lưu">
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                    <TextBlock Text="📂" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Phục hồi hàng chờ (.MD)" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Button Command="{Binding OpenDownloadRootCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,4" Margin="0,0,0,2"
+
+                                    ToolTip.Tip="Mở thư mục lưu truyện trên máy tính">
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                    <TextBlock Text="📁" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Mở thư mục tải" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Button Command="{Binding ToggleFloatingBubbleCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,4" Margin="0,0,0,3"
+
+                                    ToolTip.Tip="Bật / Tắt Bong bóng nổi GMTPC">
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                    <TextBlock Text="🫧" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Bong bóng nổi GMTPC" FontSize="10" Foreground="#38BDF8" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Separator Background="#1E293B" Margin="0,0,0,2" />
+
+
+
+                            <!-- PHẦN 3: CÀI ĐẶT & THOÁT -->
+
+                            <TextBlock Text="⚙️ THIẾT LẬP" Foreground="#64748B" FontSize="9" FontWeight="Bold" Margin="4,0,0,1" />
+
+
+
+                            <Button Command="{Binding ToggleLanguageCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,4" Margin="0,0,0,2"
+
+                                    ToolTip.Tip="Chuyển đổi giao diện Tiếng Việt / Tiếng Anh">
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                    <TextBlock Text="🌐" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="{Binding CurrentLanguage, StringFormat='{}Ngôn ngữ: {0}'}" FontSize="10" Foreground="#38BDF8" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Button Command="{Binding OpenExitConfirmCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#3B0764" BorderBrush="#7E22CE" BorderThickness="1"
+
+                                    CornerRadius="5" Padding="7,4" Margin="0,0,0,2"
+
+                                    ToolTip.Tip="Đóng hoặc tắt ứng dụng">
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+
+                                    <TextBlock Text="⛔" FontSize="10.5" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Thoát hoàn toàn" FontSize="10" Foreground="#FBCFE8" FontWeight="Bold" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+                        </StackPanel>
+
+                    </ScrollViewer>
+
+                </Border>
+
+
+
+                <!-- KHUNG CUỘN CHÍNH HỖ TRỢ ĐA NỀN TẢNG (DESKTOP & MOBILE/ANDROID) -->
+
+                <ScrollViewer Grid.Column="1" x:Name="MainRootScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" BringIntoViewOnFocusChange="False">
 
             <Grid RowDefinitions="Auto, Auto, *, Auto" MinHeight="650">
 
@@ -892,6 +1274,28 @@
                             <ComboBox ItemsSource="{Binding ModeSelections}" SelectedItem="{Binding ModeSelection, Mode=TwoWay}" Width="110" Height="26" FontSize="11" VerticalContentAlignment="Center" />
 
                         </StackPanel>
+
+
+
+                        <!-- Nút Bật / Tắt Sidebar Điều Hướng Nhanh (Windows, Linux, Android) -->
+
+                        <Button Command="{Binding ToggleSidebarCommand}"
+
+                                Background="{Binding SidebarButtonBackground}" BorderBrush="#334155" BorderThickness="1"
+
+                                CornerRadius="5" Padding="8,2" Height="26" Margin="0,0,5,3"
+
+                                ToolTip.Tip="Bật / Ẩn Sidebar điều hướng nhanh (Windows, Linux &amp; Android Drawer)">
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+
+                                <TextBlock Text="📑" FontSize="11" VerticalAlignment="Center" />
+
+                                <TextBlock Text="{Binding SidebarToggleLabel}" FontWeight="Bold" Foreground="#F8FAFC" FontSize="10.5" VerticalAlignment="Center" />
+
+                            </StackPanel>
+
+                        </Button>
 
 
 
@@ -9673,6 +10077,348 @@
         </Grid>
 
     </ScrollViewer>
+
+            </Grid>
+
+
+
+            <!-- 0.5. OVERLAY NAVIGATION DRAWER CHO ANDROID / MOBILE (NGĂN KÉO PHỦ ĐÈ TRƯỢT TỪ MÉP TRÁI) -->
+
+            <Panel IsVisible="{Binding IsMobileSidebarVisible}" ZIndex="2800">
+
+                <!-- Nền đen mờ 70% bắt sự kiện PointerPressed để đóng ngăn kéo -->
+
+                <Border Background="#B3000000" PointerPressed="OnSidebarOverlayBackgroundPressed" />
+
+
+
+                <!-- Khung Sidebar trượt từ mép trái bo góc tròn sang trọng -->
+
+                <Border HorizontalAlignment="Left" Width="260"
+
+                        Background="#0D1525" BorderBrush="#1E293B" BorderThickness="0,0,1,0"
+
+                        CornerRadius="0,14,14,0" ClipToBounds="True">
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+
+                        <StackPanel Spacing="6" Margin="12,14">
+
+                            <!-- Header của Sidebar Mobile Drawer -->
+
+                            <Grid ColumnDefinitions="*, Auto" Margin="2,0,2,8">
+
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+
+                                    <Border Background="#4F46E5" CornerRadius="4" Width="22" Height="22">
+
+                                        <TextBlock Text="⚡" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                    </Border>
+
+                                    <TextBlock Text="MENU GMTPC" FontWeight="Bold" Foreground="#38BDF8" FontSize="12.5" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                                <Button Grid.Column="1" Command="{Binding CloseSidebarCommand}"
+
+                                        Background="#1E293B" BorderThickness="0" CornerRadius="4" Padding="8,3"
+
+                                        Foreground="#94A3B8" ToolTip.Tip="Đóng ngăn kéo menu">
+
+                                    <TextBlock Text="✕" FontSize="12" FontWeight="Bold" />
+
+                                </Button>
+
+                            </Grid>
+
+
+
+                            <Separator Background="#1E293B" Margin="0,0,0,4" />
+
+
+
+                            <!-- PHẦN 1: ĐIỀU HƯỚNG TAB CHÍNH -->
+
+                            <TextBlock Text="🧭 ĐIỀU HƯỚNG CHÍNH" Foreground="#64748B" FontSize="10" FontWeight="Bold" Margin="4,0,0,2" />
+
+
+
+                            <!-- Tab 0: Tải về -->
+
+                            <Button Command="{Binding NavigateToTabCommand}" CommandParameter="0"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,8" Margin="0,0,0,3">
+
+                                <Grid ColumnDefinitions="Auto, *">
+
+                                    <TextBlock Grid.Column="0" Text="📥" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                                    <TextBlock Grid.Column="1" Text="Tải Về" FontWeight="Bold" Foreground="#F8FAFC" FontSize="12" VerticalAlignment="Center" />
+
+                                </Grid>
+
+                            </Button>
+
+
+
+                            <!-- Tab 1: Nguồn -->
+
+                            <Button Command="{Binding NavigateToTabCommand}" CommandParameter="1"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,8" Margin="0,0,0,3">
+
+                                <Grid ColumnDefinitions="Auto, *">
+
+                                    <TextBlock Grid.Column="0" Text="🌐" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                                    <TextBlock Grid.Column="1" Text="Nguồn Manga" FontWeight="Bold" Foreground="#F8FAFC" FontSize="12" VerticalAlignment="Center" />
+
+                                </Grid>
+
+                            </Button>
+
+
+
+                            <!-- Tab 2: Công cụ -->
+
+                            <Button Command="{Binding NavigateToTabCommand}" CommandParameter="2"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,8" Margin="0,0,0,3">
+
+                                <Grid ColumnDefinitions="Auto, *">
+
+                                    <TextBlock Grid.Column="0" Text="🛠️" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                                    <TextBlock Grid.Column="1" Text="Công Cụ" FontWeight="Bold" Foreground="#F8FAFC" FontSize="12" VerticalAlignment="Center" />
+
+                                </Grid>
+
+                            </Button>
+
+
+
+                            <!-- Tab 3: Thư viện -->
+
+                            <Button Command="{Binding NavigateToTabCommand}" CommandParameter="3"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,8" Margin="0,0,0,3">
+
+                                <Grid ColumnDefinitions="Auto, *">
+
+                                    <TextBlock Grid.Column="0" Text="📚" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                                    <TextBlock Grid.Column="1" Text="Thư Viện" FontWeight="Bold" Foreground="#F8FAFC" FontSize="12" VerticalAlignment="Center" />
+
+                                </Grid>
+
+                            </Button>
+
+
+
+                            <!-- Tab 4: Tìm truyện -->
+
+                            <Button Command="{Binding NavigateToTabCommand}" CommandParameter="4"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+
+                                <Grid ColumnDefinitions="Auto, *">
+
+                                    <TextBlock Grid.Column="0" Text="🔍" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                                    <TextBlock Grid.Column="1" Text="Tìm Truyện" FontWeight="Bold" Foreground="#F8FAFC" FontSize="12" VerticalAlignment="Center" />
+
+                                </Grid>
+
+                            </Button>
+
+
+
+                            <Separator Background="#1E293B" Margin="0,0,0,4" />
+
+
+
+                            <!-- PHẦN 2: TIỆN ÍCH DỮ LIỆU & HÀNG CHỜ -->
+
+                            <TextBlock Text="⚡ TIỆN ÍCH DỮ LIỆU" Foreground="#64748B" FontSize="10" FontWeight="Bold" Margin="4,0,0,2" />
+
+
+
+                            <Button Command="{Binding OpenGoogleDriveModalCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,7" Margin="0,0,0,3">
+
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+
+                                    <TextBlock Text="☁️" FontSize="13" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Google Drive Cloud" FontSize="11" Foreground="#C7D2FE" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Button Command="{Binding BackupQueueCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,7" Margin="0,0,0,3">
+
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+
+                                    <TextBlock Text="💾" FontSize="13" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Sao lưu hàng chờ (.MD)" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Button Command="{Binding RestoreQueueCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,7" Margin="0,0,0,3">
+
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+
+                                    <TextBlock Text="📂" FontSize="13" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Phục hồi hàng chờ (.MD)" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Button Command="{Binding OpenDownloadRootCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,7" Margin="0,0,0,3">
+
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+
+                                    <TextBlock Text="📁" FontSize="13" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Mở thư mục tải" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Button Command="{Binding ToggleFloatingBubbleCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,7" Margin="0,0,0,6">
+
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+
+                                    <TextBlock Text="🫧" FontSize="13" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Bong bóng nổi GMTPC" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Separator Background="#1E293B" Margin="0,0,0,4" />
+
+
+
+                            <!-- PHẦN 3: CÀI ĐẶT & THOÁT -->
+
+                            <TextBlock Text="⚙️ THIẾT LẬP" Foreground="#64748B" FontSize="10" FontWeight="Bold" Margin="4,0,0,2" />
+
+
+
+                            <Button Command="{Binding ToggleLanguageCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#161F30" BorderBrush="#1E293B" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,7" Margin="0,0,0,3">
+
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+
+                                    <TextBlock Text="🌐" FontSize="13" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="{Binding CurrentLanguage, StringFormat='{}Ngôn ngữ: {0}'}" FontSize="11" Foreground="#38BDF8" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+
+
+                            <Button Command="{Binding OpenExitConfirmCommand}"
+
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+
+                                    Background="#3B0764" BorderBrush="#7E22CE" BorderThickness="1"
+
+                                    CornerRadius="6" Padding="10,7" Margin="0,0,0,3">
+
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+
+                                    <TextBlock Text="⛔" FontSize="13" VerticalAlignment="Center" />
+
+                                    <TextBlock Text="Thoát hoàn toàn" FontSize="11" Foreground="#FBCFE8" FontWeight="Bold" VerticalAlignment="Center" />
+
+                                </StackPanel>
+
+                            </Button>
+
+                        </StackPanel>
+
+                    </ScrollViewer>
+
+                </Border>
+
+            </Panel>
 
 
 

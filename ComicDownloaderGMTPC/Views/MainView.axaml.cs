@@ -245,6 +245,63 @@ public partial class MainView : UserControl
                     return;
                 }
 
+                // Phím Escape hoặc Back trên Android: Đóng Sidebar Drawer nếu đang mở
+                if ((e.Key == Key.Escape || e.Key == Key.Back) && vm.IsSidebarVisible && !vm.IsDesktopLifetime)
+                {
+                    vm.IsSidebarVisible = false;
+                    e.Handled = true;
+                    return;
+                }
+
+                // Phím tắt điều hướng nhanh Sidebar (Desktop hotkeys):
+                // Ctrl + B: Bật / Ẩn Sidebar
+                if (e.Key == Key.B && (e.KeyModifiers & KeyModifiers.Control) != 0 && !isTyping)
+                {
+                    vm.ToggleSidebarCommand.Execute(null);
+                    e.Handled = true;
+                    return;
+                }
+
+                // Ctrl + Shift + D: Chuyển Tab Tải về (Download)
+                if (e.Key == Key.D && (e.KeyModifiers & KeyModifiers.Control) != 0 && (e.KeyModifiers & KeyModifiers.Shift) != 0 && !isTyping)
+                {
+                    vm.NavigateToTabCommand.Execute(0);
+                    e.Handled = true;
+                    return;
+                }
+
+                // Ctrl + Shift + S: Chuyển Tab Nguồn (Source)
+                if (e.Key == Key.S && (e.KeyModifiers & KeyModifiers.Control) != 0 && (e.KeyModifiers & KeyModifiers.Shift) != 0 && !isTyping)
+                {
+                    vm.NavigateToTabCommand.Execute(1);
+                    e.Handled = true;
+                    return;
+                }
+
+                // Ctrl + Shift + T: Chuyển Tab Công cụ (Tools)
+                if (e.Key == Key.T && (e.KeyModifiers & KeyModifiers.Control) != 0 && (e.KeyModifiers & KeyModifiers.Shift) != 0 && !isTyping)
+                {
+                    vm.NavigateToTabCommand.Execute(2);
+                    e.Handled = true;
+                    return;
+                }
+
+                // Ctrl + Shift + W: Chuyển Tab Thư viện (Watch/Library)
+                if (e.Key == Key.W && (e.KeyModifiers & KeyModifiers.Control) != 0 && (e.KeyModifiers & KeyModifiers.Shift) != 0 && !isTyping)
+                {
+                    vm.NavigateToTabCommand.Execute(3);
+                    e.Handled = true;
+                    return;
+                }
+
+                // Ctrl + Shift + F: Chuyển Tab Tìm truyện (Search)
+                if (e.Key == Key.F && (e.KeyModifiers & KeyModifiers.Control) != 0 && (e.KeyModifiers & KeyModifiers.Shift) != 0 && !isTyping)
+                {
+                    vm.NavigateToTabCommand.Execute(4);
+                    e.Handled = true;
+                    return;
+                }
+
 
 
                 // Phím tắt cho Dual Picture Sort
@@ -5101,6 +5158,14 @@ public partial class MainView : UserControl
 
         }
 
+    }
+
+    private void OnSidebarOverlayBackgroundPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+        {
+            vm.IsSidebarVisible = false;
+        }
     }
 
 }

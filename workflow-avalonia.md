@@ -1130,3 +1130,18 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
 - **4. Nâng Cấp Toolbar Preview & Presets**:
   + Các nút Preset (`Gốc`, `Khử ố`, `Webtoon`, `Đọc đêm`) được bo tròn mềm mại dạng Pill `CornerRadius="10"`.
   + Cụm lưu Custom Preset 1, 2, 3 và FastStone Info Bar được căn chỉnh tinh gọn, sắc sảo.
+
+---
+
+### 67. Tích Hợp Sidebar Đa Nền Tảng Thích Ứng (Desktop Side-by-Side Dock & Android Overlay Navigation Drawer)
+- **1. Triết Lý Thích Ứng Đa Nền Tảng (Cross-Platform Responsive Adaptive)**:
+  + **Windows & Linux (Desktop)**: Kích hoạt Sidebar dạng Side-by-side Dock (`IsDesktopSidebarVisible`), hiển thị cố định ở cột trái (Grid.Column="0", rộng 215px), nội dung bên phải tự co dãn để tận dụng tối đa màn hình ngang rộng. Khi tắt, nhường trọn vẹn 100% diện tích cho bảng danh sách truyện.
+  + **Android (Mobile / Tablet)**: Kích hoạt Sidebar dạng Overlay Navigation Drawer (`IsMobileSidebarVisible`, ZIndex="2800"), phủ đè lên trên nội dung hiện tại với nền đen mờ 70% (`#B3000000`). Chạm vào nền mờ hoặc chọn tab bất kỳ sẽ tự động đóng Drawer lại mượt mà, triệt tiêu hoàn toàn nguy cơ chèn ép vỡ giao diện trên màn hình dọc của điện thoại.
+- **2. Nút Bật / Tắt Sidebar Trực Quan Trên Header (`ToggleSidebarCommand`)**:
+  + Tích hợp nút toggle `[SIDEBAR OFF]` / `[SIDEBAR ON]` ngay cạnh Kiểu lưu/Ngôn ngữ trên thanh Navigation Header với hiệu ứng chuyển đổi trạng thái màu xanh ngọc `#059669` khi ON và `#1E293B` khi OFF.
+- **3. Cấu Trúc Menu Điều Hướng Đầy Đủ**:
+  + **Nhóm 1 (Điều Hướng Chính)**: 5 Tab cấp cao nhất (`Tải Về` - Ctrl+Shift+D, `Nguồn Manga` - Ctrl+Shift+S, `Công Cụ` - Ctrl+Shift+T, `Thư Viện` - Ctrl+Shift+W, `Tìm Truyện` - Ctrl+Shift+F).
+  + **Nhóm 2 (Tiện Ích Nhanh)**: Google Drive Cloud, Sao lưu / Phục hồi Hàng chờ (.MD), Mở thư mục tải, Bật / Tắt Bong bóng nổi GMTPC.
+  + **Nhóm 3 (Thiết Lập & Hệ Thống)**: Đổi ngôn ngữ (ENG/VI), Thoát hoàn toàn.
+- **4. Tích Hợp Hệ Thống Phím Tắt Toàn Cục (Hotkeys)**:
+  + Lắng nghe `KeyDownEvent` toàn hệ thống: `Ctrl + B` (Bật / Ẩn Sidebar), `Ctrl + Shift + D` (Tab Tải về), `Ctrl + Shift + S` (Tab Nguồn), `Ctrl + Shift + T` (Tab Công cụ), `Ctrl + Shift + W` (Tab Thư viện), `Ctrl + Shift + F` (Tab Tìm truyện), phím `Escape` hoặc `Back` (trên Android) tự động đóng ngăn kéo Drawer nếu đang mở.

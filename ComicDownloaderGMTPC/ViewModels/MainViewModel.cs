@@ -76,6 +76,12 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private int _selectedRootTabIndex = 0;
 
+    public bool IsDownloadTabActive => SelectedRootTabIndex == 0;
+    public bool IsSourceTabActive => SelectedRootTabIndex == 1;
+    public bool IsToolsTabActive => SelectedRootTabIndex == 2;
+    public bool IsLibraryTabActive => SelectedRootTabIndex == 3;
+    public bool IsSearchTabActive => SelectedRootTabIndex == 4;
+
     [ObservableProperty]
     private int _selectedToolsTabIndex = 0;
 
@@ -88,6 +94,11 @@ public partial class MainViewModel : ViewModelBase
             _ = LibraryVm.ScanLibraryAsync();
         }
         OnPropertyChanged(nameof(IsDualSortBatchToolbarRealVisible));
+        OnPropertyChanged(nameof(IsDownloadTabActive));
+        OnPropertyChanged(nameof(IsSourceTabActive));
+        OnPropertyChanged(nameof(IsToolsTabActive));
+        OnPropertyChanged(nameof(IsLibraryTabActive));
+        OnPropertyChanged(nameof(IsSearchTabActive));
     }
 
     partial void OnSelectedToolsTabIndexChanged(int value)
@@ -1281,6 +1292,54 @@ public partial class MainViewModel : ViewModelBase
     private void ToggleDownloadSettings()
     {
         IsDownloadSettingsExpanded = !IsDownloadSettingsExpanded;
+    }
+
+    [ObservableProperty]
+    private bool _isSidebarVisible = false;
+
+    public string SidebarToggleLabel => IsSidebarVisible ? "SIDEBAR [ON]" : "SIDEBAR [OFF]";
+    public string SidebarButtonBackground => IsSidebarVisible ? "#059669" : "#1E293B";
+
+    public bool IsDesktopSidebarVisible => IsSidebarVisible && IsDesktopLifetime;
+    public bool IsMobileSidebarVisible => IsSidebarVisible && !IsDesktopLifetime;
+
+    partial void OnIsSidebarVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SidebarToggleLabel));
+        OnPropertyChanged(nameof(SidebarButtonBackground));
+        OnPropertyChanged(nameof(IsDesktopSidebarVisible));
+        OnPropertyChanged(nameof(IsMobileSidebarVisible));
+    }
+
+    [RelayCommand]
+    private void ToggleSidebar()
+    {
+        IsSidebarVisible = !IsSidebarVisible;
+    }
+
+    [RelayCommand]
+    private void CloseSidebar()
+    {
+        IsSidebarVisible = false;
+    }
+
+    [RelayCommand]
+    private void ToggleFloatingBubble()
+    {
+        IsBubbleMode = !IsBubbleMode;
+    }
+
+    [RelayCommand]
+    private void NavigateToTab(object? parameter)
+    {
+        if (parameter != null && int.TryParse(parameter.ToString(), out int tabIndex))
+        {
+            SelectedRootTabIndex = tabIndex;
+            if (!IsDesktopLifetime)
+            {
+                IsSidebarVisible = false;
+            }
+        }
     }
 
     [ObservableProperty]
