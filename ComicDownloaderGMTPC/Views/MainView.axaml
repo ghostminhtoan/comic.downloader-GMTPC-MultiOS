@@ -2422,16 +2422,16 @@
                                             <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,6,2"
                                                         IsVisible="{Binding IsQueueGridMode}">
                                                 <Button Command="{Binding SetGridColumnsCommand}" CommandParameter="2" Content="2"
-                                                        Background="#1E293B" BorderBrush="#334155" BorderThickness="1" Foreground="#38BDF8"
-                                                        FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3"
+                                                        Background="{Binding GridCol2Background}" BorderBrush="{Binding GridCol2Border}" BorderThickness="1"
+                                                        Foreground="{Binding GridCol2Foreground}" FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3"
                                                         ToolTip.Tip="Lưới 2 cột (Mặc định)" />
                                                 <Button Command="{Binding SetGridColumnsCommand}" CommandParameter="3" Content="3"
-                                                        Background="#1E293B" BorderBrush="#334155" BorderThickness="1" Foreground="#38BDF8"
-                                                        FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3"
+                                                        Background="{Binding GridCol3Background}" BorderBrush="{Binding GridCol3Border}" BorderThickness="1"
+                                                        Foreground="{Binding GridCol3Foreground}" FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3"
                                                         ToolTip.Tip="Lưới 3 cột" />
                                                 <Button Command="{Binding SetGridColumnsCommand}" CommandParameter="4" Content="4"
-                                                        Background="#1E293B" BorderBrush="#334155" BorderThickness="1" Foreground="#38BDF8"
-                                                        FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3"
+                                                        Background="{Binding GridCol4Background}" BorderBrush="{Binding GridCol4Border}" BorderThickness="1"
+                                                        Foreground="{Binding GridCol4Foreground}" FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3"
                                                         ToolTip.Tip="Lưới 4 cột" />
                                             </StackPanel>
 
@@ -2506,11 +2506,11 @@
                                         </StackPanel>
                                     </Border>
 
-                                    <!-- 1. DANH SÁCH 1 CỘT (LIST VIEW & LIST + THUMBNAIL) - VIRTUALIZING ẢO HÓA 60FPS -->
-                                    <ItemsControl x:Name="QueueItemsControl" Grid.Row="1" ItemsSource="{Binding ActiveQueueItemsSource}" MinHeight="260" Padding="0,0,0,70" IsVisible="{Binding IsMainQueueSingleColumnVisible}">
+                                    <!-- 1. DANH SÁCH 1 CỘT (LIST VIEW & LIST + THUMBNAIL) - 60FPS KHÔNG BỊ KHUẤT DƯỚI KHI ZOOM -->
+                                    <ItemsControl x:Name="QueueItemsControl" Grid.Row="1" ItemsSource="{Binding ActiveQueueItemsSource}" MinHeight="260" Padding="0,0,0,12" IsVisible="{Binding IsMainQueueSingleColumnVisible}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <VirtualizingStackPanel />
+                                                <StackPanel />
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.Template>
@@ -2527,11 +2527,11 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
 
-                                    <!-- 2. DANH SÁCH LƯỚI ĐA CỘT (3 CỘT PC / 2 CỘT ANDROID) - VIRTUALIZING ẢO HÓA 60FPS TRIỆT TIÊU LAG -->
-                                    <ItemsControl x:Name="GridQueueItemsControl" Grid.Row="1" ItemsSource="{Binding GridQueueRows}" MinHeight="260" Padding="4,4,4,70" IsVisible="{Binding IsMainQueueGridColumnVisible}">
+                                    <!-- 2. DANH SÁCH LƯỚI ĐA CỘT (2, 3, 4 CỘT) - LIỀN MẠCH KHÔNG BỊ TRỐNG ĐÁY KHI ZOOM -->
+                                    <ItemsControl x:Name="GridQueueItemsControl" Grid.Row="1" ItemsSource="{Binding GridQueueRows}" MinHeight="260" Padding="4,4,4,12" IsVisible="{Binding IsMainQueueGridColumnVisible}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <VirtualizingStackPanel />
+                                                <StackPanel />
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.Template>
@@ -2555,7 +2555,7 @@
 
                                     <!-- LƯỚI THẺ ẢNH THUMBNAIL (THUMBNAIL VIEW MODE - CHUẨN GIAO DIỆN WPF) -->
 
-                                    <ScrollViewer x:Name="ThumbnailScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="8,8,8,70" IsVisible="{Binding IsMainQueueThumbnailVisible}" BringIntoViewOnFocusChange="False">
+                                    <ScrollViewer x:Name="ThumbnailScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="8,8,8,12" IsVisible="{Binding IsMainQueueThumbnailVisible}" BringIntoViewOnFocusChange="False">
 
                                         <ItemsControl x:Name="ThumbnailItemsControl" ItemsSource="{Binding ActiveThumbnailItemsSource}">
 

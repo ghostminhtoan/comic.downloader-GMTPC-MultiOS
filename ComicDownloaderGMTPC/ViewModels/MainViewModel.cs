@@ -1852,15 +1852,54 @@ public partial class MainViewModel : ViewModelBase
 
     public IReadOnlyList<int> AvailableGridColumns { get; } = new int[] { 2, 3, 4 };
 
+    public bool IsGrid2ColsActive => GridColumnsCount == 2;
+    public bool IsGrid3ColsActive => GridColumnsCount == 3;
+    public bool IsGrid4ColsActive => GridColumnsCount == 4;
+
+    public Avalonia.Media.IBrush GridCol2Background => GridColumnsCount == 2 ? Avalonia.Media.Brush.Parse("#0D9488") : Avalonia.Media.Brush.Parse("#1E293B");
+    public Avalonia.Media.IBrush GridCol3Background => GridColumnsCount == 3 ? Avalonia.Media.Brush.Parse("#0D9488") : Avalonia.Media.Brush.Parse("#1E293B");
+    public Avalonia.Media.IBrush GridCol4Background => GridColumnsCount == 4 ? Avalonia.Media.Brush.Parse("#0D9488") : Avalonia.Media.Brush.Parse("#1E293B");
+
+    public Avalonia.Media.IBrush GridCol2Foreground => GridColumnsCount == 2 ? Avalonia.Media.Brush.Parse("#FFFFFF") : Avalonia.Media.Brush.Parse("#94A3B8");
+    public Avalonia.Media.IBrush GridCol3Foreground => GridColumnsCount == 3 ? Avalonia.Media.Brush.Parse("#FFFFFF") : Avalonia.Media.Brush.Parse("#94A3B8");
+    public Avalonia.Media.IBrush GridCol4Foreground => GridColumnsCount == 4 ? Avalonia.Media.Brush.Parse("#FFFFFF") : Avalonia.Media.Brush.Parse("#94A3B8");
+
+    public Avalonia.Media.IBrush GridCol2Border => GridColumnsCount == 2 ? Avalonia.Media.Brush.Parse("#14B8A6") : Avalonia.Media.Brush.Parse("#334155");
+    public Avalonia.Media.IBrush GridCol3Border => GridColumnsCount == 3 ? Avalonia.Media.Brush.Parse("#14B8A6") : Avalonia.Media.Brush.Parse("#334155");
+    public Avalonia.Media.IBrush GridCol4Border => GridColumnsCount == 4 ? Avalonia.Media.Brush.Parse("#14B8A6") : Avalonia.Media.Brush.Parse("#334155");
+
     partial void OnGridColumnsCountChanged(int value)
     {
+        OnPropertyChanged(nameof(IsGrid2ColsActive));
+        OnPropertyChanged(nameof(IsGrid3ColsActive));
+        OnPropertyChanged(nameof(IsGrid4ColsActive));
+        OnPropertyChanged(nameof(GridCol2Background));
+        OnPropertyChanged(nameof(GridCol3Background));
+        OnPropertyChanged(nameof(GridCol4Background));
+        OnPropertyChanged(nameof(GridCol2Foreground));
+        OnPropertyChanged(nameof(GridCol3Foreground));
+        OnPropertyChanged(nameof(GridCol4Foreground));
+        OnPropertyChanged(nameof(GridCol2Border));
+        OnPropertyChanged(nameof(GridCol3Border));
+        OnPropertyChanged(nameof(GridCol4Border));
         RebuildGridQueueRows();
     }
 
     [RelayCommand]
-    public void SetGridColumns(int cols)
+    public void SetGridColumns(object? param)
     {
+        int cols = 2;
+        if (param is int i) cols = i;
+        else if (param != null && int.TryParse(param.ToString(), out int parsed)) cols = parsed;
         GridColumnsCount = Math.Clamp(cols, 2, 4);
+        if (!IsQueueGridMode)
+        {
+            IsQueueGridMode = true;
+        }
+        else
+        {
+            RebuildGridQueueRows();
+        }
     }
 
     [RelayCommand]

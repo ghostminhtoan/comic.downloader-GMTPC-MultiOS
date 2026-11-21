@@ -1257,3 +1257,25 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Tích hợp đầy đủ cả 3 chế độ hiển thị chuẩn: Chế độ 1 cột (kèm thumbnail column khi chọn "List + thumbnail column"), Chế độ Lưới đa cột (hỗ trợ nút Lưới và chọn 2, 3, 4 cột), và Chế độ Thumbnail view (lưới ảnh lớn).
   + Đổi nút "Xóa đã xong" thành CheckBox "Tự xóa đã xong" (`IsAutoDeleteCompleted`).
   + Các item truyện trong Detached Queue Window hiển thị chuẩn phong cách card truyện (name card) có thumbnail, tiến trình %, badge, domain, STT, checkbox, nút mở thư mục.
+
+### 73. Khắc Phục Triệt Để Lỗi Khuất Đáy Khi Zoom To, Sửa Hoạt Động Lưới 2/3/4 Cột & Hoàn Thiện 100% Mobile Name Card Trong Cửa Sổ Mở Rộng (Detached Window)
+- **1. Khắc phục lỗi khuất một mảng đáy khi zoom to (ScaleTransform Viewport Bug)**:
+  - Thay thế `VirtualizingStackPanel` bằng `StackPanel` trong `ItemsControl.ItemsPanel` của `QueueItemsControl` và `GridQueueItemsControl`.
+  - Giảm `Padding` đáy từ `70` xuống `12` px trong `MainView.axaml` và `DetachedQueueWindow.axaml`.
+  - Triệt tiêu hoàn toàn hiện tượng tính toán sai viewport ảo hóa của Avalonia dưới `LayoutTransformControl`, đảm bảo danh sách truyện luôn hiển thị liền mạch, đầy đủ tất cả các row từ đầu đến cuối danh sách giống ảnh zoom 90%.
+- **2. Kích hoạt và sửa lỗi các nút tùy chọn Lưới 2, 3, 4 cột trong MainWindow và Cửa sổ mới**:
+  - Sửa hàm `SetGridColumns(object? param)` trong `MainViewModel.cs` để parse an toàn từ string hoặc int, tự động kích hoạt chế độ Lưới nếu đang tắt.
+  - Bổ sung các thuộc tính Observable phản ánh trạng thái highlight `GridCol2Background`, `GridCol2Border`, `GridCol2Foreground`... cho cả 3 nút `[2] [3] [4]`.
+  - Đồng bộ cụm nút chọn 2, 3, 4 cột trên cả `MainView.axaml` và `DetachedQueueWindow.axaml`.
+- **3. Hoàn thiện 100% Mobile Name Card trong Cửa sổ mở rộng (Detached Queue Window)**:
+  - Tạo `DetachedComicQueueCardTemplate` trong `DetachedQueueWindow.axaml` đồng bộ 100% đầy đủ mọi thành phần như `MainWindow`:
+    + Cột Thumbnail ảnh bìa (đồng bộ theo `QueueRowThumbnailWidth/Height` và `IsThumbnailColumnVisible`).
+    + Checkbox, STT `#X`, Tiêu đề truyện wrap 2 dòng với `TitleBrush`.
+    + Đầy đủ 6 nút thao tác nhanh: `[🔍 Tìm truyện]`, `[📂 Mở thư mục]`, `[📖 Đọc truyện]`, `[▲ Lên]`, `[▼ Xuống]`, `[✕ Xóa]`.
+    + Các badge: `TRÙNG`, `TRÙNG ẢNH`, `📁 THƯ MỤC GỐC`, `↳ NHÁNH`.
+    + Sub-info: Domain, Subfolder `[default]`, Số chap, Latest Chapter, Missing Chapter, Trạng thái, Tiến trình chi tiết.
+    + Nhập liệu `Chọn chap` và `Subfolder [🔓] [✓ ÁP]` (tự động ẩn khi bật chế độ Lưới).
+    + Thanh ProgressBar dày viền bo góc đáy card với số % vàng `#FDE047` nổi bật ở chính giữa.
+    + ContextMenu chuột phải đầy đủ.
+  - Đồng bộ giao diện chế độ Thumbnail View trong Detached Window theo chuẩn card ảnh bìa lớn 195x280 của WPF.
+
