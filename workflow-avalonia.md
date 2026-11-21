@@ -1323,3 +1323,18 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
     + Đầy đủ các nút Dán Link, Tự dán, Part, Tải/Dừng, Tạm dừng/Tiếp tục, Top, Bot, Sidebar.
     + Hỗ trợ kéo thả (drag) di chuyển vị trí tự do, chạm nhẹ vào Grip Bar để thu nhỏ/mở rộng cụm nút.
     + Đăng ký sự kiện `ScrollToTopRequested` và `ScrollToBottomRequested` cuộn đồng bộ mượt mà cả 3 chế độ (Single Column, Grid, Thumbnail).
+
+
+### 76. Khắc Phục Triệt Để Hiện Tượng Lag Giật Khi Bật Lưới (Grid Mode) Trong Khi Download
+- **1. Nguyên nhân gốc rễ**:
+  - Trong `UpdateStats()` của `MainViewModel.cs`, mỗi khi có sự kiện cập nhật tiến độ tải (`OnProgressUpdated`) được gửi về từ `DownloadEngineService`, hàm `RecalculateDuplicates()` bị gọi liên tục (hàng chục đến hàng trăm lần mỗi phút).
+  - `RecalculateDuplicates()` kích hoạt `RequestQueueFilter(0)` -> `ExecuteQueueFilterBackground()`. Khi lọc xong, callback trên UI thread gọi `RebuildGridQueueRows()`.
+  - `RebuildGridQueueRows()` trước đây luôn khởi tạo mới đối tượng `ObservableCollection<QueueGridRow>` (`GridQueueRows = new ObservableCollection<QueueGridRow>(rows)`), làm toàn bộ visual tree của hàng nghìn visual element trên Avalonia bị phá hủy và khởi tạo lại liên tục, gây tắc nghẽn UI Thread, drop FPS về 0 và giật lag nghiêm trọng khi download.
+- **2. Giải pháp xử lý triệt để**:
+  - **Tách biệt Thống kê và Quét trùng lặp**:
+    + Nâng cấp `UpdateStats(bool recalculateDuplicates = false)`: Mặc định `recalculateDuplicates = false` để trong suốt chu trình download (khi tiến độ % và tốc độ cập nhật liên tục), `UpdateStats()` chỉ tính toán đếm số lượng, tuyệt đối không kích hoạt quét trùng lặp hay lọc lại hàng đợi.
+    + Chỉ truyền `recalculateDuplicates = true` tại các thời điểm cấu trúc danh sách truyện thực sự thay đổi (Thêm truyện từ nguồn, Dán link, Xóa truyện, Xóa hoàn tất, Tự xóa, Phục hồi sao lưu Markdown).
+  - **In-place Row Reuse & Observable QueueGridRow**:
+    + Nâng cấp `QueueGridRow` kế thừa `ObservableObject` từ `CommunityToolkit.Mvvm.ComponentModel`, hỗ trợ các `[ObservableProperty]` cho `_col1, _col2, _col3, _col4, _columnsCount` và phương thức `Update(...)`.
+    + Viết lại `RebuildGridQueueRows()`: Trước khi thay đổi, đối chiếu dữ liệu hiện tại với `GridQueueRows`. Nếu cấu trúc và các cell không đổi -> thoát ngay lập tức (0 allocations, 0 UI mutations). Nếu có biến động, tái sử dụng in-place các hàng `QueueGridRow` hiện có thay vì tạo mới `ObservableCollection`, giữ nguyên 100% visual tree của Avalonia ListBox/ItemsControl, duy trì tốc độ 60fps mượt mà tuyệt đối khi tải hàng loạt.
+

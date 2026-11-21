@@ -1937,24 +1937,71 @@ public partial class MainViewModel : ViewModelBase
 
         if (source.Count == 0)
         {
-            GridQueueRows = new ObservableCollection<QueueGridRow>();
+            if (GridQueueRows.Count > 0)
+            {
+                GridQueueRows.Clear();
+            }
             return;
         }
 
         int maxCols = MaxGridColumnsAllowed;
         int cols = Math.Clamp(GridColumnsCount, 2, maxCols);
-        var rows = new List<QueueGridRow>((source.Count + cols - 1) / cols);
+        int expectedRowCount = (source.Count + cols - 1) / cols;
 
-        for (int i = 0; i < source.Count; i += cols)
+        // Kiểm tra xem cấu trúc và các item có thay đổi không (tránh re-render khi không có biến động)
+        bool needsUpdate = false;
+        if (GridQueueRows.Count != expectedRowCount)
         {
-            var item1 = source[i];
-            var item2 = (i + 1 < source.Count) ? source[i + 1] : null;
-            var item3 = (cols >= 3 && i + 2 < source.Count) ? source[i + 2] : null;
-            var item4 = (cols >= 4 && i + 3 < source.Count) ? source[i + 3] : null;
-            rows.Add(new QueueGridRow(item1, item2, item3, item4, cols));
+            needsUpdate = true;
+        }
+        else
+        {
+            for (int r = 0; r < expectedRowCount; r++)
+            {
+                int baseIdx = r * cols;
+                var existingRow = GridQueueRows[r];
+                var item1 = source[baseIdx];
+                var item2 = (baseIdx + 1 < source.Count) ? source[baseIdx + 1] : null;
+                var item3 = (cols >= 3 && baseIdx + 2 < source.Count) ? source[baseIdx + 2] : null;
+                var item4 = (cols >= 4 && baseIdx + 3 < source.Count) ? source[baseIdx + 3] : null;
+
+                if (!ReferenceEquals(existingRow.Col1, item1) ||
+                    !ReferenceEquals(existingRow.Col2, item2) ||
+                    !ReferenceEquals(existingRow.Col3, item3) ||
+                    !ReferenceEquals(existingRow.Col4, item4) ||
+                    existingRow.ColumnsCount != cols)
+                {
+                    needsUpdate = true;
+                    break;
+                }
+            }
         }
 
-        GridQueueRows = new ObservableCollection<QueueGridRow>(rows);
+        if (!needsUpdate) return;
+
+        // Tái sử dụng in-place các row hiện có để không phá hủy visual tree của Avalonia
+        for (int r = 0; r < expectedRowCount; r++)
+        {
+            int baseIdx = r * cols;
+            var item1 = source[baseIdx];
+            var item2 = (baseIdx + 1 < source.Count) ? source[baseIdx + 1] : null;
+            var item3 = (cols >= 3 && baseIdx + 2 < source.Count) ? source[baseIdx + 2] : null;
+            var item4 = (cols >= 4 && baseIdx + 3 < source.Count) ? source[baseIdx + 3] : null;
+
+            if (r < GridQueueRows.Count)
+            {
+                GridQueueRows[r].Update(item1, item2, item3, item4, cols);
+            }
+            else
+            {
+                GridQueueRows.Add(new QueueGridRow(item1, item2, item3, item4, cols));
+            }
+        }
+
+        while (GridQueueRows.Count > expectedRowCount)
+        {
+            GridQueueRows.RemoveAt(GridQueueRows.Count - 1);
+        }
     }
 
     [ObservableProperty]
@@ -3005,7 +3052,7 @@ public partial class MainViewModel : ViewModelBase
                     if (ComicBooks.Count > 0)
                     {
                         ReindexComicBooks();
-                        UpdateStats();
+                        UpdateStats(true);
                         StartScanMissing();
                         TriggerThumbnailPrefetchIfNeeded();
                         AddLog("SUCCESS", $"🔄 [Auto Backup] Đã tự động khôi phục {ComicBooks.Count} truyện, tiến độ tải và cấu hình (Số truyện: {ConcurrentComicDownloads}, Connection: {ImageDownloadThreads}, Luồng CPU: {LinkCpuThreads}) từ '{fileName}'.");
@@ -3473,7 +3520,7 @@ public partial class MainViewModel : ViewModelBase
             AddLog("INFO", $"[{idx}] Đã nạp từ nguồn: {book.Title} ({book.TotalChapters} chaps) [{book.Domain}]");
         }
 
-        UpdateStats();
+        UpdateStats(true);
         StartScanMissing();
         TriggerThumbnailPrefetchIfNeeded();
         SelectedRootTabIndex = 0; // Tự động chuyển sang tab Download
@@ -4002,7 +4049,7 @@ public partial class MainViewModel : ViewModelBase
             }
 
             ReindexComicBooks();
-            UpdateStats();
+            UpdateStats(true);
             StartScanMissing();
             TriggerThumbnailPrefetchIfNeeded();
             RequestQueueAutoSave(200);
@@ -4042,7 +4089,7 @@ public partial class MainViewModel : ViewModelBase
     {
         ComicBooks.Clear();
         ScanResults.Clear();
-        UpdateStats();
+        UpdateStats(true);
         FlushAutoSaveImmediately();
         AddLog("INFO", "Đã xóa sạch hàng chờ tải.");
     }
@@ -4068,7 +4115,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         ReindexComicBooks();
-        UpdateStats();
+        UpdateStats(true);
         RequestQueueAutoSave(200);
         AddLog("SUCCESS", $"Đã tự động dọn dẹp {completedItems.Count} mục đã tải xong khỏi danh sách.");
     }
@@ -4091,7 +4138,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         ReindexComicBooks();
-        UpdateStats();
+        UpdateStats(true);
         RequestQueueAutoSave(200);
         AddLog("SUCCESS", $"[Tự Xóa] Đã tự động dọn dẹp {completedItems.Count} mục đã hoàn tất khỏi hàng đợi.");
     }
@@ -4612,7 +4659,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         ReindexComicBooks();
-        UpdateStats();
+        UpdateStats(true);
         RequestQueueAutoSave(150);
         AddLog("INFO", $"Đã xóa {allToRemove.Count} mục khỏi danh sách.");
     }
@@ -4692,7 +4739,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         ReindexComicBooks();
-        UpdateStats();
+        UpdateStats(true);
         RequestQueueAutoSave(150);
     }
 
@@ -5458,7 +5505,7 @@ public partial class MainViewModel : ViewModelBase
             AddLog("INFO", $"[{currentIndex}] Đã nạp: {book.Title} ({book.TotalChapters} chaps) - Domain: {book.Domain}{(string.IsNullOrWhiteSpace(book.Subfolder) ? "" : $" [Subfolder: {book.Subfolder}]")}");
         }
 
-        UpdateStats();
+        UpdateStats(true);
         StartScanMissing();
         TriggerThumbnailPrefetchIfNeeded();
 
@@ -6193,13 +6240,16 @@ public partial class MainViewModel : ViewModelBase
 
 
 
-    private void UpdateStats()
+    private void UpdateStats(bool recalculateDuplicates = false)
     {
         TotalBooks = ComicBooks.Count;
         DownloadingCount = ComicBooks.Count(b => b.Status == "Downloading");
         CompletedCount = ComicBooks.Count(b => b.Status == "Completed");
         ErrorCount = ComicBooks.Count(b => b.Status == "Error");
-        RecalculateDuplicates();
+        if (recalculateDuplicates)
+        {
+            RecalculateDuplicates();
+        }
     }
 
     private void OnLogEmitted(string level, string message)

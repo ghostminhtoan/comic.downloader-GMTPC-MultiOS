@@ -354,7 +354,7 @@ public partial class MainViewModel
                         if (!ComicBooks.Any(b => b.Url.Equals(book.Url, StringComparison.OrdinalIgnoreCase)))
                         {
                             ComicBooks.Add(book);
-                            UpdateStats();
+                            UpdateStats(true);
                         }
                         StartScanMissing();
                         TriggerThumbnailPrefetchIfNeeded();
@@ -439,7 +439,7 @@ public partial class MainViewModel
                     DomainTotalPages = maxPagesFound;
                     DomainPageFrom = 1;
                     DomainPageTo = Math.Min(5, maxPagesFound);
-                    UpdateStats();
+                    UpdateStats(true);
 
                     DomainAnalyzeStatusText = $"✅ Hoàn tất Batch Analyze: {directBookAdded} truyện nạp queue, {tagsAnalyzed} danh mục ({maxPagesFound} trang).";
                     AddLog("SUCCESS", $"[Batch Analyze] Hoàn tất phân tích hàng loạt {totalUrls} liên kết! (Đã nạp {directBookAdded} truyện, {tagsAnalyzed} danh mục).");
@@ -527,7 +527,7 @@ public partial class MainViewModel
             {
                 ComicBooks.Clear();
                 ScanResults.Clear();
-                UpdateStats();
+                UpdateStats(true);
                 AddLog("INFO", "[Cào mới (Crawl)] Đã xóa sạch danh sách truyện cũ trong Queue để cào mới từ đầu.");
             }
             else
@@ -564,7 +564,7 @@ public partial class MainViewModel
                             ComicBooks.Add(book);
                             totalAdded++;
                         }
-                        UpdateStats();
+                        UpdateStats(true);
                         AddLog("SUCCESS", $"[Cào hàng loạt] [{tagIdx + 1}/{tagUrls.Count}]: Đã cào truyện {book.Title} ({book.TotalChapters} chaps).");
                         continue;
                     }
@@ -641,7 +641,7 @@ public partial class MainViewModel
                                 totalAdded++;
                             }
                         }
-                        UpdateStats();
+                        UpdateStats(true);
                     });
                     AddLog("SUCCESS", $"[Cào hàng loạt] Tag [{tagIdx + 1}/{tagUrls.Count}]: Cào được {scrapedItems.Count} truyện (+{addedThisTag} truyện mới vào Queue).");
                 }
