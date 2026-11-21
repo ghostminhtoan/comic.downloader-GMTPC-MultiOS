@@ -21,6 +21,54 @@ public sealed class InstanceConfigService
     private string _bubbleSize = "Medium"; // "Small" (48dp), "Medium" (60dp), "Large" (72dp)
     private float _bubbleIdleAlpha = 0.45f; // Độ mờ khi nhàn rỗi (0.2f - 0.8f)
     private float _bubbleDockOffsetRatio = 0.60f; // Mức thụt vào mép (0.4f - 0.85f)
+    private int _desktopUiZoomPercent = 100; // Tỷ lệ phóng to hiển thị giao diện Desktop (80% - 175%)
+
+    /// <summary>
+    /// Các mức zoom hiển thị chuẩn của ứng dụng trên Desktop (Windows / Linux).
+    /// </summary>
+    public static readonly int[] UiZoomPresets = { 80, 90, 100, 110, 120, 130, 140, 150, 160, 175 };
+
+    /// <summary>
+    /// Làm tròn về mức zoom preset gần nhất.
+    /// </summary>
+    public static int SnapToZoomPreset(int percent)
+    {
+        int closest = UiZoomPresets[0];
+        int minDiff = Math.Abs(percent - closest);
+        foreach (var p in UiZoomPresets)
+        {
+            int diff = Math.Abs(percent - p);
+            if (diff < minDiff)
+            {
+                minDiff = diff;
+                closest = p;
+            }
+        }
+        return closest;
+    }
+
+    /// <summary>
+    /// Tỷ lệ zoom giao diện trên Desktop (Windows / Linux): 80, 90, 100, 110, 120, 130, 140, 150, 160, 175%.
+    /// </summary>
+    public int DesktopUiZoomPercent
+    {
+        get => _desktopUiZoomPercent;
+        set
+        {
+            int snapped = SnapToZoomPreset(value);
+            if (_desktopUiZoomPercent != snapped)
+            {
+                _desktopUiZoomPercent = snapped;
+                SaveConfig();
+                DesktopUiZoomPercentChanged?.Invoke(snapped);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Bắn tín hiệu khi tỷ lệ Zoom Desktop thay đổi.
+    /// </summary>
+    public event Action<int>? DesktopUiZoomPercentChanged;
 
     /// <summary>
     /// Bắn tín hiệu khi tùy biến giao diện/kích thước/độ mờ Bong bóng thay đổi.
@@ -253,6 +301,14 @@ public sealed class InstanceConfigService
                 {
                     _bubbleDockOffsetRatio = (float)propRatio.GetDouble();
                 }
+                if (doc.RootElement.TryGetProperty("DesktopUiZoomPercent", out var propZoom))
+                {
+                    _desktopUiZoomPercent = SnapToZoomPreset(propZoom.GetInt32());
+                }
+                else
+                {
+                    _desktopUiZoomPercent = 100;
+                }
             }
             else
             {
@@ -264,6 +320,7 @@ public sealed class InstanceConfigService
                 _bubbleSize = "Medium";
                 _bubbleIdleAlpha = 0.45f;
                 _bubbleDockOffsetRatio = 0.60f;
+                _desktopUiZoomPercent = 100;
             }
         }
         catch
@@ -276,6 +333,7 @@ public sealed class InstanceConfigService
             _bubbleSize = "Medium";
             _bubbleIdleAlpha = 0.45f;
             _bubbleDockOffsetRatio = 0.60f;
+            _desktopUiZoomPercent = 100;
         }
     }
 
@@ -298,7 +356,8 @@ public sealed class InstanceConfigService
                 IsBubbleCloseButtonEnabled = _isBubbleCloseButtonEnabled,
                 BubbleSize = _bubbleSize,
                 BubbleIdleAlpha = _bubbleIdleAlpha,
-                BubbleDockOffsetRatio = _bubbleDockOffsetRatio
+                BubbleDockOffsetRatio = _bubbleDockOffsetRatio,
+                DesktopUiZoomPercent = _desktopUiZoomPercent
             };
             string json = JsonSerializer.Serialize(model, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_configFilePath, json);

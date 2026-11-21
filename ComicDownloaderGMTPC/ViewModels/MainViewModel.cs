@@ -1323,6 +1323,90 @@ public partial class MainViewModel : ViewModelBase
         IsSidebarVisible = false;
     }
 
+    // =========================================================================
+    // UI DISPLAY ZOOM / SCALE CONTROL (WINDOWS & LINUX DESKTOP CHUẨN WPF)
+    // Zoom presets: 80, 90, 100, 110, 120, 130, 140, 150, 160, 175%
+    // =========================================================================
+
+    [ObservableProperty]
+    private int _uiZoomPercent = OperatingSystem.IsAndroid() ? 100 : InstanceConfigService.Instance.DesktopUiZoomPercent;
+
+    public double UiZoomScale => IsDesktopLifetime ? (UiZoomPercent / 100.0) : 1.0;
+    public string UiZoomPercentText => $"{UiZoomPercent}%";
+    public string DisplayScaleLabel => LanguageService.Instance.IsVietnamese ? "TỶ LỆ HIỂN THỊ" : "DISPLAY SCALE";
+
+    public IReadOnlyList<string> AvailableZoomPresets { get; } = new string[]
+    {
+        "80%", "90%", "100%", "110%", "120%", "130%", "140%", "150%", "160%", "175%"
+    };
+
+    public string SelectedZoomPresetString
+    {
+        get => $"{UiZoomPercent}%";
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            string raw = value.Replace("%", "").Trim();
+            if (int.TryParse(raw, out int parsed))
+            {
+                SetZoomPercent(parsed);
+            }
+        }
+    }
+
+    partial void OnUiZoomPercentChanged(int value)
+    {
+        if (IsDesktopLifetime)
+        {
+            InstanceConfigService.Instance.DesktopUiZoomPercent = value;
+        }
+        OnPropertyChanged(nameof(UiZoomScale));
+        OnPropertyChanged(nameof(UiZoomPercentText));
+        OnPropertyChanged(nameof(SelectedZoomPresetString));
+    }
+
+    [RelayCommand]
+    public void ZoomIn()
+    {
+        if (!IsDesktopLifetime) return;
+        int current = InstanceConfigService.SnapToZoomPreset(UiZoomPercent);
+        int idx = Array.IndexOf(InstanceConfigService.UiZoomPresets, current);
+        if (idx >= 0 && idx < InstanceConfigService.UiZoomPresets.Length - 1)
+        {
+            UiZoomPercent = InstanceConfigService.UiZoomPresets[idx + 1];
+            AddLog("INFO", $"🔍 Tỷ lệ hiển thị giao diện: {UiZoomPercent}%");
+        }
+    }
+
+    [RelayCommand]
+    public void ZoomOut()
+    {
+        if (!IsDesktopLifetime) return;
+        int current = InstanceConfigService.SnapToZoomPreset(UiZoomPercent);
+        int idx = Array.IndexOf(InstanceConfigService.UiZoomPresets, current);
+        if (idx > 0)
+        {
+            UiZoomPercent = InstanceConfigService.UiZoomPresets[idx - 1];
+            AddLog("INFO", $"🔍 Tỷ lệ hiển thị giao diện: {UiZoomPercent}%");
+        }
+    }
+
+    [RelayCommand]
+    public void ZoomReset()
+    {
+        if (!IsDesktopLifetime) return;
+        UiZoomPercent = 100;
+        AddLog("INFO", "🔍 Đã đặt lại tỷ lệ hiển thị giao diện về 100% (chuẩn).");
+    }
+
+    [RelayCommand]
+    public void SetZoomPercent(int percent)
+    {
+        if (!IsDesktopLifetime) return;
+        UiZoomPercent = InstanceConfigService.SnapToZoomPreset(percent);
+        AddLog("INFO", $"🔍 Tỷ lệ hiển thị giao diện: {UiZoomPercent}%");
+    }
+
     [ObservableProperty]
     private bool _isExternalQueueWindowOpen = false;
 
@@ -3026,6 +3110,7 @@ public partial class MainViewModel : ViewModelBase
 
         UpdateDualSortLanguageStrings();
         OnPropertyChanged(nameof(GridButtonText));
+        OnPropertyChanged(nameof(DisplayScaleLabel));
         foreach (var book in ComicBooks)
         {
             book?.NotifyLanguageChanged();

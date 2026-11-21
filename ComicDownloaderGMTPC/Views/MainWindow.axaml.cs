@@ -13,6 +13,9 @@ public partial class MainWindow : Window
         InitializeComponent();
         BackgroundExecutionService.Instance.BubbleModeChanged += OnBubbleModeChanged;
 
+        AddHandler(Avalonia.Input.InputElement.PointerWheelChangedEvent, MainWindow_PointerWheelChanged, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        AddHandler(Avalonia.Input.InputElement.KeyDownEvent, MainWindow_KeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
         BackgroundExecutionService.NativeMinimizeOrHide = () =>
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -112,5 +115,49 @@ public partial class MainWindow : Window
 
         BackgroundExecutionService.Instance.BubbleModeChanged -= OnBubbleModeChanged;
         base.OnClosed(e);
+    }
+
+    private void MainWindow_PointerWheelChanged(object? sender, Avalonia.Input.PointerWheelEventArgs e)
+    {
+        if ((e.KeyModifiers & Avalonia.Input.KeyModifiers.Control) != 0)
+        {
+            if (DataContext is ViewModels.MainViewModel vm)
+            {
+                if (e.Delta.Y > 0)
+                {
+                    vm.ZoomInCommand.Execute(null);
+                }
+                else if (e.Delta.Y < 0)
+                {
+                    vm.ZoomOutCommand.Execute(null);
+                }
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void MainWindow_KeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
+    {
+        if ((e.KeyModifiers & Avalonia.Input.KeyModifiers.Control) != 0)
+        {
+            if (DataContext is ViewModels.MainViewModel vm)
+            {
+                if (e.Key == Avalonia.Input.Key.OemPlus || e.Key == Avalonia.Input.Key.Add)
+                {
+                    vm.ZoomInCommand.Execute(null);
+                    e.Handled = true;
+                }
+                else if (e.Key == Avalonia.Input.Key.OemMinus || e.Key == Avalonia.Input.Key.Subtract)
+                {
+                    vm.ZoomOutCommand.Execute(null);
+                    e.Handled = true;
+                }
+                else if (e.Key == Avalonia.Input.Key.D0 || e.Key == Avalonia.Input.Key.NumPad0)
+                {
+                    vm.ZoomResetCommand.Execute(null);
+                    e.Handled = true;
+                }
+            }
+        }
     }
 }

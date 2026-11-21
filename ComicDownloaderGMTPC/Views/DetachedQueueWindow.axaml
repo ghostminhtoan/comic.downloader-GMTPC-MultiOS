@@ -14,7 +14,11 @@
         Icon="/Assets/app-icon.ico"
         Title="Danh sách truyện chờ tải - Comic Downloader GMTPC">
 
-    <Grid RowDefinitions="Auto, *">
+    <LayoutTransformControl HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+        <LayoutTransformControl.LayoutTransform>
+            <ScaleTransform ScaleX="{Binding UiZoomScale}" ScaleY="{Binding UiZoomScale}" />
+        </LayoutTransformControl.LayoutTransform>
+        <Grid RowDefinitions="Auto, *">
         <!-- ROW 0: Header & Toolbar Hàng Chờ Tối Ưu Cho Cửa Sổ Mở Rộng -->
         <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="12,8">
             <Grid ColumnDefinitions="Auto, *, Auto">
@@ -102,4 +106,5 @@
             </ScrollViewer>
         </Border>
     </Grid>
+    </LayoutTransformControl>
 </Window>

@@ -12,5 +12,10 @@
         x:DataType="vm:MainViewModel"
         Icon="/Assets/app-icon.ico"
         Title="{Binding AppTitle}">
+    <LayoutTransformControl HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+        <LayoutTransformControl.LayoutTransform>
+            <ScaleTransform ScaleX="{Binding UiZoomScale}" ScaleY="{Binding UiZoomScale}" />
+        </LayoutTransformControl.LayoutTransform>
         <views:MainView />
+    </LayoutTransformControl>
 </Window>

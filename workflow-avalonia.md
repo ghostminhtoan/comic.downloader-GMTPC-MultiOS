@@ -1192,3 +1192,29 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Thiết kế dạng viên thuốc bo tròn `CornerRadius="12"`, viền xanh ngọc Emerald `#10B981`, chữ phát sáng `#34D399`, kích thước `74x28` vừa vặn ngón tay cái.
   + Chạm vào nút sẽ gọi `ToggleSidebarCommand`, mở ngay ngăn kéo Sidebar điều hướng mọi lúc mọi nơi trên điện thoại mà không cần phải cuộn lên đỉnh màn hình.
 
+---
+
+### 70. Tích Hợp Tính Năng Zoom App Chuẩn WPF Cho Windows & Linux (Các Mức: 80 90 100 110 120 130 140 150 160 175%)
+- **1. Triết Lý Cách Ly Nền Tảng (Desktop-Only Zoom, Safe for Android)**:
+  + Tính năng Zoom App được thiết kế 100% độc quyền cho môi trường Desktop (`IsDesktopLifetime`: Windows & Linux), áp dụng trực tiếp qua `LayoutTransformControl` tại `MainWindow.axaml` và `DetachedQueueWindow.axaml`.
+  + Nền tảng Android tuyệt đối không bị ảnh hưởng: `UiZoomScale` luôn cố định là `1.0` (100%), không nạp `MainWindow.axaml`, không hiển thị cụm điều khiển zoom, bảo toàn hoàn hảo layout responsive màn hình dọc/ngang và touch pointer native.
+- **2. Bảng Tỷ Lệ Tăng Giảm Zoom Chuẩn Xác**:
+  + Bộ preset chính xác theo yêu cầu: `80%, 90%, 100%, 110%, 120%, 130%, 140%, 150%, 160%, 175%` (Mặc định: 100% baseline).
+  + Cơ chế `SnapToZoomPreset`: Tự động căn chỉnh về bậc thang chuẩn gần nhất, chống trôi số lẻ.
+- **3. Cụm Điều Khiển TỶ LỆ HIỂN THỊ (DISPLAY SCALE) Trên Sidebar Desktop**:
+  + Tọa lạc tại Sidebar Desktop (rộng 124px), thiết kế Card bo góc mềm mại `CornerRadius="8"`, viền Cyberpunk `#1E293B`, bề ngang 112px vừa khít.
+  + Nhãn song ngữ động: `TỶ LỆ HIỂN THỊ` (VI) / `DISPLAY SCALE` (ENG) kèm số % vàng phát sáng `#FFE600`.
+  + Cụm 3 nút nhanh: `[-]` (Zoom Out), `[100%]` (Reset về 100%), `[+]` (Zoom In).
+  + ComboBox dropdown chọn nhanh trực tiếp bất kỳ mức % nào từ danh sách 10 mức preset.
+- **4. Thao Tác Chuột & Phím Tắt Toàn Cục Trực Quan (Hotkeys & Mouse Wheel)**:
+  + Lắng nghe sự kiện `RoutingStrategies.Tunnel` ở tầng Window:
+    * `Ctrl + Lăn chuột lên`: Phóng to (Zoom In).
+    * `Ctrl + Lăn chuột xuống`: Thu nhỏ (Zoom Out).
+    * `Ctrl + Plus` (`Ctrl + =` hoặc `Ctrl + Add` numpad): Phóng to.
+    * `Ctrl + Minus` (`Ctrl + -` hoặc `Ctrl + Subtract` numpad): Thu nhỏ.
+    * `Ctrl + 0` (`Ctrl + D0` hoặc `Ctrl + NumPad0`): Đặt lại 100%.
+- **5. Tự Động Lưu Trữ Cấu Hình (Persistence)**:
+  + Tích hợp trường `DesktopUiZoomPercent` vào `InstanceConfigService.cs`, tự động lưu vào `instance_config.json`.
+  + Khởi động lại ứng dụng tự động khôi phục mức zoom ưa thích của người dùng.
+
+
