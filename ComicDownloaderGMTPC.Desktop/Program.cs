@@ -86,6 +86,163 @@ sealed class Program
             }
             catch { }
         };
+        if (args.Any(a => string.Equals(a, "--test-history-5cycles", StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.WriteLine("================================================================================");
+            Console.WriteLine("TEST KIỂM THỬ 5 CHU KỲ: CLEAR HISTORY -> MỞ TRUYỆN -> TẮT MỞ APP -> RE-OPEN");
+            Console.WriteLine("Thư mục kiểm thử: T:\\[HDD T]\\xnconvert\\uploaded");
+            Console.WriteLine("================================================================================");
+
+            string targetDir = @"T:\[HDD T]\xnconvert\uploaded";
+            if (!Directory.Exists(targetDir))
+            {
+                Console.WriteLine($"[LỖI] Không tìm thấy thư mục: {targetDir}");
+                Environment.Exit(1);
+                return;
+            }
+
+            var testFiles = new[]
+            {
+                Path.Combine(targetDir, "Thần hồn võ đế bookmark.jpg"),
+                Path.Combine(targetDir, "Ta Luyện Khí Ba Ngàn Năm.zip"),
+                Path.Combine(targetDir, "chúa tể tam giới.pdf"),
+                Path.Combine(targetDir, "Mắt nhìn thấu chung cực.pdf"),
+                Path.Combine(targetDir, "Thần Hồn Võ Đế nettruyenqq.us.pdf")
+            };
+
+            // BƯỚC 1: Xóa trắng toàn bộ lịch sử ban đầu để kiểm thử từ trạng thái 0
+            Console.WriteLine("\n[BƯỚC 1] Khởi tạo môi trường: Clear toàn bộ History & Resume cũ...");
+            ReadProgressStore.Instance.ClearAllHistory();
+            ReadProgressStore.Instance.ClearAllProgress();
+            ReadProgressStore.Instance.FlushImmediately();
+            ReadProgressStore.Instance.SaveHistoryToDisk();
+
+            bool allPassed = true;
+            var openedFiles = new List<string>();
+
+            // BƯỚC 2: Thực hiện 5 chu kỳ khép kín
+            for (int cycle = 1; cycle <= 5; cycle++)
+            {
+                string curFile = testFiles[cycle - 1];
+                string curFileName = Path.GetFileName(curFile);
+                openedFiles.Add(curFile);
+
+                Console.WriteLine($"\n--------------------------------------------------------------------------------");
+                Console.WriteLine($"[CHU KỲ {cycle}/5] Mở truyện: {curFileName}");
+                Console.WriteLine($"--------------------------------------------------------------------------------");
+
+                if (!File.Exists(curFile))
+                {
+                    Console.WriteLine($"  [FAIL] Không tìm thấy file: {curFile}");
+                    allPassed = false;
+                    break;
+                }
+
+                // 1. Mở truyện và ghi nhận lịch sử
+                var quickComic = LibraryScannerService.Instance.CreateQuickComicFromPath(curFile);
+                if (quickComic == null || quickComic.Chapters.Count == 0)
+                {
+                    Console.WriteLine($"  [FAIL] CreateQuickComicFromPath thất bại cho: {curFileName}");
+                    allPassed = false;
+                    break;
+                }
+
+                ReadProgressStore.Instance.RegisterReadComic(curFile, touchTimestamp: true);
+                if (!string.Equals(curFile, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
+                }
+                ReadProgressStore.Instance.RegisterLocalComicPath(quickComic.Title, curFile);
+                ReadProgressStore.Instance.RegisterLocalComicPath(curFileName, curFile);
+                ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileNameWithoutExtension(curFile), curFile);
+                ReadProgressStore.Instance.FlushImmediately();
+                ReadProgressStore.Instance.SaveHistoryToDisk();
+                Console.WriteLine($"  -> Đã mở và ghi nhận vào History + Resume + DeviceLocalPaths thành công.");
+
+                // 2. Giả lập TẮT VÀ MỞ LẠI APP (App Restart Simulation)
+                Console.WriteLine($"  -> [SIMULATE APP RESTART] Tắt app, xóa sạch RAM in-memory, nạp lại từ tệp đĩa...");
+                ReadProgressStore.Instance.SimulateAppRestart();
+
+                // 3. Kiểm tra danh sách History sau khi mở lại app
+                var unifiedItems = ReadProgressStore.Instance.GetUnifiedHistoryItems();
+                Console.WriteLine($"  -> Số lượng mục trong Lịch sử sau khi Restart: {unifiedItems.Count}");
+                for (int uIdx = 0; uIdx < unifiedItems.Count; uIdx++)
+                {
+                    var u = unifiedItems[uIdx];
+                    Console.WriteLine($"     [{uIdx + 1}] Title='{u.Title}' | Path='{u.Path}' | HasLocal={u.HasLocalPath} | Device='{u.DeviceName}'");
+                }
+
+                // Kiểm tra tất cả các file đã mở từ trước đến nay đều phải tồn tại và khả dụng
+                for (int i = 0; i < openedFiles.Count; i++)
+                {
+                    string f = openedFiles[i];
+                    string fName = Path.GetFileName(f);
+                    string fBase = Path.GetFileNameWithoutExtension(f);
+
+                    var histItem = unifiedItems.FirstOrDefault(u =>
+                        string.Equals(u.Title, fName, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(u.Title, fBase, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(Path.GetFileName(u.Path), fName, StringComparison.OrdinalIgnoreCase));
+
+                    if (histItem == null)
+                    {
+                        Console.WriteLine($"  [FAIL] Không tìm thấy mục '{fName}' trong History sau khi restart!");
+                        allPassed = false;
+                        continue;
+                    }
+
+                    // Kiểm tra không bị ngộ nhận đám mây
+                    bool isCloud = !histItem.HasLocalPath && !string.IsNullOrEmpty(histItem.DeviceName);
+                    if (isCloud)
+                    {
+                        Console.WriteLine($"  [FAIL] Mục '{fName}' bị ngộ nhận thành Cloud Sync từ '{histItem.DeviceName}'!");
+                        allPassed = false;
+                        continue;
+                    }
+
+                    // Kiểm tra khả năng mở đọc lại qua Resolver
+                    string? readPath = histItem.Path;
+                    if (string.IsNullOrEmpty(readPath) || !File.Exists(readPath))
+                    {
+                        readPath = ReadProgressStore.Instance.ResolvePathByFileName(histItem.Title);
+                    }
+
+                    if (string.IsNullOrEmpty(readPath) || !File.Exists(readPath))
+                    {
+                        Console.WriteLine($"  [FAIL] Không thể resolve đường dẫn đọc cho '{fName}'!");
+                        allPassed = false;
+                        continue;
+                    }
+
+                    Console.WriteLine($"  [PASS] #{i + 1} '{fName}' -> Đọc lại thành công: HasLocal={histItem.HasLocalPath}, Cloud={isCloud}, Path='{readPath}'");
+                }
+            }
+
+            // BƯỚC 3: Thử nghiệm Filename Resolver độc lập (đảm bảo không cần nhớ path cũ)
+            Console.WriteLine($"\n--------------------------------------------------------------------------------");
+            Console.WriteLine($"[KIỂM THỬ ĐẶC BIỆT] Filename-based Self-Healing Resolver: Tra cứu chỉ bằng TÊN FILE");
+            Console.WriteLine($"--------------------------------------------------------------------------------");
+            string testName = "Thần Hồn Võ Đế nettruyenqq.us.pdf";
+            string? autoFound = ReadProgressStore.Instance.ResolvePathByFileName(testName);
+            Console.WriteLine($"  -> Tìm kiếm '{testName}' không cần path:");
+            if (!string.IsNullOrEmpty(autoFound) && File.Exists(autoFound))
+            {
+                Console.WriteLine($"  [PASS] Tự động dò ra đường dẫn chính xác: '{autoFound}'");
+            }
+            else
+            {
+                Console.WriteLine($"  [FAIL] Không tìm thấy file bằng Resolver!");
+                allPassed = false;
+            }
+
+            Console.WriteLine($"\n================================================================================");
+            Console.WriteLine($"KẾT QUẢ CUỐI CÙNG 5 CHU KỲ TEST: {(allPassed ? "THÀNH CÔNG 100% (PASS)" : "THẤT BẠI (FAIL)")}");
+            Console.WriteLine($"================================================================================");
+            Environment.Exit(allPassed ? 0 : 1);
+            return;
+        }
+
         if (args.Any(a => string.Equals(a, "--test-realtime-history", StringComparison.OrdinalIgnoreCase)))
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;

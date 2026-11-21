@@ -1624,24 +1624,32 @@ public partial class LibraryViewModel : ViewModelBase
             }
         }
 
-        // BƯỚC 2: Thử tìm nhanh đường dẫn cục bộ trên thiết bị qua Self-Healing Title & Filename Resolver
-        string? resolved = ReadProgressStore.Instance.TryResolveLocalPathForComic(item.Title);
+        // BƯỚC 2: Tự động giải quyết đường dẫn theo TÊN FILE / TÊN TRUYỆN (Filename-based Self-Healing Resolver)
+        string? resolved = ReadProgressStore.Instance.ResolvePathByFileName(item.Title);
         if (string.IsNullOrEmpty(resolved) && !string.IsNullOrWhiteSpace(item.Path))
         {
             string fName = Path.GetFileName(item.Path);
-            if (!string.IsNullOrEmpty(fName)) resolved = ReadProgressStore.Instance.TryResolveLocalPathForComic(fName);
+            if (!string.IsNullOrEmpty(fName)) resolved = ReadProgressStore.Instance.ResolvePathByFileName(fName);
             if (string.IsNullOrEmpty(resolved))
             {
                 string fBase = Path.GetFileNameWithoutExtension(item.Path);
-                if (!string.IsNullOrEmpty(fBase)) resolved = ReadProgressStore.Instance.TryResolveLocalPathForComic(fBase);
+                if (!string.IsNullOrEmpty(fBase)) resolved = ReadProgressStore.Instance.ResolvePathByFileName(fBase);
+            }
+        }
+        if (string.IsNullOrEmpty(resolved))
+        {
+            string titleNoExt = Path.GetFileNameWithoutExtension(item.Title.Trim());
+            if (!string.IsNullOrEmpty(titleNoExt))
+            {
+                resolved = ReadProgressStore.Instance.ResolvePathByFileName(titleNoExt);
             }
         }
 
         if (!string.IsNullOrWhiteSpace(resolved) && (File.Exists(resolved) || Directory.Exists(resolved)))
         {
             item.Path = resolved;
-            
             item.IsCloudSynced = false;
+            item.CloudDeviceName = string.Empty;
             ReadProgressStore.Instance.RegisterLocalComicPath(item.Title, resolved);
             ReadProgressStore.Instance.RegisterReadComic(resolved, touchTimestamp: true);
             await OpenPathToReadAsync(resolved);
@@ -2398,6 +2406,7 @@ public partial class LibraryViewModel : ViewModelBase
                 ReadProgressStore.Instance.RegisterLocalComicPath(quickComic.Title, quickComic.RootFolderPath);
                 if (File.Exists(path))
                 {
+                    ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileName(path), path);
                     ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileNameWithoutExtension(path), path);
                 }
                 ReadProgressStore.Instance.FlushImmediately();

@@ -152,6 +152,7 @@ public sealed class ReadProgressStore
 
     private readonly ConcurrentDictionary<string, int> _progressMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _deviceLocalPathRegistry = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _recentKnownDirectories = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<CrossDeviceResumeEntry> _crossDeviceEntries = new();
     private readonly object _crossDeviceLock = new();
     private readonly object _localPathLock = new();
@@ -235,6 +236,26 @@ public sealed class ReadProgressStore
         catch { }
     }
 
+    /// <summary>
+    /// Giả lập chu kỳ tắt và khởi động lại ứng dụng (App Restart Simulation):
+    /// Xóa toàn bộ bộ nhớ tạm (In-Memory State) và nạp lại từ đầu từ các tệp trên đĩa:
+    /// resume.md, history.md, bookmarks.md, device_local_paths.json.
+    /// </summary>
+    public void SimulateAppRestart()
+    {
+        _progressMap.Clear();
+        _deviceLocalPathRegistry.Clear();
+        _recentKnownDirectories.Clear();
+        lock (_crossDeviceLock) { _crossDeviceEntries.Clear(); }
+        lock (_bookmarkLock) { _bookmarks.Clear(); }
+
+        LoadFromDisk();
+        LoadBookmarksFromDisk();
+        LoadHistoryFromDisk();
+        LoadDeviceLocalPathsFromDisk();
+        NotifyHistoryUpdated();
+    }
+
     public static string GetStoreFilePath()
     {
         string dir = QueueBackupService.GetAutoSaveDirectory();
@@ -296,7 +317,7 @@ public sealed class ReadProgressStore
         void AddKey(string? rawKey)
         {
             if (string.IsNullOrWhiteSpace(rawKey)) return;
-            string k = NormalizeKey(rawKey).Trim();
+            string k = rawKey.Trim();
             if (k.Length > 0)
             {
                 _deviceLocalPathRegistry[k] = cleanPath;
@@ -311,10 +332,29 @@ public sealed class ReadProgressStore
         AddKey(comicTitle);
         if (!string.IsNullOrWhiteSpace(comicTitle))
         {
+            AddKey(Path.GetFileName(comicTitle));
             AddKey(Path.GetFileNameWithoutExtension(comicTitle));
         }
         AddKey(fileName);
         AddKey(fileBase);
+
+        // Tự động lưu thư mục cha vào danh sách thư mục đã biết (Recent Known Directories)
+        try
+        {
+            if (Directory.Exists(cleanPath))
+            {
+                _recentKnownDirectories.TryAdd(cleanPath, 0);
+            }
+            else if (File.Exists(cleanPath))
+            {
+                string? parent = Path.GetDirectoryName(cleanPath);
+                if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent))
+                {
+                    _recentKnownDirectories.TryAdd(parent, 0);
+                }
+            }
+        }
+        catch { }
 
         _isLocalPathDirty = true;
         SaveDeviceLocalPathsToDisk();
@@ -359,6 +399,24 @@ public sealed class ReadProgressStore
                     if (!string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
                     {
                         _deviceLocalPathRegistry[kv.Key] = kv.Value;
+
+                        // Tự động thu thập thư mục cha vào Recent Known Directories
+                        try
+                        {
+                            if (Directory.Exists(kv.Value))
+                            {
+                                _recentKnownDirectories.TryAdd(kv.Value, 0);
+                            }
+                            else if (File.Exists(kv.Value))
+                            {
+                                string? parent = Path.GetDirectoryName(kv.Value);
+                                if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent))
+                                {
+                                    _recentKnownDirectories.TryAdd(parent, 0);
+                                }
+                            }
+                        }
+                        catch { }
                     }
                 }
             }
@@ -387,24 +445,33 @@ public sealed class ReadProgressStore
         {
             string basePath = trimmed.Substring(0, sepIdx);
             string suffix = trimmed.Substring(sepIdx);
+            if (Path.IsPathRooted(basePath))
+            {
+                try
+                {
+                    return Path.GetFullPath(basePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + suffix;
+                }
+                catch
+                {
+                    return basePath.TrimEnd('\\', '/') + suffix;
+                }
+            }
+            return basePath.TrimEnd('\\', '/') + suffix;
+        }
+
+        if (Path.IsPathRooted(trimmed))
+        {
             try
             {
-                return Path.GetFullPath(basePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + suffix;
+                return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             }
             catch
             {
-                return basePath.TrimEnd('\\', '/') + suffix;
+                return trimmed.TrimEnd('\\', '/');
             }
         }
 
-        try
-        {
-            return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        }
-        catch
-        {
-            return trimmed.TrimEnd('\\', '/');
-        }
+        return trimmed.TrimEnd('\\', '/');
     }
 
     public static double ExtractChapterNumber(string text)
@@ -1137,7 +1204,14 @@ public sealed class ReadProgressStore
         {
             _progressMap.TryRemove(key, out _);
         }
-        MarkDirtyAndScheduleFlush();
+        _deviceLocalPathRegistry.Clear();
+        lock (_crossDeviceLock)
+        {
+            _crossDeviceEntries.Clear();
+        }
+        SaveHistoryToDisk();
+        _isDirty = true;
+        FlushImmediately();
     }
 
     public List<string> GetPinnedFolders()
@@ -1231,6 +1305,42 @@ public sealed class ReadProgressStore
             if (extraRoots != null)
             {
                 foreach (var r in extraRoots) TryAdd(r);
+            }
+        }
+        catch { }
+
+        // Bổ sung toàn bộ các thư mục gần nhất đã từng mở (Recent Known Directories)
+        try
+        {
+            foreach (var rd in _recentKnownDirectories.Keys)
+            {
+                TryAdd(rd);
+            }
+        }
+        catch { }
+
+        // Bổ sung thư mục cha từ bảng ánh xạ cục bộ (_deviceLocalPathRegistry)
+        try
+        {
+            foreach (var p in _deviceLocalPathRegistry.Values)
+            {
+                if (Directory.Exists(p)) TryAdd(p);
+                else if (File.Exists(p)) TryAdd(Path.GetDirectoryName(p));
+            }
+        }
+        catch { }
+
+        // Bổ sung thư mục cha từ lịch sử đọc sẵn có trong _progressMap
+        try
+        {
+            foreach (var k in _progressMap.Keys)
+            {
+                if (k.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    string p = k.Substring(HistoryPrefix.Length);
+                    if (Directory.Exists(p)) TryAdd(p);
+                    else if (File.Exists(p)) TryAdd(Path.GetDirectoryName(p));
+                }
             }
         }
         catch { }
@@ -1346,10 +1456,19 @@ public sealed class ReadProgressStore
         {
             if (File.Exists(regPath) || Directory.Exists(regPath)) return regPath;
         }
+        string fileName = Path.GetFileName(cleanTitle);
+        if (!string.IsNullOrEmpty(fileName) && _deviceLocalPathRegistry.TryGetValue(fileName, out string? regPathFile) && !string.IsNullOrEmpty(regPathFile))
+        {
+            if (File.Exists(regPathFile) || Directory.Exists(regPathFile)) return regPathFile;
+        }
         string titleNoExt = Path.GetFileNameWithoutExtension(cleanTitle);
         if (!string.IsNullOrEmpty(titleNoExt) && _deviceLocalPathRegistry.TryGetValue(NormalizeKey(titleNoExt), out string? regPathNoExt) && !string.IsNullOrEmpty(regPathNoExt))
         {
             if (File.Exists(regPathNoExt) || Directory.Exists(regPathNoExt)) return regPathNoExt;
+        }
+        if (!string.IsNullOrEmpty(titleNoExt) && _deviceLocalPathRegistry.TryGetValue(titleNoExt, out string? regPathNoExtRaw) && !string.IsNullOrEmpty(regPathNoExtRaw))
+        {
+            if (File.Exists(regPathNoExtRaw) || Directory.Exists(regPathNoExtRaw)) return regPathNoExtRaw;
         }
         string chNorm = NormalizeChapterName(cleanTitle);
         if (!string.IsNullOrEmpty(chNorm) && _deviceLocalPathRegistry.TryGetValue(chNorm, out string? regPathCh) && !string.IsNullOrEmpty(regPathCh))
@@ -1357,13 +1476,12 @@ public sealed class ReadProgressStore
             if (File.Exists(regPathCh) || Directory.Exists(regPathCh)) return regPathCh;
         }
 
-        // 3. Quét đa tầng trong các Candidate Storage Roots
+        // 3. Quét nhanh O(1) trong các Candidate Storage Roots (direct folder/file lookup)
         var roots = GetCandidateStorageRoots();
         foreach (var root in roots)
         {
             try
             {
-                // A. Kiểm tra trực tiếp thư mục hoặc file cùng tên
                 string directFolder = Path.Combine(root, cleanTitle);
                 if (Directory.Exists(directFolder) || File.Exists(directFolder))
                 {
@@ -1380,81 +1498,146 @@ public sealed class ReadProgressStore
                         return directNoExt;
                     }
                 }
+            }
+            catch { }
+        }
 
-                // Nếu fastOnly = true, dừng lại ở mức tra cứu O(1), không quét chậm cây thư mục
-                if (fastOnly) continue;
+        if (fastOnly) return null;
 
-                // B. Tìm các file nén / PDF / Archive trong root
-                var files = Directory.GetFiles(root);
-                foreach (var f in files)
+        // 4. Nếu không fastOnly, gọi toàn diện Filename-based Self-Healing Resolver
+        return ResolvePathByFileName(cleanTitle);
+    }
+
+    /// <summary>
+    /// Filename-based Self-Healing Resolver:
+    /// Tìm kiếm và khôi phục file/thư mục truyện trên thiết bị dựa trên TÊN FILE hoặc TIÊU ĐỀ TRUYỆN.
+    /// Tra cứu đa tầng: Bảng ánh xạ máy hiện tại -> Thư mục đã từng mở -> Candidate Roots -> Toàn bộ ổ đĩa.
+    /// Đảm bảo không cần nhớ đường dẫn cũ, chỉ cần file có cùng tên là tìm thấy và mở ngay 100%.
+    /// </summary>
+    public string? ResolvePathByFileName(string? fileNameOrTitle)
+    {
+        if (string.IsNullOrWhiteSpace(fileNameOrTitle)) return null;
+        string clean = fileNameOrTitle.Trim();
+
+        // 1. Kiểm tra trực tiếp nếu clean là đường dẫn đầy đủ đang tồn tại
+        if (File.Exists(clean) || Directory.Exists(clean))
+        {
+            RegisterLocalComicPath(clean, clean);
+            return clean;
+        }
+
+        string fileName = Path.GetFileName(clean);
+        string fileBase = Path.GetFileNameWithoutExtension(clean);
+        string normName = NormalizeChapterName(clean);
+        bool hasFileExtension = !string.IsNullOrEmpty(Path.GetExtension(clean));
+
+        // 2. Tra cứu siêu tốc O(1) từ bảng đăng ký cục bộ (_deviceLocalPathRegistry)
+        // QUY TẮC: Nếu đầu vào có đuôi file (.pdf, .zip, .jpg...), CHỈ chấp nhận File.Exists!
+        if (_deviceLocalPathRegistry.TryGetValue(clean, out string? p1) && !string.IsNullOrEmpty(p1))
+        {
+            if (File.Exists(p1) || (!hasFileExtension && Directory.Exists(p1))) return p1;
+        }
+        if (!string.IsNullOrEmpty(fileName) && _deviceLocalPathRegistry.TryGetValue(fileName, out string? p2) && !string.IsNullOrEmpty(p2))
+        {
+            if (File.Exists(p2) || (!hasFileExtension && Directory.Exists(p2))) return p2;
+        }
+        if (!hasFileExtension)
+        {
+            if (!string.IsNullOrEmpty(fileBase) && _deviceLocalPathRegistry.TryGetValue(fileBase, out string? p3) && !string.IsNullOrEmpty(p3))
+            {
+                if (File.Exists(p3) || Directory.Exists(p3)) return p3;
+            }
+            if (!string.IsNullOrEmpty(normName) && _deviceLocalPathRegistry.TryGetValue(normName, out string? p4) && !string.IsNullOrEmpty(p4))
+            {
+                if (File.Exists(p4) || Directory.Exists(p4)) return p4;
+            }
+        }
+
+        // 3. Tra cứu đa tầng trong Candidate Roots (bao gồm toàn bộ Recent Known Directories)
+        var roots = GetCandidateStorageRoots();
+        string[] targetNames = (hasFileExtension
+            ? new[] { clean, fileName }
+            : new[] { clean, fileName, fileBase })
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        string[] extensions = new[] { ".pdf", ".zip", ".cbz", ".rar", ".cbr", ".7z", ".jpg", ".jpeg", ".png", ".webp" };
+
+        foreach (var root in roots)
+        {
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) continue;
+
+            try
+            {
+                // A. Thử ghép trực tiếp
+                foreach (var tName in targetNames)
                 {
-                    string fName = Path.GetFileName(f);
-                    string fBase = Path.GetFileNameWithoutExtension(f);
-                    if (string.Equals(fName, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(fBase, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(titleNoExt) && (string.Equals(fName, titleNoExt, StringComparison.OrdinalIgnoreCase) || string.Equals(fBase, titleNoExt, StringComparison.OrdinalIgnoreCase))))
+                    string candidate = Path.Combine(root, tName);
+                    if (File.Exists(candidate) || (!hasFileExtension && Directory.Exists(candidate)))
                     {
-                        RegisterLocalComicPath(cleanTitle, f);
-                        return f;
+                        RegisterLocalComicPath(clean, candidate);
+                        return candidate;
+                    }
+
+                    // Thử với các extension phổ biến nếu tName chưa có đuôi
+                    if (!hasFileExtension)
+                    {
+                        foreach (var ext in extensions)
+                        {
+                            string candidateWithExt = Path.Combine(root, tName + ext);
+                            if (File.Exists(candidateWithExt))
+                            {
+                                RegisterLocalComicPath(clean, candidateWithExt);
+                                return candidateWithExt;
+                            }
+                        }
                     }
                 }
 
-                // C. Tìm trong các thư mục con cấp 1 và cấp 2 (hỗ trợ truyện lồng nhau / grouped chapters)
-                var subDirs = Directory.GetDirectories(root);
-                foreach (var sd in subDirs)
+                // B. Quét các file và thư mục con trong root (độ sâu tối đa 3 cấp)
+                string? foundInTree = SearchFileOrFolderInDirectory(root, targetNames, extensions, hasFileExtension, maxDepth: 3);
+                if (!string.IsNullOrEmpty(foundInTree))
                 {
-                    string sdName = Path.GetFileName(sd);
-                    if (string.Equals(sdName, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(titleNoExt) && string.Equals(sdName, titleNoExt, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        RegisterLocalComicPath(cleanTitle, sd);
-                        return sd;
-                    }
+                    RegisterLocalComicPath(clean, foundInTree);
+                    return foundInTree;
+                }
+            }
+            catch { }
+        }
 
-                    string nested = Path.Combine(sd, cleanTitle);
-                    if (Directory.Exists(nested) || File.Exists(nested))
-                    {
-                        RegisterLocalComicPath(cleanTitle, nested);
-                        return nested;
-                    }
+        // 4. Quét trên toàn bộ các ổ đĩa của thiết bị (ngoại trừ Android)
+        if (!OperatingSystem.IsAndroid())
+        {
+            try
+            {
+                foreach (var drive in DriveInfo.GetDrives())
+                {
+                    if (!drive.IsReady) continue;
+                    string driveRoot = drive.RootDirectory.FullName;
 
-                    if (!string.IsNullOrEmpty(titleNoExt))
-                    {
-                        string nestedNoExt = Path.Combine(sd, titleNoExt);
-                        if (Directory.Exists(nestedNoExt) || File.Exists(nestedNoExt))
-                        {
-                            RegisterLocalComicPath(cleanTitle, nestedNoExt);
-                            return nestedNoExt;
-                        }
-                    }
-
-                    // Quét các file nén bên trong thư mục con cấp 1
                     try
                     {
-                        var subFiles = Directory.GetFiles(sd);
-                        foreach (var sf in subFiles)
+                        var topDirs = Directory.GetDirectories(driveRoot);
+                        foreach (var td in topDirs)
                         {
-                            string sfName = Path.GetFileName(sf);
-                            string sfBase = Path.GetFileNameWithoutExtension(sf);
-                            if (string.Equals(sfName, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(sfBase, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
-                                (!string.IsNullOrEmpty(titleNoExt) && (string.Equals(sfName, titleNoExt, StringComparison.OrdinalIgnoreCase) || string.Equals(sfBase, titleNoExt, StringComparison.OrdinalIgnoreCase))))
+                            string tdName = Path.GetFileName(td);
+                            // Bỏ qua thư mục hệ thống Windows
+                            if (string.Equals(tdName, "Windows", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(tdName, "$Recycle.Bin", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(tdName, "System Volume Information", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(tdName, "Program Files", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(tdName, "Program Files (x86)", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(tdName, "ProgramData", StringComparison.OrdinalIgnoreCase))
                             {
-                                RegisterLocalComicPath(cleanTitle, sf);
-                                return sf;
+                                continue;
                             }
-                        }
 
-                        // Quét cấp 2 nếu có
-                        var subSubDirs = Directory.GetDirectories(sd);
-                        foreach (var ssd in subSubDirs)
-                        {
-                            string ssdName = Path.GetFileName(ssd);
-                            if (string.Equals(ssdName, cleanTitle, StringComparison.OrdinalIgnoreCase) ||
-                                (!string.IsNullOrEmpty(titleNoExt) && string.Equals(ssdName, titleNoExt, StringComparison.OrdinalIgnoreCase)))
+                            string? foundInDrive = SearchFileOrFolderInDirectory(td, targetNames, extensions, hasFileExtension, maxDepth: 3);
+                            if (!string.IsNullOrEmpty(foundInDrive))
                             {
-                                RegisterLocalComicPath(cleanTitle, ssd);
-                                return ssd;
+                                RegisterLocalComicPath(clean, foundInDrive);
+                                return foundInDrive;
                             }
                         }
                     }
@@ -1463,6 +1646,63 @@ public sealed class ReadProgressStore
             }
             catch { }
         }
+
+        return null;
+    }
+
+    private static string? SearchFileOrFolderInDirectory(string dirPath, string[] targetNames, string[] extensions, bool isFileSearch, int maxDepth)
+    {
+        if (maxDepth < 0 || string.IsNullOrWhiteSpace(dirPath) || !Directory.Exists(dirPath)) return null;
+
+        try
+        {
+            // 1. Kiểm tra các file trực tiếp trong thư mục hiện tại
+            var files = Directory.GetFiles(dirPath);
+            foreach (var f in files)
+            {
+                string fName = Path.GetFileName(f);
+                string fBase = Path.GetFileNameWithoutExtension(f);
+                foreach (var t in targetNames)
+                {
+                    if (string.Equals(fName, t, StringComparison.OrdinalIgnoreCase) ||
+                        (!isFileSearch && string.Equals(fBase, t, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return f;
+                    }
+                }
+            }
+
+            // 2. Kiểm tra các thư mục con
+            var subDirs = Directory.GetDirectories(dirPath);
+            if (!isFileSearch)
+            {
+                foreach (var sd in subDirs)
+                {
+                    string sdName = Path.GetFileName(sd);
+                    foreach (var t in targetNames)
+                    {
+                        if (string.Equals(sdName, t, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return sd;
+                        }
+                    }
+                }
+            }
+
+            // 3. Đệ quy sâu vào các thư mục con
+            if (maxDepth > 0)
+            {
+                foreach (var sd in subDirs)
+                {
+                    string sdName = Path.GetFileName(sd);
+                    if (sdName.StartsWith("$", StringComparison.Ordinal) || sdName.StartsWith(".", StringComparison.Ordinal)) continue;
+
+                    string? subResult = SearchFileOrFolderInDirectory(sd, targetNames, extensions, isFileSearch, maxDepth - 1);
+                    if (!string.IsNullOrEmpty(subResult)) return subResult;
+                }
+            }
+        }
+        catch { }
 
         return null;
     }
@@ -1632,9 +1872,6 @@ public sealed class ReadProgressStore
             }
 
             seenTitles.Add(title);
-            if (!string.IsNullOrEmpty(titleWithoutExt)) seenTitles.Add(titleWithoutExt);
-            string normTitle = NormalizeChapterName(title);
-            if (!string.IsNullOrEmpty(normTitle)) seenTitles.Add(normTitle);
 
             // Tự động ghi nhớ ánh xạ local path
             RegisterLocalComicPath(title, path);
@@ -1652,6 +1889,45 @@ public sealed class ReadProgressStore
             });
         }
 
+        bool MatchComicIdentity(string titleA, string pathA, string titleB, string pathB)
+        {
+            if (!string.IsNullOrEmpty(pathA) && !string.IsNullOrEmpty(pathB) &&
+                string.Equals(pathA, pathB, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.Equals(titleA, titleB, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string extA = Path.GetExtension(titleA);
+            string extB = Path.GetExtension(titleB);
+
+            // Nếu cả hai đều có extension và extension khác nhau (.zip vs .pdf), chắc chắn là 2 truyện/file khác nhau!
+            if (!string.IsNullOrEmpty(extA) && !string.IsNullOrEmpty(extB) &&
+                !string.Equals(extA, extB, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            // Nếu một bên là file có extension (.zip, .pdf, .cbz) và bên kia là thư mục không có extension
+            if (!string.IsNullOrEmpty(extA) != !string.IsNullOrEmpty(extB))
+            {
+                return false;
+            }
+
+            string baseA = Path.GetFileNameWithoutExtension(titleA);
+            string baseB = Path.GetFileNameWithoutExtension(titleB);
+            if (!string.IsNullOrEmpty(baseA) && string.Equals(baseA, baseB, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
         // 2. Bổ sung các truyện đồng bộ chéo từ thiết bị khác
         lock (_crossDeviceLock)
         {
@@ -1664,6 +1940,24 @@ public sealed class ReadProgressStore
                 string entryTitleNoExt = Path.GetFileNameWithoutExtension(entryTitle);
                 string entryNorm = NormalizeChapterName(entryTitle);
 
+                // Kiểm tra xem mục này có phải được tạo ra từ chính máy hiện tại không
+                bool isLocalDevice = false;
+                string myDevName = string.Empty;
+                try { myDevName = GoogleDriveSyncService.Instance.CurrentDeviceName; } catch { }
+                if (string.IsNullOrWhiteSpace(myDevName)) myDevName = Environment.MachineName;
+
+                if (!string.IsNullOrWhiteSpace(entry.DeviceName))
+                {
+                    if (string.Equals(entry.DeviceName, myDevName, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(Environment.MachineName) && entry.DeviceName.Contains(Environment.MachineName, StringComparison.OrdinalIgnoreCase)) ||
+                        (entry.DeviceName.StartsWith("[Windows]", StringComparison.OrdinalIgnoreCase) && OperatingSystem.IsWindows()) ||
+                        (entry.DeviceName.StartsWith("[Android]", StringComparison.OrdinalIgnoreCase) && OperatingSystem.IsAndroid()) ||
+                        (entry.DeviceName.StartsWith("[Linux]", StringComparison.OrdinalIgnoreCase) && OperatingSystem.IsLinux()))
+                    {
+                        isLocalDevice = true;
+                    }
+                }
+
                 // Thử tìm đường dẫn cục bộ trên thiết bị hiện tại (chế độ fastOnly để khởi động tức thì)
                 string? resolved = TryResolveLocalPathForComic(entryTitle, fastOnly: true);
                 if (string.IsNullOrEmpty(resolved) && !string.IsNullOrEmpty(entry.RelativePath))
@@ -1672,6 +1966,16 @@ public sealed class ReadProgressStore
                     if (string.IsNullOrEmpty(resolved))
                     {
                         resolved = TryResolveLocalPathForComic(Path.GetFileNameWithoutExtension(entry.RelativePath), fastOnly: true);
+                    }
+                }
+
+                // Nếu là truyện của chính máy này mà fastOnly chưa ra, kích hoạt Filename-based Self-Healing Resolver
+                if (string.IsNullOrEmpty(resolved) && isLocalDevice)
+                {
+                    resolved = ResolvePathByFileName(entryTitle);
+                    if (string.IsNullOrEmpty(resolved) && !string.IsNullOrEmpty(entryTitleNoExt))
+                    {
+                        resolved = ResolvePathByFileName(entryTitleNoExt);
                     }
                 }
 
@@ -1685,31 +1989,21 @@ public sealed class ReadProgressStore
                     ? entry.ChapterTitle
                     : (entry.ChapterIndex > 0 ? $"Chương {entry.ChapterIndex}" : string.Empty);
 
-                // KIỂM TRA ĐÃ CÓ TRONG DANH SÁCH LOCAL CHƯA
-                bool alreadyInList = seenTitles.Contains(entryTitle) ||
-                                     (!string.IsNullOrEmpty(entryTitleNoExt) && seenTitles.Contains(entryTitleNoExt)) ||
-                                     (!string.IsNullOrEmpty(entryNorm) && seenTitles.Contains(entryNorm));
+                // KIỂM TRA ĐÃ CÓ TRONG DANH SÁCH LOCAL CHƯA BẰNG BỘ SO KHỚP ĐỊNH DANH AN TOÀN
+                var existingLocal = result.FirstOrDefault(r => MatchComicIdentity(r.Title, r.Path, entryTitle, resolved ?? string.Empty));
 
-                if (alreadyInList)
+                if (existingLocal != null)
                 {
                     // Đã có trong danh sách local -> Cập nhật thông tin đọc dở nếu entry đám mây mới hơn
-                    var existingLocal = result.FirstOrDefault(r =>
-                        string.Equals(r.Title, entryTitle, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(Path.GetFileNameWithoutExtension(r.Title), entryTitleNoExt, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(NormalizeChapterName(r.Title), entryNorm, StringComparison.OrdinalIgnoreCase));
-
-                    if (existingLocal != null)
+                    if (entry.LastReadPage > 0) existingLocal.LastReadPage = entry.LastReadPage;
+                    if (!string.IsNullOrWhiteSpace(subTitle)) existingLocal.ChapterOrSubTitle = subTitle;
+                    existingLocal.OrderStamp = Math.Max(existingLocal.OrderStamp, orderStamp);
+                    // ĐẢM BẢO GIỮ NGUYÊN LOCAL PATH VÀ KHÔNG BIẾN THÀNH CLOUD ITEM
+                    existingLocal.HasLocalPath = true;
+                    existingLocal.DeviceName = string.Empty;
+                    if (hasLocal && !string.IsNullOrEmpty(resolved) && !File.Exists(existingLocal.Path) && !Directory.Exists(existingLocal.Path))
                     {
-                        if (entry.LastReadPage > 0) existingLocal.LastReadPage = entry.LastReadPage;
-                        if (!string.IsNullOrWhiteSpace(subTitle)) existingLocal.ChapterOrSubTitle = subTitle;
-                        existingLocal.OrderStamp = Math.Max(existingLocal.OrderStamp, orderStamp);
-                        // ĐẢM BẢO GIỮ NGUYÊN LOCAL PATH VÀ KHÔNG BIẾN THÀNH CLOUD ITEM
-                        existingLocal.HasLocalPath = true;
-                        existingLocal.DeviceName = string.Empty;
-                        if (hasLocal && !string.IsNullOrEmpty(resolved) && !File.Exists(existingLocal.Path) && !Directory.Exists(existingLocal.Path))
-                        {
-                            existingLocal.Path = resolved;
-                        }
+                        existingLocal.Path = resolved;
                     }
                     continue;
                 }
@@ -1717,8 +2011,9 @@ public sealed class ReadProgressStore
                 // Nếu chưa có trong danh sách:
                 int dynTotalPages = (hasLocal && !string.IsNullOrEmpty(resolved)) ? GetChapterTotalPages(resolved) : entry.TotalPages;
 
-                string displayDevice = hasLocal ? string.Empty : entry.DeviceName;
-                if (!hasLocal && !string.IsNullOrWhiteSpace(displayDevice))
+                // NẾU LÀ THIẾT BỊ HIỆN TẠI HOẶC ĐÃ TÌM THẤY LOCAL: TUYỆT ĐỐI KHÔNG GÁN NHÃN ĐÁM MÂY!
+                string displayDevice = (hasLocal || isLocalDevice) ? string.Empty : entry.DeviceName;
+                if (!hasLocal && !isLocalDevice && !string.IsNullOrWhiteSpace(displayDevice))
                 {
                     subTitle = string.IsNullOrWhiteSpace(subTitle)
                         ? $"Từ {displayDevice}"
@@ -1726,24 +2021,31 @@ public sealed class ReadProgressStore
                 }
 
                 seenTitles.Add(entryTitle);
-                if (!string.IsNullOrEmpty(entryTitleNoExt)) seenTitles.Add(entryTitleNoExt);
-                if (!string.IsNullOrEmpty(entryNorm)) seenTitles.Add(entryNorm);
 
                 result.Add(new UnifiedHistoryItemInfo
                 {
-                    Path = hasLocal ? (resolved ?? string.Empty) : string.Empty,
+                    Path = hasLocal ? (resolved ?? string.Empty) : (isLocalDevice && !string.IsNullOrEmpty(resolved) ? resolved : string.Empty),
                     Title = entryTitle,
                     ChapterOrSubTitle = subTitle,
                     LastReadPage = entry.LastReadPage,
                     TotalPages = dynTotalPages,
                     OrderStamp = orderStamp,
                     DeviceName = displayDevice,
-                    HasLocalPath = hasLocal
+                    HasLocalPath = hasLocal || isLocalDevice
                 });
             }
         }
 
-        return result.OrderByDescending(r => r.OrderStamp).ToList();
+        // Deduplicate danh sách kết quả cuối cùng để mỗi bộ truyện / tệp tin chỉ xuất hiện duy nhất 1 lần (lấy bản mới nhất)
+        var deduped = new List<UnifiedHistoryItemInfo>();
+        foreach (var item in result.OrderByDescending(r => r.OrderStamp))
+        {
+            if (!deduped.Any(d => MatchComicIdentity(d.Title, d.Path, item.Title, item.Path)))
+            {
+                deduped.Add(item);
+            }
+        }
+        return deduped;
     }
 
     /// <summary>
@@ -2308,6 +2610,32 @@ public sealed class ReadProgressStore
                     {
                         // CHỈ GHI NHẬN LỊCH SỬ MỞ TRUYỆN, TUYỆT ĐỐI KHÔNG GHI ĐÈ TIẾN TRÌNH ĐỌC TRANG CỦA RESUME.MD
                         _progressMap[HistoryPrefix + norm] = h.OrderStamp;
+                    }
+
+                    // Tự động thu thập thư mục cha vào Recent Known Directories
+                    try
+                    {
+                        if (Directory.Exists(h.LocalPath))
+                        {
+                            _recentKnownDirectories.TryAdd(h.LocalPath, 0);
+                        }
+                        else if (File.Exists(h.LocalPath))
+                        {
+                            string? dir = Path.GetDirectoryName(h.LocalPath);
+                            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+                            {
+                                _recentKnownDirectories.TryAdd(dir, 0);
+                            }
+                        }
+                    }
+                    catch { }
+
+                    // Tự động khôi phục ánh xạ cục bộ cho file/truyện này
+                    RegisterLocalComicPath(h.Title, h.LocalPath);
+                    if (!string.IsNullOrWhiteSpace(h.LocalPath))
+                    {
+                        RegisterLocalComicPath(Path.GetFileName(h.LocalPath), h.LocalPath);
+                        RegisterLocalComicPath(Path.GetFileNameWithoutExtension(h.LocalPath), h.LocalPath);
                     }
                 }
             }
