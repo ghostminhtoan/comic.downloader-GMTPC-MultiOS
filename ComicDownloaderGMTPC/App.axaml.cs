@@ -158,15 +158,13 @@ public partial class App : Application
                         if (quickComic != null && quickComic.Chapters.Count > 0)
                         {
                             var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
-                            ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
-                            if (!string.Equals(cleanPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase) && File.Exists(cleanPath))
-                            {
-                                ReadProgressStore.Instance.RegisterReadComic(cleanPath, touchTimestamp: true);
-                            }
-                            ReadProgressStore.Instance.FlushImmediately();
-                            ReadProgressStore.Instance.SaveHistoryToDisk();
 
-                            var readerVm = new ComicReaderViewModel();
+                            // Khi mở tệp ảnh, zip, pdf, cbz... từ bên ngoài hệ điều hành:
+                            // Đặt IsExternalLaunch = true và TUYỆT ĐỐI KHÔNG lưu vào History của Reader (tránh rác lịch sử đọc)
+                            var readerVm = new ComicReaderViewModel
+                            {
+                                IsExternalLaunch = true
+                            };
                             var readerWin = new ComicReaderWindow
                             {
                                 DataContext = readerVm
@@ -175,10 +173,13 @@ public partial class App : Application
                             {
                                 try
                                 {
-                                    readerVm.SaveCurrentReadingSession();
+                                    if (!readerVm.IsExternalLaunch)
+                                    {
+                                        readerVm.SaveCurrentReadingSession();
+                                        ReadProgressStore.Instance.FlushImmediately();
+                                        ReadProgressStore.Instance.SaveHistoryToDisk();
+                                    }
                                     readerVm.Cleanup();
-                                    ReadProgressStore.Instance.FlushImmediately();
-                                    ReadProgressStore.Instance.SaveHistoryToDisk();
                                 }
                                 catch { }
                             };

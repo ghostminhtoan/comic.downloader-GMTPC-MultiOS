@@ -73,7 +73,10 @@ public partial class ComicReaderWindow : Window
 
         if (DataContext is ComicReaderViewModel vm)
         {
-            vm.SaveCurrentReadingSession();
+            if (!vm.IsExternalLaunch)
+            {
+                vm.SaveCurrentReadingSession();
+            }
             vm.Cleanup();
         }
         base.OnClosed(e);

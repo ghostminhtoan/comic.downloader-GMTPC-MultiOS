@@ -1377,4 +1377,23 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   - Khai báo tường minh URL runtime và nhãn nút `UpdateBetaButtonLabel = "🔄 Đang khởi động lại..."` trên cả Windows và Linux.
 
 
+### 79. Ngăn Chặn Lưu Vào History Của Reader Khi Mở Ảnh, File Zip, PDF, CBZ Từ Bên Ngoài Hệ Điều Hành (Standalone External Launch)
+- **1. Nguyên nhân & Vấn đề**:
+  - Khi người dùng mở nhanh một tệp ảnh (`.jpg`, `.png`, `.webp`, `.bmp`), tệp nén (`.zip`, `.rar`, `.cbz`, `.cbr`) hoặc tài liệu (`.pdf`, `.mobi`) từ File Explorer / liên kết tệp của Windows/Linux:
+  - Trước đây, `App.axaml.cs` và `ComicReaderWindow.axaml.cs` tự động gọi `ReadProgressStore.Instance.RegisterReadComic(...)`, `SaveHistoryToDisk()` và `SaveCurrentReadingSession()`, khiến các tệp đơn lẻ mở xem lướt ở bên ngoài bị lưu thẳng vào Lịch Sử Đọc (`history.md` và tab History trong Thư viện / Reader), gây rác danh sách lịch sử đọc truyện của người dùng.
+- **2. Cơ chế khắc phục triệt để**:
+  - Thêm thuộc tính `IsExternalLaunch` vào `ComicReaderViewModel.cs` để nhận diện các phiên đọc được khởi động từ bên ngoài hệ điều hành (`desktop.Args`).
+  - Trong `App.axaml.cs`:
+    + Xóa bỏ hoàn toàn việc gọi `RegisterReadComic` và `SaveHistoryToDisk()` trước khi nạp cửa sổ đọc độc lập.
+    + Khởi tạo `ComicReaderViewModel` với `IsExternalLaunch = true`.
+    + Khi cửa sổ `ComicReaderWindow` đóng, nếu `IsExternalLaunch == true` thì chỉ gọi `Cleanup()`, tuyệt đối không ghi nhận session hay lưu history ra đĩa.
+  - Trong `ComicReaderViewModel.cs`:
+    + Đặt chốt chặn bảo vệ tại `SaveCurrentReadingSession()` và `SaveChapterReadingSession()`: `if (IsExternalLaunch) return;`.
+    + Ngăn chặn hoàn toàn việc gọi `_progressStore.RecordSessionResume(...)` và `RegisterReadComic(...)` đối với các tệp mở từ bên ngoài.
+  - Trong `ComicReaderWindow.axaml.cs`:
+    + Đặt chốt chặn trong `OnClosed`: `if (!vm.IsExternalLaunch) vm.SaveCurrentReadingSession();`.
+  - Kết quả: Khi đọc truyện bên trong App (qua Thư viện, Hàng chờ), lịch sử đọc vẫn được lưu chính xác 100%. Khi mở xem lướt bất kỳ ảnh, file zip, pdf, cbz... từ bên ngoài hệ điều hành, History của Reader hoàn toàn sạch sẽ, không bị lưu tệp rác.
+
+
+
 
