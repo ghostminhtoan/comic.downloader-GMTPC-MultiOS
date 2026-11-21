@@ -84,7 +84,6 @@ if %ERRORLEVEL% NEQ 0 (
     python -c "import time; time.sleep(20)"
     exit /b %ERRORLEVEL%
 )
-)
 
 :: Clean root publish intermediate files
 del /f /q "publish\*.dll" >nul 2>&1

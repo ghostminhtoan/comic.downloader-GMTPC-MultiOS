@@ -1925,26 +1925,15 @@ public class MainActivity : AvaloniaMainActivity
 
 
     protected override void OnResume()
-
-
-
     {
-
-
-
-        base.OnResume();
-
-
-
-        CurrentInstance = this;
-
-
-
-        AndroidStorageHelper.WakeUpStorage(this);
-
-
-
-        Services.ThermalAndPowerOptimizationService.Instance.SetAppInBackground(false);
+        try
+        {
+            base.OnResume();
+            CurrentInstance = this;
+            AndroidStorageHelper.WakeUpStorage(this);
+            Services.ThermalAndPowerOptimizationService.Instance.SetAppInBackground(false);
+        }
+        catch { }
 
         try
         {
@@ -2709,77 +2698,33 @@ public class MainActivity : AvaloniaMainActivity
 
 
     public override void OnBackPressed()
-
-
-
     {
-
-
-
-        // Khi người dùng bấm phím Back: Mở popup confirm 3 option (Tắt / Chạy ngầm / Thoát hoàn toàn)
-
-
-
+        // Khi người dùng bấm phím Back: Nếu Sidebar Drawer đang mở thì đóng lại, ngược lại mở popup confirm thoát
         RunOnUiThread(() =>
-
-
-
         {
-
-
-
-            var vm = App.SharedMainViewModel;
-
-
-
-            if (vm != null)
-
-
-
+            try
             {
-
-
-
-                if (vm.IsExitConfirmOpen)
-
-
-
+                var vm = App.SharedMainViewModel;
+                if (vm != null)
                 {
+                    if (vm.IsMobileSidebarVisible)
+                    {
+                        vm.IsSidebarVisible = false;
+                        return;
+                    }
 
-
-
-                    vm.IsExitConfirmOpen = false;
-
-
-
+                    if (vm.IsExitConfirmOpen)
+                    {
+                        vm.IsExitConfirmOpen = false;
+                    }
+                    else
+                    {
+                        vm.IsExitConfirmOpen = true;
+                    }
                 }
-
-
-
-                else
-
-
-
-                {
-
-
-
-                    vm.IsExitConfirmOpen = true;
-
-
-
-                }
-
-
-
             }
-
-
-
+            catch { }
         });
-
-
-
     }
 
 

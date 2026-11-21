@@ -29,7 +29,9 @@
 		android:label="ComicDownloaderGMTPC" 
 		android:icon="@drawable/Icon"
 		android:usesCleartextTraffic="true"
-		android:requestLegacyExternalStorage="true">
+		android:requestLegacyExternalStorage="true"
+		android:largeHeap="true"
+		android:hardwareAccelerated="true">
 		<provider
 			android:name="androidx.core.content.FileProvider"
 			android:authorities="com.CompanyName.ComicDownloaderGMTPC.fileprovider"

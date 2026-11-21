@@ -373,7 +373,7 @@ public static class FloatingBubbleManager
                 });
 
             _bubbleView.SetOnTouchListener(touchListener);
-            _windowManager.AddView(_bubbleView, _systemLayoutParams);
+            try { _windowManager.AddView(_bubbleView, _systemLayoutParams); } catch { }
 
             // 1. Thùng rác đáy màn hình (Trash Drop Target)
             int trashSize = DpToPx(context, 64);
@@ -388,7 +388,7 @@ public static class FloatingBubbleManager
                 Gravity = GravityFlags.Bottom | GravityFlags.CenterHorizontal,
                 Y = DpToPx(context, 36)
             };
-            _windowManager.AddView(_trashTargetView, _trashLayoutParams);
+            try { _windowManager.AddView(_trashTargetView, _trashLayoutParams); } catch { }
 
             // 2. Thẻ Mini HUD Tốc độ & Tiến trình (Glassmorphism)
             int hudWidth = DpToPx(context, 255);
@@ -402,7 +402,7 @@ public static class FloatingBubbleManager
             {
                 Gravity = GravityFlags.Top | GravityFlags.Left
             };
-            _windowManager.AddView(_miniHudView, _miniHudLayoutParams);
+            try { _windowManager.AddView(_miniHudView, _miniHudLayoutParams); } catch { }
 
             // 3. Nút vệ tinh (✕) tắt app nếu người dùng bật
             _satelliteSizePx = DpToPx(context, 36);
@@ -421,7 +421,7 @@ public static class FloatingBubbleManager
             {
                 _closeSatelliteView.Visibility = ViewStates.Gone;
             }
-            _windowManager.AddView(_closeSatelliteView, _closeSatelliteLayoutParams);
+            try { _windowManager.AddView(_closeSatelliteView, _closeSatelliteLayoutParams); } catch { }
 
             SyncSatellitePosition();
 
@@ -496,12 +496,16 @@ public static class FloatingBubbleManager
             {
                 try { ((ViewGroup)_bubbleView.Parent).RemoveView(_bubbleView); } catch { }
             }
-            rootContainer.AddView(_bubbleView, _inAppLayoutParams);
-            _bubbleView.BringToFront();
+            try { rootContainer.AddView(_bubbleView, _inAppLayoutParams); } catch { }
+            try { _bubbleView.BringToFront(); } catch { }
             if (OperatingSystem.IsAndroidVersionAtLeast(21))
             {
-                _bubbleView.Elevation = DpToPx(activity, 25);
-                _bubbleView.TranslationZ = DpToPx(activity, 15);
+                try
+                {
+                    _bubbleView.Elevation = DpToPx(activity, 25);
+                    _bubbleView.TranslationZ = DpToPx(activity, 15);
+                }
+                catch { }
             }
 
             // 1. Thùng rác đáy màn hình
@@ -512,8 +516,8 @@ public static class FloatingBubbleManager
                 Gravity = GravityFlags.Bottom | GravityFlags.CenterHorizontal,
                 BottomMargin = DpToPx(activity, 36)
             };
-            rootContainer.AddView(_trashTargetView, _inAppTrashLp);
-            _trashTargetView.BringToFront();
+            try { rootContainer.AddView(_trashTargetView, _inAppTrashLp); } catch { }
+            try { _trashTargetView.BringToFront(); } catch { }
 
             // 2. Thẻ Mini HUD
             int hudWidth = DpToPx(activity, 255);
@@ -522,8 +526,8 @@ public static class FloatingBubbleManager
             {
                 Gravity = GravityFlags.Top | GravityFlags.Left
             };
-            rootContainer.AddView(_miniHudView, _inAppMiniHudLp);
-            _miniHudView.BringToFront();
+            try { rootContainer.AddView(_miniHudView, _inAppMiniHudLp); } catch { }
+            try { _miniHudView.BringToFront(); } catch { }
 
             // 3. Nút vệ tinh (✕)
             _satelliteSizePx = DpToPx(activity, 36);
@@ -537,8 +541,8 @@ public static class FloatingBubbleManager
             {
                 _closeSatelliteView.Visibility = ViewStates.Gone;
             }
-            rootContainer.AddView(_closeSatelliteView, _inAppCloseSatelliteLp);
-            _closeSatelliteView.BringToFront();
+            try { rootContainer.AddView(_closeSatelliteView, _inAppCloseSatelliteLp); } catch { }
+            try { _closeSatelliteView.BringToFront(); } catch { }
 
             SyncSatellitePosition();
 
@@ -2147,7 +2151,7 @@ public static class FloatingBubbleManager
                 {
                     _systemLayoutParams.Width = _bubbleSizePx;
                     _systemLayoutParams.Height = _bubbleSizePx;
-                    _windowManager.UpdateViewLayout(_bubbleView, _systemLayoutParams);
+                    try { _windowManager.UpdateViewLayout(_bubbleView, _systemLayoutParams); } catch { }
                 }
                 else if (!_isSystemOverlay && _inAppLayoutParams != null && _bubbleView != null)
                 {

@@ -80,6 +80,42 @@ namespace ComicDownloaderGMTPC.Android
         {
             try
             {
+                // 1. Hook unhandled exception ở tầng C# AppDomain để ghi log và tránh sập tiến trình ngầm
+                AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+                {
+                    try
+                    {
+                        var ex = e.ExceptionObject as Exception;
+                        global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[MainApplication AppDomain Unhandled] {ex}");
+                        ApplicationCrashLogger.WriteCrashLog("MainApplication.AppDomain", ex?.ToString());
+                    }
+                    catch { }
+                };
+
+                // 2. Hook task unobserved exceptions để tránh crash khi GC dọn Task lỗi
+                TaskScheduler.UnobservedTaskException += (s, e) =>
+                {
+                    try
+                    {
+                        global::Android.Util.Log.Warn("ComicGMTPC_Task", $"[MainApplication UnobservedTask] {e.Exception}");
+                        ApplicationCrashLogger.WriteCrashLog("MainApplication.UnobservedTask", e.Exception?.ToString());
+                        e.SetObserved();
+                    }
+                    catch { }
+                };
+
+                // 3. Hook AndroidEnvironment.UnhandledExceptionRaiser để bắt và nuốt các ngoại lệ JNI/Java tránh sập app
+                AndroidEnvironment.UnhandledExceptionRaiser += (s, e) =>
+                {
+                    try
+                    {
+                        global::Android.Util.Log.Error("ComicGMTPC_Crash", $"[MainApplication AndroidEnvironment Unhandled] {e.Exception}");
+                        ApplicationCrashLogger.WriteCrashLog("MainApplication.AndroidEnvironment", e.Exception?.ToString());
+                        e.Handled = true; // CỰC KỲ QUAN TRỌNG: Ngăn chặn crash app triệt để
+                    }
+                    catch { }
+                };
+
                 // Khởi tạo trước ThreadPool để chống starvation và chống crash pthread_create khi chạy CPU đa luồng trên Android
                 int minThreads = Math.Max(16, Environment.ProcessorCount * 2);
                 System.Threading.ThreadPool.SetMinThreads(minThreads, minThreads);

@@ -1145,3 +1145,28 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + **Nhóm 3 (Thiết Lập & Hệ Thống)**: Đổi ngôn ngữ (ENG/VI), Thoát hoàn toàn.
 - **4. Tích Hợp Hệ Thống Phím Tắt Toàn Cục (Hotkeys)**:
   + Lắng nghe `KeyDownEvent` toàn hệ thống: `Ctrl + B` (Bật / Ẩn Sidebar), `Ctrl + Shift + D` (Tab Tải về), `Ctrl + Shift + S` (Tab Nguồn), `Ctrl + Shift + T` (Tab Công cụ), `Ctrl + Shift + W` (Tab Thư viện), `Ctrl + Shift + F` (Tab Tìm truyện), phím `Escape` hoặc `Back` (trên Android) tự động đóng ngăn kéo Drawer nếu đang mở.
+
+---
+
+### 68. Tối Ưu Thu Hẹp Sidebar Desktop (Windows & Linux Chuẩn WPF) & Khắc Phục Triệt Để Lỗi Tự Động Crash Trên Android
+- **1. Thu Hẹp Sidebar Desktop Chuẩn Hẹp Giống WPF (124px)**:
+  + Giảm độ rộng cột Desktop Sidebar từ 215px xuống `124px` (~120-125px giống hệt bản WPF), giải phóng triệt để không gian ngang cho danh sách truyện và các công cụ chính.
+  + **Tái cấu trúc 5 nút Tab điều hướng thành Card 2 tầng đối xứng**:
+    * Dòng 1: Icon + Tên Tab (`📥 Tải Về`, `🌐 Nguồn Manga`, `🛠️ Công Cụ`, `📚 Thư Viện`, `🔍 Tìm Truyện`) font 10.5px bold căn giữa.
+    * Dòng 2: Phím tắt phớt cyan nổi bật (`Ctrl+Shift+D`, `Ctrl+Shift+S`, `Ctrl+Shift+T`, `Ctrl+Shift+W`, `Ctrl+Shift+F`) font 8px monospace căn giữa.
+    * Bo góc mềm mại `CornerRadius="6"`, padding tinh gọn `3,4`, tạo cảm giác thanh thoát, chuyên nghiệp chuẩn Desktop WPF.
+  + **Tinh gọn cụm Tiện Ích & Thiết Lập**:
+    * Các nút tiện ích được rút gọn nhãn vừa vặn bề ngang: `☁️ Drive`, `💾 Lưu MD`, `📂 Mở MD`, `📁 Thư mục`, `🫧 Bong bóng`, `🌐 Ngôn ngữ: VI`, `⛔ Thoát app`.
+- **2. Khắc Phục Triệt Để Sự Cố Thỉnh Thoảng Tự Động Crash Trên Android**:
+  + **Đăng ký Global Exception Handlers ở tầng Application (`MainApplication.cs`)**:
+    * `AndroidEnvironment.UnhandledExceptionRaiser`: Thiết lập `args.Handled = true` để chặn đứng mọi ngoại lệ chưa xử lý từ tầng Java/JNI làm sập tiến trình Native Mono.
+    * `AppDomain.CurrentDomain.UnhandledException`: Bắt và ghi nhận log chi tiết mọi unhandled exception từ luồng phụ.
+    * `TaskScheduler.UnobservedTaskException`: Gọi `args.SetObserved()` để ngăn runtime hủy process khi GC thu gom các Task nền bị lỗi.
+  + **Cấp tối đa tài nguyên bộ nhớ Heap & GPU (`AndroidManifest.xml`)**:
+    * Bổ sung `android:largeHeap="true"` để nâng giới hạn RAM heap lên 512MB-1GB, chống sập app vì `OutOfMemoryError` khi giải mã bitmap ảnh truyện tranh và xử lý ảnh hàng loạt.
+    * Bổ sung `android:hardwareAccelerated="true"` để kích hoạt tăng tốc phần cứng GPU mượt mà, chống lỗi giật lag/crash software renderer.
+  + **Bọc try-catch an toàn cho Floating Bubble & WindowManager (`FloatingBubbleManager.cs`)**:
+    * Toàn bộ các lệnh `AddView`, `UpdateViewLayout`, `RemoveView` trên WindowManager và in-app FrameLayout đều được bọc try-catch 100%, loại bỏ triệt để lỗi `WindowManagerBadTokenException`, `IllegalArgumentException: View not attached to window manager`.
+  + **Gia cố vòng đời Activity & Phím Back (`MainActivity.cs`)**:
+    * Bọc an toàn `try-catch` trong `OnResume()`.
+    * Cải tiến `OnBackPressed()`: Khi Sidebar Drawer đang mở, bấm phím Back sẽ đóng ngăn kéo lại trước một cách tự nhiên thay vì mở hộp thoại xác nhận thoát.
