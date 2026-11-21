@@ -1,0 +1,105 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ComicDownloaderGMTPC.ViewModels"
+        xmlns:models="using:ComicDownloaderGMTPC.Models"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="750"
+        Width="1150" Height="750"
+        MinWidth="700" MinHeight="450"
+        WindowStartupLocation="CenterScreen"
+        Background="#091018"
+        x:Class="ComicDownloaderGMTPC.Views.DetachedQueueWindow"
+        x:DataType="vm:MainViewModel"
+        Icon="/Assets/app-icon.ico"
+        Title="Danh sách truyện chờ tải - Comic Downloader GMTPC">
+
+    <Grid RowDefinitions="Auto, *">
+        <!-- ROW 0: Header & Toolbar Hàng Chờ Tối Ưu Cho Cửa Sổ Mở Rộng -->
+        <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="0,0,0,1" Padding="12,8">
+            <Grid ColumnDefinitions="Auto, *, Auto">
+                <!-- Tiêu đề + Thống kê -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Border Background="#4F46E5" CornerRadius="4" Width="26" Height="26">
+                        <TextBlock Text="📚" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Orientation="Vertical">
+                        <TextBlock Text="DANH SÁCH TRUYỆN CHỜ TẢI (DETACHED QUEUE)" FontWeight="Bold" FontSize="12.5" Foreground="#38BDF8" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <TextBlock Text="{Binding TotalBooksCount, StringFormat='{}Tổng: {0}'}" FontSize="10.5" Foreground="#94A3B8" />
+                            <TextBlock Text="{Binding CompletedBooksCount, StringFormat='{}Đã xong: {0}'}" FontSize="10.5" Foreground="#34D399" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding ErrorBooksCount, StringFormat='{}Lỗi: {0}'}" FontSize="10.5" Foreground="#F87171" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Toolbar View Mode & Bộ lọc nhanh -->
+                <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="10,0">
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,0">
+                        <TextBlock Text="VIEW MODE:" Foreground="#00E5FF" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding QueueViewModes}"
+                                  SelectedItem="{Binding SelectedQueueViewMode}"
+                                  Width="150" Height="24" FontSize="10" FontWeight="SemiBold"
+                                  Background="#091018" Foreground="#00E5FF" BorderBrush="#00E5FF" BorderThickness="1"
+                                  Padding="6,1" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <Button Command="{Binding SelectAllCommand}" Content="✓ Chọn tất cả" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" Foreground="#38BDF8" FontSize="10" Padding="6,2" Height="24" CornerRadius="3" Margin="0,0,4,0" />
+                    <Button Command="{Binding UnselectAllCommand}" Content="✗ Bỏ chọn" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" Foreground="#94A3B8" FontSize="10" Padding="6,2" Height="24" CornerRadius="3" Margin="0,0,4,0" />
+                    <Button Command="{Binding ReverseQueueCommand}" Content="🔃 Đảo ngược" Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1" Foreground="#38BDF8" FontSize="10" Padding="6,2" Height="24" CornerRadius="3" Margin="0,0,4,0" />
+                    <Button Command="{Binding ClearCompletedCommand}" Content="🧹 Xóa đã xong" Background="#1E293B" BorderBrush="#10B981" BorderThickness="1" Foreground="#10B981" FontSize="10" Padding="6,2" Height="24" CornerRadius="3" Margin="0,0,4,0" />
+                </WrapPanel>
+
+                <!-- Nút Đưa danh sách quay lại MainWindow -->
+                <Button Grid.Column="2" Command="{Binding CloseExternalQueueWindowCommand}"
+                        Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                        Foreground="#38BDF8" FontWeight="Bold" FontSize="10.5"
+                        Padding="10,4" Height="28" CornerRadius="4" VerticalAlignment="Center"
+                        ToolTip.Tip="Đóng cửa sổ này và đưa danh sách quay về cửa sổ chính">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Text="↩️" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Text="Quay về app chính" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ROW 1: Nội dung danh sách truyện mở rộng toàn màn hình -->
+        <Border Grid.Row="1" Background="#091018" Padding="10">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding ActiveQueueItemsSource}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="models:ComicBookItem">
+                            <Border Background="#101827" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,4">
+                                <Grid ColumnDefinitions="Auto, *, Auto">
+                                    <!-- Checkbox + STT -->
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,10,0">
+                                        <CheckBox IsChecked="{Binding IsChecked}" Margin="0" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Index, StringFormat='{}#{0}'}" Foreground="#64748B" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <!-- Tiêu đề & Thông tin tiến trình -->
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                                        <TextBlock Text="{Binding Title}" Foreground="#F8FAFC" FontSize="11.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding Domain}" Foreground="#38BDF8" FontSize="9.5" />
+                                            <TextBlock Text="{Binding LocalizedStatus}" Foreground="{Binding ProgressBarBrush}" FontSize="9.5" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding SpeedText}" Foreground="#34D399" FontSize="9.5" />
+                                        </StackPanel>
+                                        <ProgressBar Value="{Binding ProgressPercentage}" Maximum="100" Height="4" CornerRadius="2" Foreground="#00E5FF" Background="#1E293B" Margin="0,2,0,0" />
+                                    </StackPanel>
+
+                                    <!-- Tiến trình % & Nút hành động nhanh -->
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="10,0,0,0">
+                                        <TextBlock Text="{Binding ProgressPercentage, StringFormat='{}{0:F1}%'}" Foreground="#FFE600" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Width="45" TextAlignment="Right" />
+                                        <Button Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenBookFolderCommand}" CommandParameter="{Binding .}" Content="📁" Background="#1E293B" Foreground="#94A3B8" FontSize="10" Padding="5,2" CornerRadius="3" ToolTip.Tip="Mở thư mục truyện" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</Window>

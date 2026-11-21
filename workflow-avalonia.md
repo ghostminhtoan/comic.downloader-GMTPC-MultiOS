@@ -1170,3 +1170,25 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + **Gia cố vòng đời Activity & Phím Back (`MainActivity.cs`)**:
     * Bọc an toàn `try-catch` trong `OnResume()`.
     * Cải tiến `OnBackPressed()`: Khi Sidebar Drawer đang mở, bấm phím Back sẽ đóng ngăn kéo lại trước một cách tự nhiên thay vì mở hộp thoại xác nhận thoát.
+
+---
+
+### 69. Mặc Định Bật Sidebar Desktop, Cửa Sổ Phụ Hàng Chờ (Detached Queue Window Giống WPF) & Bổ Sung Nút Sidebar Trong Quick Float Dock Android
+- **1. Mặc Định Bật Sidebar Desktop Trên Windows & Linux Khi Mở App**:
+  + Tự động kích hoạt `_isSidebarVisible = true` ngay khi khởi tạo nếu chạy trên môi trường Desktop (`IClassicDesktopStyleApplicationLifetime`), đảm bảo người dùng luôn có sẵn thanh điều hướng trực quan tương tự bản WPF.
+  + Trên Android, Sidebar mặc định ở trạng thái thu gọn để giữ tối đa diện tích xem truyện tranh, chỉ bung ra khi người dùng chạm vào nút điều hướng.
+- **2. Tách Cửa Sổ Hàng Chờ Độc Lập (Detached Queue Window Chuẩn WPF)**:
+  + **Tạo mới Window riêng biệt (`DetachedQueueWindow.axaml` & `DetachedQueueWindow.axaml.cs`)**:
+    * Bố cục chuyên dụng tối ưu hiển thị danh sách lớn với độ phân giải mở rộng, tích hợp toolbar quản lý đầy đủ (View Mode, Đảo ngược, Chọn/Bỏ chọn, Xóa đã xong).
+    * Dùng chung `MainViewModel` làm DataContext, đồng bộ thời gian thực 100% tiến độ tải, tốc độ, trạng thái và sự kiện với cửa sổ chính.
+  + **Nút Bật / Tắt Trên Thanh Công Cụ Hàng Chờ (`ToggleExternalQueueWindowCommand`)**:
+    * Nằm liền kề ComboBox `VIEW MODE`, bo góc pill hiện đại với nhãn song ngữ "Mở cửa sổ mới" / "Đóng cửa sổ" và icon `🗖`.
+  + **Banner Placeholder Tại Cửa Sổ Chính Khi Danh Sách Đang Tách Rời**:
+    * Hiển thị bảng cảnh báo trung tâm đẹp mắt: `DANH SÁCH ĐANG HIỂN THỊ Ở CỬA SỔ PHỤ` kèm lời dẫn và nút `↩️ ĐƯA DANH SÁCH QUAY LẠI`.
+    * Tự động ẩn 3 danh sách hàng chờ (`SingleColumn`, `GridColumn`, `Thumbnail`) tại MainWindow để tránh xung đột layout và giải phóng tài nguyên render.
+    * Khi đóng cửa sổ phụ hoặc bấm nút đưa lại, danh sách truyện lập tức hiển thị trở lại tại cửa sổ chính nguyên vẹn.
+- **3. Bổ Sung Nút Quick Float Sidebar Trên Android Dưới Nút BOT**:
+  + Tại cụm phím điều hướng nổi đa năng (`FloatingScrollPanel`), đặt thêm nút `🧭 SIDEBAR` nằm ngay bên dưới nút `BOT`.
+  + Thiết kế dạng viên thuốc bo tròn `CornerRadius="12"`, viền xanh ngọc Emerald `#10B981`, chữ phát sáng `#34D399`, kích thước `74x28` vừa vặn ngón tay cái.
+  + Chạm vào nút sẽ gọi `ToggleSidebarCommand`, mở ngay ngăn kéo Sidebar điều hướng mọi lúc mọi nơi trên điện thoại mà không cần phải cuộn lên đỉnh màn hình.
+

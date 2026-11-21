@@ -1295,7 +1295,7 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [ObservableProperty]
-    private bool _isSidebarVisible = false;
+    private bool _isSidebarVisible = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
 
     public string SidebarToggleLabel => IsSidebarVisible ? "SIDEBAR [ON]" : "SIDEBAR [OFF]";
     public string SidebarButtonBackground => IsSidebarVisible ? "#059669" : "#1E293B";
@@ -1321,6 +1321,87 @@ public partial class MainViewModel : ViewModelBase
     private void CloseSidebar()
     {
         IsSidebarVisible = false;
+    }
+
+    [ObservableProperty]
+    private bool _isExternalQueueWindowOpen = false;
+
+    private Views.DetachedQueueWindow? _detachedQueueWindowInstance;
+
+    public int TotalBooksCount => ComicBooks.Count;
+    public int CompletedBooksCount => CompletedCount;
+    public int ErrorBooksCount => ErrorCount;
+
+    public bool IsMainQueueSingleColumnVisible => !IsExternalQueueWindowOpen && IsQueueSingleColumnDisplayActive;
+    public bool IsMainQueueGridColumnVisible => !IsExternalQueueWindowOpen && IsQueueGridDisplayActive;
+    public bool IsMainQueueThumbnailVisible => !IsExternalQueueWindowOpen && IsThumbnailMode;
+
+    public string ExternalQueueWindowToggleText => IsExternalQueueWindowOpen ? (LanguageService.Instance.IsVietnamese ? "Đóng cửa sổ" : "Close Pop-out") : (LanguageService.Instance.IsVietnamese ? "Mở cửa sổ mới" : "Pop-out");
+    public string ExternalQueueWindowToggleBackground => IsExternalQueueWindowOpen ? "#059669" : "#1E293B";
+
+    partial void OnIsExternalQueueWindowOpenChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsMainQueueSingleColumnVisible));
+        OnPropertyChanged(nameof(IsMainQueueGridColumnVisible));
+        OnPropertyChanged(nameof(IsMainQueueThumbnailVisible));
+        OnPropertyChanged(nameof(ExternalQueueWindowToggleText));
+        OnPropertyChanged(nameof(ExternalQueueWindowToggleBackground));
+    }
+
+    [RelayCommand]
+    public void ToggleExternalQueueWindow()
+    {
+        if (IsExternalQueueWindowOpen)
+        {
+            CloseExternalQueueWindow();
+        }
+        else
+        {
+            OpenExternalQueueWindow();
+        }
+    }
+
+    [RelayCommand]
+    public void OpenExternalQueueWindow()
+    {
+        if (!IsDesktopLifetime) return;
+
+        if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            if (_detachedQueueWindowInstance == null)
+            {
+                _detachedQueueWindowInstance = new Views.DetachedQueueWindow
+                {
+                    DataContext = this
+                };
+                _detachedQueueWindowInstance.Closed += (s, e) =>
+                {
+                    _detachedQueueWindowInstance = null;
+                    IsExternalQueueWindowOpen = false;
+                };
+            }
+
+            IsExternalQueueWindowOpen = true;
+            _detachedQueueWindowInstance.Show();
+            _detachedQueueWindowInstance.Activate();
+            AddLog("INFO", "🗖 Đã mở danh sách truyện ở cửa sổ phụ riêng biệt.");
+        }
+    }
+
+    [RelayCommand]
+    public void CloseExternalQueueWindow()
+    {
+        if (_detachedQueueWindowInstance != null)
+        {
+            try
+            {
+                _detachedQueueWindowInstance.Close();
+            }
+            catch { }
+            _detachedQueueWindowInstance = null;
+        }
+        IsExternalQueueWindowOpen = false;
+        AddLog("INFO", "↩ Đã đóng cửa sổ phụ, đưa danh sách truyện quay lại cửa sổ chính.");
     }
 
     [RelayCommand]
@@ -1623,6 +1704,9 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(QueueRowThumbnailHeight));
         OnPropertyChanged(nameof(IsQueueSingleColumnDisplayActive));
         OnPropertyChanged(nameof(IsQueueGridDisplayActive));
+        OnPropertyChanged(nameof(IsMainQueueSingleColumnVisible));
+        OnPropertyChanged(nameof(IsMainQueueGridColumnVisible));
+        OnPropertyChanged(nameof(IsMainQueueThumbnailVisible));
         if (value)
         {
             RebuildGridQueueRows();
@@ -1828,6 +1912,9 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ActiveThumbnailItemsSource));
         OnPropertyChanged(nameof(IsQueueSingleColumnDisplayActive));
         OnPropertyChanged(nameof(IsQueueGridDisplayActive));
+        OnPropertyChanged(nameof(IsMainQueueSingleColumnVisible));
+        OnPropertyChanged(nameof(IsMainQueueGridColumnVisible));
+        OnPropertyChanged(nameof(IsMainQueueThumbnailVisible));
         if (!thumbMode && IsQueueGridMode)
         {
             RebuildGridQueueRows();
@@ -1846,6 +1933,9 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ActiveThumbnailItemsSource));
         OnPropertyChanged(nameof(IsQueueSingleColumnDisplayActive));
         OnPropertyChanged(nameof(IsQueueGridDisplayActive));
+        OnPropertyChanged(nameof(IsMainQueueSingleColumnVisible));
+        OnPropertyChanged(nameof(IsMainQueueGridColumnVisible));
+        OnPropertyChanged(nameof(IsMainQueueThumbnailVisible));
         if (!value && IsQueueGridMode)
         {
             RebuildGridQueueRows();
@@ -2258,6 +2348,10 @@ public partial class MainViewModel : ViewModelBase
 
     public MainViewModel()
     {
+        if (IsDesktopLifetime)
+        {
+            IsSidebarVisible = true;
+        }
         SplashViewModel.ReportGlobalProgress(52, "Khởi tạo cấu hình & kết nối hàng chờ...");
         InitInAppFolderPicker();
         _downloadPathText = _downloadEngine.DownloadRoot;
