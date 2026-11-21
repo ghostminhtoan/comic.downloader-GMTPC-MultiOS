@@ -2426,10 +2426,12 @@
                                                         Foreground="{Binding GridCol2Foreground}" FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3"
                                                         ToolTip.Tip="Lưới 2 cột (Mặc định)" />
                                                 <Button Command="{Binding SetGridColumnsCommand}" CommandParameter="3" Content="3"
+                                                        IsVisible="{Binding CanSelectGrid3Cols}"
                                                         Background="{Binding GridCol3Background}" BorderBrush="{Binding GridCol3Border}" BorderThickness="1"
                                                         Foreground="{Binding GridCol3Foreground}" FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3"
                                                         ToolTip.Tip="Lưới 3 cột" />
                                                 <Button Command="{Binding SetGridColumnsCommand}" CommandParameter="4" Content="4"
+                                                        IsVisible="{Binding CanSelectGrid4Cols}"
                                                         Background="{Binding GridCol4Background}" BorderBrush="{Binding GridCol4Border}" BorderThickness="1"
                                                         Foreground="{Binding GridCol4Foreground}" FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3"
                                                         ToolTip.Tip="Lưới 4 cột" />

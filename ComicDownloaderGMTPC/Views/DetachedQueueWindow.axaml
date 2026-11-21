@@ -212,6 +212,30 @@
 
                         <!-- Toolbar View Mode & Bộ lọc nhanh -->
                         <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="10,0">
+                            <!-- Cụm nút Tải / Dừng tải -->
+                            <Button Command="{Binding DownloadAllCommand}" IsVisible="{Binding !IsDownloading}" Content="▶ Tải"
+                                    Background="#2563EB" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="8,2" Height="24" CornerRadius="3" Margin="0,0,4,0"
+                                    ToolTip.Tip="Bắt đầu tải toàn bộ danh sách truyện" />
+                            <Button Command="{Binding StopCommand}" IsVisible="{Binding IsDownloading}" Content="⏹ Dừng"
+                                    Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="8,2" Height="24" CornerRadius="3" Margin="0,0,4,0"
+                                    ToolTip.Tip="Dừng tiến trình tải truyện" />
+
+                            <!-- Cụm nút Tạm dừng / Tiếp tục -->
+                            <Button Command="{Binding TogglePauseCommand}" IsVisible="{Binding !IsPaused}" Content="⏸ Tạm dừng"
+                                    Background="#D97706" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="10" Padding="8,2" Height="24" CornerRadius="3" Margin="0,0,4,0"
+                                    ToolTip.Tip="Tạm dừng tiến trình tải truyện" />
+                            <Button Command="{Binding TogglePauseCommand}" IsVisible="{Binding IsPaused}" Content="▶ Tiếp tục"
+                                    Background="#059669" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" Padding="8,2" Height="24" CornerRadius="3" Margin="0,0,4,0"
+                                    ToolTip.Tip="Tiếp tục tiến trình tải truyện" />
+
+                            <!-- Nút Cuộn Top / Bottom -->
+                            <Button Command="{Binding ScrollToTopCommand}" Content="⬆ Top"
+                                    Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" Padding="6,2" Height="24" CornerRadius="3" Margin="0,0,4,0"
+                                    ToolTip.Tip="Cuộn lên đầu trang" />
+                            <Button Command="{Binding ScrollToBottomCommand}" Content="⬇ Bot"
+                                    Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1" Foreground="#38BDF8" FontWeight="Bold" FontSize="10" Padding="6,2" Height="24" CornerRadius="3" Margin="0,0,4,0"
+                                    ToolTip.Tip="Cuộn xuống cuối trang" />
+
                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,0">
                                 <TextBlock Text="VIEW MODE:" Foreground="#00E5FF" FontWeight="Bold" FontSize="10" VerticalAlignment="Center" />
                                 <ComboBox ItemsSource="{Binding QueueViewModes}"
@@ -238,10 +262,12 @@
                                         Foreground="{Binding GridCol2Foreground}" FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3" Margin="1,0"
                                         ToolTip.Tip="Lưới 2 cột (Mặc định)" />
                                 <Button Command="{Binding SetGridColumnsCommand}" CommandParameter="3" Content="3"
+                                        IsVisible="{Binding CanSelectGrid3Cols}"
                                         Background="{Binding GridCol3Background}" BorderBrush="{Binding GridCol3Border}" BorderThickness="1"
                                         Foreground="{Binding GridCol3Foreground}" FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3" Margin="1,0"
                                         ToolTip.Tip="Lưới 3 cột" />
                                 <Button Command="{Binding SetGridColumnsCommand}" CommandParameter="4" Content="4"
+                                        IsVisible="{Binding CanSelectGrid4Cols}"
                                         Background="{Binding GridCol4Background}" BorderBrush="{Binding GridCol4Border}" BorderThickness="1"
                                         Foreground="{Binding GridCol4Foreground}" FontWeight="Bold" FontSize="9" Padding="6,1" Height="22" CornerRadius="3" Margin="1,0"
                                         ToolTip.Tip="Lưới 4 cột" />
@@ -271,7 +297,8 @@
                 <Border Grid.Row="1" Background="#091018" Padding="10">
                     <Panel>
                         <!-- 1. CHẾ ĐỘ DANH SÁCH (LIST VIEW & LIST + THUMBNAIL COLUMN) -->
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                        <ScrollViewer x:Name="DetachedSingleColumnScrollViewer"
+                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                       Padding="4,4,4,12"
                                       IsVisible="{Binding IsQueueSingleColumnDisplayActive}">
                             <ItemsControl ItemsSource="{Binding ActiveQueueItemsSource}">
@@ -289,7 +316,8 @@
                         </ScrollViewer>
 
                         <!-- 2. CHẾ ĐỘ LƯỚI ĐA CỘT (GRID VIEW 2, 3, 4 CỘT) -->
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                        <ScrollViewer x:Name="DetachedGridScrollViewer"
+                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                       Padding="4,4,4,12"
                                       IsVisible="{Binding IsQueueGridDisplayActive}">
                             <ItemsControl ItemsSource="{Binding GridQueueRows}">
@@ -312,7 +340,8 @@
                         </ScrollViewer>
 
                         <!-- 3. CHẾ ĐỘ THUMBNAIL VIEW (LƯỚI THẺ ẢNH BÌA LỚN CHUẨN WPF) -->
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                        <ScrollViewer x:Name="DetachedThumbnailScrollViewer"
+                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                       Padding="8,8,8,12"
                                       IsVisible="{Binding IsThumbnailMode}">
                             <ItemsControl ItemsSource="{Binding ActiveThumbnailItemsSource}">
@@ -393,6 +422,147 @@
                 <StackPanel VerticalAlignment="Center" Spacing="2">
                     <TextBlock Text="{Binding DisplayScaleLabel, Mode=OneWay}" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" LetterSpacing="0.8"/>
                     <TextBlock Text="{Binding UiZoomPercentText, Mode=OneWay}" Foreground="#FFE600" FontSize="26" FontWeight="Black"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- FLOATING QUICK CONTROL BAR TRONG CỬA SỔ PHỤ DETACHED QUEUE -->
+        <Border x:Name="FloatingQuickControlBorder"
+                IsVisible="{Binding IsFloatingQuickControlVisible}"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Margin="0,0,24,45" CornerRadius="16"
+                Background="#D80B132B" BorderBrush="#38BDF8" BorderThickness="1.5"
+                Padding="4,5" ZIndex="1200" IsHitTestVisible="True"
+                BoxShadow="0 8 30 0 #A0000000">
+            <Border.RenderTransform>
+                <TranslateTransform X="0" Y="0" />
+            </Border.RenderTransform>
+            <StackPanel Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
+                <!-- Thanh Grip kéo thả di chuyển vị trí (Move Handle) -->
+                <Border x:Name="FloatingGripBar"
+                        Background="#1E293B" CornerRadius="8"
+                        Width="44" Height="14" Margin="0,1,0,2"
+                        Cursor="SizeAll"
+                        ToolTip.Tip="Chạm giữ &amp; kéo để di chuyển. Chạm nhẹ để thu nhỏ/mở rộng cụm nút nổi này">
+                    <TextBlock Text="⋮⋮⋮" Foreground="#38BDF8" FontSize="9" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0" />
+                </Border>
+
+                <!-- Cụm thao tác Tải / Dừng / Tạm dừng (Ẩn khi thu nhỏ, chỉ hiện khi mở rộng) -->
+                <StackPanel x:Name="FloatingActionPanel" Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
+                    <!-- Thao tác Dán Link & Tự dán trên thanh Quick Float Button -->
+                    <Button Command="{Binding PasteLinkCommand}"
+                            Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                            Foreground="#38BDF8" FontWeight="Bold"
+                            CornerRadius="12" Padding="4,4" Width="74" Height="28"
+                            ToolTip.Tip="Dán link truyện từ Clipboard">
+                        <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="📋" FontSize="10" VerticalAlignment="Center" />
+                            <TextBlock Text="DÁN LINK" FontSize="9.5" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <CheckBox IsChecked="{Binding IsAutoPasteClipboard}"
+                              HorizontalAlignment="Center" Margin="0,1,0,3"
+                              ToolTip.Tip="Tự động theo dõi Clipboard: mỗi khi copy link truyện sẽ tự động nạp">
+                        <TextBlock Text="⚡ Tự dán" FontSize="9.5" Foreground="#38BDF8" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </CheckBox>
+
+                    <Border Height="1" Width="50" Background="#334155" HorizontalAlignment="Center" Margin="0,1,0,3" />
+
+                    <!-- Nút Chọn / Hủy chọn dải truyện theo Part -->
+                    <Button Command="{Binding ToggleQueueBatchSelectModeCommand}"
+                            Background="{Binding QueueBatchButtonBg}" Foreground="{Binding QueueBatchButtonFg}"
+                            BorderBrush="{Binding QueueBatchButtonBorder}" BorderThickness="1"
+                            FontWeight="Bold" CornerRadius="12" Padding="2,3" Width="74" Height="28"
+                            ToolTip.Tip="Chọn / Hủy chọn dải nhiều truyện theo Part">
+                        <TextBlock Text="{Binding QueueBatchButtonText}" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
+
+                    <Border Height="1" Width="50" Background="#334155" HorizontalAlignment="Center" Margin="0,1,0,3" />
+
+                    <!-- 1. Toggle Button Tải / Dừng tải -->
+                    <Button Command="{Binding DownloadAllCommand}" IsVisible="{Binding !IsDownloading}"
+                            Background="#4F46E5" Foreground="#FFFFFF" FontWeight="Bold"
+                            CornerRadius="12" Padding="6,4" Width="74" Height="28"
+                            ToolTip.Tip="Bắt đầu tải toàn bộ danh sách truyện (Tải)">
+                        <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="⬇️" FontSize="11" VerticalAlignment="Center" />
+                            <TextBlock Text="TẢI" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding StopCommand}" IsVisible="{Binding IsDownloading}"
+                            Background="#DC2626" Foreground="#FFFFFF" FontWeight="Bold"
+                            CornerRadius="12" Padding="6,4" Width="74" Height="28"
+                            ToolTip.Tip="Dừng tiến trình tải truyện (Dừng)">
+                        <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="⏹️" FontSize="11" VerticalAlignment="Center" />
+                            <TextBlock Text="DỪNG" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <!-- 2. Toggle Button Pause / Resume -->
+                    <Button Command="{Binding TogglePauseCommand}" IsVisible="{Binding !IsPaused}"
+                            Background="#D97706" Foreground="#FFFFFF" FontWeight="SemiBold"
+                            CornerRadius="12" Padding="4,4" Width="74" Height="28"
+                            ToolTip.Tip="Tạm dừng tiến trình tải truyện">
+                        <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="⏸️" FontSize="10" VerticalAlignment="Center" />
+                            <TextBlock Text="T.DỪNG" FontSize="9.5" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding TogglePauseCommand}" IsVisible="{Binding IsPaused}"
+                            Background="#059669" Foreground="#FFFFFF" FontWeight="Bold"
+                            CornerRadius="12" Padding="4,4" Width="74" Height="28"
+                            ToolTip.Tip="Tiếp tục tiến trình tải truyện">
+                        <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="▶️" FontSize="10" VerticalAlignment="Center" />
+                            <TextBlock Text="TIẾP TỤC" FontSize="9.5" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <Border Height="1" Width="50" Background="#334155" HorizontalAlignment="Center" Margin="0,1" />
+                </StackPanel>
+
+                <!-- Cụm nút Cuộn Top / Bot -->
+                <StackPanel x:Name="FloatingScrollPanel" Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
+                    <!-- 3. Nút Cuộn Lên Đầu Trang (Top) -->
+                    <Button Command="{Binding ScrollToTopCommand}"
+                            Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                            Foreground="#38BDF8" FontWeight="Bold"
+                            CornerRadius="12" Padding="6,4" Width="74" Height="28"
+                            ToolTip.Tip="Cuộn lên đầu trang (Top)">
+                        <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="⬆️" FontSize="11" VerticalAlignment="Center" />
+                            <TextBlock Text="TOP" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <!-- 4. Nút Cuộn Xuống Cuối Trang (Bot) -->
+                    <Button Command="{Binding ScrollToBottomCommand}"
+                            Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                            Foreground="#38BDF8" FontWeight="Bold"
+                            CornerRadius="12" Padding="6,4" Width="74" Height="28"
+                            ToolTip.Tip="Cuộn xuống cuối trang (Bot)">
+                        <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="⬇️" FontSize="11" VerticalAlignment="Center" />
+                            <TextBlock Text="BOT" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <!-- 5. Nút Mở / Đóng Sidebar Drawer -->
+                    <Button Command="{Binding ToggleSidebarCommand}"
+                            Background="#1E293B" BorderBrush="#10B981" BorderThickness="1"
+                            Foreground="#34D399" FontWeight="Bold"
+                            CornerRadius="12" Padding="6,4" Width="74" Height="28"
+                            ToolTip.Tip="Mở / Đóng Menu Sidebar điều hướng (Ctrl+B)">
+                        <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="🧭" FontSize="11" VerticalAlignment="Center" />
+                            <TextBlock Text="SIDEBAR" FontSize="9" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </StackPanel>
         </Border>

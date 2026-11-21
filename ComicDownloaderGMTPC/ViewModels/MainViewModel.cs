@@ -1580,6 +1580,10 @@ public partial class MainViewModel : ViewModelBase
     public bool IsDesktopLifetime => Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
     public bool IsAndroidPlatform => OperatingSystem.IsAndroid();
 
+    public int MaxGridColumnsAllowed => (OperatingSystem.IsAndroid() && IsPortraitMode) ? 2 : 4;
+    public bool CanSelectGrid3Cols => !OperatingSystem.IsAndroid() || !IsPortraitMode;
+    public bool CanSelectGrid4Cols => !OperatingSystem.IsAndroid() || !IsPortraitMode;
+
     [ObservableProperty]
     private string _enhanceImageCounterText = "0 / 0";
 
@@ -1588,10 +1592,18 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnIsPortraitModeChanged(bool value)
     {
+        if (OperatingSystem.IsAndroid() && value && GridColumnsCount > 2)
+        {
+            GridColumnsCount = 2;
+        }
+        OnPropertyChanged(nameof(MaxGridColumnsAllowed));
+        OnPropertyChanged(nameof(CanSelectGrid3Cols));
+        OnPropertyChanged(nameof(CanSelectGrid4Cols));
         OnPropertyChanged(nameof(EnhanceDualColumns));
         OnPropertyChanged(nameof(EnhanceDualRows));
         OnPropertyChanged(nameof(DualSortThumbHeight));
         UpdateSplitOrientation();
+        RebuildGridQueueRows();
     }
 
     partial void OnIsEnhanceLogExpandedChanged(bool value)
@@ -1822,7 +1834,7 @@ public partial class MainViewModel : ViewModelBase
     };
 
     [ObservableProperty]
-    private bool _isQueueGridMode = false;
+    private bool _isQueueGridMode = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
 
     [ObservableProperty]
     private ObservableCollection<QueueGridRow> _gridQueueRows = new();
@@ -1897,7 +1909,8 @@ public partial class MainViewModel : ViewModelBase
         int cols = 2;
         if (param is int i) cols = i;
         else if (param != null && int.TryParse(param.ToString(), out int parsed)) cols = parsed;
-        GridColumnsCount = Math.Clamp(cols, 2, 4);
+        int maxCols = MaxGridColumnsAllowed;
+        GridColumnsCount = Math.Clamp(cols, 2, maxCols);
         if (!IsQueueGridMode)
         {
             IsQueueGridMode = true;
@@ -1928,7 +1941,8 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        int cols = OperatingSystem.IsAndroid() ? 2 : Math.Clamp(GridColumnsCount, 2, 4);
+        int maxCols = MaxGridColumnsAllowed;
+        int cols = Math.Clamp(GridColumnsCount, 2, maxCols);
         var rows = new List<QueueGridRow>((source.Count + cols - 1) / cols);
 
         for (int i = 0; i < source.Count; i += cols)
@@ -2544,6 +2558,8 @@ public partial class MainViewModel : ViewModelBase
         if (IsDesktopLifetime)
         {
             IsSidebarVisible = true;
+            IsQueueGridMode = true;
+            GridColumnsCount = 2;
         }
         SplashViewModel.ReportGlobalProgress(52, "Khởi tạo cấu hình & kết nối hàng chờ...");
         InitInAppFolderPicker();
@@ -5178,27 +5194,104 @@ public partial class MainViewModel : ViewModelBase
     // ==========================================
 
     [RelayCommand]
-    public void StartScanMissing()
+    public async Task StartScanMissingAsync()
     {
         if (ComicBooks.Count == 0)
         {
             return;
         }
 
-        ScanResults.Clear();
-        AddLog("INFO", $"Bắt đầu quét chap số nguyên thiếu với {ParallelCheckCount} tác vụ song song...");
-
         _scanCts?.Cancel();
         _scanCts = new CancellationTokenSource();
+        var ct = _scanCts.Token;
+
+        ScanResults.Clear();
+        int total = ComicBooks.Count;
+        AddLog("INFO", $"Bắt đầu quét chap số nguyên thiếu với {ParallelCheckCount} kết nối song song cho {total} truyện...");
+
+        // Kiểm tra xem có truyện nào chưa có danh sách chapters (do nạp hàng loạt từ tag/nguồn)
+        var missingChaptersBooks = ComicBooks
+            .Where(b => b != null && (b.Chapters == null || b.Chapters.Count == 0))
+            .ToList();
+
+        if (missingChaptersBooks.Count > 0)
+        {
+            AddLog("INFO", $"Phát hiện {missingChaptersBooks.Count} truyện chưa nạp chi tiết chapters. Đang tự động cào chi tiết ({ParallelCheckCount} kết nối song song)...");
+
+            int effectiveConcurrency = OperatingSystem.IsAndroid()
+                ? Math.Clamp(ParallelCheckCount, 1, 4)
+                : Math.Clamp(ParallelCheckCount, 1, 16);
+
+            using var semaphore = new SemaphoreSlim(effectiveConcurrency, effectiveConcurrency);
+            int fetchedCount = 0;
+
+            var fetchTasks = missingChaptersBooks.Select(async book =>
+            {
+                if (ct.IsCancellationRequested) return;
+                await semaphore.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    if (ct.IsCancellationRequested) return;
+                    var scraped = await _scraperService.ScrapeBookAsync(book.Url, book.Index, "vi", true, ct).ConfigureAwait(false);
+                    if (scraped != null && scraped.Chapters != null && scraped.Chapters.Count > 0)
+                    {
+                        book.Chapters = scraped.Chapters;
+                        book.TotalChapters = scraped.Chapters.Count;
+                        book.LatestChapter = scraped.LatestChapter;
+                        if (string.IsNullOrWhiteSpace(book.CoverUrl) && !string.IsNullOrWhiteSpace(scraped.CoverUrl))
+                        {
+                            book.CoverUrl = scraped.CoverUrl;
+                        }
+                        if (string.IsNullOrWhiteSpace(book.Title) && !string.IsNullOrWhiteSpace(scraped.Title))
+                        {
+                            book.Title = scraped.Title;
+                        }
+                        if (!string.IsNullOrWhiteSpace(scraped.PreviewTagsText))
+                        {
+                            book.PreviewTagsText = scraped.PreviewTagsText;
+                        }
+                    }
+
+                    int done = Interlocked.Increment(ref fetchedCount);
+                    if (done % 5 == 0 || done == missingChaptersBooks.Count)
+                    {
+                        AddLog("INFO", $"[Scan Missing] Đã nạp chi tiết: {done}/{missingChaptersBooks.Count} truyện...");
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    AddLog("WARN", $"[Scan Missing] Không thể cào chapters cho '{book.Title}': {ex.Message}");
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }).ToList();
+
+            await Task.WhenAll(fetchTasks).ConfigureAwait(true);
+        }
+
+        if (ct.IsCancellationRequested)
+        {
+            AddLog("WARN", "Đã dừng quét chap thiếu theo yêu cầu.");
+            return;
+        }
 
         foreach (var book in ComicBooks)
         {
+            if (book == null) continue;
             var result = _scannerService.ScanChapters(book);
             ScanResults.Add(result);
             book.MissingChapters = result.MissingIntegerChapters;
         }
 
         AddLog("SUCCESS", $"Đã quét xong chap thiếu cho {ScanResults.Count} truyện.");
+    }
+
+    public void StartScanMissing()
+    {
+        _ = StartScanMissingAsync();
     }
 
     [RelayCommand]

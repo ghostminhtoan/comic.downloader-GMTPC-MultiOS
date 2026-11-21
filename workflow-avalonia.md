@@ -1299,3 +1299,27 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
     + Khắc phục triệt để lỗi thuật toán `int start = min <= 3 ? 1 : min` (từng khiến các truyện chỉ có chap ở phân đoạn cao như 1113 và 1114 bị kết luận sai là "Đủ chap"): Dải quét chuẩn luôn bắt đầu từ 0 (nếu có chap 0) hoặc 1 đến `max`. Bất kỳ chapter số nguyên nào bị thiếu giữa dải (kể cả thiếu từ chap 1 đến min-1) đều được phát hiện chính xác 100%.
     + Rút gọn danh sách chap thiếu thành định dạng dải thông minh `1-821, 823-828, 831-1112` cực kỳ chuyên nghiệp và gọn gàng, tránh tràn văn bản.
     + Bổ sung `[NotifyPropertyChangedFor(nameof(LocalizedMissingChapter))]` và `[NotifyPropertyChangedFor(nameof(LocalizedLatestChapter))]` vào `ComicBookItem.cs`, giúp card truyện trong hàng chờ cập nhật trạng thái "thiếu chap" / "đủ chap" ngay tức thì sau khi quét.
+
+
+### 75. Tự Động Nạp Chi Tiết Chapters Khi Quét Thiếu Chap (TruyenQQ & Đa Nguồn); Mặc Định Grid 2 Cột Desktop; Linh Hoạt Cột Lưới Android Theo Portrait/Landscape; Hoàn Thiện Toolbar & Quick Float Button Trong Cửa Sổ Mới (Detached Queue)
+- **1. Khắc Phục Triệt Để Lỗi Scan Missing Chapter Khi Cào Hàng Loạt Từ Nguồn/Tag**:
+  - Khi cào hàng loạt từ Thể loại/Tag (như TruyenQQ), các item ban đầu chỉ có URL và tiêu đề, danh sách `Chapters` đang rỗng.
+  - Viết lại hàm `StartScanMissingAsync` trong `MainViewModel.cs`: Tự động nhận diện các truyện chưa có `Chapters` (`Chapters == null || Chapters.Count == 0`), sử dụng `SemaphoreSlim` với số luồng song song cấu hình bởi `ParallelCheckCount` (12 connections) để chạy `_scraperService.ScrapeBookAsync` nạp chi tiết danh sách chapters, tổng số chap, chapter mới nhất, ảnh bìa và tags.
+  - Sau khi nạp xong, tiến hành quét số nguyên thiếu bằng `_scannerService.ScanChapters(book)` và cập nhật tức thì vào `ScanResults` cùng `MissingChapters`. Triệt tiêu hoàn toàn lỗi hiển thị sai `Thiếu: N/A` và `No chapters`.
+- **2. Mặc Định Bật Chế Độ Lưới 2 Cột Trên Windows & Linux**:
+  - Khởi tạo mặc định `_isQueueGridMode = Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime` và `GridColumnsCount = 2`.
+  - Trong constructor `MainViewModel`, khi chạy Desktop (`IsDesktopLifetime`), luôn tự động kích hoạt `IsQueueGridMode = true` và `GridColumnsCount = 2`.
+- **3. Linh Hoạt Số Cột Lưới Trên Android Theo Hướng Màn Hình (Width & Height)**:
+  - Bổ sung logic `MaxGridColumnsAllowed`: Khi màn hình dọc (`Portrait`, `width < height`), số cột tối đa là 2. Nút chọn 3 và 4 cột tự động ẩn (`CanSelectGrid3Cols = false`, `CanSelectGrid4Cols = false`). Nếu đang chọn > 2 cột, tự động chuyển về 2 cột.
+  - Khi màn hình ngang (`Landscape`, `width > height`), số cột tối đa là 4. Nút chọn 2, 3, 4 cột đều khả dụng và hiển thị đầy đủ.
+  - Tự động nhận diện và thích ứng theo sự kiện thay đổi kích thước `SizeChanged` trên toàn app.
+- **4. Hoàn Thiện Toolbar & Quick Float Button Trong Cửa Sổ Mới (DetachedQueueWindow)**:
+  - Bổ sung cụm nút điều khiển trực tiếp trên Toolbar cửa sổ phụ:
+    + `Tải / Dừng` (`DownloadAllCommand` / `StopCommand`, chuyển đổi theo `IsDownloading`).
+    + `Tạm dừng / Tiếp tục` (`TogglePauseCommand`, chuyển đổi theo `IsPaused`).
+    + `Top` (`ScrollToTopCommand`, cuộn lên đầu).
+    + `Bottom` (`ScrollToBottomCommand`, cuộn xuống cuối).
+  - Tích hợp cụm **Quick Float Button** (`FloatingQuickControlBorder`) nổi ở góc dưới phải cửa sổ phụ:
+    + Đầy đủ các nút Dán Link, Tự dán, Part, Tải/Dừng, Tạm dừng/Tiếp tục, Top, Bot, Sidebar.
+    + Hỗ trợ kéo thả (drag) di chuyển vị trí tự do, chạm nhẹ vào Grip Bar để thu nhỏ/mở rộng cụm nút.
+    + Đăng ký sự kiện `ScrollToTopRequested` và `ScrollToBottomRequested` cuộn đồng bộ mượt mà cả 3 chế độ (Single Column, Grid, Thumbnail).
