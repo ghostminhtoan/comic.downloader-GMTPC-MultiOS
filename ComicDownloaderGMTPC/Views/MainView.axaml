@@ -1009,7 +1009,7 @@
                                 <StackPanel Spacing="3">
                                     <Grid ColumnDefinitions="*, Auto">
                                         <TextBlock Grid.Column="0" Text="{Binding DisplayScaleLabel}" Foreground="#64748B" FontSize="8" FontWeight="Bold" VerticalAlignment="Center"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding UiZoomPercentText}" Foreground="#FFE600" FontSize="9.5" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding UiZoomPercent, StringFormat='{}{0}%'}" Foreground="#FFE600" FontSize="9.5" FontWeight="Bold" VerticalAlignment="Center"/>
                                     </Grid>
                                     <!-- Bộ 3 phím bấm nhanh [-] [100%] [+] -->
                                     <Grid ColumnDefinitions="*, *, *">

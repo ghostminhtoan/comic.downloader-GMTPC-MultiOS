@@ -12,10 +12,31 @@
         x:DataType="vm:MainViewModel"
         Icon="/Assets/app-icon.ico"
         Title="{Binding AppTitle}">
-    <LayoutTransformControl HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-        <LayoutTransformControl.LayoutTransform>
-            <ScaleTransform ScaleX="{Binding UiZoomScale}" ScaleY="{Binding UiZoomScale}" />
-        </LayoutTransformControl.LayoutTransform>
-        <views:MainView />
-    </LayoutTransformControl>
+    <Panel>
+        <!-- NỘI DUNG CHÍNH ĐƯỢC ZOOM THEO TỶ LỆ DISPLAY SCALE -->
+        <LayoutTransformControl HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <LayoutTransformControl.LayoutTransform>
+                <ScaleTransform ScaleX="{Binding UiZoomScale}" ScaleY="{Binding UiZoomScale}" />
+            </LayoutTransformControl.LayoutTransform>
+            <views:MainView />
+        </LayoutTransformControl>
+
+        <!-- HUD TOAST THÔNG BÁO TỶ LỆ HIỂN THỊ CHÍNH GIỮA MÀN HÌNH TỰ ĐỘNG ẨN SAU 3 GIÂY (KHÔNG PHẢI MESSAGE BOX) -->
+        <Border IsVisible="{Binding IsZoomHudVisible}"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Background="#EB0A0E17" BorderBrush="#00E5FF" BorderThickness="1.5"
+                CornerRadius="14" Padding="26,16"
+                BoxShadow="0 8 32 #B0000000"
+                IsHitTestVisible="False">
+            <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <Border Background="#161F30" BorderBrush="#00E5FF" BorderThickness="1" CornerRadius="10" Width="46" Height="46">
+                    <TextBlock Text="🔍" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="{Binding DisplayScaleLabel}" Foreground="#94A3B8" FontSize="10" FontWeight="Bold" LetterSpacing="0.8"/>
+                    <TextBlock Text="{Binding UiZoomPercent, StringFormat='{}{0}%'}" Foreground="#FFE600" FontSize="26" FontWeight="Black"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Panel>
 </Window>

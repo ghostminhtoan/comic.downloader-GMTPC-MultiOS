@@ -1217,4 +1217,18 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   + Tích hợp trường `DesktopUiZoomPercent` vào `InstanceConfigService.cs`, tự động lưu vào `instance_config.json`.
   + Khởi động lại ứng dụng tự động khôi phục mức zoom ưa thích của người dùng.
 
+---
+
+### 71. Đồng Bộ Tức Thì Chữ Vàng Tỷ Lệ Hiển Thị & Bổ Sung HUD Toast Giữa Màn Hình Tự Ẩn Sau 3 Giây (Desktop)
+- **1. Khắc Phục Triệt Để Lỗi Chữ Vàng Không Cập Nhật Khi Đổi Tỷ Lệ**:
+  + Thêm bộ 3 thuộc tính phụ thuộc `[NotifyPropertyChangedFor]` (`UiZoomScale`, `UiZoomPercentText`, `SelectedZoomPresetString`) trên field `_uiZoomPercent` trong `MainViewModel.cs`.
+  + Tại Sidebar Desktop (`MainView.axaml`), chuyển TextBlock chữ màu vàng sang binding trực tiếp vào ObservableProperty gốc: `Text="{Binding UiZoomPercent, StringFormat='{}{0}%'}"`.
+  + Đảm bảo ngay khi người dùng chọn tỷ lệ mới trên ComboBox hoặc bấm nút `+`/`-`, con số màu vàng lập tức cập nhật thời gian thực không độ trễ.
+- **2. Bổ Sung HUD Toast Thông Báo OSD Chính Giữa Màn Hình Tự Ẩn Sau 3 Giây**:
+  + **Thiết kế OSD Cyberpunk Sang Trọng**: Nằm tại `MainWindow.axaml` và `DetachedQueueWindow.axaml`, căn chính giữa màn hình (`Center/Center`), nền kính mờ `#EB0A0E17`, viền bo góc cyan `#00E5FF`, số % màu vàng đậm 26px (`#FFE600`) nổi bật.
+  + **Tự Động Ẩn Sau 3 Giây (`TriggerZoomHud`)**: Sử dụng `CancellationTokenSource` và `Task.Delay(3000)`. Khi người dùng zoom liên tục, bộ đếm tự động reset lại 3 giây kể từ lần chỉnh cuối cùng.
+  + **Trải Nghiệm Liền Mạch (Zero Interruption)**: Tuyệt đối không phải MessageBox, không có nút OK/Cancel/Yes/No, thiết lập `IsHitTestVisible="False"` để chuột xuyên qua, người dùng hoàn toàn không bị chặn thao tác click hay cuộn trang.
+  + **An Toàn Đa Nền Tảng**: Toàn bộ cơ chế HUD chỉ kích hoạt trên Windows & Linux (`IsDesktopLifetime`), Android hoàn toàn không nạp và không hiển thị.
+
+
 

@@ -1329,7 +1329,16 @@ public partial class MainViewModel : ViewModelBase
     // =========================================================================
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UiZoomScale))]
+    [NotifyPropertyChangedFor(nameof(UiZoomPercentText))]
+    [NotifyPropertyChangedFor(nameof(SelectedZoomPresetString))]
     private int _uiZoomPercent = OperatingSystem.IsAndroid() ? 100 : InstanceConfigService.Instance.DesktopUiZoomPercent;
+
+    [ObservableProperty]
+    private bool _isZoomHudVisible = false;
+
+    private CancellationTokenSource? _zoomHudCts;
+    private bool _isAppFullyLoaded = false;
 
     public double UiZoomScale => IsDesktopLifetime ? (UiZoomPercent / 100.0) : 1.0;
     public string UiZoomPercentText => $"{UiZoomPercent}%";
@@ -1363,6 +1372,44 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(UiZoomScale));
         OnPropertyChanged(nameof(UiZoomPercentText));
         OnPropertyChanged(nameof(SelectedZoomPresetString));
+        TriggerZoomHud();
+    }
+
+    public void TriggerZoomHud()
+    {
+        if (!IsDesktopLifetime) return;
+        if (!_isAppFullyLoaded) return;
+
+        try
+        {
+            _zoomHudCts?.Cancel();
+            _zoomHudCts?.Dispose();
+        }
+        catch { }
+
+        _zoomHudCts = new CancellationTokenSource();
+        var token = _zoomHudCts.Token;
+
+        IsZoomHudVisible = true;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(3000, token);
+                if (!token.IsCancellationRequested)
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            IsZoomHudVisible = false;
+                        }
+                    });
+                }
+            }
+            catch (TaskCanceledException) { }
+        }, token);
     }
 
     [RelayCommand]
@@ -2632,6 +2679,7 @@ public partial class MainViewModel : ViewModelBase
         SplashViewModel.ReportGlobalProgress(97, "Chuẩn bị giao diện ứng dụng...");
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
         SoundNotificationService.Instance.PlaySound(SoundNotificationType.Startup);
+        _isAppFullyLoaded = true;
     }
 
     private void OnBackgroundTaskProgressChanged(BackgroundTaskInfo task)
