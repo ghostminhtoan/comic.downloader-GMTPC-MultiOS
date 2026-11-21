@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -1035,9 +1035,19 @@ public sealed class LibraryScannerService
 
                     if (siblingImages >= 1 && !IsCommonSystemOrUserDirectory(cleanFileDir))
                     {
-                        parentComicRoot = cleanFileDir;
-                        chapterName = folderName;
-                        return true;
+                        bool hasOtherIndependentComics = false;
+                        try
+                        {
+                            hasOtherIndependentComics = Directory.EnumerateFiles(cleanFileDir, "*", enumOpts).Any(f => IsArchiveFile(f) || IsPdfFile(f) || IsMobiFile(f));
+                        }
+                        catch { }
+
+                        if (!hasOtherIndependentComics && isChapterFolder)
+                        {
+                            parentComicRoot = cleanFileDir;
+                            chapterName = folderName;
+                            return true;
+                        }
                     }
                 }
 
@@ -1190,9 +1200,13 @@ public sealed class LibraryScannerService
                             new List<(string, List<string>)> { (dir, directImgs) },
                             new List<string>(),
                             new List<string>());
-                        comic.SourceLocationLabel = BuildShortLocationBadge(comic.RootFolderPath, comic.IsExternalHistoryItem);
+                        comic.Title = Path.GetFileName(targetPath);
+                        comic.RootFolderPath = targetPath;
+                        comic.SourceLocationLabel = BuildShortLocationBadge(targetPath, isExternal: true);
                         if (comic.Chapters.Count > 0)
                         {
+                            comic.Chapters[0].Title = Path.GetFileName(targetPath);
+                            comic.Chapters[0].LocalPath = targetPath;
                             comic.Chapters[0].LastReadPage = initialPage;
                         }
                         return comic;

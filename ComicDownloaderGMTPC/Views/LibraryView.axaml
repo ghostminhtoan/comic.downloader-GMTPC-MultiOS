@@ -39,8 +39,8 @@
                     <Button Command="{Binding OpenCbzFileDirectCommand}"
                             Background="#7C3AED" Foreground="#FFFFFF" FontWeight="Bold"
                             Padding="9,3" Height="28" CornerRadius="5" Margin="0,0,5,2"
-                            ToolTip.Tip="Mở nhanh 1 file .cbz, .zip hoặc .pdf bất kỳ để đọc ngay">
-                        <TextBlock Text="📦 Mở File CBZ/ZIP/PDF" FontSize="10.5" VerticalAlignment="Center" />
+                            ToolTip.Tip="Mở nhanh 1 file truyện (.cbz, .zip, .rar, .pdf, .mobi) hoặc file hình ảnh bất kỳ để đọc ngay">
+                        <TextBlock Text="📦 Mở File Truyện / Ảnh" FontSize="10.5" VerticalAlignment="Center" />
                     </Button>
 
                     <Button Command="{Binding ToggleSeparateReaderWindowCommand}"

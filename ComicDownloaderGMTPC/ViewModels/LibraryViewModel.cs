@@ -258,10 +258,34 @@ public partial class LibraryViewModel : ViewModelBase
             }
             try { _ = LoadHistoryItemsAsync(); } catch { }
             try { LoadBookmarkGroups(); } catch { }
+
+            // Lắng nghe sự kiện cập nhật Lịch sử Đọc theo thời gian thực (Real-time Trace)
+            ReadProgressStore.HistoryUpdated += OnHistoryUpdatedFromStore;
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[LibraryViewModel Constructor] {ex}");
+        }
+    }
+
+    private void OnHistoryUpdatedFromStore()
+    {
+        _ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            await LoadHistoryItemsAsync();
+        });
+    }
+
+    partial void OnActiveSubTabChanged(string value)
+    {
+        if (string.Equals(value, "History", StringComparison.OrdinalIgnoreCase))
+        {
+            ReadProgressStore.Instance.ReloadHistoryFromDisk();
+            _ = LoadHistoryItemsAsync();
+        }
+        else if (string.Equals(value, "Storage", StringComparison.OrdinalIgnoreCase))
+        {
+            LoadStorageItems();
         }
     }
 
@@ -448,19 +472,24 @@ public partial class LibraryViewModel : ViewModelBase
             string? normalized = await FolderOrFilePickerService.PickFileAsync(
                 topLevel,
                 null,
-                "Chọn File Truyện CBZ / ZIP / CBR / RAR / PDF / MOBI Để Đọc Ngay",
-                new[] { ".cbz", ".zip", ".cbr", ".rar", ".pdf", ".mobi", ".prc", ".azw", ".azw3" },
+                "Chọn File Truyện CBZ / ZIP / CBR / RAR / PDF / MOBI Hoặc File Ảnh Để Đọc Ngay",
+                new[] { ".cbz", ".zip", ".cbr", ".rar", ".pdf", ".mobi", ".prc", ".azw", ".azw3", ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif" },
                 new[]
                 {
-                    new FilePickerFileType("Tất cả định dạng truyện (*.cbz, *.zip, *.cbr, *.rar, *.pdf, *.mobi)")
+                    new FilePickerFileType("Tất cả định dạng truyện & ảnh (*.cbz, *.zip, *.pdf, *.jpg, *.png...)")
                     {
-                        Patterns = new[] { "*.cbz", "*.zip", "*.cbr", "*.rar", "*.pdf", "*.mobi", "*.prc", "*.azw", "*.azw3" },
-                        MimeTypes = new[] { "application/x-mobipocket-ebook", "application/octet-stream", "application/zip", "application/x-zip-compressed", "application/x-cbr", "application/x-rar-compressed", "application/pdf", "*/*" }
+                        Patterns = new[] { "*.cbz", "*.zip", "*.cbr", "*.rar", "*.pdf", "*.mobi", "*.prc", "*.azw", "*.azw3", "*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif" },
+                        MimeTypes = new[] { "application/x-mobipocket-ebook", "application/octet-stream", "application/zip", "application/x-zip-compressed", "application/x-cbr", "application/x-rar-compressed", "application/pdf", "image/*", "*/*" }
                     },
                     new FilePickerFileType("Comic Archives (*.cbz, *.zip, *.cbr, *.rar)")
                     {
                         Patterns = new[] { "*.cbz", "*.zip", "*.cbr", "*.rar" },
                         MimeTypes = new[] { "application/zip", "application/x-zip-compressed", "application/x-cbr", "application/x-rar-compressed", "application/octet-stream" }
+                    },
+                    new FilePickerFileType("Hình ảnh (*.jpg, *.png, *.webp, *.bmp, *.gif)")
+                    {
+                        Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif" },
+                        MimeTypes = new[] { "image/jpeg", "image/png", "image/webp", "image/bmp", "image/gif" }
                     },
                     new FilePickerFileType("PDF Document (*.pdf)")
                     {
@@ -477,33 +506,41 @@ public partial class LibraryViewModel : ViewModelBase
 
             if (!string.IsNullOrWhiteSpace(normalized) && File.Exists(normalized))
             {
-                    var quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(normalized));
-                    if (quickComic != null && quickComic.Chapters.Count > 0)
+                var quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(normalized));
+                if (quickComic != null && quickComic.Chapters.Count > 0)
+                {
+                    ReadProgressStore.Instance.RegisterReadComic(normalized, touchTimestamp: true);
+                    if (!string.Equals(normalized, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase))
                     {
                         ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
-                ReadProgressStore.Instance.RegisterLocalComicPath(quickComic.Title, quickComic.RootFolderPath);
-                ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileName(quickComic.RootFolderPath), quickComic.RootFolderPath);
-                ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileNameWithoutExtension(quickComic.RootFolderPath), quickComic.RootFolderPath);
-                        var existing = AllComics.FirstOrDefault(c =>
-                            string.Equals(c.RootFolderPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
-                        if (existing == null)
-                        {
-                            AllComics.Insert(0, quickComic);
-                            _ = _scanner.LoadCoversAsync(new[] { quickComic }, CancellationToken.None);
-                        }
-                        else
-                        {
-                            quickComic = existing;
-                        }
-
-                        ApplyFilter();
-                        SelectedComic = quickComic;
-
-                        var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
-                        StatusMessage = $"📖 Đã nạp '{quickComic.Title}' ({quickComic.TotalChapters} chương). Đang mở: {targetChap.Title}";
-                        await OpenChapterInternalAsync(quickComic, targetChap);
                     }
+                    ReadProgressStore.Instance.RegisterLocalComicPath(quickComic.Title, quickComic.RootFolderPath);
+                    ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileName(normalized), normalized);
+                    ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileNameWithoutExtension(normalized), normalized);
+                    ReadProgressStore.Instance.FlushImmediately();
+                    ReadProgressStore.Instance.SaveHistoryToDisk();
+
+                    var existing = AllComics.FirstOrDefault(c =>
+                        string.Equals(c.RootFolderPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
+                    if (existing == null)
+                    {
+                        AllComics.Insert(0, quickComic);
+                        _ = _scanner.LoadCoversAsync(new[] { quickComic }, CancellationToken.None);
+                    }
+                    else
+                    {
+                        quickComic = existing;
+                    }
+
+                    ApplyFilter();
+                    SelectedComic = quickComic;
+
+                    var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
+                    StatusMessage = $"📖 Đã nạp '{quickComic.Title}' ({quickComic.TotalChapters} chương). Đang mở: {targetChap.Title}";
+                    await OpenChapterInternalAsync(quickComic, targetChap);
+                    _ = LoadHistoryItemsAsync();
                 }
+            }
         }
         catch (Exception ex)
         {
@@ -1450,8 +1487,9 @@ public partial class LibraryViewModel : ViewModelBase
     [RelayCommand]
     public async Task RefreshHistoryAsync()
     {
+        ReadProgressStore.Instance.ReloadHistoryFromDisk();
         await LoadHistoryItemsAsync();
-        StatusMessage = "✓ Đã làm mới danh sách lịch sử đọc";
+        StatusMessage = "✓ Đã làm mới danh sách lịch sử đọc theo thời gian thực";
     }
 
     public async Task LoadHistoryItemsAsync()
@@ -2342,25 +2380,6 @@ public partial class LibraryViewModel : ViewModelBase
             string actualComicPath = path;
             int pageToJump = targetPageIndex;
 
-            // Nếu path là file ảnh đơn lẻ: chuyển hướng sang thư mục cha chứa ảnh và tìm index của trang
-            if (File.Exists(path) && LibraryScannerService.IsImageFile(path))
-            {
-                actualComicPath = Path.GetDirectoryName(path) ?? path;
-                if (pageToJump < 0)
-                {
-                    try
-                    {
-                        var enumOpts = new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = false };
-                        var allImgs = Directory.EnumerateFiles(actualComicPath, "*", enumOpts)
-                            .Where(LibraryScannerService.IsImageFile)
-                            .NaturalSort();
-                        int idx = allImgs.FindIndex(img => string.Equals(img, path, StringComparison.OrdinalIgnoreCase));
-                        if (idx >= 0) pageToJump = idx;
-                    }
-                    catch { }
-                }
-            }
-
             var quickComic = await Task.Run(() => _scanner.CreateQuickComicFromPath(actualComicPath));
             if ((quickComic == null || quickComic.Chapters.Count == 0) && OperatingSystem.IsAndroid() && actualComicPath.Contains("/storage/"))
             {
@@ -2371,7 +2390,18 @@ public partial class LibraryViewModel : ViewModelBase
 
             if (quickComic != null && quickComic.Chapters.Count > 0)
             {
-                ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
+                ReadProgressStore.Instance.RegisterReadComic(path, touchTimestamp: true);
+                if (!string.Equals(path, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
+                }
+                ReadProgressStore.Instance.RegisterLocalComicPath(quickComic.Title, quickComic.RootFolderPath);
+                if (File.Exists(path))
+                {
+                    ReadProgressStore.Instance.RegisterLocalComicPath(Path.GetFileNameWithoutExtension(path), path);
+                }
+                ReadProgressStore.Instance.FlushImmediately();
+                ReadProgressStore.Instance.SaveHistoryToDisk();
 
                 LibraryChapterItem? targetChap = null;
                 string chDir = Directory.Exists(path) ? path : (Path.GetDirectoryName(path) ?? string.Empty);

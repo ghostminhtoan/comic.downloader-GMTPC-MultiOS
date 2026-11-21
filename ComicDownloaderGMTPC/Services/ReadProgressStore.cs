@@ -161,6 +161,19 @@ public sealed class ReadProgressStore
     private readonly Timer _debounceTimer;
     private volatile bool _isDirty;
     private volatile bool _isLocalPathDirty;
+    private FileSystemWatcher? _historyWatcher;
+    private DateTime _lastWatcherReload = DateTime.MinValue;
+
+    /// <summary>
+    /// Sự kiện thông báo khi Lịch sử Đọc (History) vừa được cập nhật theo thời gian thực (Real-time).
+    /// Giúp toàn bộ giao diện (LibraryViewModel, Reader) tự động làm mới tức thì mà không cần thao tác thủ công.
+    /// </summary>
+    public static event Action? HistoryUpdated;
+
+    public static void NotifyHistoryUpdated()
+    {
+        try { HistoryUpdated?.Invoke(); } catch { }
+    }
 
     /// <summary>
     /// Nguồn cấp bổ sung các thư mục Storage từ bên ngoài (ví dụ các thư mục đang nạp trong LibraryViewModel).
@@ -175,6 +188,51 @@ public sealed class ReadProgressStore
         LoadBookmarksFromDisk();
         LoadHistoryFromDisk();
         LoadDeviceLocalPathsFromDisk();
+        SetupHistoryFileWatcher();
+    }
+
+    private void SetupHistoryFileWatcher()
+    {
+        try
+        {
+            string dir = QueueBackupService.GetAutoSaveDirectory();
+            if (Directory.Exists(dir))
+            {
+                _historyWatcher = new FileSystemWatcher(dir, HistoryFileName)
+                {
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+                    EnableRaisingEvents = true
+                };
+                _historyWatcher.Changed += OnHistoryFileChangedOnDisk;
+                _historyWatcher.Created += OnHistoryFileChangedOnDisk;
+            }
+        }
+        catch { }
+    }
+
+    private void OnHistoryFileChangedOnDisk(object? sender, FileSystemEventArgs e)
+    {
+        if ((DateTime.Now - _lastWatcherReload).TotalMilliseconds < 400) return;
+        _lastWatcherReload = DateTime.Now;
+        Task.Delay(150).ContinueWith(_ =>
+        {
+            try
+            {
+                LoadHistoryFromDisk();
+                NotifyHistoryUpdated();
+            }
+            catch { }
+        });
+    }
+
+    public void ReloadHistoryFromDisk()
+    {
+        try
+        {
+            LoadHistoryFromDisk();
+            NotifyHistoryUpdated();
+        }
+        catch { }
     }
 
     public static string GetStoreFilePath()
@@ -805,10 +863,12 @@ public sealed class ReadProgressStore
         if (sep > 0) cleanPath = cleanPath.Substring(0, sep);
         if (string.IsNullOrWhiteSpace(cleanPath)) return;
 
-        // Quy tắc tối thượng: File nén là truyện độc lập, tuyệt đối không gộp vào parent folder!
+        // Quy tắc tối thượng: File nén (archive), PDF, MOBI và file ảnh đơn lẻ là tệp độc lập, tuyệt đối không gộp vào parent folder!
         bool isArchive = LibraryScannerService.IsArchiveFile(cleanPath) || LibraryScannerService.IsPdfFile(cleanPath) || LibraryScannerService.IsMobiFile(cleanPath);
+        bool isImage = LibraryScannerService.IsImageFile(cleanPath);
+        bool isFile = File.Exists(cleanPath);
 
-        if (!isArchive && (Directory.Exists(cleanPath) || File.Exists(cleanPath)))
+        if (!isArchive && !isImage && (Directory.Exists(cleanPath) || isFile))
         {
             if (LibraryScannerService.TryGetParentComicRoot(cleanPath, out string parentRoot, out _))
             {
@@ -821,7 +881,7 @@ public sealed class ReadProgressStore
         {
             _progressMap[histKey] = GetCurrentOrderStamp();
 
-            // Tự động loại bỏ các file/thư mục chương con lẻ thuộc về cleanPath để không bị rác history (nhưng bảo lưu file nén độc lập)
+            // Tự động loại bỏ các thư mục chương con lẻ thuộc về cleanPath (nhưng BẢO LƯU TOÀN DIỆN mọi file độc lập trên đĩa)
             string prefixSep1 = cleanPath + Path.DirectorySeparatorChar;
             string prefixSep2 = cleanPath + "/";
             foreach (var key in _progressMap.Keys)
@@ -830,7 +890,7 @@ public sealed class ReadProgressStore
                 {
                     string sub = key.Substring(HistoryPrefix.Length);
                     if ((sub.StartsWith(prefixSep1, StringComparison.OrdinalIgnoreCase) || sub.StartsWith(prefixSep2, StringComparison.OrdinalIgnoreCase))
-                        && !LibraryScannerService.IsArchiveFile(sub))
+                        && !File.Exists(sub) && !LibraryScannerService.IsArchiveFile(sub) && !LibraryScannerService.IsPdfFile(sub) && !LibraryScannerService.IsImageFile(sub))
                     {
                         _progressMap.TryRemove(key, out _);
                     }
@@ -838,6 +898,7 @@ public sealed class ReadProgressStore
             }
 
             MarkDirtyAndScheduleFlush();
+            NotifyHistoryUpdated();
         }
     }
 
@@ -927,11 +988,13 @@ public sealed class ReadProgressStore
         foreach (var path in sorted)
         {
             // 1. Kiểm tra xem path có phải là subfolder của một path khác trong sorted không
-            // File nén là một bộ truyện độc lập, tuyệt đối không bị coi là subfolder hay bị ẩn khi nằm trong folder cha!
+            // File nén, file PDF, file ảnh đơn lẻ hoặc bất kỳ file nào tồn tại trên đĩa là một bộ truyện/tệp độc lập,
+            // TUYỆT ĐỐI KHÔNG bị coi là subfolder hay bị ẩn khi nằm trong folder cha!
             bool isSubfolder = false;
             bool isArchive = LibraryScannerService.IsArchiveFile(path) || LibraryScannerService.IsPdfFile(path) || LibraryScannerService.IsMobiFile(path);
+            bool isFile = File.Exists(path) || isArchive || LibraryScannerService.IsImageFile(path);
 
-            if (!isArchive)
+            if (!isFile)
             {
                 foreach (var other in sorted)
                 {
@@ -945,7 +1008,7 @@ public sealed class ReadProgressStore
                 }
 
                 // 2. Kiểm tra nếu path là một chương con có parent comic root hợp lệ
-                if (!isSubfolder && (Directory.Exists(path) || File.Exists(path)))
+                if (!isSubfolder && Directory.Exists(path))
                 {
                     if (LibraryScannerService.TryGetParentComicRoot(path, out string parentRoot, out _))
                     {
@@ -2142,6 +2205,7 @@ public sealed class ReadProgressStore
             string mdContent = BuildBookmarksMarkdownContent();
             File.WriteAllText(tmpPath, mdContent, Encoding.UTF8);
             File.Move(tmpPath, filePath, overwrite: true);
+            NotifyHistoryUpdated();
         }
         catch { }
     }
@@ -2218,6 +2282,7 @@ public sealed class ReadProgressStore
             string mdContent = BuildHistoryMarkdownContent();
             File.WriteAllText(tmpPath, mdContent, Encoding.UTF8);
             File.Move(tmpPath, filePath, overwrite: true);
+            NotifyHistoryUpdated();
         }
         catch { }
     }

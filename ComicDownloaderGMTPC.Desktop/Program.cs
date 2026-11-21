@@ -86,6 +86,91 @@ sealed class Program
             }
             catch { }
         };
+        if (args.Any(a => string.Equals(a, "--test-realtime-history", StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.WriteLine("================================================================================");
+            Console.WriteLine("TEST KIỂM THỬ TRACE HISTORY REAL-TIME: T:\\[HDD T]\\xnconvert\\uploaded");
+            Console.WriteLine("================================================================================");
+
+            string targetDir = @"T:\[HDD T]\xnconvert\uploaded";
+            if (!Directory.Exists(targetDir))
+            {
+                Console.WriteLine($"[LỖI] Không tìm thấy thư mục: {targetDir}");
+                Environment.Exit(1);
+                return;
+            }
+
+            int eventCount = 0;
+            ReadProgressStore.HistoryUpdated += () =>
+            {
+                Interlocked.Increment(ref eventCount);
+            };
+
+            var testFiles = new[]
+            {
+                Path.Combine(targetDir, "Thần hồn võ đế bookmark.jpg"),
+                Path.Combine(targetDir, "Ta Luyện Khí Ba Ngàn Năm.zip"),
+                Path.Combine(targetDir, "chúa tể tam giới.pdf"),
+                Path.Combine(targetDir, "Mắt nhìn thấu chung cực.pdf"),
+                Path.Combine(targetDir, "Ta Luyện Khí Ba Ngàn Năm.pdf"),
+                Path.Combine(targetDir, "Taikou.pdf"),
+                Path.Combine(targetDir, "Thần Hồn Võ Đế nettruyenqq.us.pdf")
+            };
+
+            int passCount = 0;
+            foreach (var file in testFiles)
+            {
+                if (!File.Exists(file))
+                {
+                    Console.WriteLine($"[BỎ QUA] Không tìm thấy file: {file}");
+                    continue;
+                }
+
+                Console.WriteLine($"\n[TEST FILE] {Path.GetFileName(file)}");
+                var quickComic = LibraryScannerService.Instance.CreateQuickComicFromPath(file);
+                if (quickComic == null || quickComic.Chapters.Count == 0)
+                {
+                    Console.WriteLine($"  -> [FAIL] CreateQuickComicFromPath thất bại!");
+                    continue;
+                }
+
+                Console.WriteLine($"  -> Nhận diện Comic: Title='{quickComic.Title}', Root='{quickComic.RootFolderPath}', Chaps={quickComic.Chapters.Count}");
+
+                // Đăng ký mở truyện vào history
+                ReadProgressStore.Instance.RegisterReadComic(file, touchTimestamp: true);
+                if (!string.Equals(file, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
+                }
+                ReadProgressStore.Instance.RegisterLocalComicPath(quickComic.Title, quickComic.RootFolderPath);
+                ReadProgressStore.Instance.FlushImmediately();
+                ReadProgressStore.Instance.SaveHistoryToDisk();
+
+                passCount++;
+                Console.WriteLine($"  -> [PASS] Đã ghi nhận History thành công.");
+            }
+
+            // Kiểm tra danh sách Unified History Items
+            var unified = ReadProgressStore.Instance.GetUnifiedHistoryItems();
+            Console.WriteLine($"\n[KẾT QUẢ UNIFIED HISTORY] Tổng số mục: {unified.Count}");
+            int idx = 1;
+            foreach (var u in unified)
+            {
+                Console.WriteLine($"  #{idx++} Title='{u.Title}' | Path='{u.Path}' | Chap='{u.ChapterOrSubTitle}' | Order={u.OrderStamp}");
+            }
+
+            Console.WriteLine($"\n[KIỂM TRA REAL-TIME EVENT] Tổng số sự kiện HistoryUpdated đã kích hoạt: {eventCount}");
+            bool allFound = testFiles.Where(File.Exists).All(tf =>
+                unified.Any(u => string.Equals(u.Path, tf, StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(u.Title, Path.GetFileName(tf), StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(u.Title, Path.GetFileNameWithoutExtension(tf), StringComparison.OrdinalIgnoreCase)));
+
+            Console.WriteLine($"[TỔNG KẾT] Tất cả các tệp test đều xuất hiện trong Lịch Sử: {(allFound ? "CHÍNH XÁC 100% (PASS)" : "THẤT BẠI (FAIL)")}");
+            Environment.Exit(allFound ? 0 : 1);
+            return;
+        }
+
         if (args.Any(a => string.Equals(a, "--test-scroll-drag", StringComparison.OrdinalIgnoreCase)))
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;

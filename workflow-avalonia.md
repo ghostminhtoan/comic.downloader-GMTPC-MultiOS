@@ -1395,6 +1395,30 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
   - Củng cố `ReadProgressStore.SaveHistoryToDisk()`: Tự động đảm bảo thư mục lưu trữ luôn tồn tại trước khi ghi tệp tạm `.tmp` và đổi tên, triệt tiêu nguy cơ lỗi I/O.
   - Kết quả: Khi mở đọc bất kỳ tệp truyện nào từ bên ngoài lúc chưa mở app, bộ truyện và tệp mở đều được ghi nhận chuẩn xác 100% vào Lịch sử Đọc (History) và Tiến trình đọc dở (Resume) trên toàn bộ các nền tảng (Windows, Linux, Android).
 
+### 81. Trace Lịch Sử Đọc (History) Theo Thời Gian Thực (Real-Time) Cho Bất Kỳ Ảnh Hoặc Tệp Nào (Zip, PDF, MOBI, v.v.)
+- **1. Nguyên nhân & Vấn đề**:
+  - Khi mở các file ảnh đơn lẻ (.jpg, .png, .webp...) hoặc tệp nén/PDF trong thư mục lưu trữ hỗn hợp (như `T:\[HDD T]\xnconvert\uploaded`), hệ thống bị lỗi:
+    + `LibraryScannerService.TryGetParentComicRoot`: Ngộ nhận thư mục kho chứa hỗn hợp (`uploaded`) là bộ truyện cha duy nhất và nuốt mất file ảnh đơn lẻ.
+    + `ReadProgressStore.GetAllHistoryPaths`: Coi file ảnh đơn lẻ là subfolder của thư mục cha đã từng mở, tự động loại bỏ file ảnh khỏi danh sách History.
+    + `LibraryViewModel`: Thiếu cơ chế lắng nghe sự kiện thay đổi dữ liệu lịch sử; khi chuyển qua tab `History`, không gọi reload nên giao diện hiển thị 0 mục.
+    + Nút "Mở File CBZ/ZIP/PDF" trong Thư viện chỉ hỗ trợ file nén/PDF, thiếu hoàn toàn các định dạng file ảnh.
+- **2. Cơ chế khắc phục triệt để**:
+  - **Sự kiện Real-Time `ReadProgressStore.HistoryUpdated` & FileSystemWatcher**:
+    + Bổ sung event tĩnh `ReadProgressStore.HistoryUpdated` được kích hoạt tự động mỗi khi có tệp được đăng ký hoặc lưu xuống đĩa.
+    + Tích hợp `FileSystemWatcher` giám sát file `history.md` trên đĩa: Nếu tệp bị thay đổi bởi tiến trình khác (như Standalone Reader mở từ File Explorer), tự động nạp lại `ReloadHistoryFromDisk()` và cập nhật UI ngay lập tức theo thời gian thực.
+  - **Đồng bộ UI trong `LibraryViewModel`**:
+    + Đăng ký lắng nghe `ReadProgressStore.HistoryUpdated` trong constructor để tự động reload `HistoryItems` theo Real Time.
+    + Bổ sung `partial void OnActiveSubTabChanged`: Khi người dùng click chọn subtab `History`, gọi ngay `ReloadHistoryFromDisk()` và nạp danh sách mới nhất.
+    + Bổ sung `ReloadHistoryFromDisk()` vào nút "Làm Mới" (`RefreshHistoryAsync`).
+  - **Mở rộng nút Mở File thành "Mở File Truyện / Ảnh"**:
+    + Nâng cấp `OpenCbzFileDirectAsync` hỗ trợ đầy đủ các định dạng ảnh (`.jpg`, `.jpeg`, `.png`, `.webp`, `.bmp`, `.gif`) song song với các định dạng archive/pdf/mobi.
+    + Tự động đăng ký `RegisterReadComic`, `FlushImmediately`, `SaveHistoryToDisk` và cập nhật `LoadHistoryItemsAsync` ngay sau khi mở.
+  - **Bảo vệ toàn diện File Đơn Lẻ trong `ReadProgressStore` & `LibraryScannerService`**:
+    + Trong `GetAllHistoryPaths`: Kiểm tra `File.Exists(path)` hoặc `IsImageFile`: Mọi tệp tồn tại trên đĩa là tệp độc lập, tuyệt đối không bị coi là subfolder hay bị ẩn khỏi danh sách Lịch Sử.
+    + Trong `RegisterReadComic`: Bảo vệ tệp ảnh `!isImage` không bị gộp sai vào parent root, và `!File.Exists(sub)` để không xóa nhầm file khỏi danh mục.
+    + Trong `CreateQuickComicFromPath`: File ảnh đơn lẻ được gán trực tiếp `comic.Title = Path.GetFileName(targetPath)` và `comic.RootFolderPath = targetPath`.
+  - **Kiểm thử thực tế**: Chạy test thành công 100% với toàn bộ các tệp trong `T:\[HDD T]\xnconvert\uploaded` (`Thần hồn võ đế bookmark.jpg`, `Ta Luyện Khí Ba Ngàn Năm.zip`, `chúa tể tam giới.pdf`, `Mắt nhìn thấu chung cực.pdf`, `Ta Luyện Khí Ba Ngàn Năm.pdf`, `Taikou.pdf`, `Thần Hồn Võ Đế nettruyenqq.us.pdf`). Toàn bộ 7/7 tệp xuất hiện chuẩn xác 100% trong `history.md` và `GetUnifiedHistoryItems`.
+
 
 
 
