@@ -2557,7 +2557,7 @@
 
                                     <!-- LƯỚI THẺ ẢNH THUMBNAIL (THUMBNAIL VIEW MODE - CHUẨN GIAO DIỆN WPF) -->
 
-                                    <ScrollViewer x:Name="ThumbnailScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="8,8,8,12" IsVisible="{Binding IsMainQueueThumbnailVisible}" BringIntoViewOnFocusChange="False">
+                                    <ScrollViewer x:Name="ThumbnailScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="260" Padding="4,4,4,12" IsVisible="{Binding IsMainQueueThumbnailVisible}" BringIntoViewOnFocusChange="False">
 
                                         <ItemsControl x:Name="ThumbnailItemsControl" ItemsSource="{Binding ActiveThumbnailItemsSource}">
 
@@ -2575,7 +2575,16 @@
 
                                                 <DataTemplate>
 
-                                                    <Border Focusable="True" IsVisible="{Binding !IsFilteredOut}" Width="195" Height="280" Margin="6" Background="{Binding ThumbnailCardBackground}" BorderBrush="{Binding ThumbnailCardBorderBrush}" BorderThickness="{Binding ThumbnailCardBorderThickness}" CornerRadius="3" Padding="8,6" ClipToBounds="True"
+                                                    <Border Focusable="True" IsVisible="{Binding !IsFilteredOut}"
+                                                            Width="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ThumbnailCardWidth}"
+                                                            Height="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ThumbnailCardHeight}"
+                                                            Margin="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ThumbnailCardMargin}"
+                                                            Background="{Binding ThumbnailCardBackground}"
+                                                            BorderBrush="{Binding ThumbnailCardBorderBrush}"
+                                                            BorderThickness="{Binding ThumbnailCardBorderThickness}"
+                                                            CornerRadius="3"
+                                                            Padding="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ThumbnailCardPadding}"
+                                                            ClipToBounds="True"
 
                                                             AttachedToVisualTree="OnThumbnailElementAttached"
 
@@ -2721,17 +2730,13 @@
 
                                                         </Border.ContextMenu>
 
-                                                        <Grid RowDefinitions="142, *, Auto">
+                                                        <Grid RowDefinitions="*, Auto, Auto">
 
-                                                            <!-- Hàng 0: Checkbox góc trái + Ảnh bìa dọc ở giữa + Icon ☰ góc phải (Giống hệt WPF) -->
+                                                            <!-- Hàng 0: Checkbox góc trái + Ảnh bìa dọc ở giữa + Icon ☰ góc phải -->
 
                                                             <Grid Grid.Row="0">
 
-                                                                <CheckBox Focusable="False" IsChecked="{Binding IsChecked}" PointerPressed="OnQueueItemCheckBoxPointerPressed" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0" />
-
-
-
-                                                                <Border Width="105" Height="138" Background="#05080D" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="2" HorizontalAlignment="Center" VerticalAlignment="Center" ClipToBounds="True">
+                                                                <Border Background="#05080D" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="2" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ClipToBounds="True">
 
                                                                     <Grid>
 
@@ -2739,7 +2744,7 @@
 
                                                                                    IsVisible="{Binding ThumbnailBitmap, Converter={x:Static ObjectConverters.IsNull}}" />
 
-                                                                        <Image Source="{Binding ThumbnailBitmap}" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                        <Image Source="{Binding ThumbnailBitmap}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"
 
                                                                                RenderOptions.BitmapInterpolationMode="HighQuality" />
 
@@ -2753,62 +2758,64 @@
 
                                                                 </Border>
 
+                                                                <CheckBox Focusable="False" IsChecked="{Binding IsChecked}" PointerPressed="OnQueueItemCheckBoxPointerPressed" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="1" />
 
-
-                                                                <TextBlock Text="☰" FontSize="13" FontWeight="Bold" Foreground="#00E5FF" HorizontalAlignment="Right" VerticalAlignment="Top" />
+                                                                <TextBlock Text="☰" FontSize="13" FontWeight="Bold" Foreground="#00E5FF" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,2,0"
+                                                                           IsVisible="{Binding !$parent[UserControl].((vm:MainViewModel)DataContext).IsThumbnailCompactMode}" />
 
                                                             </Grid>
 
+                                                            <!-- Hàng 1: Tiêu đề vàng đậm + Metadata (ẩn khi Compact) -->
 
+                                                            <StackPanel Grid.Row="1" Margin="0,3,0,2" Spacing="1">
 
-                                                            <!-- Hàng 1: Tiêu đề vàng đậm + Missing chapter + Status + Process (Giống hệt WPF) -->
-
-                                                            <StackPanel Grid.Row="1" Margin="0,6,0,4" Spacing="2">
-
-                                                                <TextBlock Text="{Binding Title}" FontSize="11.5" FontWeight="Bold" Foreground="{Binding TitleBrush}"
-
+                                                                <TextBlock Text="{Binding Title}"
+                                                                           FontSize="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ThumbnailTitleFontSize}"
+                                                                           FontWeight="Bold" Foreground="{Binding TitleBrush}"
+                                                                           MaxLines="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ThumbnailTitleMaxLines}"
                                                                            TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
 
-                                                                <TextBlock FontSize="10" TextTrimming="CharacterEllipsis">
+                                                                <StackPanel Spacing="1" IsVisible="{Binding !$parent[UserControl].((vm:MainViewModel)DataContext).IsThumbnailCompactMode}">
 
-                                                                    <Run Text="Missing chapter: " Foreground="#94A3B8" />
+                                                                    <TextBlock FontSize="10" TextTrimming="CharacterEllipsis">
 
-                                                                    <Run Text="{Binding MissingChapterDisplay}" Foreground="{Binding MissingChapterBrush}" FontWeight="SemiBold" />
+                                                                        <Run Text="Missing chapter: " Foreground="#94A3B8" />
 
-                                                                </TextBlock>
+                                                                        <Run Text="{Binding MissingChapterDisplay}" Foreground="{Binding MissingChapterBrush}" FontWeight="SemiBold" />
 
-                                                                <TextBlock FontSize="10" TextTrimming="CharacterEllipsis">
+                                                                    </TextBlock>
 
-                                                                    <Run Text="Status: " Foreground="#94A3B8" />
+                                                                    <TextBlock FontSize="10" TextTrimming="CharacterEllipsis">
 
-                                                                    <Run Text="{Binding DisplayStatusVi}" Foreground="#00E5FF" FontWeight="SemiBold" />
+                                                                        <Run Text="Status: " Foreground="#94A3B8" />
 
-                                                                </TextBlock>
+                                                                        <Run Text="{Binding DisplayStatusVi}" Foreground="#00E5FF" FontWeight="SemiBold" />
 
-                                                                <TextBlock FontSize="10" TextTrimming="CharacterEllipsis">
+                                                                    </TextBlock>
 
-                                                                    <Run Text="Process: " Foreground="#94A3B8" />
+                                                                    <TextBlock FontSize="10" TextTrimming="CharacterEllipsis">
 
-                                                                    <Run Text="{Binding ThumbnailProcessDisplay}" Foreground="#CBD5E1" />
+                                                                        <Run Text="Process: " Foreground="#94A3B8" />
 
-                                                                </TextBlock>
+                                                                        <Run Text="{Binding ThumbnailProcessDisplay}" Foreground="#CBD5E1" />
+
+                                                                    </TextBlock>
+
+                                                                </StackPanel>
 
                                                             </StackPanel>
 
+                                                            <!-- Hàng 2: Thanh ProgressBar bên trái + Số % bên phải -->
 
+                                                            <Grid Grid.Row="2" ColumnDefinitions="*, Auto" VerticalAlignment="Bottom" Margin="0,1,0,0">
 
-                                                            <!-- Hàng 2: Thanh ProgressBar bên trái + Số % bên phải (Giống hệt WPF) -->
-
-                                                            <Grid Grid.Row="2" ColumnDefinitions="*, Auto" VerticalAlignment="Bottom" Margin="0,2,0,0">
-
-                                                                <ProgressBar Grid.Column="0" Value="{Binding ProgressPercentage}" Maximum="100" Height="8"
-
+                                                                <ProgressBar Grid.Column="0" Value="{Binding ProgressPercentage}" Maximum="100"
+                                                                             Height="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ThumbnailProgressBarHeight}"
                                                                              CornerRadius="2" Foreground="#00E5FF" Background="#111C2D"
-
-                                                                             HorizontalAlignment="Stretch" VerticalAlignment="Center" BorderThickness="0" Margin="0,0,8,0" />
+                                                                             HorizontalAlignment="Stretch" VerticalAlignment="Center" BorderThickness="0" Margin="0,0,2,0" />
 
                                                                 <TextBlock Grid.Column="1" Text="{Binding ProgressPercentageText}"
-
+                                                                           IsVisible="{Binding !$parent[UserControl].((vm:MainViewModel)DataContext).IsThumbnailCompactMode}"
                                                                            VerticalAlignment="Center" Foreground="#00E5FF" FontWeight="Bold" FontSize="10" />
 
                                                             </Grid>

@@ -1338,3 +1338,20 @@ Quy tắc bắt buộc: App phải vượt qua cả 2 bước khởi động m�
     + Nâng cấp `QueueGridRow` kế thừa `ObservableObject` từ `CommunityToolkit.Mvvm.ComponentModel`, hỗ trợ các `[ObservableProperty]` cho `_col1, _col2, _col3, _col4, _columnsCount` và phương thức `Update(...)`.
     + Viết lại `RebuildGridQueueRows()`: Trước khi thay đổi, đối chiếu dữ liệu hiện tại với `GridQueueRows`. Nếu cấu trúc và các cell không đổi -> thoát ngay lập tức (0 allocations, 0 UI mutations). Nếu có biến động, tái sử dụng in-place các hàng `QueueGridRow` hiện có thay vì tạo mới `ObservableCollection`, giữ nguyên 100% visual tree của Avalonia ListBox/ItemsControl, duy trì tốc độ 60fps mượt mà tuyệt đối khi tải hàng loạt.
 
+
+### 77. Chuẩn Hóa Lưới Thumbnail View 5 Cột & Touch Guard Chống Tự Mở Popup Preview Trên Android; Giới Hạn Cột Grid (Android Portrait: 2 Cột, Landscape: 3 Cột, Windows: 4 Cột)
+- **1. Sửa bug Thumbnail View chỉ có 1 cột thành 5 cột trên Android Portrait**:
+  - `ThumbnailCardWidth`, `ThumbnailCardHeight`, `ThumbnailCardMargin`, `ThumbnailCardPadding`, `ThumbnailTitleFontSize`, `ThumbnailTitleMaxLines`, `ThumbnailProgressBarHeight` được quản lý phản hồi thông minh qua `UpdateResponsiveThumbnailSize(viewportWidth)` trong `MainViewModel.cs`.
+  - Trên Android Portrait: Tự động tính toán bề rộng mỗi card vừa khít `(viewportWidth - 28) / 5`, lấp đầy 100% màn hình, hiển thị chính xác **5 CỘT** trên mọi thiết bị di động.
+  - Tích hợp `IsThumbnailCompactMode`: Ảnh bìa tỷ lệ `UniformToFill` sắc nét kèm Checkbox góc trên, tiêu đề 2 dòng ngắn gọn, thanh tiến trình mini 3px ở đáy; ẩn các text metadata dài dòng để card nhỏ gọn, thanh thoát, chuẩn mobile card.
+- **2. Giới hạn số cột Lưới (Grid) tối đa theo nền tảng**:
+  - Android Portrait: Maximum 2 cột (`CanSelectGrid3Cols = false, CanSelectGrid4Cols = false`).
+  - Android Landscape: Maximum 3 cột (`CanSelectGrid3Cols = true, CanSelectGrid4Cols = false`, loại bỏ cột 4 bị chật chội).
+  - Windows/Linux (Desktop): Maximum 4 cột (đầy đủ các nút chọn 2, 3, 4 cột).
+- **3. Khắc phục triệt để lỗi tự kích hoạt Popup Preview khi vuốt cuộn trong Thumbnail View trên Android**:
+  - Tại `OnThumbnailItemPointerPressed`: Chặn kích hoạt `ShowHoverPreview` khi `e.Pointer.Type == PointerType.Touch`.
+  - Tại `OnThumbnailItemPointerMoved`: Đo khoảng cách di chuyển; nếu > 8px, đánh dấu `_thumbTouchMoved = true` và lập tức ẩn Popup Preview nếu đang mở.
+  - Tại `OnAnyScrollViewerScrollChanged`: Bắt thao tác cuộn trên mọi danh sách, đánh dấu `_thumbTouchMoved = true` và ẩn Popup Preview.
+  - Tại `OnThumbnailItemPointerReleased`: Chỉ khi người dùng thực hiện Single Tap thực sự (`!_thumbTouchMoved && dist <= 12px` không cuộn), Popup Preview mới được kích hoạt, mang lại trải nghiệm vuốt cuộn mượt mà 100% giống hệt chế độ List và List + Thumbnail column.
+
+

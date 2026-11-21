@@ -91,6 +91,8 @@ public partial class MainView : UserControl
 
                 vm.IsPortraitMode = e.NewSize.Width < e.NewSize.Height;
 
+                vm.UpdateResponsiveThumbnailSize(e.NewSize.Width);
+
             }
 
             if (e.NewSize.Width > 0 && e.NewSize.Height > 0)
@@ -2412,6 +2414,13 @@ public partial class MainView : UserControl
 
     {
 
+        _thumbTouchMoved = true;
+        _queueTouchMoved = true;
+        if (DataContext is MainViewModel scrollVm && scrollVm.IsHoverPreviewVisible)
+        {
+            scrollVm.HideHoverPreview();
+        }
+
         ScrollBarAutoExpandService.TriggerGlobalScrollExpand(this);
 
         if (sender is ScrollViewer sv)
@@ -3235,19 +3244,33 @@ public partial class MainView : UserControl
 
     private void OnThumbnailItemPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if (DataContext is MainViewModel vm && vm.IsQueueBatchModeActive)
-        {
-            var curPt = e.GetCurrentPoint(this).Position;
-            double dx = curPt.X - _thumbTouchStartPos.X;
-            double dy = curPt.Y - _thumbTouchStartPos.Y;
-            bool isSingleTap = !_thumbTouchMoved && (Math.Sqrt(dx * dx + dy * dy) <= 15);
+        var curPt = e.GetCurrentPoint(this).Position;
+        double dx = curPt.X - _thumbTouchStartPos.X;
+        double dy = curPt.Y - _thumbTouchStartPos.Y;
+        bool isSingleTap = !_thumbTouchMoved && (Math.Sqrt(dx * dx + dy * dy) <= 12);
 
-            if (isSingleTap && sender is Control ctrl && ctrl.DataContext is ComicBookItem item)
+        if (DataContext is MainViewModel vm)
+        {
+            if (vm.IsQueueBatchModeActive)
             {
-                vm.HandleQueueBatchItemClick(item);
+                if (isSingleTap && sender is Control ctrl && ctrl.DataContext is ComicBookItem item)
+                {
+                    vm.HandleQueueBatchItemClick(item);
+                }
+                e.Handled = true;
+                return;
             }
-            e.Handled = true;
-            return;
+
+            // Với cảm ứng Touch trên Android: Chỉ khi Single Tap (chạm và nhấc ra tại chỗ, không vuốt) mới kích hoạt Popup Preview
+            if (e.Pointer.Type == PointerType.Touch && isSingleTap && sender is Control touchCtrl && touchCtrl.DataContext is ComicBookItem touchItem)
+            {
+                vm.SetHighlightedComicBook(touchItem);
+                if (vm.IsPopupPreview)
+                {
+                    vm.ShowHoverPreview(touchItem);
+                    UpdateHoverPreviewPosition(e);
+                }
+            }
         }
     }
 
@@ -3291,6 +3314,11 @@ public partial class MainView : UserControl
 
                 return;
 
+            }
+
+            if (e.Pointer.Type == PointerType.Touch)
+            {
+                return;
             }
 
             if (vm.IsPopupPreview)
@@ -3351,9 +3379,13 @@ public partial class MainView : UserControl
         var curPt = e.GetCurrentPoint(this).Position;
         double tdx = curPt.X - _thumbTouchStartPos.X;
         double tdy = curPt.Y - _thumbTouchStartPos.Y;
-        if (Math.Sqrt(tdx * tdx + tdy * tdy) > 15)
+        if (Math.Sqrt(tdx * tdx + tdy * tdy) > 8)
         {
             _thumbTouchMoved = true;
+            if (e.Pointer.Type == PointerType.Touch && DataContext is MainViewModel touchVm && touchVm.IsHoverPreviewVisible)
+            {
+                touchVm.HideHoverPreview();
+            }
         }
 
         if (e.Pointer.Type == PointerType.Touch) return;
@@ -3567,6 +3599,13 @@ public partial class MainView : UserControl
                 bool isCtrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
                 bool isShift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
                 vm.HandleQueueItemSelection(item, isCtrl, isShift, ref _lastQueueClickedIndex);
+
+                // Nếu là cảm ứng Touch (Android): KHÔNG mở Popup Preview ngay khi vừa chạm (Pressed).
+                // Việc mở Preview do PointerReleased đảm nhiệm nếu là Single Tap (không vuốt cuộn).
+                if (e.Pointer.Type == PointerType.Touch)
+                {
+                    return;
+                }
 
                 if (vm.IsPopupPreview && !isShift && !isCtrl)
                 {

@@ -1580,9 +1580,89 @@ public partial class MainViewModel : ViewModelBase
     public bool IsDesktopLifetime => Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
     public bool IsAndroidPlatform => OperatingSystem.IsAndroid();
 
-    public int MaxGridColumnsAllowed => (OperatingSystem.IsAndroid() && IsPortraitMode) ? 2 : 4;
+    public int MaxGridColumnsAllowed => OperatingSystem.IsAndroid() ? (IsPortraitMode ? 2 : 3) : 4;
     public bool CanSelectGrid3Cols => !OperatingSystem.IsAndroid() || !IsPortraitMode;
-    public bool CanSelectGrid4Cols => !OperatingSystem.IsAndroid() || !IsPortraitMode;
+    public bool CanSelectGrid4Cols => !OperatingSystem.IsAndroid();
+
+    [ObservableProperty]
+    private double _thumbnailCardWidth = 195;
+
+    [ObservableProperty]
+    private double _thumbnailCardHeight = 280;
+
+    [ObservableProperty]
+    private Thickness _thumbnailCardMargin = new Thickness(6);
+
+    [ObservableProperty]
+    private Thickness _thumbnailCardPadding = new Thickness(8, 6);
+
+    [ObservableProperty]
+    private double _thumbnailTitleFontSize = 11.5;
+
+    [ObservableProperty]
+    private int _thumbnailTitleMaxLines = 1;
+
+    [ObservableProperty]
+    private double _thumbnailProgressBarHeight = 8;
+
+    public bool IsThumbnailCompactMode => OperatingSystem.IsAndroid() && IsPortraitMode;
+
+    private double _lastKnownViewportWidth = 0;
+
+    public void UpdateResponsiveThumbnailSize(double viewportWidth)
+    {
+        if (viewportWidth > 0)
+        {
+            _lastKnownViewportWidth = viewportWidth;
+        }
+        else if (_lastKnownViewportWidth > 0)
+        {
+            viewportWidth = _lastKnownViewportWidth;
+        }
+
+        if (!OperatingSystem.IsAndroid())
+        {
+            ThumbnailCardWidth = 195;
+            ThumbnailCardHeight = 280;
+            ThumbnailCardMargin = new Thickness(6);
+            ThumbnailCardPadding = new Thickness(8, 6);
+            ThumbnailTitleFontSize = 11.5;
+            ThumbnailTitleMaxLines = 1;
+            ThumbnailProgressBarHeight = 8;
+            OnPropertyChanged(nameof(IsThumbnailCompactMode));
+            return;
+        }
+
+        if (IsPortraitMode)
+        {
+            // Android Portrait: Bắt buộc CHÍNH XÁC 5 CỘT theo yêu cầu của user
+            double avail = viewportWidth > 0 ? viewportWidth : 380;
+            // Trừ padding ScrollViewer (4 * 2 = 8) và margin 5 card (mỗi card margin 2 trái + 2 phải = 4px, tổng 20px)
+            double calculated = Math.Floor((avail - 8 - 20) / 5.0);
+            double cardW = Math.Clamp(calculated, 56, 82);
+
+            ThumbnailCardWidth = cardW;
+            ThumbnailCardHeight = Math.Round(cardW * 1.95);
+            ThumbnailCardMargin = new Thickness(2, 3);
+            ThumbnailCardPadding = new Thickness(3, 3);
+            ThumbnailTitleFontSize = 8.5;
+            ThumbnailTitleMaxLines = 2;
+            ThumbnailProgressBarHeight = 3;
+        }
+        else
+        {
+            // Android Landscape: Card rộng rãi vừa vặn (~140x220)
+            ThumbnailCardWidth = 140;
+            ThumbnailCardHeight = 220;
+            ThumbnailCardMargin = new Thickness(4);
+            ThumbnailCardPadding = new Thickness(4, 4);
+            ThumbnailTitleFontSize = 10;
+            ThumbnailTitleMaxLines = 1;
+            ThumbnailProgressBarHeight = 5;
+        }
+
+        OnPropertyChanged(nameof(IsThumbnailCompactMode));
+    }
 
     [ObservableProperty]
     private string _enhanceImageCounterText = "0 / 0";
@@ -1592,9 +1672,13 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnIsPortraitModeChanged(bool value)
     {
-        if (OperatingSystem.IsAndroid() && value && GridColumnsCount > 2)
+        if (OperatingSystem.IsAndroid())
         {
-            GridColumnsCount = 2;
+            int maxAllowed = value ? 2 : 3;
+            if (GridColumnsCount > maxAllowed)
+            {
+                GridColumnsCount = maxAllowed;
+            }
         }
         OnPropertyChanged(nameof(MaxGridColumnsAllowed));
         OnPropertyChanged(nameof(CanSelectGrid3Cols));
@@ -1604,6 +1688,7 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(DualSortThumbHeight));
         UpdateSplitOrientation();
         RebuildGridQueueRows();
+        UpdateResponsiveThumbnailSize(_lastKnownViewportWidth);
     }
 
     partial void OnIsEnhanceLogExpandedChanged(bool value)
@@ -2602,6 +2687,7 @@ public partial class MainViewModel : ViewModelBase
 
     public MainViewModel()
     {
+        UpdateResponsiveThumbnailSize(0);
         if (IsDesktopLifetime)
         {
             IsSidebarVisible = true;
