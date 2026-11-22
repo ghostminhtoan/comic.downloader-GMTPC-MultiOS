@@ -1278,16 +1278,15 @@ public partial class App : Application
     {
         try
         {
-            // Bước 1: Khởi động tuần tự an toàn - Singletons nền trước
+            // Bước 1: Khởi động song song tối ưu - Singletons nền
             splashVm.ReportProgress(25, "Đang khởi động hệ thống...");
 
-            await Task.Run(() =>
-            {
-                _ = LanguageService.Instance;
-                _ = ComicScraperService.Instance;
-                _ = DownloadEngineService.Instance;
-                _ = ReadProgressStore.Instance;
-            }).ConfigureAwait(false);
+            await Task.WhenAll(
+                Task.Run(() => _ = LanguageService.Instance),
+                Task.Run(() => _ = ComicScraperService.Instance),
+                Task.Run(() => _ = DownloadEngineService.Instance),
+                Task.Run(() => _ = ReadProgressStore.Instance)
+            ).ConfigureAwait(false);
 
             // Bước 2: Khởi tạo SharedMainViewModel sau khi các service singleton đã sẵn sàng
             splashVm.ReportProgress(60, "Khởi tạo dữ liệu...");

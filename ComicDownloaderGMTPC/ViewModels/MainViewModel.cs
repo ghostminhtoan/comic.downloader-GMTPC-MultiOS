@@ -93,11 +93,14 @@ public partial class MainViewModel : ViewModelBase
         {
             try
             {
-                await Task.Delay(1000).ConfigureAwait(false);
-                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
-                {
-                    await LibraryVm.EnsureDataLoadedAsync();
-                });
+                await Task.Delay(800).ConfigureAwait(false);
+                try { LoadUserPresetsFromDisk(); } catch { }
+                try { InitializeSearchDomains(); } catch { }
+                try { InitGoogleDriveService(); } catch { }
+                try { InitFolderToolsService(); } catch { }
+                try { InitArchiveMerger(); } catch { }
+                try { LoadPasswordManagerSettings(); } catch { }
+                _ = Task.Run(async () => await EnsureDamconuongRedirectDomainAsync().ConfigureAwait(false));
             }
             catch { }
         });
@@ -2762,13 +2765,8 @@ public partial class MainViewModel : ViewModelBase
             });
         };
         DownloadEngineService.AndroidOpenFolderRequested += OnAndroidOpenFolderRequested;
-        SplashViewModel.ReportGlobalProgress(62, "Đang nạp preset người dùng & bộ lọc ảnh...");
-        LoadUserPresetsFromDisk();
-        SplashViewModel.ReportGlobalProgress(70, "Khởi tạo công cụ tìm kiếm & định tuyến...");
-        InitializeSearchDomains();
         SplashViewModel.ReportGlobalProgress(78, "Đang khôi phục hàng chờ tự động từ đĩa...");
         InitializeQueueAutoBackupAndRestore();
-        InitGoogleDriveService();
 
         // Lắng nghe thay đổi trạng thái Modal của LibraryVm để tự động ẩn/hiện FAB
         LibraryVm.PropertyChanged += (s, e) =>
@@ -2913,11 +2911,6 @@ public partial class MainViewModel : ViewModelBase
         };
 
         UpdateLanguageStrings();
-        SplashViewModel.ReportGlobalProgress(94, "Khởi tạo công cụ nối file & dọn dẹp...");
-        InitFolderToolsService();
-        try { InitArchiveMerger(); } catch { }
-        LoadPasswordManagerSettings();
-        _ = Task.Run(async () => await EnsureDamconuongRedirectDomainAsync().ConfigureAwait(false));
         SplashViewModel.ReportGlobalProgress(97, "Chuẩn bị giao diện ứng dụng...");
         AddLog("INFO", "Hệ thống Comic Downloader GMTPC Avalonia khởi chạy thành công (Hỗ trợ: Windows, Linux, Android).");
         SoundNotificationService.Instance.PlaySound(SoundNotificationType.Startup);
@@ -3159,8 +3152,19 @@ public partial class MainViewModel : ViewModelBase
                     {
                         ReindexComicBooks();
                         UpdateStats(true);
-                        StartScanMissing();
-                        TriggerThumbnailPrefetchIfNeeded();
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await Task.Delay(3500).ConfigureAwait(false);
+                                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                {
+                                    StartScanMissing();
+                                    TriggerThumbnailPrefetchIfNeeded();
+                                });
+                            }
+                            catch { }
+                        });
                         AddLog("SUCCESS", $"🔄 [Auto Backup] Đã tự động khôi phục {ComicBooks.Count} truyện, tiến độ tải và cấu hình (Số truyện: {ConcurrentComicDownloads}, Connection: {ImageDownloadThreads}, Luồng CPU: {LinkCpuThreads}) từ '{fileName}'.");
                     }
                     else if (restoreResult.ConcurrentComicDownloads.HasValue || restoreResult.ImageDownloadThreads.HasValue || restoreResult.LinkCpuThreads.HasValue)

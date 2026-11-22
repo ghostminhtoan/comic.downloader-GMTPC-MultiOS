@@ -1457,21 +1457,6 @@ public sealed class ReadProgressStore
 
         try
         {
-            if (!OperatingSystem.IsAndroid())
-            {
-                foreach (var d in DriveInfo.GetDrives())
-                {
-                    if (d.IsReady)
-                    {
-                        TryAdd(d.RootDirectory.FullName);
-                    }
-                }
-            }
-        }
-        catch { }
-
-        try
-        {
             foreach (var p in GetPinnedFolders())
             {
                 TryAdd(p);
@@ -1708,47 +1693,6 @@ public sealed class ReadProgressStore
                 {
                     RegisterLocalComicPath(clean, foundInTree);
                     return foundInTree;
-                }
-            }
-            catch { }
-        }
-
-        // 4. Quét trên toàn bộ các ổ đĩa của thiết bị (ngoại trừ Android)
-        if (!OperatingSystem.IsAndroid())
-        {
-            try
-            {
-                foreach (var drive in DriveInfo.GetDrives())
-                {
-                    if (!drive.IsReady) continue;
-                    string driveRoot = drive.RootDirectory.FullName;
-
-                    try
-                    {
-                        var topDirs = Directory.GetDirectories(driveRoot);
-                        foreach (var td in topDirs)
-                        {
-                            string tdName = Path.GetFileName(td);
-                            // Bỏ qua thư mục hệ thống Windows
-                            if (string.Equals(tdName, "Windows", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(tdName, "$Recycle.Bin", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(tdName, "System Volume Information", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(tdName, "Program Files", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(tdName, "Program Files (x86)", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(tdName, "ProgramData", StringComparison.OrdinalIgnoreCase))
-                            {
-                                continue;
-                            }
-
-                            string? foundInDrive = SearchFileOrFolderInDirectory(td, targetNames, extensions, hasFileExtension, maxDepth: 3);
-                            if (!string.IsNullOrEmpty(foundInDrive))
-                            {
-                                RegisterLocalComicPath(clean, foundInDrive);
-                                return foundInDrive;
-                            }
-                        }
-                    }
-                    catch { }
                 }
             }
             catch { }
