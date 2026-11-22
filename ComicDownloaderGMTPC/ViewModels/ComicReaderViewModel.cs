@@ -6140,6 +6140,7 @@ public partial class ComicReaderViewModel : ViewModelBase
                 _progressStore.RegisterLocalComicPath(Path.GetFileName(chapter.LocalPath), chapter.LocalPath);
                 _progressStore.RegisterLocalComicPath(Path.GetFileNameWithoutExtension(chapter.LocalPath), chapter.LocalPath);
             }
+            _progressStore.RegisterReadComic(activeLocalPath, touchTimestamp: true);
         }
 
         _progressStore.RecordSessionResume(
@@ -6150,14 +6151,11 @@ public partial class ComicReaderViewModel : ViewModelBase
             chapterNumber: ReadProgressStore.ExtractChapterNumber(chapter.Title),
             pageIndex: Math.Max(0, CurrentPageIndex),
             totalPages: totalPages
-
         );
 
-
-
         ParentComic?.RefreshReadStatus();
-
         _progressStore.FlushImmediately();
+        _progressStore.SaveHistoryToDisk();
 
     }
 

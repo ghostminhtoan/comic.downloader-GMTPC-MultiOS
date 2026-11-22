@@ -76,9 +76,7 @@ namespace ComicDownloaderGMTPC.Android;
 
 
 [Activity(
-
-
-
+    Name = "com.CompanyName.ComicDownloaderGMTPC.MainActivity",
     Label = "ComicDownloaderGMTPC",
 
 

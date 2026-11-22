@@ -94,7 +94,10 @@ public partial class MainViewModel : ViewModelBase
             try
             {
                 await Task.Delay(1000).ConfigureAwait(false);
-                await LibraryVm.EnsureDataLoadedAsync().ConfigureAwait(false);
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    await LibraryVm.EnsureDataLoadedAsync();
+                });
             }
             catch { }
         });

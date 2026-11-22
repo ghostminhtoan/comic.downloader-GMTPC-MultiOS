@@ -19,7 +19,21 @@ namespace ComicDownloaderGMTPC;
 public partial class App : Application
 {
     private static MainViewModel? _sharedMainViewModel;
-    public static MainViewModel SharedMainViewModel => _sharedMainViewModel ??= new MainViewModel();
+    private static readonly object _sharedVmLock = new();
+    public static MainViewModel SharedMainViewModel
+    {
+        get
+        {
+            if (_sharedMainViewModel == null)
+            {
+                lock (_sharedVmLock)
+                {
+                    _sharedMainViewModel ??= new MainViewModel();
+                }
+            }
+            return _sharedMainViewModel;
+        }
+    }
     public static MainViewModel? TryGetSharedMainViewModel() => _sharedMainViewModel;
     public static bool HasSharedMainViewModel => _sharedMainViewModel != null;
 
@@ -1264,27 +1278,23 @@ public partial class App : Application
     {
         try
         {
-            // Bước 1: Khởi động song song hoàn toàn các service nền và SharedMainViewModel
-            splashVm.ReportProgress(25, "Đang khởi động hệ thống song song...");
+            // Bước 1: Khởi động tuần tự an toàn - Singletons nền trước
+            splashVm.ReportProgress(25, "Đang khởi động hệ thống...");
 
-            var initServicesTask = Task.Run(() =>
+            await Task.Run(() =>
             {
                 _ = LanguageService.Instance;
                 _ = ComicScraperService.Instance;
                 _ = DownloadEngineService.Instance;
                 _ = ReadProgressStore.Instance;
-            });
+            }).ConfigureAwait(false);
 
-            var initVmTask = Task.Run(() =>
+            // Bước 2: Khởi tạo SharedMainViewModel sau khi các service singleton đã sẵn sàng
+            splashVm.ReportProgress(60, "Khởi tạo dữ liệu...");
+            await Task.Run(() =>
             {
                 _ = SharedMainViewModel;
-            });
-
-            await Task.WhenAll(initServicesTask, initVmTask).ConfigureAwait(false);
-
-            // Bước 2: Chuẩn bị hiển thị giao diện chính
-            splashVm.ReportProgress(85, "Khởi tạo giao diện chính...");
-            await Task.Yield();
+            }).ConfigureAwait(false);
 
             // Bước 3: Sẵn sàng 100% và mở ngay lập tức giao diện
             splashVm.ReportProgress(100, "Sẵn sàng!");

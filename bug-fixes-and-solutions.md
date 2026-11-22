@@ -2414,3 +2414,44 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC.Android/ComicReaderActivity.cs`
   - `Comic Downloader GMTPC AVALONIA/workflow-avalonia.md`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+---
+
+### BUG-066: Khắc Phục Triệt Để Lỗi Crash Khi Boot Trên Android / Giả Lập LDPlayer 4.0 & Đồng Bộ Lịch Sử Đọc Real-Time Đa Tiến Trình
+
+- **Hiện tượng & Bối cảnh**:
+  1. Khi khởi động ứng dụng trên Android hoặc giả lập Android (như LDPlayer 4.0 / dnmultiplayer), ứng dụng bị crash văng ngay sau màn hình Splash hoặc sau khoảng 1 giây.
+  2. Khi mở đọc truyện từ tệp bên ngoài (file association) hoặc đọc truyện trong reader độc lập, lịch sử đọc truyện trong tab Thư viện (History) của ứng dụng chính không được cập nhật theo thời gian thực (real-time).
+
+- **Nguyên nhân kỹ thuật sâu xa**:
+  1. **Race Condition & Vi Phạm Thread-Affinity Trên ObservableCollection (Avalonia Android)**:
+     - Sau khi tối ưu boot song song, `TriggerPostBootDeferredInitialization()` gọi `EnsureDataLoadedAsync()` trên luồng nền (`Task.Run`).
+     - Trong `EnsureDataLoadedAsync()`, các hàm `LoadStorageItems()`, `LoadBookmarkGroups()`, `LoadDirectoryAsync()` thực hiện `.Clear()` và `.Add()` trực tiếp trên các `ObservableCollection` (`StorageItems`, `BookmarkGroups`, `DirectoryItems`) gắn với giao diện Avalonia mà không điều phối về `Dispatcher.UIThread`.
+     - Trên Android Skia render engine, việc sửa đổi `ObservableCollection` ngoài UI thread gây ngoại lệ hoặc race condition làm sụp đổ tiến trình.
+  2. **Race Condition Khởi Tạo SharedMainViewModel**:
+     - `App.SharedMainViewModel` sử dụng `??=` không có lock đồng bộ luồng (`lock (_sharedVmLock)`), dẫn đến nguy cơ khởi tạo trùng lặp khi background thread và UI thread cùng truy cập lúc khởi động.
+  3. **Thiếu Tên Tường Minh Cho MainActivity**:
+     - `MainActivity.cs` thiếu thuộc tính `Name = "com.CompanyName.ComicDownloaderGMTPC.MainActivity"`, khiến .NET for Android tự sinh tên động hash CRC (`crc64ce76c431864a36f3.MainActivity`), gây lỗi phân giải activity khi launcher gọi.
+  4. **Thiếu Cơ Chế Ghi Lịch Sử Tức Thời Khi Đọc**:
+     - Trong `ComicReaderViewModel.SaveChapterReadingSession()`, hệ thống chỉ gọi `FlushImmediately()` (lưu resume.md) nhưng chưa gọi `RegisterReadComic(activeLocalPath, touchTimestamp: true)` và `SaveHistoryToDisk()`, khiến `history.md` không được cập nhật ngay lập tức khi đọc.
+
+- **Giải pháp xử lý triệt để**:
+  1. **Thread-Safe Toàn Diện Cho ObservableCollection & Deferred Initialization**:
+     - Trong `LibraryViewModel.cs`: Bổ sung kiểm tra `Dispatcher.UIThread.CheckAccess()` và chuyển tiếp qua `Post` / `InvokeAsync` cho 100% các hàm sửa đổi collection (`LoadStorageItems()`, `LoadBookmarkGroups()`, `LoadDirectoryAsync()`).
+     - Chụp snapshot `itemsSnapshot = items.ToList()` trong `LoadHistoryItemsAsync()` trước khi nạp thumbnail ngầm để tránh lỗi "Collection was modified".
+     - Trong `MainViewModel.TriggerPostBootDeferredInitialization()`: Điều phối `await LibraryVm.EnsureDataLoadedAsync()` chạy an toàn trên `Dispatcher.UIThread`.
+  2. **Double-Checked Locking Cho SharedMainViewModel & Khởi Động Tuần Tự Hóa**:
+     - Trong `App.axaml.cs`: Bổ sung `lock (_sharedVmLock)` cho `SharedMainViewModel`. Khởi tạo các singleton service nền trước, sau đó mới nạp `SharedMainViewModel` để triệt tiêu mọi race condition lúc boot.
+  3. **Đặt Tên Tường Minh Cho MainActivity**:
+     - Thêm `Name = "com.CompanyName.ComicDownloaderGMTPC.MainActivity"` trong `[Activity]` của `MainActivity.cs`.
+  4. **Đồng Bộ Lịch Sử Đọc Real-Time Khi Đọc**:
+     - Trong `ComicReaderViewModel.SaveChapterReadingSession()`: Tự động đăng ký `RegisterReadComic(activeLocalPath, touchTimestamp: true)` và gọi `SaveHistoryToDisk()`.
+     - `FileSystemWatcher` và `_heartbeatCheckTimer` trong `ReadProgressStore` sẽ tự động nhận diện và cập nhật tab History theo thời gian thực xuyên tiến trình.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC.Android/MainActivity.cs`
+  - `ComicDownloaderGMTPC/App.axaml.cs`
+  - `ComicDownloaderGMTPC/ViewModels/LibraryViewModel.cs`
+  - `ComicDownloaderGMTPC/ViewModels/MainViewModel.cs`
+  - `ComicDownloaderGMTPC/ViewModels/ComicReaderViewModel.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

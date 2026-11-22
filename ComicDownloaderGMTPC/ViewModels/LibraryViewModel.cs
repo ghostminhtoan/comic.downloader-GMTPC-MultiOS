@@ -262,13 +262,17 @@ public partial class LibraryViewModel : ViewModelBase
                 CurrentDirectoryPath = savedRoot;
             }
 
-            try { LoadStorageItems(); } catch { }
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                try { LoadStorageItems(); } catch { }
+                try { LoadBookmarkGroups(); } catch { }
+            });
+
             if (!OperatingSystem.IsAndroid() || DownloadEngineService.CanWriteToDirectory(CurrentDirectoryPath))
             {
-                try { LoadDirectory(CurrentDirectoryPath); } catch { }
+                try { await LoadDirectoryAsync(CurrentDirectoryPath); } catch { }
             }
             try { await LoadHistoryItemsAsync(); } catch { }
-            try { LoadBookmarkGroups(); } catch { }
         }
         catch (Exception ex)
         {
@@ -299,14 +303,8 @@ public partial class LibraryViewModel : ViewModelBase
     {
         _ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            if (_isDataLoaded)
-            {
-                await LoadHistoryItemsAsync();
-            }
-            else
-            {
-                await EnsureDataLoadedAsync();
-            }
+            await EnsureDataLoadedAsync();
+            await LoadHistoryItemsAsync();
         });
     }
 
@@ -816,6 +814,11 @@ public partial class LibraryViewModel : ViewModelBase
 
     public void LoadStorageItems()
     {
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(LoadStorageItems);
+            return;
+        }
         try
         {
             StorageItems.Clear();
@@ -1279,28 +1282,32 @@ public partial class LibraryViewModel : ViewModelBase
             if (!ct.IsCancellationRequested)
             {
                 var (list, directImagesCount, chapterFoldersCount, comicFilesCount) = result;
-                if (directImagesCount > 0)
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    CurrentDirectoryReadableStatus = $"📖 ĐỌC CHƯƠNG NÀY ({directImagesCount} ảnh)";
-                }
-                else if (chapterFoldersCount > 0)
-                {
-                    CurrentDirectoryReadableStatus = $"📖 ĐỌC TOÀN BỘ TRUYỆN ({chapterFoldersCount} chương)";
-                }
-                else if (comicFilesCount > 0)
-                {
-                    CurrentDirectoryReadableStatus = $"📖 ĐỌC THƯ MỤC TRUYỆN ({comicFilesCount} file)";
-                }
-                else
-                {
-                    CurrentDirectoryReadableStatus = string.Empty;
-                }
+                    if (directImagesCount > 0)
+                    {
+                        CurrentDirectoryReadableStatus = $"📖 ĐỌC CHƯƠNG NÀY ({directImagesCount} ảnh)";
+                    }
+                    else if (chapterFoldersCount > 0)
+                    {
+                        CurrentDirectoryReadableStatus = $"📖 ĐỌC TOÀN BỘ TRUYỆN ({chapterFoldersCount} chương)";
+                    }
+                    else if (comicFilesCount > 0)
+                    {
+                        CurrentDirectoryReadableStatus = $"📖 ĐỌC THƯ MỤC TRUYỆN ({comicFilesCount} file)";
+                    }
+                    else
+                    {
+                        CurrentDirectoryReadableStatus = string.Empty;
+                    }
 
-                DirectoryItems.Clear();
-                foreach (var item in list)
-                {
-                    DirectoryItems.Add(item);
-                }
+                    DirectoryItems.Clear();
+                    foreach (var item in list)
+                    {
+                        DirectoryItems.Add(item);
+                    }
+                    IsDirectoryLoading = false;
+                });
 
                 // Tải Cover Thumbnail ngầm bất đồng bộ cho danh sách tệp/truyện (chuẩn Comic Screen)
                 _ = Task.Run(async () =>
@@ -1607,10 +1614,11 @@ public partial class LibraryViewModel : ViewModelBase
                 }
             });
 
+            var itemsSnapshot = items.ToList();
             // Tải ảnh bìa ngầm trên task nền cho các truyện có đường dẫn cục bộ
             _ = Task.Run(() =>
             {
-                foreach (var h in HistoryItems)
+                foreach (var h in itemsSnapshot)
                 {
                     if (h.Cover != null || !h.HasLocalPath) continue;
                     try
@@ -1932,6 +1940,11 @@ public partial class LibraryViewModel : ViewModelBase
 
     public void LoadBookmarkGroups()
     {
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(LoadBookmarkGroups);
+            return;
+        }
         try
         {
             var rawBookmarks = ReadProgressStore.Instance.GetBookmarks(null);
