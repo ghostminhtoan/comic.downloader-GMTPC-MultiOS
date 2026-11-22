@@ -1912,6 +1912,18 @@ public partial class LibraryViewModel : ViewModelBase
     {
         ReadProgressStore.Instance.ClearAllHistory();
         HistoryItems.Clear();
+        SelectedHistoryItem = null;
+
+        // Reset toàn bộ LastReadPage của các chương trong bộ nhớ RAM và cập nhật lại trạng thái hiển thị
+        foreach (var comic in AllComics)
+        {
+            foreach (var ch in comic.Chapters)
+            {
+                ch.LastReadPage = 0;
+            }
+            comic.RefreshReadStatus();
+        }
+
         LoadStorageItems();
         StatusMessage = "🗑️ Đã xóa toàn bộ Lịch sử đọc.";
     }
@@ -2780,9 +2792,9 @@ public partial class LibraryViewModel : ViewModelBase
     [RelayCommand]
     public void ClearHistory()
     {
+        ClearAllHistory();
         ComicDiskCacheService.Instance.ClearHistory();
         RefreshCacheSummary();
-        _ = LoadHistoryItemsAsync();
         StatusMessage = "✓ Đã xóa toàn bộ lịch sử đọc truyện (History)";
     }
 

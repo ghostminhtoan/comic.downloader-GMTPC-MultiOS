@@ -15,7 +15,7 @@ if not "%IN_VISIBLE_CMD%"=="1" (
     )
 )
 
-title Comic Downloader GMTPC - Build & Upload Beta (Cross-Platform)
+title Comic Downloader GMTPC - Build and Upload Beta (Cross-Platform)
 
 echo ========================================================
 echo   Building and Publishing Comic Downloader GMTPC Avalonia

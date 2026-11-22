@@ -244,7 +244,6 @@ public partial class LibraryComicItem : ObservableObject
 
         if (HasAnyReadProgress && !string.IsNullOrWhiteSpace(RootFolderPath))
         {
-            Services.ReadProgressStore.Instance.RegisterReadComic(RootFolderPath, touchTimestamp: false);
             LastReadOrder = Math.Max(LastReadOrder, Services.ReadProgressStore.Instance.GetComicLastReadOrder(RootFolderPath));
         }
 

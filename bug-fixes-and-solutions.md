@@ -2607,3 +2607,41 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC/Views/LibraryView.axaml`
   - `ComicDownloaderGMTPC/Views/MainView.axaml.cs`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+---
+
+### BUG-070: Sửa Triệt Để Lỗi Lịch Sử Đọc Tự Động Hồi Sinh (Zombie Comics) Sau Khi Xóa Lịch Sử, Cô Lập Tuyệt Đối Tiến Trình resume.md Khỏi Lịch Sử Đọc Cục Bộ
+- **Thời điểm**: 22/11/2026.
+- **Hiện tượng & Bối cảnh**:
+  - Người dùng bấm nút "Xóa Lịch Sử" trong Thư viện, app thông báo "Đã xóa toàn bộ Lịch sử đọc" nhưng ngay lập tức danh sách vẫn hiển thị hàng chục bộ truyện cũ (ví dụ 18 mục).
+  - Khi mở một truyện mới và khởi động lại app, toàn bộ danh sách 18-23 truyện cũ tự động bị nạp lại vào Lịch sử.
+- **Nguyên nhân kỹ thuật sâu xa**:
+  1. `LibraryComicItem.RefreshReadStatus()`: Mỗi khi giao diện kiểm tra trạng thái truyện trong thư mục, nếu thấy `Chapters.Any(c => c.LastReadPage > 0)` (do cache tiến trình chưa xóa sạch), nó tự động gọi `RegisterReadComic(RootFolderPath)` và bơm lại toàn bộ key `@history|` vào bộ nhớ.
+  2. `ReadProgressStore.ClearAllHistory()` trước đó:
+     - Chỉ xóa key `@history|`, `@folder_history|` mà bỏ sót toàn bộ key tiến trình trang (`path`) trong `_progressMap`.
+     - Cuối hàm gọi `FlushImmediately()`, kích hoạt `SaveHistoryToDisk()` duyệt lại các key còn sót và ghi đè lại toàn bộ truyện cũ vào `history.md`.
+  3. `ReadProgressStore.LoadFromDisk()`: Khi nạp `resume.md`, vòng lặp đồng bộ tự động gọi `RegisterComicFromChapterKeyInternal(key, touchTimestamp: false)`, vô tình biến mọi tiến trình đọc dở dùng chung thành Lịch Sử Đọc cục bộ.
+  4. `ReadProgressStore.RegisterLocalComicPath()`: Tại dòng 485 gọi `RegisterReadComic(cleanPath, touchTimestamp: false)` mỗi khi tra cứu đường dẫn tệp truyện trên máy.
+  5. `ReadProgressStore.AutoResolveAndRemapLocalPaths()`: Tự động gán `_progressMap[HistoryPrefix + cleanLocal] = orderStamp;` và `RegisterReadComic` cho mọi mục nạp từ `resume.md`.
+- **Giải pháp xử lý triệt để**:
+  1. Loại bỏ hoàn toàn lệnh gọi `RegisterReadComic` trong `LibraryComicItem.RefreshReadStatus()`: Quét và hiển thị thư viện không được phép tự ý biến truyện thành lịch sử đọc.
+  2. Xây dựng lại `ClearAllHistory()` sạch sẽ:
+     - Xóa toàn bộ key trong `_progressMap` ngoại trừ PinnedFolder (`@pinned|`) và LastRoot (`@last_root|`).
+     - Xóa sạch `_deviceLocalPathRegistry` và `_recentKnownDirectories`, lưu file `device_local_paths.json` rỗng `{}`.
+     - Xóa sạch `_crossDeviceEntries`.
+     - Tạo và ghi đè `history.md` và `resume.md` rỗng có cấu trúc chuẩn Markdown + JSON schema với cờ `_isSelfWriting = true` và `_isDirty = false` (không gọi `FlushImmediately`).
+  3. Trong `LibraryViewModel.ClearAllHistory()`: Reset toàn bộ `LastReadPage = 0` của các chương trong bộ nhớ RAM (`AllComics`), làm mới trạng thái hiển thị.
+  4. Trong `ReadProgressStore.LoadFromDisk()`: Xóa bỏ việc tự động gọi `RegisterComicFromChapterKeyInternal` khi nạp `resume.md`.
+  5. Trong `RegisterLocalComicPath()` và `AutoResolveAndRemapLocalPaths()`: Xóa bỏ toàn bộ lệnh gán `@history|` và `RegisterReadComic`, cô lập triệt để tiến trình resume độc lập với lịch sử đọc.
+- **Kiểm thử tự động thực tế**:
+  - Đã thực hiện kiểm thử tự động 10 vòng lặp liên tiếp trên các file truyện thực tế tại `T:\[HDD T]\xnconvert\uploaded` (`Taikou.pdf`, `chúa tể tam giới.pdf`, `Mắt nhìn thấu chung cực.pdf`, `Ta Luyện Khí Ba Ngàn Năm.pdf`, `Ta Luyện Khí Ba Ngàn Năm.zip`, `Thần Hồn Võ Đế nettruyenqq.us.pdf`):
+    + Xóa lịch sử -> Kiểm tra 0 mục.
+    + Mở 1 truyện thực tế -> Kiểm tra đúng 1 mục.
+    + Giả lập tắt app và khởi động lại -> Kiểm tra vẫn giữ đúng 1 mục, tuyệt đối không hồi sinh danh sách truyện cũ (0 zombie comics).
+    + Xóa lịch sử -> 0 mục -> Khởi động lại -> 0 mục.
+    + Đạt chuẩn 10/10 vòng lặp liên tiếp thành công rực rỡ!
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Models/LibraryComicItem.cs`
+  - `ComicDownloaderGMTPC/Services/ReadProgressStore.cs`
+  - `ComicDownloaderGMTPC/ViewModels/LibraryViewModel.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

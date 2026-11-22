@@ -57,6 +57,20 @@ public sealed class HistoryBackupPayload
     public List<HistoryItemSnapshot> History { get; set; } = new();
 }
 
+public sealed class ComicHistoryPayload
+{
+    public string SavedAt { get; set; } = string.Empty;
+    public List<ComicHistoryItemPayload> History { get; set; } = new();
+}
+
+public sealed class ComicHistoryItemPayload
+{
+    public string Title { get; set; } = string.Empty;
+    public int OrderStamp { get; set; }
+    public string DeviceName { get; set; } = string.Empty;
+    public string LocalPath { get; set; } = string.Empty;
+}
+
 public sealed class CrossDeviceResumeEntry
 {
     public string ComicTitle { get; set; } = string.Empty;
@@ -480,9 +494,6 @@ public sealed class ReadProgressStore
 
         _isLocalPathDirty = true;
         SaveDeviceLocalPathsToDisk();
-
-        // Ghi nhận vào lịch sử đọc local
-        RegisterReadComic(cleanPath, touchTimestamp: false);
     }
 
     private void SaveDeviceLocalPathsToDisk()
@@ -1314,19 +1325,75 @@ public sealed class ReadProgressStore
         MarkDirtyAndScheduleFlush();
     }
 
+    public static string BuildEmptyHistoryMarkdown()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# COMIC DOWNLOADER GMTPC - LỊCH SỬ MỞ TRUYỆN (HISTORY.MD)");
+        sb.AppendLine($"> Thời gian cập nhật: {DateTime.Now:yyyy-MM-dd HH:mm:ss} | Hệ điều hành: {Environment.OSVersion.Platform}");
+        sb.AppendLine();
+        sb.AppendLine("## 🕒 Danh Sách Lịch Sử Mở Truyện (Reading History)");
+        sb.AppendLine("> Tổng cộng: 0 bộ truyện");
+        sb.AppendLine();
+        sb.AppendLine("| STT | Tên Truyện / File | Lần Mở Gần Nhất | Đường Dẫn Cục Bộ |");
+        sb.AppendLine("| :---: | :--- | :---: | :--- |");
+        sb.AppendLine();
+        sb.AppendLine("## Machine-Readable History State");
+        sb.AppendLine(HistoryStateBeginMarker);
+        sb.AppendLine("```json");
+        var payload = new ComicHistoryPayload
+        {
+            SavedAt = DateTime.Now.ToString("O", CultureInfo.InvariantCulture),
+            History = new List<ComicHistoryItemPayload>()
+        };
+        sb.AppendLine(JsonSerializer.Serialize(payload, _jsonOptions));
+        sb.AppendLine("```");
+        sb.AppendLine(HistoryStateEndMarker);
+        return sb.ToString();
+    }
+
+    public static string BuildEmptyResumeMarkdown(string deviceName = "")
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# COMIC DOWNLOADER GMTPC - TIẾN TRÌNH ĐỌC DÙNG CHUNG (RESUME.MD)");
+        sb.AppendLine("> Tệp tin này được dùng chung cho toàn bộ các thiết bị (Windows, Android, Linux).");
+        sb.AppendLine($"> Thiết bị cập nhật cuối: **{EscapeMarkdown(deviceName)}** | Thời gian: `{DateTime.Now:yyyy-MM-dd HH:mm:ss}`");
+        sb.AppendLine();
+        sb.AppendLine("## Danh Sách Truyện & Trang Đang Đọc Dở");
+        sb.AppendLine("| STT | Tên Truyện / File | Chương Đang Đọc | Trang Đang Đọc | Cập Nhật Gần Nhất | Thiết Bị |");
+        sb.AppendLine("| :--- | :--- | :--- | :--- | :--- | :--- |");
+        sb.AppendLine();
+        sb.AppendLine("## Machine-Readable Resume State");
+        sb.AppendLine(ResumeStateBeginMarker);
+        sb.AppendLine("```json");
+        var payload = new ComicResumePayload
+        {
+            SavedAt = DateTime.Now.ToString("O", CultureInfo.InvariantCulture),
+            DeviceName = deviceName,
+            SchemaVersion = 3,
+            Entries = new List<CrossDeviceResumeEntry>()
+        };
+        sb.AppendLine(JsonSerializer.Serialize(payload, _jsonOptions));
+        sb.AppendLine("```");
+        sb.AppendLine(ResumeStateEndMarker);
+        return sb.ToString();
+    }
+
     public void ClearAllHistory()
     {
-        // 1. Xóa toàn bộ key liên quan đến lịch sử đọc và định danh portable trong _progressMap
-        foreach (var key in _progressMap.Keys.Where(k =>
-            k.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase) ||
-            k.StartsWith(FolderHistoryPrefix, StringComparison.OrdinalIgnoreCase) ||
-            k.StartsWith(PortableIdPrefix, StringComparison.OrdinalIgnoreCase)).ToList())
+        // 1. Xóa toàn bộ key trong _progressMap NGOẠI TRỪ PinnedFolder (@pinned|) và LastRoot (@last_root|)
+        var keysToRemove = _progressMap.Keys
+            .Where(k => !k.StartsWith(PinnedFolderPrefix, StringComparison.OrdinalIgnoreCase) &&
+                        !k.StartsWith(LastRootPrefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var key in keysToRemove)
         {
             _progressMap.TryRemove(key, out _);
         }
 
         // 2. Xóa sạch bộ nhớ đường dẫn cục bộ và lưu đè file trống
         _deviceLocalPathRegistry.Clear();
+        _recentKnownDirectories.Clear();
         _isLocalPathDirty = true;
         SaveDeviceLocalPathsToDisk();
 
@@ -1336,23 +1403,31 @@ public sealed class ReadProgressStore
             _crossDeviceEntries.Clear();
         }
 
-        // 4. Ghi đè file history.md rỗng
+        // 4. Ghi đè file history.md và resume.md rỗng (không gọi FlushImmediately để tránh kích hoạt SaveHistory lại)
+        _isSelfWriting = true;
+        _isDirty = false;
         try
         {
             string histPath = GetHistoryFilePath();
-            if (File.Exists(histPath))
-            {
-                File.WriteAllText(histPath, string.Empty, Encoding.UTF8);
-            }
+            string emptyHistoryMd = BuildEmptyHistoryMarkdown();
+            File.WriteAllText(histPath, emptyHistoryMd, Encoding.UTF8);
+
+            string devName = string.Empty;
+            try { devName = GoogleDriveSyncService.Instance.CurrentDeviceName; } catch { }
+            if (string.IsNullOrWhiteSpace(devName)) devName = Environment.MachineName;
+
+            string resumePath = GetStoreFilePath();
+            string emptyResumeMd = BuildEmptyResumeMarkdown(devName);
+            File.WriteAllText(resumePath, emptyResumeMd, Encoding.UTF8);
+
+            UpdateObservedFileTimestamps();
+            NotifyHistoryUpdated();
         }
         catch { }
-
-        // 5. Ghi đè file resume.md sạch
-        _isDirty = true;
-        FlushImmediately();
-
-        UpdateObservedFileTimestamps();
-        NotifyHistoryUpdated();
+        finally
+        {
+            Task.Delay(300).ContinueWith(_ => _isSelfWriting = false);
+        }
     }
 
     public List<string> GetPinnedFolders()
@@ -1817,12 +1892,6 @@ public sealed class ReadProgressStore
             if (string.IsNullOrWhiteSpace(localPath)) continue;
 
             string cleanLocal = NormalizeKey(localPath);
-            int orderStamp = entry.UpdatedAtUnixSeconds > 0
-                ? (int)Math.Clamp(entry.UpdatedAtUnixSeconds - EpochOffsetSeconds, 1L, int.MaxValue - 1L)
-                : GetCurrentOrderStamp();
-
-            RegisterReadComic(cleanLocal, touchTimestamp: false);
-            _progressMap[HistoryPrefix + cleanLocal] = orderStamp;
 
             if (entry.ChapterIndex > 0)
             {
@@ -2884,7 +2953,7 @@ public sealed class ReadProgressStore
                 FlushImmediately();
             }
 
-            // Tự động đồng bộ khóa định danh linh hoạt (@id|...) và lịch sử đọc (@history|...) từ dữ liệu sẵn có
+            // Tự động đồng bộ khóa định danh linh hoạt (@id|...) từ dữ liệu sẵn có
             var existingKeys = _progressMap.Keys.ToList();
             foreach (string key in existingKeys)
             {
@@ -2895,8 +2964,6 @@ public sealed class ReadProgressStore
                 {
                     _progressMap.TryAdd(portableKey, val);
                 }
-
-                RegisterComicFromChapterKeyInternal(key, touchTimestamp: false);
             }
         }
         catch { }
