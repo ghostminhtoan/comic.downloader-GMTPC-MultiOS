@@ -1283,7 +1283,6 @@ public partial class App : Application
 
             await Task.WhenAll(
                 Task.Run(() => _ = LanguageService.Instance),
-                Task.Run(() => _ = ComicScraperService.Instance),
                 Task.Run(() => _ = DownloadEngineService.Instance),
                 Task.Run(() => _ = ReadProgressStore.Instance)
             ).ConfigureAwait(false);

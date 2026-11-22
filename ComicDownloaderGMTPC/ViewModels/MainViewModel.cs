@@ -94,6 +94,7 @@ public partial class MainViewModel : ViewModelBase
             try
             {
                 await Task.Delay(800).ConfigureAwait(false);
+                try { _ = ComicScraperService.Instance; } catch { }
                 try { LoadUserPresetsFromDisk(); } catch { }
                 try { InitializeSearchDomains(); } catch { }
                 try { InitGoogleDriveService(); } catch { }
@@ -101,6 +102,15 @@ public partial class MainViewModel : ViewModelBase
                 try { InitArchiveMerger(); } catch { }
                 try { LoadPasswordManagerSettings(); } catch { }
                 _ = Task.Run(async () => await EnsureDamconuongRedirectDomainAsync().ConfigureAwait(false));
+                try
+                {
+                    var entries = ReadProgressStore.Instance.GetCrossDeviceEntriesSnapshot();
+                    if (entries.Count > 0)
+                    {
+                        ReadProgressStore.Instance.AutoResolveAndRemapLocalPaths(entries, fastOnly: false);
+                    }
+                }
+                catch { }
             }
             catch { }
         });

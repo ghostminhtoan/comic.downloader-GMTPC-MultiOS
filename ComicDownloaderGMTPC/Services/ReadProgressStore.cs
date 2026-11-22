@@ -199,6 +199,16 @@ public sealed class ReadProgressStore
     {
         try
         {
+            if (OperatingSystem.IsAndroid())
+            {
+                // Trên Android, FileSystemWatcher không hỗ trợ scoped storage/fuse và gây kẹt thread/I/O lúc boot.
+                // Sử dụng Heartbeat Polling Timer nhẹ nhàng đảm bảo không ảnh hưởng hiệu năng.
+                UpdateObservedFileTimestamps();
+                _heartbeatCheckTimer?.Dispose();
+                _heartbeatCheckTimer = new Timer(OnHeartbeatCheckTick, null, 3000, 1500);
+                return;
+            }
+
             string dir = QueueBackupService.GetAutoSaveDirectory();
             if (!Directory.Exists(dir))
             {
@@ -507,21 +517,15 @@ public sealed class ReadProgressStore
                     {
                         _deviceLocalPathRegistry[kv.Key] = kv.Value;
 
-                        // Tự động thu thập thư mục cha vào Recent Known Directories
+                        // Tự động thu thập thư mục cha vào Recent Known Directories (không gọi disk IO check lúc boot để tối ưu tốc độ)
                         try
                         {
-                            if (Directory.Exists(kv.Value))
+                            string? parent = Path.GetDirectoryName(kv.Value);
+                            if (!string.IsNullOrWhiteSpace(parent))
                             {
-                                _recentKnownDirectories.TryAdd(kv.Value, 0);
+                                _recentKnownDirectories.TryAdd(parent, 0);
                             }
-                            else if (File.Exists(kv.Value))
-                            {
-                                string? parent = Path.GetDirectoryName(kv.Value);
-                                if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent))
-                                {
-                                    _recentKnownDirectories.TryAdd(parent, 0);
-                                }
-                            }
+                            _recentKnownDirectories.TryAdd(kv.Value, 0);
                         }
                         catch { }
                     }
@@ -1758,10 +1762,19 @@ public sealed class ReadProgressStore
         return null;
     }
 
+    public List<CrossDeviceResumeEntry> GetCrossDeviceEntriesSnapshot()
+    {
+        lock (_crossDeviceLock)
+        {
+            return _crossDeviceEntries.ToList();
+        }
+    }
+
     /// <summary>
     /// Tự động dò tìm và ánh xạ tiến độ từ các mục CrossDeviceResumeEntry vào các file/thư mục cục bộ có sẵn trên thiết bị hiện tại.
+    /// Tham số fastOnly = true đảm bảo chạy siêu tốc trong RAM O(1) lúc boot, không quét đĩa đệ quy gây treo app.
     /// </summary>
-    public int AutoResolveAndRemapLocalPaths(IEnumerable<CrossDeviceResumeEntry> entries)
+    public int AutoResolveAndRemapLocalPaths(IEnumerable<CrossDeviceResumeEntry> entries, bool fastOnly = true)
     {
         if (entries == null) return 0;
         int mappedCount = 0;
@@ -1770,7 +1783,7 @@ public sealed class ReadProgressStore
         {
             if (string.IsNullOrWhiteSpace(entry.ComicTitle)) continue;
 
-            string? localPath = TryResolveLocalPathForComic(entry.ComicTitle);
+            string? localPath = TryResolveLocalPathForComic(entry.ComicTitle, fastOnly: fastOnly);
             if (string.IsNullOrWhiteSpace(localPath)) continue;
 
             string cleanLocal = NormalizeKey(localPath);
@@ -2664,21 +2677,15 @@ public sealed class ReadProgressStore
                         _progressMap[HistoryPrefix + norm] = h.OrderStamp;
                     }
 
-                    // Tự động thu thập thư mục cha vào Recent Known Directories
+                    // Tự động thu thập thư mục cha vào Recent Known Directories (không gọi disk IO check lúc boot để tối ưu tốc độ)
                     try
                     {
-                        if (Directory.Exists(h.LocalPath))
+                        string? dir = Path.GetDirectoryName(h.LocalPath);
+                        if (!string.IsNullOrWhiteSpace(dir))
                         {
-                            _recentKnownDirectories.TryAdd(h.LocalPath, 0);
+                            _recentKnownDirectories.TryAdd(dir, 0);
                         }
-                        else if (File.Exists(h.LocalPath))
-                        {
-                            string? dir = Path.GetDirectoryName(h.LocalPath);
-                            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
-                            {
-                                _recentKnownDirectories.TryAdd(dir, 0);
-                            }
-                        }
+                        _recentKnownDirectories.TryAdd(h.LocalPath, 0);
                     }
                     catch { }
 
@@ -3879,8 +3886,8 @@ public sealed class ReadProgressStore
                                         }
                                     }
 
-                                    // Tự động dò tìm và liên kết vào các thư mục / file truyện cục bộ có sẵn trên thiết bị
-                                    int remapped = AutoResolveAndRemapLocalPaths(payload.Entries);
+                                    // Tự động dò tìm và liên kết vào các thư mục / file truyện cục bộ có sẵn trên thiết bị (fastOnly = true để boot tức thì)
+                                    int remapped = AutoResolveAndRemapLocalPaths(payload.Entries, fastOnly: true);
                                     res.RestoredCrossDeviceComics = payload.Entries.Count;
                                     res.RestoredProgressEntries = payload.Entries.Count;
                                     res.Message = $"Đã đồng bộ {payload.Entries.Count} bộ truyện từ [{payload.DeviceName}], tự động liên kết {remapped} thư mục/file trên thiết bị này.";

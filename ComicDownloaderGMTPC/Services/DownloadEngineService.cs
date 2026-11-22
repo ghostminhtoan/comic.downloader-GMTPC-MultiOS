@@ -605,13 +605,13 @@ public class DownloadEngineService
 
         string pub = "/storage/emulated/0/Download/ComicDownloads";
 
-        if (CanWriteToDirectory(pub)) return pub;
+        if (Directory.Exists(pub) || CanWriteToDirectory(pub)) return pub;
 
 
 
         string appExt = GetAppSpecificExternalPath();
 
-        if (CanWriteToDirectory(appExt)) return appExt;
+        if (Directory.Exists(appExt) || CanWriteToDirectory(appExt)) return appExt;
 
 
 

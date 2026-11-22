@@ -588,35 +588,17 @@ public class MainActivity : AvaloniaMainActivity
         }
         catch { }
 
-        try
-
-
-
+        Task.Run(() =>
         {
-
-
-
-            AndroidStorageHelper.WakeUpStorage(this);
-
-
-
-        }
-
-
-
-        catch (Exception ex)
-
-
-
-        {
-
-
-
-            ApplicationCrashLogger.WriteCrashLog("MainActivity.WakeUpStorage", ex.ToString());
-
-
-
-        }
+            try
+            {
+                AndroidStorageHelper.WakeUpStorage(this);
+            }
+            catch (Exception ex)
+            {
+                ApplicationCrashLogger.WriteCrashLog("MainActivity.WakeUpStorage", ex.ToString());
+            }
+        });
 
 
 

@@ -174,45 +174,41 @@ public class QueueBackupService
                             Directory.CreateDirectory(newDir);
                         }
 
-                        // 1. Di chuyển toàn bộ file (.md, .json, .txt, ...)
-                        var files = Directory.GetFiles(oldDir);
-                        foreach (var file in files)
+                        // 1. Chỉ di chuyển các tệp tin cấu hình autosave của ứng dụng (không quét toàn bộ thư mục để tránh đơ app)
+                        string[] autoSaveTargetFiles = new[]
+                        {
+                            "save gallery.md",
+                            "save_gallery.json",
+                            "bookmarks.md",
+                            "history.md",
+                            "resume.md",
+                            "device_local_paths.json",
+                            "autosave.md",
+                            "read_progress.json",
+                            "reader_bookmarks.json"
+                        };
+
+                        foreach (var fileName in autoSaveTargetFiles)
                         {
                             try
                             {
-                                string fileName = Path.GetFileName(file);
-                                string destPath = Path.Combine(newDir, fileName);
+                                string srcPath = Path.Combine(oldDir, fileName);
+                                if (!File.Exists(srcPath)) continue;
 
+                                string destPath = Path.Combine(newDir, fileName);
                                 if (File.Exists(destPath))
                                 {
-                                    var srcInfo = new FileInfo(file);
+                                    var srcInfo = new FileInfo(srcPath);
                                     var dstInfo = new FileInfo(destPath);
-                                    // Ưu tiên file có dung lượng lớn hơn hoặc thời gian sửa đổi mới hơn
                                     if (srcInfo.Length > dstInfo.Length || srcInfo.LastWriteTimeUtc > dstInfo.LastWriteTimeUtc)
                                     {
-                                        File.Copy(file, destPath, overwrite: true);
+                                        File.Copy(srcPath, destPath, overwrite: true);
                                     }
-                                    File.Delete(file);
+                                    File.Delete(srcPath);
                                 }
                                 else
                                 {
-                                    File.Move(file, destPath);
-                                }
-                            }
-                            catch { }
-                        }
-
-                        // 2. Di chuyển các thư mục con nếu có
-                        var subDirs = Directory.GetDirectories(oldDir);
-                        foreach (var subDir in subDirs)
-                        {
-                            try
-                            {
-                                string dirName = Path.GetFileName(subDir);
-                                string destSubDir = Path.Combine(newDir, dirName);
-                                if (!Directory.Exists(destSubDir))
-                                {
-                                    Directory.Move(subDir, destSubDir);
+                                    File.Move(srcPath, destPath);
                                 }
                             }
                             catch { }
@@ -247,9 +243,8 @@ public class QueueBackupService
                 string publicDownload = "/storage/emulated/0/Download/autosaveComicDownloaderGMTPC";
                 try
                 {
-                    if (DownloadEngineService.CanWriteToDirectory(publicDownload))
+                    if (Directory.Exists(publicDownload) || DownloadEngineService.CanWriteToDirectory(publicDownload))
                     {
-                        EnsureAutoSaveMigration();
                         return publicDownload;
                     }
                 }
