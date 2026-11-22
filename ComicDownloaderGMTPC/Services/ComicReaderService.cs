@@ -942,6 +942,53 @@ public sealed class ComicReaderService
 
                 }
 
+                else if (File.Exists(chapter.LocalPath) && LibraryScannerService.IsImageFile(chapter.LocalPath))
+                {
+                    // FIX 11: Mở trực tiếp file ảnh -> Tự động nhận diện toàn bộ các file ảnh anh em cùng thư mục
+                    string? dir = Path.GetDirectoryName(chapter.LocalPath);
+                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                    {
+                        progress?.Report((15, "Đang quét danh sách ảnh anh em trong cùng thư mục..."));
+                        var enumOptions = new EnumerationOptions
+                        {
+                            IgnoreInaccessible = true,
+                            RecurseSubdirectories = false,
+                            ReturnSpecialDirectories = false
+                        };
+                        var imageFiles = Directory.EnumerateFiles(dir, "*", enumOptions)
+                            .Where(LibraryScannerService.IsImageFile)
+                            .NaturalSort();
+
+                        int total = imageFiles.Count;
+                        int defaultW = 900;
+                        int defaultH = 1350;
+                        if (total > 0)
+                        {
+                            string sampleFile = imageFiles[0];
+                            if (UniversalImageDecoder.TryGetFastJpegInfo(sampleFile, out int jw, out int jh) && jw > 0 && jh > 0)
+                            {
+                                defaultW = jw;
+                                defaultH = jh;
+                            }
+                        }
+
+                        for (int i = 0; i < total; i++)
+                        {
+                            if (ct.IsCancellationRequested) break;
+                            string file = imageFiles[i];
+                            var item = new ReaderPageItem
+                            {
+                                Index = i,
+                                Title = Path.GetFileName(file),
+                                SourcePath = file,
+                                ArchiveEntryFullName = string.Empty,
+                                FileSizeBytes = 0
+                            };
+                            item.SetKnownDimensionsFast(defaultW, defaultH);
+                            pages.Add(item);
+                        }
+                    }
+                }
                 else if (Directory.Exists(chapter.LocalPath))
 
                 {

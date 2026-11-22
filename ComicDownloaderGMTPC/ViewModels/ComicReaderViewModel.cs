@@ -4918,6 +4918,29 @@ public partial class ComicReaderViewModel : ViewModelBase
 
 
 
+        private DispatcherTimer? _hudAutoHideTimer;
+
+    private void ResetHudAutoHideTimer()
+    {
+        if (_hudAutoHideTimer == null)
+        {
+            _hudAutoHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+            _hudAutoHideTimer.Tick += (s, e) =>
+            {
+                _hudAutoHideTimer?.Stop();
+                if (IsOverlayVisible && !HasActivePopup && !IsMarginEditorOpen)
+                {
+                    IsOverlayVisible = false;
+                }
+            };
+        }
+        _hudAutoHideTimer.Stop();
+        if (IsOverlayVisible && !HasActivePopup)
+        {
+            _hudAutoHideTimer.Start();
+        }
+    }
+
     partial void OnIsOverlayVisibleChanged(bool value)
 
     {
@@ -4931,6 +4954,7 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
 
         AndroidOverlayVisibilityChanged?.Invoke(value);
+        if (value) ResetHudAutoHideTimer(); else _hudAutoHideTimer?.Stop();
 
     }
 

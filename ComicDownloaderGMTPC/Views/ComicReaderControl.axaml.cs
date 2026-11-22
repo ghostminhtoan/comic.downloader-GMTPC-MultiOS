@@ -891,6 +891,13 @@ public partial class ComicReaderControl : UserControl
                 if (savedPage >= 0 && savedPage < vm.Pages.Count)
                 {
                     vm.CurrentPageIndex = savedPage;
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (DataContext is ComicReaderViewModel currentVm && savedPage >= 0 && savedPage < currentVm.Pages.Count)
+                        {
+                            OnVmScrollToPageRequested(savedPage);
+                        }
+                    }, DispatcherPriority.Loaded);
                 }
             }
         }
@@ -1945,6 +1952,10 @@ public partial class ComicReaderControl : UserControl
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         StopKineticScroll();
+        if (DataContext is ComicReaderViewModel vmAuto && vmAuto.IsAutoScrolling)
+        {
+            vmAuto.StopAutoScroll();
+        }
 
         if (IsScrollBarOrInteractiveControl(e.Source as Visual))
         {
@@ -2368,8 +2379,8 @@ public partial class ComicReaderControl : UserControl
         double distance = Math.Sqrt(dx * dx + dy * dy);
 
         // Đánh giá chuẩn xác cú Tap (Single-Tap) trên thiết bị di động Android:
-        double maxTapDist = (e.Pointer.Type == PointerType.Mouse) ? 15.0 : 30.0;
-        bool isLegitTap = distance <= maxTapDist && elapsedMs <= 500;
+        double maxTapDist = (e.Pointer.Type == PointerType.Mouse) ? 12.0 : 18.0;
+        bool isLegitTap = distance <= maxTapDist && elapsedMs <= 350 && !wasDragging && !_isPanDragging;
 
         if (wasDragging)
         {
