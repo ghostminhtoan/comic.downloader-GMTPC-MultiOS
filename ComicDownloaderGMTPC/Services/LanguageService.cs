@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace ComicDownloaderGMTPC.Services;
 
@@ -25,7 +26,14 @@ public class LanguageService
     public LanguageService()
     {
         LoadBuiltinDictionary();
-        LoadFromLanguagesFiles();
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                LoadFromLanguagesFiles();
+            }
+            catch { }
+        });
         LoadSavedLanguage();
     }
 

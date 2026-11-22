@@ -64,15 +64,18 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         // Tự động kiểm tra và di dời dữ liệu cũ từ ComicDownloaderGMTPC sang autosaveComicDownloaderGMTPC trên Android
-        // an toàn: chỉ thực hiện khi quyền lưu trữ công cộng đã sẵn sàng
-        try
+        // Chạy ngầm trong Task.Run để không chặn luồng khởi động frame đầu tiên
+        _ = Task.Run(() =>
         {
-            if (!OperatingSystem.IsAndroid() || DownloadEngineService.CanWriteToDirectory("/storage/emulated/0/Download"))
+            try
             {
-                QueueBackupService.EnsureAutoSaveMigration();
+                if (!OperatingSystem.IsAndroid() || DownloadEngineService.CanWriteToDirectory("/storage/emulated/0/Download"))
+                {
+                    QueueBackupService.EnsureAutoSaveMigration();
+                }
             }
-        }
-        catch { }
+            catch { }
+        });
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // 1. Kiểm tra cờ kiểm thử tự động CLI
@@ -1261,29 +1264,36 @@ public partial class App : Application
     {
         try
         {
-            // Bước 0-1: Bật ngay Splash Screen và khởi tạo song song các service nền (Language, Scraper, Engine)
-            splashVm.ReportProgress(15, "Đang khởi động hệ thống & ngôn ngữ...");
-            await Task.Run(() =>
+            // Bước 1: Khởi động song song hoàn toàn các service nền và SharedMainViewModel
+            splashVm.ReportProgress(25, "Đang khởi động hệ thống song song...");
+
+            var initServicesTask = Task.Run(() =>
             {
                 _ = LanguageService.Instance;
                 _ = ComicScraperService.Instance;
                 _ = DownloadEngineService.Instance;
-            }).ConfigureAwait(false);
+            });
 
-            // Bước 2: Nạp SharedMainViewModel (tự động khôi phục hàng chờ và cấu hình)
-            splashVm.ReportProgress(50, "Khởi tạo giao diện và nạp dữ liệu...");
-            var vm = SharedMainViewModel;
+            var initVmTask = Task.Run(() =>
+            {
+                _ = SharedMainViewModel;
+            });
+
+            await Task.WhenAll(initServicesTask, initVmTask).ConfigureAwait(false);
+
+            // Bước 2: Chuẩn bị hiển thị giao diện chính
+            splashVm.ReportProgress(85, "Khởi tạo giao diện chính...");
             await Task.Yield();
 
-            // Bước 3: Sẵn sàng 100% và mở ngay lập tức giao diện chính
-            splashVm.ReportProgress(100, "Sẵn sàng! Đang mở ứng dụng...");
-            await Task.Yield();
+            // Bước 3: Sẵn sàng 100% và mở ngay lập tức giao diện
+            splashVm.ReportProgress(100, "Sẵn sàng!");
 
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
                 onReady();
                 IsMainViewReady = true;
                 _ = SharedMainViewModel.DrainPendingSharedLinksAsync();
+                SharedMainViewModel.TriggerPostBootDeferredInitialization();
             });
         }
         catch (Exception ex)
@@ -1294,6 +1304,7 @@ public partial class App : Application
                 onReady();
                 IsMainViewReady = true;
                 _ = SharedMainViewModel.DrainPendingSharedLinksAsync();
+                SharedMainViewModel.TriggerPostBootDeferredInitialization();
             });
         }
     }

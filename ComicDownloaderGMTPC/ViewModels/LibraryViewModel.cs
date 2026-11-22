@@ -241,6 +241,41 @@ public partial class LibraryViewModel : ViewModelBase
         }
     }
 
+    private bool _isDataLoaded = false;
+    private readonly object _dataLoadLock = new();
+
+    public async Task EnsureDataLoadedAsync()
+    {
+        if (_isDataLoaded) return;
+        lock (_dataLoadLock)
+        {
+            if (_isDataLoaded) return;
+            _isDataLoaded = true;
+        }
+
+        try
+        {
+            string? savedRoot = ReadProgressStore.Instance.GetLastLibraryRootPath();
+            if (!string.IsNullOrWhiteSpace(savedRoot) && (Directory.Exists(savedRoot) || OperatingSystem.IsAndroid()))
+            {
+                LibraryRootPath = savedRoot;
+                CurrentDirectoryPath = savedRoot;
+            }
+
+            try { LoadStorageItems(); } catch { }
+            if (!OperatingSystem.IsAndroid() || DownloadEngineService.CanWriteToDirectory(CurrentDirectoryPath))
+            {
+                try { LoadDirectory(CurrentDirectoryPath); } catch { }
+            }
+            try { await LoadHistoryItemsAsync(); } catch { }
+            try { LoadBookmarkGroups(); } catch { }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LibraryViewModel EnsureDataLoadedAsync] {ex}");
+        }
+    }
+
     public LibraryViewModel()
     {
         try
@@ -248,16 +283,8 @@ public partial class LibraryViewModel : ViewModelBase
             ReadProgressStore.AdditionalStorageRootsProvider = () =>
                 StorageItems.Where(s => !string.IsNullOrWhiteSpace(s.Path)).Select(s => s.Path);
 
-            LibraryRootPath = ReadProgressStore.Instance.GetLastLibraryRootPath()
-                              ?? DownloadEngineService.Instance.DownloadRoot;
+            LibraryRootPath = DownloadEngineService.Instance.DownloadRoot;
             CurrentDirectoryPath = LibraryRootPath;
-            try { LoadStorageItems(); } catch { }
-            if (!OperatingSystem.IsAndroid() || DownloadEngineService.CanWriteToDirectory(CurrentDirectoryPath))
-            {
-                try { LoadDirectory(CurrentDirectoryPath); } catch { }
-            }
-            try { _ = LoadHistoryItemsAsync(); } catch { }
-            try { LoadBookmarkGroups(); } catch { }
 
             // Lắng nghe sự kiện cập nhật Lịch sử Đọc theo thời gian thực (Real-time Trace)
             ReadProgressStore.HistoryUpdated += OnHistoryUpdatedFromStore;
@@ -272,12 +299,16 @@ public partial class LibraryViewModel : ViewModelBase
     {
         _ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            await LoadHistoryItemsAsync();
+            if (_isDataLoaded)
+            {
+                await LoadHistoryItemsAsync();
+            }
         });
     }
 
     partial void OnActiveSubTabChanged(string value)
     {
+        _ = EnsureDataLoadedAsync();
         if (string.Equals(value, "History", StringComparison.OrdinalIgnoreCase))
         {
             ReadProgressStore.Instance.ReloadHistoryFromDisk();
@@ -379,6 +410,7 @@ public partial class LibraryViewModel : ViewModelBase
     [RelayCommand]
     public async Task ScanLibraryAsync()
     {
+        await EnsureDataLoadedAsync();
         if (string.IsNullOrWhiteSpace(LibraryRootPath))
         {
             LibraryRootPath = ReadProgressStore.Instance.GetLastLibraryRootPath()

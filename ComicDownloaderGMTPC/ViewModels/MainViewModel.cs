@@ -87,11 +87,28 @@ public partial class MainViewModel : ViewModelBase
 
     public LibraryViewModel LibraryVm { get; } = new();
 
+    public void TriggerPostBootDeferredInitialization()
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(1000).ConfigureAwait(false);
+                await LibraryVm.EnsureDataLoadedAsync().ConfigureAwait(false);
+            }
+            catch { }
+        });
+    }
+
     partial void OnSelectedRootTabIndexChanged(int value)
     {
-        if (value == 3 && LibraryVm.AllComics.Count == 0 && !LibraryVm.IsScanning)
+        if (value == 3)
         {
-            _ = LibraryVm.ScanLibraryAsync();
+            _ = LibraryVm.EnsureDataLoadedAsync();
+            if (LibraryVm.AllComics.Count == 0 && !LibraryVm.IsScanning)
+            {
+                _ = LibraryVm.ScanLibraryAsync();
+            }
         }
         OnPropertyChanged(nameof(IsDualSortBatchToolbarRealVisible));
         OnPropertyChanged(nameof(IsDownloadTabActive));
