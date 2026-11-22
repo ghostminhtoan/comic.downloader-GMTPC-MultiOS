@@ -303,6 +303,10 @@ public partial class LibraryViewModel : ViewModelBase
             {
                 await LoadHistoryItemsAsync();
             }
+            else
+            {
+                await EnsureDataLoadedAsync();
+            }
         });
     }
 
@@ -1594,11 +1598,14 @@ public partial class LibraryViewModel : ViewModelBase
                 });
             }
 
-            HistoryItems.Clear();
-            foreach (var it in items)
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                HistoryItems.Add(it);
-            }
+                HistoryItems.Clear();
+                foreach (var it in items)
+                {
+                    HistoryItems.Add(it);
+                }
+            });
 
             // Tải ảnh bìa ngầm trên task nền cho các truyện có đường dẫn cục bộ
             _ = Task.Run(() =>

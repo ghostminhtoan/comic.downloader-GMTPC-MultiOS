@@ -1272,6 +1272,7 @@ public partial class App : Application
                 _ = LanguageService.Instance;
                 _ = ComicScraperService.Instance;
                 _ = DownloadEngineService.Instance;
+                _ = ReadProgressStore.Instance;
             });
 
             var initVmTask = Task.Run(() =>

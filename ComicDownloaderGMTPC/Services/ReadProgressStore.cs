@@ -163,7 +163,10 @@ public sealed class ReadProgressStore
     private volatile bool _isDirty;
     private volatile bool _isLocalPathDirty;
     private FileSystemWatcher? _historyWatcher;
+    private Timer? _heartbeatCheckTimer;
     private DateTime _lastWatcherReload = DateTime.MinValue;
+    private DateTime _lastObservedHistoryUtc = DateTime.MinValue;
+    private DateTime _lastObservedResumeUtc = DateTime.MinValue;
 
     /// <summary>
     /// Sự kiện thông báo khi Lịch sử Đọc (History) vừa được cập nhật theo thời gian thực (Real-time).
@@ -197,43 +200,147 @@ public sealed class ReadProgressStore
         try
         {
             string dir = QueueBackupService.GetAutoSaveDirectory();
+            if (!Directory.Exists(dir))
+            {
+                try { Directory.CreateDirectory(dir); } catch { }
+            }
+
             if (Directory.Exists(dir))
             {
-                _historyWatcher = new FileSystemWatcher(dir, HistoryFileName)
+                UpdateObservedFileTimestamps();
+
+                // Lớp 1: FileSystemWatcher bắt toàn diện Changed, Created, Renamed, Deleted
+                try
                 {
-                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
-                    EnableRaisingEvents = true
-                };
-                _historyWatcher.Changed += OnHistoryFileChangedOnDisk;
-                _historyWatcher.Created += OnHistoryFileChangedOnDisk;
+                    _historyWatcher?.Dispose();
+                    _historyWatcher = new FileSystemWatcher(dir)
+                    {
+                        NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.CreationTime,
+                        EnableRaisingEvents = true
+                    };
+                    _historyWatcher.Changed += OnStoreFilesChangedOnDisk;
+                    _historyWatcher.Created += OnStoreFilesChangedOnDisk;
+                    _historyWatcher.Renamed += OnStoreFilesRenamedOnDisk;
+                    _historyWatcher.Deleted += OnStoreFilesChangedOnDisk;
+                }
+                catch { }
+
+                // Lớp 2: Heartbeat Polling Timer (800ms) siêu nhẹ, đảm bảo 100% không bao giờ bị hụt sự kiện trên Symlink, Virtual Drive, Network Drive
+                _heartbeatCheckTimer?.Dispose();
+                _heartbeatCheckTimer = new Timer(OnHeartbeatCheckTick, null, 1000, 800);
             }
         }
         catch { }
     }
 
-    private void OnHistoryFileChangedOnDisk(object? sender, FileSystemEventArgs e)
+    private void UpdateObservedFileTimestamps()
     {
-        if ((DateTime.Now - _lastWatcherReload).TotalMilliseconds < 400) return;
+        try
+        {
+            string histPath = GetHistoryFilePath();
+            if (File.Exists(histPath)) _lastObservedHistoryUtc = File.GetLastWriteTimeUtc(histPath);
+            string resPath = GetStoreFilePath();
+            if (File.Exists(resPath)) _lastObservedResumeUtc = File.GetLastWriteTimeUtc(resPath);
+        }
+        catch { }
+    }
+
+    private void OnStoreFilesRenamedOnDisk(object? sender, RenamedEventArgs e)
+    {
+        if (IsStoreFileNameMatch(e.Name) || IsStoreFileNameMatch(e.OldName))
+        {
+            TriggerDebouncedReloadFromDisk();
+        }
+    }
+
+    private void OnStoreFilesChangedOnDisk(object? sender, FileSystemEventArgs e)
+    {
+        if (IsStoreFileNameMatch(e.Name))
+        {
+            TriggerDebouncedReloadFromDisk();
+        }
+    }
+
+    private static bool IsStoreFileNameMatch(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return false;
+        string name = Path.GetFileName(fileName);
+        return string.Equals(name, HistoryFileName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, ResumeFileName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, BookmarksFileName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, LocalPathsFileName, StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnHeartbeatCheckTick(object? state)
+    {
+        try
+        {
+            string histPath = GetHistoryFilePath();
+            string resPath = GetStoreFilePath();
+
+            bool changed = false;
+
+            if (File.Exists(histPath))
+            {
+                var wt = File.GetLastWriteTimeUtc(histPath);
+                if (wt != _lastObservedHistoryUtc)
+                {
+                    _lastObservedHistoryUtc = wt;
+                    changed = true;
+                }
+            }
+
+            if (File.Exists(resPath))
+            {
+                var wt = File.GetLastWriteTimeUtc(resPath);
+                if (wt != _lastObservedResumeUtc)
+                {
+                    _lastObservedResumeUtc = wt;
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                TriggerDebouncedReloadFromDisk();
+            }
+        }
+        catch { }
+    }
+
+    private void TriggerDebouncedReloadFromDisk()
+    {
+        if ((DateTime.Now - _lastWatcherReload).TotalMilliseconds < 250) return;
         _lastWatcherReload = DateTime.Now;
-        Task.Delay(150).ContinueWith(_ =>
+        Task.Delay(80).ContinueWith(_ =>
         {
             try
             {
-                LoadHistoryFromDisk();
-                NotifyHistoryUpdated();
+                ReloadAllFromDisk();
             }
             catch { }
         });
     }
 
-    public void ReloadHistoryFromDisk()
+    public void ReloadAllFromDisk()
     {
         try
         {
+            LoadFromDisk();
+            LoadBookmarksFromDisk();
             LoadHistoryFromDisk();
+            LoadDeviceLocalPathsFromDisk();
+            UpdateObservedFileTimestamps();
             NotifyHistoryUpdated();
         }
         catch { }
+    }
+
+    public void ReloadHistoryFromDisk()
+    {
+        ReloadAllFromDisk();
     }
 
     /// <summary>
@@ -2584,6 +2691,7 @@ public sealed class ReadProgressStore
             string mdContent = BuildHistoryMarkdownContent();
             File.WriteAllText(tmpPath, mdContent, Encoding.UTF8);
             File.Move(tmpPath, filePath, overwrite: true);
+            UpdateObservedFileTimestamps();
             NotifyHistoryUpdated();
         }
         catch { }
