@@ -2552,3 +2552,58 @@ _onCreate bị bỏ sót hoặc không được link vào dynamic registration t
   - `ComicDownloaderGMTPC/Services/ReadProgressStore.cs`
   - `ComicDownloaderGMTPC/ViewModels/MainViewModel.cs`
   - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`
+
+---
+
+### BUG-069: Sửa Triệt Để Lỗi History Chớp Nháy Mất Select, Bookmark Nhảy Sai Trang, Đồng Bộ Cloud Manual, Android Vuốt TextBox Hiện Bàn Phím Và Không Bấm Được Delete/Trái/Phải
+- **Thời điểm**: 22/11/2026.
+- **Hiện tượng & Bối cảnh**:
+  1. Tab Thư viện (Library) / History liên tục bị chớp nháy (flicker), mỗi khi click chọn item thì lập tức bị mất select, không thao tác được menu chuột phải hay chọn mục.
+  2. Khi chọn bookmark đã lưu (ví dụ bookmark chap 5 trang 7), app không nhảy đến trang 7 mà luôn nhảy về đầu chương (trang 1).
+  3. App tự động đồng bộ đám mây nhồi các truyện từ máy khác vào History máy cục bộ với nhãn "☁ Đồng bộ đám mây" và bật popup "Chưa tìm thấy file truyện"; khi người dùng xóa hết history thì app lại tự ý phục hồi lại các mục từ cloud.
+  4. Trên Android, khi vuốt cuộn màn hình mà ngón tay lướt qua TextBox thì bàn phím ảo tự động bung lên che khuất màn hình.
+  5. Toàn bộ TextBox trên Android không thao tác được nút Delete/Backspace và không di chuyển con trỏ trái/phải được.
+
+- **Nguyên nhân kỹ thuật sâu xa**:
+  1. **History Flicker & Lost Select**:
+     - `ReadProgressStore` có `_historyWatcher` và `_heartbeatCheckTimer` (800ms) bắn sự kiện `HistoryUpdated` liên tục.
+     - `SaveHistoryToDisk()` và `FlushImmediately()` khi ghi đĩa làm `FileSystemWatcher` nhận diện thay đổi của chính file app vừa ghi, tạo vòng lặp tự kích hoạt reload.
+     - `LibraryViewModel.LoadHistoryItemsAsync` trước đó gọi `HistoryItems.Clear()` rồi Add lại toàn bộ, làm ListBox hủy toàn bộ visual items và mất sạch `SelectedHistoryItem`.
+  2. **Bookmark Nhảy Sai Trang**:
+     - Trong `ComicReaderViewModel.LoadChapterInternalAsync`, biến `savedPageIndex` bị gán cứng về `0`, bỏ qua số trang mục tiêu được truyền từ Bookmark.
+     - `LibraryViewModel.OpenBookmarkAsync` gọi `OpenChapterInternalAsync` thiếu tham số `initialPageIndex`.
+  3. **Tự Động Nhồi Truyện Cloud Vào History Cục Bộ**:
+     - `ReadProgressStore.GetUnifiedHistoryItems()` tự động duyệt `_crossDeviceEntries` và thêm vào danh sách hiển thị của History ngay cả khi file không tồn tại trên máy hiện tại (`!hasLocal`).
+     - `ClearAllHistory()` chỉ xóa key `@history|` mà không xóa key `@id|`, không xóa `_crossDeviceEntries`, và không ghi đè file `device_paths.json` rỗng.
+  4. **Vuốt Qua TextBox Bung Bàn Phím Trên Android**:
+     - `TextEditingProtectionService` đăng ký `InputElement.PointerPressedEvent` với `RoutingStrategies.Tunnel` và gọi `tb.Focus()` cùng `TriggerShowKeyboard(tb)`. Cử chỉ vuốt/cuộn phát sinh sự kiện `PointerPressed` ngay khi ngón tay vừa chạm xuống màn hình.
+  5. **TextBox Không Bấm Được Delete/Backspace Và Phím Trái/Phải Trên Android**:
+     - `MainView.axaml.cs` bắt `KeyDownEvent` ở tầng `Tunnel` cho `e.Key == Key.Back`, `Key.Left`, `Key.Right` (khi Sidebar mở hoặc popup mở) nhưng thiếu điều kiện `!isTyping`, cướp toàn bộ phím xóa và mũi tên của TextBox.
+     - `TextEditingProtectionService.cs` can thiệp `KeyDownEvent` ở tầng `Tunnel` và gán `e.Handled = true` cho `Key.Left` và `Key.Right` khi `caret <= 0` hoặc `caret >= textLen`, làm tê liệt con trỏ TextBox và IME Android.
+
+- **Giải pháp xử lý triệt để**:
+  1. **Loại bỏ vòng lặp reload & In-Place Diff Update cho History**:
+     - Thêm cờ `_isSelfWriting` trong `ReadProgressStore` để bỏ qua sự kiện `Changed` do chính app ghi đĩa. Giãn cách heartbeat timer lên 2500ms.
+     - Thêm debounce 400ms trong `LibraryViewModel.OnHistoryUpdatedFromStore`.
+     - Triển khai In-Place Diff Update trong `LoadHistoryItemsAsync`: nếu dữ liệu giống nhau thì giữ nguyên; nếu thay đổi thì cập nhật từng trường in-place mà không gọi `Clear()`; liên kết hai chiều `SelectedItem="{Binding SelectedHistoryItem}"`.
+  2. **Nhảy đúng trang Bookmark**:
+     - Thêm `TargetInitialPageIndex` vào `ComicReaderViewModel`, `NavigateToBookmark` truyền chính xác `bm.PageIndex`.
+     - Cập nhật `LibraryViewModel.OpenChapterInternalAsync` và `OpenBookmarkAsync` nhận và truyền `initialPageIndex: bm.PageIndex`.
+  3. **Chỉ hiển thị tệp cục bộ khả dụng & Xóa sạch 100% History**:
+     - Trong `GetUnifiedHistoryItems()`: Bỏ tự động chèn các mục `_crossDeviceEntries` không có tệp cục bộ (`if (!hasLocal) continue;`).
+     - Trong `ClearAllHistory()`: Xóa sạch toàn bộ key `@history|`, `@folder_history|`, `@id|`, xóa sạch `_crossDeviceEntries`, xóa `_deviceLocalPathRegistry` và ghi file rỗng, xóa sạch `history.md` và `resume.md`.
+  4. **Chỉ kích hoạt bàn phím ảo khi Tap có chủ đích**:
+     - Trong `TextEditingProtectionService`: Bỏ `Focus()` và `TriggerShowKeyboard()` khỏi `PointerPressedEvent`. Chỉ kích hoạt bàn phím trong `TappedEvent` và `GotFocusEvent`.
+  5. **Bảo vệ toàn vẹn phím Delete, Backspace, Trái, Phải cho TextBox**:
+     - Nâng cấp `isTyping` trong `MainView.axaml.cs` kiểm tra cả `TextPresenter` và ancestor TextBox/AutoCompleteBox.
+     - Nếu `isTyping`: return ngay lập tức ở đầu tầng Tunneling đối với `Key.Back`, `Key.Delete`, `Key.Left`, `Key.Right`, `Key.Up`, `Key.Down`, `Key.Home`, `Key.End`, `Key.Enter`, `Key.Tab`.
+     - Xóa bỏ khối chặn `Key.Left`/`Key.Right` với `e.Handled = true` ở tầng Tunnel của `TextEditingProtectionService`.
+
+- **File can thiệp**:
+  - `ComicDownloaderGMTPC/Services/ReadProgressStore.cs`
+  - `ComicDownloaderGMTPC/Services/TextEditingProtectionService.cs`
+  - `ComicDownloaderGMTPC/ViewModels/ComicReaderViewModel.cs`
+  - `ComicDownloaderGMTPC/ViewModels/LibraryViewModel.cs`
+  - `ComicDownloaderGMTPC/Views/LibraryView.axaml`
+  - `ComicDownloaderGMTPC/Views/MainView.axaml.cs`
+  - `Comic Downloader GMTPC AVALONIA/bug-fixes-and-solutions.md`

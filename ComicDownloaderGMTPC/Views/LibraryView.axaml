@@ -615,6 +615,7 @@
                     <!-- Danh sách mục lịch sử -->
                     <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="4">
                         <ListBox ItemsSource="{Binding HistoryItems}"
+                                 SelectedItem="{Binding SelectedHistoryItem}"
                                  Background="Transparent"
                                  BorderThickness="0">
                             <ListBox.ItemsPanel>

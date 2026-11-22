@@ -114,7 +114,23 @@ public partial class MainView : UserControl
             if (DataContext is MainViewModel vm)
             {
                 var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
-                bool isTyping = focused is TextBox || focused is AutoCompleteBox;
+                bool isTyping = ComicDownloaderGMTPC.Services.TextEditingProtectionService.IsTypingInTextBox ||
+                                focused is TextBox ||
+                                focused is AutoCompleteBox ||
+                                (focused is Visual v && (v is Avalonia.Controls.Presenters.TextPresenter || v.FindAncestorOfType<TextBox>() != null || v.FindAncestorOfType<AutoCompleteBox>() != null));
+
+                // Nếu người dùng đang tập trung trong ô nhập liệu (TextBox / AutoCompleteBox):
+                // TUYỆT ĐỐI KHÔNG can thiệp vào các phím gõ ký tự, phím xóa (Back/Delete), phím điều hướng con trỏ (Trái/Phải/Lên/Xuống/Home/End/Tab),
+                // để Avalonia TextBox tự nhiên xử lý 100% không bị cướp phím bởi cửa sổ cha ở tầng Tunneling!
+                if (isTyping)
+                {
+                    if (e.Key == Key.Back || e.Key == Key.Delete || e.Key == Key.Left || e.Key == Key.Right ||
+                        e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Home || e.Key == Key.End ||
+                        e.Key == Key.PageUp || e.Key == Key.PageDown || e.Key == Key.Enter || e.Key == Key.Tab)
+                    {
+                        return;
+                    }
+                }
 
                 // Phím tắt tua video cho tính năng Lọc ảnh song song (Dual Picture Sort) trên Windows, Linux & Android:
                 // Mũi tên Trái / Phải: tua lùi / tới 5s
@@ -221,19 +237,14 @@ public partial class MainView : UserControl
                     return;
                 }
 
-                if (vm.IsHoverPreviewVisible && (e.Key == Key.Escape || e.Key == Key.Back))
-
+                if (!isTyping && vm.IsHoverPreviewVisible && (e.Key == Key.Escape || e.Key == Key.Back))
                 {
-
                     vm.HideHoverPreview();
-
                     e.Handled = true;
-
                     return;
-
                 }
 
-                if (vm.IsEnhanceFullscreenVisible && (e.Key == Key.Escape || e.Key == Key.Back))
+                if (!isTyping && vm.IsEnhanceFullscreenVisible && (e.Key == Key.Escape || e.Key == Key.Back))
                 {
                     vm.IsEnhanceFullscreenVisible = false;
                     e.Handled = true;
@@ -248,7 +259,7 @@ public partial class MainView : UserControl
                 }
 
                 // Phím Escape hoặc Back trên Android: Đóng Sidebar Drawer nếu đang mở
-                if ((e.Key == Key.Escape || e.Key == Key.Back) && vm.IsSidebarVisible && !vm.IsDesktopLifetime)
+                if (!isTyping && (e.Key == Key.Escape || e.Key == Key.Back) && vm.IsSidebarVisible && !vm.IsDesktopLifetime)
                 {
                     vm.IsSidebarVisible = false;
                     e.Handled = true;
@@ -324,40 +335,24 @@ public partial class MainView : UserControl
 
                     }
 
-                    if (e.Key == Key.Enter || e.Key == Key.Right)
-
+                    if (!isTyping && (e.Key == Key.Enter || e.Key == Key.Right))
                     {
-
                         if (vm.DualSortSourceItems.Any(x => x.IsSelected))
-
                         {
-
                             vm.SortSelectedForwardCommand.Execute(null);
-
                             e.Handled = true;
-
                             return;
-
                         }
-
                     }
 
-                    if (e.Key == Key.Left)
-
+                    if (!isTyping && e.Key == Key.Left)
                     {
-
                         if (vm.DualSortSortedItems.Any(x => x.IsSelected))
-
                         {
-
                             vm.SortSelectedBackwardCommand.Execute(null);
-
                             e.Handled = true;
-
                             return;
-
                         }
-
                     }
 
                 }

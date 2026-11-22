@@ -4673,19 +4673,13 @@ public partial class ComicReaderViewModel : ViewModelBase
 
 
         if (targetChap != null && !ReferenceEquals(targetChap, CurrentChapter))
-
         {
-
+            TargetInitialPageIndex = item.PageIndex;
             _progressStore.SaveProgress(targetChap.EffectiveProgressKey, item.PageIndex);
-
             _suppressChapterSelectionChanged = true;
-
             CurrentChapter = targetChap;
-
             _suppressChapterSelectionChanged = false;
-
             await LoadChapterInternalAsync(targetChap);
-
         }
 
 
@@ -5050,10 +5044,14 @@ public partial class ComicReaderViewModel : ViewModelBase
 
 
 
-    public async Task InitializeAsync(LibraryComicItem? comic, LibraryChapterItem targetChapter)
+    public int? TargetInitialPageIndex { get; set; }
 
+    public async Task InitializeAsync(LibraryComicItem? comic, LibraryChapterItem targetChapter, int initialPageIndex = 0)
     {
-
+        if (initialPageIndex > 0)
+        {
+            TargetInitialPageIndex = initialPageIndex;
+        }
         ParentComic = comic;
 
         if (comic != null && !string.IsNullOrWhiteSpace(comic.Title))
@@ -5609,25 +5607,20 @@ public partial class ComicReaderViewModel : ViewModelBase
 
 
             if (_isNavigatingToPreviousChapter)
-
             {
-
                 // Khi người dùng bấm nút Quay lại chương trước: mở trang cuối của chương
-
                 savedPageIndex = Math.Max(0, TotalPages - 1);
-
             }
-
-            else
-
+            else if (TargetInitialPageIndex.HasValue)
             {
-
-                // Theo yêu cầu: Mỗi chương không cần nhớ riêng trang đã đọc đến mấy, luôn mở từ đầu chương (trang 1, index 0).
-
-                // Resume.md chỉ phụ trách xem chương gần nhất là được.
-
+                // Nhảy chính xác đến trang được yêu cầu (từ Bookmark)
+                savedPageIndex = Math.Clamp(TargetInitialPageIndex.Value, 0, Math.Max(0, TotalPages - 1));
+                TargetInitialPageIndex = null;
+            }
+            else
+            {
+                // Mặc định mở đầu chương
                 savedPageIndex = 0;
-
             }
 
 

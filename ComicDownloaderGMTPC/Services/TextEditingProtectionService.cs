@@ -245,24 +245,20 @@ public static class TextEditingProtectionService
                 catch { }
             }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
 
-            // 2. Khi người dùng chạm ngón tay / nhấp chuột vào TextBox (PointerPressed & Tapped)
-            // Kể cả khi TextBox ĐÃ CÓ FOCUS từ trước, vẫn cưỡng chế hiện bàn phím ảo ngay ở lần chạm đầu tiên!
+            // 2. Khi ngón tay chạm xuống TextBox (PointerPressed):
+            // TUYỆT ĐỐI KHÔNG gọi Focus() hay TriggerShowKeyboard() ở đây vì cử chỉ vuốt/cuộn màn hình
+            // cũng phát sinh PointerPressed ngay khi chạm. Chỉ gắn menu ngữ cảnh và để cử chỉ cuộn hoạt động bình thường!
             InputElement.PointerPressedEvent.AddClassHandler<TextBox>((tb, _) =>
             {
                 try
                 {
                     if (tb == null || tb.IsReadOnly || !tb.IsEnabled) return;
                     AttachCustomContextFlyout(tb);
-                    if (!tb.IsFocused)
-                    {
-                        tb.Focus();
-                    }
-                    NotifyTypingState(true);
-                    TriggerShowKeyboard(tb);
                 }
                 catch { }
-            }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+            }, RoutingStrategies.Direct | RoutingStrategies.Bubble);
 
+            // Bàn phím ảo CHỈ ĐƯỢC CƯỠNG CHẾ HIỂN THỊ khi người dùng CHẠM CÓ CHỦ ĐÍCH (Tapped):
             InputElement.TappedEvent.AddClassHandler<TextBox>((tb, _) =>
             {
                 try
@@ -277,7 +273,7 @@ public static class TextEditingProtectionService
                     TriggerShowKeyboard(tb);
                 }
                 catch { }
-            }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+            }, RoutingStrategies.Bubble);
 
             // 3. Khi TextBox nhận focus (GotFocus) hoặc mất focus (LostFocus)
             InputElement.GotFocusEvent.AddClassHandler<TextBox>((tb, _) =>
@@ -302,43 +298,6 @@ public static class TextEditingProtectionService
                 }
                 catch { }
             }, RoutingStrategies.Bubble);
-
-            // 4. Can thiệp KeyDownEvent ở tầng Tunneling (trước khi xử lý) để bảo vệ tuyệt đối con trỏ ở đầu / cuối ô văn bản
-            InputElement.KeyDownEvent.AddClassHandler<TextBox>((tb, e) =>
-            {
-                try
-                {
-                    if (tb == null || !tb.IsFocused) return;
-
-                    int textLen = tb.Text?.Length ?? 0;
-                    int caret = tb.CaretIndex;
-
-                    // Trường hợp 1: Con trỏ đang ở đầu ô (CaretIndex <= 0)
-                    if (caret <= 0 && tb.SelectionStart == tb.SelectionEnd)
-                    {
-                        if (e.Key == Key.Left || e.Key == Key.Home || e.Key == Key.PageUp ||
-                            (!tb.AcceptsReturn && e.Key == Key.Up))
-                        {
-                            tb.CaretIndex = 0;
-                            e.Handled = true; // Chặn đứng sự kiện, giữ nguyên con trỏ ở đầu ô, không bubble, không chuyển app
-                            return;
-                        }
-                    }
-
-                    // Trường hợp 2: Con trỏ đang ở cuối ô (CaretIndex >= textLen)
-                    if (caret >= textLen && tb.SelectionStart == tb.SelectionEnd)
-                    {
-                        if (e.Key == Key.Right || e.Key == Key.End || e.Key == Key.PageDown ||
-                            (!tb.AcceptsReturn && e.Key == Key.Down))
-                        {
-                            tb.CaretIndex = textLen;
-                            e.Handled = true; // Chặn đứng sự kiện, giữ nguyên con trỏ ở cuối ô, không bubble, không chuyển app
-                            return;
-                        }
-                    }
-                }
-                catch { }
-            }, RoutingStrategies.Tunnel);
         }
         catch { }
     }

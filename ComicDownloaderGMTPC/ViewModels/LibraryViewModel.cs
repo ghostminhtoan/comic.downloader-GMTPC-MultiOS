@@ -161,6 +161,9 @@ public partial class LibraryViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(HasSelectedComic))]
     private LibraryComicItem? _selectedComic;
 
+    [ObservableProperty]
+    private HistoryItemModel? _selectedHistoryItem;
+
     public bool HasSelectedComic => SelectedComic != null;
 
     [ObservableProperty]
@@ -299,13 +302,25 @@ public partial class LibraryViewModel : ViewModelBase
         }
     }
 
+    private System.Threading.CancellationTokenSource? _historyUpdateDebounceCts;
+
     private void OnHistoryUpdatedFromStore()
     {
-        _ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+        _historyUpdateDebounceCts?.Cancel();
+        _historyUpdateDebounceCts = new System.Threading.CancellationTokenSource();
+        var ct = _historyUpdateDebounceCts.Token;
+
+        _ = Task.Delay(400, ct).ContinueWith(t =>
         {
-            await EnsureDataLoadedAsync();
-            await LoadHistoryItemsAsync();
-        });
+            if (t.IsCanceled) return;
+            Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+            {
+                if (IsHistoryTabActive)
+                {
+                    await LoadHistoryItemsAsync();
+                }
+            });
+        }, TaskScheduler.Default);
     }
 
     partial void OnActiveSubTabChanged(string value)
@@ -708,7 +723,7 @@ public partial class LibraryViewModel : ViewModelBase
         }
     }
 
-    private async Task OpenChapterInternalAsync(LibraryComicItem? comic, LibraryChapterItem chapter, bool forceSeparateWindow = false)
+    private async Task OpenChapterInternalAsync(LibraryComicItem? comic, LibraryChapterItem chapter, bool forceSeparateWindow = false, int initialPageIndex = 0)
     {
         if (comic != null && !string.IsNullOrWhiteSpace(comic.RootFolderPath))
         {
@@ -736,7 +751,7 @@ public partial class LibraryViewModel : ViewModelBase
                 _ = LoadHistoryItemsAsync();
             };
             win.Show();
-            await readerVm.InitializeAsync(comic, chapter);
+            await readerVm.InitializeAsync(comic, chapter, initialPageIndex);
         }
         else if (useSeparateWindow && ComicReaderService.AndroidLaunchSeparateReaderTask != null)
         {
@@ -752,7 +767,7 @@ public partial class LibraryViewModel : ViewModelBase
                 });
             };
             ComicReaderService.AndroidLaunchSeparateReaderTask.Invoke(readerVm);
-            await readerVm.InitializeAsync(comic, chapter);
+            await readerVm.InitializeAsync(comic, chapter, initialPageIndex);
         }
         else
         {
@@ -770,7 +785,7 @@ public partial class LibraryViewModel : ViewModelBase
             readerVm.CloseRequested += OnInlineClose;
             InlineReaderVm = readerVm;
             IsInlineReaderVisible = true;
-            await readerVm.InitializeAsync(comic, chapter);
+            await readerVm.InitializeAsync(comic, chapter, initialPageIndex);
         }
     }
 
@@ -1607,10 +1622,69 @@ public partial class LibraryViewModel : ViewModelBase
 
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                HistoryItems.Clear();
-                foreach (var it in items)
+                // Kiểm tra xem danh sách có thực sự thay đổi không để tránh flicker UI & mất select
+                if (HistoryItems.Count == items.Count)
                 {
-                    HistoryItems.Add(it);
+                    bool isIdentical = true;
+                    for (int i = 0; i < items.Count; i++)
+                    {
+                        var cur = HistoryItems[i];
+                        var next = items[i];
+                        if (cur.Path != next.Path || cur.Title != next.Title ||
+                            cur.CurrentPage != next.CurrentPage || cur.TotalPages != next.TotalPages ||
+                            cur.ChapterOrSubTitle != next.ChapterOrSubTitle)
+                        {
+                            isIdentical = false;
+                            break;
+                        }
+                    }
+                    if (isIdentical) return; // Dữ liệu không đổi: giữ nguyên 100% UI và Selection, triệt tiêu hiện tượng chớp nháy!
+                }
+
+                string? selectedPath = SelectedHistoryItem?.Path;
+
+                // Cập nhật thông minh (In-Place Diff): giữ nguyên control trong ListBox để không mất Select
+                for (int i = 0; i < items.Count; i++)
+                {
+                    if (i < HistoryItems.Count)
+                    {
+                        var cur = HistoryItems[i];
+                        var next = items[i];
+                        if (cur.Path == next.Path)
+                        {
+                            cur.Title = next.Title;
+                            cur.ChapterOrSubTitle = next.ChapterOrSubTitle;
+                            cur.CurrentPage = next.CurrentPage;
+                            cur.TotalPages = next.TotalPages;
+                            cur.ProgressPercent = next.ProgressPercent;
+                            cur.ProgressText = next.ProgressText;
+                            cur.ProgressBarColor = next.ProgressBarColor;
+                            cur.FileSizeText = next.FileSizeText;
+                            cur.LastReadDateText = next.LastReadDateText;
+                            cur.IsCloudSynced = next.IsCloudSynced;
+                            cur.CloudDeviceName = next.CloudDeviceName;
+                            continue;
+                        }
+                        HistoryItems[i] = next;
+                    }
+                    else
+                    {
+                        HistoryItems.Add(items[i]);
+                    }
+                }
+
+                while (HistoryItems.Count > items.Count)
+                {
+                    HistoryItems.RemoveAt(HistoryItems.Count - 1);
+                }
+
+                if (!string.IsNullOrEmpty(selectedPath))
+                {
+                    var match = HistoryItems.FirstOrDefault(h => h.Path == selectedPath);
+                    if (match != null)
+                    {
+                        SelectedHistoryItem = match;
+                    }
                 }
             });
 
@@ -2023,7 +2097,7 @@ public partial class LibraryViewModel : ViewModelBase
         }
 
         ReadProgressStore.Instance.SaveProgress(targetChapter.EffectiveProgressKey, bm.PageIndex);
-        await OpenChapterInternalAsync(comic, targetChapter);
+        await OpenChapterInternalAsync(comic, targetChapter, forceSeparateWindow: false, initialPageIndex: bm.PageIndex);
     }
 
     [RelayCommand]

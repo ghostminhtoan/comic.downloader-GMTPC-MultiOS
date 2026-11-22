@@ -162,6 +162,7 @@ public sealed class ReadProgressStore
     private readonly Timer _debounceTimer;
     private volatile bool _isDirty;
     private volatile bool _isLocalPathDirty;
+    private volatile bool _isSelfWriting;
     private FileSystemWatcher? _historyWatcher;
     private Timer? _heartbeatCheckTimer;
     private DateTime _lastWatcherReload = DateTime.MinValue;
@@ -205,7 +206,7 @@ public sealed class ReadProgressStore
                 // Sử dụng Heartbeat Polling Timer nhẹ nhàng đảm bảo không ảnh hưởng hiệu năng.
                 UpdateObservedFileTimestamps();
                 _heartbeatCheckTimer?.Dispose();
-                _heartbeatCheckTimer = new Timer(OnHeartbeatCheckTick, null, 3000, 1500);
+                _heartbeatCheckTimer = new Timer(OnHeartbeatCheckTick, null, 3000, 2500);
                 return;
             }
 
@@ -235,9 +236,9 @@ public sealed class ReadProgressStore
                 }
                 catch { }
 
-                // Lớp 2: Heartbeat Polling Timer (800ms) siêu nhẹ, đảm bảo 100% không bao giờ bị hụt sự kiện trên Symlink, Virtual Drive, Network Drive
+                // Lớp 2: Heartbeat Polling Timer (2500ms) siêu nhẹ, đảm bảo 100% không bị hụt sự kiện mà không tạo bão reload
                 _heartbeatCheckTimer?.Dispose();
-                _heartbeatCheckTimer = new Timer(OnHeartbeatCheckTick, null, 1000, 800);
+                _heartbeatCheckTimer = new Timer(OnHeartbeatCheckTick, null, 3000, 2500);
             }
         }
         catch { }
@@ -257,6 +258,7 @@ public sealed class ReadProgressStore
 
     private void OnStoreFilesRenamedOnDisk(object? sender, RenamedEventArgs e)
     {
+        if (_isSelfWriting) return;
         if (IsStoreFileNameMatch(e.Name) || IsStoreFileNameMatch(e.OldName))
         {
             TriggerDebouncedReloadFromDisk();
@@ -265,6 +267,7 @@ public sealed class ReadProgressStore
 
     private void OnStoreFilesChangedOnDisk(object? sender, FileSystemEventArgs e)
     {
+        if (_isSelfWriting) return;
         if (IsStoreFileNameMatch(e.Name))
         {
             TriggerDebouncedReloadFromDisk();
@@ -285,6 +288,7 @@ public sealed class ReadProgressStore
 
     private void OnHeartbeatCheckTick(object? state)
     {
+        if (_isSelfWriting) return;
         try
         {
             string histPath = GetHistoryFilePath();
@@ -322,10 +326,11 @@ public sealed class ReadProgressStore
 
     private void TriggerDebouncedReloadFromDisk()
     {
-        if ((DateTime.Now - _lastWatcherReload).TotalMilliseconds < 250) return;
+        if (_isSelfWriting || (DateTime.Now - _lastWatcherReload).TotalMilliseconds < 800) return;
         _lastWatcherReload = DateTime.Now;
-        Task.Delay(80).ContinueWith(_ =>
+        Task.Delay(300).ContinueWith(_ =>
         {
+            if (_isSelfWriting) return;
             try
             {
                 ReloadAllFromDisk();
@@ -1311,18 +1316,43 @@ public sealed class ReadProgressStore
 
     public void ClearAllHistory()
     {
-        foreach (var key in _progressMap.Keys.Where(k => k.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase) || k.StartsWith(FolderHistoryPrefix, StringComparison.OrdinalIgnoreCase)).ToList())
+        // 1. Xóa toàn bộ key liên quan đến lịch sử đọc và định danh portable trong _progressMap
+        foreach (var key in _progressMap.Keys.Where(k =>
+            k.StartsWith(HistoryPrefix, StringComparison.OrdinalIgnoreCase) ||
+            k.StartsWith(FolderHistoryPrefix, StringComparison.OrdinalIgnoreCase) ||
+            k.StartsWith(PortableIdPrefix, StringComparison.OrdinalIgnoreCase)).ToList())
         {
             _progressMap.TryRemove(key, out _);
         }
+
+        // 2. Xóa sạch bộ nhớ đường dẫn cục bộ và lưu đè file trống
         _deviceLocalPathRegistry.Clear();
+        _isLocalPathDirty = true;
+        SaveDeviceLocalPathsToDisk();
+
+        // 3. Xóa sạch các mục đám mây / cross-device cache
         lock (_crossDeviceLock)
         {
             _crossDeviceEntries.Clear();
         }
-        SaveHistoryToDisk();
+
+        // 4. Ghi đè file history.md rỗng
+        try
+        {
+            string histPath = GetHistoryFilePath();
+            if (File.Exists(histPath))
+            {
+                File.WriteAllText(histPath, string.Empty, Encoding.UTF8);
+            }
+        }
+        catch { }
+
+        // 5. Ghi đè file resume.md sạch
         _isDirty = true;
         FlushImmediately();
+
+        UpdateObservedFileTimestamps();
+        NotifyHistoryUpdated();
     }
 
     public List<string> GetPinnedFolders()
@@ -2073,29 +2103,27 @@ public sealed class ReadProgressStore
                 }
 
                 // Nếu chưa có trong danh sách:
-                int dynTotalPages = (hasLocal && !string.IsNullOrEmpty(resolved)) ? GetChapterTotalPages(resolved) : entry.TotalPages;
-
-                // NẾU LÀ THIẾT BỊ HIỆN TẠI HOẶC ĐÃ TÌM THẤY LOCAL: TUYỆT ĐỐI KHÔNG GÁN NHÃN ĐÁM MÂY!
-                string displayDevice = (hasLocal || isLocalDevice) ? string.Empty : entry.DeviceName;
-                if (!hasLocal && !isLocalDevice && !string.IsNullOrWhiteSpace(displayDevice))
+                // CHỈ THÊM NẾU TỆP THỰC TẾ TỒN TẠI TRÊN MÁY NÀY (hasLocal == true)!
+                // Tuyệt đối không tự ý nhồi các truyện đám mây không tồn tại tệp vào Lịch sử Đọc của máy cục bộ!
+                if (!hasLocal)
                 {
-                    subTitle = string.IsNullOrWhiteSpace(subTitle)
-                        ? $"Từ {displayDevice}"
-                        : $"{subTitle} ({displayDevice})";
+                    continue;
                 }
+
+                int dynTotalPages = !string.IsNullOrEmpty(resolved) ? GetChapterTotalPages(resolved) : entry.TotalPages;
 
                 seenTitles.Add(entryTitle);
 
                 result.Add(new UnifiedHistoryItemInfo
                 {
-                    Path = hasLocal ? (resolved ?? string.Empty) : (isLocalDevice && !string.IsNullOrEmpty(resolved) ? resolved : string.Empty),
+                    Path = resolved ?? string.Empty,
                     Title = entryTitle,
                     ChapterOrSubTitle = subTitle,
                     LastReadPage = entry.LastReadPage,
                     TotalPages = dynTotalPages,
                     OrderStamp = orderStamp,
-                    DeviceName = displayDevice,
-                    HasLocalPath = hasLocal || isLocalDevice
+                    DeviceName = string.Empty,
+                    HasLocalPath = true
                 });
             }
         }
@@ -2636,6 +2664,7 @@ public sealed class ReadProgressStore
 
     public void SaveHistoryToDisk()
     {
+        _isSelfWriting = true;
         try
         {
             string filePath = GetHistoryFilePath();
@@ -2652,6 +2681,10 @@ public sealed class ReadProgressStore
             NotifyHistoryUpdated();
         }
         catch { }
+        finally
+        {
+            Task.Delay(250).ContinueWith(_ => _isSelfWriting = false);
+        }
     }
 
     private void LoadHistoryFromDisk()
@@ -2761,6 +2794,7 @@ public sealed class ReadProgressStore
             if (!_isDirty) return;
             _isDirty = false;
 
+            _isSelfWriting = true;
             try
             {
                 string filePath = GetStoreFilePath();
@@ -2784,6 +2818,10 @@ public sealed class ReadProgressStore
                 SaveHistoryToDisk();
             }
             catch { }
+            finally
+            {
+                Task.Delay(250).ContinueWith(_ => _isSelfWriting = false);
+            }
         }
     }
 
