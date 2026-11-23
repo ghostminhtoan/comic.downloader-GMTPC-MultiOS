@@ -3717,12 +3717,11 @@ public partial class ComicReaderViewModel : ViewModelBase
 
 
     /// <summary>
-
     /// Chiều cao vùng cảm ứng bấm (Hitbox) cho Type 0 (Bottom) và Type 3 (Top/Bottom) chuẩn ComicScreen.
-
+    /// Khống chế chiều cao vùng bấm bám sát theo kích thước hiển thị của icon (PageButtonAreaComputedSize + 16.0),
+    /// tuyệt đối không cao vượt lên trên vùng hiển thị nút để tránh lấn chiếm vùng nội dung đọc truyện.
     /// </summary>
-
-    public double PageButtonAreaComputedHitHeight => Math.Round(50.0 + (PageButtonAreaSize - 10.0) * 1.35);
+    public double PageButtonAreaComputedHitHeight => Math.Round(PageButtonAreaComputedSize + 16.0);
 
 
 
