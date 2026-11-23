@@ -623,7 +623,7 @@ public class ComicReaderActivity : AvaloniaActivity
 
             if (OperatingSystem.IsAndroidVersionAtLeast(30))
             {
-                window.SetDecorFitsSystemWindows(!fullScreen);
+                window.SetDecorFitsSystemWindows(false);
                 var controller = window.InsetsController;
                 if (controller != null)
                 {
@@ -635,6 +635,7 @@ public class ComicReaderActivity : AvaloniaActivity
                     else
                     {
                         controller.Show(WindowInsets.Type.StatusBars() | WindowInsets.Type.NavigationBars());
+                        controller.SystemBarsBehavior = (int)WindowInsetsControllerBehavior.ShowBarsByTouch;
                     }
                 }
             }
@@ -655,7 +656,10 @@ public class ComicReaderActivity : AvaloniaActivity
                     }
                     else
                     {
-                        decorView.SystemUiVisibility = StatusBarVisibility.Visible;
+                        decorView.SystemUiVisibility = (StatusBarVisibility)(
+                            SystemUiFlags.LayoutStable |
+                            SystemUiFlags.LayoutFullscreen |
+                            SystemUiFlags.LayoutHideNavigation);
                     }
                 }
             }
@@ -907,12 +911,94 @@ public class ComicReaderActivity : AvaloniaActivity
 
     private void OnAndroidOverlayVisibilityChanged(bool isOverlayVisible)
     {
-        // QUY TẮC BẤT BIẾN KHUNG HÌNH (WINDOW/LINUX PARITY):
-        // Giống như Windows và Linux, khi bật/tắt thanh công cụ (Overlay Tool),
-        // Android Reader Activity DUY TRÌ 100% chế độ Immersive Sticky FullScreen cố định.
-        // Tuyệt đối không thoát toàn màn hình để tránh làm co giật Viewport / Bounds,
-        // triệt tiêu hoàn toàn hiện tượng lệch trang, nhảy trang hoặc co méo ảnh.
+        RunOnUiThread(() =>
+        {
+            try
+            {
+                ApplySystemBarsForOverlay(isOverlayVisible);
+            }
+            catch { }
+        });
     }
+
+#pragma warning disable CA1422, CS0618
+    private void ApplySystemBarsForOverlay(bool isOverlayVisible)
+    {
+        try
+        {
+            var window = Window;
+            if (window == null) return;
+
+            if (OperatingSystem.IsAndroidVersionAtLeast(30))
+            {
+                // Giữ DecorFitsSystemWindows = false để layout của Avalonia Reader luôn duy trì 100% kích thước màn hình vật lý,
+                // triệt tiêu hoàn toàn co giật Viewport, lệch trang hay co méo ảnh.
+                window.SetDecorFitsSystemWindows(false);
+                var controller = window.InsetsController;
+                if (controller != null)
+                {
+                    if (isOverlayVisible)
+                    {
+                        // Khi tap hiển thị thanh công cụ đọc truyện:
+                        // Hiển thị ngay lập tức thanh điều hướng ảo (Navigation Bar: Recent, Home, Back) và Status Bar (giờ, pin)
+                        // chuẩn phong cách Comic Screen, người dùng không cần phải vuốt từ mép đáy lên.
+                        controller.Show(WindowInsets.Type.StatusBars() | WindowInsets.Type.NavigationBars());
+                        controller.SystemBarsBehavior = (int)WindowInsetsControllerBehavior.ShowBarsByTouch;
+                    }
+                    else
+                    {
+                        // Khi ẩn thanh công cụ: ẩn toàn bộ System Bars, quay về chế độ Immersive Sticky toàn màn hình
+                        controller.Hide(WindowInsets.Type.StatusBars() | WindowInsets.Type.NavigationBars());
+                        controller.SystemBarsBehavior = (int)WindowInsetsControllerBehavior.ShowTransientBarsBySwipe;
+                    }
+                }
+            }
+            else
+            {
+                var decorView = window.DecorView;
+                if (decorView != null)
+                {
+                    if (isOverlayVisible)
+                    {
+                        // Hiển thị Navigation Bar và Status Bar nhưng vẫn giữ các cờ Layout* để không co giật Bounds / Viewport
+                        decorView.SystemUiVisibility = (StatusBarVisibility)(
+                            SystemUiFlags.LayoutStable |
+                            SystemUiFlags.LayoutFullscreen |
+                            SystemUiFlags.LayoutHideNavigation);
+                    }
+                    else
+                    {
+                        decorView.SystemUiVisibility = (StatusBarVisibility)(
+                            SystemUiFlags.ImmersiveSticky |
+                            SystemUiFlags.Fullscreen |
+                            SystemUiFlags.HideNavigation |
+                            SystemUiFlags.LayoutStable |
+                            SystemUiFlags.LayoutFullscreen |
+                            SystemUiFlags.LayoutHideNavigation);
+                    }
+                }
+            }
+
+            // Đồng bộ màu nền Status Bar và Navigation Bar theo thanh công cụ đọc truyện
+            try
+            {
+                if (isOverlayVisible)
+                {
+                    window.AddFlags(WindowManagerFlags.DrawsSystemBarBackgrounds);
+                    window.SetStatusBarColor(global::Android.Graphics.Color.Argb(220, 24, 28, 34));
+                    window.SetNavigationBarColor(global::Android.Graphics.Color.Argb(230, 24, 28, 34));
+                }
+                else
+                {
+                    window.SetStatusBarColor(global::Android.Graphics.Color.Transparent);
+                    window.SetNavigationBarColor(global::Android.Graphics.Color.Transparent);
+                }
+            }
+            catch { }
+        }
+        catch { }
+    }
+#pragma warning restore CA1422, CS0618
 
     private void OnTypingStateChanged(bool isTyping)
     {

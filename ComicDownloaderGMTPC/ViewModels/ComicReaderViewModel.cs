@@ -4890,9 +4890,17 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     public Thickness ReaderHeaderSafeMargin => OperatingSystem.IsAndroid()
 
-        ? new Thickness(26, 6, 8, 6)
+        ? new Thickness(26, 28, 8, 6)
 
         : new Thickness(8, 6, 8, 6);
+
+    /// <summary>
+    /// Khoảng đệm an toàn dưới đáy cho thanh công cụ đọc truyện (BottomOverlayBar).
+    /// Trên Android đệm thêm 48dp để các nút điều hướng ảo hệ thống (Recent, Home, Back) không che mất thanh trượt và các tùy chọn đọc liền mạch.
+    /// </summary>
+    public Thickness ReaderBottomSafeMargin => OperatingSystem.IsAndroid()
+        ? new Thickness(12, 6, 12, 48)
+        : new Thickness(12, 6, 12, 6);
 
 
 

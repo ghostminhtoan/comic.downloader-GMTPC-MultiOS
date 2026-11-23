@@ -2015,7 +2015,7 @@
                         Background="#E6181C22"
                         BorderBrush="#2E3642"
                         BorderThickness="0,1,0,0"
-                        Padding="12,6">
+                        Padding="{Binding ReaderBottomSafeMargin}">
                     <StackPanel Spacing="4">
                         <!-- Hàng chỉ số trang & tên chương rõ ràng khi mở thanh công cụ -->
                         <Grid ColumnDefinitions="*, Auto" Margin="4,0,4,2">
