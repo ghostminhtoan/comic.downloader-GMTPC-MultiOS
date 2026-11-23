@@ -4653,57 +4653,41 @@ public partial class ComicReaderViewModel : ViewModelBase
 
 
     [RelayCommand]
-
     public async Task JumpToBookmarkAsync(ReaderBookmarkItem? item)
-
     {
-
         if (item == null) return;
-
         ActivePopup = string.Empty;
 
-
-
         var targetChap = ChapterList.FirstOrDefault(c =>
+            (!string.IsNullOrWhiteSpace(c.EffectiveProgressKey) && !string.IsNullOrWhiteSpace(item.ChapterProgressKey) &&
+             string.Equals(c.EffectiveProgressKey.Replace('\\', '/'), item.ChapterProgressKey.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrWhiteSpace(c.Title) && !string.IsNullOrWhiteSpace(item.ChapterTitle) &&
+             string.Equals(c.Title.Trim(), item.ChapterTitle.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+            (c.Index == item.ChapterIndex));
 
-            string.Equals(c.EffectiveProgressKey, item.ChapterProgressKey, StringComparison.OrdinalIgnoreCase) ||
-
-            (c.Index == item.ChapterIndex && string.Equals(c.Title, item.ChapterTitle, StringComparison.OrdinalIgnoreCase)));
-
-
+        int targetIdx = Math.Max(0, item.PageIndex);
 
         if (targetChap != null && !ReferenceEquals(targetChap, CurrentChapter))
         {
-            TargetInitialPageIndex = item.PageIndex;
-            _progressStore.SaveProgress(targetChap.EffectiveProgressKey, item.PageIndex);
+            TargetInitialPageIndex = targetIdx;
+            _progressStore.SaveProgress(targetChap.EffectiveProgressKey, targetIdx);
             _suppressChapterSelectionChanged = true;
             CurrentChapter = targetChap;
             _suppressChapterSelectionChanged = false;
             await LoadChapterInternalAsync(targetChap);
         }
 
-
-
         if (Pages.Count > 0)
-
         {
-
-            int targetIdx = Math.Clamp(item.PageIndex, 0, Pages.Count - 1);
-
-            CurrentPageIndex = targetIdx;
-
-            RequestScrollToPage(targetIdx);
-
+            int clampedIdx = Math.Clamp(targetIdx, 0, Pages.Count - 1);
+            CurrentPageIndex = clampedIdx;
+            RequestScrollToPage(clampedIdx);
+            RequestRefreshScrubber();
             ShowTransientToast($"🔖 Đã nhảy tới dấu trang: {item.LeftDisplayText}");
-
         }
-
     }
 
-
-
     [RelayCommand]
-
     public void DeleteBookmark(ReaderBookmarkItem? item)
 
     {
@@ -5187,30 +5171,67 @@ public partial class ComicReaderViewModel : ViewModelBase
 
 
     partial void OnSelectedPdfBookmarkChanged(PdfBookmarkItem? value)
-
     {
+        if (_suppressPdfBookmarkSelectionChanged || value == null) return;
 
-        if (_suppressPdfBookmarkSelectionChanged || value == null || Pages.Count == 0) return;
-
-        int targetIndex = Math.Clamp(value.PageIndex, 0, Pages.Count - 1);
-
-        if (CurrentPageIndex != targetIndex)
-
+        // Nếu chương hiện tại là PDF và có dải trang
+        if (CurrentChapter?.IsPdf == true)
         {
+            int startPage = CurrentChapter.PdfStartPageIndex;
+            int endPage = CurrentChapter.PdfEndPageIndex;
 
-            CurrentPageIndex = targetIndex;
+            // Nếu bookmark nằm trong chương hiện tại
+            if (value.PageIndex >= startPage && (endPage <= 0 || value.PageIndex <= endPage))
+            {
+                int localIndex = Math.Clamp(value.PageIndex - startPage, 0, Math.Max(0, Pages.Count - 1));
+                CurrentPageIndex = localIndex;
+                RequestScrollToPage(localIndex);
+                RequestRefreshScrubber();
+                ShowTransientToast($"📑 Đã chuyển tới mục lục PDF: {value.Title} (Trang {localIndex + 1})");
+                ActivePopup = string.Empty;
+                return;
+            }
 
-            RequestScrollToPage(targetIndex);
+            // Nếu bookmark nằm ở chương khác: tìm chương phù hợp
+            var targetChap = ChapterList.FirstOrDefault(c =>
+                c.IsPdf && value.PageIndex >= c.PdfStartPageIndex && (c.PdfEndPageIndex <= 0 || value.PageIndex <= c.PdfEndPageIndex));
 
-            ShowTransientToast($"📑 Đã chuyển tới mục lục PDF: {value.Title} (Trang {targetIndex + 1})");
-
+            if (targetChap != null && !ReferenceEquals(targetChap, CurrentChapter))
+            {
+                int localIndex = Math.Max(0, value.PageIndex - targetChap.PdfStartPageIndex);
+                TargetInitialPageIndex = localIndex;
+                _suppressChapterSelectionChanged = true;
+                CurrentChapter = targetChap;
+                _suppressChapterSelectionChanged = false;
+                _ = Task.Run(async () =>
+                {
+                    await LoadChapterInternalAsync(targetChap);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        CurrentPageIndex = localIndex;
+                        RequestScrollToPage(localIndex);
+                        RequestRefreshScrubber();
+                        ShowTransientToast($"📑 Đã chuyển tới mục lục PDF: {value.Title} (Trang {localIndex + 1})");
+                    });
+                });
+                ActivePopup = string.Empty;
+                return;
+            }
         }
 
+        if (Pages.Count > 0)
+        {
+            int targetIndex = Math.Clamp(value.PageIndex, 0, Pages.Count - 1);
+            if (CurrentPageIndex != targetIndex)
+            {
+                CurrentPageIndex = targetIndex;
+                RequestScrollToPage(targetIndex);
+                RequestRefreshScrubber();
+                ShowTransientToast($"📑 Đã chuyển tới mục lục PDF: {value.Title} (Trang {targetIndex + 1})");
+            }
+        }
         ActivePopup = string.Empty;
-
     }
-
-
 
     partial void OnCurrentPageIndexChanged(int value)
 
@@ -5619,8 +5640,9 @@ public partial class ComicReaderViewModel : ViewModelBase
             }
             else
             {
-                // Mặc định mở đầu chương
-                savedPageIndex = 0;
+                // Đọc lại vị trí đọc dở đã lưu của chương (nếu có) thay vì luôn luôn ép về 0
+                int lastSaved = _progressStore.GetLastReadPage(chapter.EffectiveProgressKey);
+                savedPageIndex = (lastSaved > 0 && lastSaved < TotalPages) ? lastSaved : 0;
             }
 
 

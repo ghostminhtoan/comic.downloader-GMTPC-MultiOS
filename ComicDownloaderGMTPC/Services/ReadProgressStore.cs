@@ -494,6 +494,9 @@ public sealed class ReadProgressStore
 
         _isLocalPathDirty = true;
         SaveDeviceLocalPathsToDisk();
+
+        // Ghi nhận vào lịch sử đọc local
+        RegisterReadComic(cleanPath, touchTimestamp: false);
     }
 
     private void SaveDeviceLocalPathsToDisk()
@@ -1892,6 +1895,12 @@ public sealed class ReadProgressStore
             if (string.IsNullOrWhiteSpace(localPath)) continue;
 
             string cleanLocal = NormalizeKey(localPath);
+            int orderStamp = entry.UpdatedAtUnixSeconds > 0
+                ? (int)Math.Clamp(entry.UpdatedAtUnixSeconds - EpochOffsetSeconds, 1L, int.MaxValue - 1L)
+                : GetCurrentOrderStamp();
+
+            RegisterReadComic(cleanLocal, touchTimestamp: false);
+            _progressMap[HistoryPrefix + cleanLocal] = orderStamp;
 
             if (entry.ChapterIndex > 0)
             {
