@@ -797,7 +797,10 @@ public partial class ComicReaderControl : UserControl
             _singleTapTimer.Stop();
             if (DataContext is ComicReaderViewModel vm)
             {
-                if (vm.IsTapZonesEnabled)
+                // Khi bật phím ảo Page Button Area (nút - và + ở dải dưới), hoặc khi tắt 9 Vùng Chạm (mặc định):
+                // Toàn bộ màn hình đọc truyện khi tap đơn chỉ dùng để Bật/Tắt thanh công cụ (HUD),
+                // triệt tiêu hoàn toàn lỗi vô tình nhảy previous / next page khi chạm dọc 2 bên mép trái/phải.
+                if (vm.IsTapZonesEnabled && !vm.IsPageButtonAreaEnabled)
                 {
                     Handle9ZoneTap(vm, _lastTapPoint);
                 }
@@ -2478,6 +2481,14 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
+        // Khi bật phím ảo chuyển trang Page Button Area (- / +):
+        // Các nút - và + ở dải dưới đã đảm nhiệm lùi/tiến trang, toàn bộ vùng đọc bên trên chỉ dùng để Bật/Tắt HUD.
+        if (vm.IsPageButtonAreaEnabled)
+        {
+            vm.ToggleOverlay();
+            return;
+        }
+
         // Tỷ lệ phân vùng: Trái 30%, Giữa 40%, Phải 30% | Trên 25%, Giữa 50%, Dưới 25%
         int col = pt.X < w * 0.30 ? (vm.IsRightToLeft ? 2 : 0) : (pt.X > w * 0.70 ? (vm.IsRightToLeft ? 0 : 2) : 1);
         int row = pt.Y < h * 0.25 ? 0 : (pt.Y > h * 0.75 ? 2 : 1);
@@ -2507,20 +2518,12 @@ public partial class ComicReaderControl : UserControl
                 }
             }
 
-            if (col == 0)
-            {
-                if (vm.IsRightToLeft) vm.NextPage();
-                else vm.PrevPage();
-            }
-            else if (col == 2)
-            {
-                if (vm.IsRightToLeft) vm.PrevPage();
-                else vm.NextPage();
-            }
+            // Trong chế độ Webtoon (cuộn dọc), chạm mép trái / mép phải không tự ý lật trang mà Bật/Tắt HUD
+            vm.ToggleOverlay();
             return;
         }
 
-        // Chế độ Lật trang (Flip Mode)
+        // Chế độ Lật trang (Flip Mode) khi người dùng chủ động bật 9 Vùng Chạm trong Cài Đặt:
         if (col == 0)
         {
             if (vm.IsRightToLeft) vm.NextPage();

@@ -166,7 +166,7 @@ public partial class ComicReaderViewModel : ViewModelBase
 
     [ObservableProperty]
 
-    private bool _isTapZonesEnabled = true;
+    private bool _isTapZonesEnabled = false;
 
 
 
