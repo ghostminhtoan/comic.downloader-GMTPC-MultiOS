@@ -164,6 +164,9 @@ public partial class LibraryViewModel : ViewModelBase
     [ObservableProperty]
     private HistoryItemModel? _selectedHistoryItem;
 
+    private readonly SemaphoreSlim _historyLock = new(1, 1);
+    private CancellationTokenSource? _loadHistoryCts;
+
     public bool HasSelectedComic => SelectedComic != null;
 
     [ObservableProperty]
@@ -328,8 +331,8 @@ public partial class LibraryViewModel : ViewModelBase
         _ = EnsureDataLoadedAsync();
         if (string.Equals(value, "History", StringComparison.OrdinalIgnoreCase))
         {
-            ReadProgressStore.Instance.ReloadHistoryFromDisk();
-            _ = LoadHistoryItemsAsync();
+            _ = Task.Run(() => ReadProgressStore.Instance.ReloadHistoryFromDisk())
+                    .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = LoadHistoryItemsAsync()));
         }
         else if (string.Equals(value, "Storage", StringComparison.OrdinalIgnoreCase))
         {
@@ -1552,14 +1555,22 @@ public partial class LibraryViewModel : ViewModelBase
 
     public async Task LoadHistoryItemsAsync()
     {
+        _loadHistoryCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _loadHistoryCts = cts;
+
+        await _historyLock.WaitAsync();
         try
         {
+            if (cts.Token.IsCancellationRequested) return;
+
             if (OperatingSystem.IsAndroid())
             {
                 try { LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke(); } catch { }
             }
 
-            var unifiedList = await Task.Run(() => ReadProgressStore.Instance.GetUnifiedHistoryItems());
+            var unifiedList = await Task.Run(() => ReadProgressStore.Instance.GetUnifiedHistoryItems(), cts.Token);
+            if (cts.Token.IsCancellationRequested) return;
             var items = new List<HistoryItemModel>();
 
             foreach (var u in unifiedList)
@@ -1708,6 +1719,10 @@ public partial class LibraryViewModel : ViewModelBase
             });
         }
         catch { }
+        finally
+        {
+            _historyLock.Release();
+        }
     }
 
     [RelayCommand]

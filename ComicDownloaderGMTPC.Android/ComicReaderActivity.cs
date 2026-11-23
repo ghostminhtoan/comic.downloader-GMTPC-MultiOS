@@ -790,7 +790,6 @@ public class ComicReaderActivity : AvaloniaActivity
                 var vm = _subscribedVm;
                 try { vm?.SaveCurrentReadingSession(); } catch { }
                 AttachViewModel(null);
-                vm?.Cleanup();
 
                 if (ReferenceEquals(ComicReaderService.Instance.ActiveExternalReaderViewModel, vm))
                 {
@@ -798,16 +797,33 @@ public class ComicReaderActivity : AvaloniaActivity
                 }
 
                 ComicReaderService.Instance.ActiveExternalReaderClosedCallback?.Invoke();
+
+                // Trì hoãn việc Cleanup() trên Task nền sau khi Activity đã thoát,
+                // triệt tiêu hoàn toàn AccessViolationException và ObjectDisposedException
+                if (vm != null)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await Task.Delay(300);
+                            vm.Cleanup();
+                        }
+                        catch { }
+                    });
+                }
             }
             catch { }
 
             try
             {
-                FinishAndRemoveTask();
+                // Dùng Finish() tiêu chuẩn để quay về MainActivity êm ái,
+                // không gửi tín hiệu cưỡng chế xóa task tới OnTaskRemoved của Service
+                Finish();
             }
             catch
             {
-                try { Finish(); } catch { }
+                try { FinishAndRemoveTask(); } catch { }
             }
         });
     }
@@ -919,12 +935,24 @@ public class ComicReaderActivity : AvaloniaActivity
                 var vm = _subscribedVm;
                 try { vm?.SaveCurrentReadingSession(); } catch { }
                 AttachViewModel(null);
-                vm?.Cleanup();
                 if (ReferenceEquals(ComicReaderService.Instance.ActiveExternalReaderViewModel, vm))
                 {
                     ComicReaderService.Instance.ActiveExternalReaderViewModel = null;
                 }
                 ComicReaderService.Instance.ActiveExternalReaderClosedCallback?.Invoke();
+
+                if (vm != null)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await Task.Delay(300);
+                            vm.Cleanup();
+                        }
+                        catch { }
+                    });
+                }
             }
             catch { }
         }

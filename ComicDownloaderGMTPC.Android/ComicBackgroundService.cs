@@ -1031,38 +1031,48 @@ public class ComicBackgroundService : Service
 
     /// <summary>
     /// Kích hoạt khi người dùng vuốt ứng dụng khỏi màn hình Recent Apps (đa nhiệm).
-    /// Tiến hành Force Stop tắt hoàn toàn ứng dụng, giải phóng RAM và tiến trình.
     /// </summary>
     public override void OnTaskRemoved(Intent? rootIntent)
     {
         base.OnTaskRemoved(rootIntent);
         try
         {
-            // Kiểm tra an toàn: Tuyệt đối không tắt app nếu task vừa đóng không phải là MainActivity (ví dụ ShareLinkActivity)
-            // hoặc nếu MainActivity vẫn đang hoạt động bình thường không trong trạng thái Finishing/Destroyed.
+            // Kiểm tra an toàn tuyệt đối:
+            // 1. Nếu task vừa đóng là ComicReaderActivity (người dùng thoát khỏi trình đọc truyện để về Thư viện),
+            //    hoặc ShareLinkActivity -> BỎ QUA NGAY LẬP TỨC! Tuyệt đối không tắt app!
             string? className = rootIntent?.Component?.ClassName;
-            if (!string.IsNullOrEmpty(className) && className.Contains("ShareLinkActivity", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(className) &&
+                (className.Contains("ComicReaderActivity", StringComparison.OrdinalIgnoreCase) ||
+                 className.Contains("ShareLinkActivity", StringComparison.OrdinalIgnoreCase)))
             {
-                global::Android.Util.Log.Info("ComicGMTPC", "OnTaskRemoved: Bỏ qua vì task vừa đóng là ShareLinkActivity.");
+                global::Android.Util.Log.Info("ComicGMTPC", $"OnTaskRemoved: Bỏ qua vì task vừa đóng là phụ ({className}).");
                 return;
             }
 
+            // 2. Nếu MainActivity vẫn đang tồn tại / hoạt động -> BỎ QUA NGAY LẬP TỨC!
             if (MainActivity.CurrentInstance != null && !MainActivity.CurrentInstance.IsFinishing && !MainActivity.CurrentInstance.IsDestroyed)
             {
                 global::Android.Util.Log.Info("ComicGMTPC", "OnTaskRemoved: Bỏ qua vì MainActivity vẫn đang hoạt động.");
                 return;
             }
 
-            global::Android.Util.Log.Info("ComicGMTPC", "OnTaskRemoved: Người dùng đã vuốt tắt ứng dụng từ Recent Apps -> Thực hiện Force Stop.");
+            // 3. Nếu ComicReaderActivity vẫn đang mở -> BỎ QUA NGAY LẬP TỨC!
+            if (ComicReaderActivity.CurrentInstance != null && !ComicReaderActivity.CurrentInstance.IsFinishing && !ComicReaderActivity.CurrentInstance.IsDestroyed)
+            {
+                global::Android.Util.Log.Info("ComicGMTPC", "OnTaskRemoved: Bỏ qua vì ComicReaderActivity vẫn đang hoạt động.");
+                return;
+            }
 
-            // 1. Dọn dẹp và ẩn Bong bóng nổi
+            global::Android.Util.Log.Info("ComicGMTPC", "OnTaskRemoved: Người dùng đã vuốt tắt ứng dụng chính từ Recent Apps -> Dọn dẹp an toàn.");
+
+            // Dọn dẹp và ẩn Bong bóng nổi
             try
             {
                 FloatingBubbleManager.HideBubble();
             }
             catch { }
 
-            // 2. Dừng Foreground Service và giải phóng WakeLock
+            // Dừng Foreground Service và giải phóng WakeLock
             try
             {
                 if (OperatingSystem.IsAndroidVersionAtLeast(24))
@@ -1080,20 +1090,18 @@ public class ComicBackgroundService : Service
                 nm?.Cancel(NotificationId);
             }
             catch { }
-        }
-        catch (Exception ex)
-        {
-            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi xử lý OnTaskRemoved: {ex.Message}");
-        }
-        finally
-        {
-            // 3. Force stop tắt hẳn app ngay lập tức
+
+            // Chỉ force stop khi và chỉ khi người dùng thực sự vuốt tắt MainActivity
             try
             {
                 global::Android.OS.Process.KillProcess(global::Android.OS.Process.MyPid());
                 Java.Lang.JavaSystem.Exit(0);
             }
             catch { }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("ComicGMTPC", $"Lỗi xử lý OnTaskRemoved: {ex.Message}");
         }
     }
 

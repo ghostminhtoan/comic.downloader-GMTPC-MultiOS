@@ -57,20 +57,6 @@ public sealed class HistoryBackupPayload
     public List<HistoryItemSnapshot> History { get; set; } = new();
 }
 
-public sealed class ComicHistoryPayload
-{
-    public string SavedAt { get; set; } = string.Empty;
-    public List<ComicHistoryItemPayload> History { get; set; } = new();
-}
-
-public sealed class ComicHistoryItemPayload
-{
-    public string Title { get; set; } = string.Empty;
-    public int OrderStamp { get; set; }
-    public string DeviceName { get; set; } = string.Empty;
-    public string LocalPath { get; set; } = string.Empty;
-}
-
 public sealed class CrossDeviceResumeEntry
 {
     public string ComicTitle { get; set; } = string.Empty;
@@ -1343,10 +1329,10 @@ public sealed class ReadProgressStore
         sb.AppendLine("## Machine-Readable History State");
         sb.AppendLine(HistoryStateBeginMarker);
         sb.AppendLine("```json");
-        var payload = new ComicHistoryPayload
+        var payload = new HistoryBackupPayload
         {
             SavedAt = DateTime.Now.ToString("O", CultureInfo.InvariantCulture),
-            History = new List<ComicHistoryItemPayload>()
+            History = new List<HistoryItemSnapshot>()
         };
         sb.AppendLine(JsonSerializer.Serialize(payload, _jsonOptions));
         sb.AppendLine("```");
@@ -1799,8 +1785,9 @@ public sealed class ReadProgressStore
                     }
                 }
 
-                // B. Quét các file và thư mục con trong root (độ sâu tối đa 3 cấp)
-                string? foundInTree = SearchFileOrFolderInDirectory(root, targetNames, extensions, hasFileExtension, maxDepth: 3);
+                // B. Quét các file và thư mục con trong root (trên Android giới hạn độ sâu 1 cấp để tránh lag I/O, desktop 3 cấp)
+                int maxDepth = OperatingSystem.IsAndroid() ? 1 : 3;
+                string? foundInTree = SearchFileOrFolderInDirectory(root, targetNames, extensions, hasFileExtension, maxDepth: maxDepth);
                 if (!string.IsNullOrEmpty(foundInTree))
                 {
                     RegisterLocalComicPath(clean, foundInTree);
@@ -2112,24 +2099,6 @@ public sealed class ReadProgressStore
                 string entryTitleNoExt = Path.GetFileNameWithoutExtension(entryTitle);
                 string entryNorm = NormalizeChapterName(entryTitle);
 
-                // Kiểm tra xem mục này có phải được tạo ra từ chính máy hiện tại không
-                bool isLocalDevice = false;
-                string myDevName = string.Empty;
-                try { myDevName = GoogleDriveSyncService.Instance.CurrentDeviceName; } catch { }
-                if (string.IsNullOrWhiteSpace(myDevName)) myDevName = Environment.MachineName;
-
-                if (!string.IsNullOrWhiteSpace(entry.DeviceName))
-                {
-                    if (string.Equals(entry.DeviceName, myDevName, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(Environment.MachineName) && entry.DeviceName.Contains(Environment.MachineName, StringComparison.OrdinalIgnoreCase)) ||
-                        (entry.DeviceName.StartsWith("[Windows]", StringComparison.OrdinalIgnoreCase) && OperatingSystem.IsWindows()) ||
-                        (entry.DeviceName.StartsWith("[Android]", StringComparison.OrdinalIgnoreCase) && OperatingSystem.IsAndroid()) ||
-                        (entry.DeviceName.StartsWith("[Linux]", StringComparison.OrdinalIgnoreCase) && OperatingSystem.IsLinux()))
-                    {
-                        isLocalDevice = true;
-                    }
-                }
-
                 // Thử tìm đường dẫn cục bộ trên thiết bị hiện tại (chế độ fastOnly để khởi động tức thì)
                 string? resolved = TryResolveLocalPathForComic(entryTitle, fastOnly: true);
                 if (string.IsNullOrEmpty(resolved) && !string.IsNullOrEmpty(entry.RelativePath))
@@ -2141,15 +2110,10 @@ public sealed class ReadProgressStore
                     }
                 }
 
-                // Nếu là truyện của chính máy này mà fastOnly chưa ra, kích hoạt Filename-based Self-Healing Resolver
-                if (string.IsNullOrEmpty(resolved) && isLocalDevice)
-                {
-                    resolved = ResolvePathByFileName(entryTitle);
-                    if (string.IsNullOrEmpty(resolved) && !string.IsNullOrEmpty(entryTitleNoExt))
-                    {
-                        resolved = ResolvePathByFileName(entryTitleNoExt);
-                    }
-                }
+                // GHI CHÚ TỐI ƯU HÓA HIỆU NĂNG & CHỐNG ANR ANDROID:
+                // Trong GetUnifiedHistoryItems (nạp danh sách hiển thị UI), CHỈ dùng fastOnly: true để nạp trong mili-giây (O(1)).
+                // TUYỆT ĐỐI không gọi đệ quy ResolvePathByFileName quét toàn bộ ổ đĩa ở đây để triệt tiêu hoàn toàn ANR/treo máy trên Android.
+                // Khi người dùng bấm Đọc hoặc Chạm vào truyện, OpenHistoryItemAsync sẽ giải quyết đường dẫn nếu cần.
 
                 bool hasLocal = !string.IsNullOrWhiteSpace(resolved) && (File.Exists(resolved) || Directory.Exists(resolved));
 

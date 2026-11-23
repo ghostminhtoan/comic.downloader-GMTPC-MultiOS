@@ -339,6 +339,7 @@
                                                 Cursor="Hand"
                                                 Tapped="OnDirectoryItemTapped"
                                                 PointerPressed="OnDirectoryItemPointerPressed"
+                                                PointerMoved="OnDirectoryItemPointerMoved"
                                                 PointerReleased="OnDirectoryItemPointerReleased">
                                             <Border.ContextMenu>
                                                 <ContextMenu>
@@ -625,10 +626,27 @@
                             </ListBox.ItemsPanel>
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="models:HistoryItemModel">
-                                    <Border Background="#131C31" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="10,8" Margin="0,1">
-                                        <Grid ColumnDefinitions="64, 10, *, Auto">
-                                            <!-- Bìa truyện thu nhỏ -->
-                                            <Border Grid.Column="0" Width="64" Height="90" CornerRadius="4" Background="#090D16" ClipToBounds="True">
+                                    <Border Background="#131C31" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="10,8" Margin="0,1"
+                                            CornerRadius="4" Cursor="Hand"
+                                            Tapped="OnHistoryItemTapped"
+                                            PointerPressed="OnHistoryItemPointerPressed"
+                                            PointerMoved="OnHistoryItemPointerMoved"
+                                            PointerReleased="OnHistoryItemPointerReleased">
+                                        <Grid ColumnDefinitions="Auto, 64, 12, *, Auto">
+                                            <!-- Cột 0: Nút ▶ Đọc ở bên trái ảnh bìa truyện -->
+                                            <Button Grid.Column="0"
+                                                    Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).OpenHistoryItemCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
+                                                    Padding="10,7" CornerRadius="6" Margin="0,0,10,0" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                    <TextBlock Text="▶" FontSize="11" Foreground="#FFFFFF" VerticalAlignment="Center" />
+                                                    <TextBlock Text="Đọc" FontSize="11.5" FontWeight="Bold" Foreground="#FFFFFF" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- Cột 1: Bìa truyện thu nhỏ -->
+                                            <Border Grid.Column="1" Width="64" Height="90" CornerRadius="4" Background="#090D16" ClipToBounds="True">
                                                 <Panel>
                                                     <TextBlock Text="📖" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                                Foreground="#64748B" />
@@ -636,8 +654,8 @@
                                                 </Panel>
                                             </Border>
 
-                                            <!-- Chi tiết: Tên, dung lượng, ngày, progress bar hồng rực -->
-                                            <StackPanel Grid.Column="2" Spacing="3" VerticalAlignment="Center">
+                                            <!-- Cột 3: Chi tiết: Tên, dung lượng, ngày, progress bar hồng rực -->
+                                            <StackPanel Grid.Column="3" Spacing="3" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Title}" Foreground="#F8FAFC" FontSize="13" FontWeight="Bold"
                                                            TextTrimming="CharacterEllipsis" />
 
@@ -658,15 +676,8 @@
                                                 <TextBlock Text="{Binding ProgressText}" Foreground="#CBD5E1" FontSize="10.5" FontWeight="SemiBold" />
                                             </StackPanel>
 
-                                            <!-- Cụm hành động / Menu ⋮ -->
-                                            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
-                                                <Button Command="{Binding $parent[UserControl].((vm:LibraryViewModel)DataContext).OpenHistoryItemCommand}"
-                                                        CommandParameter="{Binding}"
-                                                        Background="#0284C7" Foreground="#FFFFFF" FontWeight="Bold"
-                                                        Padding="9,5" CornerRadius="5" Margin="0,0,4,0">
-                                                    <TextBlock Text="▶ Đọc" FontSize="10.5" />
-                                                </Button>
-
+                                            <!-- Cột 4: Menu ⋮ -->
+                                            <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
                                                 <Button Background="Transparent" BorderThickness="0" Padding="6,4">
                                                     <Button.Flyout>
                                                         <MenuFlyout Placement="Bottom">

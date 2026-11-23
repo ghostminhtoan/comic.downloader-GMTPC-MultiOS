@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -204,10 +205,20 @@ public partial class ReaderPageItem : ObservableObject
         IsLoading = false;
         IsLoadFailed = false;
         ErrorMessage = null;
-        try
+
+        if (old != null)
         {
-            old?.Dispose();
+            // Trì hoãn việc giải phóng Bitmap để Avalonia Render Pipeline kịp gỡ bỏ control khỏi frame vẽ,
+            // triệt tiêu 100% ObjectDisposedException khi RenderCore/MeasurePass đang chạy
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(200);
+                    old.Dispose();
+                }
+                catch { }
+            });
         }
-        catch { }
     }
 }

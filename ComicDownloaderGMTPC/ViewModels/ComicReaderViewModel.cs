@@ -7637,21 +7637,17 @@ public partial class ComicReaderViewModel : ViewModelBase
 
 
     [RelayCommand]
-
-    public void OpenSettingsPopup(int tabIndex = 0)
-
+    public void OpenSettingsPopup(object? tabIndexObj = null)
     {
+        int tabIndex = 0;
+        if (tabIndexObj is int i) tabIndex = i;
+        else if (tabIndexObj is string s && int.TryParse(s, out int parsed)) tabIndex = parsed;
 
         SettingsTabIndex = tabIndex;
-
         CancelAssignKey();
-
         LoadShortcuts();
-
         RefreshCacheSummary();
-
         ActivePopup = "Settings";
-
     }
 
 
