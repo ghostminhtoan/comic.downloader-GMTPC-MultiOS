@@ -429,8 +429,8 @@
         <!-- FLOATING QUICK CONTROL BAR TRONG CỬA SỔ PHỤ DETACHED QUEUE -->
         <Border x:Name="FloatingQuickControlBorder"
                 IsVisible="{Binding IsFloatingQuickControlVisible}"
-                HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                Margin="0,0,24,45" CornerRadius="16"
+                HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                Margin="24,0,0,45" CornerRadius="16"
                 Background="#D80B132B" BorderBrush="#38BDF8" BorderThickness="1.5"
                 Padding="4,5" ZIndex="1200" IsHitTestVisible="True"
                 BoxShadow="0 8 30 0 #A0000000">

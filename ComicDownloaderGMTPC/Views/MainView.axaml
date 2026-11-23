@@ -11227,9 +11227,9 @@
 
                 IsVisible="{Binding IsFloatingQuickControlVisible}"
 
-                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                HorizontalAlignment="Left" VerticalAlignment="Bottom"
 
-                Margin="0,0,24,45" CornerRadius="16"
+                Margin="24,0,0,45" CornerRadius="16"
 
                 Background="#D80B132B" BorderBrush="#38BDF8" BorderThickness="1.5"
 

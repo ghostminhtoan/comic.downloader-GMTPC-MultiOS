@@ -858,9 +858,9 @@ public partial class MainView : UserControl
 
 
 
-            double minX = -Math.Max(0, Bounds.Width - 70);
+            double minX = -20;
 
-            double maxX = 20;
+            double maxX = Math.Max(0, Bounds.Width - 70);
 
             double minY = -Math.Max(0, Bounds.Height - 70);
 

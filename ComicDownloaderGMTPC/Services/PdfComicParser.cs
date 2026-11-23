@@ -903,64 +903,73 @@ public sealed class PdfComicParser
 
     private static Bitmap? DecodeStreamBytesToBitmap(PdfPageStreamInfo info, byte[] rawStream, int maxDecodeWidth)
     {
-        if (string.Equals(info.Filter, "DCTDecode", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(info.Filter, "JPXDecode", StringComparison.OrdinalIgnoreCase) ||
-            (rawStream.Length >= 3 && rawStream[0] == 0xFF && rawStream[1] == 0xD8 && rawStream[2] == 0xFF))
+        try
         {
-            try
-            {
-                using var ms = new MemoryStream(rawStream, writable: false);
-                return maxDecodeWidth > 0 ? Bitmap.DecodeToWidth(ms, maxDecodeWidth) : new Bitmap(ms);
-            }
-            catch
-            {
-                var (jpegBytes, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(rawStream, 90);
-                if (jpegBytes.Length > 0)
-                {
-                    using var ms2 = new MemoryStream(jpegBytes, writable: false);
-                    return maxDecodeWidth > 0 ? Bitmap.DecodeToWidth(ms2, maxDecodeWidth) : new Bitmap(ms2);
-                }
-            }
-        }
+            if (rawStream == null || rawStream.Length == 0) return null;
 
-        if (string.Equals(info.Filter, "FlateDecode", StringComparison.OrdinalIgnoreCase) ||
-            string.IsNullOrEmpty(info.Filter))
-        {
-            byte[]? decompressed = TryDecompressZlibOrDeflate(rawStream);
-            if (decompressed != null && decompressed.Length > 0)
+            if (string.Equals(info.Filter, "DCTDecode", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(info.Filter, "JPXDecode", StringComparison.OrdinalIgnoreCase) ||
+                (rawStream.Length >= 3 && rawStream[0] == 0xFF && rawStream[1] == 0xD8 && rawStream[2] == 0xFF))
             {
-                if (decompressed.Length >= 4 && decompressed[0] == 0xFF && decompressed[1] == 0xD8)
+                try
                 {
-                    using var ms = new MemoryStream(decompressed, writable: false);
+                    using var ms = new MemoryStream(rawStream, writable: false);
                     return maxDecodeWidth > 0 ? Bitmap.DecodeToWidth(ms, maxDecodeWidth) : new Bitmap(ms);
                 }
-
-                using var skBmp = ReconstructBitmapFromFlatePixels(info, decompressed);
-                if (skBmp != null)
+                catch
                 {
-                    using var skImg = SKImage.FromBitmap(skBmp);
-                    using var encoded = skImg.Encode(SKEncodedImageFormat.Jpeg, 92);
-                    if (encoded != null)
+                    var (jpegBytes, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(rawStream, 90);
+                    if (jpegBytes.Length > 0)
                     {
-                        using var ms = new MemoryStream(encoded.ToArray(), writable: false);
-                        return maxDecodeWidth > 0 ? Bitmap.DecodeToWidth(ms, maxDecodeWidth) : new Bitmap(ms);
+                        using var ms2 = new MemoryStream(jpegBytes, writable: false);
+                        return maxDecodeWidth > 0 ? Bitmap.DecodeToWidth(ms2, maxDecodeWidth) : new Bitmap(ms2);
                     }
                 }
             }
-        }
 
-        try
-        {
-            var (jpegFallback, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(rawStream, 90);
-            if (jpegFallback.Length > 0)
+            if (string.Equals(info.Filter, "FlateDecode", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrEmpty(info.Filter))
             {
-                using var ms = new MemoryStream(jpegFallback, writable: false);
-                return maxDecodeWidth > 0 ? Bitmap.DecodeToWidth(ms, maxDecodeWidth) : new Bitmap(ms);
-            }
-        }
-        catch { }
+                byte[]? decompressed = TryDecompressZlibOrDeflate(rawStream);
+                if (decompressed != null && decompressed.Length > 0)
+                {
+                    if (decompressed.Length >= 4 && decompressed[0] == 0xFF && decompressed[1] == 0xD8)
+                    {
+                        using var ms = new MemoryStream(decompressed, writable: false);
+                        return maxDecodeWidth > 0 ? Bitmap.DecodeToWidth(ms, maxDecodeWidth) : new Bitmap(ms);
+                    }
 
-        return null;
+                    using var skBmp = ReconstructBitmapFromFlatePixels(info, decompressed);
+                    if (skBmp != null)
+                    {
+                        using var skImg = SKImage.FromBitmap(skBmp);
+                        using var encoded = skImg.Encode(SKEncodedImageFormat.Jpeg, 92);
+                        if (encoded != null)
+                        {
+                            using var ms = new MemoryStream(encoded.ToArray(), writable: false);
+                            return maxDecodeWidth > 0 ? Bitmap.DecodeToWidth(ms, maxDecodeWidth) : new Bitmap(ms);
+                        }
+                    }
+                }
+            }
+
+            try
+            {
+                var (jpegFallback, _, _) = UniversalImageDecoder.ConvertToStandardJpeg(rawStream, 90);
+                if (jpegFallback.Length > 0)
+                {
+                    using var ms = new MemoryStream(jpegFallback, writable: false);
+                    return maxDecodeWidth > 0 ? Bitmap.DecodeToWidth(ms, maxDecodeWidth) : new Bitmap(ms);
+                }
+            }
+            catch { }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static byte[]? TryDecompressZlibOrDeflate(byte[] compressed)
@@ -993,117 +1002,140 @@ public sealed class PdfComicParser
 
     private static SKBitmap? ReconstructBitmapFromFlatePixels(PdfPageStreamInfo info, byte[] data)
     {
-        int width = info.Width;
-        int height = info.Height;
-        if (width <= 0 || height <= 0) return null;
-
-        int colors = Math.Max(1, info.Colors);
-        int bpc = info.BitsPerComponent > 0 ? info.BitsPerComponent : 8;
-        int bytesPerPixel = Math.Max(1, (colors * bpc + 7) / 8);
-        int stride = (width * colors * bpc + 7) / 8;
-
-        bool hasPngRowFilter = info.Predictor >= 10 || (data.Length == height * (stride + 1));
-        byte[] unfiltered = new byte[height * stride];
-
-        if (hasPngRowFilter && data.Length >= height * (stride + 1))
+        try
         {
-            int srcOffset = 0;
-            for (int y = 0; y < height; y++)
+            int width = info.Width;
+            int height = info.Height;
+            if (width <= 0 || height <= 0) return null;
+            if (width > 8000 || height > 8000 || (long)width * height > 30_000_000) return null;
+
+            int colors = Math.Max(1, info.Colors);
+            int bpc = info.BitsPerComponent > 0 ? info.BitsPerComponent : 8;
+            int bytesPerPixel = Math.Max(1, (colors * bpc + 7) / 8);
+            int stride = (width * colors * bpc + 7) / 8;
+            if (stride <= 0 || (long)height * stride > 60_000_000) return null;
+
+            bool hasPngRowFilter = info.Predictor >= 10 || (data.Length == height * (stride + 1));
+            byte[] unfiltered = new byte[height * stride];
+
+            if (hasPngRowFilter && data.Length >= height * (stride + 1))
             {
-                byte filterType = data[srcOffset++];
-                int rowStart = y * stride;
-                int prevRowStart = (y - 1) * stride;
-
-                for (int x = 0; x < stride; x++)
+                int srcOffset = 0;
+                for (int y = 0; y < height; y++)
                 {
-                    byte raw = data[srcOffset++];
-                    byte a = x >= bytesPerPixel ? unfiltered[rowStart + x - bytesPerPixel] : (byte)0;
-                    byte b = y > 0 ? unfiltered[prevRowStart + x] : (byte)0;
-                    byte c = (y > 0 && x >= bytesPerPixel) ? unfiltered[prevRowStart + x - bytesPerPixel] : (byte)0;
+                    if (srcOffset >= data.Length) break;
+                    byte filterType = data[srcOffset++];
+                    int rowStart = y * stride;
+                    int prevRowStart = (y - 1) * stride;
 
-                    unfiltered[rowStart + x] = filterType switch
+                    for (int x = 0; x < stride; x++)
                     {
-                        0 => raw,
-                        1 => (byte)(raw + a),
-                        2 => (byte)(raw + b),
-                        3 => (byte)(raw + ((a + b) >> 1)),
-                        4 => (byte)(raw + PaethPredictor(a, b, c)),
-                        _ => raw
-                    };
+                        if (srcOffset >= data.Length) break;
+                        byte raw = data[srcOffset++];
+                        byte a = x >= bytesPerPixel ? unfiltered[rowStart + x - bytesPerPixel] : (byte)0;
+                        byte b = y > 0 ? unfiltered[prevRowStart + x] : (byte)0;
+                        byte c = (y > 0 && x >= bytesPerPixel) ? unfiltered[prevRowStart + x - bytesPerPixel] : (byte)0;
+
+                        unfiltered[rowStart + x] = filterType switch
+                        {
+                            0 => raw,
+                            1 => (byte)(raw + a),
+                            2 => (byte)(raw + b),
+                            3 => (byte)(raw + ((a + b) >> 1)),
+                            4 => (byte)(raw + PaethPredictor(a, b, c)),
+                            _ => raw
+                        };
+                    }
                 }
             }
+            else if (data.Length >= height * stride)
+            {
+                Buffer.BlockCopy(data, 0, unfiltered, 0, height * stride);
+            }
+            else
+            {
+                return null;
+            }
+
+            var bmp = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Opaque);
+            byte[] rgba = new byte[width * height * 4];
+            byte[]? palette = info.PaletteBytes;
+
+            for (int y = 0; y < height; y++)
+            {
+                int rowStart = y * stride;
+                int dstRowStart = y * width * 4;
+
+                for (int x = 0; x < width; x++)
+                {
+                    int dstIdx = dstRowStart + (x * 4);
+                    if (dstIdx + 3 >= rgba.Length) break;
+
+                    if (colors == 3 && bpc == 8)
+                    {
+                        int srcIdx = rowStart + (x * 3);
+                        if (srcIdx + 2 < unfiltered.Length)
+                        {
+                            rgba[dstIdx] = unfiltered[srcIdx];
+                            rgba[dstIdx + 1] = unfiltered[srcIdx + 1];
+                            rgba[dstIdx + 2] = unfiltered[srcIdx + 2];
+                            rgba[dstIdx + 3] = 255;
+                        }
+                    }
+                    else if (colors == 1 && bpc == 8)
+                    {
+                        int srcIdx = rowStart + x;
+                        if (srcIdx < unfiltered.Length)
+                        {
+                            byte val = unfiltered[srcIdx];
+                            if (palette != null && val * 3 + 2 < palette.Length)
+                            {
+                                rgba[dstIdx] = palette[val * 3];
+                                rgba[dstIdx + 1] = palette[val * 3 + 1];
+                                rgba[dstIdx + 2] = palette[val * 3 + 2];
+                                rgba[dstIdx + 3] = 255;
+                            }
+                            else
+                            {
+                                rgba[dstIdx] = val;
+                                rgba[dstIdx + 1] = val;
+                                rgba[dstIdx + 2] = val;
+                                rgba[dstIdx + 3] = 255;
+                            }
+                        }
+                    }
+                    else if (colors == 4 && bpc == 8)
+                    {
+                        int srcIdx = rowStart + (x * 4);
+                        if (srcIdx + 3 < unfiltered.Length)
+                        {
+                            int c = unfiltered[srcIdx];
+                            int m = unfiltered[srcIdx + 1];
+                            int yCol = unfiltered[srcIdx + 2];
+                            int k = unfiltered[srcIdx + 3];
+                            rgba[dstIdx] = (byte)Math.Clamp(255 - Math.Min(255, c * (255 - k) / 255 + k), 0, 255);
+                            rgba[dstIdx + 1] = (byte)Math.Clamp(255 - Math.Min(255, m * (255 - k) / 255 + k), 0, 255);
+                            rgba[dstIdx + 2] = (byte)Math.Clamp(255 - Math.Min(255, yCol * (255 - k) / 255 + k), 0, 255);
+                            rgba[dstIdx + 3] = 255;
+                        }
+                    }
+                }
+            }
+
+            IntPtr ptr = bmp.GetPixels();
+            if (ptr != IntPtr.Zero)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(rgba, 0, ptr, rgba.Length);
+                return bmp;
+            }
+
+            bmp.Dispose();
+            return null;
         }
-        else if (data.Length >= height * stride)
-        {
-            Buffer.BlockCopy(data, 0, unfiltered, 0, height * stride);
-        }
-        else
+        catch
         {
             return null;
         }
-
-        var bmp = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Opaque);
-        byte[] rgba = new byte[width * height * 4];
-        byte[]? palette = info.PaletteBytes;
-
-        for (int y = 0; y < height; y++)
-        {
-            int rowStart = y * stride;
-            int dstRowStart = y * width * 4;
-
-            for (int x = 0; x < width; x++)
-            {
-                int dstIdx = dstRowStart + (x * 4);
-                if (colors == 3 && bpc == 8)
-                {
-                    int srcIdx = rowStart + (x * 3);
-                    rgba[dstIdx] = unfiltered[srcIdx];
-                    rgba[dstIdx + 1] = unfiltered[srcIdx + 1];
-                    rgba[dstIdx + 2] = unfiltered[srcIdx + 2];
-                    rgba[dstIdx + 3] = 255;
-                }
-                else if (colors == 1 && bpc == 8)
-                {
-                    byte val = unfiltered[rowStart + x];
-                    if (palette != null && val * 3 + 2 < palette.Length)
-                    {
-                        rgba[dstIdx] = palette[val * 3];
-                        rgba[dstIdx + 1] = palette[val * 3 + 1];
-                        rgba[dstIdx + 2] = palette[val * 3 + 2];
-                        rgba[dstIdx + 3] = 255;
-                    }
-                    else
-                    {
-                        rgba[dstIdx] = val;
-                        rgba[dstIdx + 1] = val;
-                        rgba[dstIdx + 2] = val;
-                        rgba[dstIdx + 3] = 255;
-                    }
-                }
-                else if (colors == 4 && bpc == 8)
-                {
-                    int srcIdx = rowStart + (x * 4);
-                    int c = unfiltered[srcIdx];
-                    int m = unfiltered[srcIdx + 1];
-                    int yCol = unfiltered[srcIdx + 2];
-                    int k = unfiltered[srcIdx + 3];
-                    rgba[dstIdx] = (byte)Math.Clamp(255 - Math.Min(255, c * (255 - k) / 255 + k), 0, 255);
-                    rgba[dstIdx + 1] = (byte)Math.Clamp(255 - Math.Min(255, m * (255 - k) / 255 + k), 0, 255);
-                    rgba[dstIdx + 2] = (byte)Math.Clamp(255 - Math.Min(255, yCol * (255 - k) / 255 + k), 0, 255);
-                    rgba[dstIdx + 3] = 255;
-                }
-            }
-        }
-
-        IntPtr ptr = bmp.GetPixels();
-        if (ptr != IntPtr.Zero)
-        {
-            System.Runtime.InteropServices.Marshal.Copy(rgba, 0, ptr, rgba.Length);
-            return bmp;
-        }
-
-        bmp.Dispose();
-        return null;
     }
 
     private static byte PaethPredictor(byte a, byte b, byte c)

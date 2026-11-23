@@ -374,6 +374,12 @@ public partial class LibraryViewModel : ViewModelBase
 
     public void ApplyFilter()
     {
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(ApplyFilter);
+            return;
+        }
+
         var prevSelected = SelectedComic;
         string q = (SearchQuery ?? string.Empty).Trim();
 
@@ -449,13 +455,15 @@ public partial class LibraryViewModel : ViewModelBase
             var list = await _scanner.ScanLibraryRootAsync(LibraryRootPath, ct);
             if (ct.IsCancellationRequested) return;
 
-            AllComics.Clear();
-            foreach (var c in list)
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                AllComics.Add(c);
-            }
-
-            ApplyFilter();
+                AllComics.Clear();
+                foreach (var c in list)
+                {
+                    AllComics.Add(c);
+                }
+                ApplyFilter();
+            });
 
             int totalChapters = list.Sum(c => c.TotalChapters);
             int externalHistoryCount = list.Count(c => c.IsExternalHistoryItem);
@@ -572,20 +580,23 @@ public partial class LibraryViewModel : ViewModelBase
                     ReadProgressStore.Instance.FlushImmediately();
                     ReadProgressStore.Instance.SaveHistoryToDisk();
 
-                    var existing = AllComics.FirstOrDefault(c =>
-                        string.Equals(c.RootFolderPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
-                    if (existing == null)
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                     {
-                        AllComics.Insert(0, quickComic);
-                        _ = _scanner.LoadCoversAsync(new[] { quickComic }, CancellationToken.None);
-                    }
-                    else
-                    {
-                        quickComic = existing;
-                    }
+                        var existing = AllComics.FirstOrDefault(c =>
+                            string.Equals(c.RootFolderPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
+                        if (existing == null)
+                        {
+                            AllComics.Insert(0, quickComic);
+                            _ = _scanner.LoadCoversAsync(new[] { quickComic }, CancellationToken.None);
+                        }
+                        else
+                        {
+                            quickComic = existing;
+                        }
 
-                    ApplyFilter();
-                    SelectedComic = quickComic;
+                        ApplyFilter();
+                        SelectedComic = quickComic;
+                    });
 
                     var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
                     StatusMessage = $"📖 Đã nạp '{quickComic.Title}' ({quickComic.TotalChapters} chương). Đang mở: {targetChap.Title}";
@@ -612,20 +623,23 @@ public partial class LibraryViewModel : ViewModelBase
             if (quickComic != null && quickComic.Chapters.Count > 0)
             {
                 ReadProgressStore.Instance.RegisterReadComic(quickComic.RootFolderPath, touchTimestamp: true);
-                var existing = AllComics.FirstOrDefault(c =>
-                    string.Equals(c.RootFolderPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
-                if (existing == null)
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    AllComics.Insert(0, quickComic);
-                    _ = _scanner.LoadCoversAsync(new[] { quickComic }, CancellationToken.None);
-                }
-                else
-                {
-                    quickComic = existing;
-                }
+                    var existing = AllComics.FirstOrDefault(c =>
+                        string.Equals(c.RootFolderPath, quickComic.RootFolderPath, StringComparison.OrdinalIgnoreCase));
+                    if (existing == null)
+                    {
+                        AllComics.Insert(0, quickComic);
+                        _ = _scanner.LoadCoversAsync(new[] { quickComic }, CancellationToken.None);
+                    }
+                    else
+                    {
+                        quickComic = existing;
+                    }
 
-                ApplyFilter();
-                SelectedComic = quickComic;
+                    ApplyFilter();
+                    SelectedComic = quickComic;
+                });
 
                 var targetChap = quickComic.GetBestResumeChapter() ?? quickComic.Chapters[0];
                 StatusMessage = $"📖 Đã nạp '{quickComic.Title}' ({quickComic.TotalChapters} chương). Đang mở: {targetChap.Title}";

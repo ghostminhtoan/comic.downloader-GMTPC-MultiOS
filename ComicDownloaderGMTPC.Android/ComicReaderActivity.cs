@@ -210,6 +210,11 @@ public class ComicReaderActivity : AvaloniaActivity
         ApplyImmersiveFullScreen(_subscribedVm?.IsFullScreen ?? true);
         if (_subscribedVm != null)
         {
+            _subscribedVm.ActivePopup = string.Empty;
+            if (_subscribedVm.IsLoadingChapter && _subscribedVm.Pages.Count > 0)
+            {
+                _subscribedVm.IsLoadingChapter = false;
+            }
             ApplyOrientationMode(_subscribedVm.OrientationLockMode);
             ApplyDisplaySettings(_subscribedVm.IsAutoSystemBrightness, _subscribedVm.SystemBrightnessPercent, _subscribedVm.IsKeepScreenOn);
         }
@@ -239,6 +244,11 @@ public class ComicReaderActivity : AvaloniaActivity
         ApplyImmersiveFullScreen(_subscribedVm?.IsFullScreen ?? true);
         if (_subscribedVm != null)
         {
+            _subscribedVm.ActivePopup = string.Empty;
+            if (_subscribedVm.IsLoadingChapter && _subscribedVm.Pages.Count > 0)
+            {
+                _subscribedVm.IsLoadingChapter = false;
+            }
             ApplyOrientationMode(_subscribedVm.OrientationLockMode);
             ApplyDisplaySettings(_subscribedVm.IsAutoSystemBrightness, _subscribedVm.SystemBrightnessPercent, _subscribedVm.IsKeepScreenOn);
         }
@@ -337,6 +347,19 @@ public class ComicReaderActivity : AvaloniaActivity
             }
         }
 
+        // 4. Fallback cuối cùng: Tự động khôi phục bộ truyện vừa đọc gần nhất từ ReadProgressStore
+        try
+        {
+            var historyItem = ReadProgressStore.Instance.GetUnifiedHistoryItems().FirstOrDefault(h => h.HasLocalPath);
+            string? lastComic = historyItem?.Path;
+            if (!string.IsNullOrWhiteSpace(lastComic) && (File.Exists(lastComic) || Directory.Exists(lastComic)))
+            {
+                RestoreReaderSessionFromExtras(lastComic, null);
+                return;
+            }
+        }
+        catch { }
+
         AttachViewModel(null);
     }
 
@@ -410,11 +433,23 @@ public class ComicReaderActivity : AvaloniaActivity
 
                     var targetChap = comic.GetBestResumeChapter() ?? comic.Chapters[0];
 
+                    int resumePageIndex = targetChap.LastReadPage > 0
+                        ? targetChap.LastReadPage - 1
+                        : ReadProgressStore.Instance.GetLastReadPage(targetChap.EffectiveProgressKey);
+                    if (resumePageIndex <= 0 && !string.IsNullOrWhiteSpace(targetChap.LocalPath))
+                    {
+                        resumePageIndex = ReadProgressStore.Instance.GetLastReadPage(targetChap.LocalPath);
+                    }
+                    if (resumePageIndex <= 0)
+                    {
+                        resumePageIndex = ReadProgressStore.Instance.GetLastReadPage(comic.RootFolderPath);
+                    }
+
                     await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
                     {
                         try
                         {
-                            await activeVm.InitializeAsync(comic, targetChap);
+                            await activeVm.InitializeAsync(comic, targetChap, Math.Max(0, resumePageIndex));
                             UpdateRecentsTaskCardTitle(activeVm);
 
                             var sharedMainVm = App.TryGetSharedMainViewModel();
@@ -485,7 +520,19 @@ public class ComicReaderActivity : AvaloniaActivity
                         ?? comic.GetBestResumeChapter()
                         ?? comic.Chapters[0];
 
-                    await activeVm.InitializeAsync(comic, targetChap);
+                    int resumePageIndex = targetChap.LastReadPage > 0
+                        ? targetChap.LastReadPage - 1
+                        : ReadProgressStore.Instance.GetLastReadPage(targetChap.EffectiveProgressKey);
+                    if (resumePageIndex <= 0 && !string.IsNullOrWhiteSpace(targetChap.LocalPath))
+                    {
+                        resumePageIndex = ReadProgressStore.Instance.GetLastReadPage(targetChap.LocalPath);
+                    }
+                    if (resumePageIndex <= 0)
+                    {
+                        resumePageIndex = ReadProgressStore.Instance.GetLastReadPage(comic.RootFolderPath);
+                    }
+
+                    await activeVm.InitializeAsync(comic, targetChap, Math.Max(0, resumePageIndex));
                 }
                 else
                 {
@@ -698,7 +745,37 @@ public class ComicReaderActivity : AvaloniaActivity
         base.OnPause();
         try
         {
-            _subscribedVm?.SaveCurrentReadingSession();
+            if (_subscribedVm != null)
+            {
+                _subscribedVm.ActivePopup = string.Empty;
+                _subscribedVm.SaveCurrentReadingSession();
+            }
+            ReadProgressStore.Instance.FlushImmediately();
+            ReadProgressStore.Instance.SaveHistoryToDisk();
+        }
+        catch { }
+    }
+
+    protected override void OnSaveInstanceState(Bundle outState)
+    {
+        base.OnSaveInstanceState(outState);
+        try
+        {
+            if (_subscribedVm != null)
+            {
+                _subscribedVm.SaveCurrentReadingSession();
+                string? root = _subscribedVm.ParentComic?.RootFolderPath ?? _subscribedVm.CurrentChapter?.LocalPath;
+                if (!string.IsNullOrWhiteSpace(root))
+                {
+                    outState.PutString(ExtraComicRootPath, root);
+                }
+                string? chPath = _subscribedVm.CurrentChapter?.LocalPath;
+                if (!string.IsNullOrWhiteSpace(chPath))
+                {
+                    outState.PutString(ExtraChapterLocalPath, chPath);
+                }
+                outState.PutInt("SavedPageIndex", _subscribedVm.CurrentPageIndex);
+            }
         }
         catch { }
     }

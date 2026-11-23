@@ -4979,8 +4979,37 @@ public partial class ComicReaderViewModel : ViewModelBase
 
 
     [ObservableProperty]
-
     private bool _isLoadingChapter;
+
+    private CancellationTokenSource? _loadingWatchdogCts;
+
+    partial void OnIsLoadingChapterChanged(bool value)
+    {
+        if (value)
+        {
+            _loadingWatchdogCts?.Cancel();
+            _loadingWatchdogCts = new CancellationTokenSource();
+            var token = _loadingWatchdogCts.Token;
+            _ = Task.Delay(6000, token).ContinueWith(t =>
+            {
+                if (!t.IsCanceled && IsLoadingChapter)
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        if (IsLoadingChapter)
+                        {
+                            IsLoadingChapter = false;
+                        }
+                    });
+                }
+            }, TaskScheduler.Default);
+        }
+        else
+        {
+            _loadingWatchdogCts?.Cancel();
+            _loadingWatchdogCts = null;
+        }
+    }
 
 
 
@@ -5642,6 +5671,19 @@ public partial class ComicReaderViewModel : ViewModelBase
             {
                 // Đọc lại vị trí đọc dở đã lưu của chương (nếu có) thay vì luôn luôn ép về 0
                 int lastSaved = _progressStore.GetLastReadPage(chapter.EffectiveProgressKey);
+                if (lastSaved <= 0 && !string.IsNullOrWhiteSpace(chapter.LocalPath))
+                {
+                    lastSaved = _progressStore.GetLastReadPage(chapter.LocalPath);
+                }
+                if (lastSaved <= 0 && chapter.LastReadPage > 0)
+                {
+                    lastSaved = chapter.LastReadPage - 1;
+                }
+                string? comicRootPath = ParentComic?.RootFolderPath;
+                if (lastSaved <= 0 && !string.IsNullOrWhiteSpace(comicRootPath))
+                {
+                    lastSaved = _progressStore.GetLastReadPage(comicRootPath);
+                }
                 savedPageIndex = (lastSaved > 0 && lastSaved < TotalPages) ? lastSaved : 0;
             }
 
@@ -6122,6 +6164,20 @@ public partial class ComicReaderViewModel : ViewModelBase
         }
 
 
+
+        int currentPage0Based = Math.Max(0, CurrentPageIndex);
+        if (!string.IsNullOrWhiteSpace(chapter.EffectiveProgressKey))
+        {
+            _progressStore.SaveProgress(chapter.EffectiveProgressKey, currentPage0Based);
+        }
+        if (!string.IsNullOrWhiteSpace(chapter.LocalPath))
+        {
+            _progressStore.SaveProgress(chapter.LocalPath, currentPage0Based);
+        }
+        if (!string.IsNullOrWhiteSpace(comicRoot))
+        {
+            _progressStore.SaveProgress(comicRoot, currentPage0Based);
+        }
 
         if (!string.IsNullOrWhiteSpace(comicRoot))
 
