@@ -783,8 +783,30 @@ public partial class LibraryViewModel : ViewModelBase
                     _ = LoadHistoryItemsAsync();
                 });
             };
-            ComicReaderService.AndroidLaunchSeparateReaderTask.Invoke(readerVm);
-            await readerVm.InitializeAsync(comic, chapter, initialPageIndex);
+            try
+            {
+                ComicReaderService.AndroidLaunchSeparateReaderTask.Invoke(readerVm);
+                await readerVm.InitializeAsync(comic, chapter, initialPageIndex);
+            }
+            catch (Exception ex)
+            {
+                global::System.Diagnostics.Debug.WriteLine($"[Reader] Lỗi mở Task đọc truyện độc lập Android: {ex.Message}");
+                // Fallback an toàn về chế độ đọc nội tuyến (Inline Reader)
+                void OnInlineClose()
+                {
+                    readerVm.CloseRequested -= OnInlineClose;
+                    IsInlineReaderVisible = false;
+                    InlineReaderVm = null;
+                    comic?.RefreshReadStatus();
+                    ApplyFilter();
+                    _ = LoadHistoryItemsAsync();
+                }
+
+                readerVm.CloseRequested += OnInlineClose;
+                InlineReaderVm = readerVm;
+                IsInlineReaderVisible = true;
+                await readerVm.InitializeAsync(comic, chapter, initialPageIndex);
+            }
         }
         else
         {
@@ -1038,10 +1060,18 @@ public partial class LibraryViewModel : ViewModelBase
     {
         if (item == null || string.IsNullOrWhiteSpace(item.Path)) return;
 
-        if (item.Type == StorageItemType.Recent && File.Exists(item.Path))
+        if (item.Type == StorageItemType.Recent)
         {
-            await OpenPathToReadAsync(item.Path);
-            return;
+            if (File.Exists(item.Path) || Directory.Exists(item.Path))
+            {
+                await OpenPathToReadAsync(item.Path);
+                return;
+            }
+            else
+            {
+                await OpenMostRecentComicAsync();
+                return;
+            }
         }
 
         string targetDir = item.Path;
@@ -2519,23 +2549,42 @@ public partial class LibraryViewModel : ViewModelBase
     [RelayCommand]
     public async Task OpenMostRecentComicAsync()
     {
-        var recentPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();
-        string? latestPath = recentPaths.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && (File.Exists(p) || Directory.Exists(p)));
+        try
+        {
+            var recentPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();
+            string? latestPath = recentPaths.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && (File.Exists(p) || Directory.Exists(p)));
 
-        if (string.IsNullOrWhiteSpace(latestPath) && OperatingSystem.IsAndroid() && recentPaths.Count > 0)
-        {
-            LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke();
-            await Task.Delay(100);
-            latestPath = recentPaths.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && (File.Exists(p) || Directory.Exists(p)));
-        }
+            if (string.IsNullOrWhiteSpace(latestPath))
+            {
+                var history = ReadProgressStore.Instance.GetUnifiedHistoryItems();
+                latestPath = history.FirstOrDefault(h => h.HasLocalPath && !string.IsNullOrWhiteSpace(h.Path) && (File.Exists(h.Path) || Directory.Exists(h.Path)))?.Path;
+            }
 
-        if (!string.IsNullOrWhiteSpace(latestPath))
-        {
-            await OpenPathToReadInternalAsync(latestPath);
+            if (string.IsNullOrWhiteSpace(latestPath) && OperatingSystem.IsAndroid())
+            {
+                try { LibraryScannerService.AndroidGetExternalStoragePaths?.Invoke(); } catch { }
+                await Task.Delay(100);
+                recentPaths = ReadProgressStore.Instance.GetKnownReadComicPaths();
+                latestPath = recentPaths.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && (File.Exists(p) || Directory.Exists(p)));
+                if (string.IsNullOrWhiteSpace(latestPath))
+                {
+                    var history = ReadProgressStore.Instance.GetUnifiedHistoryItems();
+                    latestPath = history.FirstOrDefault(h => h.HasLocalPath && !string.IsNullOrWhiteSpace(h.Path) && (File.Exists(h.Path) || Directory.Exists(h.Path)))?.Path;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(latestPath))
+            {
+                await OpenPathToReadInternalAsync(latestPath);
+            }
+            else
+            {
+                StatusMessage = "ℹ️ Chưa có truyện đọc gần đây.";
+            }
         }
-        else
+        catch (Exception ex)
         {
-            StatusMessage = "ℹ️ Chưa có truyện đọc gần đây.";
+            StatusMessage = $"❌ Lỗi mở truyện gần đây: {ex.Message}";
         }
     }
 
@@ -2596,9 +2645,12 @@ public partial class LibraryViewModel : ViewModelBase
                     targetChap.LastReadPage = pageToJump + 1;
                 }
 
-                await OpenChapterInternalAsync(quickComic, targetChap);
-                _ = LoadHistoryItemsAsync();
-                LoadStorageItems();
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    await OpenChapterInternalAsync(quickComic, targetChap);
+                    _ = LoadHistoryItemsAsync();
+                    LoadStorageItems();
+                });
             }
             else
             {

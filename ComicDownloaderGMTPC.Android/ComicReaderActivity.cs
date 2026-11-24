@@ -532,7 +532,17 @@ public class ComicReaderActivity : AvaloniaActivity
                         resumePageIndex = ReadProgressStore.Instance.GetLastReadPage(comic.RootFolderPath);
                     }
 
-                    await activeVm.InitializeAsync(comic, targetChap, Math.Max(0, resumePageIndex));
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+                    {
+                        try
+                        {
+                            await activeVm.InitializeAsync(comic, targetChap, Math.Max(0, resumePageIndex));
+                        }
+                        catch (Exception exInit)
+                        {
+                            global::Android.Util.Log.Error("ComicGMTPC", $"Lỗi nạp phiên đọc Reader: {exInit.Message}");
+                        }
+                    });
                 }
                 else
                 {

@@ -1186,7 +1186,10 @@ public partial class ComicReaderControl : UserControl
 
         if (_autoScrollVx != 0)
         {
-            newX = Math.Clamp(sv.Offset.X + _autoScrollVx, 0, maxX);
+            double effectiveVx = (DataContext is ComicReaderViewModel vm && vm.IsHorizontalScrollMode && vm.IsRightToLeft)
+                ? -_autoScrollVx
+                : _autoScrollVx;
+            newX = Math.Clamp(sv.Offset.X + effectiveVx, 0, maxX);
         }
         if (_autoScrollVy != 0)
         {
