@@ -4689,10 +4689,13 @@ public partial class ComicReaderViewModel : ViewModelBase
         if (Pages.Count > 0)
         {
             int clampedIdx = Math.Clamp(targetIdx, 0, Pages.Count - 1);
+            _suppressScrollSync = false;
             CurrentPageIndex = clampedIdx;
             RequestScrollToPage(clampedIdx);
             RequestRefreshScrubber();
             ShowTransientToast($"🔖 Đã nhảy tới dấu trang: {item.LeftDisplayText}");
+            Dispatcher.UIThread.Post(() => RequestScrollToPage(clampedIdx), DispatcherPriority.Loaded);
+            Dispatcher.UIThread.Post(() => RequestScrollToPage(clampedIdx), DispatcherPriority.Render);
         }
     }
 
@@ -5254,10 +5257,12 @@ public partial class ComicReaderViewModel : ViewModelBase
                     await LoadChapterInternalAsync(targetChap);
                     Dispatcher.UIThread.Post(() =>
                     {
+                        _suppressScrollSync = false;
                         CurrentPageIndex = localIndex;
                         RequestScrollToPage(localIndex);
                         RequestRefreshScrubber();
                         ShowTransientToast($"📑 Đã chuyển tới mục lục PDF: {value.Title} (Trang {localIndex + 1})");
+                        Dispatcher.UIThread.Post(() => RequestScrollToPage(localIndex), DispatcherPriority.Render);
                     });
                 });
                 ActivePopup = string.Empty;
@@ -5834,9 +5839,9 @@ public partial class ComicReaderViewModel : ViewModelBase
 
                 {
 
-                    RequestScrollToPage(startIndex);
-
                     _suppressScrollSync = false;
+
+                    RequestScrollToPage(startIndex);
 
                     RequestRefreshScrubber();
 
@@ -5854,9 +5859,9 @@ public partial class ComicReaderViewModel : ViewModelBase
 
                 {
 
-                    RequestScrollToPage(0);
-
                     _suppressScrollSync = false;
+
+                    RequestScrollToPage(0);
 
                     RequestRefreshScrubber();
 

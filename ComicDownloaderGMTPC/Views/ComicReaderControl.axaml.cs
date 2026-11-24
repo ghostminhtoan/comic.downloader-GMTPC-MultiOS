@@ -1940,9 +1940,10 @@ public partial class ComicReaderControl : UserControl
                 {
                     sv.Offset = new Vector(0, 0);
                 }
-                else if (maxY > 10)
+                else
                 {
-                    sv.Offset = new Vector(0, Math.Clamp(targetY, 0, maxY));
+                    double clampedY = maxY > 10 ? Math.Clamp(targetY, 0, maxY) : targetY;
+                    sv.Offset = new Vector(0, clampedY);
                 }
             }
             else if (vm.IsScrollMode && vm.IsHorizontalScrollMode)
@@ -1959,10 +1960,12 @@ public partial class ComicReaderControl : UserControl
                     double targetX = vm.IsRightToLeft ? maxX : 0;
                     sv.Offset = new Vector(Math.Clamp(targetX, 0, Math.Max(0, maxX)), 0);
                 }
-                else if (maxX > 10)
+                else
                 {
-                    double targetX = vm.IsRightToLeft ? (maxX - accX) : accX;
-                    sv.Offset = new Vector(Math.Clamp(targetX, 0, maxX), 0);
+                    double targetX = vm.IsRightToLeft
+                        ? (maxX > 10 ? Math.Clamp(maxX - accX, 0, maxX) : 0)
+                        : (maxX > 10 ? Math.Clamp(accX, 0, maxX) : accX);
+                    sv.Offset = new Vector(targetX, 0);
                 }
             }
             else if (vm.IsFlipMode)
@@ -2074,7 +2077,7 @@ public partial class ComicReaderControl : UserControl
             return;
         }
 
-        bool isTargetingNonZeroPage = _targetRequestedPageIndex.HasValue && _targetRequestedPageIndex.Value > 0 && (now - _lastTargetRequestedTick < 1200);
+        bool isTargetingNonZeroPage = _targetRequestedPageIndex.HasValue && _targetRequestedPageIndex.Value > 0 && (now - _lastTargetRequestedTick < 3000);
 
         // A. CHẾ ĐỘ CUỘN NGANG (Horizontal Scroll Mode LTR / RTL)
         if (vm.IsHorizontalScrollMode)
@@ -2089,7 +2092,7 @@ public partial class ComicReaderControl : UserControl
 
             if (isAtStart)
             {
-                if (isTargetingNonZeroPage) return;
+                if (isTargetingNonZeroPage || _isProgrammaticScroll || (vm.CurrentPageIndex > 0 && now - _lastTargetRequestedTick < 2500)) return;
                 vm.IsScrollAtStart = true;
                 vm.IsScrollAtEnd = false;
                 vm.UpdatePageIndexFromScroll(0);
@@ -2156,7 +2159,7 @@ public partial class ComicReaderControl : UserControl
         if (maxY <= 10 && vm.Pages.Count > 1) return;
         if (scrollViewer.Offset.Y <= 6)
         {
-            if (isTargetingNonZeroPage) return;
+            if (isTargetingNonZeroPage || _isProgrammaticScroll || (vm.CurrentPageIndex > 0 && now - _lastTargetRequestedTick < 2500)) return;
             vm.IsScrollAtStart = true;
             vm.IsScrollAtEnd = false;
             vm.UpdatePageIndexFromScroll(0);
