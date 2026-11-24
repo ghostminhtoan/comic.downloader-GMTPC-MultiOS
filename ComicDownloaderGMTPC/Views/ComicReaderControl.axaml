@@ -183,7 +183,7 @@
                          Padding="0"
                          Focusable="False"
                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                         ScrollViewer.VerticalScrollBarVisibility="{Binding ReaderVerticalScrollBarVisibility}">
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate>
                             <VirtualizingStackPanel Orientation="Vertical" />
@@ -246,7 +246,7 @@
                          Padding="0"
                          Focusable="False"
                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                         ScrollViewer.VerticalScrollBarVisibility="{Binding ReaderVerticalScrollBarVisibility}">
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate>
                             <VirtualizingStackPanel Orientation="Horizontal" />
@@ -288,7 +288,7 @@
                 <ScrollViewer x:Name="FlipModeScrollViewer"
                               IsVisible="{Binding IsFlipMode}"
                               HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="{Binding ReaderVerticalScrollBarVisibility}"
                               Background="{Binding ReaderBackgroundColor}">
                     <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
                         <LayoutTransformControl.LayoutTransform>
@@ -608,6 +608,81 @@
                 </Button>
             </Panel>
         </Panel>
+
+        <!-- ========================================================================= -->
+        <!-- H. FLOATING AUTO-SCROLL INDICATOR BUTTON (CHUẨN ẢNH 1 & ẢNH 2)            -->
+        <!-- - Chế độ Cuộn Dọc (Ảnh 1): (1) Cả 2 mũi tên, (2) Mũi tên lên, (3) Mũi tên xuống -->
+        <!-- - Chế độ Cuộn Ngang (Ảnh 2): (1) Cả 2 mũi tên, (2) Mũi tên phải, (3) Mũi tên trái -->
+        <!-- ========================================================================= -->
+        <Canvas x:Name="AutoScrollCanvas"
+                IsVisible="False"
+                IsHitTestVisible="False"
+                ZIndex="1850">
+            <Border x:Name="AutoScrollIndicatorBorder"
+                    Width="64" Height="64"
+                    Background="#F1F5F9"
+                    BorderBrush="#CBD5E1"
+                    BorderThickness="1.5"
+                    CornerRadius="12"
+                    BoxShadow="0 4 16 0 #50000000"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top">
+                <Panel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <!-- Vertical: (1) Cả 2 mũi tên lên & xuống -->
+                    <StackPanel x:Name="AutoScrollVertBoth"
+                                Spacing="4"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                IsVisible="False">
+                        <Path Data="M 11 2 C 11.8 0.6 13.2 0.6 14 2 L 23.5 15 C 24.5 16.5 23.5 18 21.8 18 L 3.2 18 C 1.5 18 0.5 16.5 1.5 15 Z"
+                              Fill="#000000" Width="22" Height="15" Stretch="Uniform" />
+                        <Path Data="M 11 16 C 11.8 17.4 13.2 17.4 14 16 L 23.5 3 C 24.5 1.5 23.5 0 21.8 0 L 3.2 0 C 1.5 0 0.5 1.5 1.5 3 Z"
+                              Fill="#000000" Width="22" Height="15" Stretch="Uniform" />
+                    </StackPanel>
+
+                    <!-- Vertical: (2) Mũi tên lên khi swipe/kéo lên -->
+                    <Path x:Name="AutoScrollVertUp"
+                          Data="M 13 2 C 14 0.5 16 0.5 17 2 L 28 19 C 29 20.8 27.7 23 25.5 23 L 4.5 23 C 2.3 23 1 20.8 2 19 Z"
+                          Fill="#000000" Width="32" Height="28" Stretch="Uniform"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                          IsVisible="False" />
+
+                    <!-- Vertical: (3) Mũi tên xuống khi swipe/kéo xuống -->
+                    <Path x:Name="AutoScrollVertDown"
+                          Data="M 13 21 C 14 22.5 16 22.5 17 21 L 28 4 C 29 2.2 27.7 0 25.5 0 L 4.5 0 C 2.3 0 1 2.2 2 4 Z"
+                          Fill="#000000" Width="32" Height="28" Stretch="Uniform"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                          IsVisible="False" />
+
+                    <!-- Horizontal: (1) Cả 2 mũi tên trái & phải -->
+                    <StackPanel x:Name="AutoScrollHorizBoth"
+                                Orientation="Horizontal"
+                                Spacing="4"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                IsVisible="False">
+                        <Path Data="M 2 11 C 0.6 11.8 0.6 13.2 2 14 L 15 23.5 C 16.5 24.5 18 23.5 18 21.8 L 18 3.2 C 18 1.5 16.5 0.5 15 1.5 Z"
+                              Fill="#000000" Width="15" Height="22" Stretch="Uniform" />
+                        <Path Data="M 16 11 C 17.4 11.8 17.4 13.2 16 14 L 3 23.5 C 1.5 24.5 0 23.5 0 21.8 L 0 3.2 C 0 1.5 1.5 0.5 3 1.5 Z"
+                              Fill="#000000" Width="15" Height="22" Stretch="Uniform" />
+                    </StackPanel>
+
+                    <!-- Horizontal: (2) Mũi tên phải khi swipe qua phải -->
+                    <Path x:Name="AutoScrollHorizRight"
+                          Data="M 21 13 C 22.5 14 22.5 16 21 17 L 4 28 C 2.2 29 0 27.7 0 25.5 L 0 4.5 C 0 2.3 2.2 1 4 2 Z"
+                          Fill="#000000" Width="28" Height="32" Stretch="Uniform"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                          IsVisible="False" />
+
+                    <!-- Horizontal: (3) Mũi tên trái khi swipe qua trái -->
+                    <Path x:Name="AutoScrollHorizLeft"
+                          Data="M 2 13 C 0.5 14 0.5 16 2 17 L 19 28 C 20.8 29 23 27.7 23 25.5 L 23 4.5 C 23 2.3 20.8 1 19 2 Z"
+                          Fill="#000000" Width="28" Height="32" Stretch="Uniform"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                          IsVisible="False" />
+                </Panel>
+            </Border>
+        </Canvas>
 
         <!-- NÚT NỔI CHUYỂN CHƯƠNG KHI Ở BIÊN CHẾ ĐỘ PHÂN CHƯƠNG (CHUẨN ẢNH 2) -->
         <!-- 1. Nút mép phải: Chuyển sang chương tiếp theo khi ở trang cuối -->

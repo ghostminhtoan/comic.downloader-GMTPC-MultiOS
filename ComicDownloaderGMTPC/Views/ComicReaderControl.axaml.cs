@@ -71,6 +71,21 @@ public partial class ComicReaderControl : UserControl
     private long _lastTapTick;
     private readonly DispatcherTimer _singleTapTimer;
 
+    // =========================================================================
+    // HỆ THỐNG AUTO-SCROLL / PAN-SCROLL HELPER (CHUẨN ẢNH 1 & ẢNH 2)
+    // - Android: Hold tap vào giữa 2 giây để hiển thị button (1), swipe lên/xuống hoặc trái/phải đổi mũi tên (2)/(3)
+    // - Windows: Single middle click (chuột giữa) để bật/tắt autoscroll, di chuột để điều chỉnh hướng/tốc độ
+    // =========================================================================
+    private readonly DispatcherTimer _holdScrollTimer;
+    private readonly DispatcherTimer _autoScrollLoopTimer;
+    private readonly DispatcherTimer _autoScrollFadeTimer;
+    private bool _isAutoScrollActive = false;
+    private Point _autoScrollAnchor = new(-9999, -9999);
+    private Point _holdScrollCandidatePoint = new(-9999, -9999);
+    private double _autoScrollVx = 0.0;
+    private double _autoScrollVy = 0.0;
+    private bool _isAutoScrollInteracting = false;
+
     // Theo dõi con trỏ đa điểm chạm (Multi-touch Tracking) cho Pinch-to-zoom chuẩn ComicScreen / MX Player
     // Theo dõi con trỏ đa điểm chạm (Multi-touch Tracking) cho Pinch-to-zoom chuẩn ComicScreen / MX Player
     private readonly System.Collections.Generic.Dictionary<int, Point> _activePointers = new();
@@ -811,6 +826,32 @@ public partial class ComicReaderControl : UserControl
             }
         };
 
+        // Khởi tạo các Timers cho tính năng Auto-Scroll / Pan-Scroll Helper
+        _holdScrollTimer = new DispatcherTimer(DispatcherPriority.Normal)
+        {
+            Interval = TimeSpan.FromSeconds(2.0) // Chạm giữ 2.0 giây vào giữa màn hình trên Android
+        };
+        _holdScrollTimer.Tick += OnHoldScrollTimerTick;
+
+        _autoScrollLoopTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(16) // ~60 FPS mượt mà
+        };
+        _autoScrollLoopTimer.Tick += OnAutoScrollLoopTick;
+
+        _autoScrollFadeTimer = new DispatcherTimer(DispatcherPriority.Normal)
+        {
+            Interval = TimeSpan.FromSeconds(1.5) // Tự động đóng sau 1.5s nếu nhấc tay không chạm tiếp
+        };
+        _autoScrollFadeTimer.Tick += (s, e) =>
+        {
+            _autoScrollFadeTimer.Stop();
+            if (_isAutoScrollActive && !_isAutoScrollInteracting && (OperatingSystem.IsAndroid() || e is not null))
+            {
+                DeactivateAutoScrollHelper();
+            }
+        };
+
         DataContextChanged += OnReaderDataContextChanged;
 
         // Lắng nghe sự kiện cuộn trên ListBox để cập nhật trang đang đọc và lưu tiến độ
@@ -873,7 +914,19 @@ public partial class ComicReaderControl : UserControl
 
         Focusable = true;
         AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(() => this.Focus(), DispatcherPriority.Input);
-        Loaded += (_, _) => Dispatcher.UIThread.Post(() => this.Focus(), DispatcherPriority.Input);
+        Loaded += (_, _) =>
+        {
+            Dispatcher.UIThread.Post(() => this.Focus(), DispatcherPriority.Input);
+            if (OperatingSystem.IsAndroid())
+            {
+                var vlb = this.FindControl<ListBox>("VerticalReaderListBox");
+                vlb?.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden);
+                var hlb = this.FindControl<ListBox>("HorizontalReaderListBox");
+                hlb?.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden);
+                var flipSv = this.FindControl<ScrollViewer>("FlipModeScrollViewer");
+                if (flipSv != null) flipSv.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden;
+            }
+        };
     }
 
     /// <summary>
@@ -918,6 +971,7 @@ public partial class ComicReaderControl : UserControl
     {
         base.OnDetachedFromVisualTree(e);
         StopKineticScroll();
+        DeactivateAutoScrollHelper();
     }
 
     public ListBox? GetActiveReaderListBox()
@@ -960,6 +1014,187 @@ public partial class ComicReaderControl : UserControl
         _kineticVelocityX = 0;
         _kineticVelocityY = 0;
         SetReaderInterpolationMode(Avalonia.Media.Imaging.BitmapInterpolationMode.HighQuality);
+    }
+
+    // =========================================================================
+    // HỆ THỐNG PHƯƠNG THỨC ĐIỀU KHIỂN AUTO-SCROLL / PAN-SCROLL HELPER (ẢNH 1 & ẢNH 2)
+    // =========================================================================
+    private void OnHoldScrollTimerTick(object? sender, EventArgs e)
+    {
+        _holdScrollTimer.Stop();
+        if (DataContext is not ComicReaderViewModel vm) return;
+        if (!vm.IsScrollMode) return;
+
+        // Giữ đủ 2.0s vào giữa màn hình trên Android -> Bật scroll button (1)
+        _isPointerTapCandidate = false;
+        _isPanHolding = false;
+        _isPanDragging = false;
+        _lastTapTick = 0;
+        _singleTapTimer.Stop();
+
+        ActivateAutoScrollHelper(_holdScrollCandidatePoint);
+        _isAutoScrollInteracting = true;
+    }
+
+    private void ActivateAutoScrollHelper(Point anchorPoint)
+    {
+        if (DataContext is not ComicReaderViewModel vm) return;
+        if (!vm.IsScrollMode) return;
+
+        StopKineticScroll();
+        _isAutoScrollActive = true;
+        _autoScrollAnchor = anchorPoint;
+        _autoScrollVx = 0;
+        _autoScrollVy = 0;
+        _autoScrollFadeTimer.Stop();
+
+        var canvas = this.FindControl<Canvas>("AutoScrollCanvas");
+        var border = this.FindControl<Border>("AutoScrollIndicatorBorder");
+        if (canvas != null && border != null)
+        {
+            double halfW = border.Width > 0 ? border.Width / 2.0 : 32.0;
+            double halfH = border.Height > 0 ? border.Height / 2.0 : 32.0;
+            double left = Math.Clamp(anchorPoint.X - halfW, 0, Math.Max(0, Bounds.Width - border.Width));
+            double top = Math.Clamp(anchorPoint.Y - halfH, 0, Math.Max(0, Bounds.Height - border.Height));
+            Canvas.SetLeft(border, left);
+            Canvas.SetTop(border, top);
+            canvas.IsVisible = true;
+        }
+
+        UpdateAutoScrollVisualState(0, 0);
+        _autoScrollLoopTimer.Start();
+    }
+
+    private void DeactivateAutoScrollHelper()
+    {
+        _isAutoScrollActive = false;
+        _isAutoScrollInteracting = false;
+        _autoScrollVx = 0;
+        _autoScrollVy = 0;
+        _holdScrollTimer.Stop();
+        _autoScrollLoopTimer.Stop();
+        _autoScrollFadeTimer.Stop();
+
+        var canvas = this.FindControl<Canvas>("AutoScrollCanvas");
+        if (canvas != null)
+        {
+            canvas.IsVisible = false;
+        }
+    }
+
+    private void UpdateAutoScrollVisualState(double dx, double dy)
+    {
+        if (DataContext is not ComicReaderViewModel vm) return;
+
+        var vertBoth = this.FindControl<StackPanel>("AutoScrollVertBoth");
+        var vertUp = this.FindControl<Avalonia.Controls.Shapes.Path>("AutoScrollVertUp");
+        var vertDown = this.FindControl<Avalonia.Controls.Shapes.Path>("AutoScrollVertDown");
+
+        var horizBoth = this.FindControl<StackPanel>("AutoScrollHorizBoth");
+        var horizRight = this.FindControl<Avalonia.Controls.Shapes.Path>("AutoScrollHorizRight");
+        var horizLeft = this.FindControl<Avalonia.Controls.Shapes.Path>("AutoScrollHorizLeft");
+
+        const double DeadZone = 12.0;
+
+        if (vm.IsVerticalScrollMode)
+        {
+            if (horizBoth != null) horizBoth.IsVisible = false;
+            if (horizRight != null) horizRight.IsVisible = false;
+            if (horizLeft != null) horizLeft.IsVisible = false;
+
+            if (Math.Abs(dy) <= DeadZone)
+            {
+                // (1) Ở giữa / Chờ: Cả 2 mũi tên lên & xuống
+                if (vertBoth != null) vertBoth.IsVisible = true;
+                if (vertUp != null) vertUp.IsVisible = false;
+                if (vertDown != null) vertDown.IsVisible = false;
+                _autoScrollVy = 0;
+            }
+            else if (dy < -DeadZone)
+            {
+                // (2) Swipe / Kéo lên: Chỉ hiển thị mũi tên lên
+                if (vertBoth != null) vertBoth.IsVisible = false;
+                if (vertUp != null) vertUp.IsVisible = true;
+                if (vertDown != null) vertDown.IsVisible = false;
+
+                double speed = (dy + DeadZone) * 0.35;
+                _autoScrollVy = Math.Clamp(speed, -60.0, 0.0);
+            }
+            else // dy > DeadZone
+            {
+                // (3) Swipe / Kéo xuống: Chỉ hiển thị mũi tên xuống
+                if (vertBoth != null) vertBoth.IsVisible = false;
+                if (vertUp != null) vertUp.IsVisible = false;
+                if (vertDown != null) vertDown.IsVisible = true;
+
+                double speed = (dy - DeadZone) * 0.35;
+                _autoScrollVy = Math.Clamp(speed, 0.0, 60.0);
+            }
+            _autoScrollVx = 0;
+        }
+        else if (vm.IsHorizontalScrollMode)
+        {
+            if (vertBoth != null) vertBoth.IsVisible = false;
+            if (vertUp != null) vertUp.IsVisible = false;
+            if (vertDown != null) vertDown.IsVisible = false;
+
+            if (Math.Abs(dx) <= DeadZone)
+            {
+                // (1) Ở giữa / Chờ: Cả 2 mũi tên trái & phải
+                if (horizBoth != null) horizBoth.IsVisible = true;
+                if (horizRight != null) horizRight.IsVisible = false;
+                if (horizLeft != null) horizLeft.IsVisible = false;
+                _autoScrollVx = 0;
+            }
+            else if (dx > DeadZone)
+            {
+                // (2) Swipe qua phải: Mũi tên phải
+                if (horizBoth != null) horizBoth.IsVisible = false;
+                if (horizRight != null) horizRight.IsVisible = true;
+                if (horizLeft != null) horizLeft.IsVisible = false;
+
+                double speed = (dx - DeadZone) * 0.35;
+                _autoScrollVx = Math.Clamp(speed, 0.0, 60.0);
+            }
+            else // dx < -DeadZone
+            {
+                // (3) Swipe qua trái: Mũi tên trái
+                if (horizBoth != null) horizBoth.IsVisible = false;
+                if (horizRight != null) horizRight.IsVisible = false;
+                if (horizLeft != null) horizLeft.IsVisible = true;
+
+                double speed = (dx + DeadZone) * 0.35;
+                _autoScrollVx = Math.Clamp(speed, -60.0, 0.0);
+            }
+            _autoScrollVy = 0;
+        }
+    }
+
+    private void OnAutoScrollLoopTick(object? sender, EventArgs e)
+    {
+        if (!_isAutoScrollActive) return;
+        if (_autoScrollVx == 0 && _autoScrollVy == 0) return;
+
+        var sv = GetReaderScrollViewer();
+        if (sv == null) return;
+
+        double maxX = Math.Max(0, sv.Extent.Width - sv.Viewport.Width);
+        double maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
+
+        double newX = sv.Offset.X;
+        double newY = sv.Offset.Y;
+
+        if (_autoScrollVx != 0)
+        {
+            newX = Math.Clamp(sv.Offset.X + _autoScrollVx, 0, maxX);
+        }
+        if (_autoScrollVy != 0)
+        {
+            newY = Math.Clamp(sv.Offset.Y + _autoScrollVy, 0, maxY);
+        }
+
+        sv.Offset = new Vector(newX, newY);
+        _lastUserScrollInputTick = Environment.TickCount64;
     }
 
     private void OnKineticTimerTick(object? sender, EventArgs e)
@@ -1977,6 +2212,31 @@ public partial class ComicReaderControl : UserControl
     }
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        // 1. Nếu chế độ Auto-Scroll Helper đang kích hoạt:
+        if (_isAutoScrollActive)
+        {
+            Point clickPos = e.GetPosition(this);
+            double distToAnchor = Math.Sqrt(Math.Pow(clickPos.X - _autoScrollAnchor.X, 2) + Math.Pow(clickPos.Y - _autoScrollAnchor.Y, 2));
+            if (e.Pointer.Type == PointerType.Mouse || distToAnchor > 45.0)
+            {
+                // Click chuột (Windows) hoặc chạm ra ngoài nút (Android) -> Thoát Auto-Scroll ngay lập tức
+                DeactivateAutoScrollHelper();
+                _isPointerTapCandidate = false;
+                _isPanHolding = false;
+                _isPanDragging = false;
+                e.Handled = true;
+                return;
+            }
+            else
+            {
+                // Chạm vào nút trên màn hình cảm ứng: Giữ tương tác để swipe tiếp
+                _isAutoScrollInteracting = true;
+                _autoScrollFadeTimer.Stop();
+                e.Handled = true;
+                return;
+            }
+        }
+
         StopKineticScroll();
         if (DataContext is ComicReaderViewModel vmAuto && vmAuto.IsAutoScrolling)
         {
@@ -1989,6 +2249,7 @@ public partial class ComicReaderControl : UserControl
             _isPointerTapCandidate = false;
             _isPanHolding = false;
             _isPanDragging = false;
+            _holdScrollTimer.Stop();
             return;
         }
 
@@ -2001,6 +2262,20 @@ public partial class ComicReaderControl : UserControl
         }
 
         var props = e.GetCurrentPoint(this).Properties;
+
+        // 2. Hỗ trợ Single Middle Click (Chuột giữa) trên Windows / Desktop để bật chế độ AutoScroll
+        if (props.IsMiddleButtonPressed)
+        {
+            if (DataContext is ComicReaderViewModel vmMid && vmMid.IsScrollMode)
+            {
+                ActivateAutoScrollHelper(pressPtInit);
+                _isPointerTapCandidate = false;
+                _isPanHolding = false;
+                _isPanDragging = false;
+                e.Handled = true;
+                return;
+            }
+        }
 
         // Hỗ trợ 2 phím hông chuột phụ trên Desktop (XButton1 = Back, XButton2 = Forward)
         if (props.IsXButton1Pressed)
@@ -2029,10 +2304,33 @@ public partial class ComicReaderControl : UserControl
             _isPointerTapCandidate = false;
             _isPanHolding = false;
             _isPanDragging = false;
+            _holdScrollTimer.Stop();
             return;
         }
 
         Point pos = e.GetPosition(this);
+
+        // 3. Khởi động Timer Hold Tap 2.0 giây vào giữa màn hình cho Android Touch
+        if ((e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid()) && DataContext is ComicReaderViewModel vmTouch && vmTouch.IsScrollMode)
+        {
+            double w = Bounds.Width;
+            double h = Bounds.Height;
+            bool isInCenter = w > 0 && h > 0 && pos.X >= w * 0.15 && pos.X <= w * 0.85 && pos.Y >= h * 0.15 && pos.Y <= h * 0.85;
+            if (isInCenter)
+            {
+                _holdScrollCandidatePoint = pos;
+                _holdScrollTimer.Stop();
+                _holdScrollTimer.Start();
+            }
+            else
+            {
+                _holdScrollTimer.Stop();
+            }
+        }
+        else
+        {
+            _holdScrollTimer.Stop();
+        }
         long now = Environment.TickCount64;
 
         long pinchElapsed = now - _lastPinchEndTick;
@@ -2111,6 +2409,25 @@ public partial class ComicReaderControl : UserControl
     {
         Point currentPoint = e.GetPosition(this);
         long moveNow = Environment.TickCount64;
+
+        if (_holdScrollTimer.IsEnabled)
+        {
+            double holdDist = Math.Sqrt(Math.Pow(currentPoint.X - _holdScrollCandidatePoint.X, 2) + Math.Pow(currentPoint.Y - _holdScrollCandidatePoint.Y, 2));
+            if (holdDist > 25.0)
+            {
+                // Ngón tay di chuyển quá 25px -> Người dùng đang vuốt cuộn bình thường, hủy hold 2s
+                _holdScrollTimer.Stop();
+            }
+        }
+
+        if (_isAutoScrollActive)
+        {
+            double dx = currentPoint.X - _autoScrollAnchor.X;
+            double dy = currentPoint.Y - _autoScrollAnchor.Y;
+            UpdateAutoScrollVisualState(dx, dy);
+            e.Handled = true;
+            return;
+        }
 
         if (_isEdgeBrightnessDragging && DataContext is ComicReaderViewModel vmEbMove)
         {
@@ -2293,6 +2610,27 @@ public partial class ComicReaderControl : UserControl
 
     private void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        _holdScrollTimer.Stop();
+
+        if (_isAutoScrollActive)
+        {
+            if (e.Pointer.Type == PointerType.Touch || OperatingSystem.IsAndroid())
+            {
+                _isAutoScrollInteracting = false;
+                // Nhấc ngón tay ra: trở về trạng thái (1) (cả 2 mũi tên) và dừng cuộn
+                UpdateAutoScrollVisualState(0, 0);
+                _autoScrollFadeTimer.Stop();
+                _autoScrollFadeTimer.Start(); // Đếm 1.5s tự động ẩn nếu không chạm tiếp
+                _isPointerTapCandidate = false;
+                _isPanHolding = false;
+                _isPanDragging = false;
+                _lastTapTick = 0;
+                e.Handled = true;
+                return;
+            }
+            // Trên Windows (Mouse): Sau cú click chuột giữa, người dùng di chuyển chuột tự do cho đến khi click lại
+        }
+
         if (e.Pointer.Type == PointerType.Mouse)
         {
             e.Pointer.Capture(null);
@@ -2954,6 +3292,13 @@ public partial class ComicReaderControl : UserControl
 
     private void OnControlKeyDown(object? sender, KeyEventArgs e)
     {
+        if (_isAutoScrollActive && e.Key == Key.Escape)
+        {
+            DeactivateAutoScrollHelper();
+            e.Handled = true;
+            return;
+        }
+
         if (DataContext is not ComicReaderViewModel vm) return;
 
         // Nếu đang trong ô TextBox (tìm kiếm phím tắt hoặc ghi chú memo)

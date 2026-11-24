@@ -62,6 +62,8 @@ using Avalonia.Controls;
 
 using Avalonia.Controls.ApplicationLifetimes;
 
+using Avalonia.Controls.Primitives;
+
 using Avalonia.Input;
 
 using Avalonia.Layout;
@@ -167,6 +169,14 @@ public partial class ComicReaderViewModel : ViewModelBase
     [ObservableProperty]
 
     private bool _isTapZonesEnabled = false;
+
+    /// <summary>
+    /// Độ hiển thị của thanh cuộn dọc (Vertical ScrollBar) trong trình đọc truyện:
+    /// Trên Android ẩn hoàn toàn (Hidden) để chống bấm nhầm khi đọc/vuốt màn hình.
+    /// Trên Windows giữ nguyên tự động (Auto) theo yêu cầu.
+    /// </summary>
+    [ObservableProperty]
+    private ScrollBarVisibility _readerVerticalScrollBarVisibility = OperatingSystem.IsAndroid() ? ScrollBarVisibility.Hidden : ScrollBarVisibility.Auto;
 
 
 
